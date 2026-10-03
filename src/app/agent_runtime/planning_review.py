@@ -22,6 +22,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.providers.base import BaseProvider, ChatMessage
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputGateway,
@@ -593,7 +594,7 @@ class ProviderPlanSemanticReviewer:
         provider_options: dict[str, Any] = {}
         if self.reasoning_effort:
             provider_options["reasoning_effort"] = self.reasoning_effort
-        if self.provider_name.casefold() == "chatgpt_codex":
+        if provider_supports(self.provider_name, CONVERSATION_SESSIONS):
             provider_options["conversation_id"] = (
                 f"plan-review:{spec.run_id}:{revision.revision_id}:{review_round}:{session_id}"
             )

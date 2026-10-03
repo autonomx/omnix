@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .concurrency import serialized_chat_mutation
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
 
 from .models import (
     ChatMessage,
@@ -363,7 +364,11 @@ class ChatSessionStore:
 
             messages = self._provider_messages(session, user_message, context_items or [])
             model_name = _model_key(model_id)
-            completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+            completion_kwargs = (
+                {"conversation_id": session.id}
+                if provider_supports(provider_name, CONVERSATION_SESSIONS)
+                else {}
+            )
             remaining = remaining_turn_seconds(routing_deadline_at)
             if remaining is not None:
                 if remaining <= 0:
@@ -682,7 +687,11 @@ class ChatSessionStore:
             messages = self._provider_messages(session, user_message, context_items)
 
             model_name = _model_key(model_id)
-            completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+            completion_kwargs = (
+                {"conversation_id": session.id}
+                if provider_supports(provider_name, CONVERSATION_SESSIONS)
+                else {}
+            )
             from app.providers.structured.errors import ProviderTimeout
             from .routing_deadline import remaining_turn_seconds
 

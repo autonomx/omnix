@@ -27,6 +27,7 @@ from app.chat import (
 )
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
+from app.providers.catalog import CANCELLATION, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
@@ -427,10 +428,11 @@ def _generate_side_effect_free(
             for item in rendered.messages
         ]
         provider_kwargs: dict[str, Any] = {}
-        if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
+        if cancel_event is not None and provider_supports(provider, CANCELLATION):
             provider_kwargs["cancel"] = cancel_event
-        if str(getattr(provider, "provider_name", "")).strip().casefold() == "lmstudio":
+        if provider_supports(provider, THINKING_TOGGLE):
             provider_kwargs.update(live_voice.lmstudio_live_voice_options(user_message))
+        if provider_supports(provider, RUNTIME_STATS):
             provider_kwargs["include_metrics"] = True
         raw_response = provider.chat_completion(
             messages=messages,

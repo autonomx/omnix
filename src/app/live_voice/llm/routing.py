@@ -12,6 +12,7 @@ from app.chat.contracts import (
     resolve_effective_provider_id,
 )
 from app.conversation.contracts import LIVE_VOICE_ROUTE_METADATA_KEY
+from app.providers.catalog import RUNTIME_STATS, provider_supports
 from app.observability.tts_stream_diagnostics import stream_log
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 
@@ -252,7 +253,7 @@ def log_provider_route(
         session_provider_overridden=(
             provider_key(requested_provider_id) != provider_key(route.provider_id)
         ),
-        lmstudio_metrics_path_expected=effective_provider_name == "lmstudio",
+        lmstudio_metrics_path_expected=provider_supports(effective_provider_name, RUNTIME_STATS),
         stream=stream,
     )
 

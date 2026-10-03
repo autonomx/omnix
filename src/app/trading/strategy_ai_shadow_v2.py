@@ -11,8 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.providers import ChatMessage
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 from .models import MarketBar
+from .structured_llm import trading_model_call
 from .research import _call_provider, _json_payload, _provider_identity, default_research_provider
 from .research.contracts import TradingEvidence, TradingResearchReport
 
@@ -564,11 +566,11 @@ class CatalystIntelligenceAnalyzer:
             ChatMessage(role="user", content=json.dumps(payload, sort_keys=True, default=str)),
         ]
         if hasattr(provider, "chat_completion") and callable(provider.chat_completion):
-            if provider_name.strip().casefold() == "chatgpt_codex":
+            if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
                 schema = project_provider_schema(
                     CatalystSemanticResponse.model_json_schema(),
                     mode=StructuredMode.JSON_SCHEMA,
-                    provider_name="chatgpt_codex",
+                    provider_name=provider_name,
                 )
                 response_format: dict[str, object] = {
                     "type": "json_schema",
@@ -580,26 +582,16 @@ class CatalystIntelligenceAnalyzer:
                 }
             else:
                 response_format = {"type": "json_object"}
-            try:
-                response = provider.chat_completion(
-                    messages=messages,
-                    model=model,
-                    stream=False,
-                    response_format=response_format,
-                    request_timeout_seconds=45,
-                    temperature=0,
-                    max_tokens=1_400,
-                )
-                content = str(getattr(response, "content", "") or "").strip()
-                if content.startswith("```"):
-                    content = content.strip("`").strip()
-                    if content.lower().startswith("json"):
-                        content = content[4:].strip()
-                semantics = CatalystSemanticResponse.model_validate_json(content)
-            except TypeError:
-                semantics = CatalystSemanticResponse.model_validate(
-                    _json_payload(_call_provider(provider, messages, model))
-                )
+            semantics = trading_model_call(
+                provider,
+                messages,
+                output_model=CatalystSemanticResponse,
+                contract_id="trading.ai_shadow_v2.catalyst_semantics",
+                schema_name="catalyst_intelligence_semantics",
+                model=model,
+                max_tokens=1_400,
+                response_format=response_format,
+            ).value
         else:
             semantics = CatalystSemanticResponse.model_validate(
                 _json_payload(_call_provider(provider, messages, model))
@@ -733,11 +725,11 @@ class AIShadowV2Analyzer:
             ChatMessage(role="system", content=system),
             ChatMessage(role="user", content=json.dumps({"arm": arm, "candidates": rows}, sort_keys=True, default=str)),
         ]
-        if provider_name.strip().casefold() == "chatgpt_codex":
+        if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
             schema = project_provider_schema(
                 AIShadowV2BatchResponse.model_json_schema(),
                 mode=StructuredMode.JSON_SCHEMA,
-                provider_name="chatgpt_codex",
+                provider_name=provider_name,
             )
             response_format: dict[str, object] = {
                 "type": "json_schema",
@@ -745,24 +737,16 @@ class AIShadowV2Analyzer:
             }
         else:
             response_format = {"type": "json_object"}
-        try:
-            response = provider.chat_completion(
-                messages=messages,
-                model=model,
-                stream=False,
-                response_format=response_format,
-                request_timeout_seconds=45,
-                temperature=0,
-                max_tokens=max(1200, 500 * len(rows)),
-            )
-        except TypeError:
-            response = provider.chat_completion(messages=messages, model=model, stream=False)
-        content = str(getattr(response, "content", "") or "").strip()
-        if content.startswith("```"):
-            content = content.strip("`").strip()
-            if content.lower().startswith("json"):
-                content = content[4:].strip()
-        parsed = AIShadowV2BatchResponse.model_validate_json(content)
+        parsed = trading_model_call(
+            provider,
+            messages,
+            output_model=AIShadowV2BatchResponse,
+            contract_id="trading.ai_shadow_v2.batch",
+            schema_name="ai_shadow_v2_batch_response",
+            model=model,
+            max_tokens=max(1200, 500 * len(rows)),
+            response_format=response_format,
+        ).value
         requested = {str(row["instrument_id"]) for row in rows}
         seen: set[str] = set()
         output: list[AIShadowV2AlphaDecision] = []

@@ -126,16 +126,6 @@ class AIShadowFillSimulation(BaseModel):
     execution_authority: Literal[False] = False
 
 
-def _strip_json_fence(value: str) -> str:
-    text = str(value or "").strip()
-    fence = chr(96) * 3
-    if text.startswith(fence):
-        text = text.strip(chr(96)).strip()
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    return text
-
-
 def _usage_int(usage: Any, *keys: str) -> int | None:
     if not isinstance(usage, dict):
         return None

@@ -28,7 +28,10 @@ from app.config.env import environment
 from app.providers.service import get_provider
 from app.providers import ChatMessage, ConnectionError as ProviderConnectionError, get_registry
 from app.providers.structured.contracts import StructuredMode
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 from app.providers.structured.schema_projection import project_provider_schema
+from app.providers.structured.errors import StructuredDecodeError
+from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
 from .strategy_repository import StrategyEvent, default_strategy_repository
@@ -348,11 +351,7 @@ def assess_intraday_with_shared_circuit(
         provider = get_trading_research_provider()
         if provider is None:
             return None
-        provider_name = str(
-            getattr(provider, "provider_name", "")
-            or getattr(getattr(provider, "config", None), "provider_type", "")
-        ).strip().casefold()
-        if provider_name == "chatgpt_codex":
+        if provider_supports(provider, CLOSED_OBJECT_SCHEMA):
             from .strategy_intraday_llm import _IntradaySchemaProviderProxy
 
             return _IntradaySchemaProviderProxy(provider)
@@ -511,16 +510,30 @@ def _chat_call(
 
 
 def _output_error(content: str, requested_ids: set[str]):
-    text = shadow._strip_json_fence(content)
+    """Decode one batch through the structured-output parser (WP-8.4).
+
+    The reliability codes stay this monitor's own: they drive its repair
+    retry and its persisted evidence.
+    """
+    text = str(content or "").strip()
     if not text:
         raise AIShadowReliabilityError("ai_shadow_output_empty")
     try:
-        raw = json.loads(text)
-    except JSONDecodeError as exc:
+        raw = decode_json_object(text)
+    except StructuredDecodeError as decode_error:
+        exc = decode_error.__cause__
+        if not isinstance(exc, JSONDecodeError):
+            code = (
+                "ai_shadow_output_empty"
+                if "empty" in str(decode_error)
+                else "ai_shadow_output_schema_error"
+            )
+            raise AIShadowReliabilityError(code, str(decode_error)) from decode_error
+        document = exc.doc
         truncated = (
             "unterminated" in exc.msg.casefold()
-            or exc.pos >= max(0, len(text) - 2)
-            or (text.startswith("{") and not text.rstrip().endswith("}"))
+            or exc.pos >= max(0, len(document) - 2)
+            or (document.startswith("{") and not document.rstrip().endswith("}"))
         )
         code = "ai_shadow_output_truncated" if truncated else "ai_shadow_output_syntax_error"
         raise AIShadowReliabilityError(

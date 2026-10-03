@@ -10,9 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalog import specs
-
-LOCAL_ARTIFACTS = "local_artifacts"
+from .catalog import LOCAL_ARTIFACTS, specs
 
 
 class LocalArtifactsUnavailable(ValueError):

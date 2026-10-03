@@ -20,6 +20,7 @@ from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.providers.service import get_tts_provider
+from app.providers.catalog import LOADED_MODEL, provider_supports
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.conversation.tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
@@ -123,7 +124,7 @@ def _configured_live_route() -> tuple[str | None, str | None, str]:
     provider_id = str(settings.get("provider") or "lmstudio").strip() or "lmstudio"
     provider_name = _provider_key(provider_id)
     model_id = None
-    if provider_name != "lmstudio":
+    if not provider_supports(provider_name, LOADED_MODEL):
         provider_settings = settings.get(provider_name)
         if isinstance(provider_settings, dict):
             model_id = _model_key(provider_settings.get("model"))

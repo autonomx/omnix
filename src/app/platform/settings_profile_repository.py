@@ -206,7 +206,9 @@ def load_settings_profile(settings: dict[str, Any]) -> SettingsProfile:
     legacy = _legacy_seed(settings)
     default_profile = SettingsProfile.model_validate(legacy).model_dump(mode="json", by_alias=True)
     source = _merge_known(default_profile, raw) if isinstance(raw, dict) else default_profile
-    for key in ("openrouter", "cerebras"):
+    from app.providers.catalog import API_KEY, providers_with
+
+    for key in providers_with(API_KEY):
         legacy_key = str(_record(_record(legacy.get("providerConfigs")).get(key)).get("apiKey") or "")
         source_provider_configs = _record(source.get("providerConfigs"))
         source_config = _record(source_provider_configs.get(key))

@@ -39,6 +39,7 @@ from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessag
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from .prompt_window import build_prompt_assembly_with_window
 from .store import (
@@ -738,7 +739,11 @@ class ChatSessionStore(JsonChatSessionStore):
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        completion_kwargs = (
+            {"conversation_id": session.id}
+            if provider_supports(provider_id, CONVERSATION_SESSIONS)
+            else {}
+        )
         from app.providers.structured.errors import ProviderTimeout
 
         remaining = remaining_turn_seconds(

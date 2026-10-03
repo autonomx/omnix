@@ -13,6 +13,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage
+from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.persistence.device_permits import device_permit_slot
 from app.providers.structured import (
     StructuredContract,
@@ -147,16 +148,13 @@ class ProviderStructuredProposalProvider:
         return [row.model_dump(mode="python") for row in value.proposals]
 
     def propose(self, content: str) -> list[dict[str, Any]]:
-        provider_name = str(
-            getattr(getattr(self.provider, "config", None), "provider_name", "")
-        ).strip().casefold()
         admission = (
             device_permit_slot(
                 "llm-local",
                 priority="batch",
                 timeout_seconds=self.timeout_seconds,
             )
-            if provider_name in {"lmstudio", "ollama", "local", "vllm"}
+            if provider_supports(self.provider, LOCAL_DEVICE)
             else nullcontext()
         )
         future = _PROVIDER_EXECUTOR.submit(self._call_admitted, content, admission)

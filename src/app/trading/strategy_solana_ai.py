@@ -14,8 +14,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers import ChatMessage
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
+from .structured_llm import TradingModelOutputError, trading_model_call
 
 
 SOLANA_AI_STRATEGY_ID = "solana-ai-1m-shadow"
@@ -73,16 +75,6 @@ def _default_provider():
     from app.providers import service as provider_service
 
     return provider_service.get_provider()
-
-
-def _strip_json_fence(value: str) -> str:
-    text = str(value or "").strip()
-    fence = chr(96) * 3
-    if text.startswith(fence):
-        text = text.strip(chr(96)).strip()
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    return text
 
 
 def _usage_int(usage: Any, *keys: str) -> int | None:
@@ -221,11 +213,11 @@ class SolanaAIAnalyzer:
         model = getattr(getattr(provider, "config", None), "model", None) or None
         provider_name = str(getattr(provider, "provider_name", "") or type(provider).__name__)
         response_format: dict[str, object]
-        if provider_name.strip().casefold() == "chatgpt_codex":
+        if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
             schema = project_provider_schema(
                 SolanaAIBatchResponse.model_json_schema(),
                 mode=StructuredMode.JSON_SCHEMA,
-                provider_name="chatgpt_codex",
+                provider_name=provider_name,
             )
             response_format = {
                 "type": "json_schema",
@@ -238,31 +230,29 @@ class SolanaAIAnalyzer:
         else:
             response_format = {"type": "json_object"}
         try:
-            response = provider.chat_completion(
-                messages=messages,
+            reply = trading_model_call(
+                provider,
+                messages,
+                output_model=SolanaAIBatchResponse,
+                contract_id="trading.solana_ai.batch",
+                schema_name="solana_ai_batch_response",
                 model=model,
-                stream=False,
-                response_format=response_format,
-                request_timeout_seconds=45,
-                temperature=0,
                 max_tokens=500,
+                response_format=response_format,
             )
-        except TypeError:
-            response = provider.chat_completion(messages=messages, model=model, stream=False)
+        except TradingModelOutputError as exc:
+            if exc.reason == "empty":
+                raise RuntimeError("solana_ai_provider_returned_no_text") from exc
+            raise RuntimeError("solana_ai_provider_returned_invalid_json") from exc
+        response = reply.response
         content = str(getattr(response, "content", "") or "").strip()
-        if not content:
-            raise RuntimeError("solana_ai_provider_returned_no_text")
         output_characters = len(content)
         input_tokens, output_tokens, total_tokens, usage_source = _normalized_usage(
             getattr(response, "usage", None),
             input_characters=input_characters,
             output_characters=output_characters,
         )
-        try:
-            parsed = SolanaAIBatchResponse.model_validate_json(_strip_json_fence(content))
-        except Exception as exc:
-            raise RuntimeError("solana_ai_provider_returned_invalid_json") from exc
-        decision = parsed.decision
+        decision = reply.value.decision
         if decision.instrument_id != SOLANA_INSTRUMENT_ID:
             raise RuntimeError("solana_ai_provider_returned_wrong_instrument")
         return SolanaAIResult(

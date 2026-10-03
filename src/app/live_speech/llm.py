@@ -67,9 +67,13 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
             yield from EchoTextGenerator().generate(prompt, instructions=instructions, generation=generation)
 
 
+# LIVE_SPEECH_LLM_PROVIDER values that select an OpenAI-compatible endpoint.
+_OPENAI_COMPATIBLE_SETTINGS = frozenset({"openai", "openai_compatible", "lmstudio", "real"})
+
+
 def create_text_generator_from_env() -> StreamingTextGenerator:
     provider = environment().get("LIVE_SPEECH_LLM_PROVIDER", "fake").strip().lower()
-    if provider in {"openai", "openai_compatible", "lmstudio", "real"}:
+    if provider in _OPENAI_COMPATIBLE_SETTINGS:
         return OpenAICompatibleTextGenerator(
             base_url=environment().get("LIVE_SPEECH_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
             model=environment().get("LIVE_SPEECH_LLM_MODEL", "local-model"),

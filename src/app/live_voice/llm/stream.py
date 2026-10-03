@@ -18,6 +18,7 @@ from app.chat.contracts import (
     remaining_turn_seconds,
 )
 from app.providers.service import provider_lease
+from app.providers.catalog import CONVERSATION_SESSIONS, THINKING_TOGGLE, provider_supports
 
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -201,7 +202,7 @@ def stream_low_latency_reply(
         ]
         model_name = model_key(model_id)
         completion_kwargs: dict[str, Any] = {}
-        if provider_name == "chatgpt_codex":
+        if provider_supports(provider_name, CONVERSATION_SESSIONS):
             conversation_id = str(getattr(session, "id", "") or "").strip()
             if conversation_id:
                 completion_kwargs["conversation_id"] = conversation_id
@@ -217,7 +218,7 @@ def stream_low_latency_reply(
 
                 raise ProviderTimeout("chat turn deadline has expired")
             completion_kwargs["request_timeout_seconds"] = remaining
-        if provider_name == "lmstudio":
+        if provider_supports(provider_name, THINKING_TOGGLE):
             from app.live_voice.llm.policy import lmstudio_live_voice_options
 
             completion_kwargs.update(lmstudio_live_voice_options(user_message))

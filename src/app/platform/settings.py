@@ -70,7 +70,9 @@ def get_legacy_settings_payload() -> dict[str, Any]:
     secrets = load_secrets()
     api_keys = _safe_dict(secrets.get("api_keys"))
 
-    for key in ["openrouter", "cerebras"]:
+    from app.providers.catalog import API_KEY, providers_with
+
+    for key in providers_with(API_KEY):
         secret_key = str(api_keys.get(key) or "")
         provider_settings = _safe_dict(settings.get(key))
         if secret_key:
@@ -129,40 +131,28 @@ def apply_settings_payload(
     if "lmstudio" in data:
         _merge_settings_section(settings, "lmstudio", data["lmstudio"], DEFAULT_SETTINGS["lmstudio"])
 
-    if "openrouter" in data:
-        incoming = _safe_dict(data["openrouter"])
-        api_key = str(incoming.get("api_key") or "")
-        if "api_key" in incoming and not api_key.startswith("***"):
-            api_keys = secrets.setdefault("api_keys", {})
-            if str(api_keys.get("openrouter") or "") != api_key:
-                if api_key:
-                    api_keys["openrouter"] = api_key
-                else:
-                    api_keys.pop("openrouter", None)
-                secrets_changed = True
-        _merge_settings_section(
-            settings,
-            "openrouter",
-            {key: value for key, value in incoming.items() if key != "api_key"},
-            _without_api_key(DEFAULT_SETTINGS["openrouter"]),
-        )
+    from app.providers.catalog import API_KEY, providers_with
 
-    if "cerebras" in data:
-        incoming = _safe_dict(data["cerebras"])
+    # Providers that need an API key keep it in the secret store, never in
+    # settings; a masked value ("***...") means unchanged.
+    for provider_id in providers_with(API_KEY):
+        if provider_id not in data:
+            continue
+        incoming = _safe_dict(data[provider_id])
         api_key = str(incoming.get("api_key") or "")
         if "api_key" in incoming and not api_key.startswith("***"):
             api_keys = secrets.setdefault("api_keys", {})
-            if str(api_keys.get("cerebras") or "") != api_key:
+            if str(api_keys.get(provider_id) or "") != api_key:
                 if api_key:
-                    api_keys["cerebras"] = api_key
+                    api_keys[provider_id] = api_key
                 else:
-                    api_keys.pop("cerebras", None)
+                    api_keys.pop(provider_id, None)
                 secrets_changed = True
         _merge_settings_section(
             settings,
-            "cerebras",
+            provider_id,
             {key: value for key, value in incoming.items() if key != "api_key"},
-            _without_api_key(DEFAULT_SETTINGS["cerebras"]),
+            _without_api_key(DEFAULT_SETTINGS[provider_id]),
         )
 
     if "llamacpp" in data:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
@@ -253,14 +252,16 @@ def _call_provider(provider: Any, messages: list[ChatMessage], model: str | None
 
 
 def _json_payload(text: str) -> dict[str, Any]:
-    stripped = text.strip()
-    fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", stripped, flags=re.DOTALL | re.IGNORECASE)
-    if fenced:
-        stripped = fenced.group(1)
-    parsed = json.loads(stripped)
-    if not isinstance(parsed, dict):
-        raise ValueError("research_output_must_be_a_json_object")
-    return parsed
+    """One JSON object from research output, via the structured-output parser."""
+    from app.providers.structured.errors import StructuredDecodeError
+    from app.providers.structured.parsing import decode_json_object
+
+    try:
+        return decode_json_object(text)
+    except StructuredDecodeError as exc:
+        if isinstance(exc.__cause__, json.JSONDecodeError):
+            raise exc.__cause__ from None  # the API reports invalid_research_output
+        raise ValueError("research_output_must_be_a_json_object") from exc
 
 
 def generate_market_research(

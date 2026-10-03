@@ -21,6 +21,7 @@ from app.observability.logging import log_context
 from app.observability.tracing import span
 from app.persistence.device_permits import device_permit_slot
 from app.providers.base import provider_turn_owner
+from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.runtime.cancellation import CancellationToken
 
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
@@ -620,7 +621,7 @@ def _chat_provider_id(
 
 
 def _chat_provider_slot(provider_id: str):
-    if provider_id.casefold() in {"lmstudio", "ollama", "local", "vllm"}:
+    if provider_supports(provider_id, LOCAL_DEVICE):
         return device_permit_slot(
             "llm-local",
             priority="interactive",

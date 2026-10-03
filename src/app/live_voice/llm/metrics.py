@@ -22,7 +22,10 @@ def _resolve_provider(provider_id: str | None) -> Any:
 
 
 def is_lmstudio_provider(provider: Any) -> bool:
-    return str(getattr(provider, "provider_name", "")).strip().lower() == "lmstudio"
+    """The provider reports the server's own timing stats (LM Studio)."""
+    from app.providers.catalog import RUNTIME_STATS, provider_supports
+
+    return provider_supports(provider, RUNTIME_STATS)
 
 
 def is_lmstudio(provider_id: str | None) -> bool:

@@ -67,6 +67,11 @@ _VISION_MODEL_HINTS = (
 )
 
 
+# Names that select the Codex vision client in a model reference
+# (``codex:<model>``) or in ``OMNIX_VISION_PROVIDER``.
+_CODEX_REFERENCE_NAMES = frozenset({"codex", "chatgpt_codex"})
+
+
 def _model_key(value: str | None) -> str | None:
     text = (value or "").strip()
     if not text:
@@ -74,7 +79,7 @@ def _model_key(value: str | None) -> str | None:
     parts = text.split(":", 2)
     if len(parts) == 3 and parts[0] == "llm":
         return parts[2] or None
-    if len(parts) == 2 and parts[0].casefold() in {"codex", "chatgpt_codex"}:
+    if len(parts) == 2 and parts[0].casefold() in _CODEX_REFERENCE_NAMES:
         return parts[1] or None
     return text
 
@@ -544,12 +549,14 @@ def default_desktop_vision_client() -> DesktopVisionClient | CodexDesktopVisionC
     environment_model = environment().get("OMNIX_VISION_MODEL", "").strip()
     companion_model = _configured_companion_vision_model()
     configured_model = environment_model or companion_model
-    use_codex = provider in {"codex", "chatgpt_codex"}
+    use_codex = provider in _CODEX_REFERENCE_NAMES
     use_codex = use_codex or _is_codex_model_ref(configured_model)
     # An explicit local Companion model takes precedence over the chat model.
     # Only inherit the active LLM provider when Companion has no model override.
     if not configured_model:
-        use_codex = use_codex or _configured_llm_provider() == "chatgpt_codex"
+        from app.providers.catalog import DESKTOP_VISION, provider_supports
+
+        use_codex = use_codex or provider_supports(_configured_llm_provider(), DESKTOP_VISION)
     if use_codex:
         return CodexDesktopVisionClient(default_model=configured_model or None)
     return DesktopVisionClient()

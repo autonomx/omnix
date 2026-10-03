@@ -12,6 +12,7 @@ from app.settings.access import (
     save_secrets,
 )
 from app.settings.service import SettingRevisionConflict, SettingsPatch
+from app.providers.catalog import API_KEY, providers_with
 from app.providers.service import invalidate_provider_cache
 
 from .audio_cache import invalidate_changed_audio_caches
@@ -40,7 +41,7 @@ def get_settings_payload() -> SettingsPayload:
     profile = load_settings_profile(settings)
     serialized_profile = profile_payload(profile)
     provider_configs = serialized_profile.get("providerConfigs", {})
-    for provider_id in ("openrouter", "cerebras"):
+    for provider_id in providers_with(API_KEY):
         displayed = payload.settings.get(provider_id, {})
         profile_config = provider_configs.get(provider_id, {})
         if isinstance(displayed, dict) and isinstance(profile_config, dict):

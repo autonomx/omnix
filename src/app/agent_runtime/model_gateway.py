@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.observability.tracing import set_span_attributes
 from app.providers.base import ChatMessage, ChatResponse
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
 from app.providers.service import get_provider
 
 from .budget import AgentBudgetError, default_agent_budget_manager
@@ -401,7 +402,7 @@ async def agent_chat_completion(
         raise HTTPException(status_code=503, detail=f"agent_provider_unavailable:{provider_id}")
     messages = [_authoritative_run_context(snapshot.spec), *_messages(request.messages)]
     kwargs = _kwargs(request, default_effort)
-    if provider_id == "chatgpt_codex":
+    if provider_supports(provider_id, CONVERSATION_SESSIONS):
         kwargs["conversation_id"] = agent_conversation_id(
             x_omnix_agent_run_id,
             x_omnix_agent_session_id,
