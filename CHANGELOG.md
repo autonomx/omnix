@@ -84,6 +84,9 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   transcript.
 - Typing in Chat no longer re-renders the conversation, and the Live Chat
   message list and Storyteller library no longer rebuild on every render.
+- Storyteller, Podcast, Voice Cloning and STT say what could not be loaded
+  when the gateway fails, instead of showing empty lists; Settings shows a
+  failed load on every category.
 
 ### Removed
 
