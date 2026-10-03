@@ -86,11 +86,14 @@ vi.mock('./live-voice-natural-timing', () => ({
 
 import { initializeLiveVoiceUnifiedAudioController } from './live-voice-unified-audio-controller';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 let cleanup: (() => void) | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function renderLiveVoice(): void {
+  liveCallPresentationStore.resetForTests();
+  liveCallPresentationStore.update({ autoSpeak: true, captureOwned: true, captureStatus: 'connected', captureActive: true });
   document.body.innerHTML = `
     <section class="assistant-live-card" data-live-voice-status="connected">
       <button type="button">End Call</button>

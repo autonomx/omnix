@@ -40,6 +40,7 @@ import {
 } from './live-voice-pcm-session';
 import { openStream, statusError } from '../../api/transport';
 import { chatStreamEventSchema, parseJson } from '../../api/schemas/streams';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_CALL_RUNTIME_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/runtime$/;
@@ -799,22 +800,11 @@ function captureAssistantTurnId(turn: ActiveLiveTurn, event: ChatStreamEvent | n
 }
 
 function isAutoSpeakEnabled(): boolean {
-  return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
+  return liveCallPresentationStore.getState().autoSpeak;
 }
 
 function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
-  document.querySelectorAll<HTMLElement>('.assistant-voice-orb').forEach((orb) => {
-    const card = orb.closest<HTMLElement>('.assistant-live-card');
-    const live = card?.dataset.liveVoiceStatus === 'connected'
-      || Array.from(card?.querySelectorAll<HTMLButtonElement>('button') ?? []).some(
-        (button) => button.textContent?.trim().toLowerCase() === 'end call',
-      );
-    orb.dataset.voiceMode = speaking ? 'speaking' : live ? 'listening' : 'idle';
-    if (card) {
-      if (speaking && kind) card.dataset.liveVoiceOutputKind = kind;
-      else delete card.dataset.liveVoiceOutputKind;
-    }
-  });
+  liveCallPresentationStore.update({ speaking, outputKind: speaking && kind ? kind : null });
   if (reportedSpeaking !== speaking) {
     reportedSpeaking = speaking;
     window.dispatchEvent(new CustomEvent(AUDIO_PLAYBACK_STATE_EVENT, {

@@ -65,6 +65,7 @@ import {
   shouldUseUnifiedLiveVoiceAudio,
 } from './live-voice-unified-audio-controller';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { liveCallPresentationStore, liveCallVoiceMode } from './live-call-presentation-store';
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
@@ -72,6 +73,13 @@ let greetingEvents: Array<Record<string, unknown>> | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function renderLiveVoice(active = true, autoSpeak = true): void {
+  liveCallPresentationStore.resetForTests();
+  liveCallPresentationStore.update({
+    autoSpeak,
+    captureOwned: true,
+    captureStatus: active ? 'connected' : 'idle',
+    captureActive: active,
+  });
   document.body.innerHTML = `
     <section class="assistant-live-card" data-live-voice-status="${active ? 'connected' : 'idle'}">
       <button type="button">${active ? 'End Call' : 'Start Call'}</button>
@@ -239,7 +247,7 @@ describe('live voice unified audio controller', () => {
       'turn_finished',
       expect.objectContaining({ phrases: 3, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
-    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    expect(liveCallVoiceMode(liveCallPresentationStore.getState())).toBe('listening');
   });
 
   it('uses one performance plan for onset, pause policy, cue decision, and TTS dispatch', async () => {
@@ -352,7 +360,7 @@ describe('live voice unified audio controller', () => {
     const greetingCall = fetchMock.mock.calls.find(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'));
     const signal = greetingCall?.[1]?.signal as AbortSignal;
     expect(signal.aborted).toBe(false);
-    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBe('greeting');
+    expect(liveCallPresentationStore.getState().outputKind).toBe('greeting');
 
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
 
@@ -362,8 +370,8 @@ describe('live voice unified audio controller', () => {
       expect.any(Number),
       'user-spoke-during-greeting',
     ));
-    expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
-    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    expect(liveCallPresentationStore.getState().outputKind).toBeNull();
+    expect(liveCallVoiceMode(liveCallPresentationStore.getState())).toBe('listening');
     resolveOutput();
   });
 
@@ -486,7 +494,7 @@ describe('live voice unified audio controller', () => {
       'turn_stopped',
       expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
-    expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
+    expect(liveCallVoiceMode(liveCallPresentationStore.getState())).toBe('listening');
     resolveOutput();
   });
 });

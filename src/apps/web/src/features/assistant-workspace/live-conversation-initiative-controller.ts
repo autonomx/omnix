@@ -10,6 +10,7 @@ import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
 import { api, unwrap } from '../../api/http';
 import { openStream } from '../../api/transport';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 let liveConversationInitiativeInstalled = false;
 
@@ -488,7 +489,7 @@ function isAssistantSpeaking(): boolean {
 }
 
 function isAutoSpeakEnabled(): boolean {
-  return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
+  return liveCallPresentationStore.getState().autoSpeak;
 }
 
 function waitForOnset(delayMs: number, signal: AbortSignal): Promise<void> {

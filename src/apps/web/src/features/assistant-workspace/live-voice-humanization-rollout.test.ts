@@ -7,12 +7,11 @@ import {
   writeLiveVoiceHumanizationFlags,
 } from './live-voice-humanization-flags';
 import { shouldUseUnifiedLiveVoiceAudio } from './live-voice-unified-audio-controller';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 beforeEach(() => {
-  document.body.innerHTML = `
-    <label class="assistant-voice-toggle">
-      <input type="checkbox" checked>
-    </label>`;
+  liveCallPresentationStore.resetForTests();
+  liveCallPresentationStore.update({ autoSpeak: true });
   resetLiveVoiceHumanizationFlags();
 });
 
@@ -28,7 +27,7 @@ describe('live voice humanization rollout integration', () => {
     writeLiveVoiceHumanizationFlags({ master: false });
 
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'POST' })).toBe(false);
-    expect(document.querySelector<HTMLInputElement>('.assistant-voice-toggle input')?.checked).toBe(true);
+    expect(liveCallPresentationStore.getState().autoSpeak).toBe(true);
   });
 
   it('disables listener cues independently from response playback', () => {

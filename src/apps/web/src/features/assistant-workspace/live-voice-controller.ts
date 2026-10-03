@@ -49,6 +49,7 @@ import { LIVE_VOICE_CAPTURE_WORKLET_NAME } from './worklets/names';
 import type { SpeechLocation } from './stt-url';
 import { pipelineFetch } from '../../api/fetchPipeline';
 import { liveVoiceTranscriptStore, type LiveVoiceSpeaker } from './live-voice-transcript-store';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -114,7 +115,6 @@ type EndpointCommitState = {
 };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
-const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
 const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
 const DEFAULT_CONVERSATION_PACE: ConversationPace = 'balanced';
 const MIN_SPEECH_RMS_THRESHOLD = 0.012;
@@ -136,8 +136,6 @@ const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
 const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const preparedCards = new WeakSet<HTMLElement>();
-const panelStatuses = new WeakMap<HTMLElement, StreamingSttConnectionStatus>();
 let activeSession: LiveVoiceSession | null = null;
 let pendingStart: PendingStart | null = null;
 let startToken = 0;
@@ -227,71 +225,28 @@ export function isLiveVoiceControllerInstalled(): boolean {
   return initialized;
 }
 
-export function initializeLiveVoiceController(root: ParentNode = document): () => void {
+export function initializeLiveVoiceController(): () => void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   initialized = true;
-  prepareCards(root);
-  document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
-  const observer = new MutationObserver(() => prepareCards(root));
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true,
-  });
+  liveCallPresentationStore.update({ captureOwned: true });
   return () => {
     // Leaving Chat ends a running call, as the stop button would.
     handleExternalStop();
-    observer.disconnect();
-    document.removeEventListener('click', handleDocumentClick, true);
     window.removeEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
+    liveCallPresentationStore.update({ captureOwned: false, captureStatus: 'idle', captureActive: false, hearing: false });
     initialized = false;
   };
 }
 
-function prepareCards(root: ParentNode): void {
-  root.querySelectorAll<HTMLElement>('.assistant-live-card').forEach((card) => {
-    if (!preparedCards.has(card)) {
-      preparedCards.add(card);
-      const stateButton = card.querySelector<HTMLElement>('.assistant-live-state');
-      stateButton?.setAttribute('role', 'button');
-      stateButton?.setAttribute('tabindex', '0');
-      stateButton?.setAttribute('aria-label', 'Start live voice streaming');
-      stateButton?.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        if (!isCardStartingOrActive(card)) void startLiveVoice(card);
-      });
-      ensureLiveTaskPreset(card);
-      panelStatuses.set(card, 'idle');
-    }
-    renderPanelStatus(card, panelStatuses.get(card) ?? 'idle');
-  });
+/** Starts capture for the call card (Chat's call controls); a running call is left alone. */
+export function startLiveVoiceCall(card: HTMLElement): void {
+  if (!isCardStartingOrActive(card)) void startLiveVoice(card);
 }
 
-function handleDocumentClick(event: MouseEvent): void {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const stateButton = target.closest<HTMLElement>('.assistant-live-state');
-  if (stateButton) {
-    const card = stateButton.closest<HTMLElement>('.assistant-live-card');
-    if (card && !isCardStartingOrActive(card)) void startLiveVoice(card);
-    return;
-  }
-  const button = target.closest<HTMLButtonElement>('button');
-  if (!button) return;
-  if (button.classList.contains('assistant-mic-button')) {
-    const card = document.querySelector<HTMLElement>('.assistant-live-card');
-    if (card) toggleLiveVoice(card);
-    return;
-  }
-  const label = button.textContent?.trim().toLowerCase() ?? '';
-  const voiceContext = button.closest('.assistant-live-card')
-    || button.closest('.assistant-view-panel[aria-label="Voice Sessions view"]');
-  if ((label !== 'start call' && label !== 'end call') || !voiceContext) return;
-  const card = button.closest<HTMLElement>('.assistant-live-card')
-    ?? document.querySelector<HTMLElement>('.assistant-live-card');
-  if (card) toggleLiveVoice(card);
+/** Starts or ends capture for the call card. */
+export function toggleLiveVoiceCall(card: HTMLElement): void {
+  toggleLiveVoice(card);
 }
 
 function toggleLiveVoice(card: HTMLElement): void {
@@ -326,7 +281,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     sessionReporter = reporter;
     const provenance = currentLiveRuntimeProvenance();
     reporter.record('live_runtime_provenance', provenance, 'live_voice_controller');
-    const taskInstruction = readLiveTaskInstruction(card);
+    const taskInstruction = readLiveTaskInstruction();
     await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
     const coordination = liveConversationStore.getState().coordination;
     reporter.record('live_task_contract_acknowledged', {
@@ -1078,7 +1033,7 @@ function dispatchAssistantVoiceInterrupt(
   window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
     detail: {
       source: 'live-voice',
-      status: panelStatuses.get(card) ?? 'connected',
+      status: liveCallPresentationStore.getState().captureStatus,
       timestamp: new Date().toISOString(),
       intent,
       confidence,
@@ -1150,10 +1105,7 @@ function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
   session.card.style.setProperty('--voice-ambient-scale', scales.ambientScale.toFixed(3));
   session.card.style.setProperty('--voice-core-scale', scales.coreScale.toFixed(3));
   session.card.style.setProperty('--voice-input-scale', scales.inputScale.toFixed(3));
-  session.card.dataset.voiceInput = session.voiceLevel >= 0.14 ? 'active' : 'listening';
-  setText(session.card.querySelector('.assistant-voice-input-status'), session.voiceLevel >= 0.14 ? 'Hearing you' : 'Listening');
-  const orb = session.card.querySelector<HTMLElement>('.assistant-voice-orb');
-  if (orb?.dataset.voiceMode !== 'speaking') orb?.setAttribute('data-voice-mode', 'listening');
+  liveCallPresentationStore.update({ hearing: session.voiceLevel >= 0.14 });
 }
 
 async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {
@@ -1296,30 +1248,8 @@ function failedRoutingResult(final: AcceptedVoiceFinal, errorCode: string): Live
   return { outcome: 'failed', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version, errorCode };
 }
 
-function ensureLiveTaskPreset(card: HTMLElement): void {
-  if (card.querySelector('[data-live-task-instruction]')) return;
-  const select = document.createElement('select');
-  select.dataset.liveTaskInstruction = 'true';
-  select.setAttribute('aria-label', 'Live task');
-  for (const [label, value] of [
-    ['Conversation', ''],
-    ['Translate Japanese to English', 'Translate Japanese speech into concise English continuously. Keep listening while speaking.'],
-    ['Live grammar correction', 'Correct my grammar continuously while I speak.'],
-  ] as const) {
-    const option = document.createElement('option');
-    option.textContent = label;
-    option.value = value;
-    select.append(option);
-  }
-  select.value = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY) ?? '';
-  select.addEventListener('change', () => window.localStorage.setItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY, select.value));
-  card.querySelector('header')?.append(select);
-}
-
-function readLiveTaskInstruction(card: HTMLElement): string | undefined {
-  const selected = card.querySelector<HTMLSelectElement>('[data-live-task-instruction]')?.value.trim();
-  const stored = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY)?.trim();
-  return selected || stored || undefined;
+function readLiveTaskInstruction(): string | undefined {
+  return liveCallPresentationStore.getState().taskInstruction.trim() || undefined;
 }
 
 function replayFinalizationBuffer(session: LiveVoiceSession, frames: Float32Array[]): void {
@@ -1435,53 +1365,18 @@ function closePendingResources(
   if (audioContext) void audioContext.close().catch(() => undefined);
 }
 
+// The card is rendered by Chat from the presentation store.
 function setPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus): void {
-  panelStatuses.set(card, status);
-  renderPanelStatus(card, status);
-  queueMicrotask(() => renderPanelStatus(card, panelStatuses.get(card) ?? status));
-}
-
-function renderPanelStatus(card: HTMLElement, status: StreamingSttConnectionStatus): void {
-  const active = isCardStartingOrActive(card);
-  const stateText = status === 'connected' ? 'Listening'
-    : status === 'connecting' ? 'Connecting'
-      : status === 'disconnected' ? 'Reconnecting'
-        : status === 'error' ? 'Error' : 'Idle';
-  const connectionText = status === 'connected' ? 'Connected'
-    : status === 'connecting' || status === 'disconnected' ? 'Connecting' : 'Disconnected';
-  const inputText = status === 'connected' ? 'Listening'
-    : status === 'connecting' ? 'Requesting mic'
-      : status === 'disconnected' ? 'Reconnecting'
-        : status === 'error' ? 'Input error' : 'Idle';
-  setText(card.querySelector('header strong'), connectionText);
-  setText(card.querySelector('.assistant-live-state span:first-child'), stateText);
-  setText(card.querySelector('.assistant-voice-status strong'), stateText);
-  setText(card.querySelector('.assistant-voice-input-status'), inputText);
-  setDataAttribute(card, 'liveVoiceStatus', status);
-  setDataAttribute(card, 'voiceInput', status === 'connected' ? 'listening' : status);
-  const callButton = findCallButton(card);
-  if (callButton) {
-    setText(callButton, active ? 'End Call' : 'Start Call');
-    callButton.classList.toggle('danger', active);
-    callButton.disabled = status === 'connecting';
-  }
-  const orb = card.querySelector<HTMLElement>('.assistant-voice-orb');
-  if (orb && !(status === 'connected' && orb.dataset.voiceMode === 'speaking')) {
-    setDataAttribute(orb, 'voiceMode', status === 'connected' ? 'listening' : status === 'error' ? 'error' : 'idle');
-  }
-}
-
-function findCallButton(card: HTMLElement): HTMLButtonElement | undefined {
-  return Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find((button) => {
-    const label = button.textContent?.trim().toLowerCase() ?? '';
-    return label === 'start call' || label === 'end call';
-  });
+  liveCallPresentationStore.update({ captureStatus: status, captureActive: isCardStartingOrActive(card) });
+  // Starting and stopping settle the active session after reporting the status.
+  queueMicrotask(() => liveCallPresentationStore.update({ captureActive: isCardStartingOrActive(card) }));
 }
 
 function resetVoiceVisualizer(card: HTMLElement): void {
   for (const property of ['--voice-level', '--voice-bar-scale', '--voice-ambient-scale', '--voice-core-scale', '--voice-input-scale']) {
     card.style.removeProperty(property);
   }
+  liveCallPresentationStore.update({ hearing: false });
 }
 
 function renderTranscript(_card: HTMLElement, speaker: LiveVoiceSpeaker, text: string, mode: 'draft' | 'final'): void {

@@ -2,6 +2,7 @@ import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import { liveConversationStore, type LiveConversationRuntimeState } from './live-conversation-store';
 import { api, unwrap } from '../../api/http';
 import { openStream } from '../../api/transport';
+import { liveCallPresentationStore } from './live-call-presentation-store';
 
 let desktopCompanionDeliveryInstalled = false;
 
@@ -417,7 +418,7 @@ function isAssistantSpeaking(runtime: LiveConversationRuntimeState): boolean {
 }
 
 function isAutoSpeakEnabled(): boolean {
-  return document.querySelector<HTMLInputElement>('.assistant-voice-toggle input[type="checkbox"]')?.checked ?? false;
+  return liveCallPresentationStore.getState().autoSpeak;
 }
 
 function wait(reason: string): DesktopCompanionDeliveryDecision {

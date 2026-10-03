@@ -53,7 +53,8 @@ import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
 import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
-import { isLiveVoiceControllerInstalled } from '../assistant-workspace/live-voice-controller';
+import { isLiveVoiceControllerInstalled, startLiveVoiceCall, toggleLiveVoiceCall } from '../assistant-workspace/live-voice-controller';
+import { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 import type { components } from '../../api/generated/types';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
@@ -781,6 +782,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const displayedSessionId = activeSession?.id ?? selectedSessionId ?? 'pending-session';
   const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
   const liveVoiceTranscript = useLiveVoiceTranscript();
+  const livePresentation = useLiveCallPresentation();
+  const liveCardRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    liveCallPresentationStore.update({ autoSpeak: autoSpeakResponses });
+    return () => liveCallPresentationStore.update({ autoSpeak: false });
+  }, [autoSpeakResponses]);
   const voiceTranscriptRef = useRef<HTMLDivElement | null>(null);
   const lastVoiceTranscriptMessageId = visibleVoiceTranscriptMessages.at(-1)?.id;
   // The newest words stay in view as the transcript grows.
@@ -792,15 +799,24 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
   const liveVoiceActive = callStartedAt !== null;
-  const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
-  const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
+  // With the capture controller installed, the card shows its microphone stream.
+  const captureLabels = livePresentation.captureOwned ? liveCaptureLabels(livePresentation.captureStatus) : null;
+  const liveVoiceState = captureLabels ? captureLabels.state : liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
+  const liveConnectionLabel = captureLabels ? captureLabels.connection : liveVoiceActive ? 'Connected' : 'Disconnected';
+  const liveInputLabel = captureLabels ? (livePresentation.hearing ? 'Hearing you' : captureLabels.input) : liveVoiceActive ? 'Listening' : 'Idle';
+  const liveVoiceInputMode = livePresentation.captureOwned
+    ? livePresentation.hearing ? 'active' : livePresentation.captureStatus === 'connected' ? 'listening' : livePresentation.captureStatus
+    : undefined;
+  const liveCallButtonActive = livePresentation.captureOwned ? livePresentation.captureActive : liveVoiceActive;
   const liveCharacterName = liveCallRuntime?.interaction_mode === 'character'
     ? liveCallRuntime.display_name
     : selectedCharacter?.display_name;
   const liveIdentityLabel = liveCharacterName
     ? `Character Mode · ${liveCharacterName}`
     : 'System Assistant';
-  const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
+  const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking'
+    : livePresentation.captureOwned || livePresentation.speaking ? liveCallVoiceMode(livePresentation, liveVoiceActive)
+      : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
   const configuredVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
@@ -1270,6 +1286,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   function stopMediaStream(): void {
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
+  }
+
+  // The call controls start or end both the capture controller's microphone
+  // stream (when installed) and Chat's call session.
+  function toggleLiveCallFromControls(): void {
+    const card = liveCardRef.current;
+    if (card && dedicatedLiveVoiceControllerInstalled()) toggleLiveVoiceCall(card);
+    void (liveVoiceActive ? stopLiveCall() : startLiveCall());
+  }
+
+  function startLiveCallFromControls(): Promise<void> {
+    const card = liveCardRef.current;
+    if (card && dedicatedLiveVoiceControllerInstalled()) startLiveVoiceCall(card);
+    return startLiveCall();
   }
 
   function clearVoiceTranscript(): void {
@@ -1988,7 +2018,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {pastedChatTextFile ? <div className="assistant-chat-file-attachment" role="status"><span aria-hidden="true">📄</span><div><strong>{pastedChatTextFile.filename}</strong><small>{pastedChatTextFile.mimeType} · {(pastedChatTextFile.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove attached file" onClick={() => { setPastedChatTextFile(null); setChatImageError(null); }}>×</button></div> : null}
                 {chatImageError ? <p className="assistant-chat-image-error" role="alert">{chatImageError}</p> : null}
                 <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={handleComposerPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImages.length > 0 || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
-                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
+                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={toggleLiveCallFromControls}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
               </form>
             </>
           ) : (
@@ -2010,7 +2040,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               voiceProfilesLoading={assetsQuery.isLoading}
               onResetAssistantSettings={resetAssistantSettings}
               onSessionResolved={setSelectedSessionId}
-              onStartLiveCall={startLiveCall}
+              onStartLiveCall={startLiveCallFromControls}
               onUpdateAssistantSettings={updateAssistantSettings}
               onShowTools={() => setActiveUtilityPanel('tools')}
               selectedSessionId={selectedSessionId}
@@ -2043,8 +2073,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             </button>
           </div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
-            <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
-              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
+            <section className="assistant-live-card" ref={liveCardRef} data-live-voice-id={currentLiveCallVoiceId()} data-live-voice-status={livePresentation.captureOwned ? livePresentation.captureStatus : undefined} data-voice-input={liveVoiceInputMode} data-live-voice-output-kind={livePresentation.outputKind ?? undefined}>
+              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div>{livePresentation.captureOwned ? <select aria-label="Live task" data-live-task-instruction="true" value={livePresentation.taskInstruction} onChange={(event) => liveCallPresentationStore.setTaskInstruction(event.currentTarget.value)}>{LIVE_TASK_PRESETS.map((preset) => <option key={preset.label} value={preset.value}>{preset.label}</option>)}</select> : null}</header>
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
                 ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
                 : <div className="assistant-live-state" role="status" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
@@ -2065,11 +2095,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d' ? <Live2DZoomControl /> : null}
               <div className="assistant-voice-input-indicator" aria-live="polite">
                 <span>Mic input</span>
-                <strong className="assistant-voice-input-status">{liveVoiceActive ? 'Listening' : 'Idle'}</strong>
+                <strong className="assistant-voice-input-status">{liveInputLabel}</strong>
                 <i aria-hidden="true"><b /></i>
               </div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
-              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={toggleLiveCallFromControls}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
               <div className="assistant-voice-transcript" ref={voiceTranscriptRef}><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
