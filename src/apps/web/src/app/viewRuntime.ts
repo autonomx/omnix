@@ -78,7 +78,6 @@ async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store:
 
   add((await import('../features/chatbot/chat-sidebar-manager')).initializeChatSidebarManager());
   add((await import('../features/chatbot/live-chat-workspace')).initializeLiveChatWorkspace(queryClient));
-  add((await import('../features/chatbot/voice-session-evaluation-workspace')).initializeVoiceSessionEvaluationWorkspace());
 
   add((await import('../features/assistant-workspace/live-conversation-store-bridge')).initializeLiveConversationStoreBridge());
   add((await import('../features/assistant-workspace/live-session-coordinator')).initializeLiveSessionCoordinator());
@@ -114,14 +113,7 @@ async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store:
   add((await import('../features/assistant-workspace/live-conversation-durable-evaluation-controller')).initializeLiveConversationDurableEvaluationController());
 
   add((await import('../features/assistant-workspace/assistant-context-controller')).initializeAssistantContextController());
-  const [audio, streamAudio, desktop] = await Promise.all([
-    import('../features/assistant-workspace/chat-message-audio-controller-v2'),
-    import('../features/assistant-workspace/chat-message-stream-audio-controller'),
-    import('../features/assistant-workspace/desktop-companion-controls'),
-  ]);
-  add(audio.initializeChatMessageAudioControllerV2());
-  add(streamAudio.initializeChatMessageStreamAudioController());
-  add(desktop.initializeDesktopCompanionControls());
+  add((await import('../features/assistant-workspace/desktop-companion-controls')).initializeDesktopCompanionControls());
 
   add((await import('../features/assistant-workspace/live-voice-form-sync')).initializeLiveVoiceFormSync());
   add((await import('../features/assistant-workspace/desktop-companion-expression-enricher')).initializeDesktopCompanionExpressionEnricher());

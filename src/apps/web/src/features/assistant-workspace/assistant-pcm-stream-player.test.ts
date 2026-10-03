@@ -1,16 +1,8 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { fireEvent, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { initializeChatMessageStreamAudioController } from './chat-message-stream-audio-controller';
-
-let cleanupController: (() => void) | null = null;
+import { assistantPcmStream, stopAssistantPcmStream, toggleAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 
 type SocketListener = (event: Event | MessageEvent) => void;
-
-type RenderMessageOptions = {
-  liveVoiceId?: string;
-  selectedVoice?: string | null;
-};
 
 class FakeMessagePort {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -150,25 +142,12 @@ class FakeWebSocket {
   }
 }
 
-function renderMessage(options: RenderMessageOptions = {}): HTMLButtonElement {
-  const selectedVoice = options.selectedVoice === undefined ? 'ari-clone' : options.selectedVoice;
-  const voiceSelect = selectedVoice === null
-    ? ''
-    : `<select aria-label="Cloned voice"><option value="${selectedVoice}" selected>Ari</option></select>`;
-  const liveCard = options.liveVoiceId
-    ? `<section class="assistant-live-card" data-live-voice-id="${options.liveVoiceId}"></section>`
-    : '';
-  document.body.innerHTML = `
-    ${liveCard}
-    ${voiceSelect}
-    <article class="assistant-chat-message assistant">
-      <div class="assistant-chat-bubble"><p>Stream this reply.</p>
-        <div class="assistant-message-actions"><button aria-label="More response actions">⋮</button></div>
-      </div>
-    </article>
-    <div class="assistant-inline-status"></div>`;
-  cleanupController = initializeChatMessageStreamAudioController();
-  return document.querySelector('button[aria-label="Stream response audio"]') as HTMLButtonElement;
+function streamReply(voiceId: string | null = 'ari-clone'): void {
+  void toggleAssistantPcmStream('message-1', 'Stream this reply.', voiceId);
+}
+
+function finished(): void {
+  expect(assistantPcmStream.getState()).toEqual({ messageId: null, status: 'Streaming response audio finished.' });
 }
 
 function pcmFrame(samples: Int16Array): ArrayBuffer {
@@ -183,9 +162,7 @@ function installAudioFakes(frames: ArrayBuffer[]): void {
 }
 
 afterEach(() => {
-  cleanupController?.();
-  cleanupController = null;
-  document.body.innerHTML = '';
+  stopAssistantPcmStream();
   FakeAudioContext.contexts = [];
   FakeAudioWorkletNode.nodes = [];
   FakeWebSocket.instances = [];
@@ -198,11 +175,11 @@ describe('assistant PCM stream player', () => {
   it('correlates binary websocket PCM with structured diagnostics', async () => {
     installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
 
-    fireEvent.click(renderMessage());
+    streamReply();
 
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const [socket] = FakeWebSocket.instances;
-    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    await waitFor(finished);
     expect(new URL(socket.url).pathname).toBe('/api/tts/stream/websocket');
     expect(socket.binaryType).toBe('arraybuffer');
     const messages = socket.parsedMessages();
@@ -232,9 +209,9 @@ describe('assistant PCM stream player', () => {
     window.addEventListener('omnix:character-avatar-pcm', onAvatarPcm);
 
     try {
-      fireEvent.click(renderMessage());
+      streamReply();
 
-      await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+      await waitFor(finished);
       expect(avatarPcmEvents).toHaveLength(1);
       expect(avatarPcmEvents[0].detail.samples).toBeInstanceOf(Int16Array);
       expect(Array.from(avatarPcmEvents[0].detail.samples)).toEqual([1_000, -1_000]);
@@ -245,14 +222,14 @@ describe('assistant PCM stream player', () => {
     }
   });
 
-  it('sends the active Character Mode speaker through the PCM websocket', async () => {
+  it('sends the voice Chat chose (the Character Mode speaker) through the PCM websocket', async () => {
     installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
 
-    fireEvent.click(renderMessage({ liveVoiceId: 'Inigo', selectedVoice: null }));
+    streamReply('Inigo');
 
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const [socket] = FakeWebSocket.instances;
-    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    await waitFor(finished);
     const requestBody = socket.parsedMessages().find((message) => message.type !== 'diagnostic');
     expect(requestBody).toMatchObject({
       speaker: 'Inigo',
@@ -263,7 +240,7 @@ describe('assistant PCM stream player', () => {
   it('keeps the adaptive AudioWorklet startup and recovery reserves', async () => {
     installAudioFakes(Array.from({ length: 8 }, () => pcmFrame(new Int16Array(2_400))));
 
-    fireEvent.click(renderMessage());
+    streamReply();
 
     await waitFor(() => expect(FakeAudioWorkletNode.nodes).toHaveLength(1));
     const [node] = FakeAudioWorkletNode.nodes;
@@ -277,15 +254,27 @@ describe('assistant PCM stream player', () => {
     expect(FakeAudioContext.contexts[0].audioWorklet.addModule).toHaveBeenCalledTimes(1);
   });
 
+  it('marks the streaming message and stops it on a second press', async () => {
+    installAudioFakes([]);
+    vi.spyOn(FakeWebSocket.prototype, 'send').mockImplementation(() => undefined);
+
+    streamReply();
+    expect(assistantPcmStream.getState()).toEqual({ messageId: 'message-1', status: 'Buffering streaming response audio…' });
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    streamReply();
+
+    expect(assistantPcmStream.getState()).toEqual({ messageId: null, status: 'Streaming response audio stopped.' });
+  });
+
   it('posts every binary PCM sample to the continuous queue in exact order', async () => {
     installAudioFakes([
       pcmFrame(new Int16Array([1_000, -1_000])),
       pcmFrame(new Int16Array([2_000, -2_000])),
     ]);
 
-    fireEvent.click(renderMessage());
+    streamReply();
 
-    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    await waitFor(finished);
     const pushMessages = FakeAudioWorkletNode.nodes[0].port.messages
       .filter((message) => (message as { type?: string }).type === 'push') as Array<{
         type: string;

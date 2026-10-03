@@ -1,9 +1,9 @@
+import { useSyncExternalStore } from 'react';
 import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 import ASSISTANT_PCM_STREAM_WORKLET_URL from './worklets/assistant-pcm-stream.worklet?worker&url';
 import { ASSISTANT_PCM_STREAM_WORKLET_NAME } from './worklets/names';
 import { parseJson, ttsControlEventSchema } from '../../api/schemas/streams';
 
-const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_START_BUFFER_SECONDS = 0.4;
 const STREAMING_TTS_REBUFFER_SECONDS = 0.75;
@@ -57,7 +57,8 @@ type StreamStats = {
 };
 
 type MessageStreamPlayback = {
-  button: HTMLButtonElement;
+  messageId: string;
+  voiceId: string | null;
   audioContext: AudioContext;
   node: AudioWorkletNode | null;
   socket: WebSocket | null;
@@ -71,28 +72,62 @@ type MessageStreamPlayback = {
 
 let activePlayback: MessageStreamPlayback | null = null;
 
-export function isAssistantPcmStreamActive(button: HTMLButtonElement): boolean {
-  return activePlayback?.button === button;
+/** Which message is streaming and the latest status line (WP-9.4: Chat renders both). */
+export type AssistantPcmStreamState = { messageId: string | null; status: string | null };
+
+let streamState: AssistantPcmStreamState = { messageId: null, status: null };
+const streamListeners = new Set<() => void>();
+
+function setStreamState(change: Partial<AssistantPcmStreamState>): void {
+  const next = { ...streamState, ...change };
+  if (next.messageId === streamState.messageId && next.status === streamState.status) return;
+  streamState = next;
+  streamListeners.forEach((listener) => listener());
 }
 
-export async function startAssistantPcmStream(
-  root: ParentNode,
-  button: HTMLButtonElement,
-  text: string,
-): Promise<void> {
+export const assistantPcmStream = {
+  getState: (): AssistantPcmStreamState => streamState,
+  subscribe(listener: () => void): () => void {
+    streamListeners.add(listener);
+    return () => streamListeners.delete(listener);
+  },
+};
+
+export function useAssistantPcmStream(): AssistantPcmStreamState {
+  return useSyncExternalStore(assistantPcmStream.subscribe, assistantPcmStream.getState, assistantPcmStream.getState);
+}
+
+/**
+ * Streams a message's text as speech; a second call for the streaming message
+ * stops it. `voiceId` is the cloned voice to use (the configured voice when null).
+ */
+export async function toggleAssistantPcmStream(messageId: string, text: string, voiceId: string | null): Promise<void> {
+  if (activePlayback?.messageId === messageId) {
+    stopAssistantPcmStream('Streaming response audio stopped.');
+    return;
+  }
+  if (!text.trim()) {
+    setStreamState({ status: 'No assistant response is ready to stream.' });
+    return;
+  }
+  await startAssistantPcmStream(messageId, text, voiceId);
+}
+
+async function startAssistantPcmStream(messageId: string, text: string, voiceId: string | null): Promise<void> {
   const liveWindow = window as StreamingAudioWindow;
   const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
   const AudioWorkletNodeCtor = liveWindow.AudioWorkletNode;
   const WebSocketCtor = liveWindow.WebSocket;
   if (!AudioContextCtor || !AudioWorkletNodeCtor || !WebSocketCtor) {
-    setStreamAudioStatus(root, 'Streaming audio requires browser AudioWorklet and WebSocket support.');
+    setStreamAudioStatus('Streaming audio requires browser AudioWorklet and WebSocket support.');
     return;
   }
 
-  stopAssistantPcmStream(root);
+  stopAssistantPcmStream();
   const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: STREAMING_TTS_SAMPLE_RATE });
   const playback: MessageStreamPlayback = {
-    button,
+    messageId,
+    voiceId: voiceId?.trim() || createAssistantWorkspaceRuntimeConfig().ttsVoice?.trim() || null,
     audioContext,
     node: null,
     socket: null,
@@ -115,12 +150,11 @@ export async function startAssistantPcmStream(
     },
   };
   activePlayback = playback;
-  setButtonStreaming(button, true);
-  setStreamAudioStatus(root, 'Buffering streaming response audio…');
+  setStreamState({ messageId, status: 'Buffering streaming response audio…' });
 
   try {
     if (audioContext.state !== 'running') await audioContext.resume();
-    playback.node = await createContinuousPcmSink(root, playback, AudioWorkletNodeCtor);
+    playback.node = await createContinuousPcmSink(playback, AudioWorkletNodeCtor);
     if (playback.closed || activePlayback !== playback) return;
     await streamPcmWebSocket(playback, WebSocketCtor, text);
   } catch (error) {
@@ -130,19 +164,17 @@ export async function startAssistantPcmStream(
     });
     terminatePlayback(playback, 'failed');
     if (activePlayback === playback) activePlayback = null;
-    setButtonStreaming(button, false);
-    setStreamAudioStatus(root, error instanceof Error ? error.message : 'Streaming response audio failed.');
+    setStreamState({ messageId: null, status: error instanceof Error ? error.message : 'Streaming response audio failed.' });
   }
 }
 
-export function stopAssistantPcmStream(root: ParentNode, status?: string): void {
+export function stopAssistantPcmStream(status?: string): void {
   const playback = activePlayback;
   activePlayback = null;
   if (!playback) return;
   sendDiagnostic(playback, 'playback_stopped', { requested_status: status ?? null });
   terminatePlayback(playback, 'stopped');
-  setButtonStreaming(playback.button, false);
-  if (status) setStreamAudioStatus(root, status);
+  setStreamState(status ? { messageId: null, status } : { messageId: null });
 }
 
 function streamPcmWebSocket(
@@ -162,7 +194,7 @@ function streamPcmWebSocket(
         return;
       }
       playback.stats.websocketOpenedAtMs = performance.now();
-      const voice = selectedVoiceId();
+      const voice = playback.voiceId;
       socket.send(JSON.stringify({
         text,
         speaker: voice,
@@ -280,7 +312,6 @@ function streamPcmWebSocket(
 }
 
 async function createContinuousPcmSink(
-  root: ParentNode,
   playback: MessageStreamPlayback,
   AudioWorkletNodeCtor: typeof AudioWorkletNode,
 ): Promise<AudioWorkletNode> {
@@ -310,14 +341,14 @@ async function createContinuousPcmSink(
     if (eventType === 'resumed') playback.stats.resumes += 1;
     sendDiagnostic(playback, `worklet_${eventType}`, { ...event.data });
     if (eventType === 'started' || eventType === 'resumed') {
-      setStreamAudioStatus(root, 'Streaming response audio…');
+      setStreamAudioStatus('Streaming response audio…');
       return;
     }
     if (eventType === 'underrun') {
-      setStreamAudioStatus(root, 'Rebuffering streaming response audio…');
+      setStreamAudioStatus('Rebuffering streaming response audio…');
       return;
     }
-    if (eventType === 'drained' && playback.serverDone) finishPlayback(root, playback);
+    if (eventType === 'drained' && playback.serverDone) finishPlayback(playback);
   };
   node.connect(playback.audioContext.destination);
   sendDiagnostic(playback, 'worklet_connected', {
@@ -356,16 +387,15 @@ function markServerDone(playback: MessageStreamPlayback): void {
   playback.node?.port.postMessage({ type: 'end' });
 }
 
-function finishPlayback(root: ParentNode, playback: MessageStreamPlayback): void {
+function finishPlayback(playback: MessageStreamPlayback): void {
   if (playback.closed) return;
   sendDiagnostic(playback, 'playback_finished', finalDiagnostics(playback));
   playback.closed = true;
   if (activePlayback === playback) activePlayback = null;
-  setButtonStreaming(playback.button, false);
   try { playback.socket?.close(1000, 'playback-finished'); } catch { /* ignore connection cleanup failures */ }
   try { playback.node?.disconnect(); } catch { /* ignore browser cleanup failures */ }
   void playback.audioContext.close().catch(() => undefined);
-  setStreamAudioStatus(root, 'Streaming response audio finished.');
+  setStreamState({ messageId: null, status: 'Streaming response audio finished.' });
 }
 
 function terminatePlayback(playback: MessageStreamPlayback, reason: string): void {
@@ -439,30 +469,8 @@ function streamingTtsWebSocketUrl(): string {
   return url.toString();
 }
 
-function setButtonStreaming(button: HTMLButtonElement, streaming: boolean): void {
-  button.textContent = streaming ? '■' : '≋';
-  button.title = streaming ? 'Stop streaming response audio' : 'Stream response audio';
-  button.setAttribute('aria-label', streaming ? 'Stop streaming response audio' : 'Stream response audio');
-  button.setAttribute('aria-pressed', streaming ? 'true' : 'false');
-}
-
-function setStreamAudioStatus(root: ParentNode, message: string): void {
-  const host = root.querySelector<HTMLElement>('.assistant-inline-status');
-  if (!host) return;
-  let status = host.querySelector<HTMLElement>(`[${STREAM_AUDIO_STATUS_ATTRIBUTE}]`);
-  if (!status) {
-    status = document.createElement('span');
-    status.setAttribute(STREAM_AUDIO_STATUS_ATTRIBUTE, 'true');
-    status.setAttribute('role', 'status');
-    host.appendChild(status);
-  }
-  status.textContent = message;
-}
-
-function selectedVoiceId(): string | null {
-  const selected = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
-  if (selected) return selected;
-  return createAssistantWorkspaceRuntimeConfig().ttsVoice?.trim() || null;
+function setStreamAudioStatus(message: string): void {
+  setStreamState({ status: message });
 }
 
 function parseStreamingTtsControlEvent(value: string): StreamingTtsControlEvent | null {

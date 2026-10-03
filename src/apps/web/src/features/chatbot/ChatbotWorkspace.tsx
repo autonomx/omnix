@@ -46,6 +46,8 @@ import { ChatIdentityModeControl } from './ChatIdentityModeControl';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import { LiveChatPanel } from './LiveChatPanel';
+import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
+import { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from '../assistant-workspace/assistant-pcm-stream-websocket-player';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
@@ -785,6 +787,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
   const liveVoiceTranscript = useLiveVoiceTranscript();
   const livePresentation = useLiveCallPresentation();
+  const pcmStream = useAssistantPcmStream();
   // Immersive Live Chat shows the chat when it has messages, the live transcript otherwise.
   const liveChatMessages = useMemo<LiveChatMessage[]>(() => {
     if (displayedMessages.length) {
@@ -1632,7 +1635,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setOpenMessageActionMenuId(null);
   }
 
+  // Low-latency playback of one reply over the TTS WebSocket; pressing it again stops it.
+  function streamAssistantResponseAudio(message: ChatMessage): void {
+    if (pcmStream.messageId !== message.id) {
+      window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
+        detail: { source: 'manual-stream-button', intent: 'audio-preempt', confidence: 1 },
+      }));
+      stopAssistantResponseAudio(undefined, { cancelPending: false });
+    }
+    void toggleAssistantPcmStream(message.id, message.content, currentLiveCallVoiceId() || null);
+  }
+
   async function playAssistantResponseAudio(text: string): Promise<void> {
+    stopAssistantPcmStream();
     const spokenText = text.trim();
     if (!spokenText) {
       setAudioStatus('No assistant response is ready to play.');
@@ -2023,7 +2038,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                       />
                       {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
                       <OmnixRunCard metadata={message.metadata} />
-                      {message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
+                      {message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" data-omnix-stream-audio="true" aria-label={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} title={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} aria-pressed={pcmStream.messageId === message.id} onClick={() => streamAssistantResponseAudio(message)}>{pcmStream.messageId === message.id ? '■' : '≋'}</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
                     </div>
                   </article>
                 )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
@@ -2086,6 +2101,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             {chatJobQuery.isError ? <span role="alert">The response job could not be tracked. Refresh to check its status.</span> : null}
             {chatJobError ? <span role="alert">{chatJobError}</span> : null}
             {audioStatus ? <span role="status">{audioStatus}</span> : null}
+            {pcmStream.status ? <span role="status">{pcmStream.status}</span> : null}
             {settingsStatus && activeView === 'settings' ? <span role="status">{settingsStatus}</span> : null}
             {sendMutation.data ? <span role="status">{chatJobQuery.data?.status === 'completed' ? 'Response ready' : chatJobQuery.data?.status === 'failed' ? 'Response failed' : chatJobQuery.data?.status === 'canceled' ? 'Response canceled' : 'Response job accepted'}: {sendMutation.data.job.id}</span> : null}
           </div>
@@ -2170,7 +2186,7 @@ export function selectFreshChatSession<T extends { id?: string; message_count?: 
 }
 
 function AssistantWorkspaceView({ activeView, assistantSettings, selectedSessionId, chatProviders, enabledToolCount, initialToolConnectionMessage, initialToolId, modelLabel, onResetAssistantSettings, onSessionResolved, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats' | 'live'>; assistantSettings: AssistantSettings; selectedSessionId: string | null; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; initialToolConnectionMessage: string | null; initialToolId: string | null; modelLabel: string; onResetAssistantSettings: () => void; onSessionResolved: (sessionId: string) => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {
-  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{assistantSettings.voiceId ? `Active cloned voice: ${voiceLabelForId(assistantSettings.voiceId, voiceProfiles) || assistantSettings.voiceId}` : runtimeConfig.ttsVoice ? `Configured voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div></section>;
+  if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{assistantSettings.voiceId ? `Active cloned voice: ${voiceLabelForId(assistantSettings.voiceId, voiceProfiles) || assistantSettings.voiceId}` : runtimeConfig.ttsVoice ? `Configured voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div><VoiceSessionEvaluationPanel /></section>;
   if (activeView === 'tools') return <AssistantToolSettingsPanel enabledToolCount={enabledToolCount} initialConnectionMessage={initialToolConnectionMessage} initialToolId={initialToolId} toolExecutionRows={toolExecutionRows} onShowExecutionPanel={onShowTools} />;
   if (activeView === 'characters') return <section className="assistant-view-panel" aria-label="Characters view"><header><p className="eyebrow">Omnix Assistant</p><h2>Characters</h2><p>Create, version, and govern character identities independently from their linked voices and memory.</p></header><CharacterManagementPanel sessionId={selectedSessionId} onSessionResolved={onSessionResolved} /></section>;
   if (activeView === 'memory') return <MemoryManagementPanel sessionId={selectedSessionId} />;

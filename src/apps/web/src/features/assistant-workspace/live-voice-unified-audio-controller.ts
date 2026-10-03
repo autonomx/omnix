@@ -187,7 +187,7 @@ async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestIn
   const kind: LiveTurnKind = greetingMatch ? 'greeting' : 'response';
   if (kind === 'response') cancelGreetingStartup('real-response-started', true);
   await stopActiveTurn(kind === 'response' ? 'superseded-by-real-response' : 'superseded-by-greeting');
-  stopAssistantPcmStream(document);
+  stopAssistantPcmStream();
 
   const sessionId = decodeURIComponent((responseMatch ?? greetingMatch)?.[1] ?? 'unknown');
   const voiceTurnId = kind === 'response' ? extractLiveVoiceTurnId(init) : null;
@@ -305,7 +305,7 @@ function handleGreetingUserSpeech(): void {
   if (activeTurn?.kind !== 'greeting') return;
   playbackGeneration += 1;
   void stopActiveTurn('user-spoke-during-greeting');
-  stopAssistantPcmStream(document);
+  stopAssistantPcmStream();
   setVoiceSpeaking(false);
 }
 
@@ -633,7 +633,7 @@ function stopLiveVoiceUnifiedAudio(event?: Event): void {
   void stopActiveTurn(reason).finally(() => {
     if (reason !== 'voice-interrupt') void stopSharedAudioSession(reason);
   });
-  stopAssistantPcmStream(document);
+  stopAssistantPcmStream();
   setVoiceSpeaking(false);
 }
 
