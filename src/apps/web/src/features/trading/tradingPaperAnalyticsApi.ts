@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrapLabelled } from '../../api/http';
 
 export type AnalyticsNumeric = string | number;
 export type PaperAnalyticsMode = 'all' | 'shadow' | 'auto_paper';
@@ -58,48 +59,44 @@ export interface PaperJournalFilters {
   limit?: number;
 }
 
-async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { accept: 'application/json' } });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string'
-      ? payload.detail
-      : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Paper analytics request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
+const analytics = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Paper analytics');
 
-function query(filters: PaperAnalyticsFilters): string {
-  const params = new URLSearchParams({ account_id: filters.accountId });
-  if (filters.strategyId) params.set('strategy_id', filters.strategyId);
-  if (filters.epochId) params.set('epoch_id', filters.epochId);
-  if (filters.mode) params.set('mode', filters.mode);
-  if (filters.startDate) params.set('start_date', filters.startDate);
-  if (filters.endDate) params.set('end_date', filters.endDate);
-  if (filters.rollingWindow) params.set('rolling_window', String(filters.rollingWindow));
-  return params.toString();
-}
-
-function journalQuery(filters: PaperJournalFilters): string {
-  const params = new URLSearchParams({ account_id: filters.accountId });
-  if (filters.strategyId) params.set('strategy_id', filters.strategyId);
-  if (filters.epochId) params.set('epoch_id', filters.epochId);
-  if (filters.startDate) params.set('start_date', filters.startDate);
-  if (filters.endDate) params.set('end_date', filters.endDate);
-  if (filters.limit) params.set('limit', String(filters.limit));
-  return params.toString();
+function defined<T extends Record<string, unknown>>(values: T): Partial<T> {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== '')) as Partial<T>;
 }
 
 export const tradingPaperAnalyticsApi = {
-  epochs: async (accountId: string) => {
-    const payload = await requestJson<{ epochs?: PaperSimulationEpoch[] }>(
-      `/api/trading/paper-analytics/epochs?${new URLSearchParams({ account_id: accountId })}`,
-    );
-    return Array.isArray(payload.epochs) ? payload.epochs : [];
-  },
-  overview: (filters: PaperAnalyticsFilters) =>
-    requestJson<PaperAnalyticsOverview>(`/api/trading/paper-analytics/overview?${query(filters)}`),
-  journal: (filters: PaperJournalFilters) =>
-    requestJson<PaperTradeJournalResponse>(`/api/trading/paper-analytics/journal?${journalQuery(filters)}`),
+  epochs: async (accountId: string): Promise<PaperSimulationEpoch[]> =>
+    (await analytics(api.GET('/api/trading/paper-analytics/epochs', { params: { query: { account_id: accountId } } }))).epochs,
+  overview: (filters: PaperAnalyticsFilters): Promise<PaperAnalyticsOverview> =>
+    analytics(api.GET('/api/trading/paper-analytics/overview', {
+      params: {
+        query: {
+          account_id: filters.accountId,
+          ...defined({
+            strategy_id: filters.strategyId,
+            epoch_id: filters.epochId,
+            mode: filters.mode,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            rolling_window: filters.rollingWindow || undefined,
+          }),
+        },
+      },
+    })),
+  journal: (filters: PaperJournalFilters): Promise<PaperTradeJournalResponse> =>
+    analytics(api.GET('/api/trading/paper-analytics/journal', {
+      params: {
+        query: {
+          account_id: filters.accountId,
+          ...defined({
+            strategy_id: filters.strategyId,
+            epoch_id: filters.epochId,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            limit: filters.limit || undefined,
+          }),
+        },
+      },
+    })),
 };

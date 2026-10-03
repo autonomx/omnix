@@ -5,6 +5,8 @@ export class ApiError extends Error {
   readonly body: string;
   /** The gateway's X-Request-ID for the failed call; its log lines carry it. */
   readonly requestId: string | undefined;
+  /** The gateway's `detail` (or `error`), or the body text when it is not JSON. */
+  readonly detail: string;
 
   constructor(status: number, body: string, requestId?: string) {
     let detail = '';
@@ -25,6 +27,7 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
     this.requestId = requestId;
+    this.detail = detail;
   }
 }
 

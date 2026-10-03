@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 
-const paperApi = vi.hoisted(() => ({ snapshot: vi.fn(), placeOrder: vi.fn(), processObservation: vi.fn() }));
+const paperApi = vi.hoisted(() => ({ snapshot: vi.fn(), placeOrder: vi.fn() }));
 
 vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
 

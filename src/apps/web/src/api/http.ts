@@ -20,6 +20,11 @@ class GatewayRequest extends Request {
   }
 }
 
+/** `if-match` -> `If-Match`: Headers lowercases names; calls keep their usual spelling. */
+function canonicalHeaderName(name: string): string {
+  return name.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('-');
+}
+
 /**
  * openapi-fetch hands over a Request; the call is re-issued as (path, init) so the
  * fetch pipeline's middleware and the tests see the same calls as handwritten ones.
@@ -32,13 +37,15 @@ function gatewayFetch(fetchImpl: () => typeof fetch) {
     const init = request instanceof GatewayRequest ? request.gatewayInit : {};
     const headers: Record<string, string> = {};
     new Headers(init.headers).forEach((value, name) => {
-      headers[name === 'content-type' ? 'Content-Type' : name] = value;
+      headers[canonicalHeaderName(name)] = value;
     });
     return fetchImpl()(target, {
       method: request.method,
       ...(Object.keys(headers).length ? { headers } : {}),
       ...(init.body !== undefined ? { body: init.body } : {}),
       ...(init.signal ? { signal: init.signal } : {}),
+      ...(init.cache ? { cache: init.cache } : {}),
+      ...(init.keepalive ? { keepalive: init.keepalive } : {}),
     });
   };
 }
@@ -65,6 +72,19 @@ export async function unwrap<T>(call: Promise<GatewayResult<T>>): Promise<T> {
     throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined);
   }
   return data as T;
+}
+
+/**
+ * unwrap() for features whose messages users and code read as
+ * `<label> request failed (<status>): <detail>`.
+ */
+export async function unwrapLabelled<T>(call: Promise<GatewayResult<T>>, label: string): Promise<T> {
+  try {
+    return await unwrap(call);
+  } catch (error) {
+    if (error instanceof ApiError) throw new Error(`${label} request failed (${error.status}): ${error.detail}`);
+    throw error;
+  }
 }
 
 /** An AbortSignal that fires after `timeoutMs`, and the error to raise when it did. */

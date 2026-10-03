@@ -8,7 +8,6 @@ const paperApi = vi.hoisted(() => ({
   riskPreview: vi.fn(),
   placeRiskOrder: vi.fn(),
   placeOrder: vi.fn(),
-  processObservation: vi.fn(),
   resetAccount: vi.fn(),
   archiveAccount: vi.fn(),
 }));
@@ -93,7 +92,6 @@ describe('TradingPaperPanel', () => {
     paperApi.snapshot.mockResolvedValue(accountSnapshot());
     tradingApi.quote.mockResolvedValue({ price: '75.61', bid: '75.60', ask: '75.62' });
     paperApi.riskPreview.mockResolvedValue(riskPreview());
-    paperApi.processObservation.mockResolvedValue({ fills: [] });
     paperApi.placeRiskOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
     paperApi.placeOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
     replayApi.advanceExecution.mockImplementation(async (snapshot) => snapshot);
@@ -197,7 +195,6 @@ describe('TradingPaperPanel', () => {
       stop_loss: '74.50',
     }));
     expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
-    expect(paperApi.processObservation).not.toHaveBeenCalled();
   });
 
   it('uses the replay bar through the shared server kernel without creating a persisted paper order', async () => {
@@ -221,7 +218,6 @@ describe('TradingPaperPanel', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Market order executed on');
     expect(paperApi.placeOrder).not.toHaveBeenCalled();
     expect(paperApi.placeRiskOrder).not.toHaveBeenCalled();
-    expect(paperApi.processObservation).not.toHaveBeenCalled();
     expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ account: expect.objectContaining({ account_id: 'paper-1' }) }),
       expect.objectContaining({ quantity: '1', reference_price: '101.25' }),

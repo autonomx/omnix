@@ -192,6 +192,7 @@ export function TradingTerminalDock({
         quantity: order.quantity,
         average_cost: order.reference_price ?? order.limit_price ?? order.stop_price ?? '',
         realized_pnl: '0',
+        reserved_quantity: '0',
         last_price: order.reference_price ?? null,
         unrealized_pnl: '0',
         pending: true,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type {
   TradingScannerDefinition,
+  TradingScannerDefinitionInput,
   TradingScannerMetric,
   TradingScannerOperator,
   TradingScannerResult,
@@ -58,7 +59,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
       return;
     }
     const scannerId = `scanner-${Date.now()}`;
-    const definition: TradingScannerDefinition = {
+    const definition: TradingScannerDefinitionInput = {
       scanner_id: scannerId,
       name,
       instrument_ids: selectedIds,
