@@ -157,18 +157,40 @@ def _route_internal(call: ast.Call, router_prefixes: dict[str, str]) -> bool:
     return (prefix + (path or "")).startswith("/internal/")
 
 
+def _inventory_rows(sources: dict[str, str]) -> list[list[str]]:
+    """Table rows of the reviewed transport inventory, with code quotes removed."""
+    return [
+        [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        for line in sources.get(TRANSPORT_EXCEPTIONS_DOC, "").splitlines()
+        if line.startswith("|")
+    ]
+
+
 def _documented_transport_exceptions(sources: dict[str, str]) -> set[tuple[str, str, str]]:
     """Return exact (source, method, local path) entries from the reviewed inventory."""
-    source = sources.get(TRANSPORT_EXCEPTIONS_DOC, "")
-    result: set[tuple[str, str, str]] = set()
-    for line in source.splitlines():
-        if not line.startswith("|"):
-            continue
-        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 4 or not cells[0].startswith("src/app/"):
-            continue
-        result.add((cells[0], cells[1].upper(), cells[2]))
-    return result
+    return {
+        (cells[0], cells[1].upper(), cells[2])
+        for cells in _inventory_rows(sources)
+        if len(cells) == 4 and cells[0].startswith("src/app/")
+    }
+
+
+def _documented_websocket_paths(sources: dict[str, str]) -> set[str]:
+    """WebSocket routes from the inventory; OpenAPI cannot describe them."""
+    return {
+        _normalize_api_path(cells[1])
+        for cells in _inventory_rows(sources)
+        if len(cells) == 2 and cells[0].startswith("src/app/") and cells[1].startswith("/")
+    }
+
+
+def _web_type_exceptions(sources: dict[str, str]) -> list[tuple[str, str]]:
+    """(web source pattern, type pattern) rows of the inventory's web client type table."""
+    return [
+        (cells[0], cells[1])
+        for cells in _inventory_rows(sources)
+        if len(cells) == 3 and cells[0].startswith("src/apps/web/")
+    ]
 
 
 def _process_state_inventory(sources: dict[str, str]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -893,8 +915,27 @@ def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
 
 def _normalize_api_path(path: str) -> str:
     path = path.split("?")[0]
-    path = re.sub(r"\$\{[^}]*\}|\{[^}]*\}", "{}", path)
+    path = re.sub(r"(?:\$\{[^}]*\}|\{[^}]*\})+", "{}", path)
+    # A placeholder glued to the last segment is an appended query string.
+    path = re.sub(r"(?<=[^/])\{\}$", "", path)
     return path.rstrip("/") or "/"
+
+
+def _api_path_coverage(api_paths: set[str], known: set[str]) -> tuple[set[str], set[str]]:
+    """Split literal paths into (covered, prefixes).
+
+    A literal is covered when it is a known path or fills a known template's
+    parameters. An uncovered literal that begins known paths is a prefix
+    (a scope or startsWith test), not a call.
+    """
+    templates = [re.compile("^" + re.escape(path).replace(r"\{\}", r"[^/]+") + "$") for path in known if "{}" in path]
+    covered = {path for path in api_paths if path in known or any(template.match(path) for template in templates)}
+    prefixes = set()
+    for path in api_paths - covered:
+        stem = path[:-2] if path.endswith("{}") else path
+        if any(len(candidate) > len(stem) and candidate.startswith(stem) and (stem.endswith(("/", "-")) or candidate[len(stem)] in "/-") for candidate in known):
+            prefixes.add(path)
+    return covered, prefixes
 
 
 def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int | float], dict[str, Any]]:
@@ -961,7 +1002,15 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
         elif path.endswith(".tsx"):
             values["web_hardcoded_colors"] += len(re.findall(colors, code))
     values["web_omnix_window_flags"] = len(flags)
-    values["web_handwritten_api_types"] = len(handwritten)
+    exceptions = _web_type_exceptions(sources)
+    for source_pattern, type_pattern in exceptions:
+        if not any(fnmatch.fnmatchcase(path, source_pattern) and fnmatch.fnmatchcase(name, type_pattern) for path, name in handwritten):
+            raise AnalysisError(f"web client type inventory entry matches no declaration: {source_pattern} {type_pattern}")
+    excepted = {
+        (path, name) for path, name in handwritten
+        if any(fnmatch.fnmatchcase(path, source_pattern) and fnmatch.fnmatchcase(name, type_pattern) for source_pattern, type_pattern in exceptions)
+    }
+    values["web_handwritten_api_types"] = len(handwritten - excepted)
     values["web_error_boundaries"] = boundaries
     graph = _web_graph(sources)
     roots = {"src/apps/web/src/main.tsx", "src/apps/web/src/main.ts"} & graph.keys()
@@ -969,14 +1018,18 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     unreachable = sorted(path for path in graph if path.endswith((".ts", ".tsx")) and path not in reached and not path.endswith(".d.ts"))
     values["web_unreachable_modules"] = len(unreachable)
     schema_paths = {_normalize_api_path(path) for path in openapi.get("paths", {})}
-    matched = api_paths & schema_paths
-    denominator = len(api_paths) + len(dynamic_calls)
+    websocket_paths = _documented_websocket_paths(sources)
+    matched, prefixes = _api_path_coverage(api_paths, schema_paths | websocket_paths)
+    calls = api_paths - prefixes
+    denominator = len(calls) + len(dynamic_calls)
     values["web_openapi_path_coverage_pct"] = round(100 * len(matched) / denominator, 6) if denominator else 0
     return dict(values), {
-        "web_unreachable_modules": unreachable, "web_api_paths": sorted(api_paths),
-        "web_api_paths_missing_schema": sorted(api_paths - schema_paths),
+        "web_unreachable_modules": unreachable, "web_api_paths": sorted(calls),
+        "web_api_path_prefixes": sorted(prefixes),
+        "web_api_paths_missing_schema": sorted(calls - matched),
         "web_dynamic_fetch_calls": dynamic_calls, "web_route_count": route_count,
-        "web_handwritten_api_types": [list(pair) for pair in sorted(handwritten)],
+        "web_handwritten_api_types": [list(pair) for pair in sorted(handwritten - excepted)],
+        "web_handwritten_api_type_exceptions": [list(pair) for pair in sorted(excepted)],
     }
 
 

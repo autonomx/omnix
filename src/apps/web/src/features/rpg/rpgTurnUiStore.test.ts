@@ -185,9 +185,9 @@ describe('rpgTurnUiStore', () => {
     expect(refreshPathsForChangedDomains('session:bran', [])).toEqual([
       '/api/rpg/sessions/session%3Abran',
     ]);
+    // Inventory lives in the session payload; no separate route is cached.
     expect(refreshPathsForChangedDomains('session:bran', ['conversation', 'inventory', 'currency'])).toEqual([
       '/api/rpg/sessions/session%3Abran',
-      '/api/replay/inventory',
     ]);
     expect(refreshPathsForChangedDomains('session:bran', ['location', 'world'])).toEqual([
       '/api/rpg/sessions/session%3Abran',

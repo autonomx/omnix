@@ -1,4 +1,5 @@
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
+import type { components } from '../../api/generated/types';
 
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -13,13 +14,8 @@ type SpeculationHandshake = {
   model_id?: string | null;
 };
 
-type SpeculationStartPayload = Record<string, unknown> & {
-  content: string;
-  segment_id: string;
-  source_sequence: number;
-  provider_id?: string | null;
-  model_id?: string | null;
-};
+// The intercepted request body of /start and /start-stream.
+type LiveSpeculationRequest = components['schemas']['LiveSpeculationRequest'];
 
 type PriorityRequestInit = RequestInit & {
   priority?: 'high' | 'low' | 'auto';
@@ -80,7 +76,7 @@ export async function bridgeLiveSpeculationHandshakeRequest(
 function createOptimisticSpeculationResponse(
   fetchImpl: typeof fetch,
   sessionId: string,
-  payload: SpeculationStartPayload,
+  payload: LiveSpeculationRequest,
   clientGenerationId: string,
   sourceSignal?: AbortSignal | null,
 ): Response {
@@ -186,7 +182,7 @@ function createOptimisticSpeculationResponse(
 async function openAndPipeSpeculation(
   fetchImpl: typeof fetch,
   sessionId: string,
-  payload: SpeculationStartPayload,
+  payload: LiveSpeculationRequest,
   clientGenerationId: string,
   signal: AbortSignal,
   setServerGenerationId: (generationId: string) => void,
@@ -335,7 +331,7 @@ async function requestBodyText(
   return null;
 }
 
-function parseStartPayload(body: string | null): SpeculationStartPayload | null {
+function parseStartPayload(body: string | null): LiveSpeculationRequest | null {
   if (!body) return null;
   try {
     const value = JSON.parse(body) as unknown;

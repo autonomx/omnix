@@ -52,6 +52,16 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   shows 60 images at a time; Pixi and Live2D load only when an avatar is shown.
 - Web: form fields, controls and labels are named for screen readers, and
   primary buttons are darker to meet contrast requirements.
+- Web: gateway calls use a client generated from the OpenAPI contract, and
+  chat, job, trading and voice stream messages are checked when they arrive;
+  a malformed message is dropped or reported instead of breaking the view.
+
+### Fixed
+
+- Settings Control Center changes save again.
+- Replaying an assistant response during a live voice call plays it instead of
+  failing.
+- Settings shows the Hermes sidecar as Ready when it is reachable.
 
 ### Removed
 

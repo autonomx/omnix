@@ -355,6 +355,45 @@ def test_web_api_coverage_normalizes_template_parameters_and_counts_unknown_call
     assert result["metrics"]["web_openapi_path_coverage_pct"]["value"] == pytest.approx(100 / 3, abs=1e-6)
 
 
+def test_web_api_coverage_skips_prefixes_and_reads_templates_queries_and_documented_websockets():
+    sources = {
+        WEB + "app/scope.ts": "const scopes = ['/api/assets', '/api/voice-'];",
+        WEB + "app/a.ts": (
+            "fetch(`/api/assets/${id}/file`); fetch('/api/character-live2d/runtime/core.min.js');"
+            "fetch(`/api/research/status${query}`); new WebSocket('/api/tts/stream/websocket');"
+        ),
+        "docs/architecture/api-transport-exceptions.md": (
+            "| Source | Route path |\n|---|---|\n| `src/app/voice/tts.py` | `/api/tts/stream/websocket` |\n"
+        ),
+    }
+    schema = {"paths": {
+        "/api/assets/{asset_id}/file": {}, "/api/voice-profiles": {},
+        "/api/character-live2d/runtime/{filename}": {}, "/api/research/status": {},
+    }}
+    result = observed(sources, openapi=schema)
+    assert result["metrics"]["web_openapi_path_coverage_pct"]["value"] == 100
+    assert result["evidence"]["web_api_path_prefixes"] == ["/api/assets", "/api/voice-"]
+
+
+def test_documented_web_client_types_are_not_handwritten_api_types():
+    inventory = (
+        "| Web source | Type | What it describes |\n|---|---|---|\n"
+        "| `src/apps/web/src/features/worker.ts` | `Worker*` | Worker messages |\n"
+    )
+    source = {
+        WEB + "features/worker.ts": "type WorkerRequest = { id: string };\ntype WorkerResponse = { id: string };",
+        WEB + "api/a.ts": "type SaveRequest = { value: string };",
+        "docs/architecture/api-transport-exceptions.md": inventory,
+    }
+    result = observed(source)
+    assert result["metrics"]["web_handwritten_api_types"]["value"] == 1
+    assert result["evidence"]["web_handwritten_api_types"] == [[WEB + "api/a.ts", "SaveRequest"]]
+
+    source["docs/architecture/api-transport-exceptions.md"] = inventory + "| `src/apps/web/src/features/gone.ts` | `*` | Removed |\n"
+    with pytest.raises(metrics.AnalysisError, match="matches no declaration"):
+        observed(source)
+
+
 def test_negative_cases_do_not_count_compliant_code():
     sources = {
         APP + "config/a.py": "import os\nos.getenv('X')",

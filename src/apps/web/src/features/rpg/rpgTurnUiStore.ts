@@ -249,9 +249,6 @@ export function storyMessageIdentity(message: RpgStoryMessagePreview, index: num
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
-  if ([...domains].some((domain) => ['inventory', 'currency', 'merchant', 'player'].includes(domain))) {
-    paths.add('/api/replay/inventory');
-  }
   if ([...domains].some((domain) => ['location', 'world', 'quests', 'journal'].includes(domain))) {
     paths.add('/api/reports');
   }
