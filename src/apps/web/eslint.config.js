@@ -272,7 +272,7 @@ const functionLengthBaseline = {
   'src/features/assistant/workspace/live-voice-pcm-session.ts': 773,
   'src/features/assistant/chat/CharacterAvatarPanel.tsx': 349,
   'src/features/assistant/chat/CharacterManagementPanel.tsx': 309,
-  'src/features/assistant/chat/OmnixRunCardCore.tsx': 470,
+  'src/features/assistant/chat/OmnixRunCardCore.tsx': 464,
   'src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx': 288,
   'src/features/podcast/PodcastWorkspace.tsx': 303,
   'src/features/rpg/RpgActionComposer.tsx': 551,

@@ -602,6 +602,34 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   return null;
 }
 
+// WP-4.7: an operator let this run go unsandboxed; it says so for the run's whole life.
+function UnsandboxedRunWarning({ events }: { events: Array<{ event_type: string; payload: Metadata }> }) {
+  const unsandboxed = events.find((event) => event.event_type === 'run.unsandboxed');
+  if (!unsandboxed) return null;
+  return (
+    <section className="assistant-runtime-stall-warning" role="region" aria-label="Running without the sandbox">
+      <div>
+        <strong>Running without the sandbox</strong>
+        <p>{stringField(unsandboxed.payload.reason) || 'The agent sandbox is unavailable.'}</p>
+        <small>An operator allowed unsandboxed agent runs; every command this agent runs needs your approval.</small>
+      </div>
+    </section>
+  );
+}
+
+function StallWarning({ reason, pending, onRecover }: { reason: string; pending: boolean; onRecover: () => void }) {
+  return (
+    <section className="assistant-runtime-stall-warning" aria-live="polite" aria-label="Possible Pi stall">
+      <div>
+        <strong>Pi may be stalled</strong>
+        <p>{reason || 'No agent activity has been observed recently.'}</p>
+        <small>Omnix has left the Pi session running and will not restart it automatically.</small>
+      </div>
+      <button type="button" disabled={pending} onClick={onRecover}>Interrupt and recover</button>
+    </section>
+  );
+}
+
 function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metadata }) {
   const id = runId(initial);
   const queryClient = useQueryClient();
@@ -681,8 +709,6 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   };
   const runEvents = (events.data ?? []).map((event) => ({ ...event, payload: event.payload ?? {} }));
   const stallWarning = unresolvedStallWarning(runEvents);
-  // WP-4.7: an operator let this run go unsandboxed; say so for the run's whole life.
-  const unsandboxed = runEvents.find((event) => event.event_type === 'run.unsandboxed');
   const clarificationQuestion = status === 'waiting_for_input'
     ? [...runEvents].reverse().find((event) => (
         event.event_type === 'model.message'
@@ -770,31 +796,16 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         <div><strong>Output tokens</strong><span title={query.data.usage?.output_tokens_reported ? undefined : 'Not reported'}>{outputTokens}</span></div>
       </div>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
-      {unsandboxed ? (
-        <section className="assistant-runtime-stall-warning" role="region" aria-label="Running without the sandbox">
-          <div>
-            <strong>Running without the sandbox</strong>
-            <p>{stringField(unsandboxed.payload.reason) || 'The agent sandbox is unavailable.'}</p>
-            <small>An operator allowed unsandboxed agent runs; every command this agent runs needs your approval.</small>
-          </div>
-        </section>
-      ) : null}
+      <UnsandboxedRunWarning events={runEvents} />
       {stallWarning && query.data.spec.profile === 'coding' && live ? (
-        <section className="assistant-runtime-stall-warning" aria-live="polite" aria-label="Possible Pi stall">
-          <div>
-            <strong>Pi may be stalled</strong>
-            <p>{stringField(stallWarning.reason) || 'No agent activity has been observed recently.'}</p>
-            <small>Omnix has left the Pi session running and will not restart it automatically.</small>
-          </div>
-          <button
-            type="button"
-            disabled={command.isPending}
-            onClick={() => command.mutate({
-              type: 'resume',
-              payload: { message: 'The user explicitly requested interruption and recovery. Resume the task from the current workspace state.' },
-            })}
-          >Interrupt and recover</button>
-        </section>
+        <StallWarning
+          reason={stringField(stallWarning.reason)}
+          pending={command.isPending}
+          onRecover={() => command.mutate({
+            type: 'resume',
+            payload: { message: 'The user explicitly requested interruption and recovery. Resume the task from the current workspace state.' },
+          })}
+        />
       ) : null}
       {canSteer ? (
         <form
