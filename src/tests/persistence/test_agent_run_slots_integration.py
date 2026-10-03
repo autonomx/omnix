@@ -13,7 +13,6 @@ import pytest
 from app.agent_runtime.run_slots import AgentRunCapacityError, PostgresAgentRunSlots
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.migrations import apply_migrations
 
 pytestmark = [
     pytest.mark.postgres,
@@ -25,8 +24,8 @@ pytestmark = [
 @pytest.fixture
 def database():
     """The slot count is global, so these tests take turns (also across xdist workers)."""
+    # The database is migrated before the suite; the test role may not run DDL.
     database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=4))
-    apply_migrations(database)
     with database.dedicated_connection() as turn:
         turn.execute("SELECT pg_advisory_lock(hashtext('omnix-test-agent-run-slots'))")
         turn.commit()
