@@ -99,7 +99,7 @@ def create_kernel_router(
     def api_health() -> GatewayHealth:
         return GatewayHealth()
 
-    from app.observability.client_errors import register_client_error_routes
+    from .client_errors_routes import register_client_error_routes
 
     register_client_error_routes(router)
 
