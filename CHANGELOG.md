@@ -63,6 +63,11 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   voice controller are split into hooks and components, and functions over
   250 lines fail lint. Chat sends messages with research, agent mode, desktop
   sharing or a local folder through the context route by an explicit call.
+- Web: the open chat session, audiobook project and trading instrument are in
+  the address bar, so a view can be linked to and survives a reload.
+- Web: polling pauses while the tab is hidden and never overlaps a slow
+  request; Chat follows its reply job through server events when they are
+  available.
 
 ### Fixed
 
