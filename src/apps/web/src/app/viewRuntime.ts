@@ -71,12 +71,10 @@ async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store:
   add((await import('../features/chatbot/researchProgressController')).installResearchProgressController());
   add((await import('../features/voice/voiceLibraryAssetFallback')).installVoiceLibraryAssetFallback());
   add((await import('../features/voice/voiceLibraryFetchDiagnostics')).installVoiceLibraryFetchDiagnostics());
-  add((await import('../features/chatbot/newChatCoordinator')).initializeNewChatCoordinator());
   add((await import('../features/chatbot/liveCharacterAvatarBridge')).installLiveCharacterAvatarBridge());
   add((await import('../features/chatbot/liveCharacterVisemeBridge')).installLiveCharacterVisemeBridge());
   add((await import('../features/chatbot/live2dCharacterRenderer')).installLive2DCharacterRenderer());
 
-  add((await import('../features/chatbot/chat-sidebar-manager')).initializeChatSidebarManager());
   add((await import('../features/chatbot/live-chat-workspace')).initializeLiveChatWorkspace(queryClient));
 
   add((await import('../features/assistant-workspace/live-conversation-store-bridge')).initializeLiveConversationStoreBridge());

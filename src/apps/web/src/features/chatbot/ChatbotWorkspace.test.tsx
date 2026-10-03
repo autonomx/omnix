@@ -173,14 +173,14 @@ describe('ChatbotWorkspace', () => {
 
     expect(await screen.findByText('Loading chat sessions...')).toBeInTheDocument();
     expect(screen.getByText('Loading chat messages...')).toBeInTheDocument();
-    expect(screen.queryByText('No chat sessions yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No other chat sessions.')).not.toBeInTheDocument();
     expect(screen.queryByText('No chat messages yet.')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/assets')).toBe(false);
     expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/voice-library')).toBe(false);
 
     sessions.resolve(Response.json({ sessions: [] }));
 
-    expect(await screen.findByText('No chat sessions yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No other chat sessions.')).toBeInTheDocument();
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
   });
 

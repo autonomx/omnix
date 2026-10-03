@@ -93,7 +93,7 @@
 
 .assistant-chat-sidebar-minimized .assistant-sidebar-nav button span:nth-child(2),
 .assistant-chat-sidebar-minimized .assistant-sidebar-section,
-.assistant-chat-sidebar-minimized > [data-omnix-chat-sidebar-manager='true'] {
+.assistant-chat-sidebar-minimized > .assistant-chatgpt-sidebar {
   display: none;
 }
 

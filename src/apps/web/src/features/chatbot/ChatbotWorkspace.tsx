@@ -48,6 +48,7 @@ import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscr
 import { LiveChatPanel } from './LiveChatPanel';
 import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
+import { ChatSidebarSessions } from './ChatSidebarSessions';
 import { DesktopCompanionControls } from '../assistant-workspace/desktop-companion-controls';
 import { DesktopCompanionTextSurface } from '../assistant-workspace/desktop-companion-text-surface';
 import { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from '../assistant-workspace/assistant-pcm-stream-websocket-player';
@@ -436,7 +437,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     enabled: Boolean(selectedCharacterId && (activeView === 'chats' || activeView === 'voice')),
   });
   const selectedCharacter = charactersQuery.data?.characters.find((character) => character.id === selectedCharacterId);
-  const pinnedSessions = useMemo(() => chatSessions.filter(isPinnedSession), [chatSessions]);
   const voiceProfiles = useMemo(() => getVoiceProfileAssets(assetsQuery.data), [assetsQuery.data]);
   const sessionsLoading = sessionsQuery.isPending;
   const sessionsError = sessionsQuery.isError;
@@ -1566,11 +1566,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     });
   }
 
-  function deleteChatSession(session: SessionListEntry): void {
-    const title = sessionTitle(session);
-    if (!window.confirm(`Delete "${title}"? This removes the chat history from this device.`)) return;
-    deleteSessionMutation.mutate(session.id);
+  function selectSidebarSession(session: SessionListEntry): void {
+    setSelectedSessionId(session.id);
+    setActiveView('chats');
+    window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', { detail: { sessionId: session.id } }));
   }
+
 
   function handleComposerTextareaKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
@@ -1950,43 +1951,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             ))}
           </nav>
 
-          <section className="assistant-sidebar-section assistant-sidebar-sessions" aria-labelledby="assistant-chat-sessions">
-            <header><h2 id="assistant-chat-sessions">Sessions</h2></header>
-            <div className="assistant-sidebar-list">
-              {chatSessions.length ? chatSessions.map((session) => (
-                <div className={session.id === selectedSessionId ? 'assistant-sidebar-session-row active' : 'assistant-sidebar-session-row'} key={session.id}>
-                <button type="button" onClick={() => { setSelectedSessionId(session.id); setActiveView('chats'); }}>
-                  <span aria-hidden="true">▱</span>
-                  <span>{sessionTitle(session)}</span>
-                  <small>{session.message_count} messages</small>
-                </button>
-                <button aria-label={`Delete ${sessionTitle(session)}`} className="assistant-sidebar-delete" disabled={deleteSessionMutation.isPending} title="Delete chat session" type="button" onClick={() => deleteChatSession(session)}>x</button>
-                </div>
-              )) : sessionsLoading ? <p className="assistant-sidebar-empty">Loading chat sessions...</p> : sessionsError ? <p className="assistant-sidebar-empty">Chat sessions failed to load.</p> : <p className="assistant-sidebar-empty">No chat sessions yet.</p>}
-            </div>
-          </section>
-
-          <section className="assistant-sidebar-section" aria-labelledby="assistant-chat-pinned">
-            <header><h2 id="assistant-chat-pinned">Pinned</h2><button type="button" aria-label="Add pinned chat">+</button></header>
-            <div className="assistant-sidebar-list">
-              {pinnedSessions.length ? pinnedSessions.map((session) => (
-                <button key={session.id} type="button" onClick={() => setSelectedSessionId(session.id)}>
-                  <span aria-hidden="true">▤</span><span>{sessionTitle(session)}</span><small aria-hidden="true">◆</small>
-                </button>
-              )) : <p className="assistant-sidebar-empty">No pinned chats yet.</p>}
-            </div>
-          </section>
-
-          <section className="assistant-sidebar-section" aria-labelledby="assistant-chat-recent">
-            <header><h2 id="assistant-chat-recent">Recent</h2></header>
-            <div className="assistant-sidebar-list">
-              {chatSessions.length ? chatSessions.map((session) => (
-                <button className={session.id === selectedSessionId ? 'active' : undefined} key={`recent-${session.id}`} type="button" onClick={() => { setSelectedSessionId(session.id); setActiveView('chats'); }}>
-                  <span aria-hidden="true">▱</span><span>{sessionTitle(session)}</span><time>{formatSessionTime(session)}</time>
-                </button>
-              )) : sessionsLoading ? <p className="assistant-sidebar-empty">Loading recent chats...</p> : sessionsError ? <p className="assistant-sidebar-empty">Recent chats failed to load.</p> : <p className="assistant-sidebar-empty">Recent chats appear after your first message.</p>}
-            </div>
-          </section>
+          <ChatSidebarSessions
+            sessions={chatSessions}
+            loading={sessionsLoading}
+            failed={sessionsError}
+            selectedSessionId={selectedSessionId}
+            onSelect={selectSidebarSession}
+            onDelete={(session) => deleteSessionMutation.mutateAsync(session.id)}
+          />
         </aside>
 
         <section className="assistant-chat-main" aria-labelledby="module-title">
@@ -2211,9 +2183,6 @@ function getSynthesizedAudioSource(response: TtsSynthesisResponse): string { if 
 /** The fields the session list reads; summaries and full sessions both have them. */
 type SessionListEntry = Pick<ApiChatSession, 'id' | 'title' | 'created_at' | 'updated_at'>;
 
-function isPinnedSession(session: SessionListEntry): boolean { const metadata = 'metadata' in session ? (session as { metadata?: Record<string, unknown> }).metadata : undefined; return metadata?.pinned === true || metadata?.starred === true; }
-function sessionTitle(session: SessionListEntry): string { return session.title?.trim() || 'Untitled chat'; }
-function formatSessionTime(session: SessionListEntry): string { const timestamp = session.updated_at || session.created_at; if (!timestamp) return 'Recent'; return timestamp.includes('T') ? formatMessageTime(timestamp) : timestamp; }
 function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
 function shouldFlushStreamedSpeechBuffer(value: string): boolean { const text = value.trim(); if (text.length < STREAMED_TTS_MIN_PHRASE_CHARS) return false; return /[.!?]["')\]]?$/.test(text) || text.length >= STREAMED_TTS_MIN_PHRASE_CHARS * 2; }
 function elapsedMs(start: number | undefined, end: number | undefined): number | null { return start === undefined || end === undefined ? null : Math.round(end - start); }
