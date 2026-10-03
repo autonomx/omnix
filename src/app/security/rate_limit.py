@@ -6,7 +6,9 @@ Each gateway process limits independently; the ingress adds a global limit
 - ``login``: 5 attempts per minute per client address
   (``OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE``);
 - ``approvals``: approve, deny and execute calls, 60 per minute per caller
-  (``OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE``).
+  (``OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE``);
+- ``client_errors``: browser error reports, 30 per minute per caller
+  (``OMNIX_CLIENT_ERROR_RATE_LIMIT_PER_MINUTE``).
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ MAX_KEYS = 10_000
 _LIMITS: MappingProxyType[str, tuple[str, int]] = MappingProxyType({
     "login": ("OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE", 5),
     "approvals": ("OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE", 60),
+    "client_errors": ("OMNIX_CLIENT_ERROR_RATE_LIMIT_PER_MINUTE", 30),
 })
 
 
@@ -93,7 +96,7 @@ def _caller_key(request: Request) -> str:
         return _client_key(request)
 
 
-def rate_limited(name: Literal["login", "approvals"]) -> Callable[[Request], Awaitable[None]]:
+def rate_limited(name: Literal["login", "approvals", "client_errors"]) -> Callable[[Request], Awaitable[None]]:
     """FastAPI dependency: refuse with 429 and ``Retry-After`` when exhausted."""
     key_of = _client_key if name == "login" else _caller_key
 

@@ -40,6 +40,7 @@ role to permission list; `owner` cannot be changed).
 | `characters:write` | Character profiles (write) | yes | yes |  |  | yes |  |  |  |
 | `chat:read` | Chat sessions and messages (read) | yes | yes |  |  | yes |  |  | yes |
 | `chat:write` | Chat sessions and messages (write) | yes | yes |  |  | yes |  |  |  |
+| `client:report` | Report browser errors | yes | yes |  |  | yes |  |  | yes |
 | `companion:read` | Desktop companion (read) | yes | yes |  |  | yes |  |  | yes |
 | `companion:write` | Desktop companion (write) | yes | yes |  |  | yes |  |  |  |
 | `image:generate` | Generate images | yes | yes |  |  | yes |  |  |  |
@@ -118,6 +119,7 @@ role to permission list; `owner` cannot be changed).
 | `/api/replay` | `rpg:read` | `rpg:play` |
 | `/api/tts` | `voice:read` | `voice:write` |
 | `/api/settings` | `settings:read` | `settings:write` |
+| `/api/client-errors` | `client:report` | `client:report` |
 | `/api/assistant/tools` | `tools:read` | `tools:propose` |
 | `/api/prompts` | `assistant:read` | `assistant:write` |
 | `/api/voice-cloning` | `voice:read` | `voice:clone` |

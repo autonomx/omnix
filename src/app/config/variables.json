@@ -21,6 +21,13 @@
     "type": "boolean"
   },
   {
+    "default": "",
+    "description": "Controls conda root for launcher.",
+    "feature": "launcher",
+    "name": "CONDA_ROOT",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls hermes api key for hermes, research, trading.",
     "feature": "hermes, research, trading",

@@ -5,6 +5,7 @@ import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
+import { installClientErrorReporting } from './app/clientErrorReporter';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/chat-sidebar-manager.css';
 import './features/chatbot/chat-sidebar-manager-layout-fix.css';
@@ -39,6 +40,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Uncaught errors and unhandled rejections are reported to the gateway (WP-9.9).
+installClientErrorReporting();
 
 async function mountApplication(): Promise<void> {
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(

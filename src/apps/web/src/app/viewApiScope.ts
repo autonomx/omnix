@@ -88,10 +88,12 @@ export function apiPath(input: RequestInfo | URL): string {
   }
 }
 
+const CLIENT_ERRORS_PATH = '/api/client-errors';
+
 export function isApiAllowedForView(pathname: string, moduleId: OmnixModuleId): boolean {
   if (!pathname.startsWith('/api/')) return true;
-  // Sign-in and session state belong to the shell, not to any workspace.
-  if (AUTH_API_PATTERN.test(pathname)) return true;
+  // Sign-in, session state and error reports belong to the shell, not to any workspace.
+  if (AUTH_API_PATTERN.test(pathname) || pathMatchesPrefix(pathname, CLIENT_ERRORS_PATH)) return true;
   return MODULE_API_PREFIXES[moduleId].some((prefix) => pathMatchesPrefix(pathname, prefix));
 }
 

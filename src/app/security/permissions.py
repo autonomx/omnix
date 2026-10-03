@@ -93,6 +93,7 @@ CATALOG: dict[str, str] = {
     "internal:service": "Internal service-to-service routes",
     "workspace:transfer": "Transfer workspace ownership",
     "secrets:export": "Export credentials",
+    "client:report": "Report browser errors",
 }
 
 _ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service"})
@@ -105,13 +106,13 @@ _MEMBER = frozenset({
     "rpg:read", "rpg:play", "rpg:author", "story:read", "story:write",
     "trading:read", "trading:paper:order", "audiobook:read", "audiobook:write",
     "voice:read", "voice:write", "voice:clone", "image:read", "image:generate",
-    "settings:read",
+    "settings:read", "client:report",
 })
 DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(CATALOG) - _ADMIN_EXCLUDED,
     "member": _MEMBER,
     "approver": frozenset(name for name in CATALOG if name.endswith(":approve")),
-    "viewer": frozenset(name for name in CATALOG if name.endswith(":read") and name != "settings:read"),
+    "viewer": frozenset(name for name in CATALOG if name.endswith(":read") and name != "settings:read") | {"client:report"},
     "service": frozenset({"internal:service"}),
     # Background system contexts never serve requests.
     "system": frozenset(),
@@ -159,6 +160,7 @@ KERNEL_DEFAULTS: tuple[tuple[str, tuple[str, str] | None], ...] = (
     ("/api/replay", ("rpg:read", "rpg:play")),
     ("/api/tts", ("voice:read", "voice:write")),
     ("/api/settings", ("settings:read", "settings:write")),
+    ("/api/client-errors", ("client:report", "client:report")),
     ("/api/assistant/tools", ("tools:read", "tools:propose")),
     ("/api/prompts", ("assistant:read", "assistant:write")),
     ("/api/voice-cloning", ("voice:read", "voice:clone")),

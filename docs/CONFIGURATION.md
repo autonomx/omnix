@@ -7,6 +7,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_KEY_ID` | string | — | trading | Controls apca api key id for trading. |
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
+| `CONDA_ROOT` | string | — | launcher | Controls conda root for launcher. |
 | `HERMES_API_KEY` | string | — | hermes, research, trading | Controls hermes api key for hermes, research, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | hermes, launcher | Controls hermes base url for hermes, launcher. |
 | `HERMES_ENABLED` | string | — | hermes, launcher, research | Controls hermes enabled for hermes, launcher, research. |

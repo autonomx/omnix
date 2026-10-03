@@ -50,7 +50,8 @@ from that process (elsewhere the counters stay at zero).
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
 | `omnix_auth_rejections_total` | counter | `reason` | Requests refused by sign-in (`authentication_required`, `run_token_required`, `authentication_unavailable`), the CSRF check (`csrf_failed`), a failed local login (`invalid_credential`) or a permission check (`permission_denied`). |
-| `omnix_rate_limit_rejections_total` | counter | `limit` | Requests refused by a rate limit (`login`, `approvals`). |
+| `omnix_rate_limit_rejections_total` | counter | `limit` | Requests refused by a rate limit (`login`, `approvals`, `client_errors`). |
+| `omnix_client_errors_total` | counter | `kind` | Browser error reports (`error`, `unhandledrejection`, `render`, `chunk_load`), WP-9.9. |
 
 These refusals happen before routing or in route dependencies, so the HTTP
 request metrics above do not show them by route.

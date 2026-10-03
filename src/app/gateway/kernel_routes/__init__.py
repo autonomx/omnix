@@ -99,6 +99,10 @@ def create_kernel_router(
     def api_health() -> GatewayHealth:
         return GatewayHealth()
 
+    from app.observability.client_errors import register_client_error_routes
+
+    register_client_error_routes(router)
+
     @router.get("/ready", response_model=GatewayReadinessPayload, tags=["gateway"])
     def readiness() -> JSONResponse:
         from app.runtime.drain import process_drain

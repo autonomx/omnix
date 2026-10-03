@@ -2774,6 +2774,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report Client Error */
+        post: operations["report_client_error_api_client_errors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/compatibility/legacy": {
         parameters: {
             query?: never;
@@ -12438,6 +12455,34 @@ export interface components {
              * @default
              */
             custom_rules: string;
+        };
+        /** ClientErrorAccepted */
+        ClientErrorAccepted: {
+            /**
+             * Accepted
+             * @default true
+             */
+            accepted: boolean;
+        };
+        /** ClientErrorReport */
+        ClientErrorReport: {
+            /** Api Request Id */
+            api_request_id?: string | null;
+            /** Build */
+            build?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "error" | "unhandledrejection" | "render" | "chunk_load";
+            /** Message */
+            message: string;
+            /** Module */
+            module?: string | null;
+            /** Route */
+            route: string;
+            /** Stack */
+            stack?: string | null;
         };
         /** ClonedVoiceCharacterBackfillItem */
         ClonedVoiceCharacterBackfillItem: {
@@ -34623,6 +34668,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_client_error_api_client_errors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientErrorAccepted"];
                 };
             };
             /** @description Validation Error */

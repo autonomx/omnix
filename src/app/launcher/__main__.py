@@ -7,6 +7,7 @@ the gateway is started; when the gateway is healthy, the web app is started.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import subprocess
 import sys
 import threading
@@ -24,6 +25,13 @@ def _say(message: str, stream: TextIO | None = None) -> None:
     target = stream or sys.stdout
     target.write(message + "\n")
     target.flush()
+
+
+def _unspecified(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_unspecified
+    except ValueError:
+        return False
 
 
 def _module(*args: str) -> int:
@@ -76,7 +84,8 @@ def start(args: argparse.Namespace) -> int:
     from app.runtime.net import bind_host
 
     host = bind_host()
-    loopback = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+    # The autostart thread talks to the dashboard locally even when it listens on all addresses.
+    loopback = "127.0.0.1" if _unspecified(host) else host
     threading.Thread(
         target=start_services,
         args=(f"http://{loopback}:{LAUNCHER_PORT}", args.gateway_url),

@@ -27,6 +27,7 @@ import {
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 import { LoginPage } from './LoginPage';
+import { RouteErrorFallback } from './RouteErrorBoundary';
 import { SignOutButton } from './SignOutButton';
 import { LOGIN_PATH, setActiveViewModule } from './viewApiScope';
 import { activateViewRuntime } from './viewRuntime';
@@ -168,7 +169,11 @@ function OmnixRoot() {
   return pathname === LOGIN_PATH ? <Outlet /> : <OmnixShell />;
 }
 
-const rootRoute = createRootRoute({ component: OmnixRoot });
+const rootRoute = createRootRoute({
+  component: OmnixRoot,
+  // A routing failure (outside a workspace's own boundary) still renders a way back.
+  errorComponent: ({ error, reset }) => <RouteErrorFallback error={error} onRetry={reset} />,
+});
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'login',

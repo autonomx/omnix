@@ -8205,6 +8205,98 @@
         "title": "ClassificationRequest",
         "type": "object"
       },
+      "ClientErrorAccepted": {
+        "properties": {
+          "accepted": {
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "title": "ClientErrorAccepted",
+        "type": "object"
+      },
+      "ClientErrorReport": {
+        "additionalProperties": false,
+        "properties": {
+          "api_request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Request Id"
+          },
+          "build": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build"
+          },
+          "kind": {
+            "enum": [
+              "error",
+              "unhandledrejection",
+              "render",
+              "chunk_load"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 500,
+            "title": "Message",
+            "type": "string"
+          },
+          "module": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[^?#\\s]*$",
+            "title": "Route",
+            "type": "string"
+          },
+          "stack": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stack"
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "route"
+        ],
+        "title": "ClientErrorReport",
+        "type": "object"
+      },
       "ClonedVoiceCharacterBackfillItem": {
         "properties": {
           "character_id": {
@@ -55945,6 +56037,47 @@
           }
         },
         "summary": "Set Conversation Research Mode"
+      }
+    },
+    "/api/client-errors": {
+      "post": {
+        "operationId": "report_client_error_api_client_errors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientErrorReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientErrorAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Client Error",
+        "tags": [
+          "observability"
+        ]
       }
     },
     "/api/compatibility/legacy": {

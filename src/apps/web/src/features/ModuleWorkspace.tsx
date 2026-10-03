@@ -1,19 +1,20 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { isPlatformModule, type OmnixModuleDefinition } from '../app/modules';
+import { lazyWithRetry, RouteErrorBoundary } from '../app/RouteErrorBoundary';
 import { WorkspacePanel } from '../design/primitives';
 
-const RpgWorkspace = lazy(() => import('./rpg/RpgWorkspace').then((module) => ({ default: module.RpgWorkspace })));
-const ChatbotWorkspace = lazy(() => import('./chatbot/ChatbotWorkspace').then((module) => ({ default: module.ChatbotWorkspace })));
-const StorytellerWorkspace = lazy(() => import('./storyteller/StorytellerWorkspace').then((module) => ({ default: module.StorytellerWorkspace })));
-const AudiobookWorkspace = lazy(() => import('./audiobook/AudiobookWorkspace').then((module) => ({ default: module.AudiobookWorkspace })));
-const PodcastWorkspace = lazy(() => import('./podcast/PodcastWorkspace').then((module) => ({ default: module.PodcastWorkspace })));
-const VoiceWorkspace = lazy(() => import('./voice/VoiceWorkspace').then((module) => ({ default: module.VoiceWorkspace })));
-const VoiceCloningWorkspace = lazy(() => import('./voice-cloning/VoiceCloningWorkspace').then((module) => ({ default: module.VoiceCloningWorkspace })));
-const SttWorkspace = lazy(() => import('./stt/SttWorkspace').then((module) => ({ default: module.SttWorkspace })));
-const ImageGenerationWorkspace = lazy(() => import('./image-generation/ImageGenerationWorkspace').then((module) => ({ default: module.ImageGenerationWorkspace })));
-const TradingWorkspace = lazy(() => import('./trading/TradingWorkspace').then((module) => ({ default: module.TradingWorkspace })));
-const SettingsWorkspace = lazy(() => import('./platform/SettingsWorkspace').then((module) => ({ default: module.SettingsWorkspace })));
-const PlatformModuleWorkspace = lazy(() => import('./platform/PlatformModuleWorkspace').then((module) => ({ default: module.PlatformModuleWorkspace })));
+const RpgWorkspace = lazyWithRetry(() => import('./rpg/RpgWorkspace').then((module) => ({ default: module.RpgWorkspace })));
+const ChatbotWorkspace = lazyWithRetry(() => import('./chatbot/ChatbotWorkspace').then((module) => ({ default: module.ChatbotWorkspace })));
+const StorytellerWorkspace = lazyWithRetry(() => import('./storyteller/StorytellerWorkspace').then((module) => ({ default: module.StorytellerWorkspace })));
+const AudiobookWorkspace = lazyWithRetry(() => import('./audiobook/AudiobookWorkspace').then((module) => ({ default: module.AudiobookWorkspace })));
+const PodcastWorkspace = lazyWithRetry(() => import('./podcast/PodcastWorkspace').then((module) => ({ default: module.PodcastWorkspace })));
+const VoiceWorkspace = lazyWithRetry(() => import('./voice/VoiceWorkspace').then((module) => ({ default: module.VoiceWorkspace })));
+const VoiceCloningWorkspace = lazyWithRetry(() => import('./voice-cloning/VoiceCloningWorkspace').then((module) => ({ default: module.VoiceCloningWorkspace })));
+const SttWorkspace = lazyWithRetry(() => import('./stt/SttWorkspace').then((module) => ({ default: module.SttWorkspace })));
+const ImageGenerationWorkspace = lazyWithRetry(() => import('./image-generation/ImageGenerationWorkspace').then((module) => ({ default: module.ImageGenerationWorkspace })));
+const TradingWorkspace = lazyWithRetry(() => import('./trading/TradingWorkspace').then((module) => ({ default: module.TradingWorkspace })));
+const SettingsWorkspace = lazyWithRetry(() => import('./platform/SettingsWorkspace').then((module) => ({ default: module.SettingsWorkspace })));
+const PlatformModuleWorkspace = lazyWithRetry(() => import('./platform/PlatformModuleWorkspace').then((module) => ({ default: module.PlatformModuleWorkspace })));
 
 const moduleCapabilities: Record<string, string[]> = {
   rpg: ['Turn contracts', 'Deterministic state', 'Journal', 'Party', 'Combat', 'Autoplay reports'],
@@ -72,5 +73,9 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
       </WorkspacePanel>
     );
   }
-  return <Suspense fallback={<WorkspacePanel><p className="workspace-summary">Loading {module.label} workspace…</p></WorkspacePanel>}>{content}</Suspense>;
+  return (
+    <RouteErrorBoundary resetKey={module.id}>
+      <Suspense fallback={<WorkspacePanel><p className="workspace-summary">Loading {module.label} workspace…</p></WorkspacePanel>}>{content}</Suspense>
+    </RouteErrorBoundary>
+  );
 }

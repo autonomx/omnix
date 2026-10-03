@@ -69,6 +69,9 @@ def _build() -> dict[str, Any]:
         "rate_limited": Counter(
             "omnix_rate_limit_rejections", "Requests refused by a rate limit, by limit.", ("limit",), registry=registry,
         ),
+        "client_errors": Counter(
+            "omnix_client_errors", "Browser error reports, by kind.", ("kind",), registry=registry,
+        ),
         "retention_deleted": Counter(
             "omnix_retention_rows_deleted", "Rows deleted by retention, by record type.", ("record_type",),
             registry=registry,
@@ -200,6 +203,11 @@ def record_auth_rejection(reason: str) -> None:
 
 def record_rate_limit_rejection(limit: str) -> None:
     _get()["rate_limited"].labels(limit).inc()
+
+
+def record_client_error(kind: str) -> None:
+    """A browser error report (WP-9.9); ``kind`` is one of the report's fixed kinds."""
+    _get()["client_errors"].labels(kind).inc()
 
 
 def record_job_execution(job_type: str, outcome: str, seconds: float) -> None:
@@ -497,5 +505,5 @@ __all__ = [
     "record_retention_deleted",
     "record_speech_turn", "record_sse_delivered", "record_sse_resync", "sse_subscriber", "TtsStreamCollector",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
-    "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
+    "record_client_error", "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]
