@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import requests
+import httpx
 
 from .errors import (
     ProviderCancelledError,
@@ -16,12 +16,30 @@ from .errors import (
 
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+# Per-call ``timeout=`` arguments set the read timeout; these bound the rest.
+_TIMEOUT = httpx.Timeout(30.0, connect=5.0, write=10.0, pool=5.0)
+
+
+def pooled_session(max_connections: int = 4) -> httpx.Client:
+    """One keep-alive connection pool per market-data provider (WP-7.2).
+
+    Redirects are followed, as the market-data endpoints relied on with the
+    previous client; the pool holds at most ``max_connections`` connections.
+    """
+    return httpx.Client(
+        follow_redirects=True,
+        timeout=_TIMEOUT,
+        limits=httpx.Limits(
+            max_connections=max_connections,
+            max_keepalive_connections=max_connections,
+        ),
+    )
 
 
 @dataclass(slots=True)
 class _CoalescedFlight:
     event: threading.Event = field(default_factory=threading.Event)
-    response: requests.Response | None = None
+    response: httpx.Response | None = None
     error: BaseException | None = None
 
 
@@ -50,7 +68,7 @@ class ProviderHttpRuntime:
         self,
         provider_id: str,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         max_concurrency: int = 4,
         max_attempts: int = 3,
         initial_backoff_seconds: float = 0.25,
@@ -58,8 +76,9 @@ class ProviderHttpRuntime:
         circuit_cooldown_seconds: float = 5.0,
     ) -> None:
         self.provider_id = provider_id
-        self.session = session or requests.Session()
         self.max_concurrency = max(1, int(max_concurrency))
+        # Tests pass a fake with ``request()`` or ``get()``/``post()``.
+        self.session = session if session is not None else pooled_session(self.max_concurrency)
         self.max_attempts = max(1, int(max_attempts))
         self.initial_backoff_seconds = max(0.0, float(initial_backoff_seconds))
         self.circuit_failure_threshold = max(1, int(circuit_failure_threshold))
@@ -151,7 +170,11 @@ class ProviderHttpRuntime:
         with self._guard:
             self._in_flight = max(0, self._in_flight - 1)
 
-    def _send(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+    def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            # An absent value is left out of the query, not sent empty.
+            kwargs["params"] = {key: value for key, value in params.items() if value is not None}
         request = getattr(self.session, "request", None)
         if callable(request):
             return request(method, url, **kwargs)
@@ -169,7 +192,7 @@ class ProviderHttpRuntime:
         *,
         cancellation: threading.Event | None = None,
         **kwargs: Any,
-    ) -> requests.Response:
+    ) -> httpx.Response:
         if self._cancelled(cancellation):
             raise ProviderCancelledError(f"{self.provider_id} request cancelled")
         self._assert_circuit_available()
@@ -217,14 +240,14 @@ class ProviderHttpRuntime:
                         last_error = error
                     except ProviderCancelledError:
                         raise
-                    except (requests.Timeout, requests.ConnectionError) as exc:
+                    except httpx.TransportError as exc:
                         error = ProviderUnavailableError(
                             f"{self.provider_id} transport failure: {exc}"
                         )
                         self._record_failure(error)
                         last_error = error
                         delay = self.initial_backoff_seconds * (2**attempt)
-                    except requests.RequestException:
+                    except httpx.HTTPError:
                         raise
                     if attempt + 1 < self.max_attempts:
                         self._sleep(delay, cancellation)
@@ -239,7 +262,7 @@ class ProviderHttpRuntime:
         key: str,
         url: str,
         **kwargs: Any,
-    ) -> requests.Response:
+    ) -> httpx.Response:
         """Single-flight identical GETs without creating a persistent response cache."""
 
         clean_key = str(key).strip()
@@ -276,10 +299,10 @@ class ProviderHttpRuntime:
             )
         return flight.response
 
-    def get(self, url: str, **kwargs: Any) -> requests.Response:
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
         return self.request("GET", url, **kwargs)
 
-    def post(self, url: str, **kwargs: Any) -> requests.Response:
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
         return self.request("POST", url, **kwargs)
 
     def snapshot(self) -> ProviderRuntimeSnapshot:

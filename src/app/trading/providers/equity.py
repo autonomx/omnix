@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import Any
 
-import requests
+import httpx
 
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
@@ -112,7 +112,7 @@ class YahooEquityProvider:
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:
@@ -498,7 +498,7 @@ class YahooEquityProvider:
 
             try:
                 return {"rate": read_pair(base, quote)}
-            except (ProviderFallbackEligibleError, requests.RequestException):
+            except (ProviderFallbackEligibleError, httpx.HTTPError):
                 inverse = read_pair(quote, base)
                 if inverse <= 0:
                     raise ProviderDataUnavailableError("Yahoo returned an invalid FX rate")
@@ -527,7 +527,7 @@ class StooqEquityProvider:
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:

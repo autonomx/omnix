@@ -8,8 +8,6 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests
-
 from app.trading.catalog import POLICIES, bindings_for_instrument
 from app.trading.execution import (
     ExecutionEligibilityPolicy,
@@ -189,7 +187,7 @@ class AlpacaIexExecutionProvider:
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         runtime: ProviderHttpRuntime | None = None,
         data_url: str | None = None,
         clock: Callable[[], datetime] | None = None,

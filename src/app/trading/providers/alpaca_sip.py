@@ -12,8 +12,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
-
 from app.trading.catalog import bindings_for_instrument
 from app.trading.models import AdjustmentMode, MarketBar
 from app.trading.prospective_prediction_evidence import SIPTradeEvent
@@ -79,7 +77,7 @@ class AlpacaSipResearchProvider:
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         runtime: ProviderHttpRuntime | None = None,
         data_url: str | None = None,
         clock: Callable[[], datetime] | None = None,

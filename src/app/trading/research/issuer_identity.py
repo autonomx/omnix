@@ -5,7 +5,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
-from requests import RequestException
+from httpx import HTTPError
 
 from app.trading.providers.errors import ProviderContractError, ProviderUnavailableError
 
@@ -47,7 +47,7 @@ class SecIssuerIdentityResolver:
             return self._mapping
         try:
             response = self.runtime.get(_SEC_TICKERS, headers=self._headers(), timeout=20)
-        except RequestException as exc:
+        except HTTPError as exc:
             raise ProviderUnavailableError(f"SEC issuer directory unavailable: {exc}") from exc
         try:
             payload = response.json()

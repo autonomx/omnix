@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
-
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
@@ -28,7 +26,7 @@ class AdditionalCryptoProvider:
         self,
         provider_id: str,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:

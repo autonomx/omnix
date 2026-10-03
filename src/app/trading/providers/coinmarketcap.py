@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests
+import httpx
 
 from app.security.provider_secret_store import load_trading_provider_secrets
 from app.trading.cache import TradingMarketDataCache
@@ -90,7 +90,7 @@ class CoinMarketCapProvider:
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
         base_url: str = CMC_BASE_URL,
@@ -140,7 +140,7 @@ class CoinMarketCapProvider:
                 timeout=20,
                 cancellation=cancellation,
             )
-        except requests.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             response = exc.response
             if response is None:
                 raise ProviderDataUnavailableError(str(exc)) from exc

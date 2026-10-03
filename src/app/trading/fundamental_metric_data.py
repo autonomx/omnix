@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests
+import httpx
 
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import bindings_for_instrument, instrument_by_id
@@ -85,7 +85,7 @@ class YahooAnalystMetricAdapter:
             # fc.yahoo.com intentionally commonly answers 404; the useful side
             # effect is the A3 cookie, so do not call raise_for_status here.
             getter("https://fc.yahoo.com", headers=self.headers, timeout=self.timeout_seconds)
-        except requests.RequestException:
+        except httpx.HTTPError:
             return
 
     def _request_crumb(self) -> str:
@@ -109,7 +109,7 @@ class YahooAnalystMetricAdapter:
                 return self._crumb
             try:
                 crumb = self._request_crumb()
-            except (requests.RequestException, ProviderDataUnavailableError):
+            except (httpx.HTTPError, ProviderDataUnavailableError):
                 self._bootstrap_cookie()
                 crumb = self._request_crumb()
             self._crumb = crumb
@@ -144,7 +144,7 @@ class YahooAnalystMetricAdapter:
 
         try:
             return request()
-        except requests.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             status = getattr(exc.response, "status_code", None)
             if status not in {401, 403}:
                 raise

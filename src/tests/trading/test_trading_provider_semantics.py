@@ -27,9 +27,14 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            import requests
+            import httpx
 
-            raise requests.HTTPError(f"HTTP {self.status_code}")
+            request = httpx.Request("GET", "https://provider.test")
+            raise httpx.HTTPStatusError(
+                f"HTTP {self.status_code}",
+                request=request,
+                response=httpx.Response(self.status_code, request=request),
+            )
 
 
 class FakeSession:

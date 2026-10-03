@@ -20,11 +20,11 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            import requests
+            import httpx
 
-            response = requests.Response()
-            response.status_code = self.status_code
-            raise requests.HTTPError(f"HTTP {self.status_code}", response=response)
+            request = httpx.Request("GET", "https://query2.finance.yahoo.com")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError(f"HTTP {self.status_code}", request=request, response=response)
 
     def json(self):
         return self.payload

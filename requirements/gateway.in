@@ -5,7 +5,6 @@ pydantic
 psycopg[binary]
 psycopg-pool
 httpx
-requests
 python-multipart
 websockets
 numpy
