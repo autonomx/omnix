@@ -84,12 +84,7 @@ it('selects another image model without downloading or loading it', () => {
 it('shows Download Model and starts the service automatically before downloading', async () => {
   const onRefresh = vi.fn();
   const onDownload = vi.fn();
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => ({ ok: true, state: 'unloaded' }),
-  } as Response);
+  const fetchMock = vi.fn(async () => Response.json({ ok: true, state: 'unloaded' }));
   vi.stubGlobal('fetch', fetchMock);
 
   const status: ImageModelStatusPayload = {
@@ -149,12 +144,7 @@ it('passes a masked one-time token when downloading a gated model', () => {
 it('shows Load Model and starts the service automatically for downloaded files', async () => {
   const onRefresh = vi.fn();
   const onLoad = vi.fn();
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => ({ ok: true, state: 'unloaded' }),
-  } as Response);
+  const fetchMock = vi.fn(async () => Response.json({ ok: true, state: 'unloaded' }));
   vi.stubGlobal('fetch', fetchMock);
 
   const status: ImageModelStatusPayload = {

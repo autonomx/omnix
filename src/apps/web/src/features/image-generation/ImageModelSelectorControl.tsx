@@ -1,6 +1,7 @@
 import { Button, PasswordInput, Progress, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
+import { api } from '../../api/http';
 
 export interface ImageLocalModelStatus {
   ok?: boolean;
@@ -185,11 +186,10 @@ export function ImageModelControl({
     let disposed = false;
     const poll = async () => {
       try {
-        const response = await fetch(
-          `/api/image-generation/model/status?provider=${encodeURIComponent(selectedProvider)}`,
-        );
-        if (!response.ok) return;
-        const payload = await response.json() as ImageModelStatusPayload;
+        const { data, response } = await api.GET('/api/image-generation/model/status', { params: { query: { provider: selectedProvider } } });
+        if (!response.ok || !data) return;
+        // The status route drops unset fields; the image service always sends what this view reads.
+        const payload = data as ImageModelStatusPayload;
         const progress = progressFromPayload(payload, selectedProvider);
         if (!disposed && progress) setPolledDownloadProgress(progress);
       } catch {
@@ -209,11 +209,7 @@ export function ImageModelControl({
     setServiceStarting(true);
     setServiceStartError('');
     try {
-      const response = await fetch('/api/image-generation/service/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: selectedProvider }),
-      });
+      const { response } = await api.POST('/api/image-generation/service/start', { body: { provider: selectedProvider } });
       if (!response.ok) throw new Error(await responseError(response));
       return true;
     } catch (startError) {

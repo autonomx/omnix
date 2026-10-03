@@ -2,6 +2,8 @@ import { DisposableStore } from '../../app/moduleRuntime';
 import type { Application } from 'pixi.js';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
+import { ApiError } from '../../api/errors';
+import { fetchBytes } from '../../api/transport';
 
 export type Live2DViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
 
@@ -184,9 +186,11 @@ const motionOptionsCache = new Map<string, Promise<Live2DMotionOption[]>>();
 export function loadLive2DMotionOptions(rigAssetId: string): Promise<Live2DMotionOption[]> {
   const cached = motionOptionsCache.get(rigAssetId);
   if (cached) return cached;
-  const request = fetch(live2dModelUrl(rigAssetId))
+  const request = fetchBytes(live2dModelUrl(rigAssetId))
+    .catch((error: unknown) => {
+      throw error instanceof ApiError ? new Error(`Live2D model manifest could not be loaded (${error.status}).`) : error;
+    })
     .then((response) => {
-      if (!response.ok) throw new Error(`Live2D model manifest could not be loaded (${response.status}).`);
       return response.json() as Promise<{
         FileReferences?: { Motions?: Record<string, unknown> };
       }>;

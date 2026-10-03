@@ -1,5 +1,7 @@
 import type { MarketBar } from '../tradingTypes';
 import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
+import type { components } from '../../../api/generated/types';
+import { api } from '../../../api/http';
 
 export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin';
 export type ExternalIndicatorDefinition = {
@@ -20,17 +22,7 @@ type MetricSeries = {
   kind: 'line' | 'histogram';
   points: MetricPoint[];
 };
-type MetricResponse = {
-  instrument_id: string;
-  metric: string;
-  provider: string;
-  interval: string;
-  series: MetricSeries[];
-  received_at: string;
-  freshness_mode: string;
-  history_complete: boolean;
-  metadata: Record<string, unknown>;
-};
+type MetricResponse = components['schemas']['MarketMetricResponse'];
 
 const BINANCE_REQUIREMENT = 'Available on Binance crypto symbols using public USD-M Futures market data.';
 const EQUITY_REQUIREMENT = 'Available on equity symbols with a Yahoo market-data binding.';
@@ -96,23 +88,6 @@ function defaultColor(seriesKey: string, index: number): string {
   return colors[index % colors.length];
 }
 
-function endpointUrl(
-  definition: ExternalIndicatorDefinition,
-  instrumentId: string,
-  interval: string,
-  limit: number,
-  endTime: string | undefined,
-): string {
-  const query = new URLSearchParams({
-    instrument_id: instrumentId,
-    metric: definition.metric,
-    interval,
-    limit: String(Math.max(1, Math.min(limit, 1_500))),
-  });
-  if (endTime) query.set('end_time', endTime);
-  return `/api/trading/metrics?${query.toString()}`;
-}
-
 async function requestMetric(
   definition: ExternalIndicatorDefinition,
   instrumentId: string,
@@ -126,12 +101,17 @@ async function requestMetric(
   const cached = responseCache.get(key);
   if (cached && cached.expiresAt > now) return cached.promise;
 
-  const promise = fetch(endpointUrl(definition, instrumentId, interval, limit, endTime), {
-    headers: { accept: 'application/json' },
-  }).then(async (response) => {
-    if (!response.ok) return null;
-    return await response.json() as MetricResponse;
-  }).catch(() => null);
+  const promise = api.GET('/api/trading/metrics', {
+    params: {
+      query: {
+        instrument_id: instrumentId,
+        metric: definition.metric,
+        interval,
+        limit: Math.max(1, Math.min(limit, 1_500)),
+        ...(endTime ? { end_time: endTime } : {}),
+      },
+    },
+  }).then(({ data, response }) => (response.ok && data ? data : null)).catch(() => null);
   responseCache.set(key, { expiresAt: now + definition.refreshMs, promise });
   return promise;
 }

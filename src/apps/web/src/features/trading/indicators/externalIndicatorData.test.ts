@@ -63,9 +63,7 @@ describe('external TradingView indicator data', () => {
   });
 
   it('converts provider metric series into native chart outputs', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
         instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
         metric: 'binance.open_interest',
         provider: 'binance-futures',
@@ -84,8 +82,7 @@ describe('external TradingView indicator data', () => {
         freshness_mode: 'polled',
         history_complete: false,
         metadata: {},
-      }),
-    })));
+      })));
 
     const outputs = await calculateExternalIndicatorOutputs(
       bars('crypto:BINANCE:spot:BTC-USDT'),
@@ -103,9 +100,7 @@ describe('external TradingView indicator data', () => {
   });
 
   it('extends a current analyst snapshot across the loaded chart range', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
         instrument_id: 'equity:NASDAQ:NVDA',
         metric: 'yahoo.analyst_price_forecast',
         provider: 'yahoo',
@@ -121,8 +116,7 @@ describe('external TradingView indicator data', () => {
         freshness_mode: 'polled',
         history_complete: false,
         metadata: { snapshot_only: true },
-      }),
-    })));
+      })));
 
     const sourceBars = bars('equity:NASDAQ:NVDA', '1d');
     const outputs = await calculateExternalIndicatorOutputs(

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import './HtmlArtifactPreview.css';
+import { fetchBytes } from '../../api/transport';
 
 type PreviewMode = 'preview' | 'source';
 
@@ -56,11 +57,7 @@ function HtmlArtifactPreviewCard({ runId, path }: { runId: string; path: string 
     if (sourceState === 'ready' || sourceState === 'loading') return;
     setSourceState('loading');
     try {
-      const response = await fetch(previewUrl(runId, path, { source: true, revision }), {
-        credentials: 'same-origin',
-        cache: 'no-store',
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const response = await fetchBytes(previewUrl(runId, path, { source: true, revision }), { cache: 'no-store' });
       setSource(await response.text());
       setSourceState('ready');
     } catch {

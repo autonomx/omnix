@@ -7,10 +7,10 @@
  * identical report only once every 30 seconds.
  */
 import { activeViewModule } from './viewApiScope';
+import { api } from '../api/http';
 
 export type ClientErrorKind = 'error' | 'unhandledrejection' | 'render' | 'chunk_load';
 
-const ENDPOINT = '/api/client-errors';
 const MAX_PER_MINUTE = 10;
 const REPEAT_WINDOW_MS = 30_000;
 
@@ -60,12 +60,7 @@ export function reportClientError(kind: ClientErrorKind, error: unknown): void {
     build: buildId(),
     api_request_id: apiRequestId,
   };
-  void window.fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    keepalive: true,
-  }).catch(() => undefined);
+  void api.POST('/api/client-errors', { body, keepalive: true }).catch(() => undefined);
 }
 
 /** Report uncaught errors and unhandled rejections; returns a function that stops it. */

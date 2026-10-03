@@ -15,6 +15,8 @@ import { buildConversationalPodcastSegments } from './scriptBuilder';
 import type { PodcastFormat } from './types';
 import './PodcastWorkspace.css';
 import './PodcastWorkspaceLayoutFix.css';
+import { ApiError } from '../../api/errors';
+import { fetchBytes } from '../../api/transport';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -268,8 +270,9 @@ function createWavBytes(chunks: WavChunk[]) {
 }
 
 async function loadAudioBytes(url: string) {
-  const response = await fetch(url);
-  if (!response.ok && !url.startsWith('data:')) throw new Error(`Audio fetch failed: ${response.status}`);
+  const response = await fetchBytes(url).catch((error: unknown) => {
+    throw error instanceof ApiError ? new Error(`Audio fetch failed: ${error.status}`) : error;
+  });
   return new Uint8Array(await response.arrayBuffer());
 }
 
