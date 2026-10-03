@@ -11,7 +11,7 @@
 # only PostgreSQL keep using docker-compose.postgres.yml.
 
 x-omnix-build: &omnix-build
-  image: omnix-gateway:${OMNIX_IMAGE_TAG:-local}
+  image: ${OMNIX_IMAGE_REGISTRY:-}omnix-gateway:${OMNIX_IMAGE_TAG:-local}
   build:
     context: .
     dockerfile: deploy/docker/gateway.Dockerfile
@@ -175,7 +175,7 @@ services:
       gateway-worker: {condition: service_healthy}
 
   web:
-    image: omnix-web:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-web:${OMNIX_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: deploy/docker/web.Dockerfile
@@ -193,36 +193,36 @@ services:
   # --- gpu ---------------------------------------------------------------
   tts-models:
     <<: *model-download
-    image: omnix-tts:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-tts:${OMNIX_IMAGE_TAG:-local}
     command: ["python", "-m", "app.models", "download", "--service", "tts"]
 
   tts:
     <<: *model-service
-    image: omnix-tts:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-tts:${OMNIX_IMAGE_TAG:-local}
     build: {context: ., dockerfile: deploy/docker/tts.Dockerfile}
     depends_on:
       tts-models: {condition: service_completed_successfully}
 
   stt-models:
     <<: *model-download
-    image: omnix-stt:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-stt:${OMNIX_IMAGE_TAG:-local}
     command: ["python", "-m", "app.models", "download", "--service", "stt"]
 
   stt:
     <<: *model-service
-    image: omnix-stt:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-stt:${OMNIX_IMAGE_TAG:-local}
     build: {context: ., dockerfile: deploy/docker/stt.Dockerfile}
     depends_on:
       stt-models: {condition: service_completed_successfully}
 
   image-models:
     <<: *model-download
-    image: omnix-image:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-image:${OMNIX_IMAGE_TAG:-local}
     command: ["python", "-m", "app.models", "download", "--service", "image"]
 
   image:
     <<: *model-service
-    image: omnix-image:${OMNIX_IMAGE_TAG:-local}
+    image: ${OMNIX_IMAGE_REGISTRY:-}omnix-image:${OMNIX_IMAGE_TAG:-local}
     build: {context: ., dockerfile: deploy/docker/image.Dockerfile}
     depends_on:
       image-models: {condition: service_completed_successfully}

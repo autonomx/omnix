@@ -49,7 +49,15 @@ release must be abandoned after a contract migration ran, restore the backup
 from step 1 into a new database instead of editing the schema
 ([restore runbook](runbooks/restore.md)).
 
-## Not yet automated
+## Images
 
-Container images (WP-11.1) are not built by CI yet; until then a release is a
-tagged commit deployed from source with the lock files.
+Pushing the `v<version>` tag runs `.github/workflows/images.yml`: it builds the
+gateway, web, TTS, STT and image images with
+`OMNIX_SOFTWARE_REVISION=<version>+<commit>`, fails on critical vulnerabilities
+that have a fix, attaches a CycloneDX SBOM per image, smoke-tests the gateway
+against PostgreSQL, and pushes `ghcr.io/<owner>/omnix-<image>:<version>` and
+`:<commit>`. Deploy with `OMNIX_IMAGE_REGISTRY=ghcr.io/<owner>/` and
+`OMNIX_IMAGE_TAG=<version>` in the Compose `.env` (then `docker compose pull`)
+(see [Containers](../OPERATIONS.md#containers)); a rollback sets the previous
+version and runs the same order. Source deployments still use the tagged commit
+and the lock files.
