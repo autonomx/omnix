@@ -125,6 +125,11 @@ let greetingStartup: GreetingStartup | null = null;
 let greetingStartupToken = 0;
 let reportedSpeaking = false;
 
+/** Whether unified live audio plays assistant speech (Chat must not play it too). */
+export function isLiveVoiceUnifiedAudioInstalled(): boolean {
+  return removeMiddleware !== null;
+}
+
 export function initializeLiveVoiceUnifiedAudioController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   if (removeMiddleware) return () => undefined;

@@ -84,8 +84,6 @@ function deferred<T>() {
 
 afterEach(() => {
   window.localStorage.clear();
-  delete (window as typeof window & { __omnixLiveVoiceControllerInstalled?: boolean }).__omnixLiveVoiceControllerInstalled;
-  delete (window as typeof window & { __omnixLiveVoiceUnifiedAudioInstalled?: boolean }).__omnixLiveVoiceUnifiedAudioInstalled;
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();

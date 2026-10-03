@@ -51,6 +51,8 @@ import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
 import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
+import { isLiveVoiceControllerInstalled } from '../assistant-workspace/live-voice-controller';
+import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 
 interface ChatbotFormValues {
   content: string;
@@ -175,11 +177,11 @@ function finiteNumber(value: unknown): number | undefined {
 }
 
 function dedicatedLiveVoiceControllerInstalled(): boolean {
-  return Boolean((window as StreamingTtsWindow).__omnixLiveVoiceControllerInstalled);
+  return isLiveVoiceControllerInstalled();
 }
 
 function unifiedLiveVoiceAudioInstalled(): boolean {
-  return Boolean((window as StreamingTtsWindow).__omnixLiveVoiceUnifiedAudioInstalled);
+  return isLiveVoiceUnifiedAudioInstalled();
 }
 
 type VoicePerformanceStage = {
@@ -232,8 +234,6 @@ type StreamingTtsPlayback = {
 type StreamingTtsWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
-  __omnixLiveVoiceControllerInstalled?: boolean;
-  __omnixLiveVoiceUnifiedAudioInstalled?: boolean;
 };
 
 const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: string }> = [

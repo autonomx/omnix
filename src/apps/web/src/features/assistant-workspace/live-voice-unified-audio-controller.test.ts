@@ -61,6 +61,7 @@ vi.mock('./live-voice-pcm-session', () => ({
 
 import {
   initializeLiveVoiceUnifiedAudioController,
+  isLiveVoiceUnifiedAudioInstalled,
   shouldUseUnifiedLiveVoiceAudio,
 } from './live-voice-unified-audio-controller';
 
@@ -154,6 +155,13 @@ afterEach(async () => {
 });
 
 describe('live voice unified audio controller', () => {
+  it('reports whether it owns assistant playback, so Chat does not play it too', () => {
+    expect(isLiveVoiceUnifiedAudioInstalled()).toBe(true);
+    cleanup?.();
+    cleanup = null;
+    expect(isLiveVoiceUnifiedAudioInstalled()).toBe(false);
+  });
+
   it('records installation and uses one persistent PCM session for every phrase', async () => {
     expect(mocks.recordSpy).toHaveBeenCalledWith(
       'controller_installed',

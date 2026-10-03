@@ -49,7 +49,6 @@ import type { SpeechLocation } from './stt-url';
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
-  __omnixLiveVoiceControllerInstalled?: boolean;
 };
 
 type LiveVoiceAudioPipeline = { node: AudioNode; cleanup: () => void };
@@ -220,12 +219,14 @@ export function semanticFinalizationRemainingMs(
   return Math.max(0, pauseRemainingMs, transcriptRemainingMs);
 }
 
+/** Whether the dedicated live voice controller owns the call (Chat defers to it). */
+export function isLiveVoiceControllerInstalled(): boolean {
+  return initialized;
+}
+
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
-  const liveWindow = window as LiveVoiceWindow;
-  if (liveWindow.__omnixLiveVoiceControllerInstalled) return;
   initialized = true;
-  liveWindow.__omnixLiveVoiceControllerInstalled = true;
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
