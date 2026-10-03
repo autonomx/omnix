@@ -560,6 +560,15 @@ def test_mypy_reports_override_pattern_count_and_effective_matching_modules():
     assert result["evidence"]["mypy_strict_patterns"] == ["app.chat.strict"]
 
 
+def test_web_modules_imported_with_a_vite_query_are_reachable():
+    sources = {
+        WEB + "main.tsx": "import './player';",
+        WEB + "player.ts": "import workletUrl from './pcm.worklet.ts?worker&url';",
+        WEB + "pcm.worklet.ts": "registerProcessor('pcm', class {});",
+    }
+    assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 0
+
+
 def test_eslint_baseline_metric_includes_all_linted_web_files():
     sources = {
         WEB + "app/a.ts": "/* eslint-disable no-console -- baseline WP-9.x */\n",

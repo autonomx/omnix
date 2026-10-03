@@ -883,6 +883,8 @@ def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
         # Workers and worklets load by URL: new Worker(new URL('./x.worker.ts', import.meta.url)).
         imports += re.findall(r"\bnew\s+URL\(\s*[\"'](\.[^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)", code)
         for specifier in imports:
+            # Vite import queries (`./x.worklet.ts?worker&url`) name the same module.
+            specifier = specifier.split("?", 1)[0]
             if specifier.startswith("@/"):
                 base = PurePosixPath("src/apps/web/src") / specifier[2:]
             elif specifier.startswith("."):
