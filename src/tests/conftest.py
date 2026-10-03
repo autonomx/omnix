@@ -70,6 +70,10 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
     # Legacy-test persistence writes JSON stores under resources/data by default;
     # keep every test (and every xdist worker) off the operator's files.
     monkeypatch.setenv("OMNIX_ASSISTANT_TURN_STORE_PATH", str(tmp_path / "assistant_turns.json"))
+    # The provider key store is a DPAPI file in the user's profile; a test must
+    # never read the developer's real keys (their presence changed trading
+    # test outcomes on machines with Alpaca credentials).
+    monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-api-keys.dpapi"))
 
 
 @pytest.fixture(autouse=True)
