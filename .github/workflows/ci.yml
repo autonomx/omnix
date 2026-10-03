@@ -308,12 +308,20 @@ jobs:
           npm ci
       - name: Run the security test suite
         # Auth matrix, CSRF/Origin/Host, WebSocket auth, permissions, approvals,
-        # run tokens, audit, secrets, hardening and log canaries (WP-4.11).
-        # Row-level security runs in test-postgres as the restricted role.
+        # run tokens, audit, secrets, hardening and log canaries (WP-4.11), and
+        # the agent sandbox policy: mutating runs sandboxed or refused, the
+        # locked-down container, no user home, audited override, and the guard
+        # auto-approving only inside the sandbox. Row-level security runs in
+        # test-postgres as the restricted role; the sandbox's network egress
+        # runs on Docker in test-unit, which builds the image.
         env:
           OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
           PYTHONPATH: src
-        run: python -m pytest src/tests/security -q --tb=short
+        run: >-
+          python -m pytest src/tests/security
+          src/tests/agent_runtime/test_isolation.py
+          src/tests/agent_runtime/test_pi_guard_sandbox_approval.py
+          -q --tb=short
       - name: Audit production Python dependencies
         run: pip-audit -r requirements/gateway.lock.txt
       - name: Audit production web dependencies

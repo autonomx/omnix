@@ -7,6 +7,7 @@ development proxy and production ingress forward them unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 import hmac
 from typing import Literal
 
@@ -21,9 +22,12 @@ from .oidc import safe_redirect_path
 from .service import (
     CSRF_COOKIE,
     CSRF_HEADER,
+    SECURE_SESSION_COOKIE,
     SESSION_COOKIE,
+    AuthenticatedPrincipal,
     AuthService,
     IssuedSession,
+    ReauthenticationRequired,
 )
 from .settings import AuthMode
 
@@ -45,9 +49,47 @@ class LocalLoginRequest(BaseModel):
     credential: str = Field(min_length=1, max_length=512)
 
 
+class AuthSessionSummary(BaseModel):
+    id: str
+    auth_method: str
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+    current: bool
+
+
+class AuthSessionListResponse(BaseModel):
+    sessions: list[AuthSessionSummary]
+
+
+class RevokeSessionsRequest(BaseModel):
+    # One session's id from the list, or none for every session but this one.
+    session_id: str | None = Field(default=None, min_length=16, max_length=16, pattern="^[0-9a-f]{16}$")
+    # Local mode: the install credential again. OIDC mode: a recent sign-in instead.
+    credential: str | None = Field(default=None, max_length=512)
+
+
+class RevokeSessionsResponse(BaseModel):
+    revoked: int
+
+
+def _https(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return request.url.scheme == "https" or forwarded == "https"
+
+
+def _secure(service: AuthService, request: Request) -> bool:
+    """Cookies are Secure when configured so or when the browser came over HTTPS (ASVS 3.4.1)."""
+    return service.settings.cookie_secure or _https(request)
+
+
+def presented_session(request: Request) -> str | None:
+    return request.cookies.get(SECURE_SESSION_COOKIE) or request.cookies.get(SESSION_COOKIE)
+
+
 def _set_session_cookies(response: Response, issued: IssuedSession, *, secure: bool) -> None:
     response.set_cookie(
-        SESSION_COOKIE,
+        SECURE_SESSION_COOKIE if secure else SESSION_COOKIE,
         issued.token,
         max_age=issued.max_age_seconds,
         httponly=True,
@@ -70,6 +112,8 @@ def _set_session_cookies(response: Response, issued: IssuedSession, *, secure: b
 def _clear_session_cookies(response: Response, *, secure: bool) -> None:
     for name, http_only in ((SESSION_COOKIE, True), (CSRF_COOKIE, False)):
         response.delete_cookie(name, path="/", secure=secure, httponly=http_only, samesite="strict")
+    if secure:
+        response.delete_cookie(SECURE_SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="strict")
 
 
 def _user_agent(request: Request) -> str | None:
@@ -92,7 +136,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
 
     def revoke_presented(service: AuthService, request: Request) -> None:
         # Rotation: a new login always replaces any session the browser held.
-        previous = request.cookies.get(SESSION_COOKIE)
+        previous = presented_session(request)
         if previous:
             service.logout(previous)
 
@@ -102,7 +146,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         if service is None or not service.settings.enforced:
             mode = service.settings.mode if service is not None else AuthMode.DISABLED
             return AuthSessionResponse(enforced=False, mode=mode.value, authenticated=False)
-        token = request.cookies.get(SESSION_COOKIE)
+        token = presented_session(request)
         principal = service.authenticate_session(token) if token else None
         if principal is None:
             # 200, not 401: the sign-in page reads the mode from this response.
@@ -125,7 +169,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             record_auth_rejection("invalid_credential")
             raise HTTPException(status_code=401, detail="invalid_credential")
         revoke_presented(service, request)
-        _set_session_cookies(response, issued, secure=service.settings.cookie_secure)
+        _set_session_cookies(response, issued, secure=_secure(service, request))
         context = issued.principal.context
         return AuthSessionResponse(
             enforced=True,
@@ -145,13 +189,47 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             return RedirectResponse("/login?error=login_link_expired", status_code=303)
         revoke_presented(service, request)
         redirect = RedirectResponse(safe_redirect_path(next), status_code=303)
-        _set_session_cookies(redirect, issued, secure=service.settings.cookie_secure)
+        _set_session_cookies(redirect, issued, secure=_secure(service, request))
         return redirect
+
+    def signed_in(service: AuthService, request: Request, *, check_csrf: bool) -> AuthenticatedPrincipal:
+        token = presented_session(request)
+        principal = service.authenticate_session(token) if token else None
+        if principal is None:
+            raise HTTPException(status_code=401, detail="authentication_required")
+        if check_csrf:
+            supplied = request.headers.getlist(CSRF_HEADER)
+            if len(supplied) != 1 or not principal.csrf_token or not hmac.compare_digest(supplied[0], principal.csrf_token):
+                raise HTTPException(status_code=403, detail="csrf_failed")
+        return principal
+
+    @router.get("/sessions", response_model=AuthSessionListResponse)
+    def list_sessions(request: Request) -> AuthSessionListResponse:
+        """The caller's active sessions (ASVS 3.3.4)."""
+        service = service_for()
+        principal = signed_in(service, request, check_csrf=False)
+        return AuthSessionListResponse(sessions=[
+            AuthSessionSummary(id=summary.handle, auth_method=summary.auth_method, created_at=summary.created_at,
+                               last_seen_at=summary.last_seen_at, expires_at=summary.expires_at, current=current)
+            for summary, current in service.list_sessions(principal)
+        ])
+
+    @router.post("/sessions/revoke", response_model=RevokeSessionsResponse, dependencies=[Depends(login_rate_limit)])
+    def revoke_sessions(body: RevokeSessionsRequest, request: Request) -> RevokeSessionsResponse:
+        """Sign out one other session or all others, after re-authenticating (ASVS 3.3.4)."""
+        service = service_for()
+        principal = signed_in(service, request, check_csrf=True)
+        try:
+            revoked = service.revoke_sessions(principal, handle=body.session_id, credential=body.credential)
+        except ReauthenticationRequired as exc:
+            record_auth_rejection("reauthentication_required")
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        return RevokeSessionsResponse(revoked=revoked)
 
     @router.post("/logout", status_code=204)
     def logout(request: Request) -> Response:
         service = service_for()
-        token = request.cookies.get(SESSION_COOKIE)
+        token = presented_session(request)
         if token:
             principal = service.authenticate_session(token)
             supplied = request.headers.getlist(CSRF_HEADER)
@@ -162,12 +240,14 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             ):
                 raise HTTPException(status_code=403, detail="csrf_failed")
             service.logout(token)
-        response = Response(status_code=204)
-        _clear_session_cookies(response, secure=service.settings.cookie_secure)
+        # The browser drops what the app kept locally (drafts, recent events)
+        # and its cached responses (ASVS 8.2.3).
+        response = Response(status_code=204, headers={"Clear-Site-Data": '"cache", "storage"'})
+        _clear_session_cookies(response, secure=_secure(service, request))
         return response
 
     @router.get("/oidc/login", response_class=RedirectResponse, status_code=302)
-    def oidc_login(next: str = "/") -> RedirectResponse:
+    def oidc_login(request: Request, next: str = "/") -> RedirectResponse:
         service = service_for(AuthMode.OIDC)
         url, binding = service.start_oidc_login(redirect_after=next)
         redirect = RedirectResponse(url, status_code=302)
@@ -179,7 +259,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             max_age=600,
             httponly=True,
             samesite="lax",
-            secure=service.settings.cookie_secure,
+            secure=_secure(service, request),
             path=_OIDC_TX_PATH,
         )
         return redirect
@@ -199,7 +279,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         revoke_presented(service, request)
         redirect = RedirectResponse(safe_redirect_path(redirect_after), status_code=303)
         redirect.delete_cookie(OIDC_TX_COOKIE, path=_OIDC_TX_PATH)
-        _set_session_cookies(redirect, issued, secure=service.settings.cookie_secure)
+        _set_session_cookies(redirect, issued, secure=_secure(service, request))
         return redirect
 
     return router

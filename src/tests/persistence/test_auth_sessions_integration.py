@@ -315,6 +315,99 @@ def test_launcher_login_flow_through_the_gateway(database, local_auth, monkeypat
     assert client.get("/api/__auth_probe__").status_code == 401
 
 
+def test_https_sign_in_sets_a_secure_host_only_session_cookie(database, local_auth) -> None:
+    """Behind HTTPS the cookies are Secure and the session cookie is ``__Host-`` (ASVS 3.4.1, 3.4.4)."""
+    from app.gateway.main import create_gateway_app
+
+    service, credential = local_auth
+    assert service.settings.cookie_secure is False
+    client = TestClient(
+        create_gateway_app(auth_service=service),
+        base_url="https://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+    login = client.post("/api/auth/local/login", json={"credential": credential})
+    assert login.status_code == 200
+    cookies = login.headers.get_list("set-cookie")
+    session_cookie = next(value for value in cookies if value.startswith("__Host-omnix_session="))
+    assert "Secure" in session_cookie and "HttpOnly" in session_cookie and "Path=/" in session_cookie
+    assert "Domain" not in session_cookie
+    assert not any(value.startswith("omnix_session=") for value in cookies)
+    assert "Secure" in next(value for value in cookies if value.startswith("omnix_csrf="))
+    assert client.get("/api/auth/session").json()["authenticated"] is True
+
+    csrf = client.cookies.get("omnix_csrf")
+    token = client.cookies.get("__Host-omnix_session")
+    logout = client.post("/api/auth/logout", headers={"X-Omnix-CSRF": csrf})
+    assert logout.status_code == 204
+    assert logout.headers["clear-site-data"] == '"cache", "storage"'
+    assert service.authenticate_session(token) is None
+
+
+def test_a_user_sees_their_sessions_and_signs_out_the_others(database, local_auth, monkeypatch) -> None:
+    """ASVS 3.3.4: list sessions; revoking others needs the credential again.
+
+    Revocation checks the credential, so it shares the sign-in rate limit;
+    this test makes more attempts than that limit allows in a minute."""
+    from app.gateway.main import create_gateway_app
+
+    monkeypatch.setenv("OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE", "50")
+
+    service, credential = local_auth
+    app = create_gateway_app(auth_service=service)
+    laptop = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+    phone = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+    tablet = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+    for client in (laptop, phone, tablet):
+        assert client.post("/api/auth/local/login", json={"credential": credential}).status_code == 200
+    csrf = {"X-Omnix-CSRF": laptop.cookies.get("omnix_csrf")}
+
+    listed = laptop.get("/api/auth/sessions").json()["sessions"]
+    assert len(listed) >= 3
+    assert [entry["current"] for entry in listed].count(True) == 1
+    assert all(len(entry["id"]) == 16 for entry in listed)
+    assert TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}).get(
+        "/api/auth/sessions").status_code == 401
+
+    assert laptop.post("/api/auth/sessions/revoke", json={"credential": credential}).status_code == 403
+    assert laptop.post("/api/auth/sessions/revoke", json={}, headers=csrf).status_code == 401
+    assert laptop.post("/api/auth/sessions/revoke", json={"credential": "wrong"}, headers=csrf).status_code == 401
+
+    phone_handle = service.authenticate_session(phone.cookies.get("omnix_session")).session_id[:16]
+    one = laptop.post("/api/auth/sessions/revoke", json={"session_id": phone_handle, "credential": credential},
+                      headers=csrf)
+    assert one.json() == {"revoked": 1}
+    assert phone.get("/api/auth/session").json()["authenticated"] is False
+    assert tablet.get("/api/auth/session").json()["authenticated"] is True
+
+    others = laptop.post("/api/auth/sessions/revoke", json={"credential": credential}, headers=csrf)
+    assert others.status_code == 200 and others.json()["revoked"] >= 1
+    assert tablet.get("/api/auth/session").json()["authenticated"] is False
+    assert laptop.get("/api/auth/session").json()["authenticated"] is True
+    assert [entry["current"] for entry in laptop.get("/api/auth/sessions").json()["sessions"]] == [True]
+
+
+def test_oidc_users_sign_others_out_only_soon_after_signing_in(database) -> None:
+    from app.security.auth.service import ReauthenticationRequired
+
+    idp = FakeIdentityProvider()
+    service = _oidc_service(database, idp)
+    claims = {"sub": f"bob-{uuid.uuid4().hex}", "email": "bob@example.com", "email_verified": True, "name": "Bob"}
+    first, _ = _oidc_login(service, idp, claims)
+    second, _ = _oidc_login(service, idp, claims)
+    current = service.authenticate_session(second[0].token)
+
+    assert service.revoke_sessions(current, handle=None, credential=None) == 1
+    assert service.authenticate_session(first[0].token) is None
+
+    with database.connection() as connection:
+        connection.execute("UPDATE omnix_auth_sessions SET created_at = created_at - INTERVAL '1 hour' WHERE id = %s",
+                           (current.session_id,))
+        connection.commit()
+    with pytest.raises(ReauthenticationRequired, match="recent_sign_in_required"):
+        service.revoke_sessions(current, handle=None, credential=None)
+
+
 def test_manual_login_rotates_any_presented_session(database, local_auth) -> None:
     from app.gateway.main import create_gateway_app
 

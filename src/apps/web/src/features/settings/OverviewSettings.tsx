@@ -1,5 +1,6 @@
 import { SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
+import { SignedInSessionsSection } from './SignedInSessionsSection';
 
 export function OverviewSettings() {
   const { state, loading, loadError } = useSettingsProfileContext();
@@ -21,6 +22,7 @@ export function OverviewSettings() {
         <SettingsStatusRow label="Speech input" value={providers.stt || 'Runtime default'} tone="neutral" />
         <SettingsStatusRow label="Image generation" value={providers.image || 'Runtime default'} tone="neutral" />
       </SettingsSection>
+      <SignedInSessionsSection />
     </div>
   );
 }

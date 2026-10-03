@@ -98,7 +98,11 @@ def install_error_envelope(app: Any) -> None:
     async def validation_error(request: Any, exc: RequestValidationError) -> JSONResponse:
         from fastapi.encoders import jsonable_encoder
 
-        return respond(request, 422, jsonable_encoder(exc.errors()), code="invalid_request")
+        errors = exc.errors()
+        # Validation failures are security events (ASVS 7.1.3); the rejected
+        # values are not logged.
+        logger.info("request_validation_failed path=%s errors=%d", request.url.path, len(errors))
+        return respond(request, 422, jsonable_encoder(errors), code="invalid_request")
 
     async def unhandled_error(request: Any, exc: Exception) -> JSONResponse:
         from app.observability.logging import log_context

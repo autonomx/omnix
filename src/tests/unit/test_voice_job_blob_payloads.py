@@ -38,7 +38,7 @@ def blobs(tmp_path: Path, monkeypatch) -> LocalBlobStore:
 
 
 def test_clone_sample_moves_to_the_blob_store_at_admission(blobs) -> None:
-    audio = b"RIFF" + bytes(range(256)) * 64
+    audio = b"RIFF\x00\x00\x00\x00WAVE" + bytes(range(256)) * 64
     request = CreateJobRequest(
         module="voice-cloning",
         type="voice-cloning.create-profile",
@@ -65,6 +65,22 @@ def test_oversized_or_empty_samples_are_refused(blobs, monkeypatch) -> None:
     with pytest.raises(ValueError, match="too large"):
         voice_jobs.store_inline_clone_sample({"sample_audio_base64": base64.b64encode(bytes(64)).decode()})
     assert not list(Path(blobs.root).rglob("*.wav"))
+
+
+@pytest.mark.parametrize("head", [b"RIFF\x00\x00\x00\x00WAVE", b"ID3\x04", b"\xff\xfb\x90", b"OggS", b"fLaC",
+                                  b"\x1aE\xdf\xa3", b"\x00\x00\x00\x20ftypM4A "])
+def test_audio_containers_are_accepted(blobs, head) -> None:
+    sample = base64.b64encode(head + bytes(64)).decode()
+    assert "sample_blob_key" in voice_jobs.store_inline_clone_sample({"sample_audio_base64": sample})
+
+
+def test_a_sample_that_is_not_audio_is_refused(blobs) -> None:
+    """Uploads are checked by content, not by their name (ASVS 12.2.1)."""
+    for content in (b"<html><script>alert(1)</script></html>", b"MZ\x90\x00 executable", b"RIFF\x00\x00\x00\x00AVI "):
+        with pytest.raises(ValueError, match="not a WAV"):
+            voice_jobs.store_inline_clone_sample({"sample_audio_base64": base64.b64encode(content).decode(),
+                                                  "source_file_name": "voice.wav"})
+    assert not any(path.is_file() for path in Path(blobs.root).rglob("*"))
 
 
 def test_rows_queued_before_the_change_still_decode() -> None:

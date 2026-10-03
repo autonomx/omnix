@@ -871,11 +871,29 @@ session.
 
 Sessions use the `omnix_session` cookie (HttpOnly, `SameSite=Strict`). They end
 after 12 idle hours (`OMNIX_AUTH_SESSION_IDLE_HOURS`) or 7 days
-(`OMNIX_AUTH_SESSION_MAX_DAYS`), whichever comes first. Set
-`OMNIX_AUTH_COOKIE_SECURE=true` when Omnix is served over HTTPS. Browser
+(`OMNIX_AUTH_SESSION_MAX_DAYS`), whichever comes first. When the browser
+reaches Omnix over HTTPS (directly or through an ingress that sends
+`X-Forwarded-Proto: https`) the cookies are `Secure` and the session cookie is
+named `__Host-omnix_session`, which no other host or path can set or read;
+`OMNIX_AUTH_COOKIE_SECURE=true` forces this for every request. Browser
 requests that change state must echo the `omnix_csrf` cookie in
 `X-Omnix-CSRF`; the web app does this automatically. Missing or wrong values
 get 403 `csrf_failed`.
+
+Settings → Overview lists the signed-in user's sessions
+(`GET /api/auth/sessions`). Signing out one other session or all others
+(`POST /api/auth/sessions/revoke`) needs proof of identity again: the install
+credential in local mode, a sign-in within the last 10 minutes in OIDC mode.
+It shares the sign-in rate limit and is audited (`auth.sessions.revoked`).
+Sign-out answers `Clear-Site-Data: "cache", "storage"`, so the browser drops
+what the app stored locally.
+
+Disconnecting a tool account (Settings → Tools, or
+`POST /api/assistant/tools/connect/{tool_id}/disconnect`) deletes its stored
+OAuth token and revokes the grant at the provider: Google once no other Google
+tool uses the grant, GitHub with the OAuth app's client credentials. When the
+provider cannot be reached, the token is still deleted and the reply says to
+revoke Omnix's access in the provider's account settings.
 
 ### Local mode
 

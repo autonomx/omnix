@@ -8,6 +8,7 @@ import {
 } from '../workspace/tool-actions';
 import { createDefaultAssistantToolRegistry, type AssistantTool, type ToolConfig } from '../workspace/tool-registry';
 import {
+  disconnectAssistantToolAccount,
   fetchAssistantToolsConfig,
   saveAssistantToolOAuthClient,
   saveAssistantToolsConfig,
@@ -74,15 +75,12 @@ export function AssistantToolSettingsPanel({ enabledToolCount, initialConnection
     })));
   }
 
-  function disconnectToolAccount(tool: AssistantTool): void {
-    persistConfig((payload) => updateToolRecord(payload, tool.id, (record) => ({
-      ...record,
-      connection_status: 'not_configured',
-      account_label: null,
-      account_email: null,
-      connected_at: null,
-    })));
-    setConnectionStatusMessage(`${tool.metadata.name} account connection removed.`);
+  async function disconnectToolAccount(tool: AssistantTool): Promise<void> {
+    // The server deletes the stored token (and revokes it at the provider);
+    // clearing the label alone would leave the token usable.
+    const result = await disconnectAssistantToolAccount(tool.id);
+    await queryClient.invalidateQueries({ queryKey: assistantToolConfigQueryKey });
+    setConnectionStatusMessage(`${tool.metadata.name}: ${result.message}`);
   }
 
   function setActionEnabled(tool: AssistantTool, action: ToolAction, enabled: boolean): void {
@@ -149,7 +147,7 @@ export function AssistantToolSettingsPanel({ enabledToolCount, initialConnection
           </dl>
           <div className="assistant-tool-config-actions">
             <button type="button" onClick={() => void connectToolAccount(activeTool)}>Connect real account</button>
-            <button type="button" onClick={() => disconnectToolAccount(activeTool)} disabled={activeConfig.connectionStatus !== 'connected'}>Disconnect account</button>
+            <button type="button" onClick={() => void disconnectToolAccount(activeTool)} disabled={activeConfig.connectionStatus !== 'connected'}>Disconnect account</button>
             <button type="button" onClick={() => setToolEnabled(activeTool, !activeConfig.enabled)}>{activeConfig.enabled ? 'Disable tool' : 'Enable tool'}</button>
             <button type="button" onClick={() => void testToolConnection(activeTool, activeConfig)}>Test connection</button>
             <button type="button" onClick={onShowExecutionPanel}>Show execution panel</button>

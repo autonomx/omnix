@@ -22,6 +22,22 @@ class SessionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionSummary:
+    """One active session as its owner sees it: no secrets, a short handle."""
+
+    handle: str
+    auth_method: str
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+
+
+# Sessions are named to their owner by the first 16 hex digits of their id
+# (itself a digest of the token): enough to tell them apart, useless to sign in.
+SESSION_HANDLE_LENGTH = 16
+
+
+@dataclass(frozen=True, slots=True)
 class InstallCredentialRecord:
     user_id: str
     workspace_id: str
@@ -143,6 +159,56 @@ class PostgresAuthRepository:
             (session_id,),
         ).fetchone()
         return row is not None
+
+    def user_sessions(self, user_id: str) -> list[tuple[str, SessionSummary]]:
+        rows = self.connection.execute(
+            """
+            SELECT id, auth_method, created_at, last_seen_at, LEAST(expires_at, absolute_expires_at)
+              FROM omnix_auth_sessions
+             WHERE user_id = %s
+               AND revoked_at IS NULL
+               AND expires_at > CURRENT_TIMESTAMP
+               AND absolute_expires_at > CURRENT_TIMESTAMP
+             ORDER BY last_seen_at DESC
+            """,
+            (user_id,),
+        ).fetchall()
+        return [
+            (str(row[0]), SessionSummary(handle=str(row[0])[:SESSION_HANDLE_LENGTH], auth_method=str(row[1]),
+                                         created_at=row[2], last_seen_at=row[3], expires_at=row[4]))
+            for row in rows
+        ]
+
+    def session_age_seconds(self, session_id: str) -> float | None:
+        row = self.connection.execute(
+            "SELECT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - created_at) FROM omnix_auth_sessions WHERE id = %s",
+            (session_id,),
+        ).fetchone()
+        return float(row[0]) if row else None
+
+    def revoke_user_sessions_matching(self, user_id: str, *, handle: str | None, keep: str) -> int:
+        """Revoke one of the user's sessions by handle, or all but ``keep``."""
+        if handle is not None:
+            rows = self.connection.execute(
+                """
+                UPDATE omnix_auth_sessions
+                   SET revoked_at = CURRENT_TIMESTAMP
+                 WHERE user_id = %s AND revoked_at IS NULL AND left(id, %s) = %s
+                RETURNING id
+                """,
+                (user_id, SESSION_HANDLE_LENGTH, handle),
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                UPDATE omnix_auth_sessions
+                   SET revoked_at = CURRENT_TIMESTAMP
+                 WHERE user_id = %s AND revoked_at IS NULL AND id <> %s
+                RETURNING id
+                """,
+                (user_id, keep),
+            ).fetchall()
+        return len(rows)
 
     def revoke_user_sessions(self, user_id: str) -> int:
         rows = self.connection.execute(

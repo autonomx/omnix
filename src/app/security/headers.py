@@ -46,6 +46,14 @@ class SecurityHeadersMiddleware:
                 headers.setdefault("Referrer-Policy", "no-referrer")
                 headers.setdefault("X-Frame-Options", "DENY")
                 headers.setdefault("Permissions-Policy", PERMISSIONS_POLICY)
+                # API data is personal; browsers and shared caches keep none
+                # of it unless a route chose its own policy (ASVS 8.2.1).
+                headers.setdefault("Cache-Control", "no-store")
+                content_type = headers.get("content-type", "").lower()
+                if content_type.startswith(("application/json", "application/problem+json")):
+                    # A browser navigating to an API URL saves the JSON
+                    # instead of rendering it (ASVS 14.4.2); fetch ignores it.
+                    headers.setdefault("Content-Disposition", 'attachment; filename="api.json"')
                 headers.setdefault(
                     "Content-Security-Policy",
                     HTML_CONTENT_SECURITY_POLICY if html else API_CONTENT_SECURITY_POLICY,

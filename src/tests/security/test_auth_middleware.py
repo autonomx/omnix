@@ -108,6 +108,16 @@ def test_session_cookie_authenticates_and_unsafe_methods_require_csrf(gateway) -
     assert session.json()["roles"] == ["owner"]
 
 
+def test_the_secure_session_cookie_authenticates_and_still_needs_csrf(gateway) -> None:
+    """Over HTTPS the session cookie is named ``__Host-omnix_session`` (ASVS 3.4.4)."""
+    app, authenticator = gateway
+    token, csrf = authenticator.issue_session()
+    client = _client(app, Cookie=f"__Host-omnix_session={token}")
+    assert client.get(PROBE).status_code == 404
+    assert client.post(PROBE).status_code == 403
+    assert client.post(PROBE, headers={"X-Omnix-CSRF": csrf}).status_code in {404, 405}
+
+
 def test_unknown_or_revoked_session_is_rejected(gateway) -> None:
     app, authenticator = gateway
     token, _ = authenticator.issue_session()

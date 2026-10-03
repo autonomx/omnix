@@ -11,6 +11,7 @@ export type AssistantToolsConfigPayload = components['schemas']['AssistantToolsC
 export type AssistantToolsConfigUpdate = components['schemas']['AssistantToolsConfigPayload-Input'];
 
 export type AssistantToolConnectionStartPayload = components['schemas']['AssistantToolConnectionStartPayload'];
+export type AssistantToolDisconnectPayload = components['schemas']['AssistantToolDisconnectPayload'];
 
 export type AssistantToolOAuthClientPayload = components['schemas']['AssistantToolOAuthClientPayload'];
 
@@ -52,6 +53,11 @@ export async function saveAssistantToolsConfig(payload: AssistantToolsConfigUpda
 
 export async function startAssistantToolConnection(toolId: string): Promise<AssistantToolConnectionStartPayload> {
   return unwrap(api.GET('/api/assistant/tools/connect/{tool_id}', { params: { path: { tool_id: toolId } } }));
+}
+
+/** Deletes the account's stored token and revokes its grant at the provider when possible. */
+export async function disconnectAssistantToolAccount(toolId: string): Promise<AssistantToolDisconnectPayload> {
+  return unwrap(api.POST('/api/assistant/tools/connect/{tool_id}/disconnect', { params: { path: { tool_id: toolId } } }));
 }
 
 export async function saveAssistantToolOAuthClient(toolId: string, payload: AssistantToolOAuthClientPayload): Promise<AssistantToolConnectionStartPayload> {

@@ -18,11 +18,13 @@ from app.security.service_token import require_service_token
 from .capability_dashboard import AssistantCapabilityDashboard, build_assistant_capability_dashboard
 from .config_store import AssistantToolsConfigPayload, load_assistant_tools_config, save_assistant_tools_config
 from .connections import (
+    AssistantToolDisconnectPayload,
     AssistantToolOAuthClientPayload,
     AssistantToolConnectionStartPayload,
     assistant_tool_connection_start_payload,
     complete_github_connection,
     complete_google_connection,
+    disconnect_tool_account,
     save_assistant_tool_oauth_client,
 )
 from .gate import review_assistant_tool_request
@@ -103,6 +105,11 @@ def create_assistant_tool_router() -> APIRouter:
     @router.get("/api/assistant/tools/connect/{tool_id}", response_model=AssistantToolConnectionStartPayload, tags=["assistant-tools"])
     def assistant_tool_connection_start_endpoint(request: Request, tool_id: str) -> AssistantToolConnectionStartPayload:
         return assistant_tool_connection_start_payload(tool_id, str(request.base_url).rstrip("/"))
+
+    @router.post("/api/assistant/tools/connect/{tool_id}/disconnect", response_model=AssistantToolDisconnectPayload, tags=["assistant-tools"])
+    def assistant_tool_disconnect_endpoint(tool_id: str) -> AssistantToolDisconnectPayload:
+        """Revoke and delete the connected account's token (ASVS 3.5.1)."""
+        return disconnect_tool_account(tool_id)
 
     @router.post("/api/assistant/tools/connect/{tool_id}/oauth-client", response_model=AssistantToolConnectionStartPayload, tags=["assistant-tools"])
     def assistant_tool_oauth_client_endpoint(request: Request, tool_id: str, payload: AssistantToolOAuthClientPayload) -> AssistantToolConnectionStartPayload:

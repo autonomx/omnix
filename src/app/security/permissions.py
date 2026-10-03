@@ -282,6 +282,12 @@ def kernel_defaults_for(path: str) -> tuple[str, str] | None | Literal[False]:
 
 def _deny(connection: HTTPConnection, permission: str) -> None:
     record_auth_rejection("permission_denied")
+    # Every failed access-control decision is logged (ASVS 7.2.2); the log
+    # context adds the request id and the hashed user.
+    logger.warning(
+        "permission_denied permission=%s method=%s path=%s",
+        permission, connection.scope.get("method", "WEBSOCKET"), connection.scope.get("path", ""),
+    )
     if connection.scope["type"] == "websocket":
         raise WebSocketException(code=1008, reason="permission_denied")
     raise HTTPException(status_code=403, detail={"error": "permission_denied", "permission": permission})
@@ -370,6 +376,8 @@ def ensure_permission(permission: str) -> None:
     if permission not in CATALOG:
         raise ValueError(f"unknown permission {permission!r}")
     if not has_permission(_caller_roles(), permission):
+        record_auth_rejection("permission_denied")
+        logger.warning("permission_denied permission=%s", permission)
         raise HTTPException(status_code=403, detail={"error": "permission_denied", "permission": permission})
 
 

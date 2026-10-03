@@ -25,9 +25,13 @@ def test_security_headers_on_api_and_html_responses(client) -> None:
     assert "microphone=(self)" in api.headers["permissions-policy"]
     assert api.headers["content-security-policy"].startswith("default-src 'none'")
     assert "strict-transport-security" not in api.headers
+    # API data stays out of browser and shared caches (ASVS 8.2.1).
+    assert api.headers["cache-control"] == "no-store"
+    assert api.headers["content-disposition"] == 'attachment; filename="api.json"'
     html = client.get("/docs")
     assert "frame-ancestors 'none'" in html.headers["content-security-policy"]
     assert "default-src" not in html.headers["content-security-policy"]
+    assert "content-disposition" not in html.headers
     proxied = client.get("/api/health", headers={"X-Forwarded-Proto": "https"})
     assert proxied.headers["strict-transport-security"].startswith("max-age=")
 
@@ -69,6 +73,27 @@ def test_login_attempts_are_rate_limited() -> None:
     assert limited.json()["detail"] == {"error": "rate_limited", "limit": "login"}
     assert int(limited.headers["retry-after"]) >= 1
     assert _counter("omnix_rate_limit_rejections_total", 'limit="login"') - before == 2
+
+
+def test_refusals_and_denials_are_logged(client, caplog) -> None:
+    """Failed authentication, access-control and validation decisions are logged (ASVS 7.1.3, 7.2.1, 7.2.2)."""
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from app.security import permissions
+
+    with caplog.at_level("INFO"):
+        assert client.post("/api/agent-model/v1/chat/completions", json={}).status_code == 401
+        assert client.post("/api/auth/local/login", json={"credential": 7, "secret": "canary-value"}).status_code == 422
+        request = Request({"type": "http", "method": "POST", "path": "/api/settings", "headers": []})
+        with pytest.raises(HTTPException):
+            permissions._deny(request, "settings:write")
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("request_rejected reason=run_token_required status=401" in message for message in messages)
+    assert any("permission_denied permission=settings:write method=POST path=/api/settings" in message
+               for message in messages)
+    assert any("request_validation_failed path=/api/auth/local/login" in message for message in messages)
+    assert not any("canary-value" in message for message in messages)
 
 
 def test_refused_sign_in_is_counted_by_reason(client) -> None:

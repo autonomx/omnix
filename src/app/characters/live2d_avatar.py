@@ -31,6 +31,9 @@ from .repository import CharacterNotFoundError
 OPEN_LLM_VTUBER_REVISION = "992309c0aa19845960228f880013d4685fde93b5"
 OPEN_LLM_VTUBER_WEB_REVISION = "d176e7df2366952e3bacbf12cf9a8b18a4315932"
 MAX_LIVE2D_FILE_BYTES = 64 * 1024 * 1024
+# Whole-archive limits: a model is a few dozen files (ASVS 12.1.2).
+MAX_LIVE2D_ARCHIVE_MEMBERS = 2_000
+MAX_LIVE2D_ARCHIVE_BYTES = 512 * 1024 * 1024
 _LIVE2D_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 _RUNTIME_FILES = {
@@ -612,7 +615,8 @@ def register_character_live2d_avatar_routes(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Live2D runtime file not installed") from exc
         media_type = "text/javascript" if path.suffix == ".js" else "application/octet-stream"
-        return FileResponse(path, media_type=media_type)
+        # Large static files: revalidated by ETag rather than refetched.
+        return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, no-cache"})
 
     @router.get(
         "/api/character-live2d/assets/{asset_id}/{asset_path:path}",
@@ -637,7 +641,8 @@ def register_character_live2d_avatar_routes(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Live2D model file not found") from exc
         media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        return FileResponse(path, media_type=media_type)
+        # Large static files: revalidated by ETag rather than refetched.
+        return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, no-cache"})
 
 
 def _catalog_entry(model_id: str) -> dict[str, Any]:
@@ -680,7 +685,12 @@ def _safe_relative_path(value: str) -> str:
 
 def _safe_zip_members(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
     members: dict[str, zipfile.ZipInfo] = {}
-    for info in archive.infolist():
+    infos = archive.infolist()
+    if len(infos) > MAX_LIVE2D_ARCHIVE_MEMBERS:
+        raise ValueError(f"Live2D archive has more than {MAX_LIVE2D_ARCHIVE_MEMBERS} entries")
+    if sum(info.file_size for info in infos) > MAX_LIVE2D_ARCHIVE_BYTES:
+        raise ValueError(f"Live2D archive expands beyond {MAX_LIVE2D_ARCHIVE_BYTES} bytes")
+    for info in infos:
         if info.is_dir():
             continue
         normalized = _safe_relative_path(info.filename)

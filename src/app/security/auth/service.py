@@ -17,7 +17,7 @@ from app.runtime.tenant_context import (
     TenantContext,
 )
 
-from .repository import PostgresAuthRepository
+from .repository import PostgresAuthRepository, SessionSummary
 from .settings import AuthMode, AuthSettings
 
 if TYPE_CHECKING:
@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "omnix_session"
+# The session cookie's name over HTTPS: the browser accepts it only with
+# Secure, Path=/ and no Domain, so no other host can set or read it (ASVS 3.4.4).
+SECURE_SESSION_COOKIE = "__Host-omnix_session"
 CSRF_COOKIE = "omnix_csrf"
 CSRF_HEADER = "x-omnix-csrf"
 
@@ -47,6 +50,15 @@ def _scrypt(credential: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
     return hashlib.scrypt(
         credential.encode("utf-8"), salt=salt, n=n, r=r, p=p, maxmem=_SCRYPT_MAXMEM, dklen=32
     )
+
+
+# Signing other devices out needs a fresh proof of identity (ASVS 3.3.4): the
+# install credential in local mode, a sign-in this recent in OIDC mode.
+REAUTHENTICATION_WINDOW_SECONDS = 10 * 60
+
+
+class ReauthenticationRequired(PermissionError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +246,60 @@ class AuthService:
                         payload={},
                     )
             work.commit()
+
+    def list_sessions(self, principal: AuthenticatedPrincipal) -> list[tuple[SessionSummary, bool]]:
+        """The caller's active sessions, each with whether it is this one."""
+        with self._work() as work:
+            sessions = PostgresAuthRepository(work.connection).user_sessions(principal.user_id)
+            work.rollback()
+        return [(summary, session_id == principal.session_id) for session_id, summary in sessions]
+
+    def revoke_sessions(
+        self, principal: AuthenticatedPrincipal, *, handle: str | None, credential: str | None
+    ) -> int:
+        """Sign out one of the caller's sessions (by handle) or all the others.
+
+        The caller proves its identity again first; the current session is
+        never revoked here (that is logout).
+        """
+        if principal.session_id is None:
+            raise ReauthenticationRequired("a browser session is required")
+        with self._work() as work:
+            repository = PostgresAuthRepository(work.connection)
+            if self.settings.mode is AuthMode.LOCAL:
+                stored = repository.install_credential()
+                if (
+                    not credential
+                    or len(credential) > 512
+                    or stored is None
+                    or not hmac.compare_digest(
+                        _scrypt(credential, stored.salt, n=stored.n, r=stored.r, p=stored.p),
+                        stored.credential_hash,
+                    )
+                ):
+                    self._audit_failure(work, "session_revocation")
+                    work.commit()
+                    raise ReauthenticationRequired("invalid_credential")
+            else:
+                age = repository.session_age_seconds(principal.session_id)
+                if age is None or age > REAUTHENTICATION_WINDOW_SECONDS:
+                    work.rollback()
+                    raise ReauthenticationRequired("recent_sign_in_required")
+            if handle is not None and principal.session_id.startswith(handle):
+                work.rollback()
+                return 0
+            revoked = repository.revoke_user_sessions_matching(
+                principal.user_id, handle=handle, keep=principal.session_id
+            )
+            work.audit.append(
+                principal.context,
+                aggregate_type="auth_session",
+                aggregate_id=principal.session_id[:16],
+                action="auth.sessions.revoked",
+                payload={"scope": "one" if handle is not None else "others", "revoked": revoked},
+            )
+            work.commit()
+        return revoked
 
     # Local mode -----------------------------------------------------------
 

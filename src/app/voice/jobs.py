@@ -571,6 +571,8 @@ def store_inline_clone_sample(input_payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Audio sample is required")
     if len(audio) > MAX_CLONE_SAMPLE_BYTES:
         raise ValueError("Audio sample is too large")
+    if not _is_audio_container(audio):
+        raise ValueError("Audio sample is not a WAV, MP3, MP4, WebM, Ogg or FLAC file")
     digest = hashlib.sha256(audio).hexdigest()
     suffix = Path(_text(input_payload.get("source_file_name")) or "sample.wav").suffix.lower()
     if suffix not in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"}:
@@ -580,6 +582,18 @@ def store_inline_clone_sample(input_payload: dict[str, Any]) -> dict[str, Any]:
     updated["sample_blob_key"] = record["storage_key"]
     updated["sample_sha256"] = digest
     return updated
+
+
+def _is_audio_container(data: bytes) -> bool:
+    """A sample's leading bytes name an accepted audio container (ASVS 12.2.1)."""
+    head = data[:12]
+    return (
+        (head[:4] == b"RIFF" and head[8:12] == b"WAVE")
+        or head[:4] in {b"OggS", b"fLaC", b"\x1aE\xdf\xa3"}
+        or head[:3] == b"ID3"
+        or (len(head) > 1 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0)
+        or head[4:8] == b"ftyp"
+    )
 
 
 def _sample_audio_bytes(payload: dict[str, Any]) -> bytes:

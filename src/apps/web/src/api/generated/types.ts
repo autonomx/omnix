@@ -1228,6 +1228,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant/tools/connect/{tool_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assistant Tool Disconnect Endpoint
+         * @description Revoke and delete the connected account's token (ASVS 3.5.1).
+         */
+        post: operations["assistant_tool_disconnect_endpoint_api_assistant_tools_connect__tool_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant/tools/connect/{tool_id}/oauth-client": {
         parameters: {
             query?: never;
@@ -2145,6 +2165,46 @@ export interface paths {
         get: operations["current_session_api_auth_session_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description The caller's active sessions (ASVS 3.3.4).
+         */
+        get: operations["list_sessions_api_auth_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sessions/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Sessions
+         * @description Sign out one other session or all others, after re-authenticating (ASVS 3.3.4).
+         */
+        post: operations["revoke_sessions_api_auth_sessions_revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10368,6 +10428,26 @@ export interface components {
             /** Tool Id */
             tool_id: string;
         };
+        /** AssistantToolDisconnectPayload */
+        AssistantToolDisconnectPayload: {
+            /**
+             * Disconnected
+             * @default true
+             */
+            disconnected: boolean;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Revoked At Provider
+             * @default false
+             */
+            revoked_at_provider: boolean;
+            /** Tool Id */
+            tool_id: string;
+        };
         /** AssistantToolIntent */
         AssistantToolIntent: {
             /** Action Id */
@@ -10663,6 +10743,11 @@ export interface components {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
+        /** AuthSessionListResponse */
+        AuthSessionListResponse: {
+            /** Sessions */
+            sessions: components["schemas"]["AuthSessionSummary"][];
+        };
         /** AuthSessionResponse */
         AuthSessionResponse: {
             /** Auth Method */
@@ -10682,6 +10767,30 @@ export interface components {
             user_id: string | null;
             /** Workspace Id */
             workspace_id: string | null;
+        };
+        /** AuthSessionSummary */
+        AuthSessionSummary: {
+            /** Auth Method */
+            auth_method: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current */
+            current: boolean;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
         };
         /** BackfillClonedVoiceCharactersRequest */
         BackfillClonedVoiceCharactersRequest: {
@@ -22941,6 +23050,18 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /** RevokeSessionsRequest */
+        RevokeSessionsRequest: {
+            /** Credential */
+            credential?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+        };
+        /** RevokeSessionsResponse */
+        RevokeSessionsResponse: {
+            /** Revoked */
+            revoked: number;
+        };
         /** RouteRequest */
         RouteRequest: {
             /** Content */
@@ -31950,6 +32071,37 @@ export interface operations {
             };
         };
     };
+    assistant_tool_disconnect_endpoint_api_assistant_tools_connect__tool_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantToolDisconnectPayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     assistant_tool_oauth_client_endpoint_api_assistant_tools_connect__tool_id__oauth_client_post: {
         parameters: {
             query?: never;
@@ -33913,6 +34065,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+        };
+    };
+    list_sessions_api_auth_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionListResponse"];
+                };
+            };
+        };
+    };
+    revoke_sessions_api_auth_sessions_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeSessionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeSessionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

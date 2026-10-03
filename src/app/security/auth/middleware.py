@@ -29,6 +29,7 @@ from app.security.service_token import valid_service_token
 
 from .service import (
     CSRF_HEADER,
+    SECURE_SESSION_COOKIE,
     SESSION_COOKIE,
     AuthenticatedPrincipal,
     Authenticator,
@@ -227,7 +228,7 @@ class AuthenticationMiddleware:
                 return None, False
             principal = await anyio.to_thread.run_sync(authenticator.authenticate_bearer, token.strip())
             return principal, False
-        session = _cookie(scope, SESSION_COOKIE)
+        session = _cookie(scope, SECURE_SESSION_COOKIE) or _cookie(scope, SESSION_COOKIE)
         if session:
             principal = await anyio.to_thread.run_sync(authenticator.authenticate_session, session)
             return principal, True
@@ -236,6 +237,9 @@ class AuthenticationMiddleware:
     @staticmethod
     async def _reject(scope: Scope, receive: Receive, send: Send, status: int, detail: str) -> None:
         record_auth_rejection(detail)
+        # Authentication and CSRF refusals are logged (ASVS 7.2.1); the
+        # presented credential never is.
+        logger.info("request_rejected reason=%s status=%s path=%s", detail, status, scope.get("path", ""))
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 1008, "reason": detail})
             return

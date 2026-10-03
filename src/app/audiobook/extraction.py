@@ -20,6 +20,7 @@ from .spans import UnicodeDialogueDetector
 EXTRACTOR_VERSION = "audiobook-extractor-v9"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 10_000
 SUPPORTED_SOURCE_FORMATS = frozenset({
     "docx", "epub", "html", "htm", "markdown", "md", "pdf", "text", "txt",
 })
@@ -205,6 +206,18 @@ def _text_chapters(content: str) -> list[tuple[str, str]]:
     return chapters
 
 
+def _check_archive_limits(archive: zipfile.ZipFile, label: str) -> None:
+    """Refuse an archive bomb before anything is decompressed (ASVS 12.1.2).
+
+    Sizes come from the archive's directory; zipfile never inflates a member
+    past its declared size."""
+    members = archive.infolist()
+    if len(members) > MAX_ARCHIVE_MEMBERS:
+        raise UnsupportedSource(f"{label} has more than {MAX_ARCHIVE_MEMBERS} files")
+    if sum(item.file_size for item in members) > MAX_EPUB_UNCOMPRESSED_BYTES:
+        raise UnsupportedSource(f"{label} uncompressed content exceeds the supported limit")
+
+
 def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     chapters: list[tuple[str, str]] = []
     warnings: list[str] = []
@@ -212,8 +225,7 @@ def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any
     semantic_headings: list[dict[str, object]] = []
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            if sum(item.file_size for item in archive.infolist()) > MAX_EPUB_UNCOMPRESSED_BYTES:
-                raise UnsupportedSource("EPUB uncompressed content exceeds the supported limit")
+            _check_archive_limits(archive, "EPUB")
             names = set(archive.namelist())
             if "META-INF/encryption.xml" in names:
                 raise UnsupportedSource("encrypted EPUB is unsupported")
@@ -447,6 +459,11 @@ def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any
         from docx import Document
     except ImportError as exc:  # pragma: no cover - packaging failure
         raise UnsupportedSource("DOCX support requires python-docx") from exc
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            _check_archive_limits(archive, "DOCX")
+    except zipfile.BadZipFile as exc:
+        raise UnsupportedSource("DOCX is not a valid document") from exc
     try:
         document = Document(io.BytesIO(content))
     except Exception as exc:

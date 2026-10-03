@@ -2950,6 +2950,37 @@
         "title": "AssistantToolConnectionStartPayload",
         "type": "object"
       },
+      "AssistantToolDisconnectPayload": {
+        "properties": {
+          "disconnected": {
+            "default": true,
+            "title": "Disconnected",
+            "type": "boolean"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "revoked_at_provider": {
+            "default": false,
+            "title": "Revoked At Provider",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "disconnected",
+          "revoked_at_provider",
+          "message"
+        ],
+        "title": "AssistantToolDisconnectPayload",
+        "type": "object"
+      },
       "AssistantToolIntent": {
         "properties": {
           "action_id": {
@@ -3608,6 +3639,22 @@
         "title": "AssistantToolsConfigPayload",
         "type": "object"
       },
+      "AuthSessionListResponse": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/AuthSessionSummary"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "title": "AuthSessionListResponse",
+        "type": "object"
+      },
       "AuthSessionResponse": {
         "properties": {
           "auth_method": {
@@ -3678,6 +3725,47 @@
           "auth_method"
         ],
         "title": "AuthSessionResponse",
+        "type": "object"
+      },
+      "AuthSessionSummary": {
+        "properties": {
+          "auth_method": {
+            "title": "Auth Method",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "auth_method",
+          "created_at",
+          "last_seen_at",
+          "expires_at",
+          "current"
+        ],
+        "title": "AuthSessionSummary",
         "type": "object"
       },
       "BackfillClonedVoiceCharactersRequest": {
@@ -35226,6 +35314,51 @@
         "title": "RevisionedMemoryRequest",
         "type": "object"
       },
+      "RevokeSessionsRequest": {
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "minLength": 16,
+                "pattern": "^[0-9a-f]{16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "title": "RevokeSessionsRequest",
+        "type": "object"
+      },
+      "RevokeSessionsResponse": {
+        "properties": {
+          "revoked": {
+            "title": "Revoked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "RevokeSessionsResponse",
+        "type": "object"
+      },
       "RouteRequest": {
         "properties": {
           "content": {
@@ -54594,6 +54727,49 @@
         ]
       }
     },
+    "/api/assistant/tools/connect/{tool_id}/disconnect": {
+      "post": {
+        "description": "Revoke and delete the connected account's token (ASVS 3.5.1).",
+        "operationId": "assistant_tool_disconnect_endpoint_api_assistant_tools_connect__tool_id__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolDisconnectPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Disconnect Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
     "/api/assistant/tools/connect/{tool_id}/oauth-client": {
       "post": {
         "operationId": "assistant_tool_oauth_client_endpoint_api_assistant_tools_connect__tool_id__oauth_client_post",
@@ -57552,6 +57728,70 @@
           }
         },
         "summary": "Current Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sessions": {
+      "get": {
+        "description": "The caller's active sessions (ASVS 3.3.4).",
+        "operationId": "list_sessions_api_auth_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sessions/revoke": {
+      "post": {
+        "description": "Sign out one other session or all others, after re-authenticating (ASVS 3.3.4).",
+        "operationId": "revoke_sessions_api_auth_sessions_revoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeSessionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeSessionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Sessions",
         "tags": [
           "auth"
         ]

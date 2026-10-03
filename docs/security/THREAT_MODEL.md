@@ -1,6 +1,6 @@
 # Omnix threat model
 
-Status: 2026-10-01, WP-4.11. Method: STRIDE per component. Each threat
+Status: 2026-10-03, WP-4.11. Method: STRIDE per component. Each threat
 lists the mitigation in place (with its work package) and what remains.
 Update this file when a component, trust boundary or mitigation changes.
 
@@ -40,7 +40,7 @@ Assets, most sensitive first:
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
 | S | A forged request from another site uses the session | `SameSite=Strict` cookie, CSRF header on unsafe methods, Origin check (WP-4.1, request guard) | — |
-| T | Injected script tampers with the UI | React escaping; the gateway sends CSP and `nosniff` (WP-4.10); the ingress CSP for the app is WP-11.3 | App CSP pending WP-11.3 |
+| T | Injected script tampers with the UI | React escaping; the gateway sends CSP and `nosniff` (WP-4.10); the ingress serves the app with `script-src 'self'` (WP-11.3) | The Vite development server sends no CSP |
 | I | Clickjacking reads or drives the UI | `X-Frame-Options: DENY`, `frame-ancestors 'none'` (WP-4.10) | — |
 | E | A viewer reaches admin actions in the UI | Server-side permission checks on every route (WP-4.3); the UI hides nothing the server allows | — |
 
@@ -49,18 +49,18 @@ Assets, most sensitive first:
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
 | S | A spoofed `X-Forwarded-For`/`Host` | Allowed hosts; forwarding headers trusted only from the ingress | — |
-| D | Request floods | Per-process rate limits on sign-in and approvals (WP-4.10); global ingress limits | Ingress limits are WP-11.3 |
+| D | Request floods | Per-process rate limits on sign-in and approvals (WP-4.10); ingress request rates and body sizes (WP-11.3) | — |
 
 ### Gateway API
 
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
 | S | Unauthenticated access when sign-in is on | Deny-by-default authentication middleware; auto-enumerated test over every route (WP-4.1) | Sign-in stays off by default by owner decision |
-| S | Session theft or replay | Random 256-bit tokens hashed at rest, sliding and absolute expiry, revocation on logout (WP-4.1) | — |
+| S | Session theft or replay | Random 256-bit tokens hashed at rest, sliding and absolute expiry, revocation on logout; over HTTPS a `Secure` `__Host-` cookie; users list their sessions and sign out the others after re-authenticating; sign-out clears browser storage (WP-4.1, WP-4.11) | — |
 | T | Cross-workspace writes | Request tenant bound per request (WP-4.2); repositories filter by workspace; RLS (WP-4.4) | — |
 | R | Denying a sensitive action | Append-only audit trail for approvals, executions, settings, trading control, administration, sign-in (WP-4.8) | Retention path WP-5.2 |
 | I | Reading another workspace's data | Permission guard (WP-4.3), tenant binding (WP-4.2), RLS (WP-4.4); the test isolates two users at the API | — |
-| I | Error and path disclosure | Content-free audit details; secrets kept out of logs (canary test) | `storage_path` still in asset responses; error envelope WP-10.5 |
+| I | Error and path disclosure | Errors answer problem+json with a request id and no internals (WP-10.5); asset APIs name files by id and URL, never by storage path (WP-4.10); content-free audit details; secrets kept out of logs (canary test) | Operator diagnostics (migration previews, model cache status) still show paths to administrators |
 | D | Login brute force | 5 attempts per minute per address (WP-4.10) | — |
 | E | A member approves their own risky action | `tools:approve`/`agent:approve` required; service, system and agent principals never approve; self-approval capped by risk (WP-4.5) | Default cap is `high` while sign-in is off |
 | E | API docs reveal the attack surface | `/docs`, `/redoc`, `/openapi.json` need `admin:docs` outside development (WP-4.10) | — |
@@ -146,10 +146,21 @@ asks). At most `OMNIX_AGENT_MAX_CONCURRENT_RUNS` agents run at once.
 | E | Agent-edited code runs on the host (dev server, test runner) | Commands and the workspace preview run inside the sandbox | On Windows hosts, host-installed native dependencies (node_modules, virtualenvs) do not run in the Linux sandbox; projects need a sandbox image with their toolchain or the unsandboxed override |
 | T | An agent reads the person's home (SSH keys, tokens) | Home is a per-run directory (`/tmp/home` in the container) | — |
 
+## Data classification
+
+Each class of data Omnix holds and the rules that protect it. Personal data
+stays in the workspace that created it.
+
+| Class | Examples | Where | At rest | In transit | Access | Retention | In logs |
+|---|---|---|---|---|---|---|---|
+| Secrets | Provider and tool API keys, OAuth tokens, service token, run-token key, install credential | OS secret store (DPAPI, keychain) or environment; verifiers only as scrypt/SHA-256 | Encrypted by the OS store; never in PostgreSQL or files | TLS to providers; never in URLs | Owner and admin (settings); processes by role | Until rotated or disconnected ([runbook](../operations/runbooks/secret-rotation.md)) | Never (canary test) |
+| Personal content | Chats, memory, characters, documents, voice samples and clones, generated audio and images, agent workspaces | PostgreSQL and the blob store | Not encrypted by Omnix: deployments use disk or volume encryption (ASVS V6.1.1 fail) | TLS at the ingress | Workspace members by permission; RLS per workspace | Until the user deletes it; job and event rows per the retention table (OPERATIONS: Retention) | Ids, not content; exceptions are the audiobook classification log and opt-in live-call transcripts (ASVS V7.1.2 fail) |
+| Authority records | Audit events, approvals, capability executions, agent evidence | PostgreSQL, append-only | As personal content | As personal content | Admins read; nobody updates or deletes at runtime | 365 days (audit), evidence kept with its run | — |
+| Account data | Users, memberships, sessions, OIDC identities | PostgreSQL | Session ids and codes as digests | TLS at the ingress | The user and admins | Expired sessions 7 days | Hashed user id |
+| Operational | Metrics, traces, job metadata, logs | Prometheus, Jaeger, PostgreSQL, log files | Not encrypted | Internal network | Operators | Per the retention table; logs rotated | — |
+| Trading | Market data, strategy state, paper orders | PostgreSQL | As personal content | TLS to providers | `trading:*` permissions | Strategy events 180 days when enabled | — |
+
 ## Open items
 
 - WP-4.1: sign-in on by default (owner decision: later).
-- WP-4.10: remove `storage_path` from asset responses; error envelope
-  (WP-10.5).
-- WP-11.3: ingress CSP for the web app and global rate limits.
-- ASVS L2 checklist (`docs/security/ASVS_L2_CHECKLIST.md`), WP-4.11.
+- The 20 ASVS Level 2 failures in [ASVS_L2_CHECKLIST.md](ASVS_L2_CHECKLIST.md#failures), each with its reason.

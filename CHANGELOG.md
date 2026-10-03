@@ -13,6 +13,11 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Added
 
+- Settings → Overview lists your signed-in sessions; other devices can be
+  signed out after entering the install credential again (or a recent
+  OIDC sign-in).
+- `docs/security/ASVS_L2_CHECKLIST.md`: every OWASP ASVS 4.0.3 Level 2
+  requirement with its status and evidence (90.1% of applicable pass).
 - PostgreSQL as the single authority for sessions, jobs, settings, agent runs
   and trading state, with forward migrations, row-level security per
   workspace, and a migration role separate from the runtime role.
@@ -92,6 +97,12 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Fixed
 
+- "Disconnect account" for Google and GitHub tools now deletes the stored
+  token and revokes the grant; it used to clear only the account label.
+- Over HTTPS, session cookies are always `Secure` (named
+  `__Host-omnix_session`); sign-out clears the browser's stored app data.
+- DOCX, EPUB and Live2D archives are refused when they would expand past
+  their limits; voice samples must be audio files.
 - Settings Control Center changes save again.
 - Replaying an assistant response during a live voice call plays it instead of
   failing.
