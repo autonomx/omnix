@@ -1,7 +1,5 @@
 import { DisposableStore } from '../../app/moduleRuntime';
-import { Application, extensions } from 'pixi.js';
-// Pixi's shader and uniform code without eval, so the ingress CSP can omit 'unsafe-eval' (WP-11.3).
-import 'pixi.js/unsafe-eval';
+import type { Application } from 'pixi.js';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
 
@@ -670,10 +668,14 @@ function loadRuntime(): Promise<Live2DRuntime> {
     if (!(window as Live2DWindow).Live2DCubismCore) {
       throw new Error('Installed Live2D Cubism runtime is incomplete.');
     }
+    // Pixi loads only when a Live2D avatar is shown (WP-9.9), with its
+    // eval-free shader path so the ingress CSP can omit 'unsafe-eval' (WP-11.3).
+    const pixi = await import('pixi.js');
+    await import('pixi.js/unsafe-eval');
     const live2d = await import('untitled-pixi-live2d-engine/cubism');
-    extensions.add(live2d.Live2DPlugin);
+    pixi.extensions.add(live2d.Live2DPlugin);
     live2d.configureCubismSDK({ memorySizeMB: 64 });
-    return { Application, Live2DModel: live2d.Live2DModel };
+    return { Application: pixi.Application, Live2DModel: live2d.Live2DModel };
   })().catch((error) => {
     runtimePromise = null;
     throw error;
