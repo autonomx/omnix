@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DESKTOP_COMPANION_TEXT_EVENT } from './desktop-companion-delivery';
+import { DESKTOP_COMPANION_TEXT_EVENT } from '../../events/bus';
 
 export type DesktopCompanionTextNotice = {
   sessionId: string;

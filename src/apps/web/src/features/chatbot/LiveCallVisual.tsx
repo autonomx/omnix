@@ -8,8 +8,8 @@ import {
   useLiveAvatar,
 } from './liveCharacterAvatarBridge';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
+import { CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../events/bus';
 
-const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 
 /**
  * The live call's visual: the character avatar when the session has one (a
@@ -27,7 +27,7 @@ export function LiveCallVisual({ voiceMode, thinking }: { voiceMode: string; thi
 
   useEffect(() => {
     if (!live2d || !runtime || !live2dHostRef.current) return;
-    window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, { detail: { runtime, host: live2dHostRef.current } }));
+    emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime, host: live2dHostRef.current });
   }, [live2d, runtime]);
 
   return (

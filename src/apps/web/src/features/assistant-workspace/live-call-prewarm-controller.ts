@@ -2,12 +2,10 @@ import type { components } from '../../api/generated/types';
 import { createGatewayClient, type GatewayClient } from '../../api/http';
 import { liveConversationStore } from './live-conversation-store';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let liveCallPrewarmInstalled = false;
 
-const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const PREWARM_TTL_MS = 5 * 60_000;
 const PREWARM_RETRY_MS = 5_000;
 
@@ -30,12 +28,12 @@ export function initializeLiveCallPrewarmController(): () => void {
     if (!sessionId) return;
     void prewarmLiveCall(sessionId);
   };
-  window.addEventListener(LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
-  window.addEventListener(LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
 
   return () => {
-    window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
-    window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
     liveCallPrewarmInstalled = false;
   };
 }
@@ -145,13 +143,11 @@ function dispatchPerformance(
   stage: string,
   detail: Record<string, unknown>,
 ): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: {
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
       stage,
       timestamp: new Date().toISOString(),
       ...detail,
-    },
-  }));
+    });
 }
 
 function now(): number {

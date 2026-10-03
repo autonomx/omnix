@@ -1,13 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createLiveCallDiagnosticsReporter, type LiveCallDiagnosticsReporter } from '../assistant-workspace';
-import {
-  LIVE_VOICE_PERF_EVENT,
-  elapsedMs,
-  finiteNumber,
-  type VoicePerformanceStage,
-  type VoiceTurnPerformance,
-  type VoiceTurnTimestampStage,
-} from './chatbotWorkspaceModel';
+import { elapsedMs, finiteNumber, type VoicePerformanceStage, type VoiceTurnPerformance, type VoiceTurnTimestampStage } from './chatbotWorkspaceModel';
+import { ASSISTANT_VOICE_PERF_EVENT } from '../../events/bus';
 
 /** Timings and diagnostics of one live voice turn, from the final transcript to the first audio. */
 export function useVoiceTurnDiagnostics() {
@@ -50,8 +44,8 @@ export function useVoiceTurnDiagnostics() {
         input_chars: voiceTurnPerformanceRef.current.transcriptChars,
       });
     };
-    window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
-    return () => window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerfEvent);
+    window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerfEvent);
+    return () => window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerfEvent);
   }, []);
 
   useEffect(() => () => {

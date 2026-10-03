@@ -1,10 +1,6 @@
 import type { components } from '../../api/generated/types';
 import { speechOrigin, streamingSttUrl, type SpeechLocation } from './stt-url';
 
-export const LIVE_STT_SPECULATION_PARTIAL_EVENT = 'omnix:live-stt-speculation-partial';
-export const LIVE_STT_SPECULATION_CANDIDATE_EVENT = 'omnix:live-stt-speculation-candidate';
-export const LIVE_STT_SPECULATION_FINAL_EVENT = 'omnix:live-stt-speculation-final';
-export const LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT = 'omnix:live-stt-speculation-delivery-settled';
 
 const DEFAULT_ENDPOINT_THRESHOLD = 0.75;
 

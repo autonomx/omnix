@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
-import { DESKTOP_COMPANION_STATUS_EVENT } from './desktop-companion-watch-controller';
+import { DESKTOP_COMPANION_STATUS_EVENT } from '../../events/bus';
 
 type StatusDetail = {
   phase?: string;

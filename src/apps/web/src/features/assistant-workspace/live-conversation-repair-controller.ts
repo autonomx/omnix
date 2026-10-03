@@ -6,10 +6,8 @@ import {
   type LiveConversationRepairContext,
 } from './live-conversation-repair';
 import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
+import { ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CONVERSATION_REPAIR_PLANNED_EVENT } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const REPAIR_EVENT = 'omnix:live-conversation-repair-planned';
 const CONTEXT_MESSAGE_PATH = /\/api\/assistant\/context\/chat\/sessions\/[^/]+\/messages(?:\/stream)?$/;
 
 type OverlapPerfDetail = {
@@ -51,16 +49,16 @@ export function initializeLiveConversationRepairController(): () => void {
     });
     if (!repair) return;
     pendingRepair = repair;
-    window.dispatchEvent(new CustomEvent(REPAIR_EVENT, { detail: repair }));
+    emitOmnixEvent(LIVE_CONVERSATION_REPAIR_PLANNED_EVENT, repair);
   };
   const clear = () => { pendingRepair = null; };
 
-  window.addEventListener(PERF_EVENT, handlePerf);
-  window.addEventListener(STOP_EVENT, clear);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, clear);
 
   return () => {
-    window.removeEventListener(PERF_EVENT, handlePerf);
-    window.removeEventListener(STOP_EVENT, clear);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, clear);
     removeMiddleware();
     pendingRepair = null;
     installed = false;

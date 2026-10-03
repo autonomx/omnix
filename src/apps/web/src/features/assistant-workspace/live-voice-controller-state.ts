@@ -11,6 +11,7 @@ import { StreamingSttWebSocketClient, type StreamingSttConnectionStatus } from '
 import { liveVoiceVisualScales, smoothLiveVoiceLevel } from './live-voice-level';
 import { liveVoiceTranscriptStore, type LiveVoiceSpeaker } from './live-voice-transcript-store';
 import { liveCallPresentationStore } from './live-call-presentation-store';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 /** The one capture call of the page, or the start in flight; `startToken` invalidates stale starts. */
 export const controller: {
@@ -117,17 +118,11 @@ export const STT_SEGMENT_TELEMETRY_INTERVAL_MS = 250;
 // invalidates it, and only an exact authoritative final can promote it.
 export const AUTHORITATIVE_PREVIEW_PAUSE_MS = 40;
 
-export const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 
-export const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
-export const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 
-export const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 
-export const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
 
-export const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 
 export function isCardStartingOrActive(card: HTMLElement): boolean {
   return controller.activeSession?.card === card || controller.pendingStart?.card === card;
@@ -173,9 +168,6 @@ export function createLiveVoiceSessionShell({ card, stream, audioContext, source
   } satisfies Omit<LiveVoiceSession, 'audioPipeline'>;
 }
 
-export function dispatchLiveSttSpeculationEvent(type: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(type, { detail }));
-}
 
 export function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
   session.voiceLevel = smoothLiveVoiceLevel(session.voiceLevel, rms);
@@ -255,12 +247,9 @@ export function showLiveVoiceError(card: HTMLElement, message: string): void {
   setPanelStatus(card, 'error');
 }
 
-export function dispatchLiveVoiceLifecycleEvent(type: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(type, { detail }));
-}
 
 export function dispatchLiveVoicePerfEvent(detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, { detail }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, detail);
   console.info('[Omnix Voice Perf]', detail);
 }
 

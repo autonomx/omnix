@@ -1,9 +1,9 @@
 /** Authoritative transcript previews during a pause, and barge-in assessment while the assistant speaks. */
 import { liveConversationStore } from './live-conversation-store';
-import { LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from './live-stt-authority-controller';
 import { type OverlapIntent, classifyOverlap, shouldConfirmInterruption } from './live-voice-overlap-classifier';
 import { liveCallPresentationStore } from './live-call-presentation-store';
-import { AUTHORITATIVE_PREVIEW_PAUSE_MS, LIVE_VOICE_INTERRUPT_EVENT, LiveVoiceSession, controller, currentAssistantSpeechText, dispatchLiveSttSpeculationEvent, dispatchLiveVoicePerfEvent } from './live-voice-controller-state';
+import { AUTHORITATIVE_PREVIEW_PAUSE_MS, LiveVoiceSession, controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent } from './live-voice-controller-state';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 export function scheduleAuthoritativePreview(session: LiveVoiceSession): void {
   if (session.previewTimer || session.previewRequestId || session.finalRequested) return;
@@ -56,8 +56,8 @@ export function handleAuthoritativePreview(
     sourceSequence: event.sequence,
     text,
   };
-  dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, detail);
-  dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
+  emitOmnixEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, detail);
+  emitOmnixEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
     ...detail,
     probability: 1,
     modelTimeMs: event.snapshotEndSample * 1_000 / 16_000,
@@ -82,7 +82,7 @@ export function clearAuthoritativePreview(session: LiveVoiceSession, resumedSpee
       && session.speculationSourceSequence !== null
       && session.partialTranscript
     ) {
-      dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+      emitOmnixEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
         chatSessionId: liveConversationStore.getState().sessionId,
         segmentId: session.speculationSegmentId,
         sourceSequence: session.speculationSourceSequence,
@@ -120,13 +120,11 @@ export function dispatchAssistantVoiceInterrupt(
   intent: OverlapIntent = 'interrupt',
   confidence = 1,
 ): void {
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
-    detail: {
+  emitOmnixEvent(ASSISTANT_VOICE_INTERRUPT_EVENT, {
       source: 'live-voice',
       status: liveCallPresentationStore.getState().captureStatus,
       timestamp: new Date().toISOString(),
       intent,
       confidence,
-    },
-  }));
+    });
 }

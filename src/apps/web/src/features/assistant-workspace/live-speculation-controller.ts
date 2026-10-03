@@ -1,18 +1,12 @@
  
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
-  LIVE_STT_SPECULATION_FINAL_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 import { speculationEventSchema } from './live-voice-messages';
 import { parseJson } from '../../api/schemas/streams';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const MIDDLEWARE = 'live-speculation';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
@@ -1033,9 +1027,7 @@ function ttsSpeculationEnabled(): boolean {
 }
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }
 
 function delay(milliseconds: number): Promise<void> {

@@ -1,13 +1,7 @@
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
-  LIVE_STT_SPECULATION_FINAL_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 let liveSpeculationEligibilityDiagnosticsInstalled = false;
 
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
 
@@ -213,14 +207,14 @@ export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
   window.addEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
   window.addEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, handleFinal);
   window.addEventListener(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, handleDeliverySettled);
-  window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
 
   return () => {
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
     window.removeEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, handleFinal);
     window.removeEventListener(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, handleDeliverySettled);
-    window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     segments.clear();
     liveSpeculationEligibilityDiagnosticsInstalled = false;
   };
@@ -319,7 +313,5 @@ function speculationEnabled(): boolean {
 }
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }

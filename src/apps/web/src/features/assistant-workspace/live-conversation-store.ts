@@ -17,8 +17,8 @@ import {
 } from './live-task-contract';
 import type { LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
+import { emitOmnixEvent, LIVE_CONVERSATION_STORE_UPDATED_EVENT } from '../../events/bus';
 
-export const LIVE_CONVERSATION_STORE_UPDATED_EVENT = 'omnix:live-conversation-store-updated';
 
 export type LiveConversationIdentity = {
   characterId: string;
@@ -259,7 +259,7 @@ export function createLiveConversationStore(
   const notify = () => {
     for (const listener of listeners) listener();
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(LIVE_CONVERSATION_STORE_UPDATED_EVENT, { detail: state }));
+      emitOmnixEvent(LIVE_CONVERSATION_STORE_UPDATED_EVENT, state);
     }
   };
   return {

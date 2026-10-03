@@ -1,13 +1,9 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { useEffect, useState } from 'react';
 
-import {
-  LIVE_EVALUATION_UPDATED_EVENT,
-  readLiveConversationEvaluationSnapshot,
-  recordLiveConversationSurvey,
-  resetLiveConversationEvaluation,
-} from '../assistant-workspace/live-conversation-evaluation-controller';
+import { readLiveConversationEvaluationSnapshot, recordLiveConversationSurvey, resetLiveConversationEvaluation } from '../assistant-workspace/live-conversation-evaluation-controller';
 import type { LiveConversationEvaluationReport } from '../assistant-workspace/live-conversation-evaluation';
+import { LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT } from '../../events/bus';
 
 export function LiveConversationEvaluationPanel() {
   const [report, setReport] = useState<LiveConversationEvaluationReport>(
@@ -22,9 +18,9 @@ export function LiveConversationEvaluationPanel() {
       const detail = (event as CustomEvent<{ report?: LiveConversationEvaluationReport }> | undefined)?.detail;
       setReport(detail?.report ?? readLiveConversationEvaluationSnapshot().report);
     };
-    window.addEventListener(LIVE_EVALUATION_UPDATED_EVENT, refresh);
+    window.addEventListener(LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, refresh);
     refresh();
-    return () => window.removeEventListener(LIVE_EVALUATION_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, refresh);
   }, []);
 
   function saveSurvey(): void {

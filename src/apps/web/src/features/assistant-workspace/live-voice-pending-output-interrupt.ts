@@ -1,11 +1,9 @@
 import { liveConversationStore } from './live-conversation-store';
 import type { LiveConversationState } from './live-conversation-state';
+import { ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let liveVoicePendingOutputInterruptInstalled = false;
 
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 type UserSpeechDetail = {
   assistantSpeaking?: boolean;
@@ -32,8 +30,7 @@ export function initializeLiveVoicePendingOutputInterrupt(): () => void {
     const conversation = liveConversationStore.getState().conversation;
     if (!shouldInterruptPendingAssistantOutput(conversation)) return;
     const detail = (event as CustomEvent<UserSpeechDetail>).detail ?? {};
-    window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-      detail: {
+    emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'pending_output_cancelled_on_user_speech',
         timestamp: new Date().toISOString(),
         assistantTurn: conversation.assistantTurn,
@@ -41,22 +38,19 @@ export function initializeLiveVoicePendingOutputInterrupt(): () => void {
         floorOwner: conversation.floorOwner,
         assistantSpeaking: Boolean(detail.assistantSpeaking),
         assistantOwnsFloor: Boolean(detail.assistantOwnsFloor),
-      },
-    }));
-    window.dispatchEvent(new CustomEvent(INTERRUPT_EVENT, {
-      detail: {
+      });
+    emitOmnixEvent(ASSISTANT_VOICE_INTERRUPT_EVENT, {
         source: 'pending-output-user-speech',
         intent: 'interrupt',
         confidence: 1,
         reason: 'user_speech_before_audio_started',
         timestamp: new Date().toISOString(),
-      },
-    }));
+      });
   };
 
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
   return () => {
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
     liveVoicePendingOutputInterruptInstalled = false;
   };
 }

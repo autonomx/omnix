@@ -1,13 +1,9 @@
 import { liveConversationStore } from './live-conversation-store';
 import { speculationCandidateCanStart } from './live-speculation-controller';
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 let liveSpeculationEarlyTriggerInstalled = false;
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const EARLY_SPECULATION_LONG_PROBABILITY = 0.35;
 const EARLY_SPECULATION_MEDIUM_PROBABILITY = 0.45;
 const EARLY_SPECULATION_SHORT_PROBABILITY = 0.6;
@@ -170,21 +166,16 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       sourceSequence,
       text,
     };
-    window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
-      detail: candidate,
-    }));
-    window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
-      detail: {
+    emitOmnixEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, candidate);
+    emitOmnixEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
         ...candidate,
         probability,
         modelTimeMs: numberValue(
           detail?.modelTimeMs ?? detail?.model_time_ms,
         ) ?? undefined,
         earlyTrigger: true,
-      },
-    }));
-    window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-      detail: {
+      });
+    emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'llm_speculation_early_candidate_dispatched',
         timestamp: new Date().toISOString(),
         segmentId,
@@ -193,15 +184,14 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
         probabilityFloor: earlySpeculationProbabilityFloor(text),
         transcriptChars: text.length,
         transcriptWords: fingerprint ? fingerprint.split(' ').length : 0,
-      },
-    }));
+      });
   };
 
   window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
-  window.addEventListener(PERF_EVENT, handlePerformance);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
   return () => {
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
-    window.removeEventListener(PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     resetProviderState();
     authoritativeProvider = '';
     liveSpeculationEarlyTriggerInstalled = false;

@@ -8,12 +8,9 @@ import {
   hashDesktopCompanionModelId,
   loadDesktopCompanionBuildIdentity,
 } from './desktop-companion-build-identity';
-import { DESKTOP_COMPANION_DELIVERY_EVENT } from './desktop-companion-delivery';
-import {
-  DESKTOP_COMPANION_EVALUATION_EVENT,
-  type DesktopCompanionEvaluationEvent,
-} from './desktop-companion-watch-controller';
+import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
 import { api } from '../../api/http';
+import { DESKTOP_COMPANION_DELIVERY_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT } from '../../events/bus';
 
 let desktopCompanionShadowEvaluationInstalled = false;
 

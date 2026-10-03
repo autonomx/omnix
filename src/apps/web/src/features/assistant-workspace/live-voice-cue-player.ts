@@ -7,11 +7,8 @@ import {
 import { ensureLiveVoiceCuePack } from './live-voice-cue-pack-loader';
 import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 import { createCueSegmentId } from './live-voice-playback-contract';
+import { ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_VOICE_CUE_SEGMENT_EVENT, LIVE_VOICE_CUE_SKIPPED_EVENT } from '../../events/bus';
 
-const CUE_SEGMENT_EVENT = 'omnix:live-voice-cue-segment';
-const CUE_SKIPPED_EVENT = 'omnix:live-voice-cue-skipped';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 
 type ActiveCue = {
@@ -62,15 +59,13 @@ export async function playLowLatencyVoiceCue(
     allowProceduralFallback,
   });
   if (!resolution) {
-    window.dispatchEvent(new CustomEvent(CUE_SKIPPED_EVENT, {
-      detail: {
+    emitOmnixEvent(LIVE_VOICE_CUE_SKIPPED_EVENT, {
         cue_id: cueId,
         variant_id: variantId,
         voice_id: voiceId,
         reason: 'voice_asset_unavailable',
         procedural_fallback_allowed: allowProceduralFallback,
-      },
-    }));
+      });
     return false;
   }
 
@@ -129,8 +124,8 @@ export async function closeLowLatencyVoiceCuePlayer(): Promise<void> {
 function installCueCancellationListeners(): void {
   if (listenersInstalled || typeof window === 'undefined') return;
   listenersInstalled = true;
-  window.addEventListener(INTERRUPT_EVENT, () => stopLowLatencyVoiceCue('voice_interrupt'));
-  window.addEventListener(STOP_EVENT, () => stopLowLatencyVoiceCue('live_call_stop'));
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, () => stopLowLatencyVoiceCue('voice_interrupt'));
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, () => stopLowLatencyVoiceCue('live_call_stop'));
 }
 
 function dispatchCueLifecycle(
@@ -138,8 +133,7 @@ function dispatchCueLifecycle(
   active: ActiveCue,
   reason?: string,
 ): void {
-  window.dispatchEvent(new CustomEvent(CUE_SEGMENT_EVENT, {
-    detail: {
+  emitOmnixEvent(LIVE_VOICE_CUE_SEGMENT_EVENT, {
       type,
       segment_id: active.segmentId,
       segment_kind: 'cue',
@@ -149,8 +143,7 @@ function dispatchCueLifecycle(
       voice_id: active.voiceId,
       semantic_speech_samples: 0,
       reason: reason ?? null,
-    },
-  }));
+    });
 }
 
 function selectedVoiceId(): string | null {

@@ -2,9 +2,10 @@
 import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import { type ConversationPace, assessSemanticTurn, reduceUserFloor, semanticFinalizeDelay } from './live-voice-floor-manager';
 import { calculateRms } from './live-voice-websocket';
-import { FINAL_RESPONSE_TIMEOUT_MS, INTERRUPT_CONFIRMATION_FRAMES, LIVE_VOICE_USER_SPEECH_EVENT, LiveVoiceSession, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, controller, dispatchLiveVoiceLifecycleEvent, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, liveVoiceAssistantOwnsFloor, liveVoiceSpeechThreshold, readConversationPace, renderTranscript, setPanelStatus, updateVoiceVisualizer } from './live-voice-controller-state';
+import { FINAL_RESPONSE_TIMEOUT_MS, INTERRUPT_CONFIRMATION_FRAMES, LiveVoiceSession, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, liveVoiceAssistantOwnsFloor, liveVoiceSpeechThreshold, readConversationPace, renderTranscript, setPanelStatus, updateVoiceVisualizer } from './live-voice-controller-state';
 import { assessOverlapCandidate, clearAuthoritativePreview, scheduleAuthoritativePreview } from './live-voice-preview';
 import { resetTurnState, stopLiveVoice } from './live-voice-session-lifecycle';
+import { ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, emitOmnixEvent } from '../../events/bus';
 
 export function semanticFinalizationRemainingMs(
   text: string,
@@ -47,7 +48,7 @@ export function processAudioFrame(session: LiveVoiceSession, audio: Float32Array
   session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
   const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
   if (confirmedSpeech && !session.speechDetected) {
-    dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_USER_SPEECH_EVENT, {
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, {
       timestamp: new Date().toISOString(),
       rms,
       assistantSpeaking,

@@ -1,15 +1,8 @@
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
-import {
-  LIVE_VOICE_TURN_TIMELINE_EVENT,
-  type LiveVoiceTurnTimelineDetail,
-} from './live-voice-turn-coordinator';
+import { type LiveVoiceTurnTimelineDetail } from './live-voice-turn-coordinator';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, ASSISTANT_VOICE_RELEASE_QUALITY_EVENT, emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_VOICE_RELEASE_OBSERVATION_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
-export const LIVE_VOICE_RELEASE_OBSERVATION_EVENT = 'omnix:live-voice-release-observation';
 
 export type LiveVoiceLatencyMetric =
   | 'speech_end_to_first_playback_ms'
@@ -87,16 +80,16 @@ let state: ReleaseState = emptyState();
 export function initializeLiveVoiceReleaseObserver(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
-  window.addEventListener(PERF_EVENT, handlePerfEvent);
-  window.addEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
-  window.addEventListener(INTERRUPT_EVENT, handleInterruption);
-  window.addEventListener(QUALITY_EVENT, handleQualityEvent);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerfEvent);
+  window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnosticEvent);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterruption);
+  window.addEventListener(ASSISTANT_VOICE_RELEASE_QUALITY_EVENT, handleQualityEvent);
   window.addEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, handleTurnTimeline);
   return () => {
-    window.removeEventListener(PERF_EVENT, handlePerfEvent);
-    window.removeEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
-    window.removeEventListener(INTERRUPT_EVENT, handleInterruption);
-    window.removeEventListener(QUALITY_EVENT, handleQualityEvent);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerfEvent);
+    window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnosticEvent);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterruption);
+    window.removeEventListener(ASSISTANT_VOICE_RELEASE_QUALITY_EVENT, handleQualityEvent);
     window.removeEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, handleTurnTimeline);
     initialized = false;
   };
@@ -367,7 +360,7 @@ function recordLatency(metricName: LiveVoiceLatencyMetric, valueMs: number | nul
 
 function dispatchObservation(observation: LiveVoiceReleaseObservation): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, { detail: observation }));
+  emitOmnixEvent(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, observation);
 }
 
 function elapsed(start: number | null, end: number): number | null {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
 import { characterClient, type CharacterLiveCallRuntime, type CharacterProfile } from './characterClient';
+import { emitOmnixEvent } from '../../events/bus';
 
 export function VoiceGovernancePanel({
   assetId,
@@ -90,15 +91,13 @@ export function VoiceGovernancePanel({
       );
       if (runtime && sessionId) {
         applyRuntimeIdentity(runtime, updated);
-        window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', {
-          detail: {
+        emitOmnixEvent('omnix:live-chat-session-changed', {
             sessionId,
             characterId: updated.id,
             displayName: updated.display_name,
             voiceId: runtime.voice_speaker_id || runtime.voice_asset_id || selectedVoiceId,
             profileVersion: updated.active_version,
-          },
-        }));
+          });
       }
       setStatus(
         refreshError

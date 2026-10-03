@@ -1,4 +1,5 @@
 import { DEFAULT_OMNIX_THEME, resolveOmnixThemeId, type OmnixThemeId } from '../../design/appearanceThemes';
+import { APPEARANCE_CHANGE_EVENT, emitOmnixEvent } from '../../events/bus';
 
 export const MIN_OMNIX_TEXT_SCALE = 80;
 export const MAX_OMNIX_TEXT_SCALE = 140;
@@ -26,7 +27,6 @@ export type OmnixAppearanceChangeDetail = {
 export const OMNIX_APPEARANCE_MODE_STORAGE_KEY = 'omnix.appearance.mode';
 export const OMNIX_THEME_STORAGE_KEY = 'omnix.appearance.theme';
 export const OMNIX_TEXT_SCALE_STORAGE_KEY = 'omnix.appearance.textScale';
-export const OMNIX_APPEARANCE_CHANGE_EVENT = 'omnix:appearance-change';
 
 export function normalizeAppearanceMode(mode: unknown): OmnixAppearanceMode {
   return mode === 'light' || mode === 'dark' || mode === 'system' ? mode : 'system';
@@ -95,6 +95,6 @@ export function commitAppearanceSettings(settings: AppearanceEffectSettings): Om
   } catch {
     // Appearance persistence is best-effort in private or locked-down browser contexts.
   }
-  window.dispatchEvent(new CustomEvent<OmnixAppearanceChangeDetail>(OMNIX_APPEARANCE_CHANGE_EVENT, { detail }));
+  emitOmnixEvent(APPEARANCE_CHANGE_EVENT, detail);
   return detail;
 }

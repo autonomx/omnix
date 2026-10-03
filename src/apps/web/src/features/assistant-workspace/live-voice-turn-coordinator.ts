@@ -1,9 +1,7 @@
 import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
-import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_COORDINATION_TERMINAL_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
 const AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS = 360;
 const AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS = 500;
 const AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS = 100;
@@ -198,17 +196,12 @@ export class LiveVoiceTurnCoordinator {
     atMs: number,
   ): void {
     if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent<LiveVoiceTurnTimelineDetail>(
-      LIVE_VOICE_TURN_TIMELINE_EVENT,
-      {
-        detail: {
+    emitOmnixEvent(LIVE_VOICE_TURN_TIMELINE_EVENT, {
           turnId: turn.turnId,
           event,
           atMs,
           state: turn.state,
-        },
-      },
-    ));
+        });
   }
 }
 
@@ -232,9 +225,9 @@ export function initializeLiveVoiceTurnCoordinator(): () => void {
       liveVoiceTurnCoordinator.finalReceived(turnId);
     }
   };
-  window.addEventListener(PERF_EVENT, handlePerformance);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
   return () => {
-    window.removeEventListener(PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     liveVoiceTurnCoordinator.clear();
     initialized = false;
   };

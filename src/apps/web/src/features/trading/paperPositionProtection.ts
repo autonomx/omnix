@@ -1,4 +1,5 @@
 import { tradingPaperApi } from './tradingPaperApi';
+import { emitOmnixEvent, PAPER_POSITION_PROTECTION_CHANGED_EVENT } from '../../events/bus';
 
 /** Take-profit and stop-loss prices the chart overlay draws for a paper position. */
 export type PositionProtectionLevels = {
@@ -6,7 +7,6 @@ export type PositionProtectionLevels = {
   stopLoss: number | null;
 };
 
-export const PAPER_POSITION_PROTECTION_EVENT = 'omnix:paper-position-protection-changed';
 
 const cache = new Map<string, PositionProtectionLevels>();
 const inflight = new Set<string>();
@@ -31,7 +31,7 @@ function equal(left: PositionProtectionLevels, right: PositionProtectionLevels):
 
 function notify(accountId: string, instrumentId: string): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(PAPER_POSITION_PROTECTION_EVENT, { detail: { accountId, instrumentId } }));
+  emitOmnixEvent(PAPER_POSITION_PROTECTION_CHANGED_EVENT, { accountId, instrumentId });
 }
 
 async function hydrate(accountId: string, instrumentId: string): Promise<void> {

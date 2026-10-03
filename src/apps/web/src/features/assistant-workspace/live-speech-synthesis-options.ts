@@ -14,10 +14,8 @@ import {
   humanizeSpeechPerformance,
   resetVocalInteractionState,
 } from './live-voice-performance-behavior';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../events/bus';
 
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 
 const FALLBACK_LIVE_CONVERSATION_PROFILE: Readonly<LiveConversationProfile> = {
   presence_preset: 'natural',
@@ -121,7 +119,7 @@ function fallbackProfileForCanonicalChatScope(scopeKey: string | undefined): Liv
 function installResetListeners(): void {
   if (resetListenersInstalled || typeof window === 'undefined') return;
   resetListenersInstalled = true;
-  window.addEventListener(CALL_START_EVENT, resetLiveSpeechCueState);
-  window.addEventListener(CALL_STOP_EVENT, resetLiveSpeechCueState);
-  window.addEventListener(SESSION_CHANGED_EVENT, resetLiveSpeechCueState);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, resetLiveSpeechCueState);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, resetLiveSpeechCueState);
+  window.addEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, resetLiveSpeechCueState);
 }

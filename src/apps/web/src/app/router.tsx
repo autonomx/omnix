@@ -15,15 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
-import {
-  commitAppearanceSettings,
-  DEFAULT_OMNIX_TEXT_SCALE,
-  loadStoredAppearancePreferences,
-  OMNIX_APPEARANCE_CHANGE_EVENT,
-  resolveAppearanceMode,
-  type OmnixAppearanceChangeDetail,
-  type OmnixAppearanceMode,
-} from '../features/settings/appearanceEffects';
+import { commitAppearanceSettings, DEFAULT_OMNIX_TEXT_SCALE, loadStoredAppearancePreferences, resolveAppearanceMode, type OmnixAppearanceChangeDetail, type OmnixAppearanceMode } from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 import { LoginPage } from './LoginPage';
@@ -31,6 +23,7 @@ import { RouteErrorFallback } from './RouteErrorBoundary';
 import { SignOutButton } from './SignOutButton';
 import { LOGIN_PATH, setActiveViewModule } from './viewApiScope';
 import { activateViewRuntime } from './viewRuntime';
+import { APPEARANCE_CHANGE_EVENT } from '../events/bus';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
@@ -111,8 +104,8 @@ function OmnixShell() {
       setTextScale(detail.textScale);
       setColorScheme(detail.resolvedMode);
     };
-    window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
-    return () => window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, syncAppearance);
+    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, syncAppearance);
   }, [setColorScheme]);
 
   return (

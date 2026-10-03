@@ -4,26 +4,9 @@ import { omnixApiClient } from '../../api/client';
 import { createFetchSpeechServiceTransport, createTtsServiceClient, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
 import { stopAssistantPcmStream } from '../assistant-workspace';
 import type { CharacterLiveCallRuntime, LiveCallSpeechStyle } from './characterClient';
-import {
-  LIVE_VOICE_INTERRUPT_EVENT,
-  STREAMING_TTS_RECOVERY_DELAY_SECONDS,
-  STREAMING_TTS_SAMPLE_RATE,
-  audioSourceToArrayBuffer,
-  canUseDecodedAudioPlayback,
-  getSynthesizedAudioSource,
-  getVoiceJobAudioSource,
-  makePlayableAudioSource,
-  voiceJobErrorMessage,
-  voiceProfileId,
-  waitForAudioElementPlaying,
-  waitForAudioElementToFinish,
-  waitForStreamingPlaybackToFinish,
-  type AssistantSettings,
-  type StreamingTtsPlayback,
-  type StreamingTtsWindow,
-  type VoiceProfileAsset,
-} from './chatbotWorkspaceModel';
+import { STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, getSynthesizedAudioSource, getVoiceJobAudioSource, makePlayableAudioSource, voiceJobErrorMessage, voiceProfileId, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish, type AssistantSettings, type StreamingTtsPlayback, type StreamingTtsWindow, type VoiceProfileAsset } from './chatbotWorkspaceModel';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT } from '../../events/bus';
 
 type ResponseAudioOptions = Omit<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef'> & {
   runtimeConfig: AssistantWorkspaceRuntimeConfig;
@@ -64,8 +47,8 @@ export function useResponseAudio({
 
   useEffect(() => {
     const handleInterrupt = () => stopAssistantResponseAudio('Interrupted. Listening for your next message.');
-    window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
-    return () => window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    return () => window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
     // Stopping reads only refs and state setters, so the first render's function stays correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

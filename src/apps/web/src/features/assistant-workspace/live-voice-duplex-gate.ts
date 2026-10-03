@@ -1,18 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-import {
-  LIVE_CONVERSATION_PROFILE_CHANGED_EVENT,
-  readEffectiveLiveConversationProfile,
-  type DuplexMode,
-  type LiveConversationProfile,
-} from '../chatbot/liveConversationProfileClient';
+import { readEffectiveLiveConversationProfile, type DuplexMode, type LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
 import { assessAcousticBargeIn, calculatePcm16Rms } from './live-voice-barge-in-detector';
-import {
-  LIVE_VOICE_CALIBRATION_UPDATED_EVENT,
-  readLatestLiveVoiceCalibration,
-  resolveCalibrationDuplex,
-  type LiveVoiceCalibrationRecord,
-} from './live-voice-calibration';
+import { readLatestLiveVoiceCalibration, resolveCalibrationDuplex, type LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import { resolveLiveVoiceDeviceKey } from './live-voice-device-key';
 import { createLiveVoiceMicrophoneTap, type LiveVoiceMicrophoneTap } from './live-voice-microphone-tap';
 import { liveConversationStore } from './live-conversation-store';
@@ -22,17 +12,10 @@ import {
   pcm16ToFloat32Reference,
   resampleWaveform,
 } from './live-voice-waveform-reference';
+import { ASSISTANT_AUDIO_DUCK_EVENT, ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, ASSISTANT_VOICE_RELEASE_QUALITY_EVENT, CHARACTER_AVATAR_PCM_EVENT, emitOmnixEvent, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, LIVE_VOICE_CALIBRATION_UPDATED_EVENT } from '../../events/bus';
 
 let liveVoiceDuplexGateInstalled = false;
 
-const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
-const PLAYBACK_PCM_EVENT = 'omnix:character-avatar-pcm';
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const DUCK_EVENT = 'omnix:assistant-audio-duck';
-const RELEASE_QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const trackedStreams = new Set<MediaStream>();
 const microphoneTaps = new Map<MediaStream, LiveVoiceMicrophoneTap>();
 const CANDIDATE_TIMEOUT_MS = 1_500;
@@ -203,26 +186,26 @@ export function initializeLiveVoiceDuplexGate(): () => void {
   const handleStop = () => clearCandidate('playback-stopped');
   const handleDeviceChange = () => { void refreshActiveDeviceKey(); };
 
-  window.addEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
+  window.addEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handlePlaybackState);
   window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
   window.addEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration);
-  window.addEventListener(PLAYBACK_PCM_EVENT, handlePlaybackPcm);
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-  window.addEventListener(PERF_EVENT, handlePerf);
-  window.addEventListener(INTERRUPT_EVENT, handleStop);
-  window.addEventListener(STOP_EVENT, handleStop);
+  window.addEventListener(CHARACTER_AVATAR_PCM_EVENT, handlePlaybackPcm);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleStop);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
   mediaDevices.addEventListener?.('devicechange', handleDeviceChange);
   applyDuplexGate();
 
   return () => {
-    window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
+    window.removeEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handlePlaybackState);
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
     window.removeEventListener(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration);
-    window.removeEventListener(PLAYBACK_PCM_EVENT, handlePlaybackPcm);
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    window.removeEventListener(PERF_EVENT, handlePerf);
-    window.removeEventListener(INTERRUPT_EVENT, handleStop);
-    window.removeEventListener(STOP_EVENT, handleStop);
+    window.removeEventListener(CHARACTER_AVATAR_PCM_EVENT, handlePlaybackPcm);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleStop);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
     mediaDevices.removeEventListener?.('devicechange', handleDeviceChange);
     mediaDevices.getUserMedia = originalGetUserMedia;
     deviceRefreshGeneration += 1;
@@ -354,9 +337,7 @@ function setDucked(value: boolean, reason: string): void {
     type: 'conversation',
     event: { type: 'barge_in', value: value ? 'ducking' : 'inactive' },
   });
-  window.dispatchEvent(new CustomEvent(DUCK_EVENT, {
-    detail: { ducked: value, gain: value ? 0.18 : 1, reason, timestamp: performance.now() },
-  }));
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { ducked: value, gain: value ? 0.18 : 1, reason, timestamp: performance.now() });
   dispatchPerf(value ? 'barge_in_ducked' : 'barge_in_restored', {
     reason,
     ...(candidateStartedAt !== null ? { elapsed_ms: performance.now() - candidateStartedAt } : {}),
@@ -378,13 +359,9 @@ function projectBargeIn(value: string): void {
 }
 
 function recordReleaseQuality(qualityName: string, occurred: boolean): void {
-  window.dispatchEvent(new CustomEvent(RELEASE_QUALITY_EVENT, {
-    detail: { qualityName, occurred },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_RELEASE_QUALITY_EVENT, { qualityName, occurred });
 }
 
 function dispatchPerf(stage: string, details: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...details },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...details });
 }

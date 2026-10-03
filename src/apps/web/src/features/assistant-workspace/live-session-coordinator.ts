@@ -22,13 +22,9 @@ import {
   inferLiveTaskContract,
   type LiveTaskContract,
 } from './live-task-contract';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_COORDINATION_TERMINAL_EVENT, LIVE_OBSERVATION_CANDIDATE_EVENT, LIVE_OBSERVATION_SUPERSEDED_EVENT, LIVE_TASK_CONTRACT_EVENT } from '../../events/bus';
 
 
-export const LIVE_OBSERVATION_CANDIDATE_EVENT = 'omnix:live-observation-candidate';
-export const LIVE_OBSERVATION_SUPERSEDED_EVENT = 'omnix:live-observation-superseded';
-export const LIVE_TASK_CONTRACT_EVENT = 'omnix:live-task-contract';
-export const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-export const LIVE_COORDINATION_TERMINAL_EVENT = 'omnix:live-coordination-terminal';
 
 export type CoordinateLiveTranscriptInput = {
   text: string;
@@ -54,7 +50,7 @@ type CoordinatorDependencies = {
   materialClient: Pick<LiveMaterialClient, 'append' | 'acknowledgeTaskContract'>;
   chatGateway: Pick<LiveChatSubmissionGateway, 'submit'>;
   now: () => number;
-  dispatchEvent: (event: Event) => boolean;
+  emit: typeof emitOmnixEvent;
 };
 
 const TASK_INSTRUCTION_PATTERN = /\b(?:translate|translation|interpret|correct my|correct the|grammar|proofread|coach my|pronunciation|just listen|stop correcting|summarize it)\b/i;
@@ -77,9 +73,7 @@ export class LiveSessionCoordinator {
     if (superseded.length) this.dispatchSuperseded(superseded, 'task_contract_changed');
     this.publishObservationQueue();
     if (transition.cancelSpeakingOutput) {
-      this.dependencies.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
-        detail: { source: 'task-contract-transition', intent: 'hard_stop', confidence: 1 },
-      }));
+      this.dependencies.emit(ASSISTANT_VOICE_INTERRUPT_EVENT, { source: 'task-contract-transition', intent: 'hard_stop', confidence: 1 });
     }
   }
 
@@ -198,9 +192,7 @@ export class LiveSessionCoordinator {
           queuedSpeechMs: this.observations.queuedSpeechMs,
         });
         if (admission.admitted) {
-          this.dependencies.dispatchEvent(new CustomEvent(LIVE_OBSERVATION_CANDIDATE_EVENT, {
-            detail: { observation, sourceText: text },
-          }));
+          this.dependencies.emit(LIVE_OBSERVATION_CANDIDATE_EVENT, { observation, sourceText: text });
         }
         this.publishObservationQueue();
         return {
@@ -311,20 +303,15 @@ export class LiveSessionCoordinator {
   }
 
   private dispatchInterrupt(intent: string, confidence: number): void {
-    this.dependencies.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
-      detail: { source: 'live-session-coordinator', intent, confidence },
-    }));
+    this.dependencies.emit(ASSISTANT_VOICE_INTERRUPT_EVENT, { source: 'live-session-coordinator', intent, confidence });
   }
 
   private dispatchSuperseded(observationIds: string[], reason: string): void {
-    this.dependencies.dispatchEvent(new CustomEvent(LIVE_OBSERVATION_SUPERSEDED_EVENT, {
-      detail: { observationIds, reason },
-    }));
+    this.dependencies.emit(LIVE_OBSERVATION_SUPERSEDED_EVENT, { observationIds, reason });
   }
 
   private emitTerminal(final: AcceptedVoiceFinal, result: LiveFinalRoutingResult): void {
-    this.dependencies.dispatchEvent(new CustomEvent(LIVE_COORDINATION_TERMINAL_EVENT, {
-      detail: {
+    this.dependencies.emit(LIVE_COORDINATION_TERMINAL_EVENT, {
         captureEpoch: final.captureEpoch,
         segmentId: final.segmentId,
         resultId: final.resultId,
@@ -332,8 +319,7 @@ export class LiveSessionCoordinator {
         outcome: result.outcome,
         contextVersion: result.contextVersion,
         errorCode: result.errorCode,
-      },
-    }));
+      });
   }
 
   private publishObservationQueue(): void {
@@ -351,7 +337,7 @@ export const liveSessionCoordinator = new LiveSessionCoordinator({
   materialClient: liveMaterialClient,
   chatGateway: liveChatSubmissionGateway,
   now: () => performance.now(),
-  dispatchEvent: (event) => window.dispatchEvent(event),
+  emit: emitOmnixEvent,
 });
 
 let initialized = false;

@@ -1,8 +1,8 @@
 import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
+import { ASSISTANT_AUDIO_DUCK_EVENT } from '../../events/bus';
 
 let liveVoiceDuckBridgeInstalled = false;
 
-const DUCK_EVENT = 'omnix:assistant-audio-duck';
 const activeGains = new Set<GainNode>();
 let currentGain = 1;
 
@@ -33,10 +33,10 @@ export function initializeLiveVoiceAudioDuckBridge(): () => void {
     currentGain = clampGain(detail?.gain);
     for (const gain of activeGains) applyGain(gain, currentGain);
   };
-  window.addEventListener(DUCK_EVENT, handleDuck);
+  window.addEventListener(ASSISTANT_AUDIO_DUCK_EVENT, handleDuck);
 
   return () => {
-    window.removeEventListener(DUCK_EVENT, handleDuck);
+    window.removeEventListener(ASSISTANT_AUDIO_DUCK_EVENT, handleDuck);
     if (liveWindow.AudioWorkletNode === WrappedCtor) liveWindow.AudioWorkletNode = OriginalCtor;
     liveVoiceDuckBridgeInstalled = false;
     activeGains.clear();

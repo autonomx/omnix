@@ -4,10 +4,8 @@ import {
   unregisterVoiceCueSamples,
   type LiveVoiceCueId,
 } from './live-voice-cue-bank';
+import { emitOmnixEvent, VOICE_CUE_ASSETS_CLEAR_EVENT, VOICE_CUE_ASSETS_READY_EVENT, VOICE_CUE_ASSETS_REGISTERED_EVENT } from '../../events/bus';
 
-export const VOICE_CUE_ASSETS_READY_EVENT = 'omnix:voice-cue-assets-ready';
-export const VOICE_CUE_ASSETS_CLEAR_EVENT = 'omnix:voice-cue-assets-clear';
-export const VOICE_CUE_ASSETS_REGISTERED_EVENT = 'omnix:voice-cue-assets-registered';
 
 const VALID_CUE_IDS = new Set<LiveVoiceCueId>(['mhm', 'hmm', 'inhale', 'amused_exhale']);
 const MIN_SAMPLE_RATE = 8_000;
@@ -35,7 +33,7 @@ export type VoiceCueAssetsClearDetail = {
   variantId?: string;
 };
 
-type RegistrationFailure = {
+export type RegistrationFailure = {
   index: number;
   reason: string;
 };
@@ -65,14 +63,12 @@ export function initializeLiveVoiceCueAssetBridge(): () => void {
       registered += 1;
     });
 
-    window.dispatchEvent(new CustomEvent(VOICE_CUE_ASSETS_REGISTERED_EVENT, {
-      detail: {
+    emitOmnixEvent(VOICE_CUE_ASSETS_REGISTERED_EVENT, {
         received_count: assets.length,
         registered_count: registered,
         rejected_count: failures.length,
         failures,
-      },
-    }));
+      });
   };
 
   const handleClear = (event: Event): void => {

@@ -1,31 +1,13 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-import {
-  LIVE_CONVERSATION_PROFILE_CHANGED_EVENT,
-  readEffectiveLiveConversationProfile,
-  type LiveConversationProfile,
-} from '../chatbot/liveConversationProfileClient';
-import {
-  LIVE_VOICE_CALIBRATION_UPDATED_EVENT,
-  readLatestLiveVoiceCalibration,
-  type LiveVoiceCalibrationRecord,
-} from './live-voice-calibration';
+import { readEffectiveLiveConversationProfile, type LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
+import { readLatestLiveVoiceCalibration, type LiveVoiceCalibrationRecord } from './live-voice-calibration';
 import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, CHAT_SESSION_SELECTED_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, LIVE_VOICE_CALIBRATION_UPDATED_EVENT } from '../../events/bus';
 
 let liveConversationStoreBridgeInstalled = false;
 
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const DELIVERY_PLAN_EVENT = 'omnix:live-speech-delivery-plan';
-const EVALUATION_UPDATED_EVENT = 'omnix:live-conversation-evaluation-updated';
-const PROACTIVE_DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
 const PRONUNCIATION_UPDATED_EVENT = 'omnix:live-pronunciation-updated';
 
 type UnknownDetail = Record<string, unknown>;
@@ -144,21 +126,21 @@ export function initializeLiveConversationStoreBridge(): () => void {
   const handlePerf = (event: Event) => mapPerfEvent(detailOf(event));
 
   const listeners: Array<[string, EventListener]> = [
-    [SESSION_CHANGED_EVENT, handleSession],
-    [SESSION_SELECTED_EVENT, handleSession],
-    [CALL_START_EVENT, handleCallStart],
-    [CALL_CONNECTED_EVENT, handleCallConnected],
-    [STOP_EVENT, handleStop],
-    [USER_SPEECH_EVENT, handleUserSpeech],
-    [INTERRUPT_EVENT, handleInterrupt],
-    [PLAYBACK_STATE_EVENT, handlePlayback],
+    [LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession],
+    [CHAT_SESSION_SELECTED_EVENT, handleSession],
+    [ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart],
+    [ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleCallConnected],
+    [ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop],
+    [ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech],
+    [ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt],
+    [ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handlePlayback],
     [LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile],
     [LIVE_VOICE_CALIBRATION_UPDATED_EVENT, handleCalibration],
     [DELIVERY_PLAN_EVENT, handlePlan],
-    [EVALUATION_UPDATED_EVENT, handleEvaluation],
+    [LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, handleEvaluation],
     [PRONUNCIATION_UPDATED_EVENT, handlePronunciation],
-    [PROACTIVE_DELIVERED_EVENT, handleProactiveDelivered],
-    [PERF_EVENT, handlePerf],
+    [LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, handleProactiveDelivered],
+    [ASSISTANT_VOICE_PERF_EVENT, handlePerf],
   ];
   for (const [name, listener] of listeners) window.addEventListener(name, listener);
 

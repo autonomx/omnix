@@ -1,10 +1,7 @@
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
-import {
-  DESKTOP_COMPANION_EVALUATION_EVENT,
-  DESKTOP_COMPANION_STATUS_EVENT,
-  type DesktopCompanionEvaluationEvent,
-} from './desktop-companion-watch-controller';
+import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
 import { api, unwrap } from '../../api/http';
+import { DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let desktopCompanionOperationalGuardInstalled = false;
 
@@ -143,9 +140,7 @@ function stopWatch(reason: string): void {
 }
 
 function publish(reason: string): void {
-  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_STATUS_EVENT, {
-    detail: { phase: reason.includes('backoff') ? 'backing_off' : 'off', reason },
-  }));
+  emitOmnixEvent(DESKTOP_COMPANION_STATUS_EVENT, { phase: reason.includes('backoff') ? 'backing_off' : 'off', reason });
 }
 
 function boundedInt(value: unknown, fallback: number, minimum: number, maximum: number): number {

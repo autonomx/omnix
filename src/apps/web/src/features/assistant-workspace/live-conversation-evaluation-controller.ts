@@ -1,26 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
-import {
-  LIVE_ASSISTANT_TURN_SUMMARY_EVENT,
-  type LiveAssistantTurnSummary,
-} from './live-conversation-assistant-summary';
+import { type LiveAssistantTurnSummary } from './live-conversation-assistant-summary';
 import {
   evaluateLiveConversation,
   type LiveConversationEvaluationEvent,
   type LiveConversationEvaluationReport,
 } from './live-conversation-evaluation';
 import { liveConversationStore } from './live-conversation-store';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT, LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, LIVE_CONVERSATION_LISTENER_BACKCHANNEL_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_REPAIR_PLANNED_EVENT } from '../../events/bus';
 
 let liveConversationEvaluationInstalled = false;
 
-export const LIVE_EVALUATION_UPDATED_EVENT = 'omnix:live-conversation-evaluation-updated';
 export const LIVE_EVALUATION_STORAGE_KEY = 'omnix.liveConversation.evaluation.v1';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const PROACTIVE_DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
-const REPAIR_EVENT = 'omnix:live-conversation-repair-planned';
-const LISTENER_BACKCHANNEL_EVENT = 'omnix:live-conversation-listener-backchannel';
 const MAX_EVENTS = 600;
 const MAX_TOPIC_FINGERPRINTS = 12;
 const PROACTIVE_REGRET_WINDOW_MS = 2_500;
@@ -142,28 +132,28 @@ export function initializeLiveConversationEvaluationController(): () => void {
     if (assistantTurnCompleted) completeAssistantTurn();
   };
 
-  window.addEventListener(CALL_START_EVENT, handleCallStart);
-  window.addEventListener(STOP_EVENT, handleStop);
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-  window.addEventListener(PROACTIVE_DELIVERED_EVENT, handleProactive);
-  window.addEventListener(REPAIR_EVENT, handleRepair);
-  window.addEventListener(LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
-  window.addEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, handleAssistantSummary);
-  window.addEventListener(PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, handleProactive);
+  window.addEventListener(LIVE_CONVERSATION_REPAIR_PLANNED_EVENT, handleRepair);
+  window.addEventListener(LIVE_CONVERSATION_LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
+  window.addEventListener(LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT, handleAssistantSummary);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
   const unsubscribe = liveConversationStore.subscribe(handleStore);
   handleStore();
   dispatchUpdate();
 
   return () => {
     unsubscribe();
-    window.removeEventListener(CALL_START_EVENT, handleCallStart);
-    window.removeEventListener(STOP_EVENT, handleStop);
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    window.removeEventListener(PROACTIVE_DELIVERED_EVENT, handleProactive);
-    window.removeEventListener(REPAIR_EVENT, handleRepair);
-    window.removeEventListener(LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
-    window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, handleAssistantSummary);
-    window.removeEventListener(PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, handleProactive);
+    window.removeEventListener(LIVE_CONVERSATION_REPAIR_PLANNED_EVENT, handleRepair);
+    window.removeEventListener(LIVE_CONVERSATION_LISTENER_BACKCHANNEL_EVENT, handleListenerBackchannel);
+    window.removeEventListener(LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT, handleAssistantSummary);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
     resolveBackchannel(false, false);
     liveConversationEvaluationInstalled = false;
   };
@@ -293,7 +283,7 @@ function persistEvents(value: LiveConversationEvaluationEvent[]): void {
 
 function dispatchUpdate(): EvaluationSnapshot {
   const snapshot = { events: [...events], report: evaluateLiveConversation(events) };
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(LIVE_EVALUATION_UPDATED_EVENT, { detail: snapshot }));
+  if (typeof window !== 'undefined') emitOmnixEvent(LIVE_CONVERSATION_EVALUATION_UPDATED_EVENT, snapshot);
   return snapshot;
 }
 

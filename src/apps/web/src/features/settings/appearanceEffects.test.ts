@@ -2,15 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { migrateSettingsDocument } from './settingsMerge';
-import {
-  commitAppearanceSettings,
-  loadStoredAppearancePreferences,
-  normalizeTextScale,
-  OMNIX_APPEARANCE_CHANGE_EVENT,
-  OMNIX_APPEARANCE_MODE_STORAGE_KEY,
-  OMNIX_TEXT_SCALE_STORAGE_KEY,
-  OMNIX_THEME_STORAGE_KEY,
-} from './appearanceEffects';
+import { commitAppearanceSettings, loadStoredAppearancePreferences, normalizeTextScale, OMNIX_APPEARANCE_MODE_STORAGE_KEY, OMNIX_TEXT_SCALE_STORAGE_KEY, OMNIX_THEME_STORAGE_KEY } from './appearanceEffects';
+import { APPEARANCE_CHANGE_EVENT } from '../../events/bus';
 
 describe('appearance theme effects', () => {
   beforeEach(() => {
@@ -27,7 +20,7 @@ describe('appearance theme effects', () => {
 
   it('applies, persists, and announces appearance and text scale', () => {
     const listener = vi.fn();
-    window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, listener);
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, listener);
 
     const detail = commitAppearanceSettings({
       mode: 'light',
@@ -50,7 +43,7 @@ describe('appearance theme effects', () => {
     expect(window.localStorage.getItem(OMNIX_TEXT_SCALE_STORAGE_KEY)).toBe('115');
     expect(listener).toHaveBeenCalledTimes(1);
 
-    window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, listener);
+    window.removeEventListener(APPEARANCE_CHANGE_EVENT, listener);
   });
 
   it('loads stored mode, theme, and text scale preferences', () => {

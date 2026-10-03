@@ -1,14 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
+import { emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../events/bus';
 
 type LiveCallDiagnosticDetail = {
   event?: unknown;
   details?: Record<string, unknown>;
 };
 
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)(?:$|\/)/;
 const SESSION_RECONCILIATION_EVENTS = new Set([
   'turn_finished',
@@ -46,7 +45,7 @@ export function initializeLiveChatWorkspace(queryClient: QueryClient): () => voi
     const response = await next(input, init);
     if (response.ok && sessionId && sessionId !== selectedSessionId) {
       selectedSessionId = sessionId;
-      window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT, { detail: { sessionId } }));
+      emitOmnixEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, { sessionId });
     }
     return response;
   });

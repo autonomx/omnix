@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { ASSISTANT_VOICE_PERF_EVENT } from '../../events/bus';
 
 let liveSpeculationDiagnosticsInstalled = false;
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const HOT_PATH_STAGE_PREFIXES = [
   'llm_speculation_',
   'tts_speculative_',
@@ -28,9 +28,9 @@ export function initializeLiveSpeculationDiagnosticsBridge(): () => void {
     reporter.record(stage, safeDetails, 'speculation');
   };
 
-  window.addEventListener(PERF_EVENT, handlePerformance);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
   return () => {
-    window.removeEventListener(PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     liveSpeculationDiagnosticsInstalled = false;
     void reporter.close('speculation_diagnostics_stopped');
   };

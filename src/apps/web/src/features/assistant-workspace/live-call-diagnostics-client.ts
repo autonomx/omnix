@@ -1,8 +1,8 @@
 import { observeAssistantDiagnostic } from './live-conversation-assistant-summary';
 import { api } from '../../api/http';
+import { emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT } from '../../events/bus';
 
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
-const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const FLUSH_DELAY_MS = 250;
 const MAX_BATCH_EVENTS = 24;
 const TRANSCRIPT_LOGGING_KEY = 'omnix.liveCall.transcriptLogging';
@@ -76,9 +76,7 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
       ? { ...commonDetails, ...details }
       : persistedDetails;
     queue.push({ source, event, details: persistedDetails });
-    window.dispatchEvent(new CustomEvent(LIVE_CALL_DIAGNOSTIC_EVENT, {
-      detail: { traceId, source, event, details: localDetails },
-    }));
+    emitOmnixEvent(LIVE_CALL_DIAGNOSTIC_EVENT, { traceId, source, event, details: localDetails });
     if (queue.length >= MAX_BATCH_EVENTS) void flush();
     else scheduleFlush();
   };

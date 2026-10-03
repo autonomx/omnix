@@ -1,6 +1,6 @@
 import { api, unwrap } from '../../api/http';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export type LiveTtsCapabilities = {
   ok: boolean;
@@ -35,22 +35,18 @@ export function initializeLiveTtsCapabilityController(): () => void {
     // The capability route returns an untyped object.
     const capabilities = payload as unknown as LiveTtsCapabilities;
     negotiatedCapabilities = capabilities;
-    window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-      detail: {
+    emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'tts_capabilities_negotiated',
         timestamp: new Date().toISOString(),
         ...capabilities,
-      },
-    }));
+      });
   }).catch((error: unknown) => {
     if (abortController.signal.aborted) return;
-    window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-      detail: {
+    emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'tts_capabilities_unavailable',
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : String(error),
-      },
-    }));
+      });
   });
 
   return () => {

@@ -1,3 +1,4 @@
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from './live-accepted-final';
 import { streamingSttUrl, type SpeechLocation } from './stt-url';
 import { streamingSttMessageSchema } from './live-voice-messages';
@@ -224,7 +225,6 @@ const CAP_CLIENT_AUDIO_REPLAY = 'client_audio_replay';
 const CAP_AUTHORITATIVE_PREVIEW = 'authoritative_preview';
 // Audio as binary frames: uint32 LE header length, JSON header, PCM16 bytes.
 const CAP_BINARY_AUDIO_FRAMES = 'binary_audio_frames';
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export function getDefaultStreamingSttWebSocketUrl(
   locationLike: SpeechLocation = globalThis.location,
@@ -234,15 +234,7 @@ export function getDefaultStreamingSttWebSocketUrl(
 }
 
 function dispatchSttDiagnostic(stage: string, detail: Record<string, unknown>): void {
-  const CustomEventCtor = globalThis.CustomEvent;
-  if (typeof globalThis.dispatchEvent !== 'function' || typeof CustomEventCtor !== 'function') return;
-  globalThis.dispatchEvent(new CustomEventCtor(LIVE_VOICE_PERF_EVENT, {
-    detail: {
-      stage,
-      timestamp: new Date().toISOString(),
-      ...detail,
-    },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }
 
 export class StreamingFloat32Resampler {

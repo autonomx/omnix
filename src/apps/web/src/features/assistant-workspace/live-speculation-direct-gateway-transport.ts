@@ -1,10 +1,10 @@
 import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const MIDDLEWARE = 'live-speculation-direct-gateway';
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://127.0.0.1:8000';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 type LocationLike = Pick<Location, 'hostname' | 'port' | 'origin'>;
 type EnvLike = Record<string, string | boolean | number | undefined>;
@@ -243,9 +243,7 @@ function booleanEnv(env: EnvLike, key: string): boolean | undefined {
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }
 
 function now(): number {

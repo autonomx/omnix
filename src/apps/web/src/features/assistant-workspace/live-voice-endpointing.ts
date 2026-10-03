@@ -1,12 +1,12 @@
 /** Provider endpoint candidates and partial transcripts: whether a pause ends the turn. */
 import { liveConversationStore } from './live-conversation-store';
-import { LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from './live-stt-authority-controller';
 import { assessSemanticTurn } from './live-voice-floor-manager';
 import { type StreamingSttSegmentState } from './live-voice-websocket';
 import { endpointFusionAction } from './live-voice-turn-coordinator';
-import { EndpointCommitState, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, STT_SEGMENT_TELEMETRY_INTERVAL_MS, controller, dispatchLiveSttSpeculationEvent, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, readConversationPace, renderTranscript } from './live-voice-controller-state';
+import { EndpointCommitState, PROVIDER_ENDPOINT_MIN_SILENCE_MS, ProviderEndpointCandidate, STT_SEGMENT_TELEMETRY_INTERVAL_MS, controller, dispatchLiveVoicePerfEvent, liveVoiceAssistantIsSpeaking, readConversationPace, renderTranscript } from './live-voice-controller-state';
 import { requestFinalTranscript, rescheduleSemanticFinalization } from './live-voice-finalization';
 import { assessOverlapCandidate } from './live-voice-preview';
+import { emitOmnixEvent, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 export class LiveSttSegmentTelemetryGate {
   private structuralKey = '';
@@ -116,8 +116,8 @@ export function handleProviderEndpointCandidate(card: HTMLElement, event: Provid
       sourceSequence: event.sequence,
       text: candidateText,
     };
-    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, detail);
-    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
+    emitOmnixEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, detail);
+    emitOmnixEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
       ...detail,
       probability: event.probability,
       modelTimeMs: event.modelTimeMs,
@@ -160,7 +160,7 @@ export function handlePartialTranscript(card: HTMLElement, text: string): void {
       && session.speculationSegmentId
       && session.speculationSourceSequence !== null
     ) {
-      dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+      emitOmnixEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
         chatSessionId: liveConversationStore.getState().sessionId,
         segmentId: session.speculationSegmentId,
         sourceSequence: session.speculationSourceSequence,

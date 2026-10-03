@@ -1,3 +1,4 @@
+import { emitOmnixEvent } from '../../events/bus';
 export const LIVE_COORDINATION_SCHEMA = 2;
 
 export type LiveRuntimeProvenance = {
@@ -57,7 +58,7 @@ export function currentLiveRuntimeProvenance(): LiveRuntimeProvenance {
 
 export function emitLiveRuntimeProvenance(): LiveRuntimeProvenance {
   const provenance = currentLiveRuntimeProvenance();
-  window.dispatchEvent(new CustomEvent('omnix:live-runtime-bootstrap', { detail: provenance }));
+  emitOmnixEvent('omnix:live-runtime-bootstrap', provenance);
   console.info('[Omnix Voice Perf]', { event: 'live_runtime_bootstrap', ...provenance });
   return provenance;
 }

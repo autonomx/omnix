@@ -2,15 +2,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_FINAL_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
-import {
   initializeLiveSpeculationRuntime,
   liveSubmissionRequestMatches,
 } from './live-speculation-runtime';
 import { pipelineFetch, registerFetchMiddleware } from '../../api/fetchPipeline';
+import { LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 const submission = {
   sessionId: 'chat:one',

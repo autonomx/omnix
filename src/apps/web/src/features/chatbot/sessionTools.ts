@@ -3,13 +3,10 @@ import type { ChatSession, CreateChatSessionRequest } from '../../api/client';
 import './chat-response-metrics-controller.css';
 import { characterClient, type SessionInteraction } from './characterClient';
 import type { components } from '../../api/generated/types';
+import { ASSISTANT_LIVE_VOICE_STOP_EVENT, CHAT_SESSION_CREATED_EVENT, CHAT_SESSION_SELECTED_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../events/bus';
 
 let chatSessionToolsInstalled = false;
 
-const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
-const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
-const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 
 // A new session keeps the interaction settings of the one it replaces, so they are required here.
 type PreservedChatSessionRequest = components['schemas']['CreateChatSessionRequest']
@@ -139,12 +136,10 @@ export async function startBlankChat(): Promise<ChatSession> {
 
   selectedSessionId = sessionId;
   selectedSessionSnapshot = session;
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
+  emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);
   clearMessageComposer();
-  window.dispatchEvent(new CustomEvent(CHAT_SESSION_CREATED_EVENT, { detail: { session } }));
-  window.dispatchEvent(new CustomEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, {
-    detail: { sessionId },
-  }));
+  emitOmnixEvent(CHAT_SESSION_CREATED_EVENT, { session });
+  emitOmnixEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, { sessionId });
   requestSessionListRefresh();
   return session;
 }
@@ -162,9 +157,9 @@ export function installSessionTools(): () => void {
       ? snapshot as SessionSelectionSnapshot
       : selectedSessionSnapshot?.id === nextSessionId ? selectedSessionSnapshot : null;
   };
-  window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
+  window.addEventListener(CHAT_SESSION_SELECTED_EVENT, handleSessionSelected);
   return () => {
-    window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
+    window.removeEventListener(CHAT_SESSION_SELECTED_EVENT, handleSessionSelected);
     chatSessionToolsInstalled = false;
   };
 }

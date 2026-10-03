@@ -1,3 +1,4 @@
+import { emitOmnixEvent } from '../../events/bus';
 export type ConversationPaceSetting = 'quick' | 'balanced' | 'reflective';
 export type InterruptionPreference = 'easy' | 'balanced' | 'finish_more';
 export type BackchannelMode = 'off' | 'minimal' | 'natural';
@@ -58,7 +59,7 @@ export function updateLiveConversationSettings(
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       mirrorConversationSettings(next);
-      window.dispatchEvent(new CustomEvent('omnix:live-conversation-settings-changed', { detail: next }));
+      emitOmnixEvent('omnix:live-conversation-settings-changed', next);
     }
   } catch {
     // Settings remain usable for the current read even when storage is unavailable.

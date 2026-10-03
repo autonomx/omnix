@@ -6,17 +6,9 @@ import {
   resetLiveSttCapabilityState,
 } from './live-stt-capability-state';
 import { assessSemanticTurn, semanticFinalizeDelay } from './live-voice-floor-manager';
-import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
-import {
-  LIVE_VOICE_TURN_TIMELINE_EVENT,
-  LiveVoiceTurnCoordinator,
-  endpointFusionAction,
-  initializeLiveVoiceTranscriptReconciliation,
-  removeTransientFinalUserRows,
-  resetLiveVoiceTurnCoordinatorForTests,
-  type LiveVoiceTurnTimelineDetail,
-} from './live-voice-turn-coordinator';
+import { LiveVoiceTurnCoordinator, endpointFusionAction, initializeLiveVoiceTranscriptReconciliation, removeTransientFinalUserRows, resetLiveVoiceTurnCoordinatorForTests, type LiveVoiceTurnTimelineDetail } from './live-voice-turn-coordinator';
 import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
+import { LIVE_COORDINATION_TERMINAL_EVENT, LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../events/bus';
 
 afterEach(() => {
   resetLiveVoiceTurnCoordinatorForTests();

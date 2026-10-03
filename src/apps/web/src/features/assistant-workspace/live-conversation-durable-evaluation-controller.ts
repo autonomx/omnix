@@ -4,19 +4,11 @@ import {
   liveChatEvaluationClient,
   type VoiceSessionEvaluationCreate,
 } from './live-chat-evaluation-client';
-import {
-  LIVE_VOICE_RELEASE_OBSERVATION_EVENT,
-  type LiveVoiceLatencyMetric,
-  type LiveVoiceQualityMetric,
-  type LiveVoiceReleaseObservation,
-} from './live-voice-release-observer';
+import { type LiveVoiceLatencyMetric, type LiveVoiceQualityMetric, type LiveVoiceReleaseObservation } from './live-voice-release-observer';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, LIVE_VOICE_RELEASE_OBSERVATION_EVENT } from '../../events/bus';
 
 let liveDurableEvaluationInstalled = false;
 
-export const LIVE_DURABLE_EVALUATION_SAVED_EVENT = 'omnix:live-conversation-durable-evaluation-saved';
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const RELEASE_SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
 
 type ActiveCall = {
@@ -73,16 +65,16 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
     void persistCallEvaluation(call);
   };
 
-  window.addEventListener(CALL_START_EVENT, handleStart);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
   window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, handleObservation);
-  window.addEventListener(PERF_EVENT, handlePerf);
-  window.addEventListener(STOP_EVENT, handleStop);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
 
   return () => {
-    window.removeEventListener(CALL_START_EVENT, handleStart);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleStart);
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, handleObservation);
-    window.removeEventListener(PERF_EVENT, handlePerf);
-    window.removeEventListener(STOP_EVENT, handleStop);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
     activeCall = null;
     liveDurableEvaluationInstalled = false;
   };
@@ -215,17 +207,13 @@ async function persistCallEvaluation(call: ActiveCall): Promise<void> {
   try {
     const record = await liveChatEvaluationClient.upsert(buildDurableEvaluationPayload(call));
     const gate = await liveChatEvaluationClient.releaseGate({ persistStatus: true });
-    window.dispatchEvent(new CustomEvent(LIVE_DURABLE_EVALUATION_SAVED_EVENT, {
-      detail: { record: { ...record, release_gate_status: gate.status }, gate },
-    }));
+    emitOmnixEvent(LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, { record: { ...record, release_gate_status: gate.status }, gate });
   } catch (error) {
-    window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-      detail: {
+    emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
         stage: 'durable_evaluation_save_failed',
         error_name: error instanceof Error ? error.name : 'unknown',
         timestamp: new Date().toISOString(),
-      },
-    }));
+      });
   }
 }
 

@@ -1,9 +1,9 @@
+import { APPEARANCE_CHANGE_EVENT, onOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 import { useEffect } from 'react';
 import { defaultTradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
-import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings';
-import { resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, TRADING_TIMEZONE_CHANGE_EVENT } from './tradingTime';
+import { resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS } from './tradingTime';
 import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
@@ -158,8 +158,8 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
       adapter.setAppearance(document.documentElement.dataset.omnixAppearance === 'light' ? 'light' : 'dark');
     };
     applyAppearance();
-    window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, applyAppearance);
-    return () => window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, applyAppearance);
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, applyAppearance);
+    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, applyAppearance);
   }, [adapter]);
 
   useEffect(() => {
@@ -178,14 +178,9 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     return () => document.removeEventListener('pointerdown', closeMenus, true);
   }, [customRangeOpen, timezoneMenuOpen, customRangeRef, setCustomRangeOpen, setTimezoneMenuOpen, timezoneMenuRef]);
 
-  useEffect(() => {
-    const synchronizeTimezone = (event: Event) => {
-      if (!(event instanceof CustomEvent) || typeof event.detail !== 'string') return;
-      if (TRADING_TIMEZONE_OPTIONS.some((option) => option.id === event.detail)) setTimezoneId(event.detail);
-    };
-    window.addEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
-    return () => window.removeEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
-  }, [setTimezoneId]);
+  useEffect(() => onOmnixEvent(TRADING_CHART_TIMEZONE_CHANGE_EVENT, (timezone) => {
+    if (TRADING_TIMEZONE_OPTIONS.some((option) => option.id === timezone)) setTimezoneId(timezone);
+  }), [setTimezoneId]);
 
   useEffect(() => {
     if (previousIntervalRef.current === interval) return;

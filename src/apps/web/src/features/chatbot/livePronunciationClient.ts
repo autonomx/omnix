@@ -1,11 +1,11 @@
 import type { components } from '../../api/generated/types';
 import { api, unwrapAs } from '../../api/http';
+import { emitOmnixEvent, LIVE_CONVERSATION_PRONUNCIATIONS_CHANGED_EVENT } from '../../events/bus';
 export type PronunciationEntry = components['schemas']['PronunciationEntry'];
 
 export type PronunciationListResponse = components['schemas']['PronunciationListResponse'];
 
 export const ACTIVE_PRONUNCIATIONS_KEY = 'omnix.liveConversation.activePronunciations';
-export const PRONUNCIATIONS_CHANGED_EVENT = 'omnix:live-conversation-pronunciations-changed';
 
 function pronunciations(call: Promise<{ data?: PronunciationListResponse; error?: unknown; response: Response }>): Promise<PronunciationListResponse> {
   return unwrapAs(call, (error) => `Pronunciation request failed with status ${error.status}.`);
@@ -28,7 +28,7 @@ export const livePronunciationClient = {
 export function publishActivePronunciations(entries: PronunciationEntry[]): void {
   if (typeof window === 'undefined') return;
   try { window.localStorage.setItem(ACTIVE_PRONUNCIATIONS_KEY, JSON.stringify(entries)); } catch { /* event remains authoritative */ }
-  window.dispatchEvent(new CustomEvent(PRONUNCIATIONS_CHANGED_EVENT, { detail: { entries } }));
+  emitOmnixEvent(LIVE_CONVERSATION_PRONUNCIATIONS_CHANGED_EVENT, { entries });
 }
 
 export function readActivePronunciations(): PronunciationEntry[] {

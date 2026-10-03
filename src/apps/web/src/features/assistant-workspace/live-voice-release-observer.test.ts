@@ -15,13 +15,8 @@ vi.mock('./live-call-diagnostics-client', () => ({
   }),
 }));
 
-import {
-  LIVE_VOICE_RELEASE_OBSERVATION_EVENT,
-  initializeLiveVoiceReleaseObserver,
-  recordLiveVoiceReleaseQuality,
-  resetLiveVoiceReleaseObserver,
-  type LiveVoiceReleaseObservation,
-} from './live-voice-release-observer';
+import { initializeLiveVoiceReleaseObserver, recordLiveVoiceReleaseQuality, resetLiveVoiceReleaseObserver, type LiveVoiceReleaseObservation } from './live-voice-release-observer';
+import { LIVE_VOICE_RELEASE_OBSERVATION_EVENT } from '../../events/bus';
 
 function perf(stage: string, turnId = 'voice-turn:1', extra = {}): void {
   window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {

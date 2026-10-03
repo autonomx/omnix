@@ -6,10 +6,7 @@ import {
   earlySpeculationProbabilityFloor,
   initializeLiveSpeculationEarlyTrigger,
 } from './live-speculation-early-trigger';
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
+import { LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 const NEGOTIATED_EOU = {
   stage: 'stt_negotiated',

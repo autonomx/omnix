@@ -8,7 +8,6 @@ import {
 } from './desktop-companion-activity';
 import { desktopCompanionRolloutEvidenceIdentity } from './desktop-companion-build-identity';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
-import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT } from './desktop-companion-delivery';
 import {
   fetchDesktopCompanionRolloutStatus,
   type DesktopCompanionRolloutStatus,
@@ -18,11 +17,10 @@ import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
 import type { components } from '../../api/generated/types';
 import { api, unwrap } from '../../api/http';
+import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let desktopCompanionWatchInstalled = false;
 
-export const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
-export const DESKTOP_COMPANION_EVALUATION_EVENT = 'omnix:desktop-companion-evaluation';
 
 export type ShadowWatchSettings = {
   enabled: boolean;
@@ -408,8 +406,7 @@ async function tickOnce(): Promise<void> {
         && result.scene_summary
         && (effectiveStage === 'text' || effectiveStage === 'speech')
       ) {
-        window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, {
-          detail: {
+        emitOmnixEvent(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, {
             sessionId: capture.sessionId,
             observationId,
             groundingIds: [observationId],
@@ -417,8 +414,7 @@ async function tickOnce(): Promise<void> {
             priority: 'normal',
             presentation: effectiveStage === 'speech' && !controls.muted ? 'speech' : 'text',
             expiresAtMs: Date.now() + settings.observationTtlMs,
-          },
-        }));
+          });
       }
     } else if (result.status === 'deferred') {
       runtime.markPhase('backing_off', result.reason);
@@ -564,8 +560,7 @@ async function stopAndReset(reason: string): Promise<void> {
 }
 
 function publishStatus(phase: string, reason: string, result?: ObserveResponse): void {
-  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_STATUS_EVENT, {
-    detail: {
+  emitOmnixEvent(DESKTOP_COMPANION_STATUS_EVENT, {
       phase,
       reason,
       requestedStage: rollout.requested_stage,
@@ -583,12 +578,11 @@ function publishStatus(phase: string, reason: string, result?: ObserveResponse):
         remote: preflight.remote,
         latencyMs: preflight.latency_ms,
       } : null,
-    },
-  }));
+    });
 }
 
 function dispatchEvaluation(detail: DesktopCompanionEvaluationEvent): void {
-  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_EVALUATION_EVENT, { detail }));
+  emitOmnixEvent(DESKTOP_COMPANION_EVALUATION_EVENT, detail);
 }
 
 function disabledSettings(): ShadowWatchSettings {

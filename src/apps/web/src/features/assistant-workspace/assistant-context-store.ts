@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { createGatewayClient } from '../../api/http';
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
 import type { components } from '../../api/generated/types';
+import { emitOmnixEvent } from '../../events/bus';
 
 /**
  * The chat composer's context choices (WP-9.4): web research mode and its
@@ -294,7 +295,7 @@ export async function toggleDesktopShare(): Promise<void> {
       desktopShare: { stream, video, capture, sourceFingerprint: desktopSourceFingerprint(stream) },
       desktopStatus: 'Buffering recent frames',
     });
-    window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: true } }));
+    emitOmnixEvent('omnix:desktop-share-changed', { sharing: true });
     stream.getVideoTracks()[0]?.addEventListener('ended', () => stopDesktopShare(), { once: true });
   } catch (error) {
     const desktopStatus = error instanceof Error && error.name === 'NotAllowedError'
@@ -311,7 +312,7 @@ export function stopDesktopShare(options: { resetStatus?: boolean } = {}): void 
   current?.stream.getTracks().forEach((track) => track.stop());
   if (current) current.video.srcObject = null;
   update({ desktopShare: null, ...(options.resetStatus === false ? {} : { desktopStatus: 'Off' }) });
-  if (current) window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: false } }));
+  if (current) emitOmnixEvent('omnix:desktop-share-changed', { sharing: false });
 }
 
 export function readStoredAgentMode(): boolean {
@@ -386,9 +387,7 @@ function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
 }
 
 export function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent('omnix:assistant-voice-perf', { stage, timestamp: new Date().toISOString(), ...detail });
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

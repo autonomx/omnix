@@ -1,9 +1,5 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-import {
-  LIVE_CONVERSATION_PROFILE_CHANGED_EVENT,
-  readEffectiveLiveConversationProfile,
-  type LiveConversationProfile,
-} from '../chatbot/liveConversationProfileClient';
+import { readEffectiveLiveConversationProfile, type LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
 import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
@@ -11,17 +7,10 @@ import { liveConversationStore } from './live-conversation-store';
 import { api, unwrap } from '../../api/http';
 import { openStream } from '../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
+import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../events/bus';
 
 let liveConversationInitiativeInstalled = false;
 
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
 const SCHEDULER_INTERVAL_MS = 750;
 const DEFAULT_COOLDOWN_MS = 30_000;
 const AUDIO_START_TIMEOUT_MS = 5_000;
@@ -129,12 +118,12 @@ export function initializeLiveConversationInitiativeController(): () => void {
   };
   const handleProfile = () => resetQuietPeriod('profile-changed');
 
-  window.addEventListener(SESSION_CHANGED_EVENT, handleSession);
-  window.addEventListener(CALL_START_EVENT, handleCallStart);
-  window.addEventListener(CALL_CONNECTED_EVENT, handleCallConnected);
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-  window.addEventListener(INTERRUPT_EVENT, handleInterrupt);
-  window.addEventListener(STOP_EVENT, handleStop);
+  window.addEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleCallConnected);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
   window.addEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
 
   const unsubscribe = liveConversationStore.subscribe(handleAuthoritativeStateChange);
@@ -144,12 +133,12 @@ export function initializeLiveConversationInitiativeController(): () => void {
   return () => {
     window.clearInterval(scheduler);
     unsubscribe();
-    window.removeEventListener(SESSION_CHANGED_EVENT, handleSession);
-    window.removeEventListener(CALL_START_EVENT, handleCallStart);
-    window.removeEventListener(CALL_CONNECTED_EVENT, handleCallConnected);
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    window.removeEventListener(INTERRUPT_EVENT, handleInterrupt);
-    window.removeEventListener(STOP_EVENT, handleStop);
+    window.removeEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleCallConnected);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
     requestController?.abort('controller-disposed');
     requestController = null;
@@ -380,9 +369,7 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
     promptCount += 1;
     lastPromptAtMs = performance.now();
     lastActivityAtMs = lastPromptAtMs;
-    window.dispatchEvent(new CustomEvent(DELIVERED_EVENT, {
-      detail: { sessionId: turn.sessionId, turnId: turn.turnId, status },
-    }));
+    emitOmnixEvent(LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, { sessionId: turn.sessionId, turnId: turn.turnId, status });
     dispatchPerf('initiative_delivery_committed', { turn_id: turn.turnId, delivery_status: status });
   } catch (error) {
     dispatchPerf('initiative_delivery_commit_failed', {
@@ -505,7 +492,5 @@ function waitForOnset(delayMs: number, signal: AbortSignal): Promise<void> {
 }
 
 function dispatchPerf(stage: string, details: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...details },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...details });
 }

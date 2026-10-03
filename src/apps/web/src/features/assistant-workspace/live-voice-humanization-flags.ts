@@ -1,5 +1,5 @@
+import { emitOmnixEvent, LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT } from '../../events/bus';
 export const LIVE_VOICE_HUMANIZATION_FLAGS_KEY = 'omnix.liveVoice.humanizationFlags.v1';
-export const LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT = 'omnix:live-voice-humanization-flags-changed';
 
 export type LiveVoiceHumanizationFlags = {
   master: boolean;
@@ -46,10 +46,7 @@ export function writeLiveVoiceHumanizationFlags(
   const next = { ...readLiveVoiceHumanizationFlags(), ...booleanPatch(patch) };
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(LIVE_VOICE_HUMANIZATION_FLAGS_KEY, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent<LiveVoiceHumanizationFlags>(
-      LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT,
-      { detail: next },
-    ));
+    emitOmnixEvent(LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT, next);
   }
   return next;
 }
@@ -57,10 +54,7 @@ export function writeLiveVoiceHumanizationFlags(
 export function resetLiveVoiceHumanizationFlags(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(LIVE_VOICE_HUMANIZATION_FLAGS_KEY);
-  window.dispatchEvent(new CustomEvent<LiveVoiceHumanizationFlags>(
-    LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT,
-    { detail: { ...DEFAULT_LIVE_VOICE_HUMANIZATION_FLAGS } },
-  ));
+  emitOmnixEvent(LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT, { ...DEFAULT_LIVE_VOICE_HUMANIZATION_FLAGS });
 }
 
 function booleanPatch(

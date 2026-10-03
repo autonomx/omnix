@@ -33,7 +33,6 @@ export const TRADING_TIMEZONE_OPTIONS: readonly TradingTimezoneOption[] = [
 ] as const;
 
 const TIMEZONE_STORAGE_KEY = 'omnix.trading.chart.timezone';
-export const TRADING_TIMEZONE_CHANGE_EVENT = 'omnix.trading.chart.timezone-change';
 
 function validTimeZone(value: string | null | undefined): string {
   if (!value) return 'UTC';

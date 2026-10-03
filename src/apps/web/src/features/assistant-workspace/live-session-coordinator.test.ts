@@ -7,12 +7,9 @@ import {
   createObservationAnchor,
   type LiveObservation,
 } from './live-observation-coordinator';
-import {
-  LIVE_OBSERVATION_CANDIDATE_EVENT,
-  LIVE_VOICE_INTERRUPT_EVENT,
-  LiveSessionCoordinator,
-} from './live-session-coordinator';
+import { LiveSessionCoordinator } from './live-session-coordinator';
 import { inferLiveTaskContract } from './live-task-contract';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, type emitOmnixEvent, LIVE_OBSERVATION_CANDIDATE_EVENT, OmnixEvent, type OmnixEventMap } from '../../events/bus';
 
 function materialAck(sequence: number, contextVersion = sequence + 1) {
   return {
@@ -32,6 +29,13 @@ function materialAck(sequence: number, contextVersion = sequence + 1) {
       memory_write_eligibility: false as const,
       task_contract_mutation: false as const,
     },
+  };
+}
+
+/** An emit that records each event instead of dispatching it. */
+function recordEvents(events: Event[]): typeof emitOmnixEvent {
+  return (type, ...[detail]) => {
+    events.push(new OmnixEvent(type, (detail ?? null) as OmnixEventMap[typeof type]));
   };
 }
 
@@ -73,7 +77,7 @@ describe('LiveSessionCoordinator', () => {
       materialClient: { append, acknowledgeTaskContract: vi.fn() },
       chatGateway: { submit: vi.fn() },
       now: () => 100,
-      dispatchEvent: (event) => { events.push(event); return true; },
+      emit: recordEvents(events),
     });
 
     const result = await coordinator.coordinate({
@@ -106,14 +110,14 @@ describe('LiveSessionCoordinator', () => {
       materialClient: { append: vi.fn(), acknowledgeTaskContract: vi.fn() },
       chatGateway: { submit },
       now: () => 100,
-      dispatchEvent: (event) => { events.push(event); return true; },
+      emit: recordEvents(events),
     });
 
     await coordinator.coordinate({ text: 'Maya, stop.', segmentId: 's0', sourceSequence: 0, assistantSpeaking: true });
     await coordinator.coordinate({ text: 'Wait, why?', segmentId: 's1', sourceSequence: 1, assistantSpeaking: true });
     await coordinator.coordinate({ text: 'mhm', segmentId: 's2', sourceSequence: 2, assistantSpeaking: true });
 
-    expect(events.filter((event) => event.type === LIVE_VOICE_INTERRUPT_EVENT)).toHaveLength(2);
+    expect(events.filter((event) => event.type === ASSISTANT_VOICE_INTERRUPT_EVENT)).toHaveLength(2);
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
@@ -126,7 +130,7 @@ describe('LiveSessionCoordinator', () => {
       materialClient: { append: vi.fn(), acknowledgeTaskContract: vi.fn() },
       chatGateway: { submit: vi.fn() },
       now: () => 100,
-      dispatchEvent: (event) => { events.push(event); return true; },
+      emit: recordEvents(events),
     });
 
     const result = await coordinator.coordinate({

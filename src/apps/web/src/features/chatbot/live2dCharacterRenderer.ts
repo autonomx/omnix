@@ -4,6 +4,7 @@ import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterC
 import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
 import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
+import { CHARACTER_AVATAR_FRAME_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT, CHARACTER_LIVE2D_FRAMING_EVENT, CHARACTER_LIVE2D_MOTION_EVENT, CHARACTER_LIVE2D_RENDER_EVENT, CHARACTER_LIVE2D_ZOOM_EVENT, emitOmnixEvent } from '../../events/bus';
 
 export type Live2DViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
 
@@ -108,13 +109,7 @@ type Live2DWindow = Window & typeof globalThis & {
 };
 
 let rendererInstalled = false;
-const RENDER_EVENT = 'omnix:character-live2d-render';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
-const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
-const LIVE2D_MOTION_EVENT = 'omnix:character-live2d-motion';
-const LIVE2D_ZOOM_EVENT = 'omnix:character-live2d-zoom';
-const LIVE2D_FRAMING_EVENT = 'omnix:character-live2d-framing';
 const RUNTIME_SCRIPTS = [
   '/api/character-live2d/runtime/live2dcubismcore.min.js',
 ] as const;
@@ -214,7 +209,7 @@ export function loadLive2DMotionOptions(rigAssetId: string): Promise<Live2DMotio
 
 export function setLive2DMotion(selection: Live2DMotionSelection): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE2D_MOTION_EVENT, { detail: selection }));
+  emitOmnixEvent(CHARACTER_LIVE2D_MOTION_EVENT, selection);
 }
 
 export function live2dMouthShapeForViseme(viseme: Live2DViseme): Live2DMouthShape {
@@ -261,7 +256,7 @@ export function readLive2DZoom(): number {
 export function setLive2DZoom(value: number): void {
   currentZoom = clampLive2DZoom(value);
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE2D_ZOOM_EVENT, { detail: { zoom: currentZoom } }));
+  emitOmnixEvent(CHARACTER_LIVE2D_ZOOM_EVENT, { zoom: currentZoom });
 }
 
 export function readLive2DFraming(): Live2DFraming {
@@ -271,7 +266,7 @@ export function readLive2DFraming(): Live2DFraming {
 export function setLive2DFraming(value: Live2DFraming): void {
   currentFraming = value === 'head' ? 'head' : 'full';
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE2D_FRAMING_EVENT, { detail: { framing: currentFraming } }));
+  emitOmnixEvent(CHARACTER_LIVE2D_FRAMING_EVENT, { framing: currentFraming });
 }
 
 export function live2dModelUrl(rigAssetId: string): string {
@@ -286,7 +281,7 @@ export function installLive2DCharacterRenderer(): () => void {
   rendererInstalled = true;
   const store = new DisposableStore();
 
-  store.listen(window, RENDER_EVENT, (event) => {
+  store.listen(window, CHARACTER_LIVE2D_RENDER_EVENT, (event) => {
     const detail = (event as CustomEvent<Live2DRenderDetail>).detail;
     if (!detail?.host || detail.runtime.avatar_pack?.renderer !== 'live2d') return;
     void renderLive2D(detail.runtime, detail.host);
@@ -296,30 +291,30 @@ export function installLive2DCharacterRenderer(): () => void {
     if (!detail || detail.renderer !== 'live2d' || detail.rigAssetId !== activeRigAssetId) return;
     setViseme(detail.viseme, detail.durationMs);
   });
-  store.listen(window, AVATAR_FRAME_EVENT, (event) => {
+  store.listen(window, CHARACTER_AVATAR_FRAME_EVENT, (event) => {
     const detail = (event as CustomEvent<{ frame?: AvatarMouthFrame }>).detail;
     if (!detail?.frame || performance.now() < preciseVisemeUntil) return;
     currentMouthShape = live2dMouthShapeForAvatarFrame(detail.frame);
   });
-  store.listen(window, LIVE2D_MOTION_EVENT, (event) => {
+  store.listen(window, CHARACTER_LIVE2D_MOTION_EVENT, (event) => {
     const detail = (event as CustomEvent<Live2DMotionSelection>).detail;
     if (!detail?.rigAssetId || detail.rigAssetId !== activeRigAssetId) return;
     activeMotionSelection = detail;
     applyLive2DMotion(detail);
   });
-  store.listen(window, LIVE2D_ZOOM_EVENT, (event) => {
+  store.listen(window, CHARACTER_LIVE2D_ZOOM_EVENT, (event) => {
     const zoom = (event as CustomEvent<{ zoom?: number }>).detail?.zoom;
     if (typeof zoom !== 'number') return;
     currentZoom = clampLive2DZoom(zoom);
     fitActiveModel();
   });
-  store.listen(window, LIVE2D_FRAMING_EVENT, (event) => {
+  store.listen(window, CHARACTER_LIVE2D_FRAMING_EVENT, (event) => {
     const framing = (event as CustomEvent<{ framing?: Live2DFraming }>).detail?.framing;
     if (framing !== 'full' && framing !== 'head') return;
     currentFraming = framing;
     fitActiveModel();
   });
-  store.listen(window, AVATAR_RUNTIME_EVENT, (event) => {
+  store.listen(window, CHARACTER_AVATAR_RUNTIME_EVENT, (event) => {
     const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
     if (runtime?.avatar_pack?.renderer !== 'live2d' || !runtime.avatar_pack.rig_asset_id) {
       destroyActiveRenderer();

@@ -7,6 +7,7 @@ import {
 } from '../../api/client';
 import type { components } from '../../api/generated/types';
 import { downloadBlob } from '../../shared/download';
+import { emitOmnixEvent } from '../../events/bus';
 
 let researchProgressControllerInstalled = false;
 
@@ -445,7 +446,7 @@ export function researchJobOutput(job: JobRecord): JobOutput | null {
 function dispatchRefreshSignal(): void {
   window.dispatchEvent(new Event('focus'));
   document.dispatchEvent(new Event('visibilitychange'));
-  window.dispatchEvent(new CustomEvent('omnix:research-job-settled', { detail: { jobId: activeJob?.id } }));
+  emitOmnixEvent('omnix:research-job-settled', { jobId: activeJob?.id });
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {

@@ -1,9 +1,8 @@
 import type { DesktopCompanionExpression } from './desktop-companion-delivery';
-import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT } from './desktop-companion-delivery';
+import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_STATUS_EVENT } from '../../events/bus';
 
 let desktopCompanionExpressionEnricherInstalled = false;
 
-const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
 
 type AttentionStatus = {
   observationId?: string | null;

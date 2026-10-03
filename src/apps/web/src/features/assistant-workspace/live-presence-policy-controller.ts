@@ -4,11 +4,10 @@ import {
   type PresencePreset,
 } from './live-chat-evaluation-client';
 import { liveConversationStore } from './live-conversation-store';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../../events/bus';
 
 let livePresencePolicyInstalled = false;
 
-export const LIVE_PRESENCE_POLICY_REFRESH_EVENT = 'omnix:live-presence-policy-refresh';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 let policies: Partial<Record<PresencePreset, PresencePolicyVersion>> = {};
 let refreshGeneration = 0;
@@ -69,7 +68,5 @@ export function projectCurrentPresencePolicy(): PresencePolicyVersion | null {
 }
 
 function dispatchPerf(stage: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }

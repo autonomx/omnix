@@ -1,15 +1,10 @@
-import {
-  VOICE_CUE_ASSETS_CLEAR_EVENT,
-  VOICE_CUE_ASSETS_READY_EVENT,
-} from './live-voice-cue-asset-bridge';
 import type { LiveVoiceCueId } from './live-voice-cue-bank';
 import { ApiError } from '../../api/errors';
 import { api } from '../../api/http';
 import { fetchBytes } from '../../api/transport';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, emitOmnixEvent, VOICE_CUE_ASSETS_CLEAR_EVENT, VOICE_CUE_ASSETS_READY_EVENT, VOICE_CUE_PACK_STATUS_EVENT } from '../../events/bus';
 
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const PACK_STATUS_EVENT = 'omnix:voice-cue-pack-status';
 const MAX_ASSETS_PER_PACK = 32;
 const MAX_ASSET_BYTES = 2_000_000;
 const SUPPORTED_CUES = new Set<LiveVoiceCueId>(['mhm', 'hmm', 'inhale', 'amused_exhale']);
@@ -37,7 +32,7 @@ type CueManifest = {
   assets?: unknown;
 };
 
-type DecodedCueAsset = {
+export type DecodedCueAsset = {
   voiceId: string;
   cueId: LiveVoiceCueId;
   variantId: string;
@@ -64,12 +59,12 @@ export function initializeLiveVoiceCuePackLoader(): () => void {
   const handleStorage = (event: StorageEvent) => {
     if (event.key === VOICE_SETTINGS_KEY) preloadSelected();
   };
-  window.addEventListener(CALL_START_EVENT, preloadSelected);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, preloadSelected);
   window.addEventListener('storage', handleStorage);
   document.addEventListener('change', handleChange);
   preloadSelected();
   return () => {
-    window.removeEventListener(CALL_START_EVENT, preloadSelected);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, preloadSelected);
     window.removeEventListener('storage', handleStorage);
     document.removeEventListener('change', handleChange);
     initialized = false;
@@ -98,7 +93,7 @@ async function loadCuePack(voiceId: string): Promise<LiveVoiceCuePackLoadResult>
     const manifest = data as unknown as CueManifest;
     const assets = normalizeManifest(manifest, voiceId);
     if (!assets.length) {
-      window.dispatchEvent(new CustomEvent(VOICE_CUE_ASSETS_CLEAR_EVENT, { detail: { voiceId } }));
+      emitOmnixEvent(VOICE_CUE_ASSETS_CLEAR_EVENT, { voiceId });
       loadedFingerprints.delete(voiceId);
       return publish(result(voiceId, false, 0, 0, 'pack_unavailable'));
     }
@@ -121,7 +116,7 @@ async function loadCuePack(voiceId: string): Promise<LiveVoiceCuePackLoadResult>
       await context.close().catch(() => undefined);
     }
     if (!decoded.length) return publish(result(voiceId, false, 0, skipped, 'decode_failed'));
-    window.dispatchEvent(new CustomEvent(VOICE_CUE_ASSETS_READY_EVENT, { detail: { assets: decoded } }));
+    emitOmnixEvent(VOICE_CUE_ASSETS_READY_EVENT, { assets: decoded });
     loadedFingerprints.set(voiceId, fingerprint);
     return publish(result(voiceId, true, decoded.length, skipped, 'loaded'));
   } catch {
@@ -207,6 +202,6 @@ function result(
 }
 
 function publish(value: LiveVoiceCuePackLoadResult): LiveVoiceCuePackLoadResult {
-  window.dispatchEvent(new CustomEvent(PACK_STATUS_EVENT, { detail: value }));
+  emitOmnixEvent(VOICE_CUE_PACK_STATUS_EVENT, value);
   return value;
 }

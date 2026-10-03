@@ -5,6 +5,7 @@ import {
 } from '../assistant-workspace/live-voice-conversation-settings';
 import type { components } from '../../api/generated/types';
 import { api, unwrapAs } from '../../api/http';
+import { emitOmnixEvent, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../events/bus';
 
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ConversationStance = 'automatic' | 'listen' | 'discuss' | 'advise' | 'brainstorm' | 'teach';
@@ -26,7 +27,6 @@ export type LiveConversationProfileEnvelope = components['schemas']['LiveConvers
 
 export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
 
-export const LIVE_CONVERSATION_PROFILE_CHANGED_EVENT = 'omnix:live-conversation-profile-changed';
 export const LIVE_CONVERSATION_EFFECTIVE_PROFILE_KEY = 'omnix.liveConversation.effectiveProfile';
 const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
 const CANONICAL_LEGACY_KEY = 'omnix.liveConversation.settings';
@@ -61,9 +61,7 @@ export function mirrorProfileForLegacyRuntime(profile: LiveConversationProfile):
   } catch {
     // The in-memory event remains available when storage is blocked.
   }
-  window.dispatchEvent(new CustomEvent<LiveConversationProfile>(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, {
-    detail: profile,
-  }));
+  emitOmnixEvent(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, profile);
 }
 
 export function readEffectiveLiveConversationProfile(): LiveConversationProfile | null {

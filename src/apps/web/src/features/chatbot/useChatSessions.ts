@@ -10,6 +10,7 @@ import {
   type SessionListEntry,
 } from './chatbotWorkspaceModel';
 import { adoptActiveSession, applySessionResearchMode } from '../assistant-workspace';
+import { emitOmnixEvent } from '../../events/bus';
 
 type ChatSessionsOptions = {
   setActiveView: (view: AssistantView) => void;
@@ -75,12 +76,10 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
     const session = sessionQuery.data
       ?? sessionsQuery.data?.sessions.find((candidate) => candidate.id === selectedSessionId);
     adoptActiveSession(selectedSessionId);
-    window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', {
-      detail: {
+    emitOmnixEvent('omnix:chat-session-selected', {
         sessionId: selectedSessionId,
         session,
-      },
-    }));
+      });
   }, [selectedSessionId, sessionQuery.data, sessionsQuery.data]);
 
   useEffect(() => {
@@ -129,7 +128,7 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
   function selectSidebarSession(session: SessionListEntry): void {
     setSelectedSessionId(session.id);
     setActiveView('chats');
-    window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', { detail: { sessionId: session.id } }));
+    emitOmnixEvent('omnix:live-chat-session-changed', { sessionId: session.id });
   }
 
   return {

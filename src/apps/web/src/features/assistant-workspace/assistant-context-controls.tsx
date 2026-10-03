@@ -14,6 +14,7 @@ import {
   type ResearchMode,
 } from './assistant-context-store';
 import { shouldOfferResearchDowngrade } from './research-release-controller';
+import { emitOmnixEvent } from '../../events/bus';
 
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
@@ -202,7 +203,7 @@ async function dispatchChatAttachments(files: File[]): Promise<boolean> {
     }
     try {
       const images = await Promise.all(imageFiles.map(async (file) => ({ dataUrl: await readFileAsDataUrl(file), mimeType: file.type, size: file.size })));
-      for (const image of images) window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', { detail: image }));
+      for (const image of images) emitOmnixEvent('omnix:chat-image-selected', image);
       return true;
     } catch {
       return attachmentError('Unable to read one or more selected images.');
@@ -217,7 +218,7 @@ async function dispatchChatAttachments(files: File[]): Promise<boolean> {
   try {
     const text = await file.text();
     if (!text.trim() || text.length > MAX_CHAT_TEXT_FILE_BYTES) return attachmentError('The selected text file is empty or larger than 100 KB.');
-    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', { detail: { filename: file.name, mimeType, size: file.size, text } }));
+    emitOmnixEvent('omnix:chat-text-file-selected', { filename: file.name, mimeType, size: file.size, text });
     return true;
   } catch {
     return attachmentError('Unable to read the selected text file.');
@@ -232,7 +233,7 @@ function chatTextFileMimeType(file: File): string | null {
 }
 
 function attachmentError(message: string): false {
-  window.dispatchEvent(new CustomEvent('omnix:chat-image-error', { detail: { message } }));
+  emitOmnixEvent('omnix:chat-image-error', { message });
   return false;
 }
 

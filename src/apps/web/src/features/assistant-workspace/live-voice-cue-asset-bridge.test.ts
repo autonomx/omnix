@@ -5,12 +5,8 @@ import {
   hasVoiceCueSamples,
   resolveCueSamples,
 } from './live-voice-cue-bank';
-import {
-  initializeLiveVoiceCueAssetBridge,
-  VOICE_CUE_ASSETS_CLEAR_EVENT,
-  VOICE_CUE_ASSETS_READY_EVENT,
-  VOICE_CUE_ASSETS_REGISTERED_EVENT,
-} from './live-voice-cue-asset-bridge';
+import { initializeLiveVoiceCueAssetBridge } from './live-voice-cue-asset-bridge';
+import { VOICE_CUE_ASSETS_CLEAR_EVENT, VOICE_CUE_ASSETS_READY_EVENT, VOICE_CUE_ASSETS_REGISTERED_EVENT } from '../../events/bus';
 
 let cleanup: (() => void) | null = null;
 

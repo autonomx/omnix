@@ -1,10 +1,6 @@
 import type { LiveChatSubmissionInput } from './live-chat-submission-gateway';
 import { initializeLiveSpeculationController } from './live-speculation-controller';
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_FINAL_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
+import { LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
 let liveSpeculationRuntimeInstalled = false;
 

@@ -1,8 +1,8 @@
 import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let liveTtsAdaptiveBufferInstalled = false;
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v3';
 const MAX_TRACKED_ANCILLARY_SEGMENTS = 128;
 const MIN_START_BUFFER_MS = 120;
@@ -487,13 +487,11 @@ function dispatchPerformance(
   stage: string,
   detail: Record<string, unknown>,
 ): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: {
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, {
       stage,
       timestamp: new Date().toISOString(),
       ...detail,
-    },
-  }));
+    });
 }
 
 function clamp(

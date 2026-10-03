@@ -4,11 +4,11 @@ import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';
 import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
-import { LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from './live-stt-authority-controller';
 import { classifyOverlap } from './live-voice-overlap-classifier';
-import { controller, currentAssistantSpeechText, dispatchLiveSttSpeculationEvent, dispatchLiveVoicePerfEvent, renderTranscript, setPanelStatus } from './live-voice-controller-state';
+import { controller, currentAssistantSpeechText, dispatchLiveVoicePerfEvent, renderTranscript, setPanelStatus } from './live-voice-controller-state';
 import { replayFinalizationBuffer } from './live-voice-finalization';
 import { resetTurnState } from './live-voice-session-lifecycle';
+import { emitOmnixEvent, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT } from '../../events/bus';
 
 export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {
   const session = controller.activeSession;
@@ -24,7 +24,7 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
   const interruptionDispatched = session.interruptionDispatched;
   const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
   const continuation = session.finalizationBuffer.drain();
-  dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
+  emitOmnixEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
     chatSessionId: final.chatSessionId,
     segmentId: final.segmentId,
     sourceSequence: final.sourceSequence,
@@ -130,7 +130,7 @@ export async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoic
       return result;
     }
   } finally {
-    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, {
+    emitOmnixEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, {
       chatSessionId: final.chatSessionId,
       segmentId: final.segmentId,
       sourceSequence: final.sourceSequence,

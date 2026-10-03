@@ -10,12 +10,13 @@ import type { SpeechLocation } from './stt-url';
 import { pipelineFetch } from '../../api/fetchPipeline';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { createSttTelemetryHandlers, prepareLiveTaskContract, recordSttAuthoritySelection } from './live-voice-call-telemetry';
-import { LIVE_SESSION_SELECTION_TIMEOUT_MS, LIVE_VOICE_CALL_CONNECTED_EVENT, LIVE_VOICE_CALL_START_EVENT, LIVE_VOICE_STOP_EVENT, LiveVoiceAudioPipeline, LiveVoiceSession, LiveVoiceWindow, controller, createLiveVoiceSessionShell, dispatchLiveVoiceLifecycleEvent, dispatchLiveVoicePerfEvent, isCardStartingOrActive, setPanelStatus, showLiveVoiceError } from './live-voice-controller-state';
+import { LIVE_SESSION_SELECTION_TIMEOUT_MS, LiveVoiceAudioPipeline, LiveVoiceSession, LiveVoiceWindow, controller, createLiveVoiceSessionShell, dispatchLiveVoicePerfEvent, isCardStartingOrActive, setPanelStatus, showLiveVoiceError } from './live-voice-controller-state';
 import { handlePartialTranscript, handleProviderEndpointCandidate } from './live-voice-endpointing';
 import { handleAcceptedFinal } from './live-voice-final-routing';
 import { processAudioFrame } from './live-voice-finalization';
 import { handleAuthoritativePreview } from './live-voice-preview';
 import { cleanupSession, closePendingResources, handleExternalStop, stopLiveVoice } from './live-voice-session-lifecycle';
+import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 
@@ -45,12 +46,12 @@ export function isLiveVoiceControllerInstalled(): boolean {
 export function initializeLiveVoiceController(): () => void {
   if (controller.initialized || typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   controller.initialized = true;
-  window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleExternalStop);
   liveCallPresentationStore.update({ captureOwned: true });
   return () => {
     // Leaving Chat ends a running call, as the stop button would.
     handleExternalStop();
-    window.removeEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleExternalStop);
     liveCallPresentationStore.update({ captureOwned: false, captureStatus: 'idle', captureActive: false, hearing: false });
     controller.initialized = false;
   };
@@ -77,7 +78,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
   const token = ++controller.startToken;
   controller.pendingStart = { card, token };
   setPanelStatus(card, 'connecting');
-  dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_CALL_START_EVENT, {
+  emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, {
     token,
     timestamp: new Date().toISOString(),
   });
@@ -158,7 +159,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       return;
     }
     setPanelStatus(card, 'connected');
-    dispatchLiveVoiceLifecycleEvent(LIVE_VOICE_CALL_CONNECTED_EVENT, {
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, {
       token,
       timestamp: new Date().toISOString(),
     });

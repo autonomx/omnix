@@ -16,9 +16,8 @@ import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from
 import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
 import { useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
 import './LiveChatFullscreenShell.css';
+import { CHARACTER_AVATAR_RUNTIME_EVENT, CHARACTER_LIVE2D_RENDER_EVENT, emitOmnixEvent } from '../../events/bus';
 
-const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 
 /** A message of the conversation shown in immersive Live Chat. */
 export type LiveChatMessage = {
@@ -53,9 +52,9 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
     const handleRuntime = (event: Event) => {
       setCharacterRuntime((event as CustomEvent<CharacterLiveCallRuntime | null>).detail ?? null);
     };
-    window.addEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
+    window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
     setCharacterRuntime(readLatestTrustedCharacterRuntime());
-    return () => window.removeEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
+    return () => window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
   }, [fullscreen.immersive]);
 
   useEffect(() => {
@@ -236,9 +235,7 @@ function LiveCharacterStage({
 
   useEffect(() => {
     if (!isLive2D || !characterRuntime || !live2dHostRef.current) return;
-    window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, {
-      detail: { runtime: characterRuntime, host: live2dHostRef.current },
-    }));
+    emitOmnixEvent(CHARACTER_LIVE2D_RENDER_EVENT, { runtime: characterRuntime, host: live2dHostRef.current });
   }, [characterRuntime, isLive2D]);
 
   return (

@@ -1,11 +1,8 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
 import type { SpeechPerformancePlan } from './live-speech-performance-contract';
+import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_VOICE_PERFORMANCE_BEHAVIOR_EVENT } from '../../events/bus';
 
-const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const CALL_STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const BEHAVIOR_EVENT = 'omnix:live-voice-performance-behavior';
 const STATE_HALF_LIFE_MS = 45_000;
 const HABIT_COOLDOWN_OBSERVATIONS = 3;
 const MAX_STATE_SCOPES = 32;
@@ -129,8 +126,7 @@ export function humanizeSpeechPerformance(
   const result = planMeaningfulSpeechPerformance(text, plan, profile, previous, observedAt);
   storeScopedState(scopeKey, result.state);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(BEHAVIOR_EVENT, {
-      detail: {
+    emitOmnixEvent(LIVE_VOICE_PERFORMANCE_BEHAVIOR_EVENT, {
         scope_key: scopeKey,
         reflective: result.behavior.reflective,
         genuine_self_correction: result.behavior.genuineSelfCorrection,
@@ -144,8 +140,7 @@ export function humanizeSpeechPerformance(
         playfulness: result.state.playfulness,
         uncertainty: result.state.uncertainty,
         canonical_text_modified: false,
-      },
-    }));
+      });
   }
   return result;
 }
@@ -285,9 +280,9 @@ function selectVocalHabit(
 function installResetListeners(): void {
   if (resetListenersInstalled || typeof window === 'undefined') return;
   resetListenersInstalled = true;
-  window.addEventListener(CALL_START_EVENT, () => resetVocalInteractionState());
-  window.addEventListener(CALL_STOP_EVENT, () => resetVocalInteractionState());
-  window.addEventListener(SESSION_CHANGED_EVENT, () => resetVocalInteractionState());
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, () => resetVocalInteractionState());
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, () => resetVocalInteractionState());
+  window.addEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, () => resetVocalInteractionState());
 }
 
 function storeScopedState(scopeKey: string, state: VocalInteractionState): void {

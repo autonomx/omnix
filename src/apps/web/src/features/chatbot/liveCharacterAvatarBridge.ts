@@ -3,14 +3,11 @@ import { useSyncExternalStore } from 'react';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import { liveCallPresentationStore } from '../assistant-workspace';
 import './liveCharacterAvatarBridge.css';
+import { CHARACTER_AVATAR_FRAME_EVENT, CHARACTER_AVATAR_PCM_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT, emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT } from '../../events/bus';
 
 export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
 export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
-const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
-export const CHARACTER_AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
-const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 let bridgeInstalled = false;
 const AUDIO_ELEMENT_FRAME_MS = 50;
 const AUDIO_ELEMENT_FFT_SIZE = 1_024;
@@ -85,7 +82,7 @@ export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime 
   scheduleBlink();
   publishAvatarState();
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_RUNTIME_EVENT, { detail: runtime }));
+    emitOmnixEvent(CHARACTER_AVATAR_RUNTIME_EVENT, runtime);
   }
 }
 
@@ -264,15 +261,15 @@ export function installLiveCharacterAvatarBridge(): () => void {
       Number(detail.startDelayMs) || 0,
     );
   };
-  window.addEventListener(AVATAR_FRAME_EVENT, handleFrame);
+  window.addEventListener(CHARACTER_AVATAR_FRAME_EVENT, handleFrame);
   window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
-  window.addEventListener(AVATAR_PCM_EVENT, handlePcm);
+  window.addEventListener(CHARACTER_AVATAR_PCM_EVENT, handlePcm);
 
   const cleanups = [installAudioElementMonitor(), installAudioBufferSourceMonitor()];
   return () => {
-    window.removeEventListener(AVATAR_FRAME_EVENT, handleFrame);
+    window.removeEventListener(CHARACTER_AVATAR_FRAME_EVENT, handleFrame);
     window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
-    window.removeEventListener(AVATAR_PCM_EVENT, handlePcm);
+    window.removeEventListener(CHARACTER_AVATAR_PCM_EVENT, handlePcm);
     cleanups.reverse().forEach((cleanup) => cleanup());
     bridgeInstalled = false;
   };
@@ -438,7 +435,7 @@ function isAvatarMouthFrame(value: unknown): value is AvatarMouthFrame {
 }
 
 function dispatchAvatarFrame(frame: AvatarMouthFrame): void {
-  window.dispatchEvent(new CustomEvent(AVATAR_FRAME_EVENT, { detail: { frame } }));
+  emitOmnixEvent(CHARACTER_AVATAR_FRAME_EVENT, { frame });
 }
 
 function scheduleBlink(): void {

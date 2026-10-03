@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { prewarmLiveCall } from './live-call-prewarm-controller';
+import { ASSISTANT_VOICE_PERF_EVENT } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 describe('live call prewarm controller', () => {
   afterEach(() => {
@@ -17,7 +17,7 @@ describe('live call prewarm controller', () => {
       const detail = (event as CustomEvent<Record<string, unknown>>).detail;
       if (typeof detail?.stage === 'string') stages.push(detail.stage);
     };
-    window.addEventListener(PERF_EVENT, recordStage);
+    window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, recordStage);
 
     let prewarmCalls = 0;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
@@ -57,7 +57,7 @@ describe('live call prewarm controller', () => {
       expect(prewarmCalls).toBe(2);
       expect(stages).toContain('live_call_prewarm_completed');
     } finally {
-      window.removeEventListener(PERF_EVENT, recordStage);
+      window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, recordStage);
     }
   });
 });

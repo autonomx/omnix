@@ -3,6 +3,7 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 import ASSISTANT_PCM_STREAM_WORKLET_URL from './worklets/assistant-pcm-stream.worklet?worker&url';
 import { ASSISTANT_PCM_STREAM_WORKLET_NAME } from './worklets/names';
 import { parseJson, ttsControlEventSchema } from '../../api/schemas/streams';
+import { CHARACTER_AVATAR_PCM_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_START_BUFFER_SECONDS = 0.4;
@@ -11,7 +12,6 @@ const STREAMING_TTS_MAX_REBUFFER_SECONDS = 1.5;
 const STREAMING_TTS_TRANSITION_FADE_SECONDS = 0.008;
 const STREAMING_TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
 const STREAMING_TTS_CHUNK_SIZE = 8;
-const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 
 type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -366,13 +366,11 @@ function enqueuePcmBytes(playback: MessageStreamPlayback, buffer: ArrayBuffer, s
   const samples = new Int16Array(buffer.slice(0, evenByteLength));
   const floatSamples = pcm16ToFloat32(samples, playback.sampleRate, playback.audioContext.sampleRate);
   const convertedSamples = floatSamples.length;
-  window.dispatchEvent(new CustomEvent(AVATAR_PCM_EVENT, {
-    detail: {
+  emitOmnixEvent(CHARACTER_AVATAR_PCM_EVENT, {
       samples: samples.slice(),
       sampleRate: playback.sampleRate,
       startDelayMs,
-    },
-  }));
+    });
   playback.node.port.postMessage(
     { type: 'push', samples: floatSamples },
     [floatSamples.buffer],

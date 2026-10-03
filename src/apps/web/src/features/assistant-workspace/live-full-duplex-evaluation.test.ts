@@ -18,13 +18,9 @@ import {
   type LiveObservationPriority,
 } from './live-observation-coordinator';
 import { LiveOutputQueue } from './live-output-queue';
-import {
-  LIVE_OBSERVATION_CANDIDATE_EVENT,
-  LIVE_OBSERVATION_SUPERSEDED_EVENT,
-  LIVE_VOICE_INTERRUPT_EVENT,
-  LiveSessionCoordinator,
-} from './live-session-coordinator';
+import { LiveSessionCoordinator } from './live-session-coordinator';
 import { inferLiveTaskContract, type LiveTaskContract } from './live-task-contract';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, LIVE_OBSERVATION_CANDIDATE_EVENT, LIVE_OBSERVATION_SUPERSEDED_EVENT } from '../../events/bus';
 
 type ScenarioEvidence = {
   passed: boolean;
@@ -159,12 +155,8 @@ function createCoordinatorHarness(options: {
     materialClient: material,
     chatGateway: { submit: async (input) => { events.push({ type: 'live-chat-gateway-submit', detail: input }); } },
     now: () => now++,
-    dispatchEvent: (event) => {
-      events.push({
-        type: event.type,
-        detail: event instanceof CustomEvent ? event.detail : undefined,
-      });
-      return true;
+    emit: (type, ...[detail]) => {
+      events.push({ type, detail });
     },
   });
   return { store, material, coordinator, events };
@@ -251,7 +243,7 @@ describe('deterministic full-duplex Live acceptance', () => {
     countAction(directQuestion.coordination.action);
     expect(directQuestion.coordination.action).toBe('interrupt_and_respond');
     expect(harness.events.some((event) => event.type === 'live-chat-gateway-submit')).toBe(true);
-    expect(harness.events.some((event) => event.type === LIVE_VOICE_INTERRUPT_EVENT)).toBe(true);
+    expect(harness.events.some((event) => event.type === ASSISTANT_VOICE_INTERRUPT_EVENT)).toBe(true);
 
     const stop = await harness.coordinator.coordinate({
       text: 'Maya, stop.',

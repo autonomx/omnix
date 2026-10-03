@@ -3,18 +3,11 @@ import { liveConversationStore, type LiveConversationRuntimeState } from './live
 import { api, unwrap } from '../../api/http';
 import { openStream } from '../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
+import { ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, DESKTOP_COMPANION_DELIVERY_EVENT, DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_EXPRESSION_EVENT, DESKTOP_COMPANION_TEXT_EVENT, emitOmnixEvent } from '../../events/bus';
 
 let desktopCompanionDeliveryInstalled = false;
 
-export const DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT = 'omnix:desktop-companion-delivery-request';
-export const DESKTOP_COMPANION_DELIVERY_EVENT = 'omnix:desktop-companion-delivery';
-export const DESKTOP_COMPANION_TEXT_EVENT = 'omnix:desktop-companion-text';
-export const DESKTOP_COMPANION_EXPRESSION_EVENT = 'omnix:desktop-companion-expression';
 
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const DESKTOP_INITIATIVE_COOLDOWN_MS = 4_000;
 
 export type DesktopCompanionPresentation = 'text' | 'speech';
@@ -108,16 +101,16 @@ export function initializeDesktopCompanionDeliveryController(): () => void {
   const handleStop = () => cancelActive('live_voice_stopped', false, true);
 
   window.addEventListener(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, handleRequest);
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-  window.addEventListener(INTERRUPT_EVENT, handleInterrupt);
-  window.addEventListener(STOP_EVENT, handleStop);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
   const unsubscribe = liveConversationStore.subscribe(handleAuthoritativeStateChange);
 
   return () => {
     window.removeEventListener(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, handleRequest);
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    window.removeEventListener(INTERRUPT_EVENT, handleInterrupt);
-    window.removeEventListener(STOP_EVENT, handleStop);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, handleStop);
     unsubscribe();
     cancelActive('controller_disposed', false, true);
     desktopCompanionDeliveryInstalled = false;
@@ -244,16 +237,14 @@ async function startDesktopTurn(request: DesktopCompanionDeliveryRequest, initia
     dispatchExpression(turn, true);
     dispatchDelivery('generated', request, { turnId: turn.turnId, content: turn.content, presentation: turn.presentation });
     if (turn.presentation === 'text') {
-      window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_TEXT_EVENT, {
-        detail: {
+      emitOmnixEvent(DESKTOP_COMPANION_TEXT_EVENT, {
           sessionId: turn.sessionId,
           observationId: turn.observationId,
           turnId: turn.turnId,
           content: turn.content,
           priority: request.priority,
           expiresAtMs: request.expiresAtMs,
-        },
-      }));
+        });
       await commitPending('completed');
     } else {
       handleAuthoritativeStateChange();
@@ -397,16 +388,14 @@ function pendingRequest(turn: PendingDesktopTurn): DesktopCompanionDeliveryReque
 }
 
 function dispatchExpression(turn: PendingDesktopTurn, active: boolean): void {
-  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_EXPRESSION_EVENT, {
-    detail: {
+  emitOmnixEvent(DESKTOP_COMPANION_EXPRESSION_EVENT, {
       active,
       sessionId: turn.sessionId,
       observationId: turn.observationId,
       turnId: turn.turnId,
       expression: turn.expression,
       intensity: active ? turn.intensity : 0,
-    },
-  }));
+    });
 }
 
 function boundedIntensity(value: number): number {
@@ -434,13 +423,9 @@ function dispatchDelivery(
   request: DesktopCompanionDeliveryRequest,
   details: Record<string, unknown> = {},
 ): void {
-  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANION_DELIVERY_EVENT, {
-    detail: { status, sessionId: request.sessionId, observationId: request.observationId, ...details },
-  }));
+  emitOmnixEvent(DESKTOP_COMPANION_DELIVERY_EVENT, { status, sessionId: request.sessionId, observationId: request.observationId, ...details });
 }
 
 function dispatchPerf(stage: string, details: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...details },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...details });
 }

@@ -9,10 +9,9 @@ import {
   type PresencePreset,
   type VoiceSessionEvaluationRecord,
 } from '../assistant-workspace/live-chat-evaluation-client';
-import { LIVE_DURABLE_EVALUATION_SAVED_EVENT } from '../assistant-workspace/live-conversation-durable-evaluation-controller';
-import { LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../assistant-workspace/live-presence-policy-controller';
 import './VoiceSessionEvaluationPanel.css';
 import { downloadJson } from '../../shared/download';
+import { LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../../events/bus';
 
 const PRESETS: PresencePreset[] = ['quiet', 'natural', 'engaged', 'listener'];
 const MINIMUM_TUNING_EVIDENCE = 5;
@@ -50,8 +49,8 @@ export function VoiceSessionEvaluationPanel() {
   useEffect(() => {
     void refresh();
     const handleSaved = () => void refresh();
-    window.addEventListener(LIVE_DURABLE_EVALUATION_SAVED_EVENT, handleSaved);
-    return () => window.removeEventListener(LIVE_DURABLE_EVALUATION_SAVED_EVENT, handleSaved);
+    window.addEventListener(LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, handleSaved);
+    return () => window.removeEventListener(LIVE_CONVERSATION_DURABLE_EVALUATION_SAVED_EVENT, handleSaved);
   }, []);
 
   const selectedEvidence = useMemo(

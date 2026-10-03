@@ -1,8 +1,8 @@
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import type { components } from '../../api/generated/types';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const CLIENT_GENERATION_PREFIX = 'spec-client-';
 
 type SpeculationHandshake = {
@@ -408,9 +408,7 @@ function sse(payload: Record<string, unknown>): string {
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, { stage, timestamp: new Date().toISOString(), ...detail });
 }
 
 function now(): number {

@@ -2,9 +2,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
 import { DesktopCompanionControls } from './desktop-companion-controls';
-import { DESKTOP_COMPANION_TEXT_EVENT } from './desktop-companion-delivery';
 import { DesktopCompanionTextSurface } from './desktop-companion-text-surface';
-import { DESKTOP_COMPANION_STATUS_EVENT } from './desktop-companion-watch-controller';
+import { DESKTOP_COMPANION_STATUS_EVENT, DESKTOP_COMPANION_TEXT_EVENT } from '../../events/bus';
 
 afterEach(() => {
   cleanup();

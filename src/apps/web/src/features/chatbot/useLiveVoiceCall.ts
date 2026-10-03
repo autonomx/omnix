@@ -4,11 +4,12 @@ import type { UseFormGetValues, UseFormSetValue } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
 import { liveCallPresentationStore, liveVoiceTranscriptStore, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
-import { CALL_TIMER_TICK_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, LIVE_VOICE_STOP_EVENT, createPersonalityPrompt, dedicatedLiveVoiceControllerInstalled, liveVoiceSubmissionKey, type AssistantSettings, type ChatMessage, type ChatbotFormValues, type UtilityPanel } from './chatbotWorkspaceModel';
+import { CALL_TIMER_TICK_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, createPersonalityPrompt, dedicatedLiveVoiceControllerInstalled, liveVoiceSubmissionKey, type AssistantSettings, type ChatMessage, type ChatbotFormValues, type UtilityPanel } from './chatbotWorkspaceModel';
 import { useBrowserVoiceInput } from './useBrowserVoiceInput';
 import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { useStreamedVoiceTurns } from './useStreamedVoiceTurns';
+import { ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../events/bus';
 
 type LiveVoiceCallOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio' | 'stopAssistantResponseAudio' | 'currentLiveCallSpeechStyle'>
   & Pick<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef' | 'markVoiceTurnPerformance' | 'recordVoiceTurnDiagnostic'>
@@ -273,7 +274,7 @@ export function useLiveVoiceCall({
   }
 
   function dispatchLiveVoiceStop(): void {
-    window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
+    emitOmnixEvent(ASSISTANT_LIVE_VOICE_STOP_EVENT);
   }
 
   return {

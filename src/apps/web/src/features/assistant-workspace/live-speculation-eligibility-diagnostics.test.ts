@@ -4,14 +4,8 @@ import {
   classifySpeculationEligibility,
   initializeLiveSpeculationEligibilityDiagnostics,
 } from './live-speculation-eligibility-diagnostics';
-import {
-  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
-  LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
-  LIVE_STT_SPECULATION_FINAL_EVENT,
-  LIVE_STT_SPECULATION_PARTIAL_EVENT,
-} from './live-stt-authority-controller';
+import { ASSISTANT_VOICE_PERF_EVENT, LIVE_STT_SPECULATION_CANDIDATE_EVENT, LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, LIVE_STT_SPECULATION_FINAL_EVENT, LIVE_STT_SPECULATION_PARTIAL_EVENT } from '../../events/bus';
 
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 let cleanup: (() => void) | null = null;
 
 afterEach(() => {
@@ -45,7 +39,7 @@ describe('live speculation eligibility diagnostics', () => {
     const handlePerformance = (event: Event): void => {
       events.push((event as CustomEvent<Record<string, unknown>>).detail);
     };
-    window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+    window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     cleanup = initializeLiveSpeculationEligibilityDiagnostics();
 
     const detail = {
@@ -61,7 +55,7 @@ describe('live speculation eligibility diagnostics', () => {
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_FINAL_EVENT, { detail }));
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, { detail }));
 
-    window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     const candidate = events.find((event) => event.stage === 'llm_speculation_candidate_evaluated');
     const final = events.find((event) => event.stage === 'llm_speculation_final_eligibility');
     const notStarted = events.find((event) => event.stage === 'llm_speculation_not_started');
@@ -105,7 +99,7 @@ describe('live speculation eligibility diagnostics', () => {
     const handlePerformance = (event: Event): void => {
       events.push((event as CustomEvent<Record<string, unknown>>).detail);
     };
-    window.addEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+    window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     cleanup = initializeLiveSpeculationEligibilityDiagnostics();
 
     const detail = {
@@ -118,7 +112,7 @@ describe('live speculation eligibility diagnostics', () => {
     };
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, { detail }));
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, { detail }));
-    window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
+    window.dispatchEvent(new CustomEvent(ASSISTANT_VOICE_PERF_EVENT, {
       detail: {
         stage: 'llm_speculation_started',
         sessionId: detail.chatSessionId,
@@ -126,7 +120,7 @@ describe('live speculation eligibility diagnostics', () => {
         sourceSequence: detail.sourceSequence,
       },
     }));
-    window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
+    window.dispatchEvent(new CustomEvent(ASSISTANT_VOICE_PERF_EVENT, {
       detail: {
         stage: 'llm_speculation_cancelled',
         sessionId: detail.chatSessionId,
@@ -137,7 +131,7 @@ describe('live speculation eligibility diagnostics', () => {
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_FINAL_EVENT, { detail }));
     window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, { detail }));
 
-    window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerformance);
     const final = events.find((event) => event.stage === 'llm_speculation_final_eligibility');
     const notReused = events.find((event) => event.stage === 'llm_speculation_not_reused');
     const notStarted = events.find((event) => event.stage === 'llm_speculation_not_started');

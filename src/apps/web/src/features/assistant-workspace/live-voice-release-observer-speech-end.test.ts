@@ -14,10 +14,8 @@ vi.mock('./live-call-diagnostics-client', () => ({
 }));
 
 import { initializeLiveVoiceReleaseObserver, resetLiveVoiceReleaseObserver } from './live-voice-release-observer';
-import {
-  LIVE_VOICE_TURN_TIMELINE_EVENT,
-  type LiveVoiceTurnTimelineDetail,
-} from './live-voice-turn-coordinator';
+import { type LiveVoiceTurnTimelineDetail } from './live-voice-turn-coordinator';
+import { LIVE_VOICE_TURN_TIMELINE_EVENT } from '../../events/bus';
 
 function timeline(detail: LiveVoiceTurnTimelineDetail): void {
   window.dispatchEvent(new CustomEvent(LIVE_VOICE_TURN_TIMELINE_EVENT, { detail }));

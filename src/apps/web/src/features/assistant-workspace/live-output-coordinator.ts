@@ -7,17 +7,13 @@ import { liveConversationStore, type LiveConversationStore } from './live-conver
 import type { LiveObservation } from './live-observation-coordinator';
 import { LiveOutputQueue, type LiveOutputItem } from './live-output-queue';
 import {
-  LIVE_OBSERVATION_CANDIDATE_EVENT,
-  LIVE_OBSERVATION_SUPERSEDED_EVENT,
-  LIVE_VOICE_INTERRUPT_EVENT,
-} from './live-session-coordinator';
-import {
   createLiveVoicePcmSession,
   type LiveVoicePcmSession,
   type LiveVoicePcmSessionOptions,
 } from './live-voice-pcm-session';
 import { liveStreamFetch } from '../../api/transport';
 import type { components } from '../../api/generated/types';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_OBSERVATION_CANDIDATE_EVENT, LIVE_OBSERVATION_SUPERSEDED_EVENT } from '../../events/bus';
 
 
 const LIVE_OBSERVATION_GENERATION_PATH = (sessionId: string): string =>
@@ -190,14 +186,12 @@ export class LiveOutputCoordinator {
         generatedTextEnd: text.length,
         visualDeliveredTextEnd: text.length,
       });
-      window.dispatchEvent(new CustomEvent('omnix:live-observation-text', {
-        detail: {
+      emitOmnixEvent('omnix:live-observation-text', {
           observationId: observation.observationId,
           outputId: item.outputId,
           text,
           priority: observation.priority,
-        },
-      }));
+        });
       const session = await this.ensureSession(sessionId);
       if (!this.queue.acceptsFrame(item.outputId, item.generationEpoch)) return;
       await session.enqueueOutputPhrase(text, this.phraseIndex++, {
@@ -318,12 +312,12 @@ export function initializeLiveOutputCoordinator(): () => void {
   });
   window.addEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, handleObservation);
   window.addEventListener(LIVE_OBSERVATION_SUPERSEDED_EVENT, handleSuperseded);
-  window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
   window.addEventListener('beforeunload', handleUnload);
   return () => {
     window.removeEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, handleObservation);
     window.removeEventListener(LIVE_OBSERVATION_SUPERSEDED_EVENT, handleSuperseded);
-    window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, handleInterrupt);
     window.removeEventListener('beforeunload', handleUnload);
     unsubscribe();
     void liveOutputCoordinator.stop('runtime_disposed');

@@ -13,6 +13,7 @@ import {
 import { LIVE_VOICE_PCM_WORKLET_NAME, LIVE_VOICE_PCM_WORKLET_URL } from './live-voice-pcm-worklet';
 import { pcmControlEventSchema } from './live-voice-messages';
 import { parseJson } from '../../api/schemas/streams';
+import { CHARACTER_AVATAR_PCM_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const REQUESTED_SAMPLE_RATE = 24_000;
 const START_BUFFER_SECONDS = 0.4;
@@ -22,7 +23,6 @@ const TRANSITION_FADE_SECONDS = 0.008;
 const TTS_LIVE_CALL_WEBSOCKET_PATH = '/api/tts/live-call/websocket';
 const TTS_CHUNK_SIZE = 8;
 const DRAIN_TIMEOUT_MS = 120_000;
-const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const WEBSOCKET_OPEN = 1;
 
 export type LiveOutputOwnership = {
@@ -437,9 +437,7 @@ export async function createLiveVoicePcmSession(
     // listeners do enough main-thread work to delay this postMessage by an
     // entire audio runway, even though PCM has already reached the browser.
     node.port.postMessage(workletMessage, [converted.buffer]);
-    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
-      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
-    }));
+    emitOmnixEvent(CHARACTER_AVATAR_PCM_EVENT, { samples: sourcePcm, sampleRate: phrase.stats.sampleRate });
   };
 
   const controlMatchesPhrase = (message: PcmControlEvent, phrase: ActivePhrase): boolean => {

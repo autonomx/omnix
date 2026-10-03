@@ -1,6 +1,5 @@
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_VOICE_PERF_EVENT } from '../../events/bus';
 let liveVoiceEchoSuppressionInstalled = false;
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const DEFAULT_SUPPRESSION_MS = 800;
 
 type AcousticCandidateDetail = {
@@ -64,11 +63,11 @@ export function initializePlaybackEchoSuppression(): () => void {
     if (!speaking) clearPlaybackEchoSuppression();
   };
 
-  window.addEventListener(PERF_EVENT, handlePerf);
-  window.addEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handlePlaybackState);
   return () => {
-    window.removeEventListener(PERF_EVENT, handlePerf);
-    window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, handlePlaybackState);
     clearPlaybackEchoSuppression();
     liveVoiceEchoSuppressionInstalled = false;
   };

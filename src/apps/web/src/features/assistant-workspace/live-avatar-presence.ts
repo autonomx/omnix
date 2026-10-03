@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import {
-  DESKTOP_COMPANION_EXPRESSION_EVENT,
-  type DesktopCompanionExpression,
-} from './desktop-companion-delivery';
+import { type DesktopCompanionExpression } from './desktop-companion-delivery';
 import type { LiveConversationState } from './live-conversation-state';
 import { useLiveConversationState } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
+import { DESKTOP_COMPANION_EXPRESSION_EVENT } from '../../events/bus';
 
 export type AvatarPresenceCue = 'idle' | 'listening' | 'thinking' | 'speaking' | 'yielding' | 'restrained';
 

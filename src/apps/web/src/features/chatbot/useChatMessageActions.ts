@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { LIVE_VOICE_INTERRUPT_EVENT, copyTextToClipboard, type AssistantMessageFeedback, type ChatMessage } from './chatbotWorkspaceModel';
+import { copyTextToClipboard, type AssistantMessageFeedback, type ChatMessage } from './chatbotWorkspaceModel';
 import { toggleAssistantPcmStream } from '../assistant-workspace';
 import { useStableMessageActions } from './ChatMessageItem';
 import type { useResponseAudio } from './useResponseAudio';
+import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent } from '../../events/bus';
 
 type ChatMessageActionsOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio' | 'stopAssistantResponseAudio' | 'currentLiveCallVoiceId'> & {
   setAudioStatus: (status: string | null) => void;
@@ -55,9 +56,7 @@ export function useChatMessageActions({
   // Low-latency playback of one reply over the TTS WebSocket; pressing it again stops it.
   function streamAssistantResponseAudio(message: ChatMessage): void {
     if (streamingMessageId !== message.id) {
-      window.dispatchEvent(new CustomEvent(LIVE_VOICE_INTERRUPT_EVENT, {
-        detail: { source: 'manual-stream-button', intent: 'audio-preempt', confidence: 1 },
-      }));
+      emitOmnixEvent(ASSISTANT_VOICE_INTERRUPT_EVENT, { source: 'manual-stream-button', intent: 'audio-preempt', confidence: 1 });
       stopAssistantResponseAudio(undefined, { cancelPending: false });
     }
     void toggleAssistantPcmStream(message.id, message.content, currentLiveCallVoiceId() || null);

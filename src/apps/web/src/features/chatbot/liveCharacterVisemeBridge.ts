@@ -1,6 +1,7 @@
  
 import { DisposableStore } from '../../app/moduleRuntime';
 import { isActiveView } from '../../app/viewApiScope';
+import { CHARACTER_AVATAR_FRAME_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT } from '../../events/bus';
 
 export type CharacterViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
 
@@ -23,8 +24,6 @@ type RuntimeDetail = {
   avatar_pack?: RuntimeAvatarPack | null;
 };
 
-const RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const ENVELOPE_FRAME_EVENT = 'omnix:character-avatar-frame';
 let bridgeInstalled = false;
 const DEFAULT_VISEME_DURATION_MS = 90;
 const STRONG_PHASE_DURATION_MS = 85;
@@ -120,7 +119,7 @@ export function installLiveCharacterVisemeBridge(): () => void {
   if (bridgeInstalled) return () => undefined;
   bridgeInstalled = true;
   const store = new DisposableStore();
-  store.listen(window, RUNTIME_EVENT, (event) => {
+  store.listen(window, CHARACTER_AVATAR_RUNTIME_EVENT, (event) => {
     if (!isActiveView('chatbot')) {
       runtime = null;
       return;
@@ -128,7 +127,7 @@ export function installLiveCharacterVisemeBridge(): () => void {
     runtime = (event as CustomEvent<RuntimeDetail | null>).detail;
     preloadAvatarFrames(runtime?.avatar_pack ?? null);
   });
-  store.listen(window, ENVELOPE_FRAME_EVENT, (event) => {
+  store.listen(window, CHARACTER_AVATAR_FRAME_EVENT, (event) => {
     if (runtime?.avatar_pack?.render_mode === 'viseme') event.stopImmediatePropagation();
   }, { capture: true });
   return () => {

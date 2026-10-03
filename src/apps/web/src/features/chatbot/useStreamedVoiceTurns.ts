@@ -4,10 +4,11 @@ import type { UseFormSetValue } from 'react-hook-form';
 import { omnixApiClient, type ChatSession as ApiChatSession } from '../../api/client';
 import { openStream, statusError } from '../../api/transport';
 import { liveChatSubmissionGateway } from '../assistant-workspace';
-import { LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, createPersonalityPrompt, mergeTranscript, parseChatStreamEvent, shouldFlushStreamedSpeechBuffer, unifiedLiveVoiceAudioInstalled, type AssistantSettings, type ChatMessage, type ChatbotFormValues } from './chatbotWorkspaceModel';
+import { LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, createPersonalityPrompt, mergeTranscript, parseChatStreamEvent, shouldFlushStreamedSpeechBuffer, unifiedLiveVoiceAudioInstalled, type AssistantSettings, type ChatMessage, type ChatbotFormValues } from './chatbotWorkspaceModel';
 import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { sendChatWithAssistantContext } from '../assistant-workspace';
+import { LIVE_CALL_DIAGNOSTIC_EVENT } from '../../events/bus';
 
 type StreamedVoiceTurnsOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio'>
   & Pick<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef' | 'markVoiceTurnPerformance' | 'recordVoiceTurnDiagnostic'>

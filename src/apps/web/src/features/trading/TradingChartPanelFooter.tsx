@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { formatTradingTime, formatTradingTimezoneOffset, resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, TRADING_TIMEZONE_CHANGE_EVENT, writeTradingTimezoneId } from './tradingTime';
+import { formatTradingTime, formatTradingTimezoneOffset, resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, writeTradingTimezoneId } from './tradingTime';
 import { ranges } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
+import { emitOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 
 /** The footer: replay controls, visible ranges, timezone, offset and clock. */
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
@@ -99,7 +100,7 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
                       onClick={() => {
                         setTimezoneId(option.id);
                         writeTradingTimezoneId(option.id);
-                        window.dispatchEvent(new CustomEvent(TRADING_TIMEZONE_CHANGE_EVENT, { detail: option.id }));
+                        emitOmnixEvent(TRADING_CHART_TIMEZONE_CHANGE_EVENT, option.id);
                         setTimezoneMenuOpen(false);
                       }}
                     >

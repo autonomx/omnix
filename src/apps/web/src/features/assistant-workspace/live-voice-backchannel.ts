@@ -8,15 +8,8 @@ import { cueVariantId } from './live-voice-cue-bank';
 import { mapBackchannelTokenToCue } from './live-voice-cue-policy';
 import { readLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
 import { playLowLatencyVoiceCue, stopLowLatencyVoiceCue } from './live-voice-cue-player';
+import { ASSISTANT_AUDIO_DUCK_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_LISTENER_BACKCHANNEL_EVENT, LIVE_CONVERSATION_USER_CONTINUER_EVENT } from '../../events/bus';
 
-const PERF_EVENT = 'omnix:assistant-voice-perf';
-const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
-const USER_CONTINUER_EVENT = 'omnix:live-conversation-user-continuer';
-const LISTENER_BACKCHANNEL_EVENT = 'omnix:live-conversation-listener-backchannel';
-const DUCK_EVENT = 'omnix:assistant-audio-duck';
 const BASE_COOLDOWN_MS = 8_000;
 const BASE_SPEECH_MS = 3_500;
 const DEFAULT_FREQUENCY = 0.16;
@@ -97,9 +90,7 @@ export function initializeEphemeralBackchannels(): () => void {
   const handlePerf = (event: Event) => {
     const detail = (event as CustomEvent<{ stage?: unknown; intent?: unknown; transcript?: unknown }>).detail;
     if (detail?.stage !== 'overlap_classified' || detail.intent !== 'backchannel') return;
-    window.dispatchEvent(new CustomEvent(USER_CONTINUER_EVENT, {
-      detail: { transcript: resolveBackchannelTranscript(detail.transcript), action: 'continue' },
-    }));
+    emitOmnixEvent(LIVE_CONVERSATION_USER_CONTINUER_EVENT, { transcript: resolveBackchannelTranscript(detail.transcript), action: 'continue' });
   };
   const handleUserSpeech = () => {
     clearSpeechTimer();
@@ -141,18 +132,18 @@ export function initializeEphemeralBackchannels(): () => void {
     restoreOutput('cancelled');
   };
 
-  window.addEventListener(SESSION_CHANGED_EVENT, handleSession);
-  window.addEventListener(PERF_EVENT, handlePerf);
-  window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-  window.addEventListener(INTERRUPT_EVENT, cancel);
-  window.addEventListener(STOP_EVENT, cancel);
+  window.addEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+  window.addEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, cancel);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, cancel);
 
   return () => {
-    window.removeEventListener(SESSION_CHANGED_EVENT, handleSession);
-    window.removeEventListener(PERF_EVENT, handlePerf);
-    window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    window.removeEventListener(INTERRUPT_EVENT, cancel);
-    window.removeEventListener(STOP_EVENT, cancel);
+    window.removeEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
+    window.removeEventListener(ASSISTANT_VOICE_PERF_EVENT, handlePerf);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleUserSpeech);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, cancel);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, cancel);
     cancel();
     initialized = false;
   };
@@ -164,13 +155,11 @@ async function playCharacterBackchannel(sessionId: string, token: BackchannelTok
   naturalIndex += 1;
   const cueId = mapBackchannelTokenToCue(token);
   const variantId = cueVariantId(cueId, sequence);
-  window.dispatchEvent(new CustomEvent(DUCK_EVENT, { detail: { gain: 0.35, reason: 'listener-backchannel' } }));
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { gain: 0.35, reason: 'listener-backchannel' });
   try {
     const played = await playLowLatencyVoiceCue(cueId, variantId, 0.68);
     if (played) {
-      window.dispatchEvent(new CustomEvent(LISTENER_BACKCHANNEL_EVENT, {
-        detail: { sessionId, token, cueId, variantId, playedAt: Date.now() },
-      }));
+      emitOmnixEvent(LIVE_CONVERSATION_LISTENER_BACKCHANNEL_EVENT, { sessionId, token, cueId, variantId, playedAt: Date.now() });
     }
   } finally {
     if (restoreTimer) clearTimeout(restoreTimer);
@@ -191,7 +180,7 @@ function clearSpeechTimer(): void {
 function restoreOutput(reason: string): void {
   if (restoreTimer) clearTimeout(restoreTimer);
   restoreTimer = null;
-  window.dispatchEvent(new CustomEvent(DUCK_EVENT, { detail: { gain: 1, reason } }));
+  emitOmnixEvent(ASSISTANT_AUDIO_DUCK_EVENT, { gain: 1, reason });
 }
 
 function denied(reason: string): AssistantBackchannelDecision {

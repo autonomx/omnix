@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { createLiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
+import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../events/bus';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -13,7 +14,6 @@ type ChatResponseMetrics = {
 };
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 let removeMiddleware: (() => void) | null = null;
 
@@ -141,7 +141,7 @@ function dispatchSseTransportObservation(response: Response, turnId?: string): v
     contentType: response.headers.get('content-type'),
     responseCloned: false,
   };
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, { detail }));
+  emitOmnixEvent(ASSISTANT_VOICE_PERF_EVENT, detail);
   if (!turnId) return;
   const reporter = createLiveCallDiagnosticsReporter(`live-call:${turnId}`);
   reporter.record('chat_sse_transport_response_observed', {

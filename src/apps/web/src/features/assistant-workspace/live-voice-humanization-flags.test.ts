@@ -1,13 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DEFAULT_LIVE_VOICE_HUMANIZATION_FLAGS,
-  LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT,
-  LIVE_VOICE_HUMANIZATION_FLAGS_KEY,
-  readLiveVoiceHumanizationFlags,
-  resetLiveVoiceHumanizationFlags,
-  writeLiveVoiceHumanizationFlags,
-} from './live-voice-humanization-flags';
+import { DEFAULT_LIVE_VOICE_HUMANIZATION_FLAGS, LIVE_VOICE_HUMANIZATION_FLAGS_KEY, readLiveVoiceHumanizationFlags, resetLiveVoiceHumanizationFlags, writeLiveVoiceHumanizationFlags } from './live-voice-humanization-flags';
+import { LIVE_VOICE_HUMANIZATION_FLAGS_CHANGED_EVENT } from '../../events/bus';
 
 afterEach(() => {
   window.localStorage.clear();

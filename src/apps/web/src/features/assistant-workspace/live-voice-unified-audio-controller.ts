@@ -41,16 +41,11 @@ import {
 import { openStream, statusError } from '../../api/transport';
 import { chatStreamEventSchema, parseJson } from '../../api/schemas/streams';
 import { liveCallPresentationStore } from './live-call-presentation-store';
+import { ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent } from '../../events/bus';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_CALL_RUNTIME_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/runtime$/;
 const LIVE_CALL_GREETING_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/greeting\/stream$/;
-const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
-const LIVE_VOICE_CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
-const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
-const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const REQUESTED_PLAYBACK_SAMPLE_RATE = 24_000;
 const START_BUFFER_MS = 400;
@@ -66,7 +61,7 @@ type ChatStreamEvent = {
   };
 };
 
-type LiveTurnKind = 'greeting' | 'response';
+export type LiveTurnKind = 'greeting' | 'response';
 
 type ActiveLiveTurn = {
   generation: number;
@@ -137,11 +132,11 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   if (removeMiddleware) return () => undefined;
   removeMiddleware = registerFetchMiddleware(MIDDLEWARE, interceptLiveVoiceFetch);
-  window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
-  window.addEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
-  window.addEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
-  window.addEventListener(LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
-  window.addEventListener(LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
+  window.addEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
+  window.addEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
   window.addEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
   const installedReporter = createLiveCallDiagnosticsReporter('live-call:controller');
   installedReporter.record('controller_installed', {
@@ -154,11 +149,11 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   return () => {
     removeMiddleware?.();
     removeMiddleware = null;
-    window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
-    window.removeEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
-    window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
-    window.removeEventListener(LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
-    window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
+    window.removeEventListener(ASSISTANT_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, handleGreetingCallConnected);
+    window.removeEventListener(ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
     window.removeEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
     stopLiveVoiceUnifiedAudio();
   };
@@ -627,7 +622,7 @@ function recordDeliveryCheckpoint(
 }
 
 function stopLiveVoiceUnifiedAudio(event?: Event): void {
-  const reason = event?.type === LIVE_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
+  const reason = event?.type === ASSISTANT_VOICE_INTERRUPT_EVENT ? 'voice-interrupt' : 'live-call-stop';
   cancelGreetingStartup(reason);
   playbackGeneration += 1;
   void stopActiveTurn(reason).finally(() => {
@@ -807,9 +802,7 @@ function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
   liveCallPresentationStore.update({ speaking, outputKind: speaking && kind ? kind : null });
   if (reportedSpeaking !== speaking) {
     reportedSpeaking = speaking;
-    window.dispatchEvent(new CustomEvent(AUDIO_PLAYBACK_STATE_EVENT, {
-      detail: { speaking, source: 'unified-live-voice', kind: kind ?? null },
-    }));
+    emitOmnixEvent(ASSISTANT_AUDIO_PLAYBACK_STATE_EVENT, { speaking, source: 'unified-live-voice', kind: kind ?? null });
   }
 }
 

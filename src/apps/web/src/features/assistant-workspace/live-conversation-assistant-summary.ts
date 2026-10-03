@@ -2,8 +2,8 @@ import {
   noteAssistantTurnCompletionContext,
   resetAssistantTurnCompletionContext,
 } from './live-turn-context';
+import { emitOmnixEvent, LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT } from '../../events/bus';
 
-export const LIVE_ASSISTANT_TURN_SUMMARY_EVENT = 'omnix:live-conversation-assistant-summary';
 
 export type LiveAssistantTurnSummary = {
   turnId: string | null;
@@ -117,7 +117,7 @@ export function dispatchAssistantTurnSummary(summary: LiveAssistantTurnSummary):
     createsObligation: summary.createsObligation,
   });
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, { detail: summary }));
+  emitOmnixEvent(LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT, summary);
 }
 
 export function resetAssistantDiagnosticSummaries(): void {

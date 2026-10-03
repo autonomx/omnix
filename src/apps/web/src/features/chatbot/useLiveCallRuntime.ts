@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { characterClient, type CharacterLiveCallRuntime } from './characterClient';
-import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
 import type { ChatSessionSummary } from './useChatSessions';
+import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../events/bus';
 
 type LiveCallRuntimeOptions = {
   selectedSessionId: string | null;

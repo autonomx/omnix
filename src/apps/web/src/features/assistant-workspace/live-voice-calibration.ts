@@ -1,6 +1,6 @@
+import { emitOmnixEvent, LIVE_VOICE_CALIBRATION_UPDATED_EVENT } from '../../events/bus';
 export const LIVE_VOICE_CALIBRATION_VERSION = 'live-voice-calibration-v1';
 export const LIVE_VOICE_CALIBRATION_STORAGE_KEY = 'omnix.liveVoice.calibration.v1';
-export const LIVE_VOICE_CALIBRATION_UPDATED_EVENT = 'omnix:live-voice-calibration-updated';
 export const LIVE_VOICE_CALIBRATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 
 export type LiveVoiceCalibrationRecord = {
@@ -176,7 +176,7 @@ export function readLatestLiveVoiceCalibration(): LiveVoiceCalibrationRecord | n
 export function writeLiveVoiceCalibration(record: LiveVoiceCalibrationRecord): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(LIVE_VOICE_CALIBRATION_STORAGE_KEY, JSON.stringify(record));
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, { detail: record }));
+  emitOmnixEvent(LIVE_VOICE_CALIBRATION_UPDATED_EVENT, record);
 }
 
 export async function runBrowserLiveVoiceCalibration(

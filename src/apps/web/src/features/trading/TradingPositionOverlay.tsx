@@ -5,13 +5,9 @@ import { tradingPaperApi } from './tradingPaperApi';
 import { placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
-import {
-  PAPER_POSITION_PROTECTION_EVENT,
-  readPaperPositionProtection,
-  writePaperPositionProtection,
-  type PositionProtectionLevels,
-} from './paperPositionProtection';
+import { readPaperPositionProtection, writePaperPositionProtection, type PositionProtectionLevels } from './paperPositionProtection';
 import './TradingPositionOverlay.css';
+import { PAPER_POSITION_PROTECTION_CHANGED_EVENT } from '../../events/bus';
 
 type ProtectionLevel = 'takeProfit' | 'stopLoss';
 type DraftProtection = { level: ProtectionLevel; value: number | null; dragging: boolean };
@@ -123,11 +119,11 @@ export function TradingPositionOverlay({
         void refresh();
       }
     };
-    window.addEventListener(PAPER_POSITION_PROTECTION_EVENT, changed);
+    window.addEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
-      window.removeEventListener(PAPER_POSITION_PROTECTION_EVENT, changed);
+      window.removeEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     };
   }, [accountId, instrumentId, replayMode, replaySnapshot]);
 
