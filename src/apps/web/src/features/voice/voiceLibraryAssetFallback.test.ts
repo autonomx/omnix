@@ -3,6 +3,7 @@ import {
   installVoiceLibraryAssetFallback,
   resetVoiceLibraryAssetFallbackForTests,
 } from './voiceLibraryAssetFallback';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 afterEach(() => {
   resetVoiceLibraryAssetFallbackForTests();
@@ -34,7 +35,7 @@ describe('voiceLibraryAssetFallback', () => {
     });
 
     installVoiceLibraryAssetFallback(fetchImpl as typeof fetch);
-    const response = await window.fetch('/api/assets');
+    const response = await pipelineFetch('/api/assets');
     const body = await response.json() as { assets: Array<{ id: string; type: string }> };
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -76,7 +77,7 @@ describe('voiceLibraryAssetFallback', () => {
     });
 
     installVoiceLibraryAssetFallback(fetchImpl as typeof fetch);
-    const response = await window.fetch('/api/assets');
+    const response = await pipelineFetch('/api/assets');
     const body = await response.json() as {
       assets: Array<{ id: string; metadata?: { voice_clone_id?: string; canonical?: boolean } }>;
     };
@@ -103,7 +104,7 @@ describe('voiceLibraryAssetFallback', () => {
     });
 
     installVoiceLibraryAssetFallback(fetchImpl as typeof fetch);
-    const response = await window.fetch('/api/assets');
+    const response = await pipelineFetch('/api/assets');
     const body = await response.json() as { assets: Array<{ id: string }> };
 
     expect(response.status).toBe(200);

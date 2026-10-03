@@ -47,6 +47,7 @@ import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 import LIVE_VOICE_CAPTURE_WORKLET_URL from './worklets/live-voice-capture.worklet?worker&url';
 import { LIVE_VOICE_CAPTURE_WORKLET_NAME } from './worklets/names';
 import type { SpeechLocation } from './stt-url';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -348,7 +349,7 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     const sttAuthority = await resolveLiveVoiceSttSelection(
       runtimeConfig.sttServiceUrl,
       window.location,
-      window.fetch.bind(window),
+      pipelineFetch,
     );
     const selectedProvider = sttAuthority.authorityEnabled
       ? 'configured_authoritative'

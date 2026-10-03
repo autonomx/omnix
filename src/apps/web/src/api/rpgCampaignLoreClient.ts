@@ -1,4 +1,5 @@
 import type { RpgAuthoringEntityCard } from './rpgWorldAuthoringClient';
+import { pipelineFetch } from './fetchPipeline';
 
 export interface RpgCampaignLoreResponse {
   ok: boolean;
@@ -14,7 +15,7 @@ export interface RpgCampaignLoreResponse {
 }
 
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(path, {
+  const response = await pipelineFetch(path, {
     cache: 'no-store',
     headers: { Accept: 'application/json' },
   });

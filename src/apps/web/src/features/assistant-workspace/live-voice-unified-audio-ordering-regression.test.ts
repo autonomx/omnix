@@ -85,6 +85,7 @@ vi.mock('./live-voice-natural-timing', () => ({
 }));
 
 import { initializeLiveVoiceUnifiedAudioController } from './live-voice-unified-audio-controller';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 let cleanup: (() => void) | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -149,7 +150,7 @@ afterEach(async () => {
 
 describe('live voice phrase ordering regression', () => {
   it('does not enqueue a later phrase pause while the first phrase cue is still pending', async () => {
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'hello', live_voice_turn_id: 'voice-turn:ordering' }),

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ChatSession } from '../../api/client';
 import type { SessionInteraction } from './characterClient';
-import { preservedNewChatRequest } from './sessionTools';
+import { preservedNewChatRequest, visibleChatSessions } from './sessionTools';
 
 describe('preservedNewChatRequest', () => {
   it('carries the active character setup into a blank chat', () => {
@@ -64,5 +64,13 @@ describe('preservedNewChatRequest', () => {
       shared_memory_access: 'none',
       transcript_policy: 'persistent',
     });
+  });
+});
+
+describe('visibleChatSessions', () => {
+  it('leaves Podcast script sessions out of the chat list', () => {
+    const payload = { sessions: [{ id: 'a', title: 'Trip plan' }, { id: 'b', title: 'Podcast script: episode 1' }], next_cursor: null };
+
+    expect(visibleChatSessions(payload)).toEqual({ sessions: [{ id: 'a', title: 'Trip plan' }], next_cursor: null });
   });
 });

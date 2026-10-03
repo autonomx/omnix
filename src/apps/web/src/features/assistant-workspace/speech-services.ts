@@ -1,3 +1,4 @@
+import { pipelineFetch } from '../../api/fetchPipeline';
 export type SpeechServiceTransportRequest = {
   url: string;
   method: 'POST';
@@ -87,7 +88,7 @@ export function createTtsServiceClient(options: SpeechServiceClientOptions): Tts
   };
 }
 
-export function createFetchSpeechServiceTransport(fetchImpl: typeof fetch = fetch): SpeechServiceTransport {
+export function createFetchSpeechServiceTransport(fetchImpl: typeof fetch = pipelineFetch): SpeechServiceTransport {
   return async function fetchSpeechServiceTransport<TResponse>(request: SpeechServiceTransportRequest): Promise<TResponse> {
     const response = await fetchImpl(request.url, {
       method: request.method,

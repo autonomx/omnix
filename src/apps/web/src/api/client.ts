@@ -2,6 +2,7 @@ import type { components, paths } from './generated/types';
 import { ApiError, ApiTimeoutError } from './errors';
 import { createGatewayClient, requestTimeout, unwrap, type GatewayClient } from './http';
 import { withRpgGenesisContract } from './rpgGenesisPresentation';
+import { pipelineFetch } from './fetchPipeline';
 
 export { ApiError, ApiTimeoutError } from './errors';
 
@@ -247,7 +248,7 @@ export class OmnixApiClient {
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? '';
-    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => pipelineFetch(input, init));
     this.api = createGatewayClient({ baseUrl: options.baseUrl || undefined, fetchImpl: this.fetchImpl });
   }
 

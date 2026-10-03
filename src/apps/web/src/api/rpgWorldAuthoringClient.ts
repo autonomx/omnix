@@ -1,4 +1,5 @@
 import type { RpgWorldGenerationRun, RpgWorldSummary } from './rpgWorldLibraryClient';
+import { pipelineFetch } from './fetchPipeline';
 
 export type RpgAuthoringGroup = 'workspace' | 'world' | 'lore' | 'game-master';
 export type RpgAuthoringPageKind = 'document' | 'collection';
@@ -255,7 +256,7 @@ export interface RpgWorldDossierEnrichmentResponse {
 export type RpgAuthoringPage = RpgAuthoringDocumentPage | RpgAuthoringCollectionPage;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await pipelineFetch(path, init);
   const text = await response.text();
   if (!response.ok) {
     let detail = text;

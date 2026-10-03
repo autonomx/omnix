@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { omnixApiClient } from '../../api/client';
 import type { ChatSession, JobRecord } from '../../api/client';
 
 let helpers: typeof import('./researchProgressController');
@@ -297,5 +298,26 @@ describe('research progress restoration', () => {
     expect(panel.textContent).toContain('Research needs restarting');
     expect(panel.textContent).toContain('5-page limit');
     expect(panel.querySelector('[data-omnix-research-restart]')).not.toBeNull();
+  });
+});
+
+describe('chat workspace reports', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('follows a deep research job only while the controller is installed', async () => {
+    const getJob = vi.spyOn(omnixApiClient, 'getJob').mockResolvedValue(researchJob({ status: 'completed' }));
+    const session = { id: 'chat:research', messages: [] } as unknown as ChatSession;
+    const sent = { session, user_message: {}, job: researchJob() } as unknown as Parameters<typeof helpers.noteChatMessageSent>[1];
+
+    expect(helpers.noteChatMessageSent('chat:research', sent)).toBe(sent);
+    expect(getJob).not.toHaveBeenCalled();
+
+    const dispose = helpers.installResearchProgressController();
+    try {
+      helpers.noteChatMessageSent('chat:research', sent);
+      await vi.waitFor(() => expect(getJob).toHaveBeenCalledWith('job:research-one'));
+    } finally {
+      dispose();
+    }
   });
 });

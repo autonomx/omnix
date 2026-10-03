@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { activeFetchMiddlewares, resetFetchPipelineForTests } from '../../api/fetchPipeline';
+import { activeFetchMiddlewares, resetFetchPipelineForTests, pipelineFetch } from '../../api/fetchPipeline';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -62,7 +62,7 @@ describe('live chat submission gateway', () => {
     window.fetch = vi.fn(async () => new Response(body, { status: 200 })) as typeof window.fetch;
     let handlerCompleted = false;
     gateway.register(async () => {
-      const response = await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', {
+      const response = await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', {
         method: 'POST',
       });
       await response.text();
@@ -87,7 +87,7 @@ describe('live chat submission gateway', () => {
     }) as typeof window.fetch;
     gateway.register(async () => {
       try {
-        await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
+        await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
       } catch {
         // The workspace converts the transport error into status UI and returns.
       }
@@ -105,7 +105,7 @@ describe('live chat submission gateway', () => {
     const originalFetch = window.fetch;
     window.fetch = vi.fn(async () => new Response('busy', { status: 503 })) as typeof window.fetch;
     gateway.register(async () => {
-      await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
+      await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
     });
 
     try {
@@ -124,7 +124,7 @@ describe('live chat submission gateway', () => {
     });
     window.fetch = vi.fn(() => pendingFetch) as typeof window.fetch;
     gateway.register(async () => {
-      void window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
+      void pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
       throw new Error('Speculation accept failed with status 409.');
     });
 
@@ -147,7 +147,7 @@ describe('live chat submission gateway', () => {
     });
     window.fetch = vi.fn(() => pendingFetch) as typeof window.fetch;
     gateway.register(async () => {
-      await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
+      await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
     });
 
     try {
@@ -174,7 +174,7 @@ describe('live chat submission gateway', () => {
     gateway.registerFetchInterceptor(intercepted);
     let responseText = '';
     gateway.register(async () => {
-      responseText = await (await window.fetch(
+      responseText = await (await pipelineFetch(
         '/api/chat/sessions/chat%3Atest/messages/stream',
         { method: 'POST' },
       )).text();
@@ -189,7 +189,7 @@ describe('live chat submission gateway', () => {
       expect(fallback).not.toHaveBeenCalled();
       // The interceptor is gone once the handoff returns: later requests reach the base fetch.
       expect(activeFetchMiddlewares()).not.toContain('live-chat-submission');
-      await window.fetch('/api/chat/sessions');
+      await pipelineFetch('/api/chat/sessions');
       expect(fallback).toHaveBeenCalledOnce();
     } finally {
       resetFetchPipelineForTests();

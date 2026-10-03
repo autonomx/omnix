@@ -10,6 +10,7 @@ import {
   openLiveChat,
   sessionIdFromChatRequest,
 } from './live-chat-workspace';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 const defaultProfile = {
   presence_preset: 'natural', talkativeness: 50, conversation_stance: 'automatic',
@@ -76,7 +77,7 @@ describe('live chat workspace controller', () => {
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
     disposeWorkspace = initializeLiveChatWorkspace(queryClient);
 
-    await window.fetch('/api/chat/sessions/chat%3Aone/interaction');
+    await pipelineFetch('/api/chat/sessions/chat%3Aone/interaction');
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
       detail: { event: 'turn_finished', details: { turn_kind: 'response' } },
     }));
@@ -125,7 +126,7 @@ describe('live chat workspace controller', () => {
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     disposeWorkspace = initializeLiveChatWorkspace(queryClient);
-    await window.fetch('/api/chat/sessions/chat%3Aone/interaction');
+    await pipelineFetch('/api/chat/sessions/chat%3Aone/interaction');
     document.querySelector<HTMLButtonElement>('[data-omnix-live-chat-nav]')?.click();
 
     await waitFor(() => {

@@ -64,6 +64,7 @@ import {
   isLiveVoiceUnifiedAudioInstalled,
   shouldUseUnifiedLiveVoiceAudio,
 } from './live-voice-unified-audio-controller';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 let cleanup: (() => void) | null = null;
 let streamEvents: Array<Record<string, unknown>> | null = null;
@@ -168,7 +169,7 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ fetch_wrapped: true }),
       'controller',
     );
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'hello' }),
@@ -267,7 +268,7 @@ describe('live voice unified audio controller', () => {
       { type: 'done' },
     ];
 
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
@@ -296,7 +297,7 @@ describe('live voice unified audio controller', () => {
 
   it('generates one transient greeting only after runtime and microphone connection are ready', async () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
-    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    await pipelineFetch('/api/chat/sessions/s1/live-call/runtime');
     expect(fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toBe(false);
 
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
@@ -329,7 +330,7 @@ describe('live voice unified audio controller', () => {
 
   it('does not generate a greeting when the user speaks before startup is ready', async () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
-    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    await pipelineFetch('/api/chat/sessions/s1/live-call/runtime');
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
     await Promise.resolve();
@@ -344,7 +345,7 @@ describe('live voice unified audio controller', () => {
       resolveOutput = () => resolve(undefined);
     }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
-    await window.fetch('/api/chat/sessions/s1/live-call/runtime');
+    await pipelineFetch('/api/chat/sessions/s1/live-call/runtime');
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
@@ -370,7 +371,7 @@ describe('live voice unified audio controller', () => {
     const card = document.querySelector<HTMLElement>('.assistant-live-card');
     if (card) card.dataset.liveVoiceId = 'Maya';
 
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
@@ -388,7 +389,7 @@ describe('live voice unified audio controller', () => {
       states.push(event.detail.speaking);
     }) as EventListener);
 
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
     await waitFor(() => expect(states).toContain(true));
@@ -398,7 +399,7 @@ describe('live voice unified audio controller', () => {
   });
 
   it('reuses the speech turn id as the end-to-end diagnostics trace', async () => {
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', {
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'hello', live_voice_turn_id: 'voice-turn:12345' }),
@@ -424,7 +425,7 @@ describe('live voice unified audio controller', () => {
       { type: 'done' },
     ];
 
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
@@ -464,7 +465,7 @@ describe('live voice unified audio controller', () => {
     mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
       resolveOutput = () => resolve(undefined);
     }));
-    const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
+    const response = await pipelineFetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
     await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());
     const forwardedInit = fetchMock.mock.calls[0]?.[1] as RequestInit;

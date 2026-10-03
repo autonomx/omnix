@@ -10,6 +10,7 @@ import {
   initializeLiveSpeculationRuntime,
   liveSubmissionRequestMatches,
 } from './live-speculation-runtime';
+import { pipelineFetch, registerFetchMiddleware } from '../../api/fetchPipeline';
 
 const submission = {
   sessionId: 'chat:one',
@@ -39,7 +40,7 @@ describe('live speculation runtime routing', () => {
     )).toBe(false);
   });
 
-  it('keeps speculation inside a later live-audio fetch wrapper', async () => {
+  it('keeps speculation inside a later live-audio middleware', async () => {
     const priorFetch = window.fetch;
     const order: string[] = [];
     const applicationFetch = vi.fn(async () => {
@@ -49,16 +50,13 @@ describe('live speculation runtime routing', () => {
     window.fetch = applicationFetch as typeof window.fetch;
 
     const cleanup = initializeLiveSpeculationRuntime();
-    const speculationFetch = window.fetch.bind(window);
-    expect(window.fetch).not.toBe(applicationFetch);
-
-    window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const removeAudio = registerFetchMiddleware('test-live-audio', (input, init, next) => {
       order.push('audio');
-      return speculationFetch(input, init);
-    }) as typeof window.fetch;
+      return next(input, init);
+    });
 
     try {
-      const response = await window.fetch(
+      const response = await pipelineFetch(
         '/api/chat/sessions/chat%3Aone/messages/stream',
         {
           method: 'POST',
@@ -70,6 +68,7 @@ describe('live speculation runtime routing', () => {
       expect(order).toEqual(['audio', 'application']);
       expect(applicationFetch).toHaveBeenCalledOnce();
     } finally {
+      removeAudio();
       cleanup();
       window.fetch = priorFetch;
     }

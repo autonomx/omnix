@@ -1,3 +1,4 @@
+import { pipelineFetch } from './fetchPipeline';
 export interface RpgWorldBundleImportResponse {
   ok: boolean;
   status: string;
@@ -41,7 +42,7 @@ function filenameFromDisposition(value: string | null, fallback: string): string
 
 export const rpgWorldBundleClient = {
   async exportWorld(worldId: string): Promise<RpgWorldBundleDownload> {
-    const response = await fetch(`/api/rpg/worlds/${encodeURIComponent(worldId)}/export`);
+    const response = await pipelineFetch(`/api/rpg/worlds/${encodeURIComponent(worldId)}/export`);
     if (!response.ok) throw await errorFromResponse(response);
     return {
       blob: await response.blob(),
@@ -57,7 +58,7 @@ export const rpgWorldBundleClient = {
     if (targetWorldId?.trim()) query.set('target_world_id', targetWorldId.trim());
     const queryString = query.toString();
     const suffix = queryString ? `?${queryString}` : '';
-    const response = await fetch(`/api/rpg/worlds/import${suffix}`, {
+    const response = await pipelineFetch(`/api/rpg/worlds/import${suffix}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
       body: file,

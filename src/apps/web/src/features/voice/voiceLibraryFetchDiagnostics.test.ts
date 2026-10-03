@@ -3,6 +3,7 @@ import {
   installVoiceLibraryFetchDiagnostics,
   resetVoiceLibraryFetchDiagnosticsForTests,
 } from './voiceLibraryFetchDiagnostics';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 afterEach(() => {
   resetVoiceLibraryFetchDiagnosticsForTests();
@@ -28,7 +29,7 @@ describe('voiceLibraryFetchDiagnostics', () => {
     }));
 
     installVoiceLibraryFetchDiagnostics(fetchImpl as typeof fetch);
-    const response = await window.fetch('/api/assets');
+    const response = await pipelineFetch('/api/assets');
 
     expect(response.status).toBe(200);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -52,7 +53,7 @@ describe('voiceLibraryFetchDiagnostics', () => {
     const fetchImpl = vi.fn(async () => new Response('Internal Server Error', { status: 500 }));
 
     installVoiceLibraryFetchDiagnostics(fetchImpl as typeof fetch);
-    const response = await window.fetch('/api/assets');
+    const response = await pipelineFetch('/api/assets');
 
     expect(response.status).toBe(500);
     const failed = error.mock.calls.find(([message]) => message === '[Voice Library][HTTP] request failed');
@@ -68,7 +69,7 @@ describe('voiceLibraryFetchDiagnostics', () => {
     const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
 
     installVoiceLibraryFetchDiagnostics(fetchImpl as typeof fetch);
-    await window.fetch('/api/jobs');
+    await pipelineFetch('/api/jobs');
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(info).not.toHaveBeenCalled();

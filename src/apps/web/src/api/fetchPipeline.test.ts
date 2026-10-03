@@ -5,6 +5,7 @@ import {
   baseFetch,
   registerFetchMiddleware,
   resetFetchPipelineForTests,
+  pipelineFetch,
 } from './fetchPipeline';
 
 afterEach(() => {
@@ -29,7 +30,7 @@ describe('fetch pipeline', () => {
     registerFetchMiddleware('older', (input, init, next) => { calls.push('older'); return next(input, init); });
     registerFetchMiddleware('newer', (input, init, next) => { calls.push('newer'); return next(input, init); });
 
-    await window.fetch('/api/x');
+    await pipelineFetch('/api/x');
 
     expect(calls).toEqual(['newer', 'older', 'firewall', 'base /api/x']);
     expect(activeFetchMiddlewares()).toEqual(['newer', 'older', 'firewall']);
@@ -43,7 +44,7 @@ describe('fetch pipeline', () => {
 
     removeFirst();
     removeFirst();
-    await window.fetch('/api/x');
+    await pipelineFetch('/api/x');
 
     expect(calls).toEqual(['second', 'base /api/x']);
   });
@@ -53,30 +54,34 @@ describe('fetch pipeline', () => {
     recordingBase(calls);
     registerFetchMiddleware('rewrite', (_input, init, next) => next('/api/rewritten', init));
 
-    await window.fetch('/api/original');
+    await pipelineFetch('/api/original');
 
     expect(calls).toEqual(['base /api/rewritten']);
   });
 
-  it('runs on top of a fetch replaced after installation', async () => {
+  it('ends at the current fetch, even one replaced after middleware was registered', async () => {
     const first: string[] = [];
     recordingBase(first);
     registerFetchMiddleware('a', (input, init, next) => next(input, init));
     const second: string[] = [];
     recordingBase(second);
-    registerFetchMiddleware('b', (input, init, next) => next(input, init));
 
-    await window.fetch('/api/x');
+    await pipelineFetch('/api/x');
     await baseFetch('/api/direct');
 
     expect(first).toEqual([]);
     expect(second).toEqual(['base /api/x', 'base /api/direct']);
   });
 
-  it('puts the base fetch back on reset', () => {
-    const base = recordingBase([]);
-    registerFetchMiddleware('a', (input, init, next) => next(input, init));
-    expect(window.fetch).not.toBe(base);
+  it('leaves window.fetch to the browser', async () => {
+    const calls: string[] = [];
+    const base = recordingBase(calls);
+    registerFetchMiddleware('a', (input, init, next) => { calls.push('a'); return next(input, init); });
+
+    expect(window.fetch).toBe(base);
+    await window.fetch('/assets/model.json');
+
+    expect(calls).toEqual(['base /assets/model.json']);
     resetFetchPipelineForTests();
     expect(activeFetchMiddlewares()).toEqual([]);
   });

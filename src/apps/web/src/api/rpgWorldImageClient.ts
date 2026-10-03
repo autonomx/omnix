@@ -1,4 +1,5 @@
 import type { RpgWorldSummary } from './rpgWorldLibraryClient';
+import { pipelineFetch } from './fetchPipeline';
 
 export interface RpgWorldImageAttempt {
   job_id: string;
@@ -36,7 +37,7 @@ interface RpgWorldImageTargetsResponse {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await pipelineFetch(path, init);
   const text = await response.text();
   if (!response.ok) {
     let detail = text;

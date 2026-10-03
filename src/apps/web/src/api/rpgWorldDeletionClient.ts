@@ -1,3 +1,4 @@
+import { pipelineFetch } from './fetchPipeline';
 export interface RpgWorldDeletionBlocker {
   code: string;
   count: number;
@@ -28,7 +29,7 @@ export interface RpgWorldDeletionResponse {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await pipelineFetch(path, init);
   const text = await response.text();
   if (!response.ok) {
     let detail = text;

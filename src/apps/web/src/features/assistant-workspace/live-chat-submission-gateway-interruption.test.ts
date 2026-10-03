@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { LiveChatSubmissionGateway } from './live-chat-submission-gateway';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 const firstInput = {
   sessionId: 'chat:test',
@@ -39,7 +40,7 @@ describe('live chat submission interruption handoff', () => {
     gateway.register(async (submission) => {
       if (submission.sourceSequence === 1) {
         try {
-          const response = await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', {
+          const response = await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', {
             method: 'POST',
           });
           await response.text();
@@ -51,7 +52,7 @@ describe('live chat submission interruption handoff', () => {
 
       replacementStarted = true;
       expect(priorSettled).toBe(true);
-      const response = await window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', {
+      const response = await pipelineFetch('/api/chat/sessions/chat%3Atest/messages/stream', {
         method: 'POST',
       });
       await response.text();

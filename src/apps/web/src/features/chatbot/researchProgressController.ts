@@ -4,7 +4,6 @@ import {
   omnixApiClient,
   type ChatSession,
   type JobRecord,
-  type SendChatMessageRequest,
   type SendChatMessageResponse,
 } from '../../api/client';
 import { renderAssistantMessageHtml } from './markdownRenderer';
@@ -22,25 +21,18 @@ const ACTIVE_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retr
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
 type ChatMessage = components['schemas']['ChatMessage'];
-type ClientPatch = {
-  getChatSession: (sessionId: string) => Promise<ChatSession>;
-  sendChatMessage: (sessionId: string, request: SendChatMessageRequest) => Promise<SendChatMessageResponse>;
-};
-
 let activeSession: ChatSession | null = null;
 let activeJob: JobRecord | null = null;
 let pollTimer: number | null = null;
 let pollingJobId: string | null = null;
 let currentSessionId: string | null = null;
 let recoveringSessionId: string | null = null;
-let originalGetChatSession: ClientPatch['getChatSession'] | null = null;
 const dismissedJobIds = new Set<string>();
 
 export function installResearchProgressController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   if (researchProgressControllerInstalled) return () => undefined;
   researchProgressControllerInstalled = true;
-  const restoreClient = patchApiClient();
   const mount = () => renderResearchUi();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
   else mount();
@@ -55,42 +47,27 @@ export function installResearchProgressController(): () => void {
     document.removeEventListener('click', handleResearchReportAction);
     window.removeEventListener('beforeunload', handleUnload);
     stopPolling();
-    restoreClient();
     researchProgressControllerInstalled = false;
   };
 }
 
-function patchApiClient(): () => void {
-  const client = omnixApiClient as unknown as ClientPatch;
-  const unpatchedGet = client.getChatSession;
-  const unpatchedSend = client.sendChatMessage;
-  originalGetChatSession = client.getChatSession.bind(omnixApiClient);
-  const originalSendChatMessage = client.sendChatMessage.bind(omnixApiClient);
+/** The chat workspace reports each session it loads, so research progress follows it. */
+export function noteChatSession(session: ChatSession): ChatSession {
+  if (researchProgressControllerInstalled) captureSession(session);
+  return session;
+}
 
-  const patchedGet = async (sessionId: string) => {
-    const session = await originalGetChatSession?.(sessionId);
-    if (!session) throw new Error('Chat session could not be loaded.');
-    captureSession(session);
-    return session;
-  };
-
-  const patchedSend = async (sessionId: string, request: SendChatMessageRequest) => {
-    const result = await originalSendChatMessage(sessionId, request);
-    captureSession(result.session);
-    if (result.job?.type === RESEARCH_JOB_TYPE) {
-      activeJob = result.job;
-      currentSessionId = sessionId;
-      renderResearchUi();
-      startPolling(result.job.id);
-    }
-    return result;
-  };
-  client.getChatSession = patchedGet;
-  client.sendChatMessage = patchedSend;
-  return () => {
-    if (client.getChatSession === patchedGet) client.getChatSession = unpatchedGet;
-    if (client.sendChatMessage === patchedSend) client.sendChatMessage = unpatchedSend;
-  };
+/** The chat workspace reports each message it sends; a deep research job is followed until it ends. */
+export function noteChatMessageSent(sessionId: string, result: SendChatMessageResponse): SendChatMessageResponse {
+  if (!researchProgressControllerInstalled) return result;
+  captureSession(result.session);
+  if (result.job?.type === RESEARCH_JOB_TYPE) {
+    activeJob = result.job;
+    currentSessionId = sessionId;
+    renderResearchUi();
+    startPolling(result.job.id);
+  }
+  return result;
 }
 
 function captureSession(session: ChatSession): void {
@@ -172,8 +149,8 @@ async function pollResearchJob(jobId: string): Promise<void> {
     if (!TERMINAL_STATUSES.has(String(job.status))) return;
     if (currentSessionId && await recoverLatestResearchJob(currentSessionId, job.id)) return;
     stopPolling();
-    if (currentSessionId && originalGetChatSession) {
-      const refreshed = await originalGetChatSession(currentSessionId);
+    if (currentSessionId) {
+      const refreshed = await omnixApiClient.getChatSession(currentSessionId);
       activeSession = refreshed;
       enhanceResearchMessages(refreshed);
       injectCompletedResearchMessage(refreshed, job.id);

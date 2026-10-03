@@ -1,5 +1,6 @@
 import createClient, { type Client } from 'openapi-fetch';
 import { ApiError, ApiTimeoutError } from './errors';
+import { pipelineFetch } from './fetchPipeline';
 import type { paths } from './generated/types';
 
 /**
@@ -51,8 +52,7 @@ function gatewayFetch(fetchImpl: () => typeof fetch) {
 }
 
 export function createGatewayClient(options: { baseUrl?: string; fetchImpl?: typeof fetch } = {}): GatewayClient {
-  // Resolve fetch per call: the fetch pipeline may be installed after this module loads.
-  const fetchImpl = () => options.fetchImpl ?? globalThis.fetch;
+  const fetchImpl = () => options.fetchImpl ?? pipelineFetch;
   return createClient<paths>({
     baseUrl: options.baseUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost'),
     fetch: gatewayFetch(fetchImpl),

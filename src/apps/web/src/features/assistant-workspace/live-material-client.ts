@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/types';
+import { pipelineFetch } from '../../api/fetchPipeline';
 export type LiveMaterialResponsePolicy = 'none' | 'observe' | 'respond';
 export type LiveMaterialRetention = 'ephemeral_session' | 'visible_transcript' | 'durable_conversation';
 
@@ -14,7 +15,7 @@ export type LiveMaterialSnapshot = components['schemas']['LiveMaterialSnapshot']
 
 export class LiveMaterialClient {
   constructor(
-    private readonly fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+    private readonly fetchImpl: typeof fetch = pipelineFetch,
     private readonly basePath = '/api/chat/sessions',
   ) {}
 

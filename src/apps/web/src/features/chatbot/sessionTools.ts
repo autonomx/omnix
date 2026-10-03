@@ -36,26 +36,13 @@ type SessionSelectionEventDetail = {
 let selectedSessionId: string | null = null;
 let selectedSessionSnapshot: SessionSelectionSnapshot | null = null;
 
-type ClientPatch = {
-  listChatSessions: typeof omnixApiClient.listChatSessions;
-};
-
 function shouldShowSession(session: { title?: string | null }): boolean {
   return !String(session.title ?? '').trim().startsWith('Podcast script:');
 }
 
-function patchSessionList(): () => void {
-  const client = omnixApiClient as unknown as ClientPatch;
-  const unpatched = client.listChatSessions;
-  const original = client.listChatSessions.bind(omnixApiClient);
-  const patched = async () => {
-    const payload = await original();
-    return { ...payload, sessions: payload.sessions.filter(shouldShowSession) };
-  };
-  client.listChatSessions = patched;
-  return () => {
-    if (client.listChatSessions === patched) client.listChatSessions = unpatched;
-  };
+/** The chat list leaves out the sessions Podcast creates for its scripts. */
+export function visibleChatSessions<T extends { sessions: Array<{ title?: string | null }> }>(payload: T): T {
+  return { ...payload, sessions: payload.sessions.filter(shouldShowSession) };
 }
 
 export function preservedNewChatRequest(
@@ -176,10 +163,8 @@ export function installSessionTools(): () => void {
       : selectedSessionSnapshot?.id === nextSessionId ? selectedSessionSnapshot : null;
   };
   window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
-  const restoreSessionList = patchSessionList();
   return () => {
     window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
-    restoreSessionList();
     chatSessionToolsInstalled = false;
   };
 }

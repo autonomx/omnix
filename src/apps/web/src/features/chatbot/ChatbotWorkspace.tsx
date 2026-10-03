@@ -57,6 +57,8 @@ import { isLiveVoiceControllerInstalled } from '../assistant-workspace/live-voic
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 import type { components } from '../../api/generated/types';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
+import { noteChatMessageSent, noteChatSession } from './researchProgressController';
+import { visibleChatSessions } from './sessionTools';
 
 interface ChatbotFormValues {
   content: string;
@@ -336,7 +338,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     eventStore.list(createWorkspaceEventFilter(runtimeConfig)),
   );
   const providerQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
-  const sessionsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'sessions'], queryFn: () => omnixApiClient.listChatSessions() });
+  const sessionsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'sessions'], queryFn: async () => visibleChatSessions(await omnixApiClient.listChatSessions()) });
   const selectedSessionSummary = sessionsQuery.data?.sessions.find((session) => session.id === selectedSessionId);
   const assetsQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'voice-library'],
@@ -356,7 +358,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   });
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
-    queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
+    queryFn: async () => noteChatSession(await omnixApiClient.getChatSession(selectedSessionId ?? '')),
     enabled: Boolean(selectedSessionId),
   });
   const chatJobQuery = useQuery({
@@ -647,7 +649,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         sessionId = created.id;
         setSelectedSessionId(sessionId);
       }
-      return omnixApiClient.sendChatMessage(sessionId, {
+      return noteChatMessageSent(sessionId, await omnixApiClient.sendChatMessage(sessionId, {
         content,
         user_turn_id: values.userTurnId,
         provider_id: providerId,
@@ -657,7 +659,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         text_attachment: pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
           : undefined,
-      });
+      }));
     },
     onMutate: (values) => {
       markVoiceTurnPerformance('chatSubmitStartedAt');

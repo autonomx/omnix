@@ -9,6 +9,7 @@ import {
   renderChatResponseMetrics,
   resetChatResponseMetricsForTests,
 } from './chat-response-metrics-controller';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 afterEach(() => {
   resetChatResponseMetricsForTests();
@@ -124,7 +125,7 @@ describe('chat response metrics', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
     initializeChatResponseMetricsController();
 
-    const response = await window.fetch('/api/chat/sessions/session-1/messages/stream', {
+    const response = await pipelineFetch('/api/chat/sessions/session-1/messages/stream', {
       method: 'POST',
       body: JSON.stringify({ live_voice_turn_id: 'voice-turn:test' }),
     });

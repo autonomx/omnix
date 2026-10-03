@@ -1,3 +1,4 @@
+import { pipelineFetch } from './fetchPipeline';
 export interface RpgWorldGenerationReviewIssue {
   code: string;
   topic_id: string;
@@ -181,7 +182,7 @@ interface ReviewListResponse {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await pipelineFetch(path, init);
   const body = await response.text();
   if (!response.ok) {
     let message = body;

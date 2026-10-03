@@ -86,7 +86,8 @@ describe('assistant context live-chat critical path', () => {
     expect(document.querySelector('[data-omnix-context-tool-agent]')).toHaveAttribute('aria-checked', 'true');
     expect(document.querySelector('.assistant-context-tool-summary')).toHaveTextContent('Agent mode');
 
-    await window.fetch('/api/chat/sessions/s1/messages/stream', {
+    const { pipelineFetch } = await import('../../api/fetchPipeline');
+    await pipelineFetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'fix the layout' }),
@@ -142,7 +143,8 @@ describe('assistant context live-chat critical path', () => {
     module.initializeAssistantContextController(document);
     await Promise.resolve();
 
-    const responsePromise = window.fetch('/api/chat/sessions/s1/messages/stream', {
+    const { pipelineFetch } = await import('../../api/fetchPipeline');
+    const responsePromise = pipelineFetch('/api/chat/sessions/s1/messages/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content: 'hello' }),

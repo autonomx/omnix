@@ -1,3 +1,4 @@
+import { pipelineFetch } from './fetchPipeline';
 export interface RpgWorldSummary {
   id: string;
   title: string;
@@ -195,7 +196,7 @@ export class RpgWorldGenerationRequestError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await pipelineFetch(path, init);
   const text = await response.text();
   if (!response.ok) {
     let detail: unknown = text;

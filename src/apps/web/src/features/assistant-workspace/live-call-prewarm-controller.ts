@@ -1,6 +1,7 @@
 import type { components } from '../../api/generated/types';
 import { createGatewayClient, type GatewayClient } from '../../api/http';
 import { liveConversationStore } from './live-conversation-store';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 let liveCallPrewarmInstalled = false;
 
@@ -41,7 +42,7 @@ export function initializeLiveCallPrewarmController(): () => void {
 
 export async function prewarmLiveCall(
   sessionId: string,
-  fetchImpl: typeof fetch = window.fetch.bind(window),
+  fetchImpl: typeof fetch = pipelineFetch,
 ): Promise<void> {
   const existing = inflight.get(sessionId);
   if (existing) return existing;
