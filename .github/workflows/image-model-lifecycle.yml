@@ -14,8 +14,8 @@ on:
       - "src/app/platform/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -42,8 +42,8 @@ on:
       - "src/app/platform/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -107,7 +107,7 @@ jobs:
               "types": ["vite/client"]
             },
             "include": [
-              "src/features/chatbot/characterAvatarClient.ts",
+              "src/features/assistant/chat/characterAvatarClient.ts",
               "src/features/image-generation/**/*.ts",
               "src/features/image-generation/**/*.tsx"
             ],
@@ -124,7 +124,7 @@ jobs:
       - name: Run image generation and avatar-routing unit tests
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/chatbot/characterAvatarClient.test.ts
+          src/features/assistant/chat/characterAvatarClient.test.ts
           src/features/image-generation/ImageModelControl.test.tsx
           src/features/image-generation/ImageModelSelection.test.tsx
           src/features/image-generation/ImageGenerationWorkspace.test.tsx

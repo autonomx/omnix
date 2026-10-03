@@ -4,7 +4,7 @@ import { type UseMutationResult } from '@tanstack/react-query';
 import { type FieldErrors, type UseFormHandleSubmit, type UseFormRegister } from 'react-hook-form';
 import { type JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { fullJobOutputText } from './storyLibraryModel';
 import { StoryGenerationRequest, StorytellerFormValues, styleOptions, toneOptions, truncate } from './storyModel';

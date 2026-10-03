@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
@@ -6,9 +5,9 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { speechInputDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
+import { speechInputDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback } from '../../shared/FeatureSubmitFeedback';
 import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
 import { jobProgressPercent } from '../../api/jobProgress';
 

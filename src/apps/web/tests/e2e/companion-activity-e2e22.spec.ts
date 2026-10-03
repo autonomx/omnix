@@ -130,7 +130,7 @@ test.describe('E2E-22 continuous game/work companion journey', () => {
       });
       sessionId = session.id;
 
-      await installCanvasDisplayCapture(page, sessionId);
+      await installCanvasDisplayCapture(page);
       await page.goto(`/chatbot?session=${encodeURIComponent(sessionId)}`);
       await expect(page.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('button', { name: 'Character', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -339,8 +339,8 @@ test.describe('E2E-22 continuous game/work companion journey', () => {
   });
 });
 
-async function installCanvasDisplayCapture(page: Page, sessionId: string): Promise<void> {
-  await page.addInitScript(({ selectedSessionId }) => {
+async function installCanvasDisplayCapture(page: Page): Promise<void> {
+  await page.addInitScript(() => {
     const captureWindow = window as Window & {
       __omnixE2E22Draw?: (scene: string) => void;
       __omnixE2E22Stream?: MediaStream;
@@ -470,7 +470,7 @@ async function installCanvasDisplayCapture(page: Page, sessionId: string): Promi
         return stream;
       },
     });
-  }, { selectedSessionId: sessionId });
+  });
 }
 
 async function drawCaptureScene(page: Page, scene: string): Promise<void> {

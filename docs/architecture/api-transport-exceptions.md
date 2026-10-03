@@ -63,17 +63,17 @@ Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src
 
 | Web source | Type | What it describes |
 |---|---|---|
-| `src/apps/web/src/features/assistant-workspace/provider-adapters.ts` | `*` | Request and response bodies of external provider HTTP APIs (Anthropic Messages, OpenAI Chat Completions) |
-| `src/apps/web/src/features/assistant-workspace/provider.ts` | `Model*` | The browser's model provider interface |
-| `src/apps/web/src/features/assistant-workspace/speech-services.ts` | `*` | The speech service's HTTP protocol (a separate speech host, not the gateway) |
-| `src/apps/web/src/features/assistant-workspace/tool-registry.ts` | `ToolExecutionRequest` | Calls into the browser's tool registry |
-| `src/apps/web/src/features/assistant-workspace/events.ts` | `AssistantWorkspaceEventPayload` | Records of the browser event store |
-| `src/apps/web/src/features/assistant-workspace/companion-initiative-arbiter.ts` | `CompanionInitiativeRequest` | Arbitration between the browser's initiative sources |
-| `src/apps/web/src/features/assistant-workspace/desktop-companion-delivery.ts` | `DesktopCompanionDeliveryRequest` | An entry of the browser's delivery queue |
-| `src/apps/web/src/features/assistant-workspace/desktop-companion-expression-enricher.ts` | `MutableDeliveryRequest` | The same queue entry while it is enriched |
-| `src/apps/web/src/features/assistant-workspace/desktop-temporal-capture.ts` | `TemporalDesktopPayload` | A browser capture result, later mapped into `AssistantContextChatRequest` and `DesktopCompanionObserveRequest` fields |
-| `src/apps/web/src/features/assistant-workspace/live-voice-cue-asset-bridge.ts` | `*Payload` | Window event details between the voice cue modules |
-| `src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts` | `LiveVoiceRequestPayload` | The browser correlation id (`live_voice_turn_id`) the chat request carries for fetch middleware; the gateway ignores it |
+| `src/apps/web/src/features/assistant/workspace/provider-adapters.ts` | `*` | Request and response bodies of external provider HTTP APIs (Anthropic Messages, OpenAI Chat Completions) |
+| `src/apps/web/src/features/assistant/workspace/provider.ts` | `Model*` | The browser's model provider interface |
+| `src/apps/web/src/features/assistant/workspace/speech-services.ts` | `*` | The speech service's HTTP protocol (a separate speech host, not the gateway) |
+| `src/apps/web/src/features/assistant/workspace/tool-registry.ts` | `ToolExecutionRequest` | Calls into the browser's tool registry |
+| `src/apps/web/src/features/assistant/workspace/events.ts` | `AssistantWorkspaceEventPayload` | Records of the browser event store |
+| `src/apps/web/src/features/assistant/workspace/companion-initiative-arbiter.ts` | `CompanionInitiativeRequest` | Arbitration between the browser's initiative sources |
+| `src/apps/web/src/features/assistant/workspace/desktop-companion-delivery.ts` | `DesktopCompanionDeliveryRequest` | An entry of the browser's delivery queue |
+| `src/apps/web/src/features/assistant/workspace/desktop-companion-expression-enricher.ts` | `MutableDeliveryRequest` | The same queue entry while it is enriched |
+| `src/apps/web/src/features/assistant/workspace/desktop-temporal-capture.ts` | `TemporalDesktopPayload` | A browser capture result, later mapped into `AssistantContextChatRequest` and `DesktopCompanionObserveRequest` fields |
+| `src/apps/web/src/features/assistant/workspace/live-voice-cue-asset-bridge.ts` | `*Payload` | Window event details between the voice cue modules |
+| `src/apps/web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts` | `LiveVoiceRequestPayload` | The browser correlation id (`live_voice_turn_id`) the chat request carries for fetch middleware; the gateway ignores it |
 | `src/apps/web/src/features/storyteller/StoryAudioPanel.tsx` | `StoryAudioWebSocketPayload` | The start message on the `/ws/audiobook` WebSocket |
 | `src/apps/web/src/features/storyteller/storyModel.ts` | `StoryGenerationRequest` | Mutation variables; the wire body is `CreateJobRequest` |
 | `src/apps/web/src/features/trading/indicators/indicatorWorkerProtocol.ts` | `IndicatorWorker*` | Messages to and from the indicator Web Worker |
@@ -86,4 +86,4 @@ Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src
 | `src/apps/web/src/api/hermes*` | `*` | Hermes clients used only by RPG features (retiring) |
 | `src/apps/web/src/api/client.ts` | `Rpg*` | RPG methods of the shared client (retiring) |
 
-Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `src/apps/web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `src/apps/web/src/features/assistant-workspace/live-voice-messages.ts`; story audio control messages in `src/apps/web/src/features/storyteller/storyAudioMessages.ts`.
+Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `src/apps/web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `src/apps/web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `src/apps/web/src/features/storyteller/storyAudioMessages.ts`.

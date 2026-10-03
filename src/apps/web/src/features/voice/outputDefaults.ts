@@ -1,5 +1,4 @@
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
-import type { SettingsDocument } from '../settings/settingsDocumentTypes';
+import type { SettingsDocument } from '../settings';
 
 export interface OutputDefaults {
   stability: number;

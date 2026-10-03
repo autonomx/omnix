@@ -144,7 +144,7 @@ def test_api_limits_omitted_and_null_are_not_explicit_but_empty_object_is() -> N
 
 def test_run_card_keeps_unreported_tokens_distinct_from_zero() -> None:
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[2] / "apps/web/src/features/chatbot/OmnixRunCardCore.tsx").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[2] / "apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx").read_text(encoding="utf-8")
     assert "if (reported !== true) return '—';" in source
     assert "input_tokens_reported" in source
     assert "output_tokens_reported" in source

@@ -3,15 +3,15 @@ name: New chat selection
 on:
   pull_request:
     paths:
-      - "src/apps/web/src/features/chatbot/newChatCoordinator.ts"
-      - "src/apps/web/src/features/chatbot/newChatCoordinator.test.ts"
-      - "src/apps/web/src/features/chatbot/chat-sidebar-manager.ts"
-      - "src/apps/web/src/features/chatbot/chat-sidebar-manager.test.ts"
-      - "src/apps/web/src/features/chatbot/chat-sidebar-manager.css"
-      - "src/apps/web/src/features/chatbot/sessionTools.ts"
-      - "src/apps/web/src/features/chatbot/sessionTools.test.ts"
-      - "src/apps/web/src/features/chatbot/live-chat-fullscreen-controller.ts"
-      - "src/apps/web/src/features/chatbot/live-chat-fullscreen-controller.test.ts"
+      - "src/apps/web/src/features/assistant/chat/newChatCoordinator.ts"
+      - "src/apps/web/src/features/assistant/chat/newChatCoordinator.test.ts"
+      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.ts"
+      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.test.ts"
+      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.css"
+      - "src/apps/web/src/features/assistant/chat/sessionTools.ts"
+      - "src/apps/web/src/features/assistant/chat/sessionTools.test.ts"
+      - "src/apps/web/src/features/assistant/chat/live-chat-fullscreen-controller.ts"
+      - "src/apps/web/src/features/assistant/chat/live-chat-fullscreen-controller.test.ts"
       - ".github/workflows/new-chat-selection.yml"
   workflow_dispatch:
 
@@ -36,7 +36,7 @@ jobs:
       - name: Verify new chat creation and selection
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/chatbot/newChatCoordinator.test.ts
-          src/features/chatbot/chat-sidebar-manager.test.ts
-          src/features/chatbot/sessionTools.test.ts
-          src/features/chatbot/live-chat-fullscreen-controller.test.ts
+          src/features/assistant/chat/newChatCoordinator.test.ts
+          src/features/assistant/chat/chat-sidebar-manager.test.ts
+          src/features/assistant/chat/sessionTools.test.ts
+          src/features/assistant/chat/live-chat-fullscreen-controller.test.ts

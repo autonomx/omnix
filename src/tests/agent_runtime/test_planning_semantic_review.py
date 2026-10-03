@@ -86,7 +86,7 @@ def _submission(*, inverted: bool) -> ImplementationPlanSubmission:
             PlanItem(
                 id="sidebar-layout",
                 intent=intent,
-                paths=["src/apps/web/src/features/chatbot/ChatSidebar.tsx"],
+                paths=["src/apps/web/src/features/assistant/chat/ChatSidebar.tsx"],
                 requirement_ids=["R-sidebar-collapse"],
                 allowed_effects=["mutate"],
             )
@@ -291,9 +291,9 @@ def test_unavailable_reviewer_fails_closed_without_consuming_planner_reasoning(t
 @pytest.mark.parametrize(
     "path",
     [
-        "src/apps/web/src/features/chatbot/ChatSidebar.tsx",
+        "src/apps/web/src/features/assistant/chat/ChatSidebar.tsx",
         "src/apps/web/tests/ChatSidebar.test.tsx",
-        "src/apps/web/src/features/chatbot/sidebar.css",
+        "src/apps/web/src/features/assistant/chat/sidebar.css",
         "docs/chat-sidebar.md",
     ],
 )

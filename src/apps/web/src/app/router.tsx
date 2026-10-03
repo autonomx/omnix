@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { useMantineColorScheme } from '@mantine/core';
 import {
   Link,
@@ -15,9 +14,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
-import { commitAppearanceSettings, DEFAULT_OMNIX_TEXT_SCALE, loadStoredAppearancePreferences, resolveAppearanceMode, type OmnixAppearanceChangeDetail, type OmnixAppearanceMode } from '../features/settings/appearanceEffects';
+import { commitAppearanceSettings, DEFAULT_OMNIX_TEXT_SCALE, loadStoredAppearancePreferences, resolveAppearanceMode, type OmnixAppearanceChangeDetail, type OmnixAppearanceMode } from '../design/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
-import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
+import { defaultModuleId, moduleManifests, omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
+import { NotFoundView } from './NotFoundView';
 import { LoginPage } from './LoginPage';
 import { RouteErrorFallback } from './RouteErrorBoundary';
 import { SignOutButton } from './SignOutButton';
@@ -29,25 +29,20 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleId,
   OmnixModuleDefinition
 >;
-const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'audiobook', 'podcast', 'voice', 'image-generation', 'trading'];
+const defaultModule = moduleById[defaultModuleId];
+// Top-bar modes: the default module first, then the others that declare a mode label.
+const modeModules = [...moduleManifests]
+  .filter((manifest) => manifest.modeLabel)
+  .sort((left, right) => Number(right.id === defaultModuleId) - Number(left.id === defaultModuleId));
+const sidebarModules = moduleManifests.filter((manifest) => manifest.sidebar !== false);
 
-// Keep lower-level platform workspaces routable without crowding the primary
-// workstation navigation. These pages remain available by direct route and can
-// be linked contextually from settings/diagnostics when needed.
-const sidebarHiddenModuleIds = new Set<OmnixModuleId>([
-  'voice-cloning',
-  'providers',
-  'models',
-  'jobs',
-]);
-const sidebarModules = omnixModules.filter((module) => !sidebarHiddenModuleIds.has(module.id));
 
-function moduleFromPath(pathname: string): OmnixModuleDefinition {
+/** The module whose route contains `pathname`, or null (the not-found page). */
+function moduleFromPath(pathname: string): OmnixModuleDefinition | null {
   return (
     [...omnixModules]
       .sort((left, right) => right.route.length - left.route.length)
-      .find((module) => pathname === module.route || pathname.startsWith(`${module.route}/`)) ?? defaultModule
+      .find((module) => pathname === module.route || pathname.startsWith(`${module.route}/`)) ?? null
   );
 }
 
@@ -73,15 +68,16 @@ function OmnixShell() {
   const [themeId, setThemeId] = useState<OmnixThemeId>(initialThemeId);
   const [textScale, setTextScale] = useState(initialTextScale);
   const activeModule = moduleFromPath(pathname);
-  const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
   const resolvedAppearanceMode = resolveAppearanceMode(appearanceMode);
 
+  const activeModuleId = activeModule?.id ?? null;
   useEffect(() => {
-    setActiveViewModule(activeModule.id);
+    setActiveViewModule(activeModuleId);
+    if (!activeModuleId) return undefined;
     // The leaving workspace's runtime is disposed when the route changes (WP-9.1).
-    const runtime = activateViewRuntime(activeModule.id, { queryClient });
+    const runtime = activateViewRuntime(activeModuleId, { queryClient });
     return () => runtime.dispose();
-  }, [activeModule.id, queryClient]);
+  }, [activeModuleId, queryClient]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -117,7 +113,7 @@ function OmnixShell() {
           <nav className="omnix-nav">
             {sidebarModules.map((module) => (
               <Link key={module.id} to={module.route as never} title={module.label} activeProps={{ className: 'active' }}>
-                <OmnixNavItem active={module.id === activeModule.id} moduleId={module.id}>
+                <OmnixNavItem active={module.id === activeModuleId} icon={module.icon}>
                   {module.label}
                 </OmnixNavItem>
               </Link>
@@ -133,17 +129,17 @@ function OmnixShell() {
           onThemeChange={setThemeId}
           themeId={themeId}
           themeMode={resolvedAppearanceMode}
-          title={activeModule.label}
+          title={activeModule?.label ?? 'Page not found'}
         >
           {modeModules.map((module) => (
             <button
               key={module.id}
               type="button"
-              className={module.id === activeModule.id ? 'active' : undefined}
+              className={module.id === activeModuleId ? 'active' : undefined}
               aria-label={`Open ${module.label} mode`}
               onClick={() => void navigate({ to: module.route as never })}
             >
-              {module.label === 'Chatbot' ? 'Chat' : module.label}
+              {module.modeLabel}
             </button>
           ))}
           <SignOutButton />
@@ -166,6 +162,7 @@ const rootRoute = createRootRoute({
   component: OmnixRoot,
   // A routing failure (outside a workspace's own boundary) still renders a way back.
   errorComponent: ({ error, reset }) => <RouteErrorFallback error={error} onRetry={reset} />,
+  notFoundComponent: NotFoundView,
 });
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -178,56 +175,16 @@ const indexRoute = createRoute({
   component: () => <Navigate to={defaultModule.route as never} replace />,
 });
 
-function moduleRoute<const TPath extends string>(moduleId: OmnixModuleId, path: TPath) {
-  const module = moduleById[moduleId];
-  return createRoute({
-    getParentRoute: () => rootRoute,
-    path,
-    component: () => <ModuleWorkspace module={module} />,
-  });
-}
-
-const rpgRoute = moduleRoute('rpg', 'rpg');
-const chatbotRoute = moduleRoute('chatbot', 'chatbot');
-const storytellerRoute = moduleRoute('storyteller', 'storyteller');
-const audiobookRoute = moduleRoute('audiobook', 'audiobook');
-const podcastRoute = moduleRoute('podcast', 'podcast');
-const voiceRoute = moduleRoute('voice', 'voice');
-const voiceCloningRoute = moduleRoute('voice-cloning', 'voice-cloning');
-const sttRoute = moduleRoute('stt', 'stt');
-const imageGenerationRoute = moduleRoute('image-generation', 'image-generation');
-const tradingRoute = moduleRoute('trading', 'trading');
-const providersRoute = moduleRoute('providers', 'providers');
-const modelsRoute = moduleRoute('models', 'models');
-const jobsRoute = moduleRoute('jobs', 'jobs');
-const assetsRoute = moduleRoute('assets', 'assets');
-const reportsRoute = moduleRoute('reports', 'reports');
-const settingsRoute = moduleRoute('settings', 'settings');
-const diagnosticsRoute = moduleRoute('diagnostics', 'diagnostics');
+// One route per module manifest (WP-9.7).
+const moduleRoutes = moduleManifests.map((manifest) => createRoute({
+  getParentRoute: () => rootRoute,
+  path: manifest.route,
+  component: () => <ModuleWorkspace module={moduleById[manifest.id]} />,
+}));
 
 export const moduleRoutePaths = omnixModules.map((module) => module.route);
 
-const routeTree = rootRoute.addChildren([
-  indexRoute,
-  loginRoute,
-  rpgRoute,
-  chatbotRoute,
-  storytellerRoute,
-  audiobookRoute,
-  podcastRoute,
-  voiceRoute,
-  voiceCloningRoute,
-  sttRoute,
-  imageGenerationRoute,
-  tradingRoute,
-  providersRoute,
-  modelsRoute,
-  jobsRoute,
-  assetsRoute,
-  reportsRoute,
-  settingsRoute,
-  diagnosticsRoute,
-]);
+const routeTree = rootRoute.addChildren([indexRoute, loginRoute, ...moduleRoutes]);
 
 export const router = createRouter({ routeTree });
 

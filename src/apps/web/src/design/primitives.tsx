@@ -1,6 +1,5 @@
 import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { OmnixModuleId } from '../app/modules';
 import { getOmnixThemePreset, OMNIX_THEME_PRESETS, type OmnixThemeId } from './appearanceThemes';
 
 export function OmnixShellLayout({ children, isSidebarVisible = true, sidebar, topbar }: { children: ReactNode; isSidebarVisible?: boolean; sidebar: ReactNode; topbar: ReactNode }) {
@@ -24,14 +23,8 @@ export function OmnixBrand() {
   return <div role="group" className="omnix-brand" aria-label="Omnix"><span className="omnix-brand-mark" aria-hidden="true" /><span className="omnix-brand-copy"><h1>Omnix</h1><small>Local AI workstation</small></span></div>;
 }
 
-const moduleMonograms: Record<OmnixModuleId, string> = {
-  audiobook: 'AB',
-  chatbot: '▣', rpg: '✦', storyteller: '✍', podcast: '◉', voice: '◍', 'voice-cloning': '◎', stt: '⌁',
-  'image-generation': '▧', trading: '⌁', providers: '◇', models: '✧', jobs: '↻', assets: '▤', reports: '☷', settings: '⚙', diagnostics: '⌕',
-};
-
-export function OmnixNavItem({ active, moduleId, children }: { active: boolean; moduleId: OmnixModuleId; children: ReactNode }) {
-  return <span className={active ? 'omnix-nav-item active' : 'omnix-nav-item'}><span className="omnix-nav-icon" aria-hidden="true">{moduleMonograms[moduleId]}</span><span className="omnix-nav-label">{children}</span></span>;
+export function OmnixNavItem({ active, icon, children }: { active: boolean; icon: string; children: ReactNode }) {
+  return <span className={active ? 'omnix-nav-item active' : 'omnix-nav-item'}><span className="omnix-nav-icon" aria-hidden="true">{icon}</span><span className="omnix-nav-label">{children}</span></span>;
 }
 
 function OmnixThemePicker({ themeId, onThemeChange }: { themeId: OmnixThemeId; onThemeChange?: (themeId: OmnixThemeId) => void }) {

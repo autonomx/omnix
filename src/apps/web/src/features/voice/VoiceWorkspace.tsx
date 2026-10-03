@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 /* eslint-disable react-hooks/rules-of-hooks -- baseline WP-9.x */
 import { Button, Group, Text, Title } from '@mantine/core';
@@ -9,9 +8,9 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type AssetListResponse, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { voiceStudioDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { voiceStudioDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
 import { firstResultAsset } from './resultList';
 import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type ScriptSpeakerRow } from './scriptLines';

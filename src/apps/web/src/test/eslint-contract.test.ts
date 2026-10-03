@@ -24,15 +24,15 @@ describe('web ESLint architecture rules', () => {
   it('rejects another feature deep import and allows its public index', async () => {
     const deepImportRuleIds = await lintSource(
       "import { TradingWorkspace } from '../trading/TradingWorkspace';",
-      'src/features/chatbot/eslint-contract-fixture.ts',
+      'src/features/storyteller/eslint-contract-fixture.ts',
     );
     const dynamicImportRuleIds = await lintSource(
       "void import('../trading/TradingWorkspace');",
-      'src/features/chatbot/eslint-contract-fixture.ts',
+      'src/features/storyteller/eslint-contract-fixture.ts',
     );
     const publicImportRuleIds = await lintSource(
       "import { TradingWorkspace } from '../trading';",
-      'src/features/chatbot/eslint-contract-fixture.ts',
+      'src/features/storyteller/eslint-contract-fixture.ts',
     );
 
     expect(deepImportRuleIds).toContain('no-restricted-imports');

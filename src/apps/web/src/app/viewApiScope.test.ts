@@ -22,7 +22,8 @@ describe('view API scope', () => {
     expect(moduleIdFromPathname('/voice-cloning')).toBe('voice-cloning');
     expect(moduleIdFromPathname('/voice-cloning/settings')).toBe('voice-cloning');
     expect(moduleIdFromPathname('/trading')).toBe('trading');
-    expect(moduleIdFromPathname('/unknown')).toBe('chatbot');
+    // No fallback: an unknown route belongs to no workspace (WP-9.7).
+    expect(moduleIdFromPathname('/unknown')).toBeNull();
   });
 
   it('only permits trading API families in the trading view', () => {

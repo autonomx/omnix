@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
@@ -10,7 +9,7 @@ import {
   type RpgWorldRelease,
   type RpgWorldSummary,
 } from '../../api/rpgWorldLibraryClient';
-import { loadSettingsProfile } from '../settings/settingsApi';
+import { loadSettingsProfile } from '../settings';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
 import { RpgWorldCampaignCatalog } from './RpgWorldCampaignCatalog';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';

@@ -3,7 +3,7 @@ import { loadSettingsProfile } from './settingsApi';
 import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
 import { createSettingsDraftState, settingsDraftReducer } from './settingsDraft';
 import type { SettingsDocument } from './settingsDocumentTypes';
-import { loadStoredAppearancePreferences } from './appearanceEffects';
+import { loadStoredAppearancePreferences } from '../../design/appearanceEffects';
 import { SettingsProfileContext } from './SettingsProfileContext';
 
 function withLocalAppearancePreferences(document: SettingsDocument): SettingsDocument {

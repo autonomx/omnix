@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,9 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { imageGenerationDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
+import { imageGenerationDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback } from '../../shared/FeatureSubmitFeedback';
 import { ImageAssetGallery } from './ImageAssetGallery';
 import './ImageGenerationWorkspace.css';
 import './ImageGenerationWorkspaceInteractions.css';

@@ -12,7 +12,7 @@ import {
 import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';

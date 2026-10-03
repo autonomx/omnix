@@ -34,7 +34,7 @@ python scripts/run_architecture_gates.py --group multiprocess
 python scripts/run_architecture_gates.py --group persistence-all
 npm --prefix src/apps/web run typecheck
 npm --prefix src/apps/web run api:check
-npm --prefix src/apps/web run test -- src/test/gateway-routing.test.ts src/features/chatbot src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
+npm --prefix src/apps/web run test -- src/test/gateway-routing.test.ts src/features/assistant/chat src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
 ```
 
 Set `OMNIX_TEST_DATABASE_URL` to a disposable database named `omnix_test`; the gate also sets the production database URL within the test subprocess. `--local-disposable` selects only the documented local benchmark container at port 16432. Never point integration tests at an operator database. On Windows use `npm.cmd` if PowerShell blocks `npm.ps1`.

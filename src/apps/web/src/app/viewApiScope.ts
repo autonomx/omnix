@@ -1,77 +1,42 @@
  
 import { registerFetchMiddleware } from '../api/fetchPipeline';
-import type { OmnixModuleId } from './modules';
+import { moduleManifests, type OmnixModuleId } from './modules';
 
 let removeFirewall: (() => void) | null = null;
 let previousWebSocket: typeof window.WebSocket | null = null;
 let previousEventSource: typeof window.EventSource | null = null;
 
-const ROUTE_MODULES: ReadonlyArray<readonly [string, OmnixModuleId]> = [
-  ['/voice-cloning', 'voice-cloning'],
-  ['/image-generation', 'image-generation'],
-  ['/diagnostics', 'diagnostics'],
-  ['/storyteller', 'storyteller'],
-  ['/audiobook', 'audiobook'],
-  ['/chatbot', 'chatbot'],
-  ['/podcast', 'podcast'],
-  ['/trading', 'trading'],
-  ['/providers', 'providers'],
-  ['/models', 'models'],
-  ['/assets', 'assets'],
-  ['/reports', 'reports'],
-  ['/settings', 'settings'],
-  ['/rpg', 'rpg'],
-  ['/voice', 'voice'],
-  ['/stt', 'stt'],
-  ['/jobs', 'jobs'],
-] as const;
+// Longest route first, so /voice-cloning is not taken for /voice.
+const ROUTE_MODULES: ReadonlyArray<readonly [string, OmnixModuleId]> = [...moduleManifests]
+  .sort((left, right) => right.route.length - left.route.length)
+  .map((manifest) => [manifest.route, manifest.id] as const);
 
 // These are the API families each workspace is allowed to use. Keeping this
 // list at the browser boundary prevents a globally installed controller from
 // silently reaching another workspace's backend while the user is navigating.
-const MODULE_API_PREFIXES: Record<OmnixModuleId, readonly string[]> = {
-  rpg: ['/api/rpg', '/api/assets', '/api/jobs', '/api/reports', '/api/replay', '/api/hermes', '/api/agent', '/api/prompts'],
-  chatbot: [
-    '/api/chat', '/api/assistant', '/api/characters', '/api/character-avatar-generations',
-    '/api/character-avatar-visemes', '/api/character-live2d', '/api/image-generation',
-    '/api/live', '/api/live-chat', '/api/live-call', '/api/tts', '/api/voice',
-    '/api/voice-profiles', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers',
-    '/api/settings', '/api/hermes', '/api/agent', '/api/agent-runs', '/api/prompts', '/api/desktop-companion',
-  ],
-  storyteller: ['/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent', '/api/prompts'],
-  audiobook: ['/api/audiobook', '/api/jobs', '/api/providers', '/api/voice', '/api/tts'],
-  podcast: ['/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent', '/api/prompts'],
-  voice: ['/api/voice', '/api/voice-cloning', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/agent', '/api/prompts'],
-  'voice-cloning': ['/api/voice-cloning', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/agent', '/api/prompts'],
-  stt: ['/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/voice', '/api/tts', '/api/agent', '/api/prompts'],
-  'image-generation': ['/api/image-generation', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/workers', '/api/agent', '/api/prompts'],
-  trading: ['/api/trading'],
-  providers: ['/api/providers', '/api/models', '/api/jobs', '/api/settings', '/api/health', '/api/diagnostics'],
-  models: ['/api/models', '/api/providers', '/api/jobs', '/api/settings', '/api/health', '/api/diagnostics'],
-  jobs: ['/api/jobs', '/api/assets', '/api/reports', '/api/diagnostics'],
-  assets: ['/api/assets', '/api/jobs', '/api/reports'],
-  reports: ['/api/reports', '/api/assets', '/api/jobs', '/api/replay'],
-  settings: ['/api/settings', '/api/providers', '/api/models', '/api/runtime', '/api/assistant', '/api/hermes', '/api/diagnostics', '/api/workers', '/api/trading/market-data'],
-  diagnostics: ['/api/diagnostics', '/api/health', '/api/runtime', '/api/providers', '/api/models', '/api/jobs'],
-};
+const MODULE_API_PREFIXES = Object.fromEntries(
+  moduleManifests.map((manifest) => [manifest.id, manifest.apiPrefixes]),
+) as Record<OmnixModuleId, readonly string[]>;
 
 function pathMatchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-export function moduleIdFromPathname(pathname: string): OmnixModuleId {
+/** The module whose route contains `pathname`; null outside every workspace (no fallback, WP-9.7). */
+export function moduleIdFromPathname(pathname: string): OmnixModuleId | null {
   const normalized = pathname.split('?', 1)[0].replace(/\/+$/u, '') || '/';
-  return ROUTE_MODULES.find(([route]) => normalized === route || normalized.startsWith(`${route}/`))?.[1] ?? 'chatbot';
+  return ROUTE_MODULES.find(([route]) => normalized === route || normalized.startsWith(`${route}/`))?.[1] ?? null;
 }
 
-export function activeViewModule(): OmnixModuleId {
-  if (typeof window === 'undefined') return 'chatbot';
+export function activeViewModule(): OmnixModuleId | null {
+  if (typeof window === 'undefined') return null;
   return moduleIdFromPathname(window.location.pathname);
 }
 
-export function setActiveViewModule(moduleId: OmnixModuleId): void {
+export function setActiveViewModule(moduleId: OmnixModuleId | null): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.dataset.omnixActiveModule = moduleId;
+  if (moduleId) document.documentElement.dataset.omnixActiveModule = moduleId;
+  else delete document.documentElement.dataset.omnixActiveModule;
 }
 
 export function isActiveView(moduleId: OmnixModuleId): boolean {
@@ -90,14 +55,15 @@ export function apiPath(input: RequestInfo | URL): string {
 
 const CLIENT_ERRORS_PATH = '/api/client-errors';
 
-export function isApiAllowedForView(pathname: string, moduleId: OmnixModuleId): boolean {
+export function isApiAllowedForView(pathname: string, moduleId: OmnixModuleId | null): boolean {
   if (!pathname.startsWith('/api/')) return true;
   // Sign-in, session state and error reports belong to the shell, not to any workspace.
   if (AUTH_API_PATTERN.test(pathname) || pathMatchesPrefix(pathname, CLIENT_ERRORS_PATH)) return true;
+  if (!moduleId) return false;
   return MODULE_API_PREFIXES[moduleId].some((prefix) => pathMatchesPrefix(pathname, prefix));
 }
 
-function blockedApiResponse(pathname: string, moduleId: OmnixModuleId): Response {
+function blockedApiResponse(pathname: string, moduleId: OmnixModuleId | null): Response {
   return new Response(JSON.stringify({
     code: 'VIEW_API_SCOPE_BLOCKED',
     detail: 'The active workspace cannot call this API family.',

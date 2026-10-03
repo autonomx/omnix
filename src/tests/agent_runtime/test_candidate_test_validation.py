@@ -55,7 +55,7 @@ def test_executable_candidate_test_paths_are_narrow_and_exclude_support_files() 
     paths = executable_candidate_test_paths(
         [
             "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
-            "src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx",
+            "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
             "tests/test_service.py",
             "pkg/engine_test.go",
             "src/apps/web/tests/helpers.ts",
@@ -67,7 +67,7 @@ def test_executable_candidate_test_paths_are_narrow_and_exclude_support_files() 
     )
     assert paths == [
         "pkg/engine_test.go",
-        "src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx",
+        "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
         "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
         "tests/test_service.py",
     ]
@@ -75,7 +75,7 @@ def test_executable_candidate_test_paths_are_narrow_and_exclude_support_files() 
 
 def test_targeted_unit_test_does_not_cover_new_playwright_regression() -> None:
     subject = [
-        "src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx",
+        "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
         "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
     ]
     missing = missing_candidate_test_execution(

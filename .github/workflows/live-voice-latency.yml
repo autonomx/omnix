@@ -8,7 +8,7 @@ on:
       - "src/app/conversation/**"
       - "src/app/live_voice/**"
       - "src/app/providers/**"
-      - "src/apps/web/src/features/assistant-workspace/**"
+      - "src/apps/web/src/features/assistant/workspace/**"
       - "src/tests/app/test_live_chat_*.py"
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/app/test_tts_stream_contract*.py"
@@ -21,7 +21,7 @@ on:
       - "src/app/conversation/**"
       - "src/app/live_voice/**"
       - "src/app/providers/**"
-      - "src/apps/web/src/features/assistant-workspace/**"
+      - "src/apps/web/src/features/assistant/workspace/**"
       - "src/tests/app/test_live_chat_*.py"
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/app/test_tts_stream_contract*.py"
@@ -127,10 +127,10 @@ jobs:
       - name: Test live voice browser controllers
         run: >-
           npm --workspace @omnix/web run test -- --run
-          src/features/assistant-workspace/live-stt-capability-state.test.ts
-          src/features/assistant-workspace/live-speculation-early-trigger.test.ts
-          src/features/assistant-workspace/live-voice-controller.test.ts
-          src/features/assistant-workspace/live-voice-websocket.spec.ts
-          src/features/assistant-workspace/live-speculation-controller.test.ts
-          src/features/assistant-workspace/live-voice-turn-coordinator.test.ts
-          src/features/assistant-workspace/live-tts-adaptive-buffer-controller.test.ts
+          src/features/assistant/workspace/live-stt-capability-state.test.ts
+          src/features/assistant/workspace/live-speculation-early-trigger.test.ts
+          src/features/assistant/workspace/live-voice-controller.test.ts
+          src/features/assistant/workspace/live-voice-websocket.spec.ts
+          src/features/assistant/workspace/live-speculation-controller.test.ts
+          src/features/assistant/workspace/live-voice-turn-coordinator.test.ts
+          src/features/assistant/workspace/live-tts-adaptive-buffer-controller.test.ts

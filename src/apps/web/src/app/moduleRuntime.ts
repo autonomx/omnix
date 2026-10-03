@@ -6,6 +6,12 @@
  * timers, fetch middleware, client patches) is registered with a
  * DisposableStore, which undoes it in reverse order.
  */
+import type { QueryClient } from '@tanstack/react-query';
+
+/** What a workspace runtime receives when it activates. */
+export interface ModuleRuntimeContext {
+  queryClient: QueryClient;
+}
 
 export interface Disposable {
   dispose(): void;

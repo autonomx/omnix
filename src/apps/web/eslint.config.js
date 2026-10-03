@@ -107,21 +107,21 @@ function restrictedFeatureImports(currentFeature) {
 }
 
 const mutationObserverAllowList = [
-  'src/features/assistant-workspace/assistant-context-controller.ts',
-  'src/features/assistant-workspace/chat-message-stream-audio-controller.ts',
-  'src/features/assistant-workspace/desktop-companion-controls.ts',
-  'src/features/assistant-workspace/desktop-companion-text-surface.ts',
-  'src/features/assistant-workspace/live-avatar-presence.ts',
-  'src/features/assistant-workspace/live-voice-controller.ts',
-  'src/features/assistant-workspace/live-voice-transcript-autoscroll.ts',
-  'src/features/assistant-workspace/live-chat-submission-gateway.ts',
-  'src/features/chatbot/chat-response-metrics-controller.ts',
-  'src/features/chatbot/chat-sidebar-manager.ts',
-  'src/features/chatbot/live-chat-workspace.tsx',
-  'src/features/chatbot/liveCharacterAvatarBridge.ts',
-  'src/features/chatbot/newChatCoordinator.ts',
-  'src/features/chatbot/researchProgressController.ts',
-  'src/features/chatbot/voice-session-evaluation-workspace.tsx',
+  'src/features/assistant/workspace/assistant-context-controller.ts',
+  'src/features/assistant/workspace/chat-message-stream-audio-controller.ts',
+  'src/features/assistant/workspace/desktop-companion-controls.ts',
+  'src/features/assistant/workspace/desktop-companion-text-surface.ts',
+  'src/features/assistant/workspace/live-avatar-presence.ts',
+  'src/features/assistant/workspace/live-voice-controller.ts',
+  'src/features/assistant/workspace/live-voice-transcript-autoscroll.ts',
+  'src/features/assistant/workspace/live-chat-submission-gateway.ts',
+  'src/features/assistant/chat/chat-response-metrics-controller.ts',
+  'src/features/assistant/chat/chat-sidebar-manager.ts',
+  'src/features/assistant/chat/live-chat-workspace.tsx',
+  'src/features/assistant/chat/liveCharacterAvatarBridge.ts',
+  'src/features/assistant/chat/newChatCoordinator.ts',
+  'src/features/assistant/chat/researchProgressController.ts',
+  'src/features/assistant/chat/voice-session-evaluation-workspace.tsx',
   'src/features/rpg/RpgWorkspaceHeader.tsx',
   'src/features/storyteller/story-audio-enhancer.ts',
 ];
@@ -269,10 +269,10 @@ const appImports = {
 // arrived (WP-9.5). Each file's limit is that function's length: shrink a
 // function, then lower or delete its entry; never raise one.
 const functionLengthBaseline = {
-  'src/features/assistant-workspace/live-voice-pcm-session.ts': 773,
-  'src/features/chatbot/CharacterAvatarPanel.tsx': 349,
-  'src/features/chatbot/CharacterManagementPanel.tsx': 309,
-  'src/features/chatbot/OmnixRunCardCore.tsx': 470,
+  'src/features/assistant/workspace/live-voice-pcm-session.ts': 773,
+  'src/features/assistant/chat/CharacterAvatarPanel.tsx': 349,
+  'src/features/assistant/chat/CharacterManagementPanel.tsx': 309,
+  'src/features/assistant/chat/OmnixRunCardCore.tsx': 470,
   'src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx': 288,
   'src/features/podcast/PodcastWorkspace.tsx': 303,
   'src/features/rpg/RpgActionComposer.tsx': 551,
@@ -334,7 +334,7 @@ export default [
     withoutBodyInsertion,
   )),
   restrictedSyntaxConfig(
-    ['src/features/chatbot/markdownRenderer.ts'],
+    ['src/features/assistant/chat/markdownRenderer.ts'],
     withoutInnerHtml,
   ),
   ...featureNames.map((feature) => ({

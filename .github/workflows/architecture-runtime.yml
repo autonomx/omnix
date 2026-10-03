@@ -195,6 +195,6 @@ jobs:
         run: >
           npm run web:test --
           src/test/gateway-routing.test.ts
-          src/features/chatbot
+          src/features/assistant/chat
           src/features/audiobook/AudiobookWorkspace.test.tsx
           src/features/trading

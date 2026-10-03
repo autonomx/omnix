@@ -2,7 +2,7 @@ import { Button } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ProviderFacadePayload } from '../../api/client';
-import { FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { ImageReferenceControl } from './ImageReferenceControl';
 import {
   imageRequestDefaultValues,

@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment -- baseline WP-9.x */
 /* eslint-disable @typescript-eslint/no-explicit-any -- baseline WP-9.x */
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 // @ts-nocheck
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,8 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { mockPodcastSpeakerProfiles } from '../conversation-production/speakers';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { mockPodcastSpeakerProfiles } from '../conversation-production';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { createPodcastScriptSession } from './podcastScriptSession';
 import { buildConversationalPodcastSegments } from './scriptBuilder';
 import type { PodcastFormat } from './types';

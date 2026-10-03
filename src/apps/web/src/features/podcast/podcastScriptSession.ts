@@ -1,7 +1,6 @@
-/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { omnixApiClient, type CreateChatSessionRequest } from '../../api/client';
-import { podcastDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
+import { podcastDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
 
 /**
  * Create the chat session a podcast script is drafted in, with the podcast

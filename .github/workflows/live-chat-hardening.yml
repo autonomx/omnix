@@ -12,7 +12,7 @@ on:
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/agent_runtime/**"
       - "src/tests/e2e/test_live_voice_api.py"
-      - "src/apps/web/src/features/assistant-workspace/**"
+      - "src/apps/web/src/features/assistant/workspace/**"
       - ".github/workflows/live-chat-hardening.yml"
   push:
     branches: [main]
@@ -25,7 +25,7 @@ on:
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/agent_runtime/**"
       - "src/tests/e2e/test_live_voice_api.py"
-      - "src/apps/web/src/features/assistant-workspace/**"
+      - "src/apps/web/src/features/assistant/workspace/**"
       - ".github/workflows/live-chat-hardening.yml"
   workflow_dispatch:
 
@@ -257,7 +257,7 @@ jobs:
         run: |
           set -o pipefail
           npm --workspace @omnix/web run test -- --run \
-            src/features/assistant-workspace/live-full-duplex-evaluation.test.ts \
+            src/features/assistant/workspace/live-full-duplex-evaluation.test.ts \
             2>&1 | tee live-full-duplex-evaluation-output.txt
           python - <<'PY'
           import json
@@ -329,7 +329,7 @@ jobs:
           path: |
             web-typecheck-output.txt
             web-unit-test-output.txt
-            src/apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
-            src/apps/web/src/features/assistant-workspace/live-output-coordinator.ts
-            src/apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
-            src/apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts
+            src/apps/web/src/features/assistant/workspace/live-voice-pcm-session.ts
+            src/apps/web/src/features/assistant/workspace/live-output-coordinator.ts
+            src/apps/web/src/features/assistant/workspace/live-output-coordinator.test.ts
+            src/apps/web/src/features/assistant/workspace/live-full-duplex-evaluation.test.ts

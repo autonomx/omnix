@@ -11,17 +11,17 @@ on:
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "src/tests/unit/characters/test_live2d_avatar_api.py"
-      - "src/apps/web/src/features/chatbot/CharacterAvatarPanel.tsx"
-      - "src/apps/web/src/features/chatbot/CharacterAvatarPanel.css"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "src/apps/web/src/features/chatbot/characterClient.ts"
-      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.css"
-      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.ts"
-      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.test.ts"
-      - "src/apps/web/src/features/chatbot/liveCharacterVisemeBridge.ts"
-      - "src/apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
-      - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.ts"
-      - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.test.ts"
+      - "src/apps/web/src/features/assistant/chat/CharacterAvatarPanel.tsx"
+      - "src/apps/web/src/features/assistant/chat/CharacterAvatarPanel.css"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterClient.ts"
+      - "src/apps/web/src/features/assistant/chat/liveCharacterAvatarBridge.css"
+      - "src/apps/web/src/features/assistant/chat/liveCharacterAvatarBridge.ts"
+      - "src/apps/web/src/features/assistant/chat/liveCharacterAvatarBridge.test.ts"
+      - "src/apps/web/src/features/assistant/chat/liveCharacterVisemeBridge.ts"
+      - "src/apps/web/src/features/assistant/chat/liveCharacterVisemeBridge.test.ts"
+      - "src/apps/web/src/features/assistant/chat/live2dCharacterRenderer.ts"
+      - "src/apps/web/src/features/assistant/chat/live2dCharacterRenderer.test.ts"
       - ".github/workflows/avatar-frame-stabilization.yml"
   workflow_dispatch:
 
@@ -78,12 +78,12 @@ jobs:
               "types": ["vite/client"]
             },
             "include": [
-              "src/features/chatbot/CharacterAvatarPanel.tsx",
-              "src/features/chatbot/characterAvatarClient.ts",
-              "src/features/chatbot/characterClient.ts",
-              "src/features/chatbot/liveCharacterAvatarBridge.ts",
-              "src/features/chatbot/liveCharacterVisemeBridge.ts",
-              "src/features/chatbot/live2dCharacterRenderer.ts"
+              "src/features/assistant/chat/CharacterAvatarPanel.tsx",
+              "src/features/assistant/chat/characterAvatarClient.ts",
+              "src/features/assistant/chat/characterClient.ts",
+              "src/features/assistant/chat/liveCharacterAvatarBridge.ts",
+              "src/features/assistant/chat/liveCharacterVisemeBridge.ts",
+              "src/features/assistant/chat/live2dCharacterRenderer.ts"
             ],
             "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
           }
@@ -93,6 +93,6 @@ jobs:
       - name: Verify browser avatar playback
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/chatbot/liveCharacterAvatarBridge.test.ts
-          src/features/chatbot/liveCharacterVisemeBridge.test.ts
-          src/features/chatbot/live2dCharacterRenderer.test.ts
+          src/features/assistant/chat/liveCharacterAvatarBridge.test.ts
+          src/features/assistant/chat/liveCharacterVisemeBridge.test.ts
+          src/features/assistant/chat/live2dCharacterRenderer.test.ts
