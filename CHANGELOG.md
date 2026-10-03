@@ -68,6 +68,8 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Web: polling pauses while the tab is hidden and never overlaps a slow
   request; Chat follows its reply job through server events when they are
   available.
+- Web: an address that matches no workspace shows a not-found page instead of
+  opening Chat.
 
 ### Fixed
 
