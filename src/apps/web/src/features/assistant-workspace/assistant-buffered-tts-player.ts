@@ -1,3 +1,4 @@
+import { parseJson, ttsControlEventSchema } from '../../api/schemas/streams';
 const DEFAULT_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
@@ -249,7 +250,7 @@ function pcm16ToAudioBuffer(
 
 
 function parseControlEvent(value: string): TtsControlEvent | null {
-  try { return JSON.parse(value) as TtsControlEvent; } catch { return null; }
+  return parseJson(ttsControlEventSchema, value);
 }
 
 

@@ -56,6 +56,7 @@ import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } f
 import { isLiveVoiceControllerInstalled } from '../assistant-workspace/live-voice-controller';
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 import type { components } from '../../api/generated/types';
+import { chatStreamEventSchema, parseSseData } from '../../api/schemas/streams';
 
 interface ChatbotFormValues {
   content: string;
@@ -2358,7 +2359,8 @@ function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor 
 function canUseStreamingTts(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean((liveWindow.AudioContext || liveWindow.webkitAudioContext) && typeof window.fetch === 'function' && typeof window.ReadableStream !== 'undefined'); }
 function canUseDecodedAudioPlayback(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean(liveWindow.AudioContext || liveWindow.webkitAudioContext); }
 function parseStreamingTtsSseEvent(value: string): { type?: string; message?: string; audio_b64?: string; sample_rate?: number; partial?: boolean } | null { const line = value.split(/\r?\n/).find((entry) => entry.startsWith('data:')); if (!line) return null; try { return JSON.parse(line.slice(5).trim()) as { type?: string; message?: string; audio_b64?: string; sample_rate?: number; partial?: boolean }; } catch { return null; } }
-function parseChatStreamEvent(value: string): ChatStreamEvent | null { const line = value.split(/\r?\n/).find((entry) => entry.startsWith('data:')); if (!line) return null; try { return JSON.parse(line.slice(5).trim()) as ChatStreamEvent; } catch { return null; } }
+// Checked at the boundary; the session is then read as the full ChatSession the route sends.
+function parseChatStreamEvent(value: string): ChatStreamEvent | null { return parseSseData(chatStreamEventSchema, value) as ChatStreamEvent | null; }
 function makePlayableAudioSource(source: string): { url: string; revoke?: () => void } { if (!source.startsWith('data:audio/') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return { url: source }; const blob = dataUrlToBlob(source); const url = URL.createObjectURL(blob); return { url, revoke: () => URL.revokeObjectURL(url) }; }
 function dataUrlToBlob(source: string): Blob { const [header, encoded = ''] = source.split(',', 2); const mime = /^data:([^;,]+)/.exec(header)?.[1] || 'audio/wav'; const binary = window.atob(encoded); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return new Blob([bytes], { type: mime }); }
 async function audioSourceToArrayBuffer(source: string): Promise<ArrayBuffer> { if (source.startsWith('data:')) return dataUrlToArrayBuffer(source); const response = await fetchBytes(source).catch(statusError('Audio fetch')); return response.arrayBuffer(); }

@@ -13,6 +13,7 @@ import type {
 import { decodeTradingFormula, evaluateTradingFormula, parseTradingFormula } from './tradingFormula';
 import type { components } from '../../api/generated/types';
 import { api, unwrapLabelled } from '../../api/http';
+import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
 
 export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
 
@@ -47,11 +48,8 @@ export function subscribeTradingStream(
   const socket = new WebSocket(tradingStreamUrl(instrumentId, interval, bindingId));
   socket.addEventListener('open', () => onStatus?.('live'));
   socket.addEventListener('message', (event) => {
-    try {
-      onMessage(JSON.parse(String(event.data)) as TradingStreamMessage);
-    } catch {
-      onMessage({ type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned invalid JSON.' });
-    }
+    onMessage((parseJson(tradingStreamMessageSchema, String(event.data)) as TradingStreamMessage | null)
+      ?? { type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned an invalid message.' });
   });
   socket.addEventListener('error', () => onStatus?.('error'));
   socket.addEventListener('close', () => onStatus?.('closed'));

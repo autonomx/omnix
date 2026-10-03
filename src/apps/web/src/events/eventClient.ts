@@ -1,3 +1,5 @@
+import { jobEventSchema } from '../api/schemas/streams';
+
 export type OmnixEventHandler<TPayload = unknown> = (payload: TPayload) => void;
 
 export type OmnixEventConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
@@ -266,6 +268,13 @@ export class OmnixEventClient {
           error,
         });
         return;
+      }
+      if (eventName.startsWith('job.')) {
+        const checked = jobEventSchema.safeParse(payload);
+        if (!checked.success) {
+          this.onMalformedEvent?.({ eventName, data: message.data, error: checked.error });
+          return;
+        }
       }
 
       const handlersForEvent = this.handlers.get(eventName);

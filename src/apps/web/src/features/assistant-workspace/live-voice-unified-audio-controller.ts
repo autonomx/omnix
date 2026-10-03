@@ -39,6 +39,7 @@ import {
   type LiveVoicePcmSession,
 } from './live-voice-pcm-session';
 import { openStream, statusError } from '../../api/transport';
+import { chatStreamEventSchema, parseJson } from '../../api/schemas/streams';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_CALL_RUNTIME_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/runtime$/;
@@ -877,7 +878,7 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     .map((line) => line.slice(5).trimStart())
     .join('\n');
   if (!data) return null;
-  try { return JSON.parse(data) as ChatStreamEvent; } catch { return null; }
+  return parseJson(chatStreamEventSchema, data) as ChatStreamEvent | null;
 }
 
 function selectedVoiceId(): string | null {

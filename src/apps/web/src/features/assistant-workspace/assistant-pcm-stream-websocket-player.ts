@@ -1,6 +1,7 @@
 import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 import ASSISTANT_PCM_STREAM_WORKLET_URL from './worklets/assistant-pcm-stream.worklet?worker&url';
 import { ASSISTANT_PCM_STREAM_WORKLET_NAME } from './worklets/names';
+import { parseJson, ttsControlEventSchema } from '../../api/schemas/streams';
 
 const STREAM_AUDIO_STATUS_ATTRIBUTE = 'data-omnix-stream-audio-status';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
@@ -465,7 +466,7 @@ function selectedVoiceId(): string | null {
 }
 
 function parseStreamingTtsControlEvent(value: string): StreamingTtsControlEvent | null {
-  try { return JSON.parse(value) as StreamingTtsControlEvent; } catch { return null; }
+  return parseJson(ttsControlEventSchema, value);
 }
 
 function pcm16ToFloat32(input: Int16Array, sourceSampleRate: number, targetSampleRate: number): Float32Array {
