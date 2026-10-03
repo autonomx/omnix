@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import secrets
-from urllib.parse import urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -19,6 +18,7 @@ from app.assistant_tools.routes import (
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
+from tests.conftest_databases import is_disposable_test_database
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def client(monkeypatch):
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
-    assert urlsplit(url).path in {"/omnix_test", "/omnix_refactor_baseline"}
+    assert is_disposable_test_database(url)
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=3))
     context = ensure_local_identity(database)
     service = proposals.AssistantToolProposalService(database, context)

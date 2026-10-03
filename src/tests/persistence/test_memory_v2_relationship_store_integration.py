@@ -74,7 +74,8 @@ def _append(store: PostgresMemoryV2ObservationStore, space: MemorySpaceKey, inde
 
 def _relationship(space: MemorySpaceKey, observation_id: str, *, relationship_id: str = "rel:alice"):
     return RelationshipState(
-        relationship_id=relationship_id,
+        # Relationship ids are global; each run's carry its space (reruns share the database).
+        relationship_id=f"{relationship_id}@{space.owner_id}",
         space=space,
         subject=GraphEntityRef(entity_id=space.owner_id, entity_type="character"),
         counterpart=GraphEntityRef(entity_id="user:alice", entity_type="user"),
@@ -188,7 +189,7 @@ def test_relationship_update_replaces_metrics_and_can_archive() -> None:
         assert archived.revision == 2
         assert [metric.name for metric in archived.metrics] == ["trust"]
         assert relationships.list(space) == []
-        assert [item.relationship_id for item in relationships.list(space, status=None)] == ["rel:update"]
+        assert [item.relationship_id for item in relationships.list(space, status=None)] == [f"rel:update@{space.owner_id}"]
     finally:
         database.close()
 
@@ -206,7 +207,7 @@ def test_relationships_are_character_isolated() -> None:
         relationships.put(_relationship(sofia, sofia_observation.observation_id, relationship_id="rel:sofia"))
         relationships.put(_relationship(maya, maya_observation.observation_id, relationship_id="rel:maya"))
 
-        assert [item.relationship_id for item in relationships.list(sofia)] == ["rel:sofia"]
-        assert [item.relationship_id for item in relationships.list(maya)] == ["rel:maya"]
+        assert [item.relationship_id for item in relationships.list(sofia)] == [f"rel:sofia@{sofia.owner_id}"]
+        assert [item.relationship_id for item in relationships.list(maya)] == [f"rel:maya@{maya.owner_id}"]
     finally:
         database.close()

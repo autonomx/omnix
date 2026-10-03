@@ -262,8 +262,9 @@ def test_the_sweep_converges_a_write_whose_inline_convergence_failed(switched) -
 
 
 def _v1_record(database, owner_id: str, content: str) -> None:
+    # The local tenant's workspace: the one the switched service serves.
+    workspace_id = ensure_local_identity(database).workspace_id
     with system_scope("operator.cli"), database.transaction() as connection:
-        workspace_id = connection.execute("SELECT id FROM omnix_workspaces ORDER BY id LIMIT 1").fetchone()[0]
         connection.execute(
             """
             INSERT INTO omnix_memory_records (

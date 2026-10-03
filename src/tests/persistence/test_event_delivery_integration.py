@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 import uuid
 
 import psycopg
@@ -51,6 +52,17 @@ def _labels(events, job_id: str) -> list[str]:
     return [event["payload"]["label"] for event in events if event["job_id"] == job_id]
 
 
+def _wait_for(reader: EventReader, after: EventCursor, job_id: str, *, count: int) -> list:
+    """The reader never passes a transaction in progress anywhere in the cluster
+    (other tests' included), so delivery can lag the commit briefly."""
+    deadline = time.monotonic() + 15
+    while True:
+        delivered = reader.events_after(after)
+        if len(_labels(delivered, job_id)) >= count or time.monotonic() > deadline:
+            return delivered
+        time.sleep(0.1)
+
+
 def test_a_lower_id_that_commits_late_is_delivered_in_order_exactly_once(setup) -> None:
     database, tenant, job_id = setup
     reader = EventReader(database, tenant)
@@ -64,7 +76,7 @@ def test_a_lower_id_that_commits_late_is_delivered_in_order_exactly_once(setup) 
         # An id cursor would deliver "second" now and later skip "first".
         assert _labels(reader.events_after(start), job_id) == []
         first.commit()
-        delivered = reader.events_after(start)
+        delivered = _wait_for(reader, start, job_id, count=2)
         assert _labels(delivered, job_id) == ["first", "second"]
         assert _labels(reader.events_after(event_cursor(delivered[-1])), job_id) == []
     finally:

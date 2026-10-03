@@ -47,6 +47,19 @@ def service_token(monkeypatch):
     return token
 
 
+def pytest_configure(config) -> None:
+    # Before anything reads a database URL: each xdist worker gets its own database.
+    from tests.conftest_databases import configure_worker_database
+
+    configure_worker_database()
+
+
+def pytest_unconfigure(config) -> None:
+    from tests.conftest_databases import drop_worker_databases
+
+    drop_worker_databases()
+
+
 def pytest_ignore_collect(collection_path: Path, config) -> bool | None:
     if should_ignore_collection(collection_path):
         return True
