@@ -11,6 +11,7 @@ from app.characters.avatar_generation_models import (
     CreateCharacterAvatarGenerationRequest,
 )
 from app.characters.avatar_viseme_generation import CharacterVisemeGenerationBatch
+from app.persistence.document_schemas import register_document_schema
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 
@@ -287,3 +288,8 @@ __all__ = [
     "PostgresCharacterAvatarGenerationRepositoryAdapter",
     "PostgresCharacterVisemeGenerationRepositoryAdapter",
 ]
+
+
+# Document shapes (WP-5.9).
+register_document_schema(_MODULE, _AVATAR_BATCH_TYPE, CharacterAvatarGenerationBatch)
+register_document_schema(_MODULE, _VISEME_BATCH_TYPE, CharacterVisemeGenerationBatch)

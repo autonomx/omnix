@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 from app.persistence.transaction_binding import after_commit
 
 
@@ -72,3 +73,8 @@ class PostgresAssistantTurnCoordinator(AssistantTurnCoordinator):
                 self._persisted_records.update(changed)
 
         after_commit(self._documents.database, remember)
+
+
+# Document shapes (WP-5.9); ``assistant-turns`` is the retired single-list form, read only.
+register_document_schema("chat", "assistant-turn", AssistantTurnRecord)
+register_document_schema("chat", "assistant-turns", list[AssistantTurnRecord])

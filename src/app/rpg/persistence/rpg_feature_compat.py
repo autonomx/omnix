@@ -18,6 +18,7 @@ from app.rpg.npc_evolution.profile_store import (
 )
 
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 
 
 def _now_iso() -> str:
@@ -326,3 +327,8 @@ def load_npc_evolution_profiles_for_runtime_postgres(
         "missing": missing,
         "errors": errors,
     }
+
+
+# Document shapes (WP-5.9). RPG is being retired; its two kinds are JSON objects.
+register_document_schema("rpg", "narrative-event", dict[str, Any])
+register_document_schema("rpg", "npc-evolution-profile", dict[str, Any])

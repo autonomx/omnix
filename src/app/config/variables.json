@@ -833,6 +833,13 @@
     "type": "integer"
   },
   {
+    "default": "false",
+    "description": "Controls document schemas strict for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DOCUMENT_SCHEMAS_STRICT",
+    "type": "boolean"
+  },
+  {
     "default": "0",
     "description": "Controls drain min seconds for kernel.",
     "feature": "kernel",

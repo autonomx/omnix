@@ -4,12 +4,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.characters.live_conversation_profile import (
     LiveConversationProfile,
     LiveConversationProfileEnvelope,
     LiveConversationProfileStore,
 )
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 
 
 class PostgresLiveConversationProfileStore(LiveConversationProfileStore):
@@ -40,3 +43,17 @@ class PostgresLiveConversationProfileStore(LiveConversationProfileStore):
             self._lock.write(dict(payload))
             return
         self._documents.write(dict(payload), module="live-chat", record_type="conversation-profiles")
+
+
+class LiveConversationProfilesDocument(BaseModel):
+    """The ``live-chat/conversation-profiles`` document: defaults and per-session profiles."""
+
+    model_config = ConfigDict(extra="allow")
+
+    format_version: int = 1
+    defaults: LiveConversationProfile | dict[str, Any] = Field(default_factory=dict)
+    sessions: dict[str, LiveConversationProfile] = Field(default_factory=dict)
+
+
+# Document shapes (WP-5.9).
+register_document_schema("live-chat", "conversation-profiles", LiveConversationProfilesDocument)

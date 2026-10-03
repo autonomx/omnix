@@ -74,6 +74,8 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
     # never read the developer's real keys (their presence changed trading
     # test outcomes on machines with Alpaca credentials).
     monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-api-keys.dpapi"))
+    # A document kind written without a registered shape fails the test (WP-5.9).
+    monkeypatch.setenv("OMNIX_DOCUMENT_SCHEMAS_STRICT", "1")
 
 
 @pytest.fixture(autouse=True)

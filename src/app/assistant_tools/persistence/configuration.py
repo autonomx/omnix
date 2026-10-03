@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 
 
 def read_assist_pending() -> dict[str, Any]:
@@ -91,3 +92,13 @@ def save_assistant_tools_config(payload: Any, path: Path | None = None):
         record_type="configuration",
     )
     return normalized
+
+
+def _register_document_schemas() -> None:
+    from app.assistant_tools.config_store import AssistantToolsConfigPayload
+
+    register_document_schema("assistant-tools", "configuration", AssistantToolsConfigPayload)
+
+
+# Document shapes (WP-5.9); config_store imports this module's callers lazily.
+_register_document_schemas()

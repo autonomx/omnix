@@ -123,6 +123,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEPLOYMENT_PROCESS_COUNTS` | string | — | kernel | Controls deployment process counts for kernel. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
+| `OMNIX_DOCUMENT_SCHEMAS_STRICT` | boolean | `false` | kernel | Controls document schemas strict for kernel. |
 | `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |
 | `OMNIX_DRAIN_SECONDS` | integer | `30` | kernel | Controls drain seconds for kernel. |
 | `OMNIX_ENV` | string | `development` | gateway, kernel, production.py, security | Controls env for gateway, kernel, production.py, security. |

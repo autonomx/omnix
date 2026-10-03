@@ -30,7 +30,8 @@ _metrics: dict[str, Any] | None = None
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
     "auth_rejections", "rate_limited", "retention_deleted", "job_duration",
-    "sse_subscribers", "sse_delivered", "sse_resyncs", "speech_turn", "db_hold",
+    "sse_subscribers", "sse_delivered", "sse_resyncs", "speech_turn", "db_hold", "client_errors",
+    "document_shape_mismatches",
 )
 
 
@@ -71,6 +72,10 @@ def _build() -> dict[str, Any]:
         ),
         "client_errors": Counter(
             "omnix_client_errors", "Browser error reports, by kind.", ("kind",), registry=registry,
+        ),
+        "document_shape_mismatches": Counter(
+            "omnix_document_shape_mismatches", "Stored documents read with a shape their kind does not declare.",
+            ("module", "record_type"), registry=registry,
         ),
         "retention_deleted": Counter(
             "omnix_retention_rows_deleted", "Rows deleted by retention, by record type.", ("record_type",),
@@ -194,6 +199,11 @@ def record_provider_attempt(client: str, status: int | str, seconds: float | Non
 
 def record_provider_retry(client: str) -> None:
     _get()["provider_retries"].labels(client).inc()
+
+
+def record_document_shape_mismatch(module: str, record_type: str) -> None:
+    """A stored document read with a shape its kind does not declare (WP-5.9)."""
+    _get()["document_shape_mismatches"].labels(module, record_type).inc()
 
 
 def record_auth_rejection(reason: str) -> None:
@@ -505,5 +515,5 @@ __all__ = [
     "record_retention_deleted",
     "record_speech_turn", "record_sse_delivered", "record_sse_resync", "sse_subscriber", "TtsStreamCollector",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
-    "record_client_error", "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
+    "record_client_error", "record_document_shape_mismatch", "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

@@ -60,6 +60,9 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Changed
 
+- Feature documents stored in PostgreSQL are checked against their declared
+  shape: a wrong write is refused, an old mismatching document is reported
+  (`scripts/check_document_shapes.py`).
 - Asset APIs no longer reveal where files are stored: responses carry the
   asset id, `file_name` and `download_url` (`GET /api/assets/{id}/download`)
   instead of `storage_path`, and voices are chosen by asset id.

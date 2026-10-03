@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .database import PostgresDatabase, default_database
+from .document_schemas import document_matches, validate_document
 from .errors import RevisionConflict
 from app.runtime.tenant_context import RequestTenant
 
@@ -54,6 +55,7 @@ class PostgresDocumentStore:
         if row is None:
             return default
         value = row[0]
+        document_matches(module, record_type, value, record_id=record_id)
         if isinstance(value, dict):
             return dict(value)
         if isinstance(value, list):
@@ -85,6 +87,7 @@ class PostgresDocumentStore:
         if row is None:
             return default, 0
         value = row[0]
+        document_matches(module, record_type, value, record_id=record_id)
         if isinstance(value, dict):
             value = dict(value)
         elif isinstance(value, list):
@@ -136,7 +139,10 @@ class PostgresDocumentStore:
         """Store ``payload``; with ``expected_revision`` only if unchanged since then.
 
         ``expected_revision=0`` creates the document only if it does not exist.
+        An active document must match its kind's registered shape.
         """
+        if status == "active":
+            validate_document(module, record_type, payload)
         if expected_revision is not None:
             return self._write_if_revision(
                 payload, module=module, record_type=record_type, record_id=record_id,
@@ -381,10 +387,12 @@ class DocumentLock:
         if row is None:
             return default
         value = row[0]
+        document_matches(self.module, self.record_type, value, record_id=self.record_id)
         return dict(value) if isinstance(value, dict) else list(value) if isinstance(value, list) else value
 
     def write(self, payload: Any) -> None:
         """Store the document on the locked connection; committed on exit."""
+        validate_document(self.module, self.record_type, payload)
         context = self.store.context
         self._local.connection.execute(
             """

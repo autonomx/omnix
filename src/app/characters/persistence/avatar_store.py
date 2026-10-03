@@ -8,6 +8,7 @@ from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAva
 from app.characters.repository import CharacterConflictError
 
 from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.document_schemas import register_document_schema
 from app.security.tenant_context import RequestTenant
 
 
@@ -154,3 +155,7 @@ class PostgresCharacterAvatarRepositoryAdapter:
 
 
 __all__ = ["PostgresCharacterAvatarRepositoryAdapter"]
+
+
+# Document shapes (WP-5.9).
+register_document_schema(_MODULE, _RECORD_TYPE, CharacterAvatarPack)

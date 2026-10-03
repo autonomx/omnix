@@ -6,6 +6,7 @@ from typing import Any, Callable, TypeVar
 
 from app.persistence.database import default_database
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 from app.security.tenant_context import current_tenant
 
 _T = TypeVar("_T")
@@ -76,3 +77,7 @@ def install_postgresql_legacy_session_callbacks() -> None:
         save_callback=save_legacy_chat_sessions,
         update_callback=mutate_legacy_chat_sessions,
     )
+
+
+# Document shapes (WP-5.9): the retired session map, keyed by session id.
+register_document_schema("platform", "legacy-chat-sessions", dict[str, Any])

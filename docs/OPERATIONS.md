@@ -560,6 +560,22 @@ error; after fixing the cause, set the event back to `pending` to retry it:
      WHERE event_key = '<key>';
     DELETE FROM omnix_outbox_consumer_inbox WHERE event_key = '<key>' AND status = 'dead_letter';
 
+### Document shapes
+
+Small feature documents live in `omnix_module_records`. Each kind
+(`module`/`record_type`) has a Pydantic shape its feature registers; a write
+with the wrong shape is refused (`DocumentShapeError`). A stored document that
+does not match is still read, logged as `document_shape_mismatch` and counted
+in `omnix_document_shape_mismatches_total`. To list every stored document that
+does not match, or whose kind has no shape:
+
+```
+python scripts/check_document_shapes.py
+```
+
+It exits 1 when it finds one. Run it after importing legacy data and before a
+release that tightens a shape.
+
 ### Database roles and row-level security
 
 Every table with a `workspace_id` has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in `src/app/persistence/tenant_scope.py`.

@@ -6,6 +6,11 @@ from typing import Any, Callable
 
 from app.research.source_store import ResearchSourceStore
 from app.persistence.document_store import PostgresDocumentStore
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.research.contracts import ResearchSource, ResearchSourceSnapshot
+from app.research.source_store import ResearchSourceManifest
+from app.persistence.document_schemas import register_document_schema
 
 
 class PostgresResearchSourceStore(ResearchSourceStore):
@@ -104,3 +109,17 @@ class PostgresResearchSourceStore(ResearchSourceStore):
         path = root / f"{safe}.txt"
         path.write_text(content, encoding="utf-8")
         return path
+
+
+class ResearchProvenanceDocument(BaseModel):
+    """The ``research/source-provenance-store`` document."""
+
+    model_config = ConfigDict(extra="allow")
+
+    sources: dict[str, ResearchSource] = Field(default_factory=dict)
+    snapshots: dict[str, ResearchSourceSnapshot] = Field(default_factory=dict)
+    manifests: dict[str, ResearchSourceManifest] = Field(default_factory=dict)
+
+
+# Document shapes (WP-5.9).
+register_document_schema("research", "source-provenance-store", ResearchProvenanceDocument)

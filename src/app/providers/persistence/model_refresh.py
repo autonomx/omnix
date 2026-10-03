@@ -14,6 +14,7 @@ from app.providers.cache_status import (
     _utcnow,
 )
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 from app.runtime.pagination import page_limit
 
 
@@ -81,3 +82,7 @@ class PostgresProviderModelRefreshStore:
 
     def history(self, *, limit: int = 20) -> ProviderModelRefreshHistory:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))
+
+
+# Document shapes (WP-5.9).
+register_document_schema("providers", "model-refresh-snapshot", ProviderModelRefreshSnapshot)

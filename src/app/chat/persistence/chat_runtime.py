@@ -20,6 +20,7 @@ from app.chat.character_store import (
     _store_database,
 )
 from app.chat.compaction import ConversationSummary
+from app.persistence.document_schemas import register_document_schema
 from app.chat.history_search import HistorySearchResult, HistorySearchStatus
 from app.chat.memory_commands import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
@@ -891,3 +892,7 @@ def reset_default_chat_runtime_caches() -> None:
     """Clear process-resident defaults for isolated tests and controlled restarts."""
     default_chat_store.cache_clear()
     default_history_search_service.cache_clear()
+
+
+# Document shapes (WP-5.9).
+register_document_schema("chat", "conversation-summary", ConversationSummary)

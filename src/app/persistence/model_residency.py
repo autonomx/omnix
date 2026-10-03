@@ -10,6 +10,7 @@ from app.jobs.residency import (
     get_model_residency_diagnostics,
 )
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 
 
 class PostgresModelResidencyStore:
@@ -56,3 +57,7 @@ class PostgresModelResidencyStore:
         policy: GpuResidencyPolicy | None = None,
     ) -> ModelResidencyDiagnostics:
         return get_model_residency_diagnostics(self.list_records(), policy)
+
+
+# Document shapes (WP-5.9).
+register_document_schema("models", "residency", ModelResidencyRecord)

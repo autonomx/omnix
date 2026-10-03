@@ -5,6 +5,12 @@ from pathlib import Path
 
 from app.chat.evaluation_store import LiveChatEvaluationStore
 from app.persistence.document_store import PostgresDocumentStore
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.chat.evaluation_store import VoiceSessionEvaluationRecord
+from app.persistence.document_schemas import register_document_schema
 
 
 class PostgresLiveChatEvaluationStore(LiveChatEvaluationStore):
@@ -42,3 +48,15 @@ class PostgresLiveChatEvaluationStore(LiveChatEvaluationStore):
         self._documents.write(payload, module="live-chat", record_type="evaluation-policy-store")
 
 
+class LiveChatEvaluationDocument(BaseModel):
+    """The ``live-chat/evaluation-policy-store`` document."""
+
+    model_config = ConfigDict(extra="allow")
+
+    format_version: int = 2
+    evaluations: list[VoiceSessionEvaluationRecord] = Field(default_factory=list)
+    presence_policies: dict[str, Any] = Field(default_factory=dict)
+
+
+# Document shapes (WP-5.9).
+register_document_schema("live-chat", "evaluation-policy-store", LiveChatEvaluationDocument)

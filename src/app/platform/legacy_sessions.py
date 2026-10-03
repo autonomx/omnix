@@ -8,6 +8,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 from app.providers.service import get_global_system_prompt
 from app.runtime.pagination import MAX_PAGE_SIZE
 
@@ -141,3 +142,17 @@ def generate_legacy_session_title(
     if not first_line:
         first_line = request.ai_response.split("\n")[0].strip() if request.ai_response else ""
     return LegacyGenerateTitleResponse(title=(first_line[:50] if first_line else "New Chat"))
+
+
+class LegacySessionDocument(BaseModel):
+    """The ``platform/legacy-session`` document."""
+
+    title: str = "New Chat"
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    system_prompt: str | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+# Document shapes (WP-5.9).
+register_document_schema(_MODULE, _RECORD_TYPE, LegacySessionDocument)

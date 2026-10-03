@@ -5,6 +5,7 @@ from typing import Any
 
 from app.runtime.pagination import page_limit
 
+from .document_schemas import document_matches, validate_document
 from .errors import RevisionConflict
 from .tenant import TenantContext
 
@@ -40,7 +41,12 @@ class PostgresModuleRecordRepository:
             + expiry,
             (context.workspace_id, module, record_type, record_id),
         ).fetchone()
-        return self._record(row) if row is not None else None
+        if row is None:
+            return None
+        record = self._record(row)
+        if record["status"] == "active":
+            document_matches(module, record_type, record["payload"], record_id=record_id)
+        return record
 
     def put(
         self,
@@ -54,6 +60,9 @@ class PostgresModuleRecordRepository:
         expires_at: str | None = None,
         expected_revision: int | None = None,
     ) -> dict[str, Any]:
+        if status == "active":
+            # An active document must match its kind's registered shape (WP-5.9).
+            validate_document(module, record_type, payload)
         if expected_revision is None:
             row = self.connection.execute(
                 """

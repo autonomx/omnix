@@ -10,6 +10,12 @@ from app.persistence.errors import RevisionConflict
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
+from app.persistence.document_schemas import register_document_schema
+
+# The generic repository is exercised with kinds made up for these tests; every
+# stored kind needs a registered shape (WP-5.9).
+for _module, _record_type in (("research", "cache-entry"), ("live-chat", "evaluation"), ("rpg", "npc-evolution-profile")):
+    register_document_schema(_module, _record_type, dict)
 
 
 pytestmark = pytest.mark.skipif(

@@ -10,6 +10,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
+from app.persistence.document_schemas import register_document_schema
 from app.persistence.document_store import DocumentLock, DocumentRevisionConflict, PostgresDocumentStore
 from app.persistence.identity_service import ensure_local_identity
 from app.runtime.tenant_context import install_process_tenant
@@ -29,6 +30,7 @@ def store():
     database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=12))
     install_process_tenant(ensure_local_identity(database))
     record_type = f"cas-test-{uuid.uuid4().hex[:10]}"
+    register_document_schema("test", record_type, dict)
     try:
         yield PostgresDocumentStore(database), record_type
     finally:

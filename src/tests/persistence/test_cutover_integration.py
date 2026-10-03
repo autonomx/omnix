@@ -19,6 +19,10 @@ from app.persistence.cutover import (
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
+from app.persistence.document_schemas import register_document_schema
+
+# The bundles import a legacy kind no current code reads; stored kinds need a shape (WP-5.9).
+register_document_schema("assist-core", "policy", dict)
 
 
 pytestmark = pytest.mark.skipif(

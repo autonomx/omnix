@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_schemas import register_document_schema
 
 
 def append_assistant_tool_ledger_entry_postgres(entry: Any, path: Path | None = None) -> Any:
@@ -40,3 +41,13 @@ def load_assistant_tool_ledger_postgres(
             continue
     entries.sort(key=lambda item: item.created_at, reverse=True)
     return AssistantToolLedgerPayload(entries=entries[: max(1, int(limit))])
+
+
+def _register_document_schemas() -> None:
+    from app.assistant_tools.ledger import AssistantToolLedgerEntry
+
+    register_document_schema("assistant-tools", "execution-ledger", AssistantToolLedgerEntry)
+
+
+# Document shapes (WP-5.9).
+_register_document_schemas()

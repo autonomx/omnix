@@ -172,7 +172,10 @@ else:
     raise AssertionError("non-identical avatar import replacement was not rejected")
 
 from app.assist_core import policy_store
-policy_store.write_pending({"confirmation:1": {"status": "pending"}})
+policy_store.write_pending({"confirmation:1": {
+    "confirmation_id": "confirmation:1", "tool_call": {"name": "house.lights", "args": {}},
+    "created_at": "2026-07-01T00:00:00Z", "status": "pending",
+}})
 assert policy_store.read_pending()["confirmation:1"]["status"] == "pending"
 
 from app.assistant_tools import config_store

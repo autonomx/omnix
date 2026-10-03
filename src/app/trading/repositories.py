@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
+from app.persistence.document_schemas import register_document_schema
 from app.runtime.pagination import MAX_PAGE_SIZE
 
 
@@ -165,3 +166,9 @@ RepositoryFactory = Callable[[], TradingDocumentRepository]
 
 def default_trading_repository() -> TradingDocumentRepository:
     return TradingDocumentRepository()
+
+
+# Document shapes (WP-5.9): the terminal's documents are client-owned JSON
+# objects (layouts, watchlists, drawings, indicator presets).
+for _record_type in SUPPORTED_DOCUMENT_TYPES:
+    register_document_schema(TRADING_MODULE, _record_type, dict[str, Any])
