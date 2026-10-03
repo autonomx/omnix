@@ -7,14 +7,12 @@ import {
   useLiveConversationState,
 } from '../assistant-workspace/live-conversation-store';
 import { CharacterModePanel } from './CharacterModePanel';
-import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
 import {
   enterLiveChatFullscreen,
   exitLiveChatFullscreen,
   initializeLiveChatFullscreenController,
   useLiveChatFullscreenState,
 } from './live-chat-fullscreen-controller';
-import { invokeExistingLiveCallControl } from './live-chat-runtime-adapters';
 import { LiveConversationControls } from './LiveConversationControls';
 import { LiveConversationEvaluationPanel } from './LiveConversationEvaluationPanel';
 import { LivePronunciationPanel } from './LivePronunciationPanel';
@@ -22,18 +20,14 @@ import { LiveVoiceCalibrationPanel } from './LiveVoiceCalibrationPanel';
 import './LiveChatPanel.css';
 import './LiveChatFullscreenEntry.css';
 
-export {
-  invokeExistingLiveCallControl,
-  liveCallCharacterName,
-  readLiveCallSnapshot,
-} from './live-chat-runtime-adapters';
-
 export type LiveChatPanelProps = {
   sessionId: string | null;
   onSessionResolved?: (sessionId: string) => void;
+  /** Starts or ends the live call (Chat's call controls). */
+  onToggleCall: () => void;
 };
 
-export function LiveChatPanel({ sessionId, onSessionResolved }: LiveChatPanelProps) {
+export function LiveChatPanel({ sessionId, onSessionResolved, onToggleCall }: LiveChatPanelProps) {
   const runtimeState = useLiveConversationState();
   const snapshot = selectLiveChatSnapshot(runtimeState);
   const fullscreen = useLiveChatFullscreenState();
@@ -52,10 +46,7 @@ export function LiveChatPanel({ sessionId, onSessionResolved }: LiveChatPanelPro
   }, []);
 
   function toggleCall(): void {
-    if (!invokeExistingLiveCallControl()) {
-      setCallStatus('Live Voice controls are not mounted yet. Open a Chat session and try again.');
-      return;
-    }
+    onToggleCall();
     setCallStatus(snapshot.connected ? 'Ending live call…' : 'Starting live call…');
   }
 
@@ -130,7 +121,6 @@ export function LiveChatPanel({ sessionId, onSessionResolved }: LiveChatPanelPro
       </section>
 
       <LiveConversationEvaluationPanel />
-      <LiveChatFullscreenShell />
     </section>
   );
 }

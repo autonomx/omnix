@@ -1,24 +1,10 @@
-.assistant-chat-main.omnix-live-chat-active > :not([data-omnix-live-chat-host]) {
-  display: none !important;
-}
-
-[data-omnix-live-chat-host] {
+/* Live Chat is a Chat view; its panel scrolls inside the chat column. */
+.assistant-chat-main > .live-chat-panel {
   box-sizing: border-box;
-  height: 100%;
-  min-height: 100%;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-}
-
-.assistant-chat-main.omnix-live-chat-active {
-  display: block;
-  overflow: hidden;
-}
-
-.assistant-sidebar-nav.omnix-live-chat-nav-active > button.active:not([data-omnix-live-chat-nav]) {
-  background: transparent;
-  border-color: transparent;
 }
 
 .live-chat-panel {

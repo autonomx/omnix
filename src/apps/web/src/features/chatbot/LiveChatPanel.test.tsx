@@ -1,15 +1,11 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
-import {
-  LiveChatPanel,
-  invokeExistingLiveCallControl,
-  readLiveCallSnapshot,
-} from './LiveChatPanel';
+import { LiveChatPanel } from './LiveChatPanel';
 
 const defaultProfile = {
   presence_preset: 'natural', talkativeness: 50, conversation_stance: 'automatic',
@@ -48,11 +44,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderPanel(sessionId: string | null) {
+function renderPanel(sessionId: string | null, onToggleCall = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LiveChatPanel sessionId={sessionId} />
+      <LiveChatPanel sessionId={sessionId} onToggleCall={onToggleCall} />
     </QueryClientProvider>,
   );
 }
@@ -83,23 +79,13 @@ describe('LiveChatPanel', () => {
     expect(screen.getByText('user')).toBeInTheDocument();
   });
 
-  it('reuses the existing live-call control instead of creating another voice pipeline', () => {
-    const card = document.createElement('section');
-    card.className = 'assistant-live-card';
-    card.innerHTML = `
-      <span class="assistant-live-identity">Talking to Maya</span>
-      <div class="assistant-live-state"><span>Listening</span></div>
-      <button type="button">Start Call</button>
-    `;
-    document.body.appendChild(card);
-    const click = vi.spyOn(card.querySelector('button')!, 'click');
+  it('starts the call through Chat instead of creating another voice pipeline', () => {
+    const onToggleCall = vi.fn();
+    renderPanel('chat:one', onToggleCall);
 
-    expect(readLiveCallSnapshot()).toMatchObject({
-      connected: false,
-      state: 'Listening',
-      identity: 'Talking to Maya',
-    });
-    expect(invokeExistingLiveCallControl()).toBe(true);
-    expect(click).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Start Call' }));
+
+    expect(onToggleCall).toHaveBeenCalledOnce();
+    expect(screen.getByText('Starting live call…')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,4 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -14,14 +13,8 @@ import {
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
-import {
-  invokeExistingLiveCallControl,
-  readLiveChatMirroredAvatar,
-  readLiveChatMirroredMessages,
-  submitLiveChatMessageThroughExistingComposer,
-  type LiveChatMirroredAvatar,
-  type LiveChatMirroredMessage,
-} from './live-chat-runtime-adapters';
+import { readLiveChatMirroredAvatar, type LiveChatMirroredAvatar } from './live-chat-runtime-adapters';
+import { useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
 import './LiveChatFullscreenShell.css';
 
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
@@ -29,11 +22,28 @@ const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const PRESENTATION_UPDATE_DELAY_MS = 24;
 
-export function LiveChatFullscreenShell() {
+/** A message of the conversation shown in immersive Live Chat. */
+export type LiveChatMessage = {
+  id: string;
+  role: 'assistant' | 'user' | 'system';
+  text: string;
+  timestamp: string | null;
+};
+
+export type LiveChatFullscreenShellProps = {
+  /** The conversation, newest last (Chat passes its messages or the live transcript). */
+  messages: readonly LiveChatMessage[];
+  /** Sends through Chat's composer; false when nothing was sent. */
+  onSendMessage: (text: string) => boolean;
+  /** Starts or ends the live call. */
+  onToggleCall: () => void;
+};
+
+export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall }: LiveChatFullscreenShellProps) {
   const fullscreen = useLiveChatFullscreenState();
   const runtime = useLiveConversationState();
+  const presentation = useLiveCallPresentation();
   const snapshot = selectLiveChatSnapshot(runtime);
-  const [messages, setMessages] = useState<LiveChatMirroredMessage[]>(() => readLiveChatMirroredMessages());
   const [avatar, setAvatar] = useState<LiveChatMirroredAvatar>(() => readLiveChatMirroredAvatar());
   const [characterRuntime, setCharacterRuntime] = useState<CharacterLiveCallRuntime | null>(() => readLatestTrustedCharacterRuntime());
   const [composerText, setComposerText] = useState('');
@@ -48,7 +58,6 @@ export function LiveChatFullscreenShell() {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        setMessages(readLiveChatMirroredMessages());
         const nextAvatar = readLiveChatMirroredAvatar();
         if (nextAvatar.imageUrl || nextAvatar.backgroundImage) setAvatar(nextAvatar);
         setCharacterRuntime(readLatestTrustedCharacterRuntime());
@@ -58,24 +67,16 @@ export function LiveChatFullscreenShell() {
       setCharacterRuntime((event as CustomEvent<CharacterLiveCallRuntime | null>).detail ?? null);
       refresh();
     };
-    const observer = new MutationObserver(refresh);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ['src', 'style', 'data-mouth-frame', 'data-voice-mode'],
-    });
+    // The avatar bridge reports runtime and frame changes; the call's voice mode comes from presentation.
     window.addEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
     window.addEventListener(AVATAR_FRAME_EVENT, refresh);
     refresh();
     return () => {
-      observer.disconnect();
       window.removeEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
       window.removeEventListener(AVATAR_FRAME_EVENT, refresh);
       if (timer !== null) clearTimeout(timer);
     };
-  }, [fullscreen.immersive]);
+  }, [fullscreen.immersive, presentation.speaking, presentation.captureStatus]);
 
   useEffect(() => {
     if (!fullscreen.immersive) return;
@@ -112,20 +113,14 @@ export function LiveChatFullscreenShell() {
   const displayIdentity = characterRuntime?.display_name?.trim() || snapshot.identity;
 
   function toggleCall(): void {
-    if (!invokeExistingLiveCallControl()) {
-      setActionStatus('The existing Live Voice controls are not available yet.');
-      return;
-    }
+    onToggleCall();
     setActionStatus(snapshot.connected ? 'Ending live call…' : 'Starting live call…');
   }
 
   function submitMessage(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!composerText.trim()) return;
-    if (!submitLiveChatMessageThroughExistingComposer(composerText)) {
-      setActionStatus('The existing chat composer is not available yet.');
-      return;
-    }
+    if (!onSendMessage(composerText)) return;
     setComposerText('');
     setActionStatus('Message sent through the current chat session.');
   }
@@ -177,7 +172,7 @@ export function LiveChatFullscreenShell() {
           <div className="live-chat-fullscreen-transcript" role="log" aria-live="polite" ref={transcriptRef}>
             {messages.length ? messages.slice(-24).map((message) => (
               <article className={message.role} key={message.id}>
-                <header><strong>{message.label}</strong>{message.timestamp ? <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time> : null}</header>
+                <header><strong>{message.role === 'user' ? 'You' : message.role === 'assistant' ? displayIdentity : 'System'}</strong>{message.timestamp ? <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time> : null}</header>
                 <p>{message.text}</p>
               </article>
             )) : (

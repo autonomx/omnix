@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
-import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
+import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import {
   enterLiveChatFullscreen,
   exitLiveChatFullscreen,
@@ -13,26 +13,25 @@ import {
 } from './live-chat-fullscreen-controller';
 
 const sourceCallClick = vi.fn();
-const sourceSubmit = vi.fn();
+const sourceSubmit = vi.fn((text: string) => Boolean(text.trim()));
+const messages: LiveChatMessage[] = [
+  { id: 'a1', role: 'assistant', text: 'Welcome to our corner of the stars.', timestamp: null },
+  { id: 'u1', role: 'user', text: 'Can you tell me a story?', timestamp: null },
+];
+
+function renderShell() {
+  return render(<LiveChatFullscreenShell messages={messages} onSendMessage={sourceSubmit} onToggleCall={sourceCallClick} />);
+}
 
 describe('LiveChatFullscreenShell', () => {
   let dispose: () => void;
 
   beforeEach(() => {
     document.body.innerHTML = `
-      <div class="assistant-chat-messages">
-        <article class="assistant-chat-message assistant"><div class="assistant-chat-bubble"><header><strong>Maya</strong></header><p>Welcome to our corner of the stars.</p></div></article>
-        <article class="assistant-chat-message user"><div class="assistant-chat-bubble"><header><strong>You</strong></header><p>Can you tell me a story?</p></div></article>
-      </div>
-      <section class="assistant-live-card"><button type="button">End Call</button></section>
-      <form class="assistant-composer"><textarea></textarea></form>
       <figure class="assistant-live-character-avatar" data-mouth-frame="medium" data-voice-mode="speaking"><img src="/maya.png" alt="Maya live avatar" /></figure>
     `;
-    sourceCallClick.mockReset();
-    sourceSubmit.mockReset();
-    document.querySelector<HTMLButtonElement>('.assistant-live-card button')!
-      .addEventListener('click', () => sourceCallClick());
-    document.querySelector<HTMLFormElement>('.assistant-composer')!.requestSubmit = () => sourceSubmit();
+    sourceCallClick.mockClear();
+    sourceSubmit.mockClear();
     Object.defineProperty(document.documentElement, 'requestFullscreen', { configurable: true, value: undefined });
     vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
@@ -59,9 +58,9 @@ describe('LiveChatFullscreenShell', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders a character-first stage and conversation rail from existing owners', () => {
+  it('renders a character-first stage and the conversation it is given', () => {
     enterLiveChatFullscreen('header');
-    render(<LiveChatFullscreenShell />);
+    renderShell();
 
     const dialog = screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' });
     const fullscreen = within(dialog);
@@ -73,9 +72,9 @@ describe('LiveChatFullscreenShell', () => {
     expect(fullscreen.getByText(/Microphone listening · Echo-aware/)).toBeInTheDocument();
   });
 
-  it('delegates call and composer actions without creating another runtime', () => {
+  it('hands call and composer actions to Chat', () => {
     enterLiveChatFullscreen('call-card');
-    render(<LiveChatFullscreenShell />);
+    renderShell();
 
     fireEvent.click(screen.getByRole('button', { name: 'End voice chat' }));
     expect(sourceCallClick).toHaveBeenCalledTimes(1);
@@ -83,13 +82,13 @@ describe('LiveChatFullscreenShell', () => {
     const composer = screen.getByPlaceholderText('Write a message…');
     fireEvent.change(composer, { target: { value: 'A fullscreen message' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send fullscreen Live Chat message' }));
-    expect(document.querySelector<HTMLTextAreaElement>('.assistant-composer textarea')).toHaveValue('A fullscreen message');
-    expect(sourceSubmit).toHaveBeenCalledTimes(1);
+    expect(sourceSubmit).toHaveBeenCalledWith('A fullscreen message');
+    expect(composer).toHaveValue('');
   });
 
-  it('exits the overlay without clicking the existing End Call control', async () => {
+  it('exits the overlay without ending the call', async () => {
     enterLiveChatFullscreen('header');
-    render(<LiveChatFullscreenShell />);
+    renderShell();
 
     fireEvent.click(screen.getByRole('button', { name: 'Exit fullscreen Live Chat' }));
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

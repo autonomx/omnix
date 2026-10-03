@@ -44,7 +44,8 @@ import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { ChatIdentityModeControl } from './ChatIdentityModeControl';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
-import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
+import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
+import { LiveChatPanel } from './LiveChatPanel';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
@@ -90,7 +91,7 @@ const DEFAULT_IMAGE_MESSAGE = 'Please analyze the attached image.';
 const DEFAULT_IMAGES_MESSAGE = 'Please analyze the attached images.';
 const DEFAULT_TEXT_FILE_MESSAGE = 'Please analyze the attached file.';
 
-type AssistantView = 'chats' | 'voice' | 'tools' | 'characters' | 'memory' | 'settings';
+type AssistantView = 'chats' | 'live' | 'voice' | 'tools' | 'characters' | 'memory' | 'settings';
 type UtilityPanel = 'voice' | 'tools';
 type VoiceCaptureMode = 'idle' | 'listening' | 'recording' | 'transcribing' | 'error';
 type VoiceProfileAsset = AssetListResponse['assets'][number];
@@ -127,6 +128,7 @@ type AssistantSettings = {
 
 const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: string }> = [
   { id: 'chats', label: 'Chats', icon: '▣' },
+  { id: 'live', label: 'Live Chat', icon: '◉' },
   { id: 'voice', label: 'Voice Sessions', icon: '◉' },
   { id: 'tools', label: 'Tools', icon: '⚒' },
   { id: 'characters', label: 'Characters', icon: '♙' },
@@ -783,6 +785,27 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
   const liveVoiceTranscript = useLiveVoiceTranscript();
   const livePresentation = useLiveCallPresentation();
+  // Immersive Live Chat shows the chat when it has messages, the live transcript otherwise.
+  const liveChatMessages = useMemo<LiveChatMessage[]>(() => {
+    if (displayedMessages.length) {
+      return displayedMessages.map((message) => ({
+        id: message.id,
+        role: message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system',
+        text: message.content,
+        timestamp: message.created_at,
+      }));
+    }
+    const transcript: LiveChatMessage[] = liveVoiceTranscript.rows.map((row) => ({
+      id: row.id,
+      role: row.speaker === 'You' ? 'user' : 'assistant',
+      text: row.text,
+      timestamp: row.at,
+    }));
+    if (liveVoiceTranscript.delivery) {
+      transcript.push({ id: 'live-voice-delivery', role: 'assistant', text: liveVoiceTranscript.delivery.text, timestamp: null });
+    }
+    return transcript;
+  }, [displayedMessages, liveVoiceTranscript]);
   const liveCardRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     liveCallPresentationStore.update({ autoSpeak: autoSpeakResponses });
@@ -1294,6 +1317,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const card = liveCardRef.current;
     if (card && dedicatedLiveVoiceControllerInstalled()) toggleLiveVoiceCall(card);
     void (liveVoiceActive ? stopLiveCall() : startLiveCall());
+  }
+
+  function sendFromLiveChat(text: string): boolean {
+    const content = text.trim();
+    if (!content) return false;
+    setValue('content', content, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    void handleSubmit(submitComposerMessage)();
+    return true;
   }
 
   function startLiveCallFromControls(): Promise<void> {
@@ -2021,6 +2052,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={toggleLiveCallFromControls}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
               </form>
             </>
+          ) : activeView === 'live' ? (
+            <LiveChatPanel sessionId={selectedSessionId} onSessionResolved={setSelectedSessionId} onToggleCall={toggleLiveCallFromControls} />
           ) : (
             <AssistantWorkspaceView
               activeView={activeView}
@@ -2110,7 +2143,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </aside>
       </div>
-      <LiveChatFullscreenShell />
+      <LiveChatFullscreenShell messages={liveChatMessages} onSendMessage={sendFromLiveChat} onToggleCall={toggleLiveCallFromControls} />
     </WorkspacePanel>
   );
 }
@@ -2136,7 +2169,7 @@ export function selectFreshChatSession<T extends { id?: string; message_count?: 
   return queryMessageLength >= mutationMessageLength ? queriedSession : mutationSession;
 }
 
-function AssistantWorkspaceView({ activeView, assistantSettings, selectedSessionId, chatProviders, enabledToolCount, initialToolConnectionMessage, initialToolId, modelLabel, onResetAssistantSettings, onSessionResolved, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats'>; assistantSettings: AssistantSettings; selectedSessionId: string | null; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; initialToolConnectionMessage: string | null; initialToolId: string | null; modelLabel: string; onResetAssistantSettings: () => void; onSessionResolved: (sessionId: string) => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {
+function AssistantWorkspaceView({ activeView, assistantSettings, selectedSessionId, chatProviders, enabledToolCount, initialToolConnectionMessage, initialToolId, modelLabel, onResetAssistantSettings, onSessionResolved, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats' | 'live'>; assistantSettings: AssistantSettings; selectedSessionId: string | null; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; initialToolConnectionMessage: string | null; initialToolId: string | null; modelLabel: string; onResetAssistantSettings: () => void; onSessionResolved: (sessionId: string) => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {
   if (activeView === 'voice') return <section className="assistant-view-panel" aria-label="Voice Sessions view"><p className="eyebrow">Omnix Assistant</p><h2>Voice Sessions</h2><p>Use browser speech-to-text or the configured STT service to draft messages, then play assistant replies through the TTS service or local Voice Studio jobs.</p><div className="platform-grid"><article><h3>Live call</h3><p>Input: {speechInputLabel}. Output: {ttsOutputLabel}.</p><button type="button" onClick={() => void onStartLiveCall()}>Start Call</button></article><article><h3>Response playback</h3><p>{assistantSettings.voiceId ? `Active cloned voice: ${voiceLabelForId(assistantSettings.voiceId, voiceProfiles) || assistantSettings.voiceId}` : runtimeConfig.ttsVoice ? `Configured voice: ${runtimeConfig.ttsVoice}` : 'Chatbot will synthesize assistant replies with the default configured voice.'}</p></article></div></section>;
   if (activeView === 'tools') return <AssistantToolSettingsPanel enabledToolCount={enabledToolCount} initialConnectionMessage={initialToolConnectionMessage} initialToolId={initialToolId} toolExecutionRows={toolExecutionRows} onShowExecutionPanel={onShowTools} />;
   if (activeView === 'characters') return <section className="assistant-view-panel" aria-label="Characters view"><header><p className="eyebrow">Omnix Assistant</p><h2>Characters</h2><p>Create, version, and govern character identities independently from their linked voices and memory.</p></header><CharacterManagementPanel sessionId={selectedSessionId} onSessionResolved={onSessionResolved} /></section>;

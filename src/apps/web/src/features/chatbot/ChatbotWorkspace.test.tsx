@@ -581,6 +581,27 @@ describe('ChatbotWorkspace', () => {
     });
   });
 
+  it('opens Live Chat from the sidebar, right after Chats', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/characters') return Response.json({ characters: [] });
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderChatbot();
+
+    const liveChat = await screen.findByRole('button', { name: 'Open Live Chat view' });
+    expect(liveChat.previousElementSibling).toHaveAccessibleName('Open Chats view');
+    fireEvent.click(liveChat);
+
+    expect(await screen.findByRole('heading', { name: 'Live Chat' })).toBeInTheDocument();
+    expect(liveChat).toHaveClass('active');
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+  });
+
   it('opens a dedicated Characters destination from the assistant sidebar', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
