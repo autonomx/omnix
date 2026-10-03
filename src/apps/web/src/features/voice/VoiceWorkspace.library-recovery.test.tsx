@@ -38,7 +38,7 @@ describe('VoiceWorkspace library recovery', () => {
     let assetRequests = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
-      if (path === '/api/settings') return Response.json({
+      if (path === '/api/settings/profile') return Response.json({
         success: true,
         provider: 'lmstudio',
         audio_provider_tts: 'faster-qwen3-tts',

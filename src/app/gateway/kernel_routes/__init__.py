@@ -30,8 +30,10 @@ from app.platform import (
     delete_legacy_session,
     generate_legacy_session_title,
     get_legacy_session,
+    get_settings_payload,
     list_legacy_sessions,
     list_report_artifacts,
+    save_settings_payload,
     update_legacy_session,
 )
 from app.prompts import (
@@ -61,6 +63,7 @@ from app.runtime.worker_health import (
     get_worker_payload_policy,
 )
 from app.settings.api import settings_payload, save_settings_patch
+from app.settings.models import SettingsProfileSaveRequest
 from app.persistence.document_store import DocumentRevisionConflict
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.settings.access import load_settings
@@ -234,6 +237,16 @@ def create_kernel_router(
             raise HTTPException(status_code=409, detail="settings_revision_conflict") from exc
         except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # The Settings Control Center works on the whole profile document, with API
+    # keys masked on read and routed to the secret store on save.
+    @router.get("/api/settings/profile", response_model=SettingsPayload, tags=["settings"])
+    def settings_profile() -> SettingsPayload:
+        return get_settings_payload()
+
+    @router.post("/api/settings/profile", response_model=SettingsSaveResponse, tags=["settings"])
+    def save_settings_profile(request: SettingsProfileSaveRequest) -> SettingsSaveResponse:
+        return save_settings_payload(request.model_dump(by_alias=True, exclude_none=True))
 
     @router.get(
         "/api/sessions",

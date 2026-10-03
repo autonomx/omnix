@@ -17,6 +17,7 @@ import {
   type LiveVoicePcmSessionOptions,
 } from './live-voice-pcm-session';
 import { liveStreamFetch } from '../../api/transport';
+import type { components } from '../../api/generated/types';
 
 
 const LIVE_OBSERVATION_GENERATION_PATH = (sessionId: string): string =>
@@ -32,16 +33,7 @@ export type LiveObservationSupersededDetail = {
   reason: string;
 };
 
-type ObservationGenerationResponse = {
-  observation_id: string;
-  output_id: string;
-  context_version: number;
-  task_contract_id: string;
-  task_contract_version: number;
-  text: string;
-  text_chars: number;
-  estimated_speech_ms: number;
-};
+type ObservationGenerationResponse = components['schemas']['LiveObservationGenerationResponse'];
 
 type PcmFactory = (
   traceId: string,

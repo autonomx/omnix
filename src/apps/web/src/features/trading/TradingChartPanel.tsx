@@ -283,7 +283,8 @@ function chartHistoryLimit(
   return 1_000;
 }
 
-type ComparisonBarsResponse = BarsResponse & { historySourceInstrumentId?: string };
+/** Bars for a comparison series, noting which instrument supplied older history. */
+type ComparisonBars = BarsResponse & { historySourceInstrumentId?: string };
 
 function longHistoryEquivalent(instrumentId: string, interval: string): string | null {
   if (!['1d', '1w'].includes(interval)) return null;
@@ -301,7 +302,7 @@ async function comparisonBars(
   instrumentId: string,
   interval: string,
   limit: number,
-): Promise<ComparisonBarsResponse> {
+): Promise<ComparisonBars> {
   const selected = await tradingApi.bars(instrumentId, interval, limit);
   const equivalent = longHistoryEquivalent(instrumentId, interval);
   if (!equivalent || equivalent === instrumentId) return selected;

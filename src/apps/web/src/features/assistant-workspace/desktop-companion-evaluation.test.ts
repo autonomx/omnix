@@ -35,11 +35,11 @@ describe('desktop companion evaluation accumulator', () => {
 
     const payload = accumulator.finalize(new Date('2026-07-14T12:01:00Z'));
 
-    expect(payload.counts.max_vision_calls_per_minute).toBe(5);
-    expect(payload.latency_ms.observation_p95).toBe(600);
-    expect(payload.rates.stale_output_rate).toBe(0.5);
-    expect(payload.rates.duplicate_comment_rate).toBe(0.5);
-    expect(payload.rates.collision_rate).toBe(1);
+    expect(payload.counts?.max_vision_calls_per_minute).toBe(5);
+    expect(payload.latency_ms?.observation_p95).toBe(600);
+    expect(payload.rates?.stale_output_rate).toBe(0.5);
+    expect(payload.rates?.duplicate_comment_rate).toBe(0.5);
+    expect(payload.rates?.collision_rate).toBe(1);
     expect(payload.scenario_labels).toEqual(['scene-change']);
     expect(JSON.stringify(payload)).not.toContain('image_data_url');
   });

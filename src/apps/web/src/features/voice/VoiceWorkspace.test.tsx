@@ -55,7 +55,7 @@ describe('VoiceWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/settings') return Response.json({ success: true, settings: {} });
+      if (path === '/api/settings/profile') return Response.json({ success: true, settings: {} });
       if (path === '/api/providers') return Response.json({ providers: [], models: [] });
       if (path === '/api/assets') return Response.json({ assets: [] });
       if (path === '/api/jobs' && init?.method === 'POST') return Response.json(queuedJob);
@@ -92,7 +92,7 @@ describe('VoiceWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/settings') {
+      if (path === '/api/settings/profile') {
         return Response.json({
           success: true,
           provider: 'lmstudio',
@@ -279,7 +279,7 @@ describe('VoiceWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/settings') {
+      if (path === '/api/settings/profile') {
         return Response.json({
           success: true,
           provider: 'lmstudio',

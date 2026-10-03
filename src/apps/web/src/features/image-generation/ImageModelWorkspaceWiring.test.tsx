@@ -36,7 +36,7 @@ describe('Image Generation model residency wiring', () => {
           models: [],
         });
       }
-      if (path === '/api/settings') return Response.json({ success: true, provider: '', audio_provider_tts: '', audio_provider_stt: '', settings: {} });
+      if (path === '/api/settings/profile') return Response.json({ success: true, provider: '', audio_provider_tts: '', audio_provider_stt: '', settings: {} });
       if (path === '/api/workers/health') {
         return Response.json({
           ok: true,

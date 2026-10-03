@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { startBlankChat } from './sessionTools';
 import { api, unwrapAs } from '../../api/http';
+import type { components } from '../../api/generated/types';
 
 let chatSidebarManagerInstalled = false;
 
@@ -28,9 +29,7 @@ type SessionSummary = {
   updated_at?: string;
 };
 
-type SessionListPayload = {
-  sessions?: SessionSummary[];
-};
+type SessionListPayload = components['schemas']['ChatSessionListResponse'];
 
 type SidebarEntryState = {
   pinned?: boolean;

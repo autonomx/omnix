@@ -41,7 +41,7 @@ describe('VoiceCloningWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/settings') {
+      if (path === '/api/settings/profile') {
         return Response.json({
           success: true,
           provider: 'lmstudio',

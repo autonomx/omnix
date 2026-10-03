@@ -3,8 +3,8 @@ import { DEFAULT_SETTINGS_DOCUMENT } from './settingsDefaults';
 import { createSettingsSaveRequest, loadSettingsProfile, saveSettingsProfile, type SettingsFetch } from './settingsApi';
 import { migrateSettingsDocument } from './settingsMerge';
 
-function response(body: unknown, ok = true, status = 200): Response {
-  return { ok, status, json: async () => body } as Response;
+function response(body: unknown, status = 200): Response {
+  return Response.json(body, { status });
 }
 
 describe('settings API adapter', () => {
@@ -20,8 +20,11 @@ describe('settings API adapter', () => {
     const draft = migrateSettingsDocument({ ...base, assistant: { ...base.assistant, autoSpeakReplies: true } });
     const request = createSettingsSaveRequest(base, draft);
     let sent = '';
-    const fetcher: SettingsFetch = async (_input, init) => { sent = String(init?.body || ''); return response({ success: true }); };
+    let path = '';
+    const fetcher: SettingsFetch = async (input, init) => { path = String(input); sent = String(init?.body || ''); return response({ success: true }); };
     await saveSettingsProfile(request, fetcher);
+    // The profile route keeps the patch, provider sections and API keys together (POST /api/settings takes per-key values).
+    expect(path).toBe('/api/settings/profile');
     expect(JSON.parse(sent).settings_profile_patch).toEqual({ assistant: draft.assistant });
   });
 

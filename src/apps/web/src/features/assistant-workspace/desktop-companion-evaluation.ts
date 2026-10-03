@@ -1,29 +1,9 @@
+import type { components } from '../../api/generated/types';
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
 import { api, unwrap } from '../../api/http';
 
-export type DesktopCompanionEvaluationPayload = {
-  run_id: string;
-  session_id: string | null;
-  started_at: string;
-  ended_at: string;
-  exact_commit_sha: string;
-  app_version: string;
-  browser_version: string;
-  os_version: string;
-  character_id: string;
-  profile_version: number | null;
-  observation_schema_version: number;
-  attention_policy_version: number;
-  rollout_stage: DesktopCompanionRolloutStage;
-  vision_provider: string;
-  vision_model_hash: string | null;
-  remote_provider: boolean;
-  counts: Record<string, number>;
-  latency_ms: Record<string, number | null>;
-  rates: Record<string, number | null>;
-  scenario_labels: string[];
-};
+export type DesktopCompanionEvaluationPayload = components['schemas']['DesktopCompanionEvaluationCreate'];
 
 type AccumulatorIdentity = {
   runId: string;

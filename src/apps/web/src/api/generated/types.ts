@@ -6408,6 +6408,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings Profile */
+        get: operations["settings_profile_api_settings_profile_get"];
+        put?: never;
+        /** Save Settings Profile */
+        post: operations["save_settings_profile_api_settings_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stt/authorityz": {
         parameters: {
             query?: never;
@@ -24471,6 +24489,57 @@ export interface components {
             worker_urls: {
                 [key: string]: string;
             };
+        };
+        /**
+         * SettingsProfileSaveRequest
+         * @description A Settings Control Center save: a profile patch plus the provider sections it changed.
+         *
+         *     ``base_revision`` is the profile revision the patch was made against; a
+         *     newer profile refuses the save. Provider sections are merged into the
+         *     stored settings, and an ``api_key`` in them goes to the secret store
+         *     (a masked ``***`` value leaves the stored key unchanged).
+         */
+        SettingsProfileSaveRequest: {
+            /** Audio Provider Stt */
+            audio_provider_stt?: string | null;
+            /** Audio Provider Tts */
+            audio_provider_tts?: string | null;
+            /** Base Revision */
+            base_revision?: string | null;
+            /** Cerebras */
+            cerebras?: {
+                [key: string]: unknown;
+            } | null;
+            /** Faster-Qwen3-Tts */
+            "faster-qwen3-tts"?: {
+                [key: string]: unknown;
+            } | null;
+            /** Image */
+            image?: {
+                [key: string]: unknown;
+            } | null;
+            /** Llamacpp */
+            llamacpp?: {
+                [key: string]: unknown;
+            } | null;
+            /** Lmstudio */
+            lmstudio?: {
+                [key: string]: unknown;
+            } | null;
+            /** Openrouter */
+            openrouter?: {
+                [key: string]: unknown;
+            } | null;
+            /** Parakeet */
+            parakeet?: {
+                [key: string]: unknown;
+            } | null;
+            /** Provider */
+            provider?: string | null;
+            /** Settings Profile Patch */
+            settings_profile_patch?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** SettingsSaveResponse */
         SettingsSaveResponse: {
@@ -42717,6 +42786,59 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_profile_api_settings_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsPayload"];
+                };
+            };
+        };
+    };
+    save_settings_profile_api_settings_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsProfileSaveRequest"];
             };
         };
         responses: {

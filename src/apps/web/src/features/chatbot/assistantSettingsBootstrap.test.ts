@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS_DOCUMENT } from '../settings/settingsDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { bootstrapCentralAssistantSettings } from './assistantSettingsBootstrap';
+import { fixture } from '../../test/fixture';
 
 vi.mock('../settings/settingsApi', () => ({ loadSettingsProfile: vi.fn() }));
 
@@ -17,7 +18,7 @@ describe('bootstrapCentralAssistantSettings', () => {
 
   it('seeds personality and voice from the central settings profile', async () => {
     mockedLoadSettingsProfile.mockResolvedValue({
-      legacy: { success: true, provider: 'lmstudio', audio_provider_tts: '', audio_provider_stt: '' },
+      legacy: fixture({ success: true, provider: 'lmstudio', audio_provider_tts: '', audio_provider_stt: '' }),
       profile: {
         ...DEFAULT_SETTINGS_DOCUMENT,
         assistant: {
@@ -51,7 +52,7 @@ describe('bootstrapCentralAssistantSettings', () => {
 
   it('maps the central omnix default personality to the chatbot default id', async () => {
     mockedLoadSettingsProfile.mockResolvedValue({
-      legacy: { success: true, provider: 'lmstudio', audio_provider_tts: '', audio_provider_stt: '' },
+      legacy: fixture({ success: true, provider: 'lmstudio', audio_provider_tts: '', audio_provider_stt: '' }),
       profile: DEFAULT_SETTINGS_DOCUMENT,
     });
 

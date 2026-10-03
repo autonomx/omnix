@@ -38629,6 +38629,154 @@
         "title": "SettingsPayload",
         "type": "object"
       },
+      "SettingsProfileSaveRequest": {
+        "additionalProperties": false,
+        "description": "A Settings Control Center save: a profile patch plus the provider sections it changed.\n\n``base_revision`` is the profile revision the patch was made against; a\nnewer profile refuses the save. Provider sections are merged into the\nstored settings, and an ``api_key`` in them goes to the secret store\n(a masked ``***`` value leaves the stored key unchanged).",
+        "properties": {
+          "audio_provider_stt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Provider Stt"
+          },
+          "audio_provider_tts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Provider Tts"
+          },
+          "base_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Revision"
+          },
+          "cerebras": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerebras"
+          },
+          "faster-qwen3-tts": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faster-Qwen3-Tts"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "llamacpp": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llamacpp"
+          },
+          "lmstudio": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lmstudio"
+          },
+          "openrouter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter"
+          },
+          "parakeet": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parakeet"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "settings_profile_patch": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Profile Patch"
+          }
+        },
+        "title": "SettingsProfileSaveRequest",
+        "type": "object"
+      },
       "SettingsSaveResponse": {
         "properties": {
           "success": {
@@ -69960,6 +70108,66 @@
           }
         },
         "summary": "Save Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/profile": {
+      "get": {
+        "operationId": "settings_profile_api_settings_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings Profile",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "operationId": "save_settings_profile_api_settings_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsProfileSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Settings Profile",
         "tags": [
           "settings"
         ]

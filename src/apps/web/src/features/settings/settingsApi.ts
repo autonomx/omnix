@@ -1,32 +1,18 @@
+import type { components } from '../../api/generated/types';
+import { api, createGatewayClient } from '../../api/http';
 import { migrateSettingsDocument, settingsPatch } from './settingsMerge';
 import type { SettingsDocument } from './settingsDocumentTypes';
 
-export type SettingsApiPayload = {
-  success: boolean;
-  provider: string;
-  audio_provider_tts: string;
-  audio_provider_stt: string;
-  settings?: Record<string, unknown>;
-};
+export type SettingsApiPayload = components['schemas']['SettingsPayload'];
 
 export type SettingsProfileEnvelope = {
   profile: SettingsDocument;
   legacy: SettingsApiPayload;
 };
 
-export type SettingsProfileSaveRequest = {
-  base_revision: string;
+/** A Settings Control Center save (POST /api/settings/profile); the profile patch is typed here. */
+export type SettingsProfileSaveRequest = components['schemas']['SettingsProfileSaveRequest'] & {
   settings_profile_patch: Partial<SettingsDocument>;
-  provider?: string;
-  audio_provider_tts?: string;
-  audio_provider_stt?: string;
-  lmstudio?: Record<string, unknown>;
-  openrouter?: Record<string, unknown>;
-  cerebras?: Record<string, unknown>;
-  llamacpp?: Record<string, unknown>;
-  'faster-qwen3-tts'?: Record<string, unknown>;
-  parakeet?: Record<string, unknown>;
-  image?: Record<string, unknown>;
 };
 
 export class SettingsProfileApiError extends Error {
@@ -44,13 +30,18 @@ function waitForSettingsRetry(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, SETTINGS_LOAD_RETRY_DELAY_MS));
 }
 
+// The profile routes mask API keys on read and send them to the secret store on save.
+function settingsClient(fetcher?: SettingsFetch) {
+  return fetcher ? createGatewayClient({ fetchImpl: fetcher as typeof fetch }) : api;
+}
+
 export async function loadSettingsProfile(fetcherOrContext?: SettingsFetch | unknown): Promise<SettingsProfileEnvelope> {
-  const fetcher = typeof fetcherOrContext === 'function' ? fetcherOrContext as SettingsFetch : fetch;
+  const client = settingsClient(typeof fetcherOrContext === 'function' ? fetcherOrContext as SettingsFetch : undefined);
   for (let attempt = 1; attempt <= SETTINGS_LOAD_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetcher('/api/settings');
-      if (!response.ok) throw new SettingsProfileApiError('Settings request failed.', response.status);
-      const legacy = await response.json() as SettingsApiPayload;
+      const { data, response } = await client.GET('/api/settings/profile');
+      if (!response.ok || !data) throw new SettingsProfileApiError('Settings request failed.', response.status);
+      const legacy: SettingsApiPayload = data;
       const raw = legacy.settings?.settings_control_center;
       return { profile: migrateSettingsDocument(raw), legacy };
     } catch (error) {
@@ -62,14 +53,9 @@ export async function loadSettingsProfile(fetcherOrContext?: SettingsFetch | unk
   throw new SettingsProfileApiError('Settings request failed.', 500);
 }
 
-export async function saveSettingsProfile(request: SettingsProfileSaveRequest, fetcher: SettingsFetch = fetch): Promise<void> {
-  const response = await fetcher('/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) throw new SettingsProfileApiError('Settings save failed.', response.status);
-  const result = await response.json() as { success?: boolean };
+export async function saveSettingsProfile(request: SettingsProfileSaveRequest, fetcher?: SettingsFetch): Promise<void> {
+  const { data: result, response } = await settingsClient(fetcher).POST('/api/settings/profile', { body: request });
+  if (!response.ok || !result) throw new SettingsProfileApiError('Settings save failed.', response.status);
   if (result.success !== true) throw new SettingsProfileApiError('Settings were not saved because the profile changed or validation failed.', 409);
 }
 

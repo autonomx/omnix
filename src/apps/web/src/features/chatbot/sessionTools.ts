@@ -2,6 +2,7 @@ import { omnixApiClient } from '../../api/client';
 import type { ChatSession, CreateChatSessionRequest } from '../../api/client';
 import './chat-response-metrics-controller.css';
 import { characterClient, type SessionInteraction } from './characterClient';
+import type { components } from '../../api/generated/types';
 
 let chatSessionToolsInstalled = false;
 
@@ -10,15 +11,9 @@ const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 
-type PreservedChatSessionRequest = CreateChatSessionRequest & {
-  interaction_mode: 'system' | 'character';
-  character_id?: string | null;
-  voice_asset_id?: string | null;
-  read_memory: boolean;
-  write_memory: boolean;
-  shared_memory_access: 'none' | 'read_only';
-  transcript_policy: 'persistent' | 'temporary' | 'none';
-};
+// A new session keeps the interaction settings of the one it replaces, so they are required here.
+type PreservedChatSessionRequest = components['schemas']['CreateChatSessionRequest']
+  & Required<Pick<CreateChatSessionRequest, 'interaction_mode' | 'read_memory' | 'write_memory' | 'shared_memory_access' | 'transcript_policy'>>;
 
 type SessionSelectionSnapshot = Pick<ChatSession,
   | 'id'
