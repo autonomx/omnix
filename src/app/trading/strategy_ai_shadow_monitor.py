@@ -1,11 +1,12 @@
-"""Interday six-substrategy SHADOW experiment.
+"""Interday SHADOW experiment: the AI arms of the substrategy group.
 
 A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
 strategy monitor. This monitor adds C/D: a stateful every-minute AI policy and a
 stateful event-driven AI policy over the identical frozen cohort. It never
-creates paper orders or protections. E/F are the linked standalone
-``stoch-rsi-5min`` and ``gap-pullback-v2-prospective-20260825`` configurations;
-their deterministic monitors remain the owners of their own evidence.
+creates paper orders or protections. The linked standalone ``stoch-rsi-5min``,
+``stoch-rsi-5min-early-single`` and ``gap-pullback-v2-prospective-20260825``
+configurations are separate children; their deterministic monitors remain the
+owners of their own evidence.
 """
 
 from __future__ import annotations

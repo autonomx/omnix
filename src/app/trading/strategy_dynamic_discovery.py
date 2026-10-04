@@ -24,6 +24,7 @@ INTERDAY_SUBSTRATEGIES = (
     "ai-every-minute",
     "ai-event-driven",
     "stoch-rsi-5min",
+    "stoch-rsi-5min-early-single",
     "gap-pullback-v2-prospective-20260825",
 )
 
@@ -717,6 +718,9 @@ def strategy_specific_score(arm: str, row: OpportunityCharacterization) -> float
         return _clip(row.attention_intensity * 0.25 + row.catalyst_strength * 0.20 + row.continuation_prior * 0.25 + row.market_confirmation * 0.20 + row.relationship_exposure * 0.10)
     if arm == "stoch-rsi-5min":
         return _clip(row.reversal_prior * 0.45 + row.market_confirmation * 0.30 + row.execution_quality * 0.25)
+    if arm == "stoch-rsi-5min-early-single":
+        # One trade per symbol: favor names whose single entry executes cleanly.
+        return _clip(row.reversal_prior * 0.45 + row.market_confirmation * 0.25 + row.execution_quality * 0.30)
     if arm == "gap-pullback-v2-prospective-20260825":
         return _clip(row.failed_selloff_prior * 0.50 + row.catalyst_persistence * 0.15 + row.market_confirmation * 0.25 + row.execution_quality * 0.10)
     raise ValueError(f"unknown_interday_substrategy:{arm}")

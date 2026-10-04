@@ -25537,6 +25537,12 @@ export interface components {
              */
             strategy_version?: "1.0.0";
             /**
+             * Trade Selection
+             * @default sequential
+             * @enum {string}
+             */
+            trade_selection?: "sequential" | "early_single";
+            /**
              * Universe Archive Grace Minutes
              * @default 10
              */
@@ -25699,6 +25705,12 @@ export interface components {
              * @constant
              */
             strategy_version: "1.0.0";
+            /**
+             * Trade Selection
+             * @default sequential
+             * @enum {string}
+             */
+            trade_selection: "sequential" | "early_single";
             /**
              * Universe Archive Grace Minutes
              * @default 10

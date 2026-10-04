@@ -12,6 +12,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
 )
 from .strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
+from .strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
 from .strategies.models import StochRsi5mConfig
 from .trade_logging import trade_log
 
@@ -31,6 +32,11 @@ async def record_stoch_rsi_5m_candidates(
     stoch_config = config.config
     if not isinstance(stoch_config, StochRsi5mConfig):
         raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
+    evaluate = (
+        evaluate_stoch_rsi_5m_early_single
+        if stoch_config.trade_selection == "early_single"
+        else evaluate_stoch_rsi_5m
+    )
     evaluation_clock = (
         observed_at.astimezone(timezone.utc)
         if observed_at is not None
@@ -130,13 +136,14 @@ async def record_stoch_rsi_5m_candidates(
                     interval="5m",
                     as_of=candidate_observed_at,
                 )
-            snapshot = evaluate_stoch_rsi_5m(evaluation_bars, stoch_config)
+            snapshot = evaluate(evaluation_bars, stoch_config)
             event_observed_at = snapshot.as_of or candidate_observed_at
             payload = {
                 "universe_id": universe.universe_id,
                 "universe_source": getattr(universe, "discovery_source", None),
                 "strategy_version": config.strategy_version,
                 "mode": "shadow",
+                "trade_selection": stoch_config.trade_selection,
                 "snapshot": snapshot.model_dump(mode="json"),
                 "coverage_certificate": (
                     coverage_certificate.model_dump(mode="json")
@@ -157,7 +164,9 @@ async def record_stoch_rsi_5m_candidates(
                     "stoch_rsi_overbought_cross_down_above": str(
                         stoch_config.overbought_threshold
                     ),
-                    "allow_sequential_trades_per_symbol": True,
+                    "allow_sequential_trades_per_symbol": (
+                        stoch_config.trade_selection == "sequential"
+                    ),
                 },
                 "bar_provenance": bar_provenance,
                 "research_only": True,

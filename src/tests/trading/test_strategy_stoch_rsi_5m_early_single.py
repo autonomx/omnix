@@ -197,3 +197,88 @@ def test_early_single_passes_through_snapshot_without_trades(monkeypatch) -> Non
     result = early_single.evaluate_stoch_rsi_5m_early_single([])
 
     assert result is snapshot
+
+
+def _open_snapshot() -> StochRsi5mSnapshot:
+    entry_time = datetime(2026, 9, 10, 17, 0, tzinfo=timezone.utc)
+    return StochRsi5mSnapshot(
+        state="long_active",
+        reason_code="STOCH_RSI_5M_LONG_ACTIVE",
+        session_date="2026-09-10",
+        entry_signal_time=entry_time,
+        entry_time=entry_time,
+        entry_price=Decimal("11"),
+    )
+
+
+def test_early_single_vetoes_open_first_trade_above_pre_entry_range_cap(monkeypatch) -> None:
+    snapshot = _open_snapshot()
+    monkeypatch.setattr(
+        early_single,
+        "evaluate_stoch_rsi_5m",
+        lambda bars, config: snapshot,
+    )
+
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="26", low="10")]
+    )
+
+    assert result.state == "waiting_oversold"
+    assert result.reason_code == "STOCH_RSI_5M_EARLY_SINGLE_PRE_ENTRY_RANGE_ABOVE_150"
+    assert result.entry_time is None
+    assert result.trades == ()
+
+
+def test_early_single_keeps_open_first_trade_within_pre_entry_range_cap(monkeypatch) -> None:
+    snapshot = _open_snapshot()
+    monkeypatch.setattr(
+        early_single,
+        "evaluate_stoch_rsi_5m",
+        lambda bars, config: snapshot,
+    )
+
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="25", low="10")]
+    )
+
+    assert result is snapshot
+
+
+def test_early_single_takes_first_trade_allowed_by_admission(monkeypatch) -> None:
+    first = _trade(entry_price="10", exit_price="9", reason="STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA")
+    second = _trade(
+        entry_price="12",
+        exit_price="13",
+        reason="STOCH_RSI_5M_CROSS_DOWN_BELOW_80",
+        entry_time=datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc),
+    )
+    snapshot = StochRsi5mSnapshot(
+        state="exited",
+        reason_code=second.exit_reason_code,
+        session_date="2026-09-10",
+        trades=(first, second),
+    )
+    monkeypatch.setattr(early_single, "evaluate_stoch_rsi_5m", lambda bars, config: snapshot)
+    admitted_at = datetime(2026, 9, 10, 17, 30, tzinfo=timezone.utc)
+
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="12", low="10")],
+        entry_allowed=lambda entry_time: entry_time >= admitted_at,
+    )
+
+    assert result.trades == (second,)
+    assert result.entry_time == second.entry_time
+
+
+def test_early_single_clears_open_trade_entered_before_admission(monkeypatch) -> None:
+    snapshot = _open_snapshot()
+    monkeypatch.setattr(early_single, "evaluate_stoch_rsi_5m", lambda bars, config: snapshot)
+
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="11", low="10")],
+        entry_allowed=lambda entry_time: False,
+    )
+
+    assert result.state == "waiting_oversold"
+    assert result.reason_code == "STOCH_RSI_5M_EARLY_SINGLE_ENTRY_NOT_ADMITTED"
+    assert result.entry_time is None

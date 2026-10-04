@@ -40569,6 +40569,15 @@
             "title": "Strategy Version",
             "type": "string"
           },
+          "trade_selection": {
+            "default": "sequential",
+            "enum": [
+              "sequential",
+              "early_single"
+            ],
+            "title": "Trade Selection",
+            "type": "string"
+          },
           "universe_archive_grace_minutes": {
             "default": 10,
             "maximum": 60,
@@ -40763,6 +40772,15 @@
             "title": "Strategy Version",
             "type": "string"
           },
+          "trade_selection": {
+            "default": "sequential",
+            "enum": [
+              "sequential",
+              "early_single"
+            ],
+            "title": "Trade Selection",
+            "type": "string"
+          },
           "universe_archive_grace_minutes": {
             "default": 10,
             "maximum": 60,
@@ -40813,6 +40831,7 @@
           "float_preference_mode",
           "require_catalyst_evidence",
           "reject_dilution_flags",
+          "trade_selection",
           "oversold_threshold",
           "recovery_threshold",
           "overbought_threshold",

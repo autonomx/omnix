@@ -209,6 +209,10 @@ class StochRsi5mConfig(BaseModel):
     # close below the 5-period 5m EMA, or a finalized %K/%D cross down while
     # %K is below 80. After an exit, a fresh setup may produce another
     # sequential trade during the same session.
+    #
+    # ``early_single`` keeps only the first current-session trade per symbol
+    # and vetoes it when the pre-entry regular-session range exceeds 150%.
+    trade_selection: Literal["sequential", "early_single"] = "sequential"
     oversold_threshold: Decimal = Field(default=Decimal("18"), gt=0, lt=100)
     recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)

@@ -1028,7 +1028,9 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
             # Only declaration values, not selectors such as #abc.
             declarations = " ".join(re.findall(r"[\w-]+\s*:\s*([^;{}]+)(?:;|(?=\}))", code))
             values["web_hardcoded_colors"] += len(re.findall(colors, declarations))
-            values["web_hardcoded_colors"] += len(re.findall(r"\b(?:black|white|red|green|blue|gray|grey|silver|maroon|yellow|lime|aqua|teal|navy|fuchsia|purple|olive)\b", declarations, re.I))
+            # A named colour is a whole value word; `var(--pd-red)` and
+            # `animation: pulse-green` name no colour.
+            values["web_hardcoded_colors"] += len(re.findall(r"(?<![\w-])(?:black|white|red|green|blue|gray|grey|silver|maroon|yellow|lime|aqua|teal|navy|fuchsia|purple|olive)(?![\w-])", declarations, re.I))
         elif path.endswith(".tsx"):
             values["web_hardcoded_colors"] += len(re.findall(colors, code))
     values["web_omnix_window_flags"] = len(flags)

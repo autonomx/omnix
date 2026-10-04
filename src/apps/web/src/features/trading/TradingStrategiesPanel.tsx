@@ -33,7 +33,8 @@ const INTERDAY_SUBSTRATEGIES = [
   { key: 'ai-every-minute', label: 'C · AI every minute', description: 'Embedded stateful AI shadow policy', strategyId: null },
   { key: 'ai-event-driven', label: 'D · AI event-driven', description: 'Embedded event-driven AI shadow policy', strategyId: null },
   { key: 'stoch-rsi-5min', label: 'E · 5m Stoch RSI', description: 'Linked deterministic child strategy', strategyId: 'stoch-rsi-5min' },
-  { key: 'gap-pullback-v2-prospective-20260825', label: 'F · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
+  { key: 'stoch-rsi-5min-early-single', label: 'F · 5m Stoch RSI early-single', description: 'Linked child: first trade per symbol per session only', strategyId: 'stoch-rsi-5min-early-single' },
+  { key: 'gap-pullback-v2-prospective-20260825', label: 'G · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
 ] as const;
 
 const strictV11Config = (): GapPullbackConfig => ({
@@ -387,6 +388,7 @@ const defaultStochRsi5mConfig = (): StochRsi5mConfig => ({
   float_preference_mode: 'ignore',
   require_catalyst_evidence: false,
   reject_dilution_flags: [],
+  trade_selection: 'sequential',
   oversold_threshold: '18',
   recovery_threshold: '20',
   overbought_threshold: '95',
@@ -450,6 +452,7 @@ function StochRsi5mEditor({
           <div className="trading-strategy-grid">
             <label><span>Strategy type</span><input value="stoch-rsi-5min" readOnly /></label>
             <label className="toggle-field"><span>Enabled</span><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} /></label>
+            <label><span>Trades per symbol</span><select value={draft.config.trade_selection ?? 'sequential'} onChange={(event) => setConfig('trade_selection', event.target.value as NonNullable<StochRsi5mConfig['trade_selection']>)}><option value="sequential">Sequential</option><option value="early_single">First per session (early-single)</option></select></label>
             <ConfigNumber label="Oversold threshold" suffix="%K &lt;" step="0.1" value={draft.config.oversold_threshold} onChange={(value) => setConfig('oversold_threshold', value)} />
             <ConfigNumber label="Recovery confirmation" suffix="%K ≥" step="0.1" value={draft.config.recovery_threshold ?? '20'} onChange={(value) => setConfig('recovery_threshold', value)} />
             <ConfigNumber label="Overbought threshold" suffix="%K &gt;" step="0.1" value={draft.config.overbought_threshold} onChange={(value) => setConfig('overbought_threshold', value)} />
@@ -1397,10 +1400,10 @@ export function TradingStrategiesPanel() {
             </section>
 
             {draft.strategy_id === INTERDAY_TRADING_STRATEGY_ID ? (
-              <section className="trading-config-block" aria-label="Six-substrategy interday SHADOW group">
+              <section className="trading-config-block" aria-label="Interday SHADOW substrategy group">
                 <header>
-                  <strong>Six-substrategy interday SHADOW group</strong>
-                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus two linked deterministic child strategies</small>
+                  <strong>Interday SHADOW substrategy group</strong>
+                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus three linked deterministic child strategies</small>
                 </header>
                 <div className="trading-strategy-grid">
                   {INTERDAY_SUBSTRATEGIES.map((substrategy) => {
