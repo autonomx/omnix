@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.agent_runtime import service as service_module
+from app.agent_runtime import service_core as core_module
 from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, ValidationSpec
 from app.agent_runtime.service import AgentRunService
 
@@ -639,10 +640,10 @@ def test_acceptance_retry_count_is_scoped_to_task_revision() -> None:
 
 
 def test_nonrecoverable_acceptance_failure_is_never_retried() -> None:
-    assert service_module._acceptance_failures_retryable(
+    assert core_module._acceptance_failures_retryable(
         ["modified_paths_outside_scope"]
     ) is False
-    assert service_module._acceptance_failures_retryable(
+    assert core_module._acceptance_failures_retryable(
         ["successful_test_command"]
     ) is True
 

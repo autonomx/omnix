@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.agent_runtime import service as service_module
 from app.agent_runtime import service_core as core_module
+from app.agent_runtime import quality_acceptance, quality_state_machine
 from app.agent_runtime.acceptance import AcceptanceResult
 from app.agent_runtime.contracts import (
     AgentEvent,
@@ -20,6 +20,14 @@ from app.agent_runtime.contracts import (
 )
 from app.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
 from app.agent_runtime.service import AgentRunService
+
+def _patch_quality(monkeypatch, name, value):
+    """Patch a dependency where the quality code that uses it lives (WP-8.2)."""
+    patched = [module for module in (quality_acceptance, quality_state_machine) if hasattr(module, name)]
+    assert patched, name
+    for module in patched:
+        monkeypatch.setattr(module, name, value)
+
 
 
 class _Work:
@@ -247,29 +255,21 @@ def test_post_review_workspace_drift_refreshes_same_quality_attempt(monkeypatch)
     service._quality_fail = MagicMock(return_value=None)
 
     service.quality_repository_factory = Quality
-    monkeypatch.setattr(service_module, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
-    monkeypatch.setattr(
-        service_module,
-        "evaluate_acceptance",
+    _patch_quality(monkeypatch, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
+    _patch_quality(monkeypatch, "evaluate_acceptance",
         lambda *_args, **_kwargs: AcceptanceResult(passed=True),
     )
-    monkeypatch.setattr(
-        service_module,
-        "evaluate_evidence_set",
+    _patch_quality(monkeypatch, "evaluate_evidence_set",
         lambda *_args, **_kwargs: EvidenceSet(run_id=spec.run_id),
     )
-    monkeypatch.setattr(
-        service_module,
-        "quality_failure_reasons",
+    _patch_quality(monkeypatch, "quality_failure_reasons",
         lambda *_args, **_kwargs: [
             "quality_missing_validation:final-state-tests",
             "quality_self_review_stale_or_missing",
             "quality_independent_review_missing_or_not_approved",
         ],
     )
-    monkeypatch.setattr(
-        service_module,
-        "evaluate_planning_acceptance",
+    _patch_quality(monkeypatch, "evaluate_planning_acceptance",
         lambda *_args, **_kwargs: PlanningAcceptanceAssessment(
             mode="shadow",
             plan_revision_id="plan-1",
@@ -333,13 +333,11 @@ def test_enforced_post_review_workspace_drift_fails_integrity_not_quality_repair
     service._quality_fail = MagicMock(return_value=None)
 
     service.quality_repository_factory = Quality
-    monkeypatch.setattr(service_module, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
-    monkeypatch.setattr(service_module, "evaluate_acceptance", lambda *_args, **_kwargs: AcceptanceResult(passed=True))
-    monkeypatch.setattr(service_module, "evaluate_evidence_set", lambda *_args, **_kwargs: EvidenceSet(run_id=spec.run_id))
-    monkeypatch.setattr(service_module, "quality_failure_reasons", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(
-        service_module,
-        "evaluate_planning_acceptance",
+    _patch_quality(monkeypatch, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
+    _patch_quality(monkeypatch, "evaluate_acceptance", lambda *_args, **_kwargs: AcceptanceResult(passed=True))
+    _patch_quality(monkeypatch, "evaluate_evidence_set", lambda *_args, **_kwargs: EvidenceSet(run_id=spec.run_id))
+    _patch_quality(monkeypatch, "quality_failure_reasons", lambda *_args, **_kwargs: [])
+    _patch_quality(monkeypatch, "evaluate_planning_acceptance",
         lambda *_args, **_kwargs: PlanningAcceptanceAssessment(
             mode="enforce",
             plan_revision_id="plan-1",

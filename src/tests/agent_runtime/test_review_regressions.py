@@ -74,7 +74,7 @@ def test_chat_dispatcher_worker_survives_unhandled_job_failure(monkeypatch) -> N
 
 
 def test_task_graph_terminal_child_reconciles_from_waiting_for_approval() -> None:
-    source = (ROOT / "src/app/agent_runtime/task_graph_runtime.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/app/agent_runtime/task_graph_scheduling.py").read_text(encoding="utf-8")
     terminal_region = source.split(
         'if child.status not in {"completed", "failed", "cancelled"}:', 1
     )[1].split("def _claim_node", 1)[0]
