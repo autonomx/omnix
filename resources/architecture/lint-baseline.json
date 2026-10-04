@@ -25,7 +25,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
-        17
+        21
       ],
       "path": "src/app/agent_runtime/broker_api.py",
       "rule": "AL001"

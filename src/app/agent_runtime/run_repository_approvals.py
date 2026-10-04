@@ -6,6 +6,8 @@ delegator per function, so callers and tests are unchanged.
 from __future__ import annotations
 
 from typing import Any
+
+from app.capabilities.registry import capability_definition_hash
 from .contracts import (
     AgentApproval,
     AgentArtifact,
@@ -26,8 +28,8 @@ def add_approval(repo: PostgresAgentRunRepository, approval: AgentApproval) -> A
         """
         INSERT INTO omnix_agent_approvals (
             workspace_id, run_id, approval_id, capability_id, state,
-            request_payload, resolution_payload, created_at, resolved_at
-        ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            request_payload, resolution_payload, created_at, resolved_at, capability_definition_hash
+        ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
         ON CONFLICT (workspace_id, run_id, approval_id) DO NOTHING
         """,
         (
@@ -40,6 +42,7 @@ def add_approval(repo: PostgresAgentRunRepository, approval: AgentApproval) -> A
             _json(approval.resolution_payload),
             approval.created_at,
             approval.resolved_at,
+            approval.capability_definition_hash,
         ),
     )
     repo.append_event(AgentEvent(run_id=approval.run_id, event_type="approval.requested", payload={"approval_id": approval.approval_id, "capability_id": approval.capability_id}))
@@ -68,9 +71,11 @@ def workspace_approval(
         SELECT approval_id FROM omnix_agent_approvals
          WHERE workspace_id = %s AND run_id = %s AND capability_id = %s
            AND request_payload = %s::jsonb
+           AND capability_definition_hash IS NOT DISTINCT FROM %s
          ORDER BY created_at DESC, approval_id LIMIT 1
         """,
-        (repo.context.workspace_id, run_id, capability_id, _json(request_payload)),
+        (repo.context.workspace_id, run_id, capability_id, _json(request_payload),
+         capability_definition_hash(capability_id)),
     ).fetchone()
     if row is not None:
         approval = repo.get_approval(run_id, str(row[0]))
@@ -86,7 +91,7 @@ def get_approval(repo: PostgresAgentRunRepository, run_id: str, approval_id: str
     row = repo.connection.execute(
         """
         SELECT capability_id, state, request_payload, resolution_payload,
-               created_at, resolved_at
+               created_at, resolved_at, capability_definition_hash
           FROM omnix_agent_approvals
          WHERE workspace_id = %s AND run_id = %s AND approval_id = %s
         """,
@@ -98,7 +103,7 @@ def get_approval(repo: PostgresAgentRunRepository, run_id: str, approval_id: str
         approval_id=approval_id, run_id=run_id, capability_id=str(row[0]),
         state=str(row[1]), request_payload=dict(row[2] or {}),
         resolution_payload=dict(row[3] or {}), created_at=row[4], resolved_at=row[5],
-    )
+    ).with_definition_hash(row[6])
 
 
 def list_approvals(
@@ -111,7 +116,7 @@ def list_approvals(
         rows = repo.connection.execute(
             """
             SELECT approval_id, capability_id, state, request_payload,
-                   resolution_payload, created_at, resolved_at
+                   resolution_payload, created_at, resolved_at, capability_definition_hash
               FROM omnix_agent_approvals
              WHERE workspace_id = %s AND run_id = %s
              ORDER BY created_at, approval_id
@@ -122,7 +127,7 @@ def list_approvals(
         rows = repo.connection.execute(
             """
             SELECT approval_id, capability_id, state, request_payload,
-                   resolution_payload, created_at, resolved_at
+                   resolution_payload, created_at, resolved_at, capability_definition_hash
               FROM omnix_agent_approvals
              WHERE workspace_id = %s AND run_id = %s AND state = %s
              ORDER BY created_at, approval_id
@@ -139,7 +144,7 @@ def list_approvals(
             resolution_payload=dict(row[4] or {}),
             created_at=row[5],
             resolved_at=row[6],
-        )
+        ).with_definition_hash(row[7])
         for row in rows
     ]
 
@@ -154,7 +159,8 @@ def resolve_approval(
         UPDATE omnix_agent_approvals
            SET state = %s, resolution_payload = %s::jsonb, resolved_at = CURRENT_TIMESTAMP
          WHERE workspace_id = %s AND run_id = %s AND approval_id = %s AND state = 'pending'
-        RETURNING capability_id, request_payload, resolution_payload, created_at, resolved_at
+        RETURNING capability_id, request_payload, resolution_payload, created_at, resolved_at,
+                  capability_definition_hash
         """,
         (state, _json(resolution_payload or {}), repo.context.workspace_id, run_id, approval_id),
     ).fetchone()
@@ -167,7 +173,7 @@ def resolve_approval(
         approval_id=approval_id, run_id=run_id, capability_id=str(row[0]), state=state,
         request_payload=dict(row[1] or {}), resolution_payload=dict(row[2] or {}),
         created_at=row[3], resolved_at=row[4],
-    )
+    ).with_definition_hash(row[5])
     repo.append_event(AgentEvent(
         run_id=run_id, event_type="approval.resolved",
         payload={"approval_id": approval_id, "state": state, "capability_id": approval.capability_id},

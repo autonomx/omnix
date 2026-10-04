@@ -5,6 +5,8 @@ delegator per function, so callers and tests are unchanged.
 """
 from __future__ import annotations
 
+from app.capabilities.registry import capability_definition_hash
+
 from datetime import datetime
 from typing import Any
 from .contracts import (
@@ -77,10 +79,12 @@ def find_capability_approval(
           FROM omnix_agent_approvals
          WHERE workspace_id = %s AND run_id = %s AND capability_id = %s
            AND request_payload ->> 'execution_key' = %s
+           AND capability_definition_hash IS NOT DISTINCT FROM %s
          ORDER BY created_at
          LIMIT 1
         """,
-        (repo.context.workspace_id, run_id, capability_id, execution_key),
+        (repo.context.workspace_id, run_id, capability_id, execution_key,
+         capability_definition_hash(capability_id)),
     ).fetchone()
     if row is None:
         return None

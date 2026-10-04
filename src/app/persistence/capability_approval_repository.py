@@ -27,6 +27,21 @@ def proposal_digest(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _bound_payload(payload: dict[str, Any], capability_id: str) -> dict[str, Any]:
+    """The payload with the capability's current definition hash (PA-1.4).
+
+    The proposal digest covers it, so a proposal cannot authorize a capability
+    whose authority-relevant definition changed or disappeared since issue.
+    The stored payload stays the plain request.
+    """
+    from app.capabilities.registry import capability_definition_hash
+
+    definition = capability_definition_hash(capability_id)
+    if definition is None:
+        raise CapabilityApprovalConflict("capability_unavailable")
+    return {**payload, "capability_definition_hash": definition}
+
+
 @dataclass(frozen=True)
 class CapabilityProposal:
     id: str
@@ -55,7 +70,7 @@ class PostgresCapabilityApprovalRepository:
         if not 1 <= ttl_seconds <= 86400:
             raise ValueError("proposal lifetime must be between 1 second and 24 hours")
         identifier = secrets.token_urlsafe(24)
-        digest = proposal_digest(payload)
+        digest = proposal_digest(_bound_payload(payload, capability_id))
         row = self.connection.execute(
             f"""INSERT INTO omnix_capability_approvals (
                 id, workspace_id, subject_type, subject_id, capability_id,
@@ -104,9 +119,16 @@ class PostgresCapabilityApprovalRepository:
         stored = self.get(context, identifier, lock=True)
         if stored is None:
             raise CapabilityApprovalConflict("proposal_not_found")
-        digest = proposal_digest(expected_payload)
+        # Issued before definitions were bound (PA-1.4): refuse; propose again.
+        if hmac.compare_digest(proposal_digest(stored.payload), stored.proposal_digest):
+            raise CapabilityApprovalConflict("proposal_definition_unbound")
+        # The digest covers the capability's current definition, so a changed
+        # definition fails here like a changed request or a tampered row.
+        digest = proposal_digest(_bound_payload(expected_payload, stored.capability_id))
         if (not hmac.compare_digest(digest, stored.proposal_digest)
-                or not hmac.compare_digest(proposal_digest(stored.payload), stored.proposal_digest)):
+                or not hmac.compare_digest(
+                    proposal_digest(_bound_payload(stored.payload, stored.capability_id)), stored.proposal_digest,
+                )):
             raise CapabilityApprovalConflict("proposal_digest_mismatch")
         if stored.capability_id != str(expected_payload.get("capability_id", "")):
             raise CapabilityApprovalConflict("proposal_capability_mismatch")

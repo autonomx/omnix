@@ -28,7 +28,7 @@ The response model is `DiagnosticsPayload` in `src/app/platform/diagnostics.py`
 |---|---|
 | `version` | `build_revision` (`OMNIX_SOFTWARE_REVISION`) and `application_schema`, the newest migration this build knows. |
 | `features` | Enabled feature ids. |
-| `process` | Process id, runtime id, gateway role, uptime, granted capabilities, and request totals (`active_requests`, `request_count`, `error_count`, from the metrics registry). |
+| `process` | Process id, runtime id, gateway role, uptime, granted capabilities, request totals (`active_requests`, `request_count`, `error_count`, from the metrics registry), and `capability_catalog_digest`: a digest of this process's tool catalog. Processes can differ during a rolling upgrade or an MCP policy reload; a mismatch is for investigation only and never refuses an execution, because approvals are bound to each capability's definition. |
 | `postgresql` | Connectivity, authority state, statement timeout, pool statistics, pending migrations, outbox lag (`outbox`). On failure: `connectivity: false` and the error class. |
 | `background` | Role and whether this process owns the background lock. |
 | `jobs` | Jobs by resource class and status, oldest queued age, expired leases, dead letters, events in the last minute and claim, failure and retry rates. |

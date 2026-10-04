@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 
@@ -59,6 +60,17 @@ def durable_metrics_snapshot(services):
     return snapshot
 
 
+def _capability_catalog_digest() -> str | None:
+    try:
+        from app.capabilities.registry import capability_catalog_digest
+
+        return capability_catalog_digest()
+    except Exception:
+        # Diagnostics never fail the status endpoint; the failure is logged.
+        logging.getLogger(__name__).warning("capability catalog digest unavailable", exc_info=True)
+        return None
+
+
 def runtime_diagnostics(state) -> RuntimeDiagnostics:
     from app.observability.metrics import request_snapshot
 
@@ -98,6 +110,8 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
         process={"process_id": os.getpid(), "runtime_id": getattr(owner, 'node_id', None),
                  "gateway_role": config.gateway_role.value, "uptime_seconds": time.monotonic() - state.started_monotonic,
                  "build_revision": config.build_revision, "capabilities": sorted(value.value for value in capabilities.granted),
+                 # Diagnostic only: processes may differ during a rollout (PA-1.4).
+                 "capability_catalog_digest": _capability_catalog_digest(),
                  **request_snapshot()},
         postgresql=postgres,
         background=background.diagnostics() if background is not None else {"role": config.gateway_role.value, "owns_lock": False},

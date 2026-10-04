@@ -6,6 +6,8 @@ of maintaining runtime-specific tool names.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable
 from typing import Any, Literal, Protocol
 
@@ -278,6 +280,37 @@ def default_capability_registry() -> CapabilityRegistry:
     from .mcp_policy import mcp_policy_signature
 
     return _capability_registry_for(mcp_policy_signature(), installed_port_bindings())
+
+
+# Fields that only describe a capability to people. Every other field bounds
+# what an approval authorizes, so it is in the definition hash; a field added
+# later is covered automatically unless it is listed here (with review).
+DISPLAY_ONLY_CAPABILITY_FIELDS = frozenset({
+    "name", "description", "category", "aliases", "assistant_visible", "hermes_visible",
+})
+
+
+def _definition_hash(row: Capability) -> str:
+    definition = row.model_dump(mode="json", exclude=set(DISPLAY_ONLY_CAPABILITY_FIELDS))
+    canonical = json.dumps(definition, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def capability_definition_hash(capability_id: str) -> str | None:
+    """The hash of a capability's authority-relevant definition in this process's
+    catalog, or ``None`` when the catalog does not offer it. An approval records
+    it when issued; execution refuses a missing or different hash (PA-1.4)."""
+    row = default_capability_registry().get(capability_id)
+    return _definition_hash(row) if row is not None else None
+
+
+def capability_catalog_digest() -> str:
+    """A digest of the whole catalog, for diagnostics only. Processes may run
+    different catalogs during rolling upgrades and MCP policy reloads, so a
+    mismatch never refuses an execution; approvals are bound per capability."""
+    rows = sorted(default_capability_registry().all(), key=lambda row: row.id)
+    canonical = json.dumps([[row.id, _definition_hash(row)] for row in rows], separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)

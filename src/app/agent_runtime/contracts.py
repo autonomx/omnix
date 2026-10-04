@@ -6,7 +6,7 @@ from typing import Any, Literal
 import secrets
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 AgentRunStatus = Literal[
     "queued",
@@ -684,6 +684,25 @@ class AgentApproval(BaseModel):
     resolution_payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
     resolved_at: datetime | None = None
+    # PA-1.4: the capability's definition when the approval was issued. Kept
+    # out of the API schema; rows stored before the binding read back as None
+    # and cannot authorize.
+    _definition_hash: str | None = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        from app.capabilities.registry import capability_definition_hash
+
+        self._definition_hash = capability_definition_hash(self.capability_id)
+
+    @property
+    def capability_definition_hash(self) -> str | None:
+        return self._definition_hash
+
+    def with_definition_hash(self, value: str | None) -> "AgentApproval":
+        """This approval as stored: bound to ``value`` (None for rows issued before binding)."""
+        bound = self.model_copy()
+        bound._definition_hash = value
+        return bound
 
 
 class AgentRunCommand(BaseModel):

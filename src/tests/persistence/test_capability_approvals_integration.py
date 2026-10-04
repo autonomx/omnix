@@ -199,3 +199,40 @@ def test_canonical_digest_ignores_key_order():
     assert proposal_digest({"input": {"a": 1, "b": 2}, "session": None}) == proposal_digest({"session": None, "input": {"b": 2, "a": 1}})
     with pytest.raises(ValueError):
         proposal_digest({"input": float("nan")})
+
+
+# PA-1.4: a proposal authorizes only the capability definition it was issued for.
+
+def test_a_changed_capability_definition_refuses_the_proposal(database, monkeypatch):
+    from app.capabilities import registry
+
+    proposal = _create(database)
+    _decide(database, proposal.id)
+    monkeypatch.setattr(registry, "capability_definition_hash", lambda _capability_id: "f" * 64)
+    with pytest.raises(CapabilityApprovalConflict, match="proposal_digest_mismatch"):
+        _consume(database, proposal.id)
+
+
+def test_a_capability_missing_from_the_catalog_refuses_issue_and_execution(database, monkeypatch):
+    from app.capabilities import registry
+
+    proposal = _create(database)
+    _decide(database, proposal.id)
+    monkeypatch.setattr(registry, "capability_definition_hash", lambda _capability_id: None)
+    with pytest.raises(CapabilityApprovalConflict, match="capability_unavailable"):
+        _consume(database, proposal.id)
+    with pytest.raises(CapabilityApprovalConflict, match="capability_unavailable"):
+        _create(database)
+
+
+def test_a_proposal_issued_before_binding_is_refused(database):
+    proposal = _create(database)
+    _decide(database, proposal.id)
+    db, context = database
+    with db.transaction() as connection:
+        connection.execute(
+            "UPDATE omnix_capability_approvals SET proposal_digest = %s WHERE workspace_id = %s AND id = %s",
+            (proposal_digest(_payload()), context.workspace_id, proposal.id),
+        )
+    with pytest.raises(CapabilityApprovalConflict, match="proposal_definition_unbound"):
+        _consume(database, proposal.id)

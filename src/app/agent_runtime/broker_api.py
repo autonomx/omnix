@@ -1,5 +1,9 @@
 """Run-scoped PostgreSQL-authoritative broker for external agent capabilities."""
 from __future__ import annotations
+
+from app.capabilities.registry import capability_definition_hash
+
+import hmac
 from app.config.env import env_str as _env_str
 
 import hashlib
@@ -621,7 +625,30 @@ def _workspace_approval(
     return approval
 
 
+def approval_definition_refusal(approval: AgentApproval) -> str | None:
+    """Why an approval cannot authorize now, or None (PA-1.4).
+
+    An approval authorizes only the capability definition it was issued for:
+    a missing capability, an approval issued before definitions were bound,
+    or a changed definition refuses it, and the run asks for approval again.
+    """
+    current = capability_definition_hash(approval.capability_id)
+    if current is None:
+        return "capability_unavailable"
+    if approval.capability_definition_hash is None:
+        return "approval_definition_unbound"
+    if not hmac.compare_digest(current, approval.capability_definition_hash):
+        return "capability_definition_changed"
+    return None
+
+
 def _authorization_response(approval: AgentApproval) -> BrokerCommandAuthorizationResponse:
+    refusal = approval_definition_refusal(approval) if approval.state == "approved" else None
+    if refusal is not None:
+        return BrokerCommandAuthorizationResponse(
+            approval_id=approval.approval_id,
+            reason=f"This approval no longer authorizes the action ({refusal}); request approval again.",
+        )
     if approval.state == "approved":
         return BrokerCommandAuthorizationResponse(
             allowed=True,
@@ -810,6 +837,9 @@ def execute_agent_capability(
             approval = repository.get_approval(run_id, request.approval_id)
             if approval is None:
                 raise HTTPException(status_code=403, detail="agent_approval_mismatch")
+            refusal = approval_definition_refusal(approval) if approval.state == "approved" else None
+            if refusal is not None:
+                raise HTTPException(status_code=403, detail=refusal)
             execution_key = _approved_execution_key(
                 run_id,
                 canonical,
