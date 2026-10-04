@@ -35,6 +35,13 @@ INTERVAL_SECONDS = {
 BINANCE_INTERVALS = {"1mo": "1M"}
 
 
+
+def _request_weight(path: str, params: dict[str, Any]) -> int:
+    """Binance's request weight for the spot endpoints this provider calls (WP-8.3)."""
+    if path == "/api/v3/ticker/24hr" and not (params.get("symbol") or params.get("symbols")):
+        return 80
+    return 2
+
 class BinanceMarketDataProvider:
     provider_id = "binance"
     policy = BINANCE_POLICY
@@ -81,6 +88,7 @@ class BinanceMarketDataProvider:
             params=params,
             timeout=self.timeout_seconds,
             cancellation=cancellation,
+            weight=_request_weight(path, params),
         )
         try:
             return response.json()

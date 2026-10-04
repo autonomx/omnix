@@ -78,6 +78,7 @@ from .strategy_v2_qualification import (
 )
 from .strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
 from .order_gateway import strategy_paper_access
+from .providers.request_budget import in_provider_lane
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -723,6 +724,7 @@ class TradingStrategyMonitor:
             },
         )
 
+    @in_provider_lane("protective")
     async def _reconcile_protections(
         self,
         config: TradingStrategyConfigDocument,

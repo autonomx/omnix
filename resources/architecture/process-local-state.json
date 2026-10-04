@@ -1270,6 +1270,15 @@
       "invalidation": "shared_http_client.cache_clear"
     },
     {
+      "path": "src/app/trading/providers/request_budget.py",
+      "symbol": "request_budget.__cache__",
+      "category": "cache",
+      "reason": "One request budget (token bucket) per market-data upstream with a published limit (WP-8.3), shared by this process's runtimes. It bounds what this process sends; it holds no request data, and a recreated bucket starts full. Bounded, expiring, and cleared with cache_clear.",
+      "max_entries": 16,
+      "ttl_seconds": 86400.0,
+      "invalidation": "request_budget.cache_clear"
+    },
+    {
       "path": "src/app/runtime/worker_health.py",
       "symbol": "_health_probes",
       "category": "cache",

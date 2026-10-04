@@ -17,6 +17,7 @@ from app.runtime.features import FeatureContext
 
 from .execution import ExecutionObservation
 from .order_gateway import OrderGateway
+from .providers.request_budget import in_provider_lane
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_protection import PaperPositionProtection
 from .paper_protection_repository import (
@@ -148,6 +149,7 @@ class TradingPaperMonitor:
                 await task
         self._wake_event = None
 
+    @in_provider_lane("protective")
     async def _reconcile_protection(
         self,
         *,

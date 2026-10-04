@@ -13,6 +13,7 @@ from .errors import (
     ProviderRateLimitedError,
     ProviderUnavailableError,
 )
+from .request_budget import LANES, ProviderLane, RequestBudget, current_lane, request_budget, upstream_of
 
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -44,6 +45,15 @@ class _CoalescedFlight:
 
 
 @dataclass(slots=True)
+class _Circuit:
+    """One lane's breaker: research failures never open the protective lane's."""
+
+    consecutive_failures: int = 0
+    open_until_monotonic: float = 0.0
+    open_until_wall: datetime | None = None
+
+
+@dataclass(slots=True)
 class ProviderRuntimeSnapshot:
     status: str
     request_count: int
@@ -62,7 +72,13 @@ class ProviderRuntimeSnapshot:
 
 
 class ProviderHttpRuntime:
-    """Bounded HTTP runtime with retry/backoff, cancellation, and health evidence."""
+    """Bounded HTTP runtime with retry/backoff, cancellation, and health evidence.
+
+    Requests spend the upstream's shared request budget (WP-8.3) and run in
+    the caller's provider lane, each lane with its own circuit breaker. A
+    runtime built on an injected session (tests) has no budget unless one is
+    passed.
+    """
 
     def __init__(
         self,
@@ -74,10 +90,12 @@ class ProviderHttpRuntime:
         initial_backoff_seconds: float = 0.25,
         circuit_failure_threshold: int = 3,
         circuit_cooldown_seconds: float = 5.0,
+        budget: RequestBudget | None = None,
     ) -> None:
         self.provider_id = provider_id
         self.max_concurrency = max(1, int(max_concurrency))
         # Tests pass a fake with ``request()`` or ``get()``/``post()``.
+        self.budget = budget if budget is not None or session is not None else request_budget(upstream_of(provider_id))
         self.session = session if session is not None else pooled_session(self.max_concurrency)
         self.max_attempts = max(1, int(max_attempts))
         self.initial_backoff_seconds = max(0.0, float(initial_backoff_seconds))
@@ -88,14 +106,12 @@ class ProviderHttpRuntime:
         self._request_count = 0
         self._success_count = 0
         self._failure_count = 0
-        self._consecutive_failures = 0
+        self._circuits: dict[ProviderLane, _Circuit] = {lane: _Circuit() for lane in LANES}
         self._rate_limit_count = 0
         self._in_flight = 0
         self._last_success_at: datetime | None = None
         self._last_failure_at: datetime | None = None
         self._last_error: str | None = None
-        self._circuit_open_until_monotonic = 0.0
-        self._circuit_open_until_wall: datetime | None = None
         self._circuit_open_count = 0
         self._circuit_suppression_count = 0
         self._coalesced_guard = threading.Lock()
@@ -117,31 +133,31 @@ class ProviderHttpRuntime:
             self._request_count += 1
             self._in_flight += 1
 
-    def _record_success(self) -> None:
+    def _record_success(self, lane: ProviderLane) -> None:
         with self._guard:
             self._success_count += 1
-            self._consecutive_failures = 0
+            self._circuits[lane] = _Circuit()
             self._last_success_at = datetime.now(timezone.utc)
             self._last_error = None
-            self._circuit_open_until_monotonic = 0.0
-            self._circuit_open_until_wall = None
 
     def _record_failure(
         self,
         error: BaseException,
+        lane: ProviderLane,
         *,
         rate_limited: bool = False,
         retry_after_seconds: float | None = None,
     ) -> None:
         with self._guard:
+            circuit = self._circuits[lane]
             self._failure_count += 1
-            self._consecutive_failures += 1
+            circuit.consecutive_failures += 1
             if rate_limited:
                 self._rate_limit_count += 1
             self._last_failure_at = datetime.now(timezone.utc)
             self._last_error = f"{type(error).__name__}: {error}"
-            if self._consecutive_failures >= self.circuit_failure_threshold:
-                exponent = self._consecutive_failures - self.circuit_failure_threshold
+            if circuit.consecutive_failures >= self.circuit_failure_threshold:
+                exponent = circuit.consecutive_failures - self.circuit_failure_threshold
                 cooldown = min(
                     60.0,
                     max(
@@ -149,22 +165,23 @@ class ProviderHttpRuntime:
                         float(retry_after_seconds or 0.0),
                     ),
                 )
-                self._circuit_open_until_monotonic = time.monotonic() + cooldown
-                self._circuit_open_until_wall = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
+                circuit.open_until_monotonic = time.monotonic() + cooldown
+                circuit.open_until_wall = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
                 self._circuit_open_count += 1
 
-    def _assert_circuit_available(self) -> None:
+    def _assert_circuit_available(self, lane: ProviderLane) -> None:
         now = time.monotonic()
         with self._guard:
-            if now < self._circuit_open_until_monotonic:
+            circuit = self._circuits[lane]
+            if now < circuit.open_until_monotonic:
                 self._circuit_suppression_count += 1
-                retry_after = max(0.0, self._circuit_open_until_monotonic - now)
+                retry_after = max(0.0, circuit.open_until_monotonic - now)
                 raise ProviderUnavailableError(
                     f"{self.provider_id} circuit open; retry_after_seconds={retry_after:.3f}"
                 )
-            if self._circuit_open_until_monotonic:
-                self._circuit_open_until_monotonic = 0.0
-                self._circuit_open_until_wall = None
+            if circuit.open_until_monotonic:
+                circuit.open_until_monotonic = 0.0
+                circuit.open_until_wall = None
 
     def _record_finish(self) -> None:
         with self._guard:
@@ -191,22 +208,27 @@ class ProviderHttpRuntime:
         url: str,
         *,
         cancellation: threading.Event | None = None,
+        weight: float = 1.0,
         **kwargs: Any,
     ) -> httpx.Response:
+        """Send a request costing ``weight`` of the upstream's budget per attempt."""
+        lane = current_lane()
         if self._cancelled(cancellation):
             raise ProviderCancelledError(f"{self.provider_id} request cancelled")
-        self._assert_circuit_available()
+        self._assert_circuit_available(lane)
         with self._semaphore:
             # A request may have waited behind other in-flight work that opened
             # the circuit. Re-check here so queued callers do not amplify the
             # same upstream outage after capacity becomes available.
-            self._assert_circuit_available()
+            self._assert_circuit_available(lane)
             self._record_start()
             try:
                 last_error: BaseException | None = None
                 for attempt in range(self.max_attempts):
                     if self._cancelled(cancellation):
                         raise ProviderCancelledError(f"{self.provider_id} request cancelled")
+                    if self.budget is not None:
+                        self.budget.acquire(weight, lane=lane, cancellation=cancellation)
                     try:
                         response = self._send(method, url, **kwargs)
                         status_code = int(getattr(response, "status_code", 200))
@@ -214,7 +236,7 @@ class ProviderHttpRuntime:
                             raise_for_status = getattr(response, "raise_for_status", None)
                             if callable(raise_for_status):
                                 raise_for_status()
-                            self._record_success()
+                            self._record_success(lane)
                             return response
                         headers = getattr(response, "headers", {}) or {}
                         retry_after = headers.get("Retry-After")
@@ -229,6 +251,7 @@ class ProviderHttpRuntime:
                             )
                             self._record_failure(
                                 error,
+                                lane,
                                 rate_limited=True,
                                 retry_after_seconds=delay,
                             )
@@ -236,7 +259,7 @@ class ProviderHttpRuntime:
                             error = ProviderUnavailableError(
                                 f"{self.provider_id} unavailable: HTTP {status_code}"
                             )
-                            self._record_failure(error)
+                            self._record_failure(error, lane)
                         last_error = error
                     except ProviderCancelledError:
                         raise
@@ -244,7 +267,7 @@ class ProviderHttpRuntime:
                         error = ProviderUnavailableError(
                             f"{self.provider_id} transport failure: {exc}"
                         )
-                        self._record_failure(error)
+                        self._record_failure(error, lane)
                         last_error = error
                         delay = self.initial_backoff_seconds * (2**attempt)
                     except httpx.HTTPError:
@@ -306,10 +329,16 @@ class ProviderHttpRuntime:
         return self.request("POST", url, **kwargs)
 
     def snapshot(self) -> ProviderRuntimeSnapshot:
+        """Health across lanes: the worst lane's failures and latest circuit opening."""
         with self._guard:
-            if self._consecutive_failures >= self.circuit_failure_threshold:
+            consecutive_failures = max(circuit.consecutive_failures for circuit in self._circuits.values())
+            open_until = max(
+                (circuit.open_until_wall for circuit in self._circuits.values() if circuit.open_until_wall),
+                default=None,
+            )
+            if consecutive_failures >= self.circuit_failure_threshold:
                 status = "unavailable"
-            elif self._consecutive_failures > 0:
+            elif consecutive_failures > 0:
                 status = "degraded"
             else:
                 status = "ready"
@@ -318,17 +347,13 @@ class ProviderHttpRuntime:
                 request_count=self._request_count,
                 success_count=self._success_count,
                 failure_count=self._failure_count,
-                consecutive_failures=self._consecutive_failures,
+                consecutive_failures=consecutive_failures,
                 rate_limit_count=self._rate_limit_count,
                 in_flight=self._in_flight,
                 max_concurrency=self.max_concurrency,
                 circuit_open_count=self._circuit_open_count,
                 circuit_suppression_count=self._circuit_suppression_count,
-                circuit_open_until=(
-                    self._circuit_open_until_wall.isoformat()
-                    if self._circuit_open_until_wall is not None
-                    else None
-                ),
+                circuit_open_until=open_until.isoformat() if open_until is not None else None,
                 last_success_at=(
                     self._last_success_at.isoformat() if self._last_success_at else None
                 ),

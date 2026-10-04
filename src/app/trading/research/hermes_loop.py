@@ -12,6 +12,7 @@ from typing import Any, Callable, Protocol
 from pydantic import ValidationError
 
 from app.trading.trade_logging import trade_log
+from app.trading.providers.request_budget import in_provider_lane
 
 from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter
@@ -162,6 +163,7 @@ def _execute(proposal: ResearchActionProposal, identity: IssuerIdentity, *, sec:
     raise ValueError("trading_research_operation_not_allowlisted")
 
 
+@in_provider_lane("research")
 def run_iterative_research(
     request: TradingResearchRequest,
     identity: IssuerIdentity,
