@@ -1,13 +1,20 @@
-"""Deterministic, feature-gated routing between live chat and Live Agent."""
+"""The live agent: route a live turn to direct chat or the agent, and plan its proposal."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
-
-import os
 import re
-from typing import Literal
+from dataclasses import asdict
+from typing import Literal, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.assistant_tools.contracts import KASA_READ_TOOLS, is_kasa_tool_name, kasa_request_from_tool_call
+from app.capabilities.executor import CapabilityGrant, execute_capability
+from app.chat.assist.hermes import HermesAssistantPlanner
+from app.chat.assist.models import AssistantRequest, ToolResult
+from app.chat.assist.modes import apply_mode_result, ModeChatResponse, detect_mode_domain
+from app.config.env import environment
+from app.providers.hermes_status import hermes_runtime_config
+
 
 LiveAgentRequestedMode = Literal["off", "auto", "agent"]
 LiveAgentRoute = Literal["direct_chat", "agent_plan"]
@@ -190,3 +197,83 @@ def _float(name: str, default: float, minimum: float, maximum: float) -> float:
     except ValueError:
         return default
     return max(minimum, min(maximum, value))
+
+
+class LiveAgentUnavailable(RuntimeError):
+    pass
+
+
+def plan_live_agent_proposal(
+    *,
+    content: str,
+    session_id: str,
+    context: dict[str, Any] | None = None,
+    timeout_seconds: float = 6.0,
+) -> ModeChatResponse:
+    config = hermes_runtime_config()
+    if not config.enabled:
+        raise LiveAgentUnavailable("Hermes is disabled")
+    request = AssistantRequest(
+        message=content,
+        session_id=session_id,
+        domain=detect_mode_domain(content),
+        dry_run=True,
+        metadata={
+            "source": "live_agent",
+            "proposal_only": True,
+            "review_required": True,
+            "executes": False,
+            **(context or {}),
+        },
+    )
+    try:
+        result = HermesAssistantPlanner(
+            base_url=config.base_url,
+            api_key=environment().get("HERMES_API_KEY") or None,
+            timeout=min(config.timeout_seconds, timeout_seconds),
+        ).plan(request)
+    except Exception as exc:
+        raise LiveAgentUnavailable(str(exc) or "Hermes planner is unavailable") from exc
+    has_kasa_call = any(is_kasa_tool_name(call.name) for call in result.tool_calls)
+    if not has_kasa_call:
+        result = apply_mode_result(result, dry_run=True)
+    _apply_kasa_reads(result, content=content, session_id=session_id)
+    for row in result.tool_results:
+        if row.name not in KASA_READ_TOOLS:
+            row.executed = False
+    kasa_read_only = bool(result.tool_calls) and all(
+        call.name in KASA_READ_TOOLS for call in result.tool_calls
+    )
+    result.requires_confirmation = not kasa_read_only
+    return ModeChatResponse(
+        ok=result.success,
+        mode="agent",
+        backend="hermes",
+        result=asdict(result),
+    )
+
+
+def _apply_kasa_reads(result, *, content: str, session_id: str) -> None:
+    rows = list(result.tool_results)
+    for call in result.tool_calls:
+        if call.name not in KASA_READ_TOOLS:
+            continue
+        request = kasa_request_from_tool_call(call, session_id=session_id)
+        if request is None:
+            continue
+        payload = execute_capability(CapabilityGrant("live_agent", session_id or "live-agent"), request, user_request=content)
+        execution = payload.execution_result
+        rows.append(
+            ToolResult(
+                name=call.name,
+                ok=execution.error is None,
+                output=execution.output,
+                error=execution.error,
+                executed=execution.error is None,
+            )
+        )
+        if execution.result_summary:
+            result.response = execution.result_summary
+    if rows:
+        result.tool_results = rows
+        result.success = all(row.ok for row in rows)

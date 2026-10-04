@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.assist_core.omnix_mode_router import omnix_mode_route
+from app.rpg.hermes.mode_routing import omnix_mode_route
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

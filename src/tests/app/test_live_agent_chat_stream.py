@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.assist_core.mode_chat import ModeChatResponse
+from app.chat.assist.modes import ModeChatResponse
 from app.characters.repository import InMemoryCharacterRepository
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.gateway.main import create_gateway_app

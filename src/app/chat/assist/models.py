@@ -1,3 +1,4 @@
+"""Assist mode requests, results, tool results, confirmations and the action log."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -63,23 +64,3 @@ class ActionLogEntry:
     success: bool
     detail: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
-
-
-DEFAULT_FLAGS: dict[str, bool] = {
-    "assistant_core_enabled": True,
-    "assistant_chat_enabled": True,
-    "live_assistant_enabled": False,
-    "house_mock_tools_enabled": True,
-    "real_tool_adapters_enabled": False,
-}
-
-
-def default_flags() -> dict[str, bool]:
-    return dict(DEFAULT_FLAGS)
-
-
-# Back-compat naming for the product roadmap language.
-AgentRequest = AssistantRequest
-AgentResult = AssistantResult
-AgentActionLogEntry = ActionLogEntry
-PendingConfirmation = ConfirmationRequest

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.capabilities import default_capability_registry
 from app.assistant_tools.registry import default_assistant_tools
-from app.assist_core.hermes_catalog import hermes_catalog_specs
+from app.chat.assist.hermes import hermes_catalog_specs
 
 
 def test_capability_registry_is_the_canonical_projection_source() -> None:

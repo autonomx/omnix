@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.assist_core.core import AssistantResult, ToolCall, ToolResult, ToolRiskLevel
-from app.assist_core.live_agent_planner import LiveAgentUnavailable, plan_live_agent_proposal
+from app.chat.assist.models import AssistantResult, ToolCall, ToolResult, ToolRiskLevel
+from app.chat.assist.live_agent import LiveAgentUnavailable, plan_live_agent_proposal
 from app.assistant_tools.hermes_payloads import HermesAssistantToolExecutePayload
 from app.assistant_tools.models import AssistantToolResult, AssistantToolReviewDecision
 
@@ -53,7 +53,7 @@ class OfflineHermesClient:
 def test_live_agent_planner_forces_nonexecuting_review_proposal(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
+        "app.chat.assist.live_agent.HermesAssistantPlanner",
         FakeHermesClient,
     )
 
@@ -71,7 +71,7 @@ def test_live_agent_planner_forces_nonexecuting_review_proposal(monkeypatch) -> 
 def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
+        "app.chat.assist.live_agent.HermesAssistantPlanner",
         FakeKasaReadHermesClient,
     )
 
@@ -108,7 +108,7 @@ def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> No
         )
 
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.execute_capability",
+        "app.chat.assist.live_agent.execute_capability",
         execute,
     )
 
@@ -126,7 +126,7 @@ def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> No
 def test_live_agent_planner_reports_unavailability_for_provider_fallback(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
+        "app.chat.assist.live_agent.HermesAssistantPlanner",
         OfflineHermesClient,
     )
 

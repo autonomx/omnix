@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # The modules that register document shapes (kept in step by
 # src/tests/persistence/test_document_schemas.py).
 DOCUMENT_SCHEMA_OWNERS = (
-    "app.assist_core.persistence.house_state",
+    "app.chat.assist.house",
     "app.assistant_tools.persistence.configuration",
     "app.assistant_tools.persistence.runtime_documents",
     "app.characters.persistence.avatar_generation_repository",

@@ -63,7 +63,6 @@ def _owner(path: Path) -> str:
             "agent_runtime": "agent-runtime",
             "assistant_memory": "assistant-memory",
             "assistant_memory_v2": "assistant-memory",
-            "assist_core": "hermes",
             "runtime": "kernel",
             "config": "kernel",
             "persistence": "kernel",

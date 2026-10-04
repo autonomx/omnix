@@ -1,11 +1,12 @@
+"""Hermes assist diagnostics: sidecar status, schema and a dry-run planning test."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .core import AssistantRequest
+from app.chat.assist.models import AssistantRequest
+from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
 from app.providers.hermes_status import hermes_runtime_config, hermes_status_payload
-from .mode_chat import ModeChatRequest, plan_mode_chat
 
 
 @dataclass

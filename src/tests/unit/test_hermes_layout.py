@@ -18,12 +18,7 @@ def test_the_sidecar_client_is_transport_only() -> None:
 
 
 def test_rpg_hermes_modules_live_under_rpg() -> None:
-    left_behind = sorted(
-        path.name
-        for path in (APP / "assist_core").glob("hermes_*.py")
-        if path.name.startswith(("hermes_rpg_", "hermes_sequence_"))
-    )
-
-    assert left_behind == []
+    # assist_core is gone (WP-8.2): assist mode lives in app/chat/assist.
+    assert not (APP / "assist_core").exists()
     assert FEATURE_CATALOG["hermes"] == "app.rpg.hermes.feature:FEATURE"
     assert load_feature("hermes").depends_on == ("rpg",)

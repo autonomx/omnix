@@ -44,7 +44,7 @@ class DocumentServices:
 def production_document_services() -> DocumentServices:
     from app.assistant_tools.persistence import configuration
     from app.assistant_tools.persistence import runtime_documents as assistant_tool_documents
-    from app.assist_core.persistence import house_state as assist_house_state
+    from app.chat.assist import house as assist_house_state
     from app.image.persistence import image_assets as image_asset_compat
     from app.rpg.persistence import rpg_compat
     from app.rpg.persistence import rpg_feature_compat

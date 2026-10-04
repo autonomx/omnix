@@ -8,9 +8,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
 | `CONDA_ROOT` | string | — | launcher | Controls conda root for launcher. |
-| `HERMES_API_KEY` | string | — | hermes, providers, research, rpg, trading | Controls hermes api key for hermes, providers, research, rpg, trading. |
+| `HERMES_API_KEY` | string | — | chat, providers, research, rpg, trading | Controls hermes api key for chat, providers, research, rpg, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
-| `HERMES_ENABLED` | string | — | hermes, launcher, providers, research | Controls hermes enabled for hermes, launcher, providers, research. |
+| `HERMES_ENABLED` | string | — | chat, launcher, providers, research | Controls hermes enabled for chat, launcher, providers, research. |
 | `HERMES_TIMEOUT_SECONDS` | string | `45` | providers | Controls hermes timeout seconds for providers. |
 | `HF_TOKEN` | string | — | image | Controls hf token for image. |
 | `LIVE_SPEECH_INPUT_SAMPLE_RATE` | string | `16000` | live-speech | Controls live speech input sample rate for live-speech. |
@@ -168,9 +168,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LAUNCHER_URL` | string | — | image-http-client.py | Controls launcher url for image-http-client.py. |
 | `OMNIX_LEGACY_AUDIO_DIRS` | string | — | assets | Controls legacy audio dirs for assets. |
 | `OMNIX_LEGACY_DOCUMENT_DIRS` | string | — | assets | Controls legacy document dirs for assets. |
-| `OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED` | boolean | — | hermes | Controls live agent auto route enabled for hermes. |
-| `OMNIX_LIVE_AGENT_ENABLED` | boolean | — | hermes | Controls live agent enabled for hermes. |
-| `OMNIX_LIVE_AGENT_REQUIRE_HERMES` | boolean | — | hermes | Controls live agent require hermes for hermes. |
+| `OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED` | boolean | — | chat | Controls live agent auto route enabled for chat. |
+| `OMNIX_LIVE_AGENT_ENABLED` | boolean | — | chat | Controls live agent enabled for chat. |
+| `OMNIX_LIVE_AGENT_REQUIRE_HERMES` | boolean | — | chat | Controls live agent require hermes for chat. |
 | `OMNIX_LIVE_CHAT_EVALUATION_PATH` | string | — | chat | Controls live chat evaluation path for chat. |
 | `OMNIX_LIVE_CONVERSATION_PROFILE_PATH` | string | — | characters | Controls live conversation profile path for characters. |
 | `OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS` | string | `60` | providers | Controls live global prompt cache ttl seconds for providers. |

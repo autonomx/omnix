@@ -590,7 +590,6 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
         # runtime test in src/tests/security/test_permissions.py proves every
         # composed route refuses a caller without permissions.
         "src/app/gateway/",
-        "src/app/assist_core/",
     )
     evidence["other_fixed_sleeps_in_tests"] = []
     values["files_over_1200_lines"] = sum(

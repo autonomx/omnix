@@ -188,12 +188,11 @@ The gateway explicitly reports the classic browser UI as retired. Older FastAPI/
 src/app/
 ├─ agent_runtime/       planning, routing, capabilities, Pi execution, evidence, review
 ├─ assets/              shared artifact metadata/storage
-├─ assist_core/         assistant core services
 ├─ assistant_context/   durable assistant context APIs/services
 ├─ assistant_memory/    assistant memory subsystem
 ├─ assistant_tools/     governed tool adapters, connections, credentials, policy projection
 ├─ characters/          character profiles/runtime support
-├─ chat/                chat sessions/messages/generation jobs
+├─ chat/                chat sessions/messages/generation jobs; assist mode in chat/assist/
 ├─ desktop_companion/   companion support subsystem
 ├─ gateway/             browser-facing FastAPI gateway
 ├─ image/               image provider/API domain

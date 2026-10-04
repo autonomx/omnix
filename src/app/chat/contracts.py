@@ -29,6 +29,27 @@ from app.chat.store import _model_key as model_key
 from app.chat.store import _provider_key as provider_key
 from app.conversation.contracts import estimate_tokens
 
+
+# Assist mode diagnostics for the Hermes routes; loaded on first use (WP-8.2).
+def hermes_assist_status_payload() -> dict:
+    from app.chat.assist.diagnostics import hermes_diagnostics_status_payload
+
+    return hermes_diagnostics_status_payload()
+
+
+def hermes_assist_test_payload(*, content: str, session_id: str, domain: str, metadata: dict) -> dict:
+    from app.chat.assist.diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
+
+    return hermes_diagnostics_test_payload(
+        HermesDiagnosticsTestRequest(content=content, session_id=session_id, domain=domain, metadata=metadata)
+    )
+
+
+def hermes_assist_readout_payload(name: str, args: dict) -> dict:
+    from app.chat.assist.modes import readout_payload
+
+    return readout_payload(name, args)
+
 __all__ = [
     "ChatMessage",
     "ChatSession",
@@ -43,6 +64,9 @@ __all__ = [
     "compaction_enabled",
     "eager_async_sse_stream",
     "estimate_tokens",
+    "hermes_assist_readout_payload",
+    "hermes_assist_status_payload",
+    "hermes_assist_test_payload",
     "live_call_provider_affinity",
     "merge_provider_response_metrics",
     "model_key",

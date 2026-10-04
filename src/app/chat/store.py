@@ -637,7 +637,7 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
+        from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
 
         result = plan_mode_chat(
             ModeChatRequest(

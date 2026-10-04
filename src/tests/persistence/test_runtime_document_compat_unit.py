@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.assistant_tools.ledger import AssistantToolLedgerEntry
 from app.assistant_tools.persistence import runtime_documents as tool_documents
-from app.assist_core.persistence import house_state as house_state_store
+from app.chat.assist import house as house_state_store
 from app.characters.live_conversation_profile import LiveConversationProfileUpdate
 from app.characters.persistence import live_profile_store
 from app.chat.persistence import assistant_turn_store, legacy_sessions

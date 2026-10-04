@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.assist_core.live_agent_planner import LiveAgentUnavailable
-from app.assist_core.mode_chat import ModeChatResponse
+from app.chat.assist.live_agent import LiveAgentUnavailable
+from app.chat.assist.modes import ModeChatResponse
 from app.chat.character_store import _CharacterSessionMixin
 from app.chat.live_agent_store import LiveAgentPlanner
 from app.chat.models import ChatMessage, ChatSession

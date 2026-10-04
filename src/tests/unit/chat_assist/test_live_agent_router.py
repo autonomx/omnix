@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assist_core.live_agent_router import (
+from app.chat.assist.live_agent import (
     LiveAgentRuntimeConfig,
     classify_live_agent_intent,
     resolve_live_agent_route,

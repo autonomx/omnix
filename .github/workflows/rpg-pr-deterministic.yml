@@ -181,7 +181,7 @@ jobs:
       - name: Kasa Live Agent regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/assistant_tools/test_kasa_runtime_adapter.py src/tests/unit/chat/test_kasa_live_agent_flow.py src/tests/unit/chat/test_live_agent_store.py src/tests/unit/assist_core/test_live_agent_router.py src/tests/unit/assist_core/test_live_agent_planner.py -q --tb=short 2>&1 | tee kasa-live-agent-pytest-output.txt
+          python -m pytest src/tests/assistant_tools/test_kasa_runtime_adapter.py src/tests/unit/chat/test_kasa_live_agent_flow.py src/tests/unit/chat/test_live_agent_store.py src/tests/unit/chat_assist/test_live_agent_router.py src/tests/unit/chat_assist/test_live_agent_planner.py -q --tb=short 2>&1 | tee kasa-live-agent-pytest-output.txt
 
       - name: Upload Kasa Live Agent diagnostics
         if: failure()

@@ -29,8 +29,8 @@
   },
   {
     "default": null,
-    "description": "Controls hermes api key for hermes, providers, research, rpg, trading.",
-    "feature": "hermes, providers, research, rpg, trading",
+    "description": "Controls hermes api key for chat, providers, research, rpg, trading.",
+    "feature": "chat, providers, research, rpg, trading",
     "name": "HERMES_API_KEY",
     "type": "string"
   },
@@ -43,8 +43,8 @@
   },
   {
     "default": null,
-    "description": "Controls hermes enabled for hermes, launcher, providers, research.",
-    "feature": "hermes, launcher, providers, research",
+    "description": "Controls hermes enabled for chat, launcher, providers, research.",
+    "feature": "chat, launcher, providers, research",
     "name": "HERMES_ENABLED",
     "type": "string"
   },
@@ -1149,22 +1149,22 @@
   },
   {
     "default": null,
-    "description": "Controls live agent auto route enabled for hermes.",
-    "feature": "hermes",
+    "description": "Controls live agent auto route enabled for chat.",
+    "feature": "chat",
     "name": "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED",
     "type": "boolean"
   },
   {
     "default": null,
-    "description": "Controls live agent enabled for hermes.",
-    "feature": "hermes",
+    "description": "Controls live agent enabled for chat.",
+    "feature": "chat",
     "name": "OMNIX_LIVE_AGENT_ENABLED",
     "type": "boolean"
   },
   {
     "default": null,
-    "description": "Controls live agent require hermes for hermes.",
-    "feature": "hermes",
+    "description": "Controls live agent require hermes for chat.",
+    "feature": "chat",
     "name": "OMNIX_LIVE_AGENT_REQUIRE_HERMES",
     "type": "boolean"
   },

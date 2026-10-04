@@ -256,33 +256,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.kasa_plan",
-      "lines": [
-        23
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.live_agent_proposals",
-      "lines": [
-        24
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.models",
-      "lines": [
-        28
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
       "lines": [
         159

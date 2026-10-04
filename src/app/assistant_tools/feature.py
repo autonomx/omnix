@@ -15,6 +15,8 @@ def _assistant_tools_internal_router(_context):
 FEATURE = FeatureModule(
     id="assistant-tools",
     title="Assistant Tools",
+    # Chat's live agent and assist mode use these tools through app.assistant_tools.contracts.
+    depends_on=("chat",),
     routers=(_assistant_tools_router,),
     internal_routers=(_assistant_tools_internal_router,),
     # Installs the runtime behind app.capabilities.executor (WP-4.5).

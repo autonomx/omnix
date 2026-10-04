@@ -4,9 +4,9 @@ import json
 
 import httpx
 
-from app.assist_core.core import AssistantRequest
+from app.chat.assist.models import AssistantRequest
 from app.agent_runtime.evidence import _hermes_evidence_decision
-from app.assist_core.hermes_planner import HermesAssistantPlanner
+from app.chat.assist.hermes import HermesAssistantPlanner
 from app.providers.hermes_client import HermesSidecarClient
 from app.research.planner import HermesResearchPlanner
 from tests.support.http import mock_http_client

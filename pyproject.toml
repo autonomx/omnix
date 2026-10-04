@@ -87,7 +87,6 @@ module = [
   "app.assistant_memory", "app.assistant_memory.*",
   "app.assistant_memory_v2", "app.assistant_memory_v2.*",
   "app.assistant_tools", "app.assistant_tools.*",
-  "app.assist_core", "app.assist_core.*",
   "app.audiobook", "app.audiobook.*",
   "app.assets", "app.assets.*",
   "app.characters", "app.characters.*",

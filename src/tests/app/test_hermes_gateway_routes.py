@@ -30,7 +30,7 @@ def test_hermes_gateway_routes_are_registered() -> None:
 def test_hermes_status_reports_the_sidecar_and_its_configuration(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
-    from app.assist_core import hermes_diagnostics
+    from app.chat.assist import diagnostics as hermes_diagnostics
 
     monkeypatch.setattr(hermes_diagnostics, "hermes_status_payload", lambda: {
         "enabled": True, "reachable": True, "state": "ready", "message": "Hermes is reachable.",

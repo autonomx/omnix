@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.assist_core.mode_chat import ModeChatResponse
+from app.chat.assist.modes import ModeChatResponse
 from app.assistant_tools.hermes_payloads import HermesAssistantToolExecutePayload
 from app.assistant_tools.models import (
     AssistantToolRequest,

@@ -172,7 +172,7 @@ except SecretStoreUnavailable:
 else:
     raise AssertionError("assistant-tool credentials were saved without a writable secret store")
 
-from app.assist_core.house_state import load_house_state, save_house_state
+from app.chat.assist.house import load_house_state, save_house_state
 
 save_house_state({"rooms": {"office": {"lights": "on"}}, "reminders": []})
 assert load_house_state()["rooms"]["office"]["lights"] == "on"

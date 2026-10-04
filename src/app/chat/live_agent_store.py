@@ -8,24 +8,24 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from app.assist_core.live_agent_planner import (
+from app.chat.assist.live_agent import (
     LiveAgentUnavailable,
 )
-from app.assist_core.live_agent_router import (
+from app.chat.assist.live_agent import (
     LiveAgentRouteDecision,
     live_agent_runtime_config,
     resolve_live_agent_route,
 )
-from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
+from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
 from app.capabilities.approvals import ApproverNotAllowed, current_approver
 from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.security import audit
-from app.assistant_tools.kasa_plan import first_pending_kasa_write
-from app.assistant_tools.live_agent_proposals import (
+from app.assistant_tools.contracts import (
+    AssistantToolRequest,
+    first_pending_kasa_write,
     live_agent_planner_context,
     live_agent_tool_proposals,
 )
-from app.assistant_tools.models import AssistantToolRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession
@@ -64,7 +64,7 @@ class AssistCoreLiveAgentPlanner:
         context: dict[str, Any],
         timeout_seconds: float,
     ) -> Any:
-        from app.assist_core.live_agent_planner import plan_live_agent_proposal
+        from app.chat.assist.live_agent import plan_live_agent_proposal
 
         return plan_live_agent_proposal(
             content=content,
