@@ -512,6 +512,16 @@ def test_web_glob_reachability_resolves_parent_segments():
     assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 1
 
 
+def test_unused_feature_public_api_is_not_dead_but_what_only_it_exports_is():
+    sources = {
+        WEB + "main.tsx": "import './features/chat/module';",
+        WEB + "features/chat/module.ts": "",
+        WEB + "features/chat/index.ts": "export * from './helper';",
+        WEB + "features/chat/helper.ts": "",
+    }
+    assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 1
+
+
 def test_web_workers_loaded_by_url_are_reachable():
     sources = {
         WEB + "main.tsx": "import './scheduler';",

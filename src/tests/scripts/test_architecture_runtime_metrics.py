@@ -120,7 +120,12 @@ print('guard verified')
 def test_snapshot_copies_tracked_inputs_without_untracked_operator_state(tmp_path):
     root, target = tmp_path / "source", tmp_path / "snapshot"
     root.mkdir()
-    files = {"src/app/a.py": "value = 1", "resources/logo.png": "binary fixture", "vendor/unsafe.py": "value = 2"}
+    files = {
+        "src/app/a.py": "value = 1",
+        "resources/logo.png": "binary fixture",
+        "src/app/providers/vendor/engine.py": "value = 2",
+        "node_modules/tool/index.js": "tool",
+    }
     for name, contents in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -131,7 +136,9 @@ def test_snapshot_copies_tracked_inputs_without_untracked_operator_state(tmp_pat
     runtime.disposable_snapshot(root, target)
     assert (target / "src/app/a.py").read_text(encoding="utf-8") == "value = 1"
     assert (target / "resources/logo.png").read_bytes() == (root / "resources/logo.png").read_bytes()
-    assert not (target / "vendor").exists()
+    # Vendored source is production code the probes import; tool environments are not.
+    assert (target / "src/app/providers/vendor/engine.py").read_text(encoding="utf-8") == "value = 2"
+    assert not (target / "node_modules").exists()
     assert not (target / "operator-secret.txt").exists()
 
 

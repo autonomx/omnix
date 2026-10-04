@@ -15,7 +15,7 @@ import fnmatch
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -72,11 +72,25 @@ def active_collection_paths(root: Path, test_paths: list[str]) -> list[str]:
     return active
 
 
+# Tracked vendored source is production code (the TTS provider imports
+# app/providers/vendor), so the snapshot the probes import keeps it even though
+# the metrics do not measure it. Tool environments stay out.
+SNAPSHOT_EXCLUDED_PARTS = frozenset({"node_modules", ".venv", "venv", ".tools"})
+
+
+def snapshot_path(name: str) -> bool:
+    """Whether a tracked file belongs in the probe snapshot."""
+    parts = PurePosixPath(name).parts
+    if not included_path(name) and not {"vendor", "vendored", "third_party", "third-party"}.intersection(parts):
+        return False
+    return not SNAPSHOT_EXCLUDED_PARTS.intersection(parts)
+
+
 def disposable_snapshot(root: Path, destination: Path) -> None:
     """Copy tracked working-tree inputs; never include operator/untracked data."""
     names = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.decode("utf-8").split("\0")
     for name in sorted(set(names)):
-        if not name or not included_path(name):
+        if not name or not snapshot_path(name):
             continue
         source = root / name
         if not source.exists():

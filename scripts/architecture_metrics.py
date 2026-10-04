@@ -1045,7 +1045,15 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     graph = _web_graph(sources)
     roots = {"src/apps/web/src/main.tsx", "src/apps/web/src/main.ts"} & graph.keys()
     reached = _reach(graph, roots)
-    unreachable = sorted(path for path in graph if path.endswith((".ts", ".tsx")) and path not in reached and not path.endswith(".d.ts"))
+    # A feature's index.ts is its declared public API (WP-9.7) and exists even
+    # when no other feature imports it yet. It is not counted, and it is not a
+    # root either: a module only an unused index re-exports still counts.
+    public_api = re.compile(r"src/apps/web/src/features/[^/]+/index\.tsx?")
+    unreachable = sorted(
+        path for path in graph
+        if path.endswith((".ts", ".tsx")) and path not in reached and not path.endswith(".d.ts")
+        and not public_api.fullmatch(path)
+    )
     values["web_unreachable_modules"] = len(unreachable)
     global_stylesheets = _global_stylesheets(sources)
     values["web_global_css_files"] = len(global_stylesheets)

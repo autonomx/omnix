@@ -3,66 +3,9 @@
   "evidence": {
     "absolute_storage_path_read_files": [],
     "absolute_storage_path_read_sites": [],
-    "capped_500_query_sites": [
-      {
-        "kind": "limit_keyword",
-        "line": 156,
-        "path": "src/app/rpg/persistence/rpg_compat.py"
-      },
-      {
-        "kind": "limit_keyword",
-        "line": 157,
-        "path": "src/app/rpg/persistence/rpg_compat.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 105,
-        "path": "src/app/rpg/persistence/rpg_hermes_research_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 225,
-        "path": "src/app/rpg/persistence/rpg_observer_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 164,
-        "path": "src/app/rpg/persistence/rpg_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 197,
-        "path": "src/app/rpg/persistence/rpg_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 113,
-        "path": "src/app/rpg/persistence/rpg_world_forge_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 29,
-        "path": "src/app/rpg/persistence/rpg_world_library_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 72,
-        "path": "src/app/rpg/persistence/rpg_world_library_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 217,
-        "path": "src/app/rpg/persistence/rpg_world_library_repository.py"
-      },
-      {
-        "kind": "min_call",
-        "line": 134,
-        "path": "src/app/rpg/persistence/rpg_world_scenario_repository.py"
-      }
-    ],
+    "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 68,
-      "AL008": 46,
+      "AL001": 59,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -73,7 +16,13 @@
       "app.agent_runtime.broker_api",
       "app.agent_runtime.budget",
       "app.agent_runtime.candidate_test_validation",
+      "app.agent_runtime.capability_requests",
       "app.agent_runtime.chat_bridge",
+      "app.agent_runtime.chat_lane_agent",
+      "app.agent_runtime.chat_lane_common",
+      "app.agent_runtime.chat_lane_direct",
+      "app.agent_runtime.chat_lane_evidence",
+      "app.agent_runtime.chat_lane_task_graph",
       "app.agent_runtime.coding_external_authority",
       "app.agent_runtime.coding_quality",
       "app.agent_runtime.coding_quality_repository",
@@ -99,8 +48,10 @@
       "app.agent_runtime.planning_review",
       "app.agent_runtime.preview_api",
       "app.agent_runtime.profiles",
+      "app.agent_runtime.quality_acceptance",
       "app.agent_runtime.quality_evaluation",
       "app.agent_runtime.quality_recovery",
+      "app.agent_runtime.quality_state_machine",
       "app.agent_runtime.repository",
       "app.agent_runtime.repository_guidance",
       "app.agent_runtime.request_policy",
@@ -111,9 +62,23 @@
       "app.agent_runtime.router",
       "app.agent_runtime.routes",
       "app.agent_runtime.routing_api",
+      "app.agent_runtime.run_acceptance",
       "app.agent_runtime.run_change_set",
+      "app.agent_runtime.run_lifecycle",
       "app.agent_runtime.run_locks",
+      "app.agent_runtime.run_repository_approvals",
+      "app.agent_runtime.run_repository_capabilities",
+      "app.agent_runtime.run_repository_commands",
+      "app.agent_runtime.run_repository_events",
+      "app.agent_runtime.run_repository_queries",
+      "app.agent_runtime.run_repository_revisions",
+      "app.agent_runtime.run_repository_usage",
+      "app.agent_runtime.run_slots",
+      "app.agent_runtime.run_steering",
+      "app.agent_runtime.run_supervision",
       "app.agent_runtime.run_token_guard",
+      "app.agent_runtime.run_workspace",
+      "app.agent_runtime.sandbox",
       "app.agent_runtime.semantic_classifier",
       "app.agent_runtime.semantic_normalizer",
       "app.agent_runtime.semantic_task",
@@ -123,14 +88,21 @@
       "app.agent_runtime.subagents",
       "app.agent_runtime.task_graph",
       "app.agent_runtime.task_graph_api",
+      "app.agent_runtime.task_graph_batches",
+      "app.agent_runtime.task_graph_control",
       "app.agent_runtime.task_graph_optimizer",
       "app.agent_runtime.task_graph_repository",
       "app.agent_runtime.task_graph_revision",
       "app.agent_runtime.task_graph_runtime",
+      "app.agent_runtime.task_graph_scheduling",
       "app.agent_runtime.task_revision_quality",
       "app.agent_runtime.turn_plan",
       "app.agent_runtime.workflow_api",
+      "app.agent_runtime.workflow_execution",
+      "app.agent_runtime.workflow_repository",
       "app.agent_runtime.workflow_runtime",
+      "app.agent_runtime.workflow_scheduling",
+      "app.agent_runtime.workflow_steps",
       "app.agent_runtime.workflows",
       "app.agent_runtime.workspace",
       "app.agent_runtime.workspace_dependencies",
@@ -145,72 +117,6 @@
       "app.assets.store",
       "app.assets.voice_clone_assets",
       "app.assets.voice_clone_identity",
-      "app.assist_core",
-      "app.assist_core.core",
-      "app.rpg.hermes.feature",
-      "app.rpg.hermes.adapter_contract",
-      "app.rpg.hermes.api",
-      "app.rpg.hermes.assist_mode",
-      "app.rpg.hermes.candidate",
-      "app.assist_core.hermes_catalog",
-      "app.providers.hermes_client",
-      "app.assist_core.hermes_contract",
-      "app.assist_core.hermes_diagnostics",
-      "app.rpg.hermes.planner_context",
-      "app.rpg.hermes.planner_contract",
-      "app.assist_core.hermes_readouts",
-      "app.rpg.hermes.approved_config",
-      "app.rpg.hermes.approved_flow",
-      "app.rpg.hermes.approved_routes",
-      "app.rpg.hermes.canonical_submitter",
-      "app.rpg.hermes.command_request",
-      "app.rpg.hermes.context",
-      "app.rpg.hermes.context_pack",
-      "app.rpg.hermes.execution_ledger",
-      "app.rpg.hermes.flow_audit",
-      "app.rpg.hermes.flow_error",
-      "app.rpg.hermes.flow_readout",
-      "app.rpg.hermes.narrative_research",
-      "app.rpg.hermes.pipeline_handoff",
-      "app.rpg.hermes.pipeline_result",
-      "app.rpg.hermes.plan",
-      "app.rpg.hermes.plan_request",
-      "app.rpg.hermes.plan_summary",
-      "app.rpg.hermes.ready_packet",
-      "app.rpg.hermes.request_guard",
-      "app.rpg.hermes.submit_adapter",
-      "app.rpg.hermes.submit_bridge",
-      "app.rpg.hermes.suggestions",
-      "app.rpg.hermes.ticket",
-      "app.rpg.hermes.turn_readout",
-      "app.rpg.hermes.validator",
-      "app.rpg.hermes.sequence_approved_executor",
-      "app.rpg.hermes.sequence_checkpoint_policy",
-      "app.rpg.hermes.sequence_contract",
-      "app.rpg.hermes.sequence_gate",
-      "app.rpg.hermes.sequence_loop_guard",
-      "app.rpg.hermes.sequence_planner_loop",
-      "app.rpg.hermes.sequence_state",
-      "app.providers.hermes_status",
-      "app.assist_core.house_mock",
-      "app.assist_core.house_plan",
-      "app.assist_core.house_state",
-      "app.assist_core.live_agent_planner",
-      "app.assist_core.live_agent_router",
-      "app.assist_core.mode_apply",
-      "app.assist_core.mode_chat",
-      "app.assist_core.mode_review",
-      "app.assist_core.omnix_mode_policy",
-      "app.assist_core.omnix_mode_router",
-      "app.assist_core.omnix_route_decision",
-      "app.assist_core.persistence.house_state",
-      "app.assist_core.policy_store",
-      "app.assist_core.rpg_direction",
-      "app.chat.assistant_context",
-      "app.chat.assistant_context.models",
-      "app.chat.assistant_context.routes",
-      "app.chat.assistant_context.service",
-      "app.providers.desktop_vision",
       "app.assistant_memory",
       "app.assistant_memory.character_hermes_adapter",
       "app.assistant_memory.companion_context",
@@ -262,6 +168,8 @@
       "app.assistant_memory_v2.consolidation",
       "app.assistant_memory_v2.contracts",
       "app.assistant_memory_v2.convergence",
+      "app.assistant_memory_v2.curated_records",
+      "app.assistant_memory_v2.cutover",
       "app.assistant_memory_v2.derived_state",
       "app.assistant_memory_v2.embedding_index",
       "app.assistant_memory_v2.embeddings",
@@ -270,6 +178,7 @@
       "app.assistant_memory_v2.grant_store",
       "app.assistant_memory_v2.graph_store",
       "app.assistant_memory_v2.legacy_shadow",
+      "app.assistant_memory_v2.memory_repository",
       "app.assistant_memory_v2.observation_store",
       "app.assistant_memory_v2.operations",
       "app.assistant_memory_v2.policy",
@@ -280,6 +189,7 @@
       "app.assistant_memory_v2.search_index",
       "app.assistant_memory_v2.semantic_enrichment",
       "app.assistant_memory_v2.shadow_report",
+      "app.assistant_memory_v2.shadow_runner",
       "app.assistant_memory_v2.speculative_prefetch",
       "app.assistant_memory_v2.temporal",
       "app.assistant_tools",
@@ -289,6 +199,7 @@
       "app.assistant_tools.config_store",
       "app.assistant_tools.connections",
       "app.assistant_tools.contacts_adapter",
+      "app.assistant_tools.contracts",
       "app.assistant_tools.credentials",
       "app.assistant_tools.executor",
       "app.assistant_tools.feature",
@@ -394,6 +305,18 @@
       "app.characters.voice_consent",
       "app.chat",
       "app.chat.admission",
+      "app.chat.assist",
+      "app.chat.assist.diagnostics",
+      "app.chat.assist.hermes",
+      "app.chat.assist.house",
+      "app.chat.assist.live_agent",
+      "app.chat.assist.models",
+      "app.chat.assist.modes",
+      "app.chat.assist.review",
+      "app.chat.assistant_context",
+      "app.chat.assistant_context.models",
+      "app.chat.assistant_context.routes",
+      "app.chat.assistant_context.service",
       "app.chat.assistant_turns",
       "app.chat.character_store",
       "app.chat.compaction",
@@ -495,6 +418,7 @@
       "app.gateway.event_loop_lag_monitor",
       "app.gateway.feature_registry",
       "app.gateway.kernel_routes",
+      "app.gateway.kernel_routes.client_errors_routes",
       "app.gateway.kernel_routes.core_assets_routes",
       "app.gateway.kernel_routes.core_chat_routes",
       "app.gateway.kernel_routes.core_jobs_routes",
@@ -534,9 +458,12 @@
       "app.image.service",
       "app.image.style",
       "app.launcher",
+      "app.launcher.__main__",
+      "app.launcher.config",
       "app.launcher.control_app",
       "app.launcher.runtime_control_app",
       "app.launcher.service_manager",
+      "app.launcher.startup",
       "app.live_speech",
       "app.live_speech.api_models",
       "app.live_speech.api_stub",
@@ -596,7 +523,6 @@
       "app.live_voice.transport.diagnostics_routes",
       "app.live_voice.transport.sse",
       "app.live_voice.transport.websocket",
-      "app.llamacpp_installer",
       "app.persistence",
       "app.persistence.__main__",
       "app.persistence.asset_repository",
@@ -615,6 +541,7 @@
       "app.persistence.cutover_state",
       "app.persistence.database",
       "app.persistence.device_permits",
+      "app.persistence.document_schemas",
       "app.persistence.document_store",
       "app.persistence.errors",
       "app.persistence.execution_repositories",
@@ -675,13 +602,17 @@
       "app.providers.catalog",
       "app.providers.cerebras_provider",
       "app.providers.chatgpt_codex_provider",
+      "app.providers.desktop_vision",
       "app.providers.exceptions",
       "app.providers.facade",
       "app.providers.faster_qwen3_tts_provider",
+      "app.providers.hermes_client",
+      "app.providers.hermes_status",
       "app.providers.http_calls",
       "app.providers.live_stt_contracts",
       "app.providers.llamacpp_provider",
       "app.providers.lmstudio_provider",
+      "app.providers.model_catalog",
       "app.providers.nemotron_eou_live_websocket",
       "app.providers.nemotron_eou_quality",
       "app.providers.nemotron_eou_streaming",
@@ -753,7 +684,6 @@
       "app.rpg.ai.conversation_prompt_builder",
       "app.rpg.ai.conversation_response_parser",
       "app.rpg.ai.conversation_threads",
-      "app.rpg.ai.goap",
       "app.rpg.ai.grounding_patterns",
       "app.rpg.ai.grounding_settings",
       "app.rpg.ai.grounding_soft_audit",
@@ -769,19 +699,13 @@
       "app.rpg.ai.llm_mind.npc_prompt_builder",
       "app.rpg.ai.llm_mind.npc_response_parser",
       "app.rpg.ai.memory_narration_grounding",
-      "app.rpg.ai.npc_actor",
       "app.rpg.ai.npc_initiative",
       "app.rpg.ai.npc_reaction_layer",
-      "app.rpg.ai.planner",
-      "app.rpg.ai.planner.candidate_generator",
-      "app.rpg.ai.planner.npc_planner",
-      "app.rpg.ai.planner_core",
       "app.rpg.ai.pre_runtime_intent_fast_path",
       "app.rpg.ai.scene_continuity",
       "app.rpg.ai.scene_weaver",
       "app.rpg.ai.semantic_action_intelligence",
       "app.rpg.ai.semantic_packet_contract",
-      "app.rpg.ai.strategy_profiles",
       "app.rpg.ai.survival_narration_grounding",
       "app.rpg.ai.world_scene_narrator",
       "app.rpg.ai.world_scene_narrator_ambient",
@@ -889,21 +813,19 @@
       "app.rpg.combat.runtime_turns",
       "app.rpg.combat.state",
       "app.rpg.combat.world_consequences",
-      "app.rpg.companions",
       "app.rpg.compat",
       "app.rpg.compat.character_cards",
+      "app.rpg.contracts",
       "app.rpg.control",
       "app.rpg.control.controller",
       "app.rpg.control.framing",
       "app.rpg.control.models",
       "app.rpg.control.option_engine",
       "app.rpg.core",
-      "app.rpg.core.action_resolver",
       "app.rpg.core.clock",
       "app.rpg.core.determinism",
       "app.rpg.core.effects",
       "app.rpg.core.event_bus",
-      "app.rpg.core.execution_pipeline",
       "app.rpg.core.game_engine",
       "app.rpg.core.game_loop",
       "app.rpg.core.game_loop_creator",
@@ -913,8 +835,6 @@
       "app.rpg.core.host_runtime_boundary",
       "app.rpg.core.llm_boundary",
       "app.rpg.core.llm_recording",
-      "app.rpg.core.npc_state",
-      "app.rpg.core.probabilistic_executor",
       "app.rpg.core.replay_engine",
       "app.rpg.core.snapshot_manager",
       "app.rpg.core.state_contracts",
@@ -922,7 +842,6 @@
       "app.rpg.core.timeline_metadata",
       "app.rpg.core.timeline_query",
       "app.rpg.core.tool_runtime_boundary",
-      "app.rpg.core.world_loop",
       "app.rpg.creator",
       "app.rpg.creator.canon",
       "app.rpg.creator.commands",
@@ -1003,6 +922,47 @@
       "app.rpg.group_dynamics.participant_finder",
       "app.rpg.group_dynamics.reaction_policy",
       "app.rpg.group_dynamics.rumor_seed_builder",
+      "app.rpg.hermes",
+      "app.rpg.hermes.adapter_contract",
+      "app.rpg.hermes.api",
+      "app.rpg.hermes.approved_config",
+      "app.rpg.hermes.approved_flow",
+      "app.rpg.hermes.approved_routes",
+      "app.rpg.hermes.assist_mode",
+      "app.rpg.hermes.candidate",
+      "app.rpg.hermes.canonical_submitter",
+      "app.rpg.hermes.command_request",
+      "app.rpg.hermes.context",
+      "app.rpg.hermes.context_pack",
+      "app.rpg.hermes.execution_ledger",
+      "app.rpg.hermes.feature",
+      "app.rpg.hermes.flow_audit",
+      "app.rpg.hermes.flow_error",
+      "app.rpg.hermes.flow_readout",
+      "app.rpg.hermes.mode_routing",
+      "app.rpg.hermes.narrative_research",
+      "app.rpg.hermes.pipeline_handoff",
+      "app.rpg.hermes.pipeline_result",
+      "app.rpg.hermes.plan",
+      "app.rpg.hermes.plan_request",
+      "app.rpg.hermes.plan_summary",
+      "app.rpg.hermes.planner_context",
+      "app.rpg.hermes.planner_contract",
+      "app.rpg.hermes.ready_packet",
+      "app.rpg.hermes.request_guard",
+      "app.rpg.hermes.sequence_approved_executor",
+      "app.rpg.hermes.sequence_checkpoint_policy",
+      "app.rpg.hermes.sequence_contract",
+      "app.rpg.hermes.sequence_gate",
+      "app.rpg.hermes.sequence_loop_guard",
+      "app.rpg.hermes.sequence_planner_loop",
+      "app.rpg.hermes.sequence_state",
+      "app.rpg.hermes.submit_adapter",
+      "app.rpg.hermes.submit_bridge",
+      "app.rpg.hermes.suggestions",
+      "app.rpg.hermes.ticket",
+      "app.rpg.hermes.turn_readout",
+      "app.rpg.hermes.validator",
       "app.rpg.interactions",
       "app.rpg.interactions.companion_auto_equip",
       "app.rpg.interactions.companion_item_policy",
@@ -1084,10 +1044,8 @@
       "app.rpg.map_observer_runtime",
       "app.rpg.map_observer_service",
       "app.rpg.map_overlay_projection",
-      "app.rpg.map_package_bridge",
       "app.rpg.map_persistence",
       "app.rpg.map_projection",
-      "app.rpg.map_release",
       "app.rpg.map_repository",
       "app.rpg.map_serialization",
       "app.rpg.map_settlement_assembler",
@@ -1390,7 +1348,6 @@
       "app.rpg.session.ambient_intent",
       "app.rpg.session.ambient_policy",
       "app.rpg.session.ambient_tick_runtime",
-      "app.rpg.session.attack_reward_runtime",
       "app.rpg.session.autoplay_certification_artifact",
       "app.rpg.session.canonical_direct_dialogue",
       "app.rpg.session.causal_turn_runtime",
@@ -1703,7 +1660,6 @@
       "app.rpg.systems",
       "app.rpg.tactical_spatial",
       "app.rpg.tactical_spatial_service",
-      "app.rpg.tools",
       "app.rpg.ux",
       "app.rpg.ux.action_flow",
       "app.rpg.ux.core",
@@ -1943,6 +1899,8 @@
       "app.trading.catalyst_evidence",
       "app.trading.catalyst_repository",
       "app.trading.catalyst_shadow",
+      "app.trading.evidence_import",
+      "app.trading.evidence_storage",
       "app.trading.execution",
       "app.trading.execution_api",
       "app.trading.execution_observation_monitor",
@@ -1962,6 +1920,7 @@
       "app.trading.indicators",
       "app.trading.indicators.engine",
       "app.trading.instrument_catalog_service",
+      "app.trading.kill_switches",
       "app.trading.llm_reliability_metrics",
       "app.trading.market_data_api",
       "app.trading.market_data_recovery",
@@ -1973,6 +1932,8 @@
       "app.trading.metric_monitor",
       "app.trading.model_api",
       "app.trading.models",
+      "app.trading.monitor_task",
+      "app.trading.order_gateway",
       "app.trading.paper",
       "app.trading.paper_analytics",
       "app.trading.paper_analytics_api",
@@ -1988,6 +1949,7 @@
       "app.trading.premarket_liquidity",
       "app.trading.prospective_experiment_outcomes",
       "app.trading.prospective_gap_api",
+      "app.trading.prospective_gap_inputs",
       "app.trading.prospective_gap_monitor",
       "app.trading.prospective_gap_repository",
       "app.trading.prospective_gap_runtime",
@@ -2018,6 +1980,7 @@
       "app.trading.providers.ibkr",
       "app.trading.providers.ibkr_runtime",
       "app.trading.providers.registry",
+      "app.trading.providers.request_budget",
       "app.trading.replay",
       "app.trading.replay_api",
       "app.trading.replay_execution",
@@ -2063,9 +2026,13 @@
       "app.trading.session_integrity",
       "app.trading.session_reconciliation_monitor",
       "app.trading.strategies",
+      "app.trading.strategies.contract",
       "app.trading.strategies.failed_selloff_v2",
       "app.trading.strategies.gap_pullback",
       "app.trading.strategies.models",
+      "app.trading.strategies.registrations",
+      "app.trading.strategies.registry",
+      "app.trading.strategies.runner",
       "app.trading.strategy_adaptive_exit_research",
       "app.trading.strategy_ai_shadow",
       "app.trading.strategy_ai_shadow_monitor",
@@ -2136,6 +2103,7 @@
       "app.trading.strategy_stoch_rsi_5m_early_single",
       "app.trading.strategy_stoch_rsi_5m_early_single_loss_controls",
       "app.trading.strategy_stoch_rsi_5m_early_single_research",
+      "app.trading.strategy_stoch_rsi_5m_early_single_v2",
       "app.trading.strategy_stoch_rsi_5m_late_stage",
       "app.trading.strategy_stoch_rsi_5m_monitor",
       "app.trading.strategy_stoch_rsi_5m_research_exit",
@@ -2150,6 +2118,7 @@
       "app.trading.streaming.binance_stream",
       "app.trading.streaming.gap_recovery",
       "app.trading.streaming.manager",
+      "app.trading.structured_llm",
       "app.trading.trade_logging",
       "app.trading.trigger_plan",
       "app.trading.us_equity_calendar",
@@ -2176,8 +2145,6 @@
       "app.agent_runtime.*",
       "app.assets",
       "app.assets.*",
-      "app.assist_core",
-      "app.assist_core.*",
       "app.assistant_memory",
       "app.assistant_memory.*",
       "app.assistant_memory_v2",
@@ -2208,7 +2175,6 @@
       "app.live_speech.*",
       "app.live_voice",
       "app.live_voice.*",
-      "app.llamacpp_installer",
       "app.persistence",
       "app.persistence.*",
       "app.platform",
@@ -2491,8 +2457,18 @@
       },
       {
         "call": "asyncio.sleep",
-        "line": 127,
-        "path": "src/tests/trading/test_trading_paper_execution_cadence.py"
+        "line": 190,
+        "path": "src/tests/trading/test_scheduler_registration.py"
+      },
+      {
+        "call": "asyncio.sleep",
+        "line": 51,
+        "path": "src/tests/trading/test_shared_bar_stream.py"
+      },
+      {
+        "call": "asyncio.sleep",
+        "line": 89,
+        "path": "src/tests/trading/test_shared_bar_stream.py"
       },
       {
         "call": "asyncio.sleep",
@@ -2513,7 +2489,7 @@
         "category": "cache",
         "invalidation": "default_agent_budget_manager.cache_clear",
         "kind": "function_cache",
-        "line": 451,
+        "line": 438,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/budget.py",
@@ -2526,7 +2502,7 @@
         "category": "cache",
         "invalidation": "clear_provider_failures",
         "kind": "container",
-        "line": 123,
+        "line": 124,
         "max_entries": 4096,
         "path": "src/app/agent_runtime/pi_runtime.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2537,7 +2513,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 124,
+        "line": 125,
         "path": "src/app/agent_runtime/pi_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LAST_PROVIDER_FAILURE_LOCK"
@@ -2569,7 +2545,7 @@
         "category": "cache",
         "invalidation": "default_agent_run_service.cache_clear",
         "kind": "function_cache",
-        "line": 2625,
+        "line": 975,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/service.py",
@@ -2583,7 +2559,7 @@
         "category": "cache",
         "invalidation": "default_agent_run_service.cache_clear",
         "kind": "function_cache",
-        "line": 3239,
+        "line": 762,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/service_core.py",
@@ -2597,7 +2573,7 @@
         "category": "cache",
         "invalidation": "default_task_graph_runtime.cache_clear",
         "kind": "function_cache",
-        "line": 1655,
+        "line": 444,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/task_graph_runtime.py",
@@ -2611,7 +2587,7 @@
         "category": "cache",
         "invalidation": "default_workflow_runtime.cache_clear",
         "kind": "function_cache",
-        "line": 1448,
+        "line": 498,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/workflow_runtime.py",
@@ -2636,18 +2612,6 @@
         "path": "src/app/assets/store.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROCESS_LOCK"
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "invalidation": "hermes_rpg_execution_ledger_reset",
-        "kind": "container",
-        "line": 9,
-        "max_entries": 200,
-        "path": "src/app/rpg/hermes/execution_ledger.py",
-        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-        "symbol": "_LEDGER",
-        "ttl_seconds": 86400.0
       },
       {
         "approved": true,
@@ -2806,7 +2770,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 41,
+        "line": 39,
         "path": "src/app/assistant_memory/repository.py",
         "reason": "This is the provider-free in-memory adapter; production memory composition uses the PostgreSQL repository for records, candidates, snapshots, and events.",
         "symbol": "_STATES"
@@ -2815,7 +2779,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 42,
+        "line": 40,
         "path": "src/app/assistant_memory/repository.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_STATES_LOCK"
@@ -2833,7 +2797,7 @@
         "approved": true,
         "category": "cache",
         "kind": "executor",
-        "line": 45,
+        "line": 46,
         "path": "src/app/assistant_memory/structured_provider.py",
         "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores.",
         "symbol": "_PROVIDER_EXECUTOR"
@@ -2887,7 +2851,7 @@
         "category": "cache",
         "invalidation": "_clear_browser_session_generation",
         "kind": "container",
-        "line": 153,
+        "line": 165,
         "max_entries": 4096,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2898,7 +2862,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 152,
+        "line": 164,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_BROWSER_SESSION_LOCK"
@@ -2907,7 +2871,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 154,
+        "line": 166,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PLAYWRIGHT_LOCK"
@@ -2917,7 +2881,7 @@
         "category": "cache",
         "invalidation": "_stop_all_playwright_sessions",
         "kind": "container",
-        "line": 155,
+        "line": 167,
         "max_entries": 64,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2929,7 +2893,7 @@
         "category": "cache",
         "invalidation": "_stop_all_workspace_previews",
         "kind": "container",
-        "line": 151,
+        "line": 163,
         "max_entries": 64,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2940,7 +2904,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 150,
+        "line": 162,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PREVIEW_LOCK"
@@ -2949,7 +2913,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 57,
+        "line": 65,
         "path": "src/app/assistant_tools/connections.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PENDING_OAUTH_LOCK"
@@ -2959,7 +2923,7 @@
         "category": "cache",
         "invalidation": "clear_pending_oauth_states",
         "kind": "container",
-        "line": 58,
+        "line": 66,
         "max_entries": 2048,
         "path": "src/app/assistant_tools/connections.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3129,7 +3093,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 67,
+        "line": 69,
         "path": "src/app/chat/compaction.py",
         "reason": "This is the provider-free summary repository; production compaction uses PostgresConversationSummaryRepository.",
         "symbol": "_SUMMARIES"
@@ -3138,7 +3102,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 68,
+        "line": 70,
         "path": "src/app/chat/compaction.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_SUMMARY_LOCK"
@@ -3147,7 +3111,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 51,
+        "line": 53,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This holds references only for currently executing jobs; the durable job store owns job status, leases, and cancellation authority, and terminal execution removes each reference.",
         "symbol": "_active_chat_providers"
@@ -3156,7 +3120,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 52,
+        "line": 54,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_execution_registry_lock"
@@ -3165,7 +3129,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 50,
+        "line": 52,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "These are local wakeup handles for active workers; cancellation status is persisted in the durable job store and the handles are removed when execution ends.",
         "symbol": "_job_cancel_events"
@@ -3174,7 +3138,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 47,
+        "line": 49,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_registry_guard"
@@ -3184,7 +3148,7 @@
         "category": "cache",
         "invalidation": "clear_live_call_prewarm_state",
         "kind": "container",
-        "line": 33,
+        "line": 34,
         "max_entries": 256,
         "path": "src/app/chat/live_call_prewarm.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3196,7 +3160,7 @@
         "category": "cache",
         "invalidation": "clear_live_call_prewarm_state",
         "kind": "container",
-        "line": 34,
+        "line": 35,
         "max_entries": 256,
         "path": "src/app/chat/live_call_prewarm.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3207,7 +3171,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 32,
+        "line": 33,
         "path": "src/app/chat/live_call_prewarm.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PREWARM_LOCK"
@@ -3217,7 +3181,7 @@
         "category": "cache",
         "invalidation": "clear_live_call_prewarm_state",
         "kind": "container",
-        "line": 35,
+        "line": 36,
         "max_entries": 256,
         "path": "src/app/chat/live_call_prewarm.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3229,7 +3193,7 @@
         "category": "cache",
         "invalidation": "clear_live_speculation_cache",
         "kind": "container",
-        "line": 97,
+        "line": 98,
         "max_entries": 64,
         "path": "src/app/chat/live_chat_speculation.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3241,7 +3205,7 @@
         "category": "cache",
         "invalidation": "clear_live_speculation_cache",
         "kind": "container",
-        "line": 98,
+        "line": 99,
         "max_entries": 64,
         "path": "src/app/chat/live_chat_speculation.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3253,7 +3217,7 @@
         "category": "cache",
         "invalidation": "clear_live_speculation_cache",
         "kind": "container",
-        "line": 96,
+        "line": 97,
         "max_entries": 64,
         "path": "src/app/chat/live_chat_speculation.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3264,7 +3228,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 99,
+        "line": 100,
         "path": "src/app/chat/live_chat_speculation.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_SPECULATION_LOCK"
@@ -3287,7 +3251,7 @@
         "category": "cache",
         "invalidation": "default_chat_store.cache_clear",
         "kind": "function_cache",
-        "line": 857,
+        "line": 886,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/chat/persistence/chat_runtime.py",
@@ -3301,7 +3265,7 @@
         "category": "cache",
         "invalidation": "default_history_search_service.cache_clear",
         "kind": "function_cache",
-        "line": 851,
+        "line": 880,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/chat/persistence/chat_runtime.py",
@@ -3754,6 +3718,15 @@
       },
       {
         "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 28,
+        "path": "src/app/observability/tracing.py",
+        "reason": "Serializes the one-time start and shutdown of this process's OpenTelemetry tracer provider; spans are exported per process and carry no authority.",
+        "symbol": "_lock"
+      },
+      {
+        "approved": true,
         "category": "cache",
         "kind": "lock",
         "line": 33,
@@ -3816,7 +3789,7 @@
         "category": "cache",
         "invalidation": "default_database.cache_clear",
         "kind": "function_cache",
-        "line": 292,
+        "line": 299,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/persistence/database.py",
@@ -3832,6 +3805,33 @@
         "path": "src/app/persistence/device_permits.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 28,
+        "path": "src/app/persistence/document_schemas.py",
+        "reason": "Process-local mutex serializing registration and lookups in the document shape registry; it holds no durable state.",
+        "symbol": "_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "container",
+        "line": 29,
+        "path": "src/app/persistence/document_schemas.py",
+        "reason": "Registry of the document shapes declared in code (WP-5.9): every process registers the same shapes when it imports the owning modules; bounded by the document kinds in the source and carries no authority.",
+        "symbol": "_SCHEMAS"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "container",
+        "line": 30,
+        "path": "src/app/persistence/document_schemas.py",
+        "reason": "Remembers which unregistered document kinds this process already warned about, so the warning is logged once per kind; bounded by the kinds the code writes.",
+        "symbol": "_WARNED"
       },
       {
         "approved": true,
@@ -3876,6 +3876,36 @@
         "path": "src/app/providers/cache_status.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_REFRESH_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 25,
+        "path": "src/app/providers/model_catalog.py",
+        "reason": "Process-local mutex serializing the model catalog cache and its in-flight set; it holds no durable state.",
+        "symbol": "_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "container",
+        "line": 27,
+        "path": "src/app/providers/model_catalog.py",
+        "reason": "Provider ids with a model-list refresh in flight in this process, so one refresh runs per provider; each id is removed when its refresh ends.",
+        "symbol": "_REFRESHING"
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "invalidation": "clear_model_catalog",
+        "kind": "container",
+        "line": 26,
+        "max_entries": 32,
+        "path": "src/app/providers/model_catalog.py",
+        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; context windows advertised by providers, re-read from the provider after the TTL.",
+        "symbol": "_WINDOWS",
+        "ttl_seconds": 600.0
       },
       {
         "approved": true,
@@ -4041,6 +4071,18 @@
       },
       {
         "approved": true,
+        "category": "cache",
+        "invalidation": "hermes_rpg_execution_ledger_reset",
+        "kind": "container",
+        "line": 9,
+        "max_entries": 200,
+        "path": "src/app/rpg/hermes/execution_ledger.py",
+        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+        "symbol": "_LEDGER",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
         "category": "coordination",
         "kind": "container",
         "line": 40,
@@ -4077,7 +4119,7 @@
         "category": "cache",
         "invalidation": "_cached_delivery_repository.cache_clear",
         "kind": "function_cache",
-        "line": 132,
+        "line": 131,
         "max_entries": 4,
         "maxsize": 4,
         "path": "src/app/rpg/narrative_delivery.py",
@@ -4105,7 +4147,7 @@
         "category": "cache",
         "invalidation": "_cached_repository.cache_clear",
         "kind": "function_cache",
-        "line": 122,
+        "line": 121,
         "max_entries": 4,
         "maxsize": 4,
         "path": "src/app/rpg/narrative_repository.py",
@@ -4119,7 +4161,7 @@
         "category": "cache",
         "invalidation": "_cached_repository.cache_clear",
         "kind": "function_cache",
-        "line": 166,
+        "line": 165,
         "max_entries": 4,
         "maxsize": 4,
         "path": "src/app/rpg/narrative_retirement.py",
@@ -4193,7 +4235,7 @@
         "category": "cache",
         "invalidation": "load_all_file_npc_profiles.cache_clear",
         "kind": "function_cache",
-        "line": 82,
+        "line": 71,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/rpg/world/npc_profile_loader.py",
@@ -4303,7 +4345,7 @@
         "category": "cache",
         "invalidation": "production_conversation_profile_store.cache_clear",
         "kind": "function_cache",
-        "line": 121,
+        "line": 123,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -4317,7 +4359,7 @@
         "category": "cache",
         "invalidation": "production_evaluation_store.cache_clear",
         "kind": "function_cache",
-        "line": 128,
+        "line": 130,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -4331,7 +4373,7 @@
         "category": "cache",
         "invalidation": "production_memory_settings_store.cache_clear",
         "kind": "function_cache",
-        "line": 114,
+        "line": 116,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -4373,7 +4415,7 @@
         "category": "cache",
         "invalidation": "production_research_source_store.cache_clear",
         "kind": "function_cache",
-        "line": 135,
+        "line": 137,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -4399,7 +4441,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 59,
+        "line": 60,
         "path": "src/app/security/audit.py",
         "reason": "Guards the reference to the process's installed audit sink (set once at persistence startup); audit events themselves are written to PostgreSQL, never held in this process.",
         "symbol": "_LOCK"
@@ -4489,7 +4531,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 290,
+        "line": 284,
         "path": "src/app/trading/ibkr_evidence.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
@@ -4516,10 +4558,24 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 1036,
+        "line": 1044,
         "path": "src/app/trading/providers/ibkr_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "request_budget.cache_clear",
+        "kind": "function_cache",
+        "line": 180,
+        "max_entries": 16,
+        "maxsize": 16,
+        "path": "src/app/trading/providers/request_budget.py",
+        "reason": "One request budget (token bucket) per market-data upstream with a published limit (WP-8.3), shared by this process's runtimes. It bounds what this process sends; it holds no request data, and a recreated bucket starts full. Bounded, expiring, and cleared with cache_clear.",
+        "symbol": "request_budget.__cache__",
+        "ttl_seconds": 86400.0
       },
       {
         "approved": true,
@@ -4534,7 +4590,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 824,
+        "line": 861,
         "path": "src/app/trading/service.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -4544,7 +4600,7 @@
         "category": "cache",
         "invalidation": "clear_data_gap_heartbeat_cache",
         "kind": "container",
-        "line": 126,
+        "line": 127,
         "max_entries": 4096,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -4555,7 +4611,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 123,
+        "line": 124,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_GAP_LOCK"
@@ -4564,7 +4620,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 208,
+        "line": 211,
         "path": "src/app/trading/strategy_ai_shadow_provider.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROVIDER_LOCK"
@@ -4582,7 +4638,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 21,
+        "line": 20,
         "path": "src/app/trading/trade_logging.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_HANDLER_LOCK"
@@ -4591,7 +4647,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 878,
+        "line": 615,
         "path": "src/app/trading/yahoo_evidence.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -4682,11 +4738,6 @@
         "approved": true,
         "path": "src/app/assets/store.py",
         "symbol": "_PROCESS_LOCK"
-      },
-      {
-        "approved": true,
-        "path": "src/app/rpg/hermes/execution_ledger.py",
-        "symbol": "_LEDGER"
       },
       {
         "approved": true,
@@ -5230,6 +5281,11 @@
       },
       {
         "approved": true,
+        "path": "src/app/observability/tracing.py",
+        "symbol": "_lock"
+      },
+      {
+        "approved": true,
         "path": "src/app/observability/tts_stream_diagnostics.py",
         "symbol": "_ACTIVE_LOCK"
       },
@@ -5265,6 +5321,21 @@
       },
       {
         "approved": true,
+        "path": "src/app/persistence/document_schemas.py",
+        "symbol": "_LOCK"
+      },
+      {
+        "approved": true,
+        "path": "src/app/persistence/document_schemas.py",
+        "symbol": "_SCHEMAS"
+      },
+      {
+        "approved": true,
+        "path": "src/app/persistence/document_schemas.py",
+        "symbol": "_WARNED"
+      },
+      {
+        "approved": true,
         "path": "src/app/persistence/repository_registry.py",
         "symbol": "_LOCK"
       },
@@ -5282,6 +5353,21 @@
         "approved": true,
         "path": "src/app/providers/cache_status.py",
         "symbol": "_REFRESH_LOCK"
+      },
+      {
+        "approved": true,
+        "path": "src/app/providers/model_catalog.py",
+        "symbol": "_LOCK"
+      },
+      {
+        "approved": true,
+        "path": "src/app/providers/model_catalog.py",
+        "symbol": "_REFRESHING"
+      },
+      {
+        "approved": true,
+        "path": "src/app/providers/model_catalog.py",
+        "symbol": "_WINDOWS"
       },
       {
         "approved": true,
@@ -5362,6 +5448,11 @@
         "approved": true,
         "path": "src/app/rpg/debug_logging.py",
         "symbol": "_lock"
+      },
+      {
+        "approved": true,
+        "path": "src/app/rpg/hermes/execution_ledger.py",
+        "symbol": "_LEDGER"
       },
       {
         "approved": true,
@@ -5580,6 +5671,11 @@
       },
       {
         "approved": true,
+        "path": "src/app/trading/providers/request_budget.py",
+        "symbol": "request_budget.__cache__"
+      },
+      {
+        "approved": true,
         "path": "src/app/trading/scanner_manager.py",
         "symbol": "_default_lock"
       },
@@ -5637,37 +5733,55 @@
     "process_local_state_inventory_kind": "module_scope_scan_plus_reviewed_entries",
     "python_syntax_errors": [],
     "unbounded_fetchall_calls": [],
-    "unreachable_rpg_modules": [
-      "src/app/rpg/ai/goap.py",
-      "src/app/rpg/companions.py",
-      "src/app/rpg/core/action_resolver.py",
-      "src/app/rpg/core/execution_pipeline.py",
-      "src/app/rpg/core/npc_state.py",
-      "src/app/rpg/core/probabilistic_executor.py",
-      "src/app/rpg/core/world_loop.py",
-      "src/app/rpg/session/attack_reward_runtime.py"
-    ],
-    "web_api_paths": [
+    "unreachable_rpg_modules": [],
+    "web_api_path_prefixes": [
       "/api",
       "/api/agent",
+      "/api/assistant",
+      "/api/audiobook",
+      "/api/character-avatar-generations",
+      "/api/character-avatar-visemes",
+      "/api/character-live2d",
+      "/api/chat",
+      "/api/desktop-companion",
+      "/api/hermes",
+      "/api/image-generation",
+      "/api/live",
+      "/api/live-call",
+      "/api/live-chat",
+      "/api/prompts",
+      "/api/replay",
+      "/api/rpg",
+      "/api/runtime",
+      "/api/stt",
+      "/api/trading",
+      "/api/trading/market-data",
+      "/api/tts",
+      "/api/voice",
+      "/api/voice-cloning",
+      "/api/voice-profiles",
+      "/api/voice/cues",
+      "/api/workers",
+      "/api/{}"
+    ],
+    "web_api_paths": [
       "/api/agent-runs",
       "/api/agent-runs/workspace-picker",
       "/api/agent-runs/{}",
-      "/api/agent-runs/{}/approvals{}",
+      "/api/agent-runs/{}/approvals",
       "/api/agent-runs/{}/artifacts",
       "/api/agent-runs/{}/commands",
-      "/api/agent-runs/{}/events{}",
+      "/api/agent-runs/{}/events",
       "/api/agent-runs/{}/evidence",
       "/api/agent-runs/{}/evidence/receipts",
       "/api/agent-runs/{}/task-revisions",
-      "/api/agent/plan",
       "/api/assets",
       "/api/assets/migrations/legacy-non-image/dry-run",
       "/api/assets/story",
       "/api/assets/{}/content",
       "/api/assets/{}/file",
-      "/api/assets/{}/file{}",
-      "/api/assistant",
+      "/api/assistant/context/chat/sessions/{}/messages",
+      "/api/assistant/context/chat/sessions/{}/messages/stream",
       "/api/assistant/context/research/jobs/{}/plan",
       "/api/assistant/context/research/jobs/{}/start",
       "/api/assistant/memory",
@@ -5684,30 +5798,62 @@
       "/api/assistant/memory/{}",
       "/api/assistant/memory/{}/archive",
       "/api/assistant/memory/{}/move",
+      "/api/assistant/memory/{}/pin",
       "/api/assistant/memory/{}/restore",
       "/api/assistant/memory/{}/undo",
-      "/api/assistant/memory/{}/{}",
+      "/api/assistant/memory/{}/unpin",
       "/api/assistant/research/credentials",
       "/api/assistant/research/status",
-      "/api/assistant/research/status{}",
       "/api/assistant/tools/config",
       "/api/assistant/tools/connect/{}",
+      "/api/assistant/tools/connect/{}/disconnect",
       "/api/assistant/tools/connect/{}/oauth-client",
       "/api/assistant/tools/dashboard",
       "/api/assistant/tools/intent",
       "/api/assistant/tools/ledger",
       "/api/assistant/tools/proposals",
-      "/api/assistant/tools/proposals/{}",
-      "/api/audiobook",
+      "/api/assistant/tools/proposals/{}/approve",
+      "/api/assistant/tools/proposals/{}/execute",
+      "/api/audiobook/models/current",
+      "/api/audiobook/projects",
+      "/api/audiobook/projects/{}",
+      "/api/audiobook/projects/{}/assets/{}",
+      "/api/audiobook/projects/{}/chapters/{}",
+      "/api/audiobook/projects/{}/classification-rules",
+      "/api/audiobook/projects/{}/document-overrides",
+      "/api/audiobook/projects/{}/exports",
+      "/api/audiobook/projects/{}/extract-quotes",
+      "/api/audiobook/projects/{}/jobs/{}/cancel",
+      "/api/audiobook/projects/{}/jobs/{}/pause",
+      "/api/audiobook/projects/{}/jobs/{}/resume",
+      "/api/audiobook/projects/{}/jobs/{}/retry",
+      "/api/audiobook/projects/{}/preview",
+      "/api/audiobook/projects/{}/pronunciations",
+      "/api/audiobook/projects/{}/reading-policy",
+      "/api/audiobook/projects/{}/reclassify",
+      "/api/audiobook/projects/{}/render",
+      "/api/audiobook/projects/{}/render/pause",
+      "/api/audiobook/projects/{}/render/resume",
+      "/api/audiobook/projects/{}/render/stop",
+      "/api/audiobook/projects/{}/review/{}",
+      "/api/audiobook/projects/{}/source/library",
+      "/api/audiobook/projects/{}/spans/{}/annotation",
+      "/api/audiobook/projects/{}/spans/{}/speech-exclusions",
+      "/api/audiobook/projects/{}/speakers",
+      "/api/audiobook/projects/{}/speakers/{}/aliases",
+      "/api/audiobook/projects/{}/speakers/{}/casting",
+      "/api/audiobook/projects/{}/speakers/{}/reject",
+      "/api/audiobook/projects/{}/speech-exclusions/{}",
+      "/api/audiobook/source-library",
+      "/api/audiobook/voices",
       "/api/auth/local/login",
       "/api/auth/logout",
       "/api/auth/oidc/login",
       "/api/auth/session",
-      "/api/character-avatar-generations",
+      "/api/auth/sessions",
+      "/api/auth/sessions/revoke",
       "/api/character-avatar-generations/{}",
-      "/api/character-avatar-visemes",
       "/api/character-avatar-visemes/{}",
-      "/api/character-live2d",
       "/api/character-live2d/assets/{}/{}",
       "/api/character-live2d/runtime/live2dcubismcore.min.js",
       "/api/characters",
@@ -5719,11 +5865,11 @@
       "/api/characters/{}/avatar-visemes",
       "/api/characters/{}/data",
       "/api/characters/{}/data/actions",
-      "/api/characters/{}/hermes/{}",
+      "/api/characters/{}/hermes/export",
+      "/api/characters/{}/hermes/import",
       "/api/characters/{}/live2d-avatar",
       "/api/characters/{}/live2d-avatar/disable",
       "/api/characters/{}/live2d-models",
-      "/api/chat",
       "/api/chat/sessions",
       "/api/chat/sessions/{}",
       "/api/chat/sessions/{}/attachments",
@@ -5740,8 +5886,7 @@
       "/api/chat/sessions/{}/messages",
       "/api/chat/sessions/{}/messages/stream",
       "/api/chat/sessions/{}/research-mode",
-      "/api/chat/sessions/{}{}",
-      "/api/desktop-companion",
+      "/api/client-errors",
       "/api/desktop-companion/build-identity",
       "/api/desktop-companion/context",
       "/api/desktop-companion/evaluations",
@@ -5752,21 +5897,19 @@
       "/api/desktop-companion/rollout-status",
       "/api/diagnostics",
       "/api/health",
-      "/api/hermes",
       "/api/hermes/approve",
       "/api/hermes/candidate/demo",
       "/api/hermes/recent",
       "/api/hermes/route-decision",
       "/api/hermes/rpg/approved-flow",
       "/api/hermes/rpg/approved-flow/config",
-      "/api/hermes/rpg/approved-flow/ledger{}",
+      "/api/hermes/rpg/approved-flow/ledger",
       "/api/hermes/rpg/sequence/review",
-      "/api/hermes/rpg/sequence/state{}",
+      "/api/hermes/rpg/sequence/state",
       "/api/hermes/rpg/suggestions",
       "/api/hermes/rpg/turn-readout",
       "/api/hermes/status",
       "/api/hermes/test",
-      "/api/image-generation",
       "/api/image-generation/assets",
       "/api/image-generation/assets/{}/delete",
       "/api/image-generation/jobs",
@@ -5775,16 +5918,13 @@
       "/api/image-generation/model/load",
       "/api/image-generation/model/status",
       "/api/image-generation/model/unload",
+      "/api/image-generation/references",
       "/api/image-generation/service/start",
       "/api/jobs",
       "/api/jobs/voice-summaries",
       "/api/jobs/{}",
       "/api/jobs/{}/cancel",
-      "/api/jobs{}",
-      "/api/live",
-      "/api/live-call",
       "/api/live-call/sessions/{}/prewarm",
-      "/api/live-chat",
       "/api/live-chat/profile/defaults",
       "/api/live/speculation/sessions/{}/start",
       "/api/live/speculation/sessions/{}/start-stream",
@@ -5797,19 +5937,14 @@
       "/api/model-residency/{}",
       "/api/models",
       "/api/models/refresh",
-      "/api/modes/metadata",
-      "/api/prompts",
       "/api/providers",
       "/api/providers/chatgpt-codex/auth",
       "/api/providers/chatgpt-codex/login",
       "/api/providers/refresh",
-      "/api/replay",
       "/api/replay/checkpoints",
-      "/api/replay/inventory",
       "/api/replay/persistence/inventory",
       "/api/reports",
-      "/api/rpg",
-      "/api/rpg/maps/{}{}",
+      "/api/rpg/maps/{}",
       "/api/rpg/new-game",
       "/api/rpg/presets",
       "/api/rpg/presets/{}/start",
@@ -5846,7 +5981,7 @@
       "/api/rpg/world-generation/{}/retry-review",
       "/api/rpg/world-library",
       "/api/rpg/worlds",
-      "/api/rpg/worlds/import{}",
+      "/api/rpg/worlds/import",
       "/api/rpg/worlds/{}",
       "/api/rpg/worlds/{}/archive",
       "/api/rpg/worlds/{}/authoring-manifest",
@@ -5875,24 +6010,21 @@
       "/api/rpg/worlds/{}/topics/{}",
       "/api/rpg/worlds/{}/topics/{}/entities/{}",
       "/api/rpg/worlds/{}/topics/{}/restore",
-      "/api/runtime",
       "/api/runtime/status",
       "/api/settings",
-      "/api/sidecar/status",
-      "/api/storyteller",
-      "/api/storyteller/audio-manifests",
-      "/api/storyteller/documents",
-      "/api/stt",
+      "/api/settings/profile",
       "/api/task-graph-runs/{}",
       "/api/task-graph-runs/{}/commands",
-      "/api/task-graph-runs/{}/events{}",
-      "/api/trading",
+      "/api/task-graph-runs/{}/events",
       "/api/trading/alerts",
       "/api/trading/alerts/evaluate",
       "/api/trading/alerts/triggers",
       "/api/trading/alerts/{}",
+      "/api/trading/bars",
       "/api/trading/currency-rates",
       "/api/trading/diagnostics",
+      "/api/trading/drawings",
+      "/api/trading/drawings/{}",
       "/api/trading/execution/providers/alpaca-iex/credentials",
       "/api/trading/hermes-research/attribution",
       "/api/trading/hermes-research/audit",
@@ -5900,11 +6032,13 @@
       "/api/trading/hermes-research/validate",
       "/api/trading/hermes-research/validation/review",
       "/api/trading/hermes-research/validation/{}",
+      "/api/trading/indicator-presets",
+      "/api/trading/indicator-presets/{}",
       "/api/trading/instruments/search",
-      "/api/trading/market-data",
       "/api/trading/market-data/providers/coinmarketcap/credentials",
       "/api/trading/market-data/providers/ibkr/settings",
       "/api/trading/metrics",
+      "/api/trading/paper-analytics/epochs",
       "/api/trading/paper-analytics/journal",
       "/api/trading/paper-analytics/overview",
       "/api/trading/paper/accounts",
@@ -5918,6 +6052,7 @@
       "/api/trading/paper/accounts/{}/risk-orders",
       "/api/trading/paper/accounts/{}/risk-preview",
       "/api/trading/providers/status",
+      "/api/trading/quotes",
       "/api/trading/replay/backtests",
       "/api/trading/replay/backtests/{}",
       "/api/trading/replay/datasets",
@@ -5925,9 +6060,9 @@
       "/api/trading/replay/execution/orders",
       "/api/trading/research",
       "/api/trading/scanners",
+      "/api/trading/scanners/runs",
       "/api/trading/scanners/runs/{}/cancel",
       "/api/trading/scanners/runs/{}/results",
-      "/api/trading/scanners/runs{}",
       "/api/trading/scanners/{}",
       "/api/trading/scanners/{}/runs",
       "/api/trading/solana-ai/decisions",
@@ -5955,138 +6090,35 @@
       "/api/trading/strategies/{}/v2/qualification/review",
       "/api/trading/strategy-operations/health",
       "/api/trading/strategy-operations/status",
-      "/api/trading/{}",
-      "/api/trading/{}/{}",
-      "/api/tts",
+      "/api/trading/watchlists",
+      "/api/trading/watchlists/{}",
+      "/api/trading/workspaces",
+      "/api/trading/workspaces/{}",
       "/api/tts/live-call/capabilities",
       "/api/tts/live-call/diagnostics",
       "/api/tts/live-call/evaluations",
       "/api/tts/live-call/evaluations/export",
       "/api/tts/live-call/evaluations/release-gate",
       "/api/tts/live-call/presence-presets",
+      "/api/tts/live-call/presence-presets/versions",
       "/api/tts/live-call/presence-presets/{}/activate/{}",
       "/api/tts/live-call/presence-presets/{}/rollback",
       "/api/tts/live-call/presence-presets/{}/versions",
       "/api/tts/live-call/websocket",
-      "/api/tts/stream/server-sent-events",
       "/api/tts/stream/websocket",
-      "/api/voice",
-      "/api/voice-cloning",
       "/api/voice-cloning/assets/{}",
       "/api/voice-library",
-      "/api/voice-profiles",
       "/api/voice-profiles/{}/governance",
-      "/api/voice/cues",
       "/api/voice/cues/{}/manifest",
-      "/api/workers",
       "/api/workers/health",
       "/api/workflow-runs/{}",
       "/api/workflow-runs/{}/commands",
-      "/api/{}",
       "/events",
       "/health",
       "/ready"
     ],
-    "web_api_paths_missing_schema": [
-      "/api",
-      "/api/agent",
-      "/api/agent-runs/{}/approvals{}",
-      "/api/agent-runs/{}/events{}",
-      "/api/agent/plan",
-      "/api/assets/{}/file{}",
-      "/api/assistant",
-      "/api/assistant/memory/{}/{}",
-      "/api/assistant/research/status{}",
-      "/api/assistant/tools/proposals/{}",
-      "/api/audiobook",
-      "/api/character-avatar-generations",
-      "/api/character-avatar-visemes",
-      "/api/character-live2d",
-      "/api/character-live2d/runtime/live2dcubismcore.min.js",
-      "/api/characters/{}/hermes/{}",
-      "/api/chat",
-      "/api/chat/sessions/{}/live-call/greeting/stream",
-      "/api/chat/sessions/{}{}",
-      "/api/desktop-companion",
-      "/api/hermes",
-      "/api/hermes/rpg/approved-flow/ledger{}",
-      "/api/hermes/rpg/sequence/state{}",
-      "/api/image-generation",
-      "/api/jobs{}",
-      "/api/live",
-      "/api/live-call",
-      "/api/live-chat",
-      "/api/live/speculation/sessions/{}/start-stream",
-      "/api/live/speculation/sessions/{}/stream",
-      "/api/live/speculation/sessions/{}/{}/stream",
-      "/api/modes/metadata",
-      "/api/prompts",
-      "/api/replay",
-      "/api/replay/inventory",
-      "/api/rpg",
-      "/api/rpg/maps/{}{}",
-      "/api/rpg/worlds/import{}",
-      "/api/runtime",
-      "/api/sidecar/status",
-      "/api/storyteller",
-      "/api/storyteller/audio-manifests",
-      "/api/storyteller/documents",
-      "/api/stt",
-      "/api/task-graph-runs/{}/events{}",
-      "/api/trading",
-      "/api/trading/market-data",
-      "/api/trading/scanners/runs{}",
-      "/api/trading/{}",
-      "/api/trading/{}/{}",
-      "/api/tts",
-      "/api/tts/live-call/websocket",
-      "/api/tts/stream/server-sent-events",
-      "/api/tts/stream/websocket",
-      "/api/voice",
-      "/api/voice-cloning",
-      "/api/voice-profiles",
-      "/api/voice/cues",
-      "/api/workers",
-      "/api/{}",
-      "/events"
-    ],
-    "web_dynamic_fetch_calls": [
-      "src/apps/web/src/features/assistant-workspace/assistant-buffered-tts-player.ts:225",
-      "src/apps/web/src/features/assistant-workspace/live-call-diagnostics-client.ts:49",
-      "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts:82",
-      "src/apps/web/src/features/assistant-workspace/live-output-coordinator.ts:290",
-      "src/apps/web/src/features/assistant-workspace/live-voice-cue-pack-loader.ts:164",
-      "src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts:332",
-      "src/apps/web/src/features/assistant-workspace/tool-proposal-client.ts:8",
-      "src/apps/web/src/features/audiobook/AudiobookWorkspace.tsx:309",
-      "src/apps/web/src/features/audiobook/AudiobookWorkspace.tsx:316",
-      "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx:1728",
-      "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx:2369",
-      "src/apps/web/src/features/chatbot/HtmlArtifactPreview.tsx:59",
-      "src/apps/web/src/features/chatbot/characterAvatarClient.ts:107",
-      "src/apps/web/src/features/chatbot/characterClient.ts:200",
-      "src/apps/web/src/features/chatbot/live2dCharacterRenderer.ts:185",
-      "src/apps/web/src/features/chatbot/liveConversationProfileClient.ts:59",
-      "src/apps/web/src/features/chatbot/livePronunciationClient.ts:19",
-      "src/apps/web/src/features/chatbot/memoryClient.ts:157",
-      "src/apps/web/src/features/podcast/PodcastWorkspace.tsx:270",
-      "src/apps/web/src/features/rpg/RpgLorePanel.tsx:174",
-      "src/apps/web/src/features/rpg/RpgLorePanel.tsx:187",
-      "src/apps/web/src/features/settings/tradingMarketDataApi.ts:32",
-      "src/apps/web/src/features/storyteller/storyRemoteStore.ts:33",
-      "src/apps/web/src/features/trading/indicators/externalIndicatorData.ts:129",
-      "src/apps/web/src/features/trading/tradingApi.ts:27",
-      "src/apps/web/src/features/trading/tradingExecutionApi.ts:13",
-      "src/apps/web/src/features/trading/tradingHermesResearchApi.ts:194",
-      "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts:248",
-      "src/apps/web/src/features/trading/tradingPaperApi.ts:19",
-      "src/apps/web/src/features/trading/tradingReplayApi.ts:6",
-      "src/apps/web/src/features/trading/tradingResearchApi.ts:4",
-      "src/apps/web/src/features/trading/tradingScannerApi.ts:8",
-      "src/apps/web/src/features/trading/tradingStrategyApi.ts:54",
-      "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts:104",
-      "src/apps/web/src/features/voice/voiceJobListGuard.ts:21"
-    ],
+    "web_api_paths_missing_schema": [],
+    "web_dynamic_fetch_calls": [],
     "web_global_css_files": [
       "@mantine/core/styles.layer.css",
       "src/apps/web/src/appearance-overrides.css",
@@ -6096,35 +6128,7 @@
       "src/apps/web/src/styles.css",
       "src/apps/web/src/theme-presets.css"
     ],
-    "web_handwritten_api_types": [
-      [
-        "src/apps/web/src/api/client.ts",
-        "AgentApproval"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "AgentArtifact"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "AgentRunSnapshot"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "AssetContentResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "CreateChatSessionRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "DeepResearchPlanUpdateRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "DeleteChatSessionResponse"
-      ],
+    "web_handwritten_api_type_exceptions": [
       [
         "src/apps/web/src/api/client.ts",
         "RpgFeatureOptions"
@@ -6164,26 +6168,6 @@
       [
         "src/apps/web/src/api/client.ts",
         "RpgSessionMutationResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "SaveStoryAssetRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "SavedStoryAssetResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "SendChatMessageRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "TaskGraphEvent"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "TaskGraphRunSnapshot"
       ],
       [
         "src/apps/web/src/api/hermesClient.ts",
@@ -6256,14 +6240,6 @@
       [
         "src/apps/web/src/api/hermesRpgSequenceClient.ts",
         "HermesRpgSequenceStateResponse"
-      ],
-      [
-        "src/apps/web/src/api/modeMetadataClient.ts",
-        "ModeMetadataResponse"
-      ],
-      [
-        "src/apps/web/src/api/planRequestClient.ts",
-        "PlanRequestPayload"
       ],
       [
         "src/apps/web/src/api/rpgCampaignLoreClient.ts",
@@ -6370,416 +6346,88 @@
         "RpgWorldProfileResponse"
       ],
       [
-        "src/apps/web/src/app/omnixAdapterContract.ts",
-        "OmnixAdapterRequest"
-      ],
-      [
-        "src/apps/web/src/app/planRequestDedupe.ts",
-        "PendingPlanRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/LedgerToolExecutionPanel.tsx",
-        "AssistantToolLedgerEntry"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/LedgerToolExecutionPanel.tsx",
-        "AssistantToolLedgerPayload"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/assistant-context-controller.ts",
-        "LocalWorkspacePickResponse"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/companion-initiative-arbiter.ts",
+        "src/apps/web/src/features/assistant/workspace/companion-initiative-arbiter.ts",
         "CompanionInitiativeRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-activity.ts",
-        "DesktopActivitySignal"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-activity.ts",
-        "DesktopBehaviorState"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-delivery.ts",
+        "src/apps/web/src/features/assistant/workspace/desktop-companion-delivery.ts",
         "DesktopCompanionDeliveryRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-evaluation.ts",
-        "DesktopCompanionEvaluationPayload"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-expression-enricher.ts",
+        "src/apps/web/src/features/assistant/workspace/desktop-companion-expression-enricher.ts",
         "MutableDeliveryRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-rollout.ts",
-        "DesktopCompanionRolloutStatus"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-watch-controller.ts",
-        "ObserveResponse"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-companion-watch-controller.ts",
-        "PreflightResponse"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/desktop-temporal-capture.ts",
+        "src/apps/web/src/features/assistant/workspace/desktop-temporal-capture.ts",
         "TemporalDesktopPayload"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/domain.ts",
-        "ChatSession"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/events.ts",
+        "src/apps/web/src/features/assistant/workspace/events.ts",
         "AssistantWorkspaceEventPayload"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/knowledge-registry.ts",
-        "KnowledgeRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-call-prewarm-controller.ts",
-        "RuntimePayload"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts",
-        "LiveChatReleaseGateReport"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts",
-        "PresencePolicyValues"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts",
-        "PresencePolicyVersion"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts",
-        "VoiceSessionEvaluationCreate"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-chat-evaluation-client.ts",
-        "VoiceSessionEvaluationRecord"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-conversation-repair.ts",
-        "LiveConversationRepairContext"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-material-client.ts",
-        "LiveMaterialAcknowledgement"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-material-client.ts",
-        "LiveMaterialAppendRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-material-client.ts",
-        "LiveMaterialSnapshot"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-material-client.ts",
-        "LiveTaskContractAcknowledgement"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-material-client.ts",
-        "LiveTaskContractAcknowledgementRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-output-coordinator.ts",
-        "ObservationGenerationResponse"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-speculation-handshake-transport.ts",
-        "SpeculationStartPayload"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-speech-performance-contract.ts",
-        "SpeechPerformancePlan"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts",
-        "AuthorityResponse"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/live-voice-cue-asset-bridge.ts",
+        "src/apps/web/src/features/assistant/workspace/live-voice-cue-asset-bridge.ts",
         "CueSamplePayload"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/live-voice-cue-asset-bridge.ts",
+        "src/apps/web/src/features/assistant/workspace/live-voice-cue-asset-bridge.ts",
         "VoiceCueAssetPayload"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts",
+        "src/apps/web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts",
         "LiveVoiceRequestPayload"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/memories.ts",
-        "MemoryRecord"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/pack.ts",
-        "PackRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/provider-adapters.ts",
+        "src/apps/web/src/features/assistant/workspace/provider-adapters.ts",
         "AnthropicMessagesRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider-adapters.ts",
+        "src/apps/web/src/features/assistant/workspace/provider-adapters.ts",
         "AnthropicMessagesResponse"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider-adapters.ts",
+        "src/apps/web/src/features/assistant/workspace/provider-adapters.ts",
         "OpenAiChatRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider-adapters.ts",
+        "src/apps/web/src/features/assistant/workspace/provider-adapters.ts",
         "OpenAiChatResponse"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider-adapters.ts",
+        "src/apps/web/src/features/assistant/workspace/provider-adapters.ts",
         "ProviderHttpRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider.ts",
+        "src/apps/web/src/features/assistant/workspace/provider.ts",
         "ModelRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/provider.ts",
+        "src/apps/web/src/features/assistant/workspace/provider.ts",
         "ModelResponse"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/research-release-controller.ts",
-        "ResearchStatusPayload"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/source.ts",
-        "SourceRequest"
-      ],
-      [
-        "src/apps/web/src/features/assistant-workspace/speech-services.ts",
+        "src/apps/web/src/features/assistant/workspace/speech-services.ts",
         "SpeechServiceTransportRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/speech-services.ts",
+        "src/apps/web/src/features/assistant/workspace/speech-services.ts",
         "SttTranscriptionRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/speech-services.ts",
+        "src/apps/web/src/features/assistant/workspace/speech-services.ts",
         "SttTranscriptionResponse"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/speech-services.ts",
+        "src/apps/web/src/features/assistant/workspace/speech-services.ts",
         "TtsSynthesisRequest"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/speech-services.ts",
+        "src/apps/web/src/features/assistant/workspace/speech-services.ts",
         "TtsSynthesisResponse"
       ],
       [
-        "src/apps/web/src/features/assistant-workspace/tool-registry.ts",
+        "src/apps/web/src/features/assistant/workspace/tool-registry.ts",
         "ToolExecutionRequest"
-      ],
-      [
-        "src/apps/web/src/features/audiobook/AudiobookWorkspace.tsx",
-        "JobStatus"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx",
-        "ChatMessage"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantActionConfigRecord"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantCapabilityDashboard"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantCapabilityStatus"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolConfigRecord"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolConnectionStartPayload"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolIntent"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolLedgerEntry"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolLedgerPayload"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolOAuthClientPayload"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/assistantToolConfigClient.ts",
-        "AssistantToolsConfigPayload"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "CharacterAvatarGenerationBatch"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "CharacterVisemeGenerationBatch"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "ClonedVoiceBackfillResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "Live2DAvatarActionResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "Live2DModelCatalogItem"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterAvatarClient.ts",
-        "Live2DModelCatalogResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterAvatarPack"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterDataActionResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterDataExport"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterListResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterLiveCallRuntime"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "CharacterProfile"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "LiveCallSpeechStyle"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterClient.ts",
-        "VoiceProfileGovernance"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/characterHermesClient.ts",
-        "CharacterHermesSyncStatus"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/chat-sidebar-manager.ts",
-        "SessionListPayload"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/liveConversationProfileClient.ts",
-        "LiveConversationProfile"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/liveConversationProfileClient.ts",
-        "LiveConversationProfileEnvelope"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/livePronunciationClient.ts",
-        "PronunciationEntry"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/livePronunciationClient.ts",
-        "PronunciationListResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "AssistantMemoryRuntimeSettings"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "AssistantMemoryRuntimeStatus"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "CompanionMemoryMetrics"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "MemoryExportResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "MemoryResetResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "MemoryUsageItem"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "MemoryUsageResponse"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/memoryClient.ts",
-        "SessionMemoryState"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/researchProgressController.ts",
-        "ChatMessage"
-      ],
-      [
-        "src/apps/web/src/features/chatbot/sessionTools.ts",
-        "PreservedChatSessionRequest"
-      ],
-      [
-        "src/apps/web/src/features/image-generation/ImageAssetGallery.tsx",
-        "DeleteImageAssetResponse"
-      ],
-      [
-        "src/apps/web/src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx",
-        "ImageModelDownloadRequest"
-      ],
-      [
-        "src/apps/web/src/features/image-generation/ImageModelSelectorControl.tsx",
-        "ImageModelStatusPayload"
-      ],
-      [
-        "src/apps/web/src/features/image-generation/ImageReferenceControl.tsx",
-        "ImageReferenceUploadResponse"
-      ],
-      [
-        "src/apps/web/src/features/image-generation/imageReadinessModel.ts",
-        "WorkerHealthPayload"
-      ],
-      [
-        "src/apps/web/src/features/platform/HermesStatusCard.tsx",
-        "HermesSettingsPayload"
-      ],
-      [
-        "src/apps/web/src/features/podcast/types.ts",
-        "PodcastGenerationRequest"
       ],
       [
         "src/apps/web/src/features/rpg/RpgLoadoutTabs.tsx",
@@ -6802,52 +6450,16 @@
         "CachedResponse"
       ],
       [
-        "src/apps/web/src/features/settings/ResearchSettingsSection.tsx",
-        "ProviderRuntimeStatus"
-      ],
-      [
-        "src/apps/web/src/features/settings/ResearchSettingsSection.tsx",
-        "ResearchRuntimeStatus"
-      ],
-      [
-        "src/apps/web/src/features/settings/ServicesSettings.tsx",
-        "ServiceStatusPayload"
-      ],
-      [
-        "src/apps/web/src/features/settings/settingsApi.ts",
-        "SettingsApiPayload"
-      ],
-      [
-        "src/apps/web/src/features/settings/settingsApi.ts",
-        "SettingsProfileSaveRequest"
-      ],
-      [
-        "src/apps/web/src/features/settings/tradingMarketDataApi.ts",
-        "CoinMarketCapCredentialStatus"
-      ],
-      [
-        "src/apps/web/src/features/settings/tradingMarketDataApi.ts",
-        "IbkrSettingsStatus"
-      ],
-      [
         "src/apps/web/src/features/storyteller/StoryAudioPanel.tsx",
         "StoryAudioWebSocketPayload"
       ],
       [
-        "src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx",
+        "src/apps/web/src/features/storyteller/storyModel.ts",
         "StoryGenerationRequest"
-      ],
-      [
-        "src/apps/web/src/features/trading/TradingChartPanel.tsx",
-        "ComparisonBarsResponse"
       ],
       [
         "src/apps/web/src/features/trading/TradingWatchlist.tsx",
         "WatchlistPayload"
-      ],
-      [
-        "src/apps/web/src/features/trading/indicators/externalIndicatorData.ts",
-        "MetricResponse"
       ],
       [
         "src/apps/web/src/features/trading/indicators/indicatorScheduler.ts",
@@ -6862,22 +6474,6 @@
         "IndicatorWorkerResponse"
       ],
       [
-        "src/apps/web/src/features/trading/paperPositionProtection.ts",
-        "PaperPositionProtection"
-      ],
-      [
-        "src/apps/web/src/features/trading/paperTypes.ts",
-        "PaperPositionProtection"
-      ],
-      [
-        "src/apps/web/src/features/trading/paperTypes.ts",
-        "PaperRiskOrderResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/paperTypes.ts",
-        "PaperRiskPreview"
-      ],
-      [
         "src/apps/web/src/features/trading/persistence/workspaceDocument.ts",
         "TradingTabPayload"
       ],
@@ -6886,358 +6482,13 @@
         "TradingWorkspacePayload"
       ],
       [
-        "src/apps/web/src/features/trading/replayTypes.ts",
-        "BacktestArtifactReference"
-      ],
-      [
-        "src/apps/web/src/features/trading/replayTypes.ts",
-        "BacktestEquityPoint"
-      ],
-      [
-        "src/apps/web/src/features/trading/replayTypes.ts",
-        "BacktestRunResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/replayTypes.ts",
-        "BacktestTrade"
-      ],
-      [
-        "src/apps/web/src/features/trading/replayTypes.ts",
-        "FrozenDatasetSnapshot"
-      ],
-      [
-        "src/apps/web/src/features/trading/researchTypes.ts",
-        "MarketResearchRequest"
-      ],
-      [
-        "src/apps/web/src/features/trading/researchTypes.ts",
-        "MarketResearchResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/researchTypes.ts",
-        "ResearchSource"
-      ],
-      [
-        "src/apps/web/src/features/trading/scannerTypes.ts",
-        "TradingScannerResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/scannerTypes.ts",
-        "TradingScannerRun"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingExecutionApi.ts",
-        "AlpacaIexCredentialStatus"
-      ],
-      [
         "src/apps/web/src/features/trading/tradingFormula.ts",
         "TradingFormulaPayload"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperAnalyticsOverview"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperAnalyticsTrade"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperDailyR"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperDrawdownPoint"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperEquityPoint"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperExecutionSummary"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperFactorBucket"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperFactorStudy"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperFunnelStage"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperMaeMfePoint"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperModeComparison"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperPerformanceSummary"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperRDistributionBucket"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperRollingExpectancyPoint"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperSimulationEpoch"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperTradeJournalEntry"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperTradeJournalEvent"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingPaperAnalyticsApi.ts",
-        "PaperTradeJournalResponse"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyApi.ts",
-        "StrategyRuntimeMonitorStatus"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts",
-        "AccountRiskHealth"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts",
-        "ExecutionHealth"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts",
-        "SolanaAIStrategyRecord"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts",
-        "StrategyRuntimeMonitorStatus"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts",
-        "TradingOperationalHealth"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "CatalystShadowClassification"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "GapPullbackBacktestResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "GapPullbackBacktestSummary"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "GapPullbackBacktestTrade"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "ProspectiveEconomicMetrics"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "ProspectiveEconomicStatus"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "ProspectiveEconomicThresholds"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyCatalystCaptureResponse"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyEvent"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyProtection"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyRangeBacktestDay"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyRangeBacktestResult"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyResearchReview"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "StrategyResearchReviewResponse"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "V2ProspectiveQualification"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingStrategyTypes.ts",
-        "V2QualificationThresholds"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "AssetClass"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "BarsResponse"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "CanonicalInstrument"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "DatasetProvenance"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "InstrumentType"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "ProviderBinding"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "ProviderDescriptor"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "ProviderPolicy"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "TradingAlert"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "TradingAlertEvaluationPolicy"
-      ],
-      [
-        "src/apps/web/src/features/trading/tradingTypes.ts",
-        "TradingAlertTrigger"
-      ],
-      [
-        "src/apps/web/src/features/voice/resultList.ts",
-        "AssetRecord"
       ]
     ],
-    "web_route_count": 20,
-    "web_unreachable_modules": [
-      "src/apps/web/src/api/modeMetadataClient.ts",
-      "src/apps/web/src/api/planRequestClient.ts",
-      "src/apps/web/src/api/resultPayloadTypes.ts",
-      "src/apps/web/src/api/sidecarStatusClient.ts",
-      "src/apps/web/src/app/AuditStatusCard.tsx",
-      "src/apps/web/src/app/ModePreviewCard.tsx",
-      "src/apps/web/src/app/ModeReviewPanel.tsx",
-      "src/apps/web/src/app/ResultSummaryCard.tsx",
-      "src/apps/web/src/app/ReviewChecklist.tsx",
-      "src/apps/web/src/app/ReviewRpgPairBadgeView.tsx",
-      "src/apps/web/src/app/SidecarStatusCard.tsx",
-      "src/apps/web/src/app/StaleProposalWarning.tsx",
-      "src/apps/web/src/app/StepsRisksReviewList.tsx",
-      "src/apps/web/src/app/auditDisplayState.ts",
-      "src/apps/web/src/app/boundaryBannerState.ts",
-      "src/apps/web/src/app/cfgLine.ts",
-      "src/apps/web/src/app/cfgState.ts",
-      "src/apps/web/src/app/modeClient.ts",
-      "src/apps/web/src/app/modeNameMap.ts",
-      "src/apps/web/src/app/modePlanStub.ts",
-      "src/apps/web/src/app/modeRouteStatus.ts",
-      "src/apps/web/src/app/modeState.ts",
-      "src/apps/web/src/app/omnixAdapterContract.ts",
-      "src/apps/web/src/app/omnixModeIds.ts",
-      "src/apps/web/src/app/omnixModePreview.ts",
-      "src/apps/web/src/app/omnixModeRouter.ts",
-      "src/apps/web/src/app/pairBadgeSummary.ts",
-      "src/apps/web/src/app/pairCountText.ts",
-      "src/apps/web/src/app/pairSummaryText.ts",
-      "src/apps/web/src/app/planManualTriggerGuard.ts",
-      "src/apps/web/src/app/planRequestDebounceState.ts",
-      "src/apps/web/src/app/planRequestDedupe.ts",
-      "src/apps/web/src/app/planRequestState.ts",
-      "src/apps/web/src/app/planResultFreshness.ts",
-      "src/apps/web/src/app/resultDisplayState.ts",
-      "src/apps/web/src/app/reviewChecklistState.ts",
-      "src/apps/web/src/app/reviewDecisionDraft.ts",
-      "src/apps/web/src/app/reviewDecisionState.ts",
-      "src/apps/web/src/app/reviewNotes.ts",
-      "src/apps/web/src/app/reviewRpgPairBadge.ts",
-      "src/apps/web/src/app/reviewRpgPairLabel.ts",
-      "src/apps/web/src/app/reviewRpgPairStatus.ts",
-      "src/apps/web/src/app/rpgCommandSuggestion.ts",
-      "src/apps/web/src/app/rpgHandoffDisplayState.ts",
-      "src/apps/web/src/app/rpgSuggestionRailState.ts",
-      "src/apps/web/src/app/rpgSuggestionUseState.ts",
-      "src/apps/web/src/app/serviceCardState.ts",
-      "src/apps/web/src/app/sidecarStatusState.ts",
-      "src/apps/web/src/app/stepsRisksDisplayState.ts",
-      "src/apps/web/src/app/taskContract.ts",
-      "src/apps/web/src/features/assistant-workspace/chat-context.ts",
-      "src/apps/web/src/features/assistant-workspace/derived-capabilities.ts",
-      "src/apps/web/src/features/assistant-workspace/flows.ts",
-      "src/apps/web/src/features/assistant-workspace/knowledge-registry.ts",
-      "src/apps/web/src/features/assistant-workspace/live-conversation-evaluation-replay.ts",
-      "src/apps/web/src/features/assistant-workspace/live-conversation-replay.ts",
-      "src/apps/web/src/features/assistant-workspace/live-segment-submit-interceptor.ts",
-      "src/apps/web/src/features/assistant-workspace/live-speech-delivery-bridge.ts",
-      "src/apps/web/src/features/assistant-workspace/live-voice-smooth-audio-controller.ts",
-      "src/apps/web/src/features/assistant-workspace/live-voice-websocket-enhancer.ts",
-      "src/apps/web/src/features/assistant-workspace/pack.ts",
-      "src/apps/web/src/features/assistant-workspace/planning-engine.ts",
-      "src/apps/web/src/features/assistant-workspace/source.ts",
-      "src/apps/web/src/features/assistant-workspace/trace.ts",
-      "src/apps/web/src/features/assistant-workspace/web-research.ts",
-      "src/apps/web/src/features/assistant-workspace/workflows.ts",
-      "src/apps/web/src/features/image-generation/ImageGenerationWorkspaceImpl.tsx",
-      "src/apps/web/src/features/live-speech/realtimeEvents.ts",
-      "src/apps/web/src/features/live-speech/realtimeTypes.ts",
-      "src/apps/web/src/features/platform/HermesRecentPanel.tsx",
-      "src/apps/web/src/features/platform/HermesReviewCard.tsx",
-      "src/apps/web/src/features/platform/HermesStatusCard.tsx",
-      "src/apps/web/src/features/platform/InfoCard.tsx",
-      "src/apps/web/src/features/podcast/mockProduction.ts",
-      "src/apps/web/src/features/podcast/reviewPolicy.ts",
-      "src/apps/web/src/features/rpg/RpgWorldDesignFixtures.tsx",
-      "src/apps/web/src/features/rpg/RpgWorldsCampaignsLibrary.tsx",
-      "src/apps/web/src/features/rpg/hermesSequenceStatus.ts",
-      "src/apps/web/src/features/rpg/rpgMapCulling.ts",
-      "src/apps/web/src/features/rpg/rpgRailModeState.ts",
-      "src/apps/web/src/features/rpg/rpgWorkspaceRailProps.ts",
-      "src/apps/web/src/features/settings/PodcastDefaultsSettings.tsx",
-      "src/apps/web/src/features/settings/StoryDefaultsSettings.tsx",
-      "src/apps/web/src/features/settings/StoryPodcastPanel.tsx",
-      "src/apps/web/src/features/settings/index.ts",
-      "src/apps/web/src/features/settings/rpgPreferenceSeed.ts",
-      "src/apps/web/src/features/settings/settingsLocalPreferences.ts",
-      "src/apps/web/src/features/settings/settingsOwnership.ts",
-      "src/apps/web/src/features/settings/storyPhase.ts",
-      "src/apps/web/src/features/shared/textTools.ts",
-      "src/apps/web/src/features/trading/experimental/TradingChartSpike.tsx",
-      "src/apps/web/src/features/trading/experimental/tradingSpikeCore.ts",
-      "src/apps/web/src/features/trading/indicators/indicator.worker.ts"
-    ]
+    "web_handwritten_api_types": [],
+    "web_route_count": 4,
+    "web_unreachable_modules": []
   },
   "metrics": {
     "absolute_storage_path_reads": {
@@ -7253,7 +6504,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 2256
+      "value": 2077
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -7263,12 +6514,12 @@
     "capped_500_queries": {
       "direction": "lower",
       "target": 0,
-      "value": 11
+      "value": 0
     },
     "collection_errors": {
       "direction": "lower",
       "target": 0,
-      "value": 2
+      "value": 0
     },
     "compat_modules": {
       "direction": "lower",
@@ -7288,7 +6539,7 @@
     "eslint_baseline_disables": {
       "direction": "lower",
       "target": 0,
-      "value": 182
+      "value": 91
     },
     "fastapi_init_patchers": {
       "direction": "lower",
@@ -7298,7 +6549,7 @@
     "files_over_1200_lines": {
       "direction": "lower",
       "target": 5,
-      "value": 46
+      "value": 39
     },
     "fixed_sleeps_in_tests": {
       "direction": "lower",
@@ -7313,12 +6564,12 @@
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 385
+      "value": 351
     },
     "inline_prompt_strings": {
       "direction": "lower",
       "target": 10,
-      "value": 94
+      "value": 2
     },
     "install_hook_functions": {
       "direction": "lower",
@@ -7328,12 +6579,12 @@
     "largest_class_lines": {
       "direction": "lower",
       "target": 800,
-      "value": 3057
+      "value": 3043
     },
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 68
+      "value": 59
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -7343,7 +6594,7 @@
     "mypy_ignored_modules": {
       "direction": "lower",
       "target": "0 kernel; <=10% total",
-      "value": 76
+      "value": 71
     },
     "outbox_consumer_coverage_pct": {
       "direction": "higher",
@@ -7423,7 +6674,7 @@
     "unreachable_rpg_modules": {
       "direction": "lower",
       "target": 0,
-      "value": 8
+      "value": 0
     },
     "untyped_body_routes": {
       "direction": "lower",
@@ -7433,17 +6684,17 @@
     "web_custom_event_dispatch_files": {
       "direction": "lower",
       "target": 0,
-      "value": 57
+      "value": 0
     },
     "web_error_boundaries": {
       "direction": "higher",
       "target": "number of routes",
-      "value": 0
+      "value": 1
     },
     "web_fetch_assignment_files": {
       "direction": "lower",
       "target": 0,
-      "value": 17
+      "value": 0
     },
     "web_global_css_files": {
       "direction": "lower",
@@ -7453,50 +6704,50 @@
     "web_handwritten_api_types": {
       "direction": "lower",
       "target": 0,
-      "value": 261
+      "value": 0
     },
     "web_hardcoded_colors": {
       "direction": "lower",
       "target": 300,
-      "value": 6815
+      "value": 259
     },
     "web_important": {
       "direction": "lower",
       "target": 50,
-      "value": 1671
+      "value": 0
     },
     "web_mutation_observer_files": {
       "direction": "lower",
       "target": 2,
-      "value": 19
+      "value": 1
     },
     "web_omnix_window_flags": {
       "direction": "lower",
       "target": 0,
-      "value": 55
+      "value": 0
     },
     "web_openapi_path_coverage_pct": {
       "direction": "higher",
       "target": 100,
-      "value": 74.262735
+      "value": 100.0
     },
     "web_raw_fetch_outside_api": {
       "direction": "lower",
       "target": 0,
-      "value": 75
+      "value": 0
     },
     "web_set_interval_files": {
       "direction": "lower",
       "target": 5,
-      "value": 28
+      "value": 1
     },
     "web_unreachable_modules": {
       "direction": "lower",
       "target": 0,
-      "value": 93
+      "value": 0
     }
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "d61a3540ca582b9da07a17087ad9c877de21aa2a7ee5133c3d41d99c6a219ff0"
+  "source_digest": "4700b8b770f64c73f22f0b26826096cb89b35d98dd156a0837686c192b2a0129"
 }
