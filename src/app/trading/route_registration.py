@@ -237,7 +237,13 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
 
         return create
 
-    return tuple(factory_for(worker_factory, enabled) for worker_factory, enabled in registrations)
+    from app.trading.strategies.runner import strategy_runner_task
+
+    return (
+        *(factory_for(worker_factory, enabled) for worker_factory, enabled in registrations),
+        # Registered strategies run through the generic runner (WP-8.3).
+        strategy_runner_task,
+    )
 
 
 __all__ = [

@@ -17,7 +17,8 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
-    assert len(FEATURE.scheduled_tasks) == 22
+    # 22 monitors and the generic strategy runner (WP-8.3).
+    assert len(FEATURE.scheduled_tasks) == 23
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -29,7 +30,10 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
         runtime_state=SimpleNamespace(),
     )
 
-    tasks = [factory(context) for factory in FEATURE.scheduled_tasks]
+    *monitor_factories, runner_factory = FEATURE.scheduled_tasks
+    # No runner strategy is registered yet, so the runner has no task.
+    assert runner_factory(context) is None
+    tasks = [factory(context) for factory in monitor_factories]
 
     assert all(isinstance(task, ScheduledTaskSpec) for task in tasks)
     task_ids = [task.task_id for task in tasks]
