@@ -29,13 +29,16 @@ class AnchorSlot:
         return row
 
 
+# Domain -> (anchor kind, ID prefix). Every entity a domain's topic is asked
+# for gets an anchor: topic generation requires one authoritative ID per
+# entity, so a cap below the graph's target count made generation fail.
 _ANCHOR_DOMAINS = {
-    "regions": ("region", "region", 12),
-    "places": ("major_settlement", "places", 6),
-    "groups": ("major_institution", "groups", 6),
-    "cultures": ("major_culture", "cultures", 6),
-    "actors": ("historical_actor", "actors", 4),
-    "history_timeline": ("historical_event", "history_timeline", 10),
+    "regions": ("region", "region"),
+    "places": ("major_settlement", "places"),
+    "groups": ("major_institution", "groups"),
+    "cultures": ("major_culture", "cultures"),
+    "actors": ("historical_actor", "actors"),
+    "history_timeline": ("historical_event", "history_timeline"),
 }
 
 
@@ -77,11 +80,11 @@ def allocate_global_anchor_registry(
     starting_place_id = _starting_place_id(
         starting_location_id or str(graph.metadata.get("starting_location") or "")
     )
-    for domain_id, (anchor_kind, prefix, maximum) in _ANCHOR_DOMAINS.items():
+    for domain_id, (anchor_kind, prefix) in _ANCHOR_DOMAINS.items():
         node = node_map.get(domain_id)
         if node is None:
             continue
-        count = min(maximum, max(0, int(node.target_count)))
+        count = max(0, int(node.target_count))
         for index in range(1, count + 1):
             use_starting_place = domain_id == "places" and index == 1 and starting_place_id
             anchors.append(

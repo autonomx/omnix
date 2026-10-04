@@ -187,6 +187,10 @@ def _value_for_field(
     if value_type == "entity_ref_list":
         width = min(2, len(candidates))
         return [candidates[(index + offset) % len(candidates)] for offset in range(width)] if candidates else []
+    if field_id == "legacy_status":
+        # The deterministic causal links give every historical event a
+        # continuing effect; a terminal status would contradict them.
+        return "continuing"
     if value_type == "enum":
         values = tuple(str(value) for value in definition.get("enum_values") or ())
         return values[index % len(values)] if values else "defined"
