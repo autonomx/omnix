@@ -2,6 +2,7 @@
 
 Date: 2026-09-27
 Source revision inspected: `7bd17af08` (branch `main`, clean tree)
+Source links point at that revision; the code has changed since (see the roadmap's [progress log](roadmap/PROGRESS.md)).
 Scope: whole repository, assessed as an enterprise application. The review asks three questions:
 - Can new features be added as modules without disturbing existing ones?
 - How does it perform?
@@ -100,7 +101,7 @@ Earlier reviews: [FRAMEWORK_REVIEW_2026-09-26.md](FRAMEWORK_REVIEW_2026-09-26.md
 | 10 | CI never runs the full suite (~10% failing); no type checker; no lockfiles; builds tied to one developer's machine | Delivery | DEL1–DEL3 |
 
 ### Immediate actions, independent of the roadmap
-1. Rotate the Cerebras credential whose format-matching value is committed in [src/app/data/settings.json](../src/app/data/settings.json) (`cerebras.api_key`, 52 characters, prefix `csk-`). Then remove the file, purge it from history, and add secret scanning.
+1. Rotate the Cerebras credential whose format-matching value is committed in [src/app/data/settings.json](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/data/settings.json) (`cerebras.api_key`, 52 characters, prefix `csk-`). Then remove the file, purge it from history, and add secret scanning.
 2. Bind the Vite dev server, STT service, `openai_api.py` and spawned `llama-server` to loopback by default.
 3. Stop accepting `approved` and `approval_policy` from request bodies.
 
@@ -155,7 +156,7 @@ These are the numbers the roadmap's ratchet tracks. Most come from static AST an
 | Routes with an auth dependency | 0 | AST |
 | `install_*hook/patch` function definitions | 87 | AST |
 | Files that assign `FastAPI.__init__` | 48 | grep |
-| Trading import-time installers / patches | 20 / 99 | trading audit |
+| Trading import-time installers / patches | 19 (20 with the `enum` shim) / 99 | trading audit |
 | Package-level import cycles (module-level imports) | 17 | AST import graph |
 | `bootstrap_local_tenant(` non-test call sites | 132 (111 in RPG) | grep |
 | Environment variable names read / read sites | 290 / 388; ~19 centrally validated | AST |
@@ -187,49 +188,49 @@ These are the numbers the roadmap's ratchet tracks. Most come from static AST an
 Each of these is a real asset. The roadmap builds on them and must not regress them.
 
 - **PostgreSQL authority, fail-closed.**
-  - Typed SQLSTATE error mapping: [persistence/database.py](../src/app/persistence/database.py).
-  - Authority gate: [persistence/authority.py](../src/app/persistence/authority.py).
-  - `/ready` never migrates and redacts errors: [production.py:26-54](../src/app/production.py#L26-L54), [gateway/main.py:260-275](../src/app/gateway/main.py#L260-L275).
+  - Typed SQLSTATE error mapping: [persistence/database.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/database.py).
+  - Authority gate: [persistence/authority.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/authority.py).
+  - `/ready` never migrates and redacts errors: [production.py:26-54](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/production.py#L26-L54), [gateway/main.py:260-275](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/main.py#L260-L275).
 - **Job execution fencing in the repository layer.**
-  - `SKIP LOCKED` claim: [job_repository.py:249-271](../src/app/persistence/job_repository.py#L249-L271).
-  - Token-checked transitions, attempts, dead letters and job events written in one transaction: [execution_repositories.py](../src/app/persistence/execution_repositories.py).
-  - The durable worker renews leases and fences failures by the original lease: [durable_feature_worker.py](../src/app/jobs/durable_feature_worker.py).
+  - `SKIP LOCKED` claim: [job_repository.py:249-271](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/job_repository.py#L249-L271).
+  - Token-checked transitions, attempts, dead letters and job events written in one transaction: [execution_repositories.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/execution_repositories.py).
+  - The durable worker renews leases and fences failures by the original lease: [durable_feature_worker.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/jobs/durable_feature_worker.py).
 - **Chat execution.**
   - Admission locks the session row.
   - Duplicate submissions across processes are idempotent.
   - Recovery checks whether the owning process is alive, and processes rows in creation order.
   - Reply, job status and terminal event commit atomically.
-  - See [chat_execution.py](../src/app/persistence/chat_execution.py), [generation_jobs.py](../src/app/chat/generation_jobs.py) and migrations 0096 and 0097.
+  - See [chat_execution.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/chat_execution.py), [generation_jobs.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/chat/generation_jobs.py) and migrations 0096 and 0097.
 - **Worker and API roles.**
   - One background owner per workspace via `pg_try_advisory_lock`, with supervision of the lock connection.
   - API processes cannot start singleton work.
-  - See [background_runtime.py](../src/app/gateway/background_runtime.py) and [runtime_capabilities.py](../src/app/runtime_capabilities.py).
+  - See [background_runtime.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/background_runtime.py) and [runtime_capabilities.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/runtime_capabilities.py).
 - **Immutable runtime configuration.**
-  - [runtime_config.py](../src/app/runtime_config.py) is frozen and bound once per process.
+  - [runtime_config.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/runtime_config.py) is frozen and bound once per process.
   - It validates URLs and never echoes credentials.
 - **Agent authority model.**
-  - Profile ceilings: [profiles.py](../src/app/agent_runtime/profiles.py).
-  - Child-run narrowing: [subagents.py](../src/app/agent_runtime/subagents.py).
-  - Broker checks RunSpec membership first and binds approvals to the exact input: [broker_api.py](../src/app/agent_runtime/broker_api.py).
-  - Durable budgets that lock rows and fail closed: [budget.py](../src/app/agent_runtime/budget.py).
-  - Safe, verified, idempotent workspace promotion: [workspace_promotion.py](../src/app/agent_runtime/workspace_promotion.py).
+  - Profile ceilings: [profiles.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/profiles.py).
+  - Child-run narrowing: [subagents.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/subagents.py).
+  - Broker checks RunSpec membership first and binds approvals to the exact input: [broker_api.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/broker_api.py).
+  - Durable budgets that lock rows and fail closed: [budget.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/budget.py).
+  - Safe, verified, idempotent workspace promotion: [workspace_promotion.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/workspace_promotion.py).
   - Subprocess calls all have timeouts, allow-listed environments, and no `shell=True` in the agent runtime.
 - **Trading safety invariants.**
-  - Idempotent paper ledger with row locks: [paper_repository.py](../src/app/trading/paper_repository.py).
-  - IBKR rejected as an execution binding: [binding_authority.py](../src/app/trading/binding_authority.py).
-  - Fail-closed eligibility: [execution.py](../src/app/trading/execution.py).
+  - Idempotent paper ledger with row locks: [paper_repository.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/paper_repository.py).
+  - IBKR rejected as an execution binding: [binding_authority.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/binding_authority.py).
+  - Fail-closed eligibility: [execution.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/execution.py).
   - No broker `placeOrder` call exists.
-  - Provider HTTP runtime with semaphore, backoff, circuit breaker and request coalescing: [providers/http_runtime.py](../src/app/trading/providers/http_runtime.py).
-- **Structured LLM outputs.** Versioned contracts with semantic validation, retry budget and size limits: [providers/structured](../src/app/providers/structured).
+  - Provider HTTP runtime with semaphore, backoff, circuit breaker and request coalescing: [providers/http_runtime.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/providers/http_runtime.py).
+- **Structured LLM outputs.** Versioned contracts with semantic validation, retry budget and size limits: [providers/structured](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/providers/structured).
 - **Outbox and inbox schema.** Ordered claims, per-consumer dedup and dead letters (migration 0011). The design is good; it is simply not used yet.
-- **Atomic blob store.** Temp file, fsync, atomic replace, path-traversal guard and streaming put: [blob_store.py](../src/app/persistence/blob_store.py).
+- **Atomic blob store.** Temp file, fsync, atomic replace, path-traversal guard and streaming put: [blob_store.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/blob_store.py).
 - **Audiobook as the reference feature.**
   - Explicit registrar, sync handlers, a `BackgroundWorker`, lease-fenced render workers per resource class, a content-addressed cache, and a standalone worker entrypoint.
-  - See [audiobook/routes.py](../src/app/audiobook/routes.py) and [audiobook/worker.py](../src/app/audiobook/worker.py).
+  - See [audiobook/routes.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/audiobook/routes.py) and [audiobook/worker.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/audiobook/worker.py).
 - **Frontend shell.**
-  - Typed module catalog and lazy workspaces: [modules.ts](../src/apps/web/src/app/modules.ts), [ModuleWorkspace.tsx](../src/apps/web/src/features/ModuleWorkspace.tsx).
-  - Per-module API firewall: [viewApiScope.ts](../src/apps/web/src/app/viewApiScope.ts).
-  - SSE client with backoff, jitter and replay: [events/eventClient.ts](../src/apps/web/src/events/eventClient.ts).
+  - Typed module catalog and lazy workspaces: [modules.ts](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/app/modules.ts), [ModuleWorkspace.tsx](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/features/ModuleWorkspace.tsx).
+  - Per-module API firewall: [viewApiScope.ts](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/app/viewApiScope.ts).
+  - SSE client with backoff, jitter and replay: [events/eventClient.ts](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/events/eventClient.ts).
   - Strict TypeScript, and `api:check` runs on PRs.
 - **Engineering discipline.** ADRs, [OMNIX_RUNTIME_INVARIANTS.md](architecture/OMNIX_RUNTIME_INVARIANTS.md), [architecture gates](testing/ARCHITECTURE_GATES.md), reproducible benchmark harnesses, and measurement artifacts under [docs/measurements](measurements).
 
@@ -245,21 +246,21 @@ Each of these is a real asset. The roadmap builds on them and must not regress t
 
 | Location | Mechanism | Evidence |
 |---|---|---|
-| Gateway | `create_gateway_app` → `_install_required_rpg_turn_hooks` → `initialize_gateway_runtime_hooks()` installs ~20 live-chat hooks, then 5 RPG turn hooks | [gateway/\_\_init\_\_.py:8-14](../src/app/gateway/__init__.py#L8-L14), [runtime_hooks.py:83-150](../src/app/gateway/runtime_hooks.py#L83-L150) ✔ |
-| Gateway → persistence | Replaces `PostgresChatSessionStore.get_session`, `begin_user_message` and `complete_streamed_reply` on the class | [live_chat_postgres_fast_path.py:535-586](../src/app/gateway/live_chat_postgres_fast_path.py#L535-L586) ✔ |
+| Gateway | `create_gateway_app` → `_install_required_rpg_turn_hooks` → `initialize_gateway_runtime_hooks()` installs ~20 live-chat hooks, then 5 RPG turn hooks | [gateway/\_\_init\_\_.py:8-14](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/__init__.py#L8-L14), [runtime_hooks.py:83-150](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/runtime_hooks.py#L83-L150) ✔ |
+| Gateway → persistence | Replaces `PostgresChatSessionStore.get_session`, `begin_user_message` and `complete_streamed_reply` on the class | [live_chat_postgres_fast_path.py:535-586](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/live_chat_postgres_fast_path.py#L535-L586) ✔ |
 | Gateway → chat | `PromptChatSessionStore.stream_provider_reply_chunks` is wrapped 5 times; `LMStudioProvider.chat_completion` twice; Starlette `StreamingResponse.__init__` globally | providers audit (`live_chat_low_latency_stream.py`, `live_chat_live_voice_profile.py`, `live_chat_provider_metrics.py`, `live_chat_provider_routing.py`, `live_chat_stream_retry.py`, `live_sse_transport.py:374`) |
-| Platform kernel | Replaces `app.rpg.session.new_game.create_new_game_session` as an import side effect | [platform/\_\_init\_\_.py:1-11](../src/app/platform/__init__.py#L1-L11) ✔ |
-| Jobs kernel | Installs 7 execution patches on `InMemoryJobStore` at import time | [jobs/\_\_init\_\_.py:48-55](../src/app/jobs/__init__.py#L48-L55) ✔ |
-| Composition root | `install_rpg_turn_job_guard(PostgresJobStoreAdapter)`, `install_rpg_debug_job_hook(...)`, `install_live_agent_store_hooks(...)` decorate adapter classes | [runtime_composition.py:6-30](../src/app/runtime_composition.py#L6-L30) ✔ |
-| Trading | 19 installers run on any `app.trading` import (99 patches across 84 targets); comments say correctness depends on the order; `TradingStrategyMonitor._evaluate_candidates` is wrapped 5 times | [trading/\_\_init\_\_.py:51-75](../src/app/trading/__init__.py#L51-L75) ✔ |
-| Trading safety | The AUTO_PAPER authorization gate (kill switch, entry window, qualification, profile match) exists only as a replacement of `_run_config` | [trading_data_hardening.py:596-614](../src/app/trading/trading_data_hardening.py#L596-L614) ✔ |
-| RPG | 40 numbered runtime parts; globals merged and copied back into every part | [rpg/session/runtime.py](../src/app/rpg/session/runtime.py) |
-| RPG | 19 best-effort hooks that swallow every exception (`except Exception: return`) | [rpg/session/\_\_init\_\_.py:67-105](../src/app/rpg/session/__init__.py#L67-L105) ✔ |
+| Platform kernel | Replaces `app.rpg.session.new_game.create_new_game_session` as an import side effect | [platform/\_\_init\_\_.py:1-11](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/platform/__init__.py#L1-L11) ✔ |
+| Jobs kernel | Installs 7 execution patches on `InMemoryJobStore` at import time | [jobs/\_\_init\_\_.py:48-55](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/jobs/__init__.py#L48-L55) ✔ |
+| Composition root | `install_rpg_turn_job_guard(PostgresJobStoreAdapter)`, `install_rpg_debug_job_hook(...)`, `install_live_agent_store_hooks(...)` decorate adapter classes | [runtime_composition.py:6-30](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/runtime_composition.py#L6-L30) ✔ |
+| Trading | 19 installers run on any `app.trading` import (99 patches across 84 targets); comments say correctness depends on the order; `TradingStrategyMonitor._evaluate_candidates` is wrapped 5 times | [trading/\_\_init\_\_.py:51-75](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/__init__.py#L51-L75) ✔ |
+| Trading safety | The AUTO_PAPER authorization gate (kill switch, entry window, qualification, profile match) exists only as a replacement of `_run_config` | [trading_data_hardening.py:596-614](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/trading/trading_data_hardening.py#L596-L614) ✔ |
+| RPG | 40 numbered runtime parts; globals merged and copied back into every part | [rpg/session/runtime.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/rpg/session/runtime.py) |
+| RPG | 19 best-effort hooks that swallow every exception (`except Exception: return`) | [rpg/session/\_\_init\_\_.py:67-105](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/rpg/session/__init__.py#L67-L105) ✔ |
 | RPG | 246 star imports; 4 `sys.meta_path` import hooks; `apply_turn` rebound by 9 modules | RPG audit |
-| Every Python process | `sitecustomize.py` sets `builtins.opening_bonus` to hide a `NameError` and adds methods to `LMStudioProvider` | [src/sitecustomize.py](../src/sitecustomize.py) ✔ |
-| Agent runtime | `AgentRunService.__getattribute__` rewrites `service_core` module globals on every attribute access; `review_orchestration` swaps globals inside try/finally, which is not thread-safe | [service.py:548-574](../src/app/agent_runtime/service.py#L548-L574), [review_orchestration.py:213-221](../src/app/agent_runtime/review_orchestration.py#L213-L221) |
+| Every Python process | `sitecustomize.py` sets `builtins.opening_bonus` to hide a `NameError` and adds methods to `LMStudioProvider` | [src/sitecustomize.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/sitecustomize.py) ✔ |
+| Agent runtime | `AgentRunService.__getattribute__` rewrites `service_core` module globals on every attribute access; `review_orchestration` swaps globals inside try/finally, which is not thread-safe | [service.py:548-574](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/service.py#L548-L574), [review_orchestration.py:213-221](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/review_orchestration.py#L213-L221) |
 | Legacy | 48 files still carry `FastAPI.__init__` patchers (most are no longer called); 87 `install_*hook/patch` functions exist | AST scan ✔ |
-| Frontend | 17 files replace `window.fetch`; `voiceJobListGuard` replaces `omnixApiClient.listJobs` for the whole app and turns errors into `{jobs: []}`; 55 `window.__omnix*` flags act as a registry; `viewRuntime` drops every cleanup function | [voiceJobListGuard.ts:15-29](../src/apps/web/src/features/voice/voiceJobListGuard.ts#L15-L29) ✔, [viewRuntime.ts:11-48](../src/apps/web/src/app/viewRuntime.ts#L11-L48) ✔ |
+| Frontend | 17 files replace `window.fetch`; `voiceJobListGuard` replaces `omnixApiClient.listJobs` for the whole app and turns errors into `{jobs: []}`; 55 `window.__omnix*` flags act as a registry; `viewRuntime` drops every cleanup function | [voiceJobListGuard.ts:15-29](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/features/voice/voiceJobListGuard.ts#L15-L29) ✔, [viewRuntime.ts:11-48](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/app/viewRuntime.ts#L11-L48) ✔ |
 
 **Why it matters.**
 - *Correctness and audit.* What runs cannot be determined from the source of the function being called.
@@ -284,7 +285,7 @@ Each of these is a real asset. The roadmap builds on them and must not regress t
    - About 75% of its 5,615 lines are feature executors: `image_inline.py`, `voice_inline.py`, `research_inline.py`, `inline_feature_jobs.py` (story, podcast and RPG narration), `rpg_last10_report.py`, `rpg_debug_job_hook.py`.
    - `jobs/models.py:146-152` imports platform defaults.
    - `durable_feature_worker.py:15` imports the gateway.
-   - Job dispatch is a hard-coded if/else ([durable_feature_worker.py:336-360](../src/app/jobs/durable_feature_worker.py#L336-L360)) ✔.
+   - Job dispatch is a hard-coded if/else ([durable_feature_worker.py:336-360](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/jobs/durable_feature_worker.py#L336-L360)) ✔.
 2. **`persistence` imports domain and transport code.**
    - It imports rpg (16 imports), chat, characters, assistant_memory, assistant_tools and gateway.
    - A persistence class subclasses a gateway store (`document_feature_compat.py:8,14`).
@@ -331,10 +332,10 @@ Each of these is a real asset. The roadmap builds on them and must not regress t
 - The gateway has 107 files and 233 route handlers.
 - 48 of its files (15.3K of 26.4K lines, 58%) are live-voice and TTS domain logic.
 - It holds 24 RPG route modules.
-- [feature_registry.py](../src/app/gateway/feature_registry.py) is a hard-coded tuple of 45 `(module, registrar)` strings.
+- [feature_registry.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/feature_registry.py) is a hard-coded tuple of 45 `(module, registrar)` strings.
   - Each registrar receives the whole FastAPI app and can add middleware or rewrite routes, as `blocking_route_offload`, `rpg_turn_job_mirror._install_middleware` and `live_sse_transport` do.
   - Features cannot be enabled or disabled by configuration, and there is no per-feature router prefix or dependency set.
-- [gateway/main.py](../src/app/gateway/main.py) re-exports about 160 symbols from `core_services.py` and still defines about 40 inline routes. Those include 21 RPG compatibility routes that take `dict[str, Any]` bodies and use `POST` for reads.
+- [gateway/main.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/main.py) re-exports about 160 symbols from `core_services.py` and still defines about 40 inline routes. Those include 21 RPG compatibility routes that take `dict[str, Any]` bodies and use `POST` for reads.
 - It still has to delete routes that hooks installed and re-register them (`_remove_hook_installed_assistant_context_routes`).
 
 **Recommendation.**
@@ -345,7 +346,7 @@ Each of these is a real asset. The roadmap builds on them and must not regress t
 
 ### X4 — `shared.py` is a legacy global service locator with file fallbacks (High)
 
-**Evidence.** [src/app/shared.py](../src/app/shared.py) (847 lines) is imported by 20 packages. It holds:
+**Evidence.** [src/app/shared.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/shared.py) (847 lines) is imported by 20 packages. It holds:
 - resource paths;
 - constants;
 - default settings;
@@ -354,9 +355,9 @@ Each of these is a real asset. The roadmap builds on them and must not regress t
 - text utilities.
 
 Three concrete problems:
-1. **Silent file fallback.** When the PostgreSQL callbacks have not been installed first, `load_settings`/`save_settings`/`load_secrets`/`save_secrets` read and write `resources/data/settings.json`, `sessions.json` and **`secrets.json`** ✔ ([shared.py:244-412](../src/app/shared.py#L244-L412)). Fail-closed behaviour therefore depends on bootstrap order, which contradicts ADR-0010 for any process that imports `shared` without bootstrapping.
+1. **Silent file fallback.** When the PostgreSQL callbacks have not been installed first, `load_settings`/`save_settings`/`load_secrets`/`save_secrets` read and write `resources/data/settings.json`, `sessions.json` and **`secrets.json`** ✔ ([shared.py:244-412](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/shared.py#L244-L412)). Fail-closed behaviour therefore depends on bootstrap order, which contradicts ADR-0010 for any process that imports `shared` without bootstrapping.
 2. **Whole-document settings.** `save_settings` calls `load_settings()` twice and rewrites the entire document.
-3. **Single-slot provider cache.** `get_provider` has one unlocked slot. It re-reads settings and secrets on every call, and **closes the evicted instance even while another request is using it** ✔ ([shared.py:594-610](../src/app/shared.py#L594-L610)). Two concurrent sessions on different providers keep evicting each other.
+3. **Single-slot provider cache.** `get_provider` has one unlocked slot. It re-reads settings and secrets on every call, and **closes the evicted instance even while another request is using it** ✔ ([shared.py:594-610](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/shared.py#L594-L610)). Two concurrent sessions on different providers keep evicting each other.
 
 **Recommendation.** Decompose it:
 - paths → runtime paths;
@@ -425,12 +426,12 @@ Remove the document callbacks and all file fallbacks.
 
 **Evidence.**
 - There are 0 `Depends(`/`dependencies=` auth guards across 767 route decorators.
-- The only middleware is request metrics plus CORS ([gateway/main.py:229-243](../src/app/gateway/main.py#L229-L243)) ✔.
-- Every request runs as `local_tenant_context()`, a hard-coded owner/admin/member of `workspace:local` ([persistence/tenant.py:79-85](../src/app/persistence/tenant.py#L79-L85)) ✔.
+- The only middleware is request metrics plus CORS ([gateway/main.py:229-243](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/main.py#L229-L243)) ✔.
+- Every request runs as `local_tenant_context()`, a hard-coded owner/admin/member of `workspace:local` ([persistence/tenant.py:79-85](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/tenant.py#L79-L85)) ✔.
 - 20 repositories default to it.
 - `TrustedPrincipal` exists but is never used.
 - Internal Hermes routes are only hidden from the OpenAPI schema.
-- The worker protocol routes `/api/jobs/claim|complete|fail` are public ([core_jobs_routes.py:74-92](../src/app/gateway/core_jobs_routes.py#L74-L92)).
+- The worker protocol routes `/api/jobs/claim|complete|fail` are public ([core_jobs_routes.py:74-92](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/core_jobs_routes.py#L74-L92)).
 - The Nginx example proxies all of `/api/*` without auth, over plain HTTP.
 
 **Impact.** Anything that can reach a gateway port can:
@@ -452,8 +453,8 @@ No action is attributable to a person.
 ### SEC2 — Approvals are asserted by the client (Critical)
 
 **Evidence.**
-- [assistant_tools/gate.py:48](../src/app/assistant_tools/gate.py#L48) takes `approval_policy` from the request body. Line 62 makes the tool executable when `request.approved` is true ✔.
-- The web client sends `approved: true` ([assistantToolConfigClient.ts:164-174](../src/apps/web/src/features/chatbot/assistantToolConfigClient.ts#L164-L174)) ✔.
+- [assistant_tools/gate.py:48](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/assistant_tools/gate.py#L48) takes `approval_policy` from the request body. Line 62 makes the tool executable when `request.approved` is true ✔.
+- The web client sends `approved: true` ([assistantToolConfigClient.ts:164-174](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/features/chatbot/assistantToolConfigClient.ts#L164-L174)) ✔.
 - The ledger then records the approval as coming from the "user" (`hermes_bridge.py:138`).
 - Agent runs:
   - The client chooses `approval_policy="allow_automatic"`, `allowed_paths=["**"]`, the workspace root and the isolation level (`agent_runtime/api.py:56-75`).
@@ -470,8 +471,8 @@ No action is attributable to a person.
 ### SEC3 — Exposure to the LAN, any web page, and DNS rebinding (Critical)
 
 **Evidence.**
-- The launcher runs `npm run web:dev`, which is `vite --host 0.0.0.0` ([src/apps/web/package.json](../src/apps/web/package.json)) ✔. It proxies `/api`, `/events` and WebSockets to the gateway, which defeats the gateway's 127.0.0.1 bind.
-- STT binds `0.0.0.0` with `allow_origins=["*"]` plus `allow_credentials=True` and no auth ([nemotron_eou_stt_server.py:29-35,192](../src/nemotron_eou_stt_server.py#L29-L35)) ✔.
+- The launcher runs `npm run web:dev`, which is `vite --host 0.0.0.0` ([src/apps/web/package.json](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/package.json)) ✔. It proxies `/api`, `/events` and WebSockets to the gateway, which defeats the gateway's 127.0.0.1 bind.
+- STT binds `0.0.0.0` with `allow_origins=["*"]` plus `allow_credentials=True` and no auth ([nemotron_eou_stt_server.py:29-35,192](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/nemotron_eou_stt_server.py#L29-L35)) ✔.
 - `openai_api.py` and spawned `llama-server` also bind `0.0.0.0`.
 - No CSRF protection, no Origin check on WebSockets, no Host allow-list.
 - 35 parameterless POST routes can be triggered by a cross-site "simple request" with no preflight, e.g. launcher `stop-all`, image import and Codex login.
@@ -484,7 +485,7 @@ No action is attributable to a person.
 
 ### SEC4 — Committed secret (Critical)
 
-**Evidence.** [src/app/data/settings.json](../src/app/data/settings.json) is tracked ✔. Its `cerebras.api_key` is a 52-character value with the `csk-` prefix ✔; the value is not reproduced here.
+**Evidence.** [src/app/data/settings.json](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/data/settings.json) is tracked ✔. Its `cerebras.api_key` is a 52-character value with the `csk-` prefix ✔; the value is not reproduced here.
 - The file is orphaned: the runtime reads `resources/data/settings.json`.
 - It has been in history since at least commit `637220e19`.
 - It ships in Docker images via `COPY . .`.
@@ -512,7 +513,7 @@ No action is attributable to a person.
 ### SEC6 — Agent execution is not sandboxed and network policy is not enforced (High)
 
 **Evidence.**
-- The default `supervised_worktree` is a plain `Popen` ([isolation.py:45-50](../src/app/agent_runtime/isolation.py#L45-L50)).
+- The default `supervised_worktree` is a plain `Popen` ([isolation.py:45-50](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/agent_runtime/isolation.py#L45-L50)).
 - `network_policy="broker-only"` is only exported as an environment variable and logged.
 - The command prefixes `python -m pytest` and `npm run build` are treated as safe, so they run agent-written code with no approval.
 - `HOME` is passed through to the agent.
@@ -557,7 +558,7 @@ No action is attributable to a person.
 ### PERF1 — The event loop is blocked by synchronous work (Critical)
 
 **Evidence.**
-- 229 `async def` HTTP handlers never await ✔. They call synchronous PostgreSQL-backed services directly, for example `service_factory().list(...)` in [characters/api.py:129-130](../src/app/characters/api.py#L129-L130) ✔.
+- 229 `async def` HTTP handlers never await ✔. They call synchronous PostgreSQL-backed services directly, for example `service_factory().list(...)` in [characters/api.py:129-130](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/characters/api.py#L129-L130) ✔.
 
   | Package | Async handlers that never await |
   |---|---|
@@ -567,7 +568,7 @@ No action is attributable to a person.
   | trading | 31 (36 of 120 per the trading audit) |
   | RPG gateway routes | 76 of 78 async handlers don't offload |
   | image | 13 |
-- The compensating [blocking_route_offload.py](../src/app/gateway/blocking_route_offload.py) covers 8 routes. It works by replacing `route.dependant.call` and runs coroutines in a new event loop per call via `asyncio.run` ✔.
+- The compensating [blocking_route_offload.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/blocking_route_offload.py) covers 8 routes. It works by replacing `route.dependant.call` and runs coroutines in a new event loop per call via `asyncio.run` ✔.
 - The RPG turn pipeline offloads only `apply_turn`. Session load, canonical narrative generation, shadow narrative generation (sampled at 100% by default) and the full-state save all run on the loop.
 - The TTS service runs synchronous CUDA synthesis inside `async` handlers.
 - A cold TTS provider lookup can block the live-call websocket loop.
@@ -584,10 +585,10 @@ No action is attributable to a person.
 ### PERF2 — Migrations and tenant bootstrap run on request paths (Critical)
 
 **Evidence.**
-- `bootstrap_local_tenant` calls `apply_migrations` and appends a `workspace.local_bootstrap` audit row on every call ✔ ([identity_service.py:19-35](../src/app/persistence/identity_service.py#L19-L35)).
-- It has 132 non-test call sites, 111 in RPG, including once per RPG turn, on plain reads, and in every `rpg_compat` function. [rpg/worlds/postgres_service.py](../src/app/rpg/worlds/postgres_service.py) alone calls it 10 times ✔.
+- `bootstrap_local_tenant` calls `apply_migrations` and appends a `workspace.local_bootstrap` audit row on every call ✔ ([identity_service.py:19-35](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/identity_service.py#L19-L35)).
+- It has 132 non-test call sites, 111 in RPG, including once per RPG turn, on plain reads, and in every `rpg_compat` function. [rpg/worlds/postgres_service.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/rpg/worlds/postgres_service.py) alone calls it 10 times ✔.
 - Each call hashes all 118 migration files twice, takes one global `pg_advisory_xact_lock`, runs about 17 statements, and writes an audit row.
-- Compat store constructors and uncached factories trigger it too. That includes every character-mode chat prompt via [runtime_composition.py:45-62](../src/app/runtime_composition.py#L45-L62).
+- Compat store constructors and uncached factories trigger it too. That includes every character-mode chat prompt via [runtime_composition.py:45-62](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/runtime_composition.py#L45-L62).
 
 **Impact.**
 - All processes serialize on one lock.
@@ -642,7 +643,7 @@ No action is attributable to a person.
 ### PERF5 — Event delivery polls per subscriber and can skip events (High)
 
 **Evidence.**
-- Each SSE subscriber polls the database every second on a thread ([live_job_events.py:70-100](../src/app/gateway/live_job_events.py#L70-L100)).
+- Each SSE subscriber polls the database every second on a thread ([live_job_events.py:70-100](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/live_job_events.py#L70-L100)).
 - There is no `LISTEN`/`NOTIFY` anywhere.
 - The cursor is `id > last` on an identity column, so an event whose transaction commits after a later id has already been read is skipped for good.
 - The Docker default entrypoint serves a different, less resilient `/events` implementation than `runtime_app.py`.
@@ -715,7 +716,7 @@ No action is attributable to a person.
 - all live voice (pinned by `X-Omnix-Gateway-Affinity: worker`);
 - local TTS.
 
-TTS synthesis is serialized per process ([tts_priority.py](../src/app/providers/tts_priority.py), [live_voice_execution_lane.py](../src/app/gateway/live_voice_execution_lane.py)). By inference, capacity is about 1–2 simultaneously speaking calls per worker/GPU.
+TTS synthesis is serialized per process ([tts_priority.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/providers/tts_priority.py), [live_voice_execution_lane.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/live_voice_execution_lane.py)). By inference, capacity is about 1–2 simultaneously speaking calls per worker/GPU.
 
 **Recommendation.**
 - Separate the singleton scheduler from job execution.
@@ -769,7 +770,7 @@ TTS synthesis is serialized per process ([tts_priority.py](../src/app/providers/
 ### SCALE5 — Blob storage is tied to the local filesystem (High)
 
 **Evidence.**
-- The `BlobStore` protocol in [persistence/contracts.py](../src/app/persistence/contracts.py) is imported by no module.
+- The `BlobStore` protocol in [persistence/contracts.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/contracts.py) is imported by no module.
 - `LocalBlobStore` is constructed directly in 7 files.
 - Absolute `storage_path` values are read in 21 files across 9 packages.
 - Voice clones are discovered by scanning directories.
@@ -829,7 +830,7 @@ TTS synthesis is serialized per process ([tts_priority.py](../src/app/providers/
 
 **Evidence.**
 - Every RPG turn and agent-runtime event writes to the outbox.
-- `claim_batch` ([outbox_repository.py](../src/app/persistence/outbox_repository.py)) has no production caller.
+- `claim_batch` ([outbox_repository.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/outbox_repository.py)) has no production caller.
 - Cleanup removes only rows marked `published`, which never happens.
 
 **Recommendation.** Either build a relay with registered consumers and `NOTIFY`, or stop writing event types that have no consumer. The roadmap chooses the relay.
@@ -1035,7 +1036,7 @@ Strengths are listed in section 4. Findings not covered above:
 - **PJ1 — Tenant bootstrap everywhere (Critical).** See PERF2. There are 18 `ensure_postgresql_runtime_ready` calls. `database.transaction()` skips the authority check and has 123 call sites. The retry helper `run_transaction` has 0 callers.
 - **PJ2 — Whole-workspace chat save (High).** See CM1.
 - **PJ3 — Job fencing gaps (High).**
-  - `job_compat.complete_job`/`fail_job` read the current owner and lease token from the row, then pass the same values into the fenced repository call, so the check always passes ✔ ([job_compat.py:219-299](../src/app/persistence/job_store.py#L219-L299)).
+  - `job_compat.complete_job`/`fail_job` read the current owner and lease token from the row, then pass the same values into the fenced repository call, so the check always passes ✔ ([job_compat.py:219-299](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/persistence/job_compat.py#L219-L299)).
   - `CompleteJobRequest` has no token field.
   - The durable worker verifies the lease in one transaction and finalizes in another.
   - `update_progress`, `update_job_input`, `update_job_stages`, `finalize_cancel` and `delete_job` are not fenced.
@@ -1090,7 +1091,7 @@ Strengths are listed in section 4. Findings not covered above:
 - **TR2 — No strategy or monitor contract (High).**
   - Strategy kinds are a closed `Literal["gap_pullback_v1","stoch_rsi_5m_v1"]` with a union and an if/else row mapper (`strategy_repository.py:30,34,113-117`). Adding one touches 8 or more backend modules plus the frontend.
   - Every other capability — AI shadow v1/v2/v3, deep recovery, prospective gap/economic, Solana, interday discovery — is its own module with a copy-pasted start/stop/loop monitor.
-  - [trading_routes.py](../src/app/gateway/trading_routes.py) hard-wires 18 routers and 22 monitors ✔.
+  - [trading_routes.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/gateway/trading_routes.py) hard-wires 18 routers and 22 monitors ✔.
   - There are 83 `strategy_*` modules (42.5K lines).
 - **TR3 — One worker, one event loop, blocking work (High).**
   - CPU-bound Decimal evaluators run on the loop, processing candidates one at a time.
@@ -1129,7 +1130,7 @@ Strengths are listed in section 4. Findings not covered above:
 ### 11.4 RPG — 3/10
 
 - **RPG1 — Player actions use an unseeded RNG (Critical).**
-  - [action_resolver.py](../src/app/rpg/action_resolver.py)'s own docstring says "No randomness without explicit seed".
+  - [action_resolver.py](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/app/rpg/action_resolver.py)'s own docstring says "No randomness without explicit seed".
   - The main-path caller `runtime_part09.py:469` calls `resolve_player_action(gated_state, action)` with no seed ✔.
   - `_make_rng(None)` therefore returns an OS-entropy `random.Random()` ✔, which is used for attack and skill rolls.
   - Replay, state-hash certification, dispute auditing and the README's determinism claim all fail on the main path.
@@ -1220,7 +1221,7 @@ Strengths are listed in section 4. Findings not covered above:
 
 - **FE1 — The browser runtime is unmanaged global patching (Critical; R8 not fixed).**
   - `viewRuntime` makes 47 initializer calls: 37 return a cleanup that is dropped, 10 return nothing. 9 more modules install themselves on import.
-  - [router.tsx:82-85](../src/apps/web/src/app/router.tsx#L82-L85) starts the runtime in an effect with no cleanup.
+  - [router.tsx:82-85](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/app/router.tsx#L82-L85) starts the runtime in an effect with no cleanup.
   - There are 15 live fetch wrappers. One (`assistant-context-controller.ts:114-119,229-244`) rewrites chat POSTs to another endpoint and changes the body.
   - Importing `characterClient.ts` installs avatar and viseme bridges and the Live2D renderer.
   - Adding disposal naively is unsafe: the existing cleanups restore a fetch reference captured at install time, which would drop any wrapper installed later.
@@ -1241,7 +1242,7 @@ Strengths are listed in section 4. Findings not covered above:
   - 1,671 `!important`.
   - Themes are 686 attribute-selector overrides; `liquid-glass-theme.css` targets 221 feature class names.
   - 125 CSS custom properties against 6,675 hard-coded color literals.
-  - [main.tsx:12-35](../src/apps/web/src/main.tsx#L12-L35) loads 24 stylesheets eagerly, with themes after features ✔.
+  - [main.tsx:12-35](https://github.com/autonomx/omnix/blob/7bd17af0821c20bbe73311106c66ab2120bb7d1e/src/apps/web/src/main.tsx#L12-L35) loads 24 stylesheets eagerly, with themes after features ✔.
   - Mantine's custom palette is never used.
 - **FE7 — Feature boundaries (Medium).**
   - chatbot and assistant-workspace import each other (21 edges one way, 13 back).
