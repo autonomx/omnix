@@ -1,6 +1,8 @@
 """Stable memory services consumed by prompt and conversation features."""
 from __future__ import annotations
 
+from importlib import import_module
+
 from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 from app.assistant_memory.owner_defaults import default_memory_service
 from app.assistant_memory.selection import estimate_memory_tokens, select_memory_records
@@ -63,3 +65,18 @@ def owner_memory_repository():
     from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 
     return production_owner_memory_repository()
+
+
+# Services apps import through this contract, loaded on first use (ADR-0016).
+_LAZY_EXPORTS = {
+    "CharacterHermesSyncStatus": "character_hermes_adapter",
+    "export_character_memory_to_hermes": "character_hermes_adapter",
+    "import_character_hermes_memory": "character_hermes_adapter",
+}
+
+
+def __getattr__(name: str):
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(f"app.assistant_memory.{module}"), name)

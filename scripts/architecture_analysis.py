@@ -295,9 +295,15 @@ class SourceAnalysis:
                     feature_id = ast.literal_eval(values["id"])
                 except (KeyError, ValueError, TypeError):
                     continue
-                dependency_node = values.get("depends_on")
+                # depends_on and uses both declare a one-way contract dependency;
+                # only depends_on also requires the other feature to be enabled.
                 try:
-                    dependencies = ast.literal_eval(dependency_node) if dependency_node is not None else ()
+                    dependencies = tuple(
+                        item
+                        for key in ("depends_on", "uses")
+                        if values.get(key) is not None
+                        for item in ast.literal_eval(values[key])
+                    )
                 except (ValueError, TypeError):
                     continue
                 if (

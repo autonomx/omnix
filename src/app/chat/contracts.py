@@ -1,6 +1,8 @@
 """Stable Chat services and data types consumed by neighboring features."""
 from __future__ import annotations
 
+from importlib import import_module
+
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -148,3 +150,22 @@ __all__ = [
     "resolve_effective_provider_id",
     "resolve_system_session_identity",
 ]
+
+
+# Services apps import through this contract, loaded on first use (ADR-0016).
+_LAZY_EXPORTS = {
+    "stream_live_call_greeting_chunks": "live_call_greeting",
+    "ProactiveDeliveryRequest": "live_conversation_proactive",
+    "ProactiveDeliveryResponse": "live_conversation_proactive",
+    "commit_proactive_delivery": "live_conversation_proactive",
+    "stream_proactive_turn_chunks": "live_conversation_proactive",
+    "ChatSessionStore": "character_store",
+    "default_chat_store": "character_store",
+}
+
+
+def __getattr__(name: str):
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(f"app.chat.{module}"), name)

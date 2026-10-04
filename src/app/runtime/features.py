@@ -126,6 +126,9 @@ class FeatureModule:
     tier: FeatureTier
     requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
     depends_on: tuple[str, ...] = ()
+    # Contracts this feature imports from features it can run without (ADR-0016):
+    # the import is declared and one-way, but the other feature may be disabled.
+    uses: tuple[str, ...] = ()
     config_model: type[BaseModel] | None = None
     routers: tuple[RouterFactory, ...] = ()
     internal_routers: tuple[RouterFactory, ...] = ()
@@ -149,5 +152,5 @@ class FeatureModule:
             raise ValueError(f"Feature {self.id} has invalid tier: {self.tier!r}")
         if any(not isinstance(item, ContributionSpec) for item in self.contributions):
             raise TypeError(f"Feature {self.id} contributions must be ContributionSpec values")
-        if self.id in self.depends_on:
+        if self.id in self.depends_on or self.id in self.uses:
             raise ValueError(f"Feature {self.id} cannot depend on itself")

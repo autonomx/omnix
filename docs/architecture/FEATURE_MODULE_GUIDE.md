@@ -19,6 +19,7 @@ A feature package exposes `feature.py` with one `FEATURE = FeatureModule(...)` v
 | `contributions` | Implementations of typed ports (`app.runtime.ports`) declared in another module's contract; the composition root binds them. |
 | `repositories`, `settings`, `permissions` | Persistence, configuration and permission declarations. |
 | `depends_on`, `requires` | Other features and runtime capabilities the feature needs. A feature imports another only through its `contracts` module, and only in the `depends_on` direction. |
+| `uses` | Features whose contracts this feature imports but can run without; unlike `depends_on`, they may be disabled, so the code must handle their absence. |
 
 Factories receive a `FeatureContext` (runtime configuration, capabilities, kernel services, a feature logger). A feature never imports the gateway composition root and never patches other packages at import time.
 

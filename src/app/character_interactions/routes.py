@@ -9,30 +9,30 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from app.companion_activity.initiative import (
+from app.companion_activity.contracts import (
     CompanionInitiativeAuthorityStore, InitiativeAcquireRequest,
     default_companion_initiative_authority,
 )
 from app.conversation.contracts import ChatSession
-from app.chat.live_call_greeting import stream_live_call_greeting_chunks
-from app.chat.live_conversation_proactive import (
+from app.chat.contracts import stream_live_call_greeting_chunks
+from app.chat.contracts import (
     ProactiveDeliveryRequest,
     ProactiveDeliveryResponse,
     commit_proactive_delivery,
     stream_proactive_turn_chunks,
 )
-from app.characters.live_call import CharacterLiveCallRuntime, resolve_live_call_runtime
-from app.characters.live_conversation_profile import (
+from app.characters.contracts import CharacterLiveCallRuntime, resolve_live_call_runtime
+from app.characters.contracts import (
     LiveConversationProfileEnvelope, LiveConversationProfileStore,
     LiveConversationProfileUpdate, default_live_conversation_profile_store,
 )
-from app.characters.management import (
+from app.characters.contracts import (
     CharacterDataActionRequest, CharacterDataActionResponse, CharacterDataExport,
     CharacterManagementService,
 )
-from app.characters.repository import CharacterConflictError, CharacterNotFoundError
-from app.characters.session_models import SetSessionInteractionRequest
-from app.characters.service import CharacterService, default_character_service
+from app.characters.contracts import CharacterConflictError, CharacterNotFoundError
+from app.characters.contracts import SetSessionInteractionRequest
+from app.characters.contracts import CharacterService, default_character_service
 _INITIATIVE_GENERATION = "session"
 
 def _utcnow() -> datetime:
@@ -86,12 +86,12 @@ def register_character_integration_routes(
     memory_service_factory: Callable[[], Any] | None = None,
     memory_repository_factory: Callable[[], Any] | None = None,
 ) -> None:
-    from app.assistant_memory.character_hermes_adapter import (
+    from app.assistant_memory.contracts import (
         CharacterHermesSyncStatus, export_character_memory_to_hermes,
         import_character_hermes_memory,
     )
-    from app.assistant_memory import default_memory_service, resolve_chat_scope
-    from app.characters.interaction import character_hermes_sync_enabled
+    from app.assistant_memory.contracts import default_memory_service, resolve_chat_scope
+    from app.characters.contracts import character_hermes_sync_enabled
     get_memory_service = memory_service_factory or default_memory_service
     if memory_repository_factory is None:
 

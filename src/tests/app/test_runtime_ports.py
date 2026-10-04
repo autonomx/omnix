@@ -128,3 +128,19 @@ def test_composition_builds_contributions_from_the_feature_context(monkeypatch):
     assert ports.optional(ONE_OR_NONE).greet() == "hello"
     # Composition also binds its own exactly-one ports (the chat store factory).
     assert gateway.state.port_bindings.owners() == {"chat.store_factory": 1, "test.greeter": 1}
+
+
+def test_feature_uses_must_name_catalog_features(monkeypatch):
+    from app.runtime import feature_catalog
+
+    feature = FeatureModule(id="chat", title="Chat", tier="platform", uses=("no-such-feature",))
+    monkeypatch.setattr(feature_catalog, "load_feature", lambda _feature_id: feature)
+    with pytest.raises(ValueError, match="uses unknown features"):
+        feature_catalog.enabled_feature_ids(RuntimeConfig(enabled_features=("chat",)))
+
+
+def test_a_used_feature_may_be_disabled():
+    from app.runtime.feature_catalog import enabled_feature_ids
+
+    selected = enabled_feature_ids(RuntimeConfig(disabled_features=("research",)))
+    assert "trading" in selected and "research" not in selected

@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat import ChatSessionStore, default_chat_store
+from app.chat.contracts import ChatSessionStore, default_chat_store
 
 from .activity_bridge import (
     DesktopCompanionActivityBridge,

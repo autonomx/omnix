@@ -1,7 +1,8 @@
 """Image feature contract (ADR-0016): job payloads and the ports other modules implement."""
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -137,3 +138,31 @@ class CharacterAvatarFinisher(Protocol):
 CHARACTER_AVATAR_FINISHER: Port[CharacterAvatarFinisher] = Port(
     "image.character_avatar_finisher", CharacterAvatarFinisher, "at_most_one",
 )
+
+
+# Image services other modules use, loaded on first use (ADR-0016): importing
+# the contract does not load providers or reference-asset code.
+_ENTRY_POINTS = {
+    "BaseImageProvider": "providers.base",
+    "ImageGenerationResult": "providers.base",
+    "FluxKleinImageProvider": "providers.flux_klein_provider",
+    "ImageReferenceError": "reference_assets",
+    "close_image_references": "reference_assets",
+    "load_image_reference_assets": "reference_assets",
+}
+
+if TYPE_CHECKING:
+    from .providers.base import BaseImageProvider as BaseImageProvider, ImageGenerationResult as ImageGenerationResult
+    from .providers.flux_klein_provider import FluxKleinImageProvider as FluxKleinImageProvider
+    from .reference_assets import (
+        ImageReferenceError as ImageReferenceError,
+        close_image_references as close_image_references,
+        load_image_reference_assets as load_image_reference_assets,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    module = _ENTRY_POINTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(f"{__package__}.{module}"), name)

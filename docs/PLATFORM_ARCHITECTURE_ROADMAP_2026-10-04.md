@@ -824,7 +824,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-1.2 | done | — | 2026-10-04 | composition_imports_outside_composition 32 → 0; AL001 107 → 69 (with PA-1.3 work); boot imports 2077 (unchanged) | `runtime_document_services` deleted (23 call sites use their own persistence); assist review documents moved into chat; repository factories moved to their owners; 4 unused factories deleted; chat's default store comes from the composition-bound `CHAT_STORE_FACTORY` port |
 | PA-1.3 | in progress | — | 2026-10-04 | string_runtime_hooks 3 → 0; reverse_contract_imports 22 → 16; AL001 76 → 70; AL015 5 → 4; boot imports 2077 | Steps 1, 2 and 5 done (typed ports; hooks deleted). Step 3: RPG done (`ASSIST_READOUTS`), research done (`CHAT_RESEARCH`; research routes moved with pinned permissions; research-mode compatibility moved to `app.conversation`). Remaining: characters (needs conversation-segment ownership moved out of characters), assistant tools, the chat store wiring (last composition import). Step 4 (prompt budget) remains; memory excluded (PA-3.2) |
 | PA-1.4 | not started | — | — | — | |
-| PA-1.5 | not started | — | — | — | |
+| PA-1.5 | in progress | — | 2026-10-04 | AL001 69 → 41; app_to_app_imports 0 | New `FeatureModule.uses` (optional contract dependency). Trading uses research, RPG uses image, desktop companion uses assistant-memory; character interactions, desktop companion, RPG and characters import platform services only through contracts (lazy exports). `replay` was folded into the RPG unit in PA-0.2. Remaining: memory imports (PA-3.2) |
 | PA-2.1 | not started | — | — | — | |
 | PA-2.2 | not started | — | — | — | |
 | PA-2.3 | not started | — | — | — | |

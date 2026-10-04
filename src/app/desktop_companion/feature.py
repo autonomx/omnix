@@ -22,5 +22,7 @@ FEATURE = FeatureModule(
     title="Desktop Companion",
     tier="app",
     depends_on=("chat", "companion-activity"),
+    # Reads and records companion memory when assistant-memory is enabled.
+    uses=("assistant-memory",),
     routers=(_router,),
 )

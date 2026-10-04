@@ -479,3 +479,16 @@ def test_reference_migrations_uses_immutable_resolved_commit(tmp_path):
                     "commit", "--quiet", "-m", "synthetic migration reference"], cwd=root, check=True, capture_output=True)
     assert lint.reference_migrations(root, "HEAD") == {OLD: lint.checksum("SELECT 1\n")}
     assert lint.reference_migrations(root, "origin/main") is None
+
+
+def test_a_declared_use_allows_the_contract_import_in_one_direction():
+    sources = {
+        APP + "image/feature.py": feature("image", "platform"),
+        APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='T', tier='app', uses=('image',))\n",
+        APP + "image/contracts.py": "class Provider: ...\n",
+        APP + "rpg/adapter.py": "from app.image.contracts import Provider\n",
+    }
+    assert not layer_violations(sources)
+
+    sources[APP + "rpg/adapter.py"] = "from app.image.providers import Provider\n"
+    assert layer_violations(sources)

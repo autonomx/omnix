@@ -60,6 +60,9 @@ def enabled_feature_ids(config: RuntimeConfig) -> tuple[str, ...]:
     selected -= disabled
     for feature_id in tuple(selected):
         feature = load_feature(feature_id)
+        unknown_uses = set(feature.uses) - set(FEATURE_CATALOG)
+        if unknown_uses:
+            raise ValueError(f"Feature {feature_id} uses unknown features: {sorted(unknown_uses)}")
         missing = set(feature.depends_on) - selected
         if missing:
             raise ValueError(
