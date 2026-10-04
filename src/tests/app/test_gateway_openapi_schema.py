@@ -10,7 +10,8 @@ from typing import Any
 from fastapi.routing import APIRoute
 
 from app.gateway.main import create_gateway_app
-from scripts.export_gateway_openapi import normalize_contract
+from app.runtime.feature_catalog import FEATURE_CATALOG
+from scripts.export_gateway_openapi import KERNEL_OWNER, ROUTE_OWNERS_FILE, normalize_contract, route_owners
 
 
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
@@ -142,3 +143,15 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
 
     assert checked > 100, "route walk must see the composed feature routes"
     assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES
+
+
+def test_generated_route_owners_are_current() -> None:
+    generated_dir = Path(__file__).resolve().parents[3] / "src" / "apps" / "web" / "src" / "api" / "generated"
+    generated = json.loads((generated_dir / ROUTE_OWNERS_FILE).read_text(encoding="utf-8"))["operations"]
+    app = create_gateway_app()
+    current = route_owners(normalize_contract(app.openapi(), app), app.state.route_owners)
+
+    assert generated == current, "route owners are stale; run `npm --workspace @omnix/web run api:schema`"
+    assert set(current.values()) <= {KERNEL_OWNER, *FEATURE_CATALOG}
+    assert current["GET /api/trading/paper/accounts/{account_id}/protections/{instrument_id}"] == "trading"
+    assert current["POST /api/jobs"] == KERNEL_OWNER

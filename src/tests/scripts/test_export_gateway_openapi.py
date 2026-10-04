@@ -1,4 +1,4 @@
-from scripts.export_gateway_openapi import _require_serialized_defaults, _stabilize_equivalent_io_schemas
+from scripts.export_gateway_openapi import _require_serialized_defaults, _stabilize_equivalent_io_schemas, route_owners
 import json
 from pathlib import Path
 
@@ -116,3 +116,21 @@ def test_factory_defaults_count_as_defaults():
     _require_serialized_defaults(schema, factory_fields={"Alert": frozenset({"tags"})})
 
     assert schema["components"]["schemas"]["Alert"]["required"] == ["id", "tags"]
+
+
+def test_route_owners_name_each_documented_operation_and_default_to_kernel():
+    schema = {"paths": {
+        "/api/trading/protections/{instrument_id}": {"get": {}, "delete": {}, "parameters": []},
+        "/api/jobs": {"post": {}},
+    }}
+    owners = {
+        ("GET", "/api/trading/protections/{instrument_id:path}"): "trading",
+        ("DELETE", "/api/trading/protections/{instrument_id:path}"): "trading",
+        ("GET", "/api/undocumented"): "chat",
+    }
+
+    assert route_owners(schema, owners) == {
+        "DELETE /api/trading/protections/{instrument_id}": "trading",
+        "GET /api/trading/protections/{instrument_id}": "trading",
+        "POST /api/jobs": "kernel",
+    }

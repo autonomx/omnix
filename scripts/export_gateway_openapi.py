@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -283,16 +284,44 @@ def _lenient_operations(app: object) -> frozenset[tuple[str, str]]:
     return frozenset(operations)
 
 
-def export_schema() -> dict[str, object]:
-    """Return the gateway OpenAPI document exactly as the web contract stores it."""
+KERNEL_OWNER = "kernel"
+ROUTE_OWNERS_FILE = "route-owners.json"
+_HTTP_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
+
+
+def route_owners(schema: dict[str, object], owners: dict[tuple[str, str], str]) -> dict[str, str]:
+    """Each documented operation ("METHOD path") and the feature that mounted it, else kernel (PA-2.4)."""
+    # OpenAPI drops path converters: a route's `{instrument_id:path}` is documented as `{instrument_id}`.
+    owners = {(method, re.sub(r"\{([^}:]+):[^}]*\}", r"{\1}", path)): owner for (method, path), owner in owners.items()}
+    paths = schema.get("paths")
+    result: dict[str, str] = {}
+    for path, item in sorted(paths.items() if isinstance(paths, dict) else ()):
+        for method in sorted(item):
+            if method in _HTTP_METHODS:
+                result[f"{method.upper()} {path}"] = owners.get((method.upper(), path), KERNEL_OWNER)
+    return result
+
+
+def _gateway_app() -> object:
     src_dir = _repo_root() / "src"
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
     from app.gateway.main import create_gateway_app
 
-    app = create_gateway_app()
-    return normalize_contract(app.openapi(), app)
+    return create_gateway_app()
+
+
+def export_contract() -> tuple[dict[str, object], dict[str, str]]:
+    """The gateway OpenAPI document as the web contract stores it, and its route owners."""
+    app = _gateway_app()
+    schema = normalize_contract(app.openapi(), app)
+    return schema, route_owners(schema, dict(getattr(app.state, "route_owners", {}) or {}))
+
+
+def export_schema() -> dict[str, object]:
+    """Return the gateway OpenAPI document exactly as the web contract stores it."""
+    return export_contract()[0]
 
 
 def main(argv: list[str]) -> int:
@@ -302,9 +331,14 @@ def main(argv: list[str]) -> int:
 
     output_path = (_repo_root() / argv[1]).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    schema = export_schema()
+    schema, owners = export_contract()
     output_path.write_text(
         json.dumps(schema, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    # Route ownership lives beside the document, which stays unchanged (PA-2.4).
+    (output_path.parent / ROUTE_OWNERS_FILE).write_text(
+        json.dumps({"operations": owners}, indent=2) + "\n",
         encoding="utf-8",
     )
     return 0

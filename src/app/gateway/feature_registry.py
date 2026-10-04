@@ -55,6 +55,26 @@ def _router_paths(router) -> list[str]:
     ]
 
 
+def _router_operations(router) -> list[tuple[str, str]]:
+    """Every (METHOD, path) the router serves, with nested routers' prefixes applied."""
+    from fastapi.routing import APIRoute
+
+    try:
+        from fastapi.routing import iter_route_contexts
+    except ImportError:  # FastAPI without lazy router inclusion
+        return [
+            (method, str(route.path))
+            for route in router.routes if isinstance(route, APIRoute)
+            for method in sorted(route.methods)
+        ]
+    return [
+        (method, str(context.path or context.original_route.path))
+        for context in iter_route_contexts(router.routes)
+        if isinstance(context.original_route, APIRoute)
+        for method in sorted(context.original_route.methods)
+    ]
+
+
 def _register_feature_modules(gateway) -> None:
     config = gateway.state.runtime_config
     capabilities = gateway.state.runtime_capabilities
@@ -65,6 +85,7 @@ def _register_feature_modules(gateway) -> None:
     loaded_features = []
     internal_paths: list[str] = []
     public_paths: list[str] = []
+    route_owners: dict[tuple[str, str], str] = {}
     port_bindings: list[PortBinding] = []
     job_handlers = JobHandlerRegistry()
     # Kernel-owned synthetic job used by canaries and deployment tests.
@@ -106,8 +127,13 @@ def _register_feature_modules(gateway) -> None:
         # else the feature's read/write default.
         permission_guard = feature_permission_guard(feature.id)
         for router_factory in feature.routers:
+            router = router_factory(context)
+            for operation in _router_operations(router):
+                owner = route_owners.setdefault(operation, feature.id)
+                if owner != feature.id:
+                    raise RuntimeError(f"{operation[0]} {operation[1]} is mounted by both {owner} and {feature.id}")
             gateway.include_router(
-                router_factory(context),
+                router,
                 dependencies=[Depends(feature_guard(feature.id)), Depends(permission_guard)],
             )
         for router_factory in feature.internal_routers:
@@ -144,6 +170,8 @@ def _register_feature_modules(gateway) -> None:
     gateway.state.port_bindings = bindings
     gateway.state.internal_route_paths = tuple(dict.fromkeys(internal_paths))
     gateway.state.public_route_paths = tuple(dict.fromkeys(public_paths))
+    # Which feature mounted each public operation (PA-2.4); unlisted ones are kernel routes.
+    gateway.state.route_owners = dict(sorted(route_owners.items()))
     gateway.state.feature_modules = tuple(registered)
     gateway.state.loaded_feature_modules = tuple(loaded_features)
     gateway.state.job_handler_registry = job_handlers
