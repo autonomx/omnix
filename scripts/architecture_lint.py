@@ -18,7 +18,7 @@ from architecture_analysis import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = tuple(f"AL{number:03}" for number in range(1, 15))
+RULES = tuple(f"AL{number:03}" for number in range(1, 16))
 MIGRATIONS = "src/app/persistence/migrations/"
 REGISTRY = "resources/architecture/migration-checksums.json"
 SCOPE = "tracked_nonvendor_production_python_and_migrations"
@@ -130,6 +130,16 @@ def migration_sql_violations(path: str, sql: str) -> list[Violation]:
     return violations
 
 
+def reciprocal_violations(analysis: SourceAnalysis) -> list[Violation]:
+    """AL015 (ADR-0016): two packages or modules that import each other at any scope.
+
+    AL002 sees only module-level imports; imports inside functions hide the same
+    dependency cycles from it.
+    """
+    return [Violation("AL015", "src/" + first.replace(".", "/") + "/", f"{first}<->{second}", 1)
+            for first, second in analysis.reciprocal_dependencies()]
+
+
 def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
     # The metric counts reciprocal package pairs. Lint additionally rejects
     # longer module-level package cycles, whose edges may use different modules.
@@ -186,7 +196,8 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
 
 def measure(sources: dict[str, str], config: dict, protected: dict[str, str]) -> dict:
     analysis = SourceAnalysis(sources, config)
-    violations = analysis.violations() + cycle_violations(analysis) + migration_violations(sources, protected)
+    violations = (analysis.violations() + cycle_violations(analysis) + reciprocal_violations(analysis)
+                  + migration_violations(sources, protected))
     counts = Counter((item.rule, item.path, item.fingerprint) for item in violations)
     lines = {}
     for item in violations:

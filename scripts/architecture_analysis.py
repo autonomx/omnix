@@ -114,6 +114,14 @@ def qualified_name(node: ast.AST | None, aliases: dict[str, str] | None = None) 
     return ""
 
 
+def imported_modules(node: ast.Import | ast.ImportFrom, path: str, modules: dict[str, str]) -> list[str]:
+    """The modules one import statement names, preferring a submodule over its package."""
+    if isinstance(node, ast.Import):
+        return [item.name for item in node.names]
+    base = import_target(node, path)
+    return sorted({f"{base}.{item.name}" if f"{base}.{item.name}" in modules else base for item in node.names})
+
+
 def import_target(node: ast.ImportFrom, path: str) -> str:
     if not node.level:
         return node.module or ""
@@ -230,6 +238,7 @@ class ModuleUnit:
     ids: frozenset[str]
     depends_on: frozenset[str]
     tier_conflicts: tuple[str, ...]
+    words: frozenset[str] = frozenset()
 
 
 def load_layers(path: Path) -> dict:
@@ -260,7 +269,10 @@ class SourceAnalysis:
 
     def feature_dependencies(self) -> dict[str, tuple[str, frozenset[str], str | None]]:
         """Read package feature ids, declared dependencies and tiers without imports."""
-        result: dict[str, tuple[str, frozenset[str], str | None]] = {}
+        return {package: declaration[:3] for package, declaration in self._feature_declarations().items()}
+
+    def _feature_declarations(self) -> dict[str, tuple[str, frozenset[str], str | None, str]]:
+        result: dict[str, tuple[str, frozenset[str], str | None, str]] = {}
         for module, path in self.modules.items():
             if not module.endswith(".feature"):
                 continue
@@ -298,14 +310,19 @@ class SourceAnalysis:
                     tier = ast.literal_eval(values["tier"]) if "tier" in values else None
                 except (ValueError, TypeError):
                     tier = None
-                result[package] = (feature_id, frozenset(dependencies), tier if isinstance(tier, str) else None)
+                try:
+                    title = ast.literal_eval(values["title"]) if "title" in values else ""
+                except (ValueError, TypeError):
+                    title = ""
+                result[package] = (feature_id, frozenset(dependencies), tier if isinstance(tier, str) else None,
+                                   title if isinstance(title, str) else "")
                 break
         return result
 
     def module_units(self) -> dict[str, ModuleUnit]:
         """Feature packages grouped into ADR-0016 module units, keyed by the outermost package."""
         if self._units is None:
-            features = self.feature_dependencies()
+            features = self._feature_declarations()
             roots = [package for package in features
                      if not any(other != package and package_prefix(package, other) for other in features)]
             units = {}
@@ -320,6 +337,12 @@ class SourceAnalysis:
                     depends_on=frozenset().union(*(member[1] for member in members.values())) - ids,
                     tier_conflicts=tuple(sorted(package for package, member in members.items()
                                                 if package != root and member[2] != tier)),
+                    words=frozenset(
+                        word for package, member in members.items()
+                        for word in (package.rsplit(".", 1)[-1], *member[0].replace("-", "_").split("_"),
+                                     member[0].replace("-", "_"), *re.findall(r"[a-z0-9]+", member[3].lower()))
+                        if len(word) >= 3 and word not in {"and", "the"}
+                    ),
                 )
             self._units = units
         return self._units
@@ -340,6 +363,62 @@ class SourceAnalysis:
             return None
         _, layer, unit = max(candidates)
         return layer, unit
+
+    def reciprocal_dependencies(self) -> list[tuple[str, str]]:
+        """Distinct packages or modules that import each other at any import scope (AL015).
+
+        Composition imports everything by design; an import into composition is
+        already an AL001 violation, so pairs with composition are not repeated here.
+        """
+        layers = self.config.get("layers", {})
+        edges: dict[str, set[str]] = {}
+        for source, targets in self.import_edges().items():
+            source_layer = self.layer_of(source)
+            if (source_layer is None or "*" in layers[source_layer[0]]["may_import"]
+                    or not is_production(self.modules[source], self.config)):
+                continue
+            for target in targets:
+                target_layer = self.layer_of(target)
+                if (target_layer is not None and target_layer[1] != source_layer[1]
+                        and "*" not in layers[target_layer[0]]["may_import"]
+                        and is_production(self.modules[target], self.config)):
+                    edges.setdefault(source_layer[1], set()).add(target_layer[1])
+        return sorted({tuple(sorted((source, target))) for source, targets in edges.items()
+                       for target in targets if source in edges.get(target, set())})
+
+    def boundary_imports(self) -> dict[str, list[str]]:
+        """ADR-0016 import sites by kind, for the roadmap ratchet metrics."""
+        layers = self.config.get("layers", {})
+        units = self.module_units()
+        contract = self.config.get("modules", {}).get("contract_module", "contracts")
+        result: dict[str, list[str]] = {
+            "reverse_contract_imports": [], "app_to_app_imports": [],
+            "composition_imports_outside_composition": [],
+        }
+        for path, tree in self.trees.items():
+            if not is_production(path, self.config):
+                continue
+            source = self.layer_of(module_name(path))
+            if source is None or "*" in layers[source[0]]["may_import"]:
+                continue
+            for node, _ in scoped_nodes(tree):
+                if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                    continue
+                for target in imported_modules(node, path, self.modules):
+                    destination = self.layer_of(target)
+                    if destination is None or destination[1] == source[1]:
+                        continue
+                    site = f"{path}:{node.lineno}:{target}"
+                    if "*" in layers[destination[0]]["may_import"]:
+                        result["composition_imports_outside_composition"].append(site)
+                    source_tier = layers[source[0]].get("tier")
+                    target_tier = layers[destination[0]].get("tier")
+                    if source_tier == target_tier == "app":
+                        result["app_to_app_imports"].append(site)
+                    if (source_tier and target_tier and package_prefix(target, destination[1] + "." + contract)
+                            and units[source[1]].ids & units[destination[1]].depends_on):
+                        result["reverse_contract_imports"].append(site)
+        return {key: sorted(sites) for key, sites in result.items()}
 
     def import_allowed(self, source: tuple[str, str], target: tuple[str, str], module: str) -> bool:
         """ADR-0016 dependency rules for one import between classified modules."""
@@ -433,11 +512,7 @@ class SourceAnalysis:
 
             for node, scope in scoped_nodes(tree):
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
-                    imports = ([item.name for item in node.names] if isinstance(node, ast.Import)
-                               else sorted({f"{import_target(node, path)}.{item.name}"
-                                            if f"{import_target(node, path)}.{item.name}" in self.modules
-                                            else import_target(node, path) for item in node.names}))
-                    for target in imports:
+                    for target in imported_modules(node, path, self.modules):
                         target_layer = self.layer_of(target)
                         if source_layer and target_layer and not self.import_allowed(source_layer, target_layer, target):
                             add("AL001", node, target, scope)

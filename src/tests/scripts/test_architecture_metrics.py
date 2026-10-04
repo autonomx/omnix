@@ -35,7 +35,8 @@ def observed(sources, *, openapi=None):
 
 CASES = [
     ("package_cycles", {APP + "jobs/a.py": "import app.chat.b", APP + "chat/b.py": "import app.jobs.a"}, 1),
-    ("layer_violations", {APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": ""}, 1),
+    ("layer_violations", {APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": "",
+                          APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')"}, 1),
     ("foreign_attribute_assignments", {APP + "gateway/a.py": "import another\nanother.method = replacement"}, 1),
     ("install_hook_functions", {APP + "gateway/a.py": "import another\ndef install_hook():\n    another.method = replacement"}, 1),
     ("fastapi_init_patchers", {APP + "gateway/a.py": "from fastapi import FastAPI as App\nApp.__init__ = wrapper\nApp.__init__ = second"}, 1),
@@ -80,6 +81,30 @@ CASES = [
     ("web_error_boundaries", {WEB + "app/router.tsx": "createRoute({ errorComponent: ErrorPage });"}, 1),
     ("eslint_baseline_disables", {WEB + "app/a.ts": "// eslint-disable-next-line no-console\nconsole.log('x');"}, 1),
     ("inline_prompt_strings", {APP + "chat/a.py": "SYSTEM_PROMPT = " + repr("You are a careful assistant. Answer only using the evidence in this conversation.")}, 1),
+    # Platform architecture roadmap (ADR-0016), PA-0.3.
+    ("reverse_contract_imports", {**{APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                     APP + "characters/feature.py": "FEATURE = FeatureModule(id='characters', title='Characters', tier='platform', depends_on=('chat',))"},
+                                  APP + "characters/contracts.py": "", APP + "chat/a.py": "from app.characters.contracts import Port"}, 1),
+    ("any_scope_package_cycles", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                  APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": "def work():\n    import app.jobs.a"}, 1),
+    ("app_to_app_imports", {APP + "trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
+                            APP + "story/feature.py": "FEATURE = FeatureModule(id='story', title='Story', tier='app')",
+                            APP + "story/a.py": "import app.trading.b", APP + "trading/b.py": ""}, 1),
+    ("uncovered_app_modules", {APP + "loose_helper.py": "VALUE = 1"}, 1),
+    ("composition_imports_outside_composition", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                                 APP + "chat/a.py": "def work():\n    import app.gateway.b", APP + "gateway/b.py": ""}, 1),
+    ("string_runtime_hooks", {APP + "chat/a.py": "from app.runtime.hooks import RuntimeHookSpec\nHOOK = RuntimeHookSpec('name', handler)"}, 1),
+    ("kernel_tools_naming_apps", {APP + "trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
+                                  APP + "capabilities/registry.py": "_cap('trading.quote', 'Quote', 'd', category='trading')\n_cap('market.status', 'Status', 'd', category='trading')\n_cap('hermes.get_status', 'Status', 'd', category='platform')\n_cap('calendar.read', 'Read', 'd', category='productivity')"}, 2),
+    ("platform_feature_specific_files", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+                                         APP + "platform/settings_profile_rpg.py": "", APP + "platform/settings_profile_core.py": ""}, 1),
+    ("module_repositories_in_kernel", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+                                       APP + "persistence/rpg_turn_repository.py": "", APP + "persistence/job_repository.py": ""}, 1),
+    ("web_feature_clients_in_shared_api", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+                                           WEB + "api/rpgMapClient.ts": "export const map = 1;", WEB + "api/rpgMapClient.test.ts": "",
+                                           WEB + "api/http.ts": "export const http = 1;"}, 1),
+    ("src_root_service_entrypoints", {"src/tts_server.py": "", "src/launch.py": ""}, 1),
+    ("tracked_runtime_data_in_src", {APP + "data/sessions.json": "{}"}, 1),
 ]
 
 
@@ -156,6 +181,11 @@ def test_scorecard_covers_every_roadmap_metric():
     appendix = roadmap.split("### Appendix E", 1)[1].split("### Appendix F", 1)[0]
     import re
     expected = set(re.findall(r"\| `([^`]+)` \|", appendix))
+    # The platform architecture roadmap (ADR-0016) adds metrics in its
+    # "New metrics" lists, one list per work package that builds them.
+    platform = (SCRIPTS.parent / "docs/PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md").read_text(encoding="utf-8")
+    for block in re.findall(r"- \*\*New metrics:\*\*\n((?:  - `[^`]+`.*\n)+)", platform):
+        expected |= set(re.findall(r"  - `([^`]+)`", block))
     result = observed({})
     assert set(result["metrics"]) == expected
     exercised = {case[0] for case in CASES} | metrics.RUNTIME_METRICS | {"web_openapi_path_coverage_pct"}

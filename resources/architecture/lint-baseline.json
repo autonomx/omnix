@@ -15,7 +15,8 @@
     "AL011",
     "AL012",
     "AL013",
-    "AL014"
+    "AL014",
+    "AL015"
   ],
   "schema_version": 1,
   "scope": "tracked_nonvendor_production_python_and_migrations",
@@ -1012,6 +1013,69 @@
       ],
       "path": "src/app/persistence/cli.py",
       "rule": "AL011"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.agent_runtime<->app.assistant_tools",
+      "lines": [
+        1
+      ],
+      "path": "src/app/agent_runtime/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.agent_runtime<->app.chat",
+      "lines": [
+        1
+      ],
+      "path": "src/app/agent_runtime/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.assets<->app.image",
+      "lines": [
+        1
+      ],
+      "path": "src/app/assets/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.assets<->app.persistence",
+      "lines": [
+        1
+      ],
+      "path": "src/app/assets/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.chat<->app.rpg",
+      "lines": [
+        1
+      ],
+      "path": "src/app/chat/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.persistence<->app.security",
+      "lines": [
+        1
+      ],
+      "path": "src/app/persistence/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.providers<->app.rpg",
+      "lines": [
+        1
+      ],
+      "path": "src/app/providers/",
+      "rule": "AL015"
     }
   ]
 }

@@ -54,6 +54,7 @@ CASES = [
     ("AL012", {APP + "chat/a.py": "local_tenant_context()"}),
     ("AL013", {APP + "rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
+    ("AL015", {APP + "chat/a.py": "def work():\n    import app.rpg.b", APP + "rpg/b.py": "def work():\n    import app.chat.a"}),
 ]
 
 
@@ -75,7 +76,7 @@ def test_command_line_programs_may_print_their_output(path, source):
     assert "AL008" not in {entry["rule"] for entry in report({path: source})["violations"]}
 
 
-def test_all_fourteen_rules_are_exercised():
+def test_all_rules_are_exercised():
     assert {rule for rule, _ in CASES} == set(lint.RULES)
 
 

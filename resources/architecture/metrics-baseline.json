@@ -2482,6 +2482,123 @@
       }
     ],
     "package_cycles": [],
+    "platform_architecture": {
+      "any_scope_package_cycles": [
+        "app.agent_runtime<->app.assistant_tools",
+        "app.agent_runtime<->app.chat",
+        "app.assets<->app.image",
+        "app.assets<->app.persistence",
+        "app.chat<->app.rpg",
+        "app.persistence<->app.security",
+        "app.providers<->app.rpg"
+      ],
+      "app_to_app_imports": [],
+      "composition_imports_outside_composition": [
+        "src/app/assets/__init__.py:282:app.runtime_composition",
+        "src/app/assistant_memory/service.py:73:app.runtime_composition",
+        "src/app/assistant_tools/config_store.py:102:app.runtime_document_services",
+        "src/app/assistant_tools/config_store.py:120:app.runtime_document_services",
+        "src/app/character_interactions/routes.py:107:app.runtime_composition",
+        "src/app/characters/avatar_service.py:30:app.runtime_composition",
+        "src/app/characters/service.py:86:app.runtime_composition",
+        "src/app/chat/assist/review.py:25:app.runtime_document_services",
+        "src/app/chat/assist/review.py:39:app.runtime_document_services",
+        "src/app/chat/assist/review.py:47:app.runtime_document_services",
+        "src/app/chat/assist/review.py:57:app.runtime_document_services",
+        "src/app/chat/character_store.py:350:app.runtime_composition",
+        "src/app/chat/compaction.py:242:app.runtime_composition",
+        "src/app/image/asset_store.py:114:app.runtime_document_services",
+        "src/app/image/asset_store.py:123:app.runtime_document_services",
+        "src/app/image/asset_store.py:162:app.runtime_document_services",
+        "src/app/image/asset_store.py:67:app.runtime_document_services",
+        "src/app/image/asset_store.py:95:app.runtime_document_services",
+        "src/app/providers/cache_status.py:175:app.runtime_composition",
+        "src/app/research/source_store.py:262:app.runtime_composition",
+        "src/app/rpg/npc_evolution/profile_store.py:158:app.runtime_document_services",
+        "src/app/rpg/npc_evolution/profile_store.py:308:app.runtime_document_services",
+        "src/app/rpg/npc_evolution/profile_store.py:73:app.runtime_document_services",
+        "src/app/rpg/session/durable_store.py:247:app.runtime_document_services",
+        "src/app/rpg/session/durable_store.py:294:app.runtime_document_services",
+        "src/app/rpg/session/durable_store.py:308:app.runtime_document_services",
+        "src/app/rpg/session/durable_store.py:332:app.runtime_document_services",
+        "src/app/rpg/session/interaction_event_store.py:135:app.runtime_document_services",
+        "src/app/rpg/session/interaction_event_store.py:149:app.runtime_document_services",
+        "src/app/rpg/session/interaction_event_store.py:28:app.runtime_document_services",
+        "src/app/rpg/session/interaction_event_store.py:58:app.runtime_document_services",
+        "src/app/rpg/session/list_summaries.py:127:app.runtime_document_services"
+      ],
+      "kernel_tools_naming_apps": [
+        "market.status",
+        "research.web_search",
+        "trading.market_quote"
+      ],
+      "module_repositories_in_kernel": [
+        "src/app/persistence/rpg_narration_event_repository.py"
+      ],
+      "platform_feature_specific_files": [
+        "src/app/platform/settings_profile_podcast.py",
+        "src/app/platform/settings_profile_rpg.py",
+        "src/app/platform/settings_profile_story.py",
+        "src/app/platform/settings_profile_voice.py"
+      ],
+      "reverse_contract_imports": [
+        "src/app/chat/assist/live_agent.py:10:app.assistant_tools.contracts",
+        "src/app/chat/assist/modes.py:38:app.rpg.contracts",
+        "src/app/chat/assistant_context/models.py:10:app.research.contracts",
+        "src/app/chat/assistant_context/routes.py:19:app.research.contracts",
+        "src/app/chat/assistant_context/service.py:7:app.research.contracts",
+        "src/app/chat/character_store.py:8:app.assistant_memory.contracts",
+        "src/app/chat/character_store.py:9:app.characters.contracts",
+        "src/app/chat/compaction.py:18:app.assistant_memory.contracts",
+        "src/app/chat/context_budget.py:9:app.assistant_memory.contracts",
+        "src/app/chat/history_search.py:13:app.assistant_memory.contracts",
+        "src/app/chat/live_agent_store.py:23:app.assistant_tools.contracts",
+        "src/app/chat/memory_commands.py:9:app.assistant_memory.contracts",
+        "src/app/chat/memory_prompt.py:16:app.assistant_memory.contracts",
+        "src/app/chat/memory_prompt.py:18:app.characters.contracts",
+        "src/app/chat/memory_prompt.py:8:app.assistant_memory.contracts",
+        "src/app/chat/models.py:12:app.characters.contracts",
+        "src/app/chat/prompt_assembly.py:11:app.characters.contracts",
+        "src/app/chat/prompt_store.py:14:app.assistant_memory.contracts",
+        "src/app/chat/research_citations.py:6:app.research.contracts",
+        "src/app/chat/research_release.py:4:app.research.contracts",
+        "src/app/chat/retention_policy.py:6:app.assistant_memory.contracts",
+        "src/app/chat/sqlite_store.py:9:app.assistant_memory.contracts"
+      ],
+      "src_root_service_entrypoints": [
+        "src/nemotron_eou_stt_server.py",
+        "src/parakeet_stt_runtime.py",
+        "src/parakeet_stt_server.py",
+        "src/tts_server.py"
+      ],
+      "string_runtime_hooks": [
+        "src/app/assistant_tools/executor.py:154",
+        "src/app/characters/feature.py:93",
+        "src/app/characters/feature.py:94"
+      ],
+      "tracked_runtime_data_in_src": [
+        "src/app/data/sessions.json",
+        "src/app/data/voice_clones.json"
+      ],
+      "uncovered_app_modules": [],
+      "web_feature_clients_in_shared_api": [
+        "src/apps/web/src/api/hermesClient.ts",
+        "src/apps/web/src/api/hermesRpgApprovedFlowClient.ts",
+        "src/apps/web/src/api/hermesRpgSequenceClient.ts",
+        "src/apps/web/src/api/rpgCampaignLoreClient.ts",
+        "src/apps/web/src/api/rpgGenesis.ts",
+        "src/apps/web/src/api/rpgGenesisPresentation.ts",
+        "src/apps/web/src/api/rpgMapActionClient.ts",
+        "src/apps/web/src/api/rpgMapClient.ts",
+        "src/apps/web/src/api/rpgWorldAuthoringClient.ts",
+        "src/apps/web/src/api/rpgWorldBundleClient.ts",
+        "src/apps/web/src/api/rpgWorldDeletionClient.ts",
+        "src/apps/web/src/api/rpgWorldGenerationReviewClient.ts",
+        "src/apps/web/src/api/rpgWorldImageClient.ts",
+        "src/apps/web/src/api/rpgWorldLibraryClient.ts",
+        "src/apps/web/src/api/rpgWorldProfileClient.ts"
+      ]
+    },
     "process_local_state": [
       {
         "approved": true,
@@ -6496,6 +6613,16 @@
       "target": 0,
       "value": 0
     },
+    "any_scope_package_cycles": {
+      "direction": "lower",
+      "target": 0,
+      "value": 7
+    },
+    "app_to_app_imports": {
+      "direction": "lower",
+      "target": 0,
+      "value": 0
+    },
     "async_handlers_without_await": {
       "direction": "lower",
       "target": 0,
@@ -6525,6 +6652,11 @@
       "direction": "lower",
       "target": 0,
       "value": 7
+    },
+    "composition_imports_outside_composition": {
+      "direction": "lower",
+      "target": 0,
+      "value": 32
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6576,6 +6708,11 @@
       "target": 0,
       "value": 0
     },
+    "kernel_tools_naming_apps": {
+      "direction": "lower",
+      "target": 0,
+      "value": 3
+    },
     "largest_class_lines": {
       "direction": "lower",
       "target": 800,
@@ -6591,6 +6728,11 @@
       "target": 1,
       "value": 3
     },
+    "module_repositories_in_kernel": {
+      "direction": "lower",
+      "target": 0,
+      "value": 1
+    },
     "mypy_ignored_modules": {
       "direction": "lower",
       "target": "0 kernel; <=10% total",
@@ -6605,6 +6747,11 @@
       "direction": "lower",
       "target": 0,
       "value": 0
+    },
+    "platform_feature_specific_files": {
+      "direction": "lower",
+      "target": 0,
+      "value": 4
     },
     "platform_table_sql_outside_owner": {
       "direction": "lower",
@@ -6631,6 +6778,11 @@
       "target": 100,
       "value": 100.0
     },
+    "reverse_contract_imports": {
+      "direction": "lower",
+      "target": 0,
+      "value": 22
+    },
     "rls_coverage_pct": {
       "direction": "higher",
       "target": 100,
@@ -6656,10 +6808,25 @@
       "target": 10,
       "value": 0
     },
+    "src_root_service_entrypoints": {
+      "direction": "lower",
+      "target": 0,
+      "value": 4
+    },
     "star_imports": {
       "direction": "lower",
       "target": 0,
       "value": 0
+    },
+    "string_runtime_hooks": {
+      "direction": "lower",
+      "target": 0,
+      "value": 3
+    },
+    "tracked_runtime_data_in_src": {
+      "direction": "lower",
+      "target": 0,
+      "value": 2
     },
     "unbounded_fetchall": {
       "direction": "lower",
@@ -6667,6 +6834,11 @@
       "value": 0
     },
     "unbounded_module_caches": {
+      "direction": "lower",
+      "target": 0,
+      "value": 0
+    },
+    "uncovered_app_modules": {
       "direction": "lower",
       "target": 0,
       "value": 0
@@ -6690,6 +6862,11 @@
       "direction": "higher",
       "target": "number of routes",
       "value": 1
+    },
+    "web_feature_clients_in_shared_api": {
+      "direction": "lower",
+      "target": 0,
+      "value": 15
     },
     "web_fetch_assignment_files": {
       "direction": "lower",
@@ -6749,5 +6926,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "60db30518cb05b868608d574614f9ea91b6ea6bacf9a53f8eb2230d8ef20de76"
+  "source_digest": "58f67f98d67a495ba97f1b16e2ce8905ec23a6ca63259617f032d9f4cea2bbcc"
 }

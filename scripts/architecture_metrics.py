@@ -57,6 +57,13 @@ LOWER_TARGETS: dict[str, int | str] = {
     "web_global_css_files": 10,
     "eslint_baseline_disables": 0, "boot_imported_modules": "ratchet",
     "inline_prompt_strings": 10,
+    # Platform architecture roadmap (ADR-0016), PA-0.3.
+    "reverse_contract_imports": 0, "any_scope_package_cycles": 0, "app_to_app_imports": 0,
+    "uncovered_app_modules": 0, "composition_imports_outside_composition": 0,
+    "string_runtime_hooks": 0, "kernel_tools_naming_apps": 0,
+    "platform_feature_specific_files": 0, "module_repositories_in_kernel": 0,
+    "web_feature_clients_in_shared_api": 0, "src_root_service_entrypoints": 0,
+    "tracked_runtime_data_in_src": 0,
 }
 HIGHER_TARGETS: dict[str, int | str] = {
     "rls_coverage_pct": 100, "retention_policies_executed_pct": 100,
@@ -1097,12 +1104,85 @@ def runtime_values(report: dict | None, digest: str) -> tuple[dict, list[str]]:
     return values, errors
 
 
+def _kernel_tools_naming_modules(analysis: SourceAnalysis) -> list[str]:
+    """Kernel-catalog tools whose namespace is a feature id or whose category is an app id."""
+    tree = analysis.trees.get("src/app/capabilities/registry.py")
+    units = analysis.module_units().values()
+    feature_ids = {feature_id for unit in units for feature_id in unit.ids}
+    app_ids = {feature_id for unit in units if unit.tier == "app" for feature_id in unit.ids}
+    found = []
+    for node in ast.walk(tree) if tree is not None else ():
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_cap"
+                and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+            continue
+        capability = node.args[0].value
+        category = next((keyword.value.value for keyword in node.keywords
+                         if keyword.arg == "category" and isinstance(keyword.value, ast.Constant)), None)
+        # Platform-category tools (the Hermes sidecar's status tools) stay in the kernel.
+        if category != "platform" and (capability.split(".", 1)[0] in feature_ids or category in app_ids):
+            found.append(capability)
+    return sorted(found)
+
+
+def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, Any]]:
+    """Platform architecture roadmap (ADR-0016) ratchets; evidence names every site."""
+    boundaries = analysis.boundary_imports()
+    units = analysis.module_units().values()
+    words = {word for unit in units for word in unit.words}
+    layers = analysis.config.get("layers", {})
+    kernel = tuple(layers.get("kernel", {}).get("packages", ()))
+    web_features = {PurePosixPath(path).parts[5].replace("-", "") for path in analysis.sources
+                    if path.startswith("src/apps/web/src/features/") and len(PurePosixPath(path).parts) > 6}
+    client_words = web_features | {word.replace("_", "") for word in words}
+    evidence: dict[str, Any] = {key: sites for key, sites in boundaries.items()}
+    evidence["any_scope_package_cycles"] = [f"{first}<->{second}" for first, second in analysis.reciprocal_dependencies()]
+    evidence["uncovered_app_modules"] = sorted(
+        item.path for item in analysis.violations() if item.rule == "AL001" and item.fingerprint.endswith(":<uncovered>")
+    )
+    evidence["string_runtime_hooks"] = sorted(
+        f"{path}:{node.lineno}" for path, tree in analysis.trees.items()
+        if is_production(path, analysis.config) for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and qualified_name(node.func).split(".")[-1] == "RuntimeHookSpec"
+    )
+    evidence["kernel_tools_naming_apps"] = _kernel_tools_naming_modules(analysis)
+    evidence["platform_feature_specific_files"] = sorted(
+        path for path in analysis.sources
+        if path.startswith("src/app/platform/settings_profile_") and path.endswith(".py")
+        and PurePosixPath(path).stem.removeprefix("settings_profile_") in words
+    )
+    evidence["module_repositories_in_kernel"] = sorted(
+        path for path in analysis.trees
+        if path.endswith("_repository.py") and any(module_name(path).startswith(package + ".") for package in kernel)
+        and set(PurePosixPath(path).stem.split("_")) & words
+    )
+    evidence["web_feature_clients_in_shared_api"] = sorted(
+        path for path in analysis.sources
+        if PurePosixPath(path).parent == PurePosixPath("src/apps/web/src/api")
+        and path.endswith((".ts", ".tsx")) and not re.search(r"\.(test|spec)\.tsx?$", path)
+        and any(PurePosixPath(path).stem.lower().startswith(word) for word in client_words)
+    )
+    evidence["src_root_service_entrypoints"] = sorted(
+        path for path in analysis.sources
+        if PurePosixPath(path).parent == PurePosixPath("src") and path.endswith(".py")
+        and PurePosixPath(path).stem.endswith(("_server", "_runtime"))
+    )
+    evidence["tracked_runtime_data_in_src"] = sorted(
+        path for path in analysis.sources if path.startswith("src/app/data/") and path.endswith(".json")
+    )
+    values = {key: len(sites) for key, sites in evidence.items()}
+    return values, evidence
+
+
 def measure(sources: dict[str, str], config: dict, *, openapi: dict | None = None, runtime_report: dict | None = None) -> dict:
     analysis = SourceAnalysis(sources, config)
     values, evidence = python_metrics(analysis)
+    platform_values, platform_evidence = platform_metrics(analysis)
+    evidence["platform_architecture"] = platform_evidence
     web_values, web_evidence = web_metrics(analysis.sources, openapi or {})
     for key, value in web_values.items():
         values[key] = value
+    # After the web metrics, which zero-fill every web_* target they do not measure.
+    values.update(platform_values)
     values["functions_over_150_lines"] += sum(
         end - start + 1 > 150 for path, source in analysis.sources.items()
         if path.endswith((".ts", ".tsx")) for start, end in js_function_spans(source)

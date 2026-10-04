@@ -270,23 +270,18 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
   - `reverse_contract_imports`
   - `any_scope_package_cycles`
   - `app_to_app_imports`
-  - `uncovered_app_packages`
+  - `uncovered_app_modules`
   - `composition_imports_outside_composition`
   - `string_runtime_hooks`
   - `kernel_tools_naming_apps`
   - `platform_feature_specific_files`
-  - `tables_without_owner`
-  - `historical_owner_map_additions`
-  - `kernel_named_module_tables`
-  - `tables_without_isolation_or_exemption` (PostgreSQL check)
   - `module_repositories_in_kernel`
-  - `cross_module_sql`
-  - `app_migrations_in_kernel_dir`
   - `web_feature_clients_in_shared_api`
   - `src_root_service_entrypoints`
   - `tracked_runtime_data_in_src`
-- **New lint rule AL015:** reciprocal package dependencies at any import scope, including function-level imports. AL002 stays module-level; AL015 catches the cycles that lazy imports hide.
-- **Acceptance:** the metrics report the values in §2, and AL015 is baselined at 3.
+- **Metrics that need later machinery** are added by the WP that builds it: `tables_without_owner`, `historical_owner_map_additions`, `kernel_named_module_tables` and `cross_module_sql` in PA-2.2 (the ownership map and AL016); `app_migrations_in_kernel_dir` in PA-2.3; `tables_without_isolation_or_exemption` in PA-4.1 (a PostgreSQL check).
+- **New lint rule AL015:** reciprocal package dependencies at any import scope, including function-level imports. AL002 stays module-level; AL015 catches the cycles that lazy imports hide. Pairs with composition are excluded, because an import into composition is already an AL001 violation.
+- **Acceptance:** the metrics report the values in §2, and AL015 is baselined at its measured value.
 
 ---
 
@@ -824,10 +819,10 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 |---|---|---|---|---|---|
 | PA-0.1 | done | — | 2026-10-04 | — | [ADR-0016](architecture/ADR-0016-platform-tiers.md) accepted by the owner; linked from `ARCHITECTURE.md` and the FeatureModule guide |
 | PA-0.2 | done | — | 2026-10-04 | AL001: 59 → 110 (policy re-seed: 27 reverse-direction contract imports, 26 imports of `runtime_document_services`, 16 from the newly covered `character_interactions`; −8 now inside one module); uncovered `app.*` modules: 0; lint regressions: 11 new | Required `FeatureModule.tier`; tiers read from `feature.py`, not `layers.toml`; one-direction contract rule; `contracts/` packages accepted; stale `app.hermes` removed; transitional `[modules.package_owners]` for `assistant_memory_v2`, `replay`, `image_http_client`. Feature matrix, lint/metrics tests (270), unit gate, mypy and metrics check pass |
-| PA-0.3 | in progress | — | 2026-10-04 | — | Started |
+| PA-0.3 | done | — | 2026-10-04 | New ratchets: reverse_contract_imports 22, any_scope_package_cycles 7 (AL015), app_to_app_imports 0, uncovered_app_modules 0, composition_imports_outside_composition 32, string_runtime_hooks 3, kernel_tools_naming_apps 3, platform_feature_specific_files 4, module_repositories_in_kernel 1, web_feature_clients_in_shared_api 15, src_root_service_entrypoints 4, tracked_runtime_data_in_src 2 | AL015 rule (any-scope reciprocal dependencies, composition excluded). Six table/SQL/RLS metrics move to PA-2.2, PA-2.3 and PA-4.1. Lint and metrics tests (253) and the metrics check with a fresh runtime report pass |
 | PA-1.1 | not started | — | — | — | After PA-1.3 step 1 |
 | PA-1.2 | not started | — | — | — | |
-| PA-1.3 | not started | — | — | — | Step 1 first; memory excluded (PA-3.2) |
+| PA-1.3 | in progress | — | 2026-10-04 | — | Started with step 1 (the `contributions` mechanism), which PA-1.1 needs; memory excluded (PA-3.2) |
 | PA-1.4 | not started | — | — | — | |
 | PA-1.5 | not started | — | — | — | |
 | PA-2.1 | not started | — | — | — | |
