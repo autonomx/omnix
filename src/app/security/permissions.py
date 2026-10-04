@@ -180,6 +180,10 @@ KERNEL_DEFAULTS: tuple[tuple[str, tuple[str, str] | None], ...] = (
 # Per-route permissions that differ from the owning feature's default,
 # reviewed in one place: (method, route path) -> permission.
 ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
+    # Research's assistant routes moved from chat (PA-1.3) and keep chat's permissions.
+    ("GET", "/api/assistant/research/status"): "chat:read",
+    ("PATCH", "/api/assistant/context/research/jobs/{job_id}/plan"): "chat:write",
+    ("POST", "/api/assistant/context/research/jobs/{job_id}/start"): "chat:write",
     # Approvals need an approver or admin, never just a member.
     ("POST", "/api/assistant/tools/proposals/{proposal_id}/approve"): "tools:approve",
     ("POST", "/api/hermes/approve"): "tools:approve",

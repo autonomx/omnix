@@ -19,6 +19,15 @@ InteractionMode = Literal["system", "character"]
 SharedMemoryAccess = Literal["none", "read_only"]
 TranscriptPolicy = Literal["persistent", "temporary", "none"]
 ResearchMode = Literal["disabled", "quick", "deep"]
+
+
+def normalize_research_mode(value: Any) -> ResearchMode:
+    """Normalize only canonical values; legacy aliases use the compatibility adapter."""
+
+    normalized = str(value or "").strip().lower()
+    if normalized in {"disabled", "quick", "deep"}:
+        return normalized  # type: ignore[return-value]
+    return "disabled"
 ChatMessageRole = Literal["system", "user", "assistant"]
 DEFAULT_PROFILE_ID = "profile:local"
 DEFAULT_WORKSPACE_ID = "workspace:default"

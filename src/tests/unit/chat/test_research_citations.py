@@ -1,5 +1,6 @@
 from app.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
 from app.chat.research_citations import validate_completed_research_reply
+from app.research.api import ChatResearchAdapter
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -39,7 +40,10 @@ def test_completed_quick_reply_persists_validation_and_manifest(tmp_path) -> Non
             },
         }
     ]
-    updated = validate_completed_research_reply(store, session.id, user.id, context_items)
+    # Research supplies the citation rendering through chat's CHAT_RESEARCH port.
+    updated = validate_completed_research_reply(
+        store, session.id, user.id, context_items, render=ChatResearchAdapter().render_cited_reply,
+    )
 
     assert updated is not None
     saved = updated.messages[-1]

@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 75,
+      "AL001": 70,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -643,10 +643,9 @@
       "app.replay.rpg_adapter",
       "app.research",
       "app.research.adversarial_gate",
+      "app.research.api",
       "app.research.cache",
-      "app.research.compatibility",
       "app.research.contracts",
-      "app.research.credential_routes",
       "app.research.deep_manifest",
       "app.research.deep_research_diagnostics",
       "app.research.evidence",
@@ -2507,9 +2506,6 @@
       ],
       "reverse_contract_imports": [
         "src/app/chat/assist/live_agent.py:10:app.assistant_tools.contracts",
-        "src/app/chat/assistant_context/models.py:10:app.research.contracts",
-        "src/app/chat/assistant_context/routes.py:19:app.research.contracts",
-        "src/app/chat/assistant_context/service.py:7:app.research.contracts",
         "src/app/chat/character_store.py:8:app.assistant_memory.contracts",
         "src/app/chat/character_store.py:9:app.characters.contracts",
         "src/app/chat/compaction.py:18:app.assistant_memory.contracts",
@@ -2523,8 +2519,6 @@
         "src/app/chat/models.py:12:app.characters.contracts",
         "src/app/chat/prompt_assembly.py:11:app.characters.contracts",
         "src/app/chat/prompt_store.py:14:app.assistant_memory.contracts",
-        "src/app/chat/research_citations.py:6:app.research.contracts",
-        "src/app/chat/research_release.py:4:app.research.contracts",
         "src/app/chat/retention_policy.py:6:app.assistant_memory.contracts",
         "src/app/chat/sqlite_store.py:9:app.assistant_memory.contracts"
       ],
@@ -3441,6 +3435,27 @@
       {
         "approved": true,
         "category": "cache",
+        "invalidation": "reset_research_compatibility_telemetry",
+        "kind": "container",
+        "line": 26,
+        "max_entries": 8,
+        "path": "src/app/conversation/research_compatibility.py",
+        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+        "symbol": "_counts",
+        "ttl_seconds": 2592000.0
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "lock",
+        "line": 25,
+        "path": "src/app/conversation/research_compatibility.py",
+        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
+        "symbol": "_lock"
+      },
+      {
+        "approved": true,
+        "category": "cache",
         "kind": "lock",
         "line": 498,
         "path": "src/app/desktop_companion/activity_bridge.py",
@@ -4115,27 +4130,6 @@
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
         "symbol": "_CACHE_STATES",
         "ttl_seconds": 86400.0
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "invalidation": "reset_research_compatibility_telemetry",
-        "kind": "container",
-        "line": 26,
-        "max_entries": 8,
-        "path": "src/app/research/compatibility.py",
-        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-        "symbol": "_counts",
-        "ttl_seconds": 2592000.0
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "kind": "lock",
-        "line": 25,
-        "path": "src/app/research/compatibility.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_lock"
       },
       {
         "approved": true,
@@ -5121,6 +5115,16 @@
       },
       {
         "approved": true,
+        "path": "src/app/conversation/research_compatibility.py",
+        "symbol": "_counts"
+      },
+      {
+        "approved": true,
+        "path": "src/app/conversation/research_compatibility.py",
+        "symbol": "_lock"
+      },
+      {
+        "approved": true,
         "path": "src/app/desktop_companion/activity_bridge.py",
         "symbol": "_default_activity_bridge_lock"
       },
@@ -5448,16 +5452,6 @@
         "approved": true,
         "path": "src/app/research/cache.py",
         "symbol": "_CACHE_STATES"
-      },
-      {
-        "approved": true,
-        "path": "src/app/research/compatibility.py",
-        "symbol": "_counts"
-      },
-      {
-        "approved": true,
-        "path": "src/app/research/compatibility.py",
-        "symbol": "_lock"
       },
       {
         "approved": true,
@@ -6604,7 +6598,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 75
+      "value": 70
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6664,7 +6658,7 @@
     "reverse_contract_imports": {
       "direction": "lower",
       "target": 0,
-      "value": 21
+      "value": 16
     },
     "rls_coverage_pct": {
       "direction": "higher",
@@ -6809,5 +6803,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "79fca19a2dcb6ed864a78d4ab42e9be3c3a062caa8dae9505a007239fa0b8c6d"
+  "source_digest": "07ddf2ba4ce6c66b0a7403268812603864a3b0a61b7c192fafa970032a042079"
 }

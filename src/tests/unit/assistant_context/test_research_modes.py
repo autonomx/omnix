@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 from app.chat.assistant_context.models import AssistantContextChatRequest
 from app.research import normalize_research_mode, resolve_research_mode
-from app.research.compatibility import (
+from app.conversation.research_compatibility import (
     record_legacy_research_aliases,
     research_compatibility_status,
     reset_research_compatibility_telemetry,
@@ -75,7 +75,7 @@ def test_temporary_server_aliases_are_normalized_warned_and_counted(monkeypatch)
 
 
 def test_research_compatibility_telemetry_has_fixed_keys_and_expires(monkeypatch) -> None:
-    import app.research.compatibility as compatibility
+    import app.conversation.research_compatibility as compatibility
 
     now = {"value": 10.0}
     monkeypatch.setattr(compatibility.time, "monotonic", lambda: now["value"])

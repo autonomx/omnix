@@ -7,7 +7,9 @@ from app.research.persistence.report_repository import PostgresResearchReportRep
 from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
 from app.runtime.features import FeatureContext
-from .credential_routes import create_research_credential_router
+from app.chat.contracts import CHAT_RESEARCH
+from app.runtime.ports import ContributionSpec
+from .api import create_research_credential_router
 
 from .jobs import DeepResearchJobInput, execute_research_job
 
@@ -18,20 +20,31 @@ def _execute(context: JobExecutionContext, job):
 
 
 
-def _research_router(_context: FeatureContext):
+def _research_router(context: FeatureContext):
     from fastapi import APIRouter
+
+    from .api import register_research_job_routes
 
     router = APIRouter()
     router.include_router(create_research_credential_router())
+    services = context.services
+    register_research_job_routes(router, job_store_factory=lambda: services.jobs)
     return router
+
+
+def _chat_research(_context: FeatureContext):
+    from .api import ChatResearchAdapter
+
+    return ChatResearchAdapter()
 
 FEATURE = FeatureModule(
     id="research",
     title="Research",
     tier="platform",
-    # Deep research is asked for in chat and answers into chat sessions, and chat
-    # reaches research only through research.contracts (WP-8.2).
+    # Deep research is asked for in chat and answers into chat sessions; research
+    # implements chat's CHAT_RESEARCH port, so chat never imports research (ADR-0016).
     depends_on=("chat",),
+    contributions=(ContributionSpec(CHAT_RESEARCH, _chat_research),),
     routers=(_research_router,),
     repositories=(
         RepositorySpec(PostgresResearchReportRepository, PostgresResearchReportRepository, "research_reports"),

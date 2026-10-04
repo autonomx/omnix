@@ -6,7 +6,16 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
-from app.conversation.contracts import ResearchMode
+from app.conversation.contracts import ResearchMode, normalize_research_mode
+# Research-mode compatibility moved to app.conversation (ADR-0016): chat's request
+# model needs it whether or not the research feature is enabled.
+from app.conversation.research_compatibility import (
+    LEGACY_RESEARCH_FIELDS as LEGACY_RESEARCH_FIELDS,
+    LEGACY_RESEARCH_MODES as LEGACY_RESEARCH_MODES,
+    legacy_research_aliases_enabled as legacy_research_aliases_enabled,
+    legacy_research_warnings as legacy_research_warnings,
+    record_legacy_research_aliases as record_legacy_research_aliases,
+)
 
 ResearchModeSource = Literal["turn", "conversation", "profile", "fallback"]
 ResearchStatus = Literal["completed", "partial", "failed", "canceled"]
@@ -22,15 +31,6 @@ RESEARCH_STAGE_IDS = (
     "synthesizing",
     "persisting",
 )
-
-
-def normalize_research_mode(value: Any) -> ResearchMode:
-    """Normalize only canonical values; legacy aliases use the compatibility adapter."""
-
-    normalized = str(value or "").strip().lower()
-    if normalized in {"disabled", "quick", "deep"}:
-        return normalized  # type: ignore[return-value]
-    return "disabled"
 
 
 class ResearchModeResolution(BaseModel):
@@ -219,11 +219,6 @@ class ResearchMessageMetadata(BaseModel):
 # another feature only through its ``contracts`` module. They load on first use
 # because the modules that define them import this one.
 _ENTRY_POINTS = {
-    "LEGACY_RESEARCH_FIELDS": "compatibility",
-    "LEGACY_RESEARCH_MODES": "compatibility",
-    "legacy_research_aliases_enabled": "compatibility",
-    "legacy_research_warnings": "compatibility",
-    "record_legacy_research_aliases": "compatibility",
     "citation_labels": "evidence",
     "prepare_evidence_context_items": "evidence",
     "render_answer_with_compatibility_fallback": "evidence",
@@ -254,13 +249,6 @@ _ENTRY_POINTS = {
 }
 
 if TYPE_CHECKING:
-    from .compatibility import (
-        LEGACY_RESEARCH_FIELDS as LEGACY_RESEARCH_FIELDS,
-        LEGACY_RESEARCH_MODES as LEGACY_RESEARCH_MODES,
-        legacy_research_aliases_enabled as legacy_research_aliases_enabled,
-        legacy_research_warnings as legacy_research_warnings,
-        record_legacy_research_aliases as record_legacy_research_aliases,
-    )
     from .evidence import (
         citation_labels as citation_labels,
         prepare_evidence_context_items as prepare_evidence_context_items,

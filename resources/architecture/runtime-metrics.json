@@ -351,6 +351,7 @@
         "app.conversation.live_profile",
         "app.conversation.performance_contract",
         "app.conversation.privacy",
+        "app.conversation.research_compatibility",
         "app.conversation.tts_stream_contract",
         "app.desktop_companion",
         "app.desktop_companion.activity_bridge",
@@ -541,10 +542,9 @@
         "app.replay.models",
         "app.replay.rpg_adapter",
         "app.research",
+        "app.research.api",
         "app.research.cache",
-        "app.research.compatibility",
         "app.research.contracts",
-        "app.research.credential_routes",
         "app.research.deep_manifest",
         "app.research.deep_research_diagnostics",
         "app.research.evidence",
@@ -2125,7 +2125,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8199,
+      "collected_tests": 8202,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-04T19:30:29.654292+00:00",
+  "measured_at": "2026-10-04T20:12:29.444980+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "79fca19a2dcb6ed864a78d4ab42e9be3c3a062caa8dae9505a007239fa0b8c6d"
+  "source_digest": "07ddf2ba4ce6c66b0a7403268812603864a3b0a61b7c192fafa970032a042079"
 }

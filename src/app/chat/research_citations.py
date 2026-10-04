@@ -1,13 +1,8 @@
 """Citation validation for completed research-backed chat replies."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
-
-from app.research.contracts import (
-    citation_labels,
-    render_answer_with_compatibility_fallback,
-    source_manifest_id,
-)
 
 from .concurrency import serialized_chat_mutation
 from .models import ChatSession
@@ -21,10 +16,11 @@ def validate_completed_research_reply(
     user_message_id: str,
     context_items: list[dict[str, Any]],
     *,
+    render: Callable[[str, list[dict[str, Any]]], tuple[str, dict[str, Any]] | None],
     show_diagnostics: bool = True,
 ) -> ChatSession | None:
-    labels = citation_labels(context_items)
-    if not labels:
+    """Apply research's citation rendering to the reply; ``render`` returns None without citations."""
+    if render("", context_items) is None:
         return store.get_session(session_id)
     session = store.get_session(session_id)
     if session is None:
@@ -59,15 +55,16 @@ def validate_completed_research_reply(
         )
     if assistant is None:
         return session
-    rendered = render_answer_with_compatibility_fallback(assistant.content, labels)
-    assistant.content = rendered.content
+    rendered = render(assistant.content, context_items)
+    if rendered is None:
+        return session
+    assistant.content, citation_metadata = rendered
     assistant.metadata.update(
         {
             "research_mode": "quick",
             "research_status": "completed",
             "research_diagnostics_enabled": show_diagnostics,
-            "source_manifest_id": source_manifest_id(context_items),
-            "citation_validation": rendered.validation.model_dump(mode="json"),
+            **citation_metadata,
         }
     )
     session.updated_at = assistant.created_at

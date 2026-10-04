@@ -1464,15 +1464,15 @@
   },
   {
     "default": "1",
-    "description": "Controls research legacy aliases enabled for research.",
-    "feature": "research",
+    "description": "Controls research legacy aliases enabled for conversation.",
+    "feature": "conversation",
     "name": "OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls research legacy alias sunset for research.",
-    "feature": "research",
+    "description": "Controls research legacy alias sunset for conversation.",
+    "feature": "conversation",
     "name": "OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET",
     "type": "string"
   },

@@ -101,10 +101,14 @@ def capability_runtime_installed():
     # without composing a gateway get the same runtime.
     from app.assistant_tools.executor import execute_with_grant
     from app.capabilities.executor import CAPABILITY_RUNTIME
+    from app.chat.contracts import CHAT_RESEARCH
+    from app.research.api import ChatResearchAdapter
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
 
+    # Every feature is enabled by default, so tests see the ports composition binds.
     install_port_bindings(PortBindings.build([
         PortBinding(CAPABILITY_RUNTIME, execute_with_grant, owner="assistant-tools"),
+        PortBinding(CHAT_RESEARCH, ChatResearchAdapter(), owner="research"),
     ]))
     yield
 

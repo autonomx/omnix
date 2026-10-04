@@ -1,6 +1,7 @@
 """Stable Chat services and data types consumed by neighboring features."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.runtime.ports import Port
@@ -10,7 +11,8 @@ from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.chat.live_call_prewarm import live_call_provider_affinity
 from app.chat.live_chat_async_sse_bridge import eager_async_sse_stream
 from app.chat.memory_prompt import resolve_prompt_memory
-from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
+from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest, SendChatMessageResponse
+from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.prompt_assembly import (
     PromptAssembly,
     build_prompt_assembly,
@@ -47,6 +49,46 @@ class AssistReadout(Protocol):
 ASSIST_READOUTS: Port[AssistReadout] = Port("chat.assist_readouts", AssistReadout, "many")
 
 
+@dataclass(frozen=True)
+class ResearchTurn:
+    """How research applies to one assistant-context turn, as chat sees it."""
+
+    requested_mode: str
+    effective_mode: str
+    status: str
+    reason: str
+    warnings: list[str] = field(default_factory=list)
+    release: dict[str, Any] = field(default_factory=dict)
+    notice: str | None = None
+    show_diagnostics: bool = False
+    unavailable: dict[str, Any] | None = None
+    state: Any = None
+
+
+class ChatResearch(Protocol):
+    """Research behaviour the assistant-context chat endpoints use (ADR-0016 port)."""
+
+    def resolve_turn(
+        self, request: Any, session_id: str, *, settings: Any = None, release_policy: Any = None, policy: Any = None,
+    ) -> ResearchTurn: ...
+
+    def begin_deep_research(
+        self, session_id: str, request: Any, *, chat_store: Any, job_store: Any, turn: ResearchTurn, send_request: Any,
+    ) -> SendChatMessageResponse: ...
+
+    def quick_context(
+        self, request: Any, *, web_search_factory: Any = None, quick_search_factory: Any = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]: ...
+
+    def render_cited_reply(
+        self, content: str, context_items: list[dict[str, Any]],
+    ) -> tuple[str, dict[str, Any]] | None: ...
+
+
+# The research feature contributes this; without it, turns run with research disabled.
+CHAT_RESEARCH: Port[ChatResearch] = Port("chat.research", ChatResearch, "at_most_one")
+
+
 def hermes_assist_status_payload() -> dict:
     from app.chat.assist.diagnostics import hermes_diagnostics_status_payload
 
@@ -67,6 +109,11 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "CHAT_RESEARCH",
+    "ChatResearch",
+    "ResearchTurn",
+    "SendChatMessageResponse",
+    "link_user_message_to_research_job",
     "ASSIST_READOUTS",
     "AssistReadout",
     "ChatMessage",

@@ -302,33 +302,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.research.contracts",
-      "lines": [
-        10
-      ],
-      "path": "src/app/chat/assistant_context/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.contracts",
-      "lines": [
-        19
-      ],
-      "path": "src/app/chat/assistant_context/routes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.contracts",
-      "lines": [
-        7
-      ],
-      "path": "src/app/chat/assistant_context/service.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
         8
@@ -479,24 +452,6 @@
         153
       ],
       "path": "src/app/chat/prompt_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.contracts",
-      "lines": [
-        6
-      ],
-      "path": "src/app/chat/research_citations.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.contracts",
-      "lines": [
-        4
-      ],
-      "path": "src/app/chat/research_release.py",
       "rule": "AL001"
     },
     {

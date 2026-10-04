@@ -1,10 +1,7 @@
 """Persist visible research release and downgrade metadata on chat replies."""
 from __future__ import annotations
 
-from app.research.contracts import (
-    research_release_notice,
-    ResearchReleaseDecision,
-)
+from typing import Any
 
 from .concurrency import serialized_chat_mutation
 from .models import ChatSession
@@ -16,7 +13,7 @@ def apply_research_release_decision(
     store: ChatSessionStore,
     session_id: str,
     user_message_id: str,
-    decision: ResearchReleaseDecision,
+    decision: Any,
 ) -> ChatSession | None:
     session = store.get_session(session_id)
     if session is None:
@@ -51,7 +48,7 @@ def apply_research_release_decision(
         )
     if assistant is None:
         return session
-    notice = research_release_notice(decision)
+    notice = getattr(decision, "notice", None)
     if notice and notice not in assistant.content:
         assistant.content = f"{assistant.content}\n\n> Research mode notice: {notice}".strip()
     assistant.metadata.update(
@@ -60,7 +57,7 @@ def apply_research_release_decision(
             "research_effective_mode": decision.effective_mode,
             "research_release_status": decision.status,
             "research_release_reason": decision.reason,
-            "research_release_warnings": decision.warnings,
+            "research_release_warnings": list(decision.warnings),
         }
     )
     store._save_session(session)  # noqa: SLF001 - one targeted session mutation

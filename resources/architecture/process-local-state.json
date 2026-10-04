@@ -1084,7 +1084,7 @@
       "invalidation": "clear_research_cache_states"
     },
     {
-      "path": "src/app/research/compatibility.py",
+      "path": "src/app/conversation/research_compatibility.py",
       "symbol": "_counts",
       "category": "cache",
       "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -1093,7 +1093,7 @@
       "invalidation": "reset_research_compatibility_telemetry"
     },
     {
-      "path": "src/app/research/compatibility.py",
+      "path": "src/app/conversation/research_compatibility.py",
       "symbol": "_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

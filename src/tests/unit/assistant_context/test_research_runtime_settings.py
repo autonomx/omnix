@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from app.chat.assistant_context.models import AssistantContextBuildResult
 from app.chat.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.research.compatibility import reset_research_compatibility_telemetry
+from app.conversation.research_compatibility import reset_research_compatibility_telemetry
+from app.research.api import register_research_job_routes
 from app.research.policy import ResearchPolicy
 from app.research.release_policy import ResearchReleasePolicy
 from app.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
@@ -187,6 +188,8 @@ def test_api_backed_environment_provider_overrides_duckduckgo_primary(tmp_path, 
         context_service_factory=lambda: context_service,
         settings_factory=lambda: settings,
     )
+    # The status route belongs to the research feature (PA-1.3).
+    register_research_job_routes(app, job_store_factory=lambda: job_store, settings_factory=lambda: settings)
 
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
@@ -213,9 +216,8 @@ def test_research_status_reports_provider_chain_without_exposing_secret(tmp_path
     reset_research_compatibility_telemetry()
     app = FastAPI()
     settings = runtime_settings()
-    register_assistant_context_routes(
+    register_research_job_routes(
         app,
-        chat_store_factory=lambda: ChatSessionStore(tmp_path / "chat.json"),
         job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs"),
         settings_factory=lambda: settings,
     )

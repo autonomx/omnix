@@ -4,17 +4,10 @@ from __future__ import annotations
 import time
 from typing import Callable
 
-from app.research.contracts import (
-    normalize_provider_chain,
-    prepare_evidence_context_items,
-    ProviderFallbackSearchClient,
-    QuickSearchService,
-    ReadablePageExtractor,
-    research_policy_from_env,
-    ResearchPolicy,
-    WebSearchClient,
-)
+from typing import Any
+
 from app.conversation.contracts import AssistantContextItem
+from app.runtime.ports import optional
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest
 from app.providers.desktop_vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
@@ -24,8 +17,9 @@ class AssistantContextService:
     def __init__(
         self,
         *,
-        web_search_factory: Callable[..., WebSearchClient] = WebSearchClient,
-        quick_search_factory: Callable[[], QuickSearchService] | None = None,
+        web_search_factory: Callable[..., Any] | None = None,
+        quick_search_factory: Callable[[], Any] | None = None,
+        research_factory: Callable[[], Any] | None = None,
         desktop_vision_factory: Callable[[], DesktopVisionClient | CodexDesktopVisionClient] = (
             default_desktop_vision_client
         ),
@@ -33,43 +27,14 @@ class AssistantContextService:
         self.web_search_factory = web_search_factory
         self.quick_search_factory = quick_search_factory
         self.desktop_vision_factory = desktop_vision_factory
+        self.research_factory = research_factory
 
-    def _quick_search_for(self, request: AssistantContextChatRequest) -> QuickSearchService:
-        if self.quick_search_factory is not None:
-            return self.quick_search_factory()
-        policy = (
-            ResearchPolicy(**request.internal_research_policy)
-            if request.internal_research_policy
-            else research_policy_from_env()
-        )
-        provider_chain = normalize_provider_chain(
-            request.internal_research_provider,
-            request.internal_research_provider_chain,
-        )
+    def _research(self):
+        if self.research_factory is not None:
+            return self.research_factory()
+        from app.chat.contracts import CHAT_RESEARCH
 
-        def create_client(timeout_seconds: float):
-            if len(provider_chain) > 1:
-                return ProviderFallbackSearchClient(
-                    providers=provider_chain,
-                    timeout_seconds=timeout_seconds,
-                    client_factory=self.web_search_factory,
-                )
-            try:
-                return self.web_search_factory(
-                    provider=provider_chain[0],
-                    timeout_seconds=timeout_seconds,
-                )
-            except TypeError:
-                try:
-                    return self.web_search_factory(timeout_seconds=timeout_seconds)
-                except TypeError:
-                    return self.web_search_factory()
-
-        return QuickSearchService(
-            client_factory=create_client,
-            research_policy=policy,
-            extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
-        )
+        return optional(CHAT_RESEARCH)
 
     def build(self, request: AssistantContextChatRequest) -> AssistantContextBuildResult:
         items: list[AssistantContextItem] = []
@@ -113,19 +78,17 @@ class AssistantContextService:
             diagnostics["live_repair_source_reason"] = repair.source_reason
             diagnostics["live_repair_confidence"] = repair.confidence
 
-        if request.web_research_mode == "quick":
-            execution = self._quick_search_for(request).search(
-                request.content,
-                request.web_search_max_results,
-                identity=request.internal_research_identity or "anonymous",
-            )
-            prepared = prepare_evidence_context_items(
-                [item.model_dump(mode="json") for item in execution.items]
+        research = self._research() if request.web_research_mode == "quick" else None
+        if request.web_research_mode == "quick" and research is None:
+            diagnostics["web_search_status"] = "research_unavailable"
+        elif request.web_research_mode == "quick":
+            prepared, search_diagnostics = research.quick_context(
+                request,
+                web_search_factory=self.web_search_factory,
+                quick_search_factory=self.quick_search_factory,
             )
             items.extend(AssistantContextItem.model_validate(item) for item in prepared)
-            for key, value in execution.diagnostics.items():
-                diagnostics[f"web_search_{key}"] = value
-            diagnostics["web_search_warnings"] = execution.warnings
+            diagnostics.update(search_diagnostics)
         elif request.web_research_mode == "deep":
             diagnostics["web_search_status"] = "deferred_to_deep_research"
         else:

@@ -139,8 +139,11 @@ role to permission list; `owner` cannot be changed).
 
 | Method | Route | Permission |
 |---|---|---|
+| PATCH | `/api/assistant/context/research/jobs/{job_id}/plan` | `chat:write` |
+| POST | `/api/assistant/context/research/jobs/{job_id}/start` | `chat:write` |
 | POST | `/api/assistant/memory/reset` | `memory:admin` |
 | POST | `/api/assistant/research/credentials` | `tools:connections:admin` |
+| GET | `/api/assistant/research/status` | `chat:read` |
 | POST | `/api/assistant/tools/connect/{tool_id}/oauth-client` | `tools:connections:admin` |
 | POST | `/api/assistant/tools/proposals/{proposal_id}/approve` | `tools:approve` |
 | POST | `/api/chat/sessions/{session_id}/live/material/promote` | `agent:promote` |
