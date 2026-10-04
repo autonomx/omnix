@@ -32,6 +32,10 @@ _STREAM_ERROR = object()
 _STREAM_BUFFER = 32
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def normalize_llm_provider_id(provider_id: str) -> str:
     value = str(provider_id or "").strip()
     return value.removeprefix("llm:") if value.startswith("llm:") else value
@@ -423,6 +427,23 @@ async def agent_chat_completion(
     completion_id = f"chatcmpl-omnix-{x_omnix_agent_run_id[:16]}"
     created = int(time.time())
 
+    outcome = await _complete_without_streaming(request, provider, messages, model_id, kwargs, budget, x_omnix_agent_run_id, provider_id, completion_id, created)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    iterator = await asyncio.to_thread(
+        provider.chat_completion,
+        messages,
+        model=model_id,
+        stream=True,
+        **kwargs,
+    )
+
+    return _stream_completion(iterator, completion_id, created, request, budget, x_omnix_agent_run_id, provider_id)
+
+
+async def _complete_without_streaming(request, provider, messages, model_id, kwargs, budget, x_omnix_agent_run_id, provider_id, completion_id, created):
+    """One provider call, metered against the run budget, as a chat.completion body."""
     if not request.stream:
         response = await asyncio.to_thread(
             provider.chat_completion,
@@ -468,15 +489,11 @@ async def agent_chat_completion(
             "choices": [_choice(response, delta=False)],
             "usage": response.usage or {},
         }
+    return _CONTINUE
 
-    iterator = await asyncio.to_thread(
-        provider.chat_completion,
-        messages,
-        model=model_id,
-        stream=True,
-        **kwargs,
-    )
 
+def _stream_completion(iterator, completion_id, created, request, budget, x_omnix_agent_run_id, provider_id):
+    """Stream the provider's chunks as SSE, then meter tokens; budget and provider errors end the stream with an error event."""
     async def generate():
         observed_input_tokens: int | None = None
         observed_output_tokens: int | None = None

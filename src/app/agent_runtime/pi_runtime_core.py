@@ -1070,124 +1070,132 @@ class PiRpcSession:
                 run_id=self.spec.run_id,
                 fields={"line_number": line_number, "raw_event_type": event_type or None},
             )
-            if event_type == "turn_start":
-                self._assistant_text_parts = []
-                self._terminal_assistant_text_emitted = False
-                self._turn_active = True
-            elif event_type == "agent_start":
-                self._turn_active = True
-            elif event_type in {"agent_settled", "agent_completed", "agent_error", "error"}:
-                self._turn_active = False
-            if event_type == "message_update":
-                delta = _assistant_text_delta(payload)
-                if delta:
-                    self._assistant_text_parts.append(delta)
-            elif event_type in {"message_end", "turn_end"}:
-                if _user_visible_assistant_text(payload):
-                    self._terminal_assistant_text_emitted = True
-            elif event_type == "agent_settled" and self._assistant_text_parts and not self._terminal_assistant_text_emitted:
-                recovered_text = "".join(self._assistant_text_parts).strip()[:12_000]
-                if recovered_text:
-                    recovered = AgentEvent(
-                        run_id=self.spec.run_id,
-                        event_type="model.message",
-                        payload={
-                            "source": "pi",
-                            "phase": "turn_end",
-                            "text": recovered_text,
-                            "task_revision_id": self._task_revision_id,
-                            "recovered_from_text_deltas": True,
-                        },
-                    )
-                    self._events.append(recovered)
-                    log_agent_activity(
-                        "pi.event.recovered_from_text_deltas",
-                        category="event",
-                        run_id=self.spec.run_id,
-                        fields={
-                            "event_type": recovered.event_type,
-                            "text_chars": len(recovered_text),
-                        },
-                    )
-                    if self.on_event is not None:
-                        try:
-                            self.on_event(recovered)
-                        except Exception as exc:
-                            self._stderr.append(
-                                f"event sink failed for {recovered.event_type}: {type(exc).__name__}: {exc}"
-                            )
-                            log_agent_activity(
-                                "pi.event_sink.failed",
-                                category="event",
-                                level="error",
-                                run_id=self.spec.run_id,
-                                fields={"event_type": recovered.event_type},
-                                error=exc,
-                                include_traceback=True,
-                            )
+            self._track_assistant_turn(event_type, payload)
             if event_type == "message_update" and not self._message_progress_due():
                 # Token deltas stay in memory (above); the event log gets at
                 # most one progress event a second (WP-7.4).
                 continue
-            tool_call_id = str(payload.get("toolCallId") or "")
-            revision_id = self._task_revision_id
-            if event_type == "tool_execution_start" and tool_call_id:
-                self._tool_revision_ids[tool_call_id] = self._task_revision_id
-                revision_id = self._tool_revision_ids[tool_call_id]
-            elif event_type in {"tool_execution_update", "tool_execution_end"} and tool_call_id:
-                revision_id = self._tool_revision_ids.get(tool_call_id)
-            event = self._event_normalizer(
-                self.spec.run_id,
-                payload,
-                task_revision_id=revision_id,
-            )
-            if event_type == "tool_execution_end" and tool_call_id:
-                self._tool_revision_ids.pop(tool_call_id, None)
-            if event is not None:
-                self._events.append(event)
+            self._emit_normalized_event(payload, event_type)
+
+    def _track_assistant_turn(self, event_type, payload):
+        """Track the turn and its text deltas; recover the reply from deltas when Pi settles without a final message."""
+        if event_type == "turn_start":
+            self._assistant_text_parts = []
+            self._terminal_assistant_text_emitted = False
+            self._turn_active = True
+        elif event_type == "agent_start":
+            self._turn_active = True
+        elif event_type in {"agent_settled", "agent_completed", "agent_error", "error"}:
+            self._turn_active = False
+        if event_type == "message_update":
+            delta = _assistant_text_delta(payload)
+            if delta:
+                self._assistant_text_parts.append(delta)
+        elif event_type in {"message_end", "turn_end"}:
+            if _user_visible_assistant_text(payload):
+                self._terminal_assistant_text_emitted = True
+        elif event_type == "agent_settled" and self._assistant_text_parts and not self._terminal_assistant_text_emitted:
+            recovered_text = "".join(self._assistant_text_parts).strip()[:12_000]
+            if recovered_text:
+                recovered = AgentEvent(
+                    run_id=self.spec.run_id,
+                    event_type="model.message",
+                    payload={
+                        "source": "pi",
+                        "phase": "turn_end",
+                        "text": recovered_text,
+                        "task_revision_id": self._task_revision_id,
+                        "recovered_from_text_deltas": True,
+                    },
+                )
+                self._events.append(recovered)
                 log_agent_activity(
-                    "pi.event.normalized",
+                    "pi.event.recovered_from_text_deltas",
                     category="event",
                     run_id=self.spec.run_id,
                     fields={
-                        "raw_event_type": event_type,
-                        "event_type": event.event_type,
-                        "tool_call_id": tool_call_id or None,
-                        "task_revision_id": revision_id,
-                        "payload": event.payload,
+                        "event_type": recovered.event_type,
+                        "text_chars": len(recovered_text),
                     },
                 )
-                if event.event_type in {"run.settled", "run.completed", "run.failed"}:
-                    self._terminal_seen = True
                 if self.on_event is not None:
                     try:
-                        self.on_event(event)
+                        self.on_event(recovered)
                     except Exception as exc:
-                        # Event persistence/quality observers must not be able
-                        # to kill the stdout reader. The durable supervisor
-                        # can recover if a sink remains unavailable, while a
-                        # transient observer error does not strand the Pi
-                        # process after a successful tool call.
                         self._stderr.append(
-                            f"event sink failed for {event.event_type}: {type(exc).__name__}: {exc}"
+                            f"event sink failed for {recovered.event_type}: {type(exc).__name__}: {exc}"
                         )
                         log_agent_activity(
                             "pi.event_sink.failed",
                             category="event",
                             level="error",
                             run_id=self.spec.run_id,
-                            fields={"event_type": event.event_type},
+                            fields={"event_type": recovered.event_type},
                             error=exc,
                             include_traceback=True,
                         )
-            else:
-                log_agent_activity(
-                    "pi.event.unmapped",
-                    category="event",
-                    level="debug",
-                    run_id=self.spec.run_id,
-                    fields={"raw_event_type": event_type, "payload": _rpc_payload_for_log(payload)},
-                )
+
+    def _emit_normalized_event(self, payload, event_type):
+        """Normalize one Pi event with the task revision its tool call started under, record it and pass it to the sink."""
+        tool_call_id = str(payload.get("toolCallId") or "")
+        revision_id = self._task_revision_id
+        if event_type == "tool_execution_start" and tool_call_id:
+            self._tool_revision_ids[tool_call_id] = self._task_revision_id
+            revision_id = self._tool_revision_ids[tool_call_id]
+        elif event_type in {"tool_execution_update", "tool_execution_end"} and tool_call_id:
+            revision_id = self._tool_revision_ids.get(tool_call_id)
+        event = self._event_normalizer(
+            self.spec.run_id,
+            payload,
+            task_revision_id=revision_id,
+        )
+        if event_type == "tool_execution_end" and tool_call_id:
+            self._tool_revision_ids.pop(tool_call_id, None)
+        if event is not None:
+            self._events.append(event)
+            log_agent_activity(
+                "pi.event.normalized",
+                category="event",
+                run_id=self.spec.run_id,
+                fields={
+                    "raw_event_type": event_type,
+                    "event_type": event.event_type,
+                    "tool_call_id": tool_call_id or None,
+                    "task_revision_id": revision_id,
+                    "payload": event.payload,
+                },
+            )
+            if event.event_type in {"run.settled", "run.completed", "run.failed"}:
+                self._terminal_seen = True
+            if self.on_event is not None:
+                try:
+                    self.on_event(event)
+                except Exception as exc:
+                    # Event persistence/quality observers must not be able
+                    # to kill the stdout reader. The durable supervisor
+                    # can recover if a sink remains unavailable, while a
+                    # transient observer error does not strand the Pi
+                    # process after a successful tool call.
+                    self._stderr.append(
+                        f"event sink failed for {event.event_type}: {type(exc).__name__}: {exc}"
+                    )
+                    log_agent_activity(
+                        "pi.event_sink.failed",
+                        category="event",
+                        level="error",
+                        run_id=self.spec.run_id,
+                        fields={"event_type": event.event_type},
+                        error=exc,
+                        include_traceback=True,
+                    )
+        else:
+            log_agent_activity(
+                "pi.event.unmapped",
+                category="event",
+                level="debug",
+                run_id=self.spec.run_id,
+                fields={"raw_event_type": event_type, "payload": _rpc_payload_for_log(payload)},
+            )
 
     def _message_progress_due(self) -> bool:
         now = time.monotonic()

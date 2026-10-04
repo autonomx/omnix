@@ -286,27 +286,7 @@ def _normalize_semantic_payload(value: Any) -> Any:
         return value
     data = dict(value)
 
-    nested = data.get("primary_intent")
-    if isinstance(nested, Mapping):
-        nested_data = dict(nested)
-        for key in (
-            "lane",
-            "profile_id",
-            "action_intents",
-            "evidence_requirements",
-            "temporal_scope",
-            "subject_hints",
-            "multi_step",
-            "confidence",
-        ):
-            if key not in data and key in nested_data:
-                data[key] = nested_data[key]
-        nested_intent = nested_data.get("primary_intent") or nested_data.get("intent")
-        data["primary_intent"] = (
-            str(nested_intent).strip()
-            if nested_intent
-            else "conversation"
-        )
+    _flatten_nested_intent(data)
 
     data.pop("contract_id", None)
     data.pop("contract_version", None)
@@ -358,6 +338,75 @@ def _normalize_semantic_payload(value: Any) -> Any:
     else:
         data["primary_intent"] = intent.strip()[:120]
 
+    _normalize_evidence_requirements(data)
+
+    hints = data.get("subject_hints")
+    if isinstance(hints, str):
+        hints = [hints]
+    data["subject_hints"] = [
+        str(item)[:160]
+        for item in (hints or [])
+        if str(item).strip()
+    ][:8]
+
+    temporal = data.get("temporal_scope")
+    if temporal is not None and not isinstance(temporal, str):
+        data["temporal_scope"] = str(temporal)[:160]
+
+    try:
+        data["confidence"] = max(0.0, min(float(data.get("confidence", 0.75)), 1.0))
+    except (TypeError, ValueError):
+        data["confidence"] = 0.75
+
+    reason = data.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        data["reason"] = f"semantic classification: {data['primary_intent']}"
+    else:
+        data["reason"] = reason.strip()[:320]
+
+    data["multi_step"] = bool(data.get("multi_step", False))
+    allowed_top_level = {
+        "lane",
+        "profile_id",
+        "primary_intent",
+        "action_intents",
+        "evidence_requirements",
+        "temporal_scope",
+        "subject_hints",
+        "multi_step",
+        "confidence",
+        "reason",
+    }
+    return {key: data[key] for key in allowed_top_level if key in data}
+
+
+def _flatten_nested_intent(data):
+    """Lift contract fields a model nested under primary_intent to the top level."""
+    nested = data.get("primary_intent")
+    if isinstance(nested, Mapping):
+        nested_data = dict(nested)
+        for key in (
+            "lane",
+            "profile_id",
+            "action_intents",
+            "evidence_requirements",
+            "temporal_scope",
+            "subject_hints",
+            "multi_step",
+            "confidence",
+        ):
+            if key not in data and key in nested_data:
+                data[key] = nested_data[key]
+        nested_intent = nested_data.get("primary_intent") or nested_data.get("intent")
+        data["primary_intent"] = (
+            str(nested_intent).strip()
+            if nested_intent
+            else "conversation"
+        )
+
+
+def _normalize_evidence_requirements(data):
+    """Keep known evidence classes with valid freshness, trust and fallback values (at most 8)."""
     normalized_evidence: list[dict[str, Any]] = []
     raw_evidence = data.get("evidence_requirements")
     if isinstance(raw_evidence, (str, Mapping)):
@@ -407,45 +456,6 @@ def _normalize_semantic_payload(value: Any) -> Any:
         )
         normalized_evidence.append(row)
     data["evidence_requirements"] = normalized_evidence[:8]
-
-    hints = data.get("subject_hints")
-    if isinstance(hints, str):
-        hints = [hints]
-    data["subject_hints"] = [
-        str(item)[:160]
-        for item in (hints or [])
-        if str(item).strip()
-    ][:8]
-
-    temporal = data.get("temporal_scope")
-    if temporal is not None and not isinstance(temporal, str):
-        data["temporal_scope"] = str(temporal)[:160]
-
-    try:
-        data["confidence"] = max(0.0, min(float(data.get("confidence", 0.75)), 1.0))
-    except (TypeError, ValueError):
-        data["confidence"] = 0.75
-
-    reason = data.get("reason")
-    if not isinstance(reason, str) or not reason.strip():
-        data["reason"] = f"semantic classification: {data['primary_intent']}"
-    else:
-        data["reason"] = reason.strip()[:320]
-
-    data["multi_step"] = bool(data.get("multi_step", False))
-    allowed_top_level = {
-        "lane",
-        "profile_id",
-        "primary_intent",
-        "action_intents",
-        "evidence_requirements",
-        "temporal_scope",
-        "subject_hints",
-        "multi_step",
-        "confidence",
-        "reason",
-    }
-    return {key: data[key] for key in allowed_top_level if key in data}
 
 
 def _normalize_semantic_decision(

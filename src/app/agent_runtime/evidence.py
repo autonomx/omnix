@@ -144,6 +144,10 @@ DEFAULT_FRESHNESS_SECONDS = {
     "email_state": 300,
 }
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def freshness_max_age_seconds(source_class: str) -> int | None:
     """Resolve source-specific freshness from policy configuration.
 
@@ -756,6 +760,15 @@ def classify_evidence(
         market_signal or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
     )
 
+    outcome = _advised_evidence_decision(advised, external_forbidden, attribution, requirements, hard_requirement_sources, potentially_current, market_signal, text)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    return _deterministic_evidence_decision(requirements, external_forbidden, attribution, text, potentially_current, market_signal)
+
+
+def _advised_evidence_decision(advised, external_forbidden, attribution, requirements, hard_requirement_sources, potentially_current, market_signal, text):
+    """Combine the semantic adviser with the deterministic hard floors; a low-confidence adviser keeps a conservative floor."""
     if advised is not None:
         advised_policy = advised.policy.model_copy(
             update={
@@ -841,7 +854,11 @@ def classify_evidence(
                 classifier="conservative",
             )
         return advised.model_copy(update={"policy": advised_policy})
+    return _CONTINUE
 
+
+def _deterministic_evidence_decision(requirements, external_forbidden, attribution, text, potentially_current, market_signal):
+    """The evidence policy from deterministic floors alone: required sources, timeless concepts, or a conservative current domain."""
     if requirements:
         policy = EvidencePolicy(
             requirement="required",
@@ -1066,6 +1083,39 @@ def compile_task_authority(
         if intent.startswith("workspace_surface:") and ":" in intent
     )
 
+    local = _local_task_capabilities(profile, text, intents, allow_text_semantic_fallback)
+
+    external = list(evidence.required_external)
+    if profile.produces_diff:
+        # Browser and MCP providers remain outside Pi. SemanticTask describes
+        # whether the workspace surface is web UI; deterministic policy maps
+        # that description to capabilities inside the coding profile ceiling.
+        from .coding_external_authority import coding_external_capabilities_for_task
+
+        external.extend(coding_external_capabilities_for_task(
+            text,
+            semantic_workspace_surfaces=surfaces,
+            allow_text_semantic_fallback=allow_text_semantic_fallback,
+        ))
+    _add_domain_capabilities(profile, intents, external, text, allow_text_semantic_fallback)
+
+    ceiling = profile_external_ceiling(profile)
+    outside = [cap for cap in external if cap not in ceiling]
+    if outside:
+        raise EvidenceCompilationError(
+            "required_source_outside_profile_ceiling",
+            f"required capabilities outside profile {profile.id}: {', '.join(outside)}",
+        )
+    return CompiledEvidence(
+        decision=decision,
+        required_local=tuple(dict.fromkeys(local)),
+        required_external=tuple(dict.fromkeys(external)),
+        external_groups=evidence.external_groups,
+    )
+
+
+def _local_task_capabilities(profile, text, intents, allow_text_semantic_fallback):
+    """Workspace capabilities: reads always, edits and commands only when the task mutates or executes."""
     if profile.produces_diff:
         read_caps = [
             capability
@@ -1133,19 +1183,11 @@ def compile_task_authority(
             )
     else:
         local = list(profile.capabilities)
+    return local
 
-    external = list(evidence.required_external)
-    if profile.produces_diff:
-        # Browser and MCP providers remain outside Pi. SemanticTask describes
-        # whether the workspace surface is web UI; deterministic policy maps
-        # that description to capabilities inside the coding profile ceiling.
-        from .coding_external_authority import coding_external_capabilities_for_task
 
-        external.extend(coding_external_capabilities_for_task(
-            text,
-            semantic_workspace_surfaces=surfaces,
-            allow_text_semantic_fallback=allow_text_semantic_fallback,
-        ))
+def _add_domain_capabilities(profile, intents, external, text, allow_text_semantic_fallback):
+    """Home and personal-assistant capabilities the semantic actions (or, for compatibility, the text) ask for."""
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")
@@ -1188,20 +1230,6 @@ def compile_task_authority(
             external.append("calendar.create_event")
         if "contacts_read" in intents:
             external.extend(["contacts.search_contacts", "contacts.resolve_recipient"])
-
-    ceiling = profile_external_ceiling(profile)
-    outside = [cap for cap in external if cap not in ceiling]
-    if outside:
-        raise EvidenceCompilationError(
-            "required_source_outside_profile_ceiling",
-            f"required capabilities outside profile {profile.id}: {', '.join(outside)}",
-        )
-    return CompiledEvidence(
-        decision=decision,
-        required_local=tuple(dict.fromkeys(local)),
-        required_external=tuple(dict.fromkeys(external)),
-        external_groups=evidence.external_groups,
-    )
 
 
 def validate_required_evidence_capabilities(
@@ -1531,29 +1559,7 @@ def evaluate_evidence_set(
             matched_units += _receipt_source_units_for_requirement(requirement, receipt)
             accepted_receipts.add(receipt.receipt_id)
 
-        if matched_units >= requirement.minimum_matches:
-            status = "satisfied"
-            reason = None
-        elif not candidates:
-            status = "missing"
-            reason = "no receipt for required source class"
-            missing.append(requirement.id)
-        elif "stale" in statuses:
-            status = "stale"
-            reason = "matching receipts are stale"
-            missing.append(requirement.id)
-        elif "wrong_subject" in statuses:
-            status = "wrong_subject"
-            reason = "receipts do not match required subject"
-            missing.append(requirement.id)
-        elif "insufficient_trust" in statuses:
-            status = "insufficient_trust"
-            reason = "receipts are below trust floor"
-            missing.append(requirement.id)
-        else:
-            status = "rejected"
-            reason = "insufficient acceptable receipts"
-            missing.append(requirement.id)
+        reason, status = _requirement_status(matched_units, requirement, candidates, missing, statuses)
         evaluations.append(EvidenceRequirementEvaluation(
             requirement_id=requirement.id,
             status=status,
@@ -1582,6 +1588,34 @@ def evaluate_evidence_set(
         }),
         passed=not missing,
     )
+
+
+def _requirement_status(matched_units, requirement, candidates, missing, statuses):
+    """A requirement's verdict from its matched units and the rejection reasons seen."""
+    if matched_units >= requirement.minimum_matches:
+        status = "satisfied"
+        reason = None
+    elif not candidates:
+        status = "missing"
+        reason = "no receipt for required source class"
+        missing.append(requirement.id)
+    elif "stale" in statuses:
+        status = "stale"
+        reason = "matching receipts are stale"
+        missing.append(requirement.id)
+    elif "wrong_subject" in statuses:
+        status = "wrong_subject"
+        reason = "receipts do not match required subject"
+        missing.append(requirement.id)
+    elif "insufficient_trust" in statuses:
+        status = "insufficient_trust"
+        reason = "receipts are below trust floor"
+        missing.append(requirement.id)
+    else:
+        status = "rejected"
+        reason = "insufficient acceptable receipts"
+        missing.append(requirement.id)
+    return reason, status
 
 
 def request_digest(payload: dict[str, object]) -> str:

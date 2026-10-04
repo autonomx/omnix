@@ -57,6 +57,10 @@ if TYPE_CHECKING:
     from app.agent_runtime.service import AgentRunService
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def run_change_set(service: AgentRunService, run_id: str) -> tuple[RunChangeSet, str]:
     """Return the one authoritative run-owned subject for parent or reviewer."""
     with service.unit_of_work(service.database) as work:
@@ -653,6 +657,48 @@ def _finalize_acceptance(
         )
     )
 
+    failures, passed, promotion = _acceptance_failures(current, repository, quality_failures, result, workspace_changed_after_review, planning_assessment, service, revision_id, state, change_set)
+
+    repository.append_event(
+        AgentEvent(
+            run_id=current.run_id,
+            event_type="acceptance.completed",
+            payload={
+                **result.model_dump(mode="json"),
+                "passed": passed,
+                "failures": failures,
+                "retrying": False,
+                "task_revision_id": revision_id,
+                "workspace_state_id": state.state_id if state else None,
+                "evidence_set": evidence_set.model_dump(mode="json"),
+                "quality_policy": current.spec.quality_policy,
+                "workspace_promotion": promotion,
+                "planning": {
+                    "mode": planning_assessment.mode,
+                    "plan_revision_id": planning_assessment.plan_revision_id,
+                    "would_block": planning_assessment.would_block,
+                    "blocks_acceptance": planning_assessment.blocks_acceptance,
+                    "fail_closed": planning_assessment.fail_closed,
+                    "failures": list(planning_assessment.failures),
+                },
+            },
+        )
+    )
+    latest = repository.get_run(current.run_id) or current
+    outcome = _refresh_after_review_drift(workspace_changed_after_review, planning_assessment, service, repository, latest, reviewed_workspace_state_id, revision, state)
+    if outcome is not _CONTINUE:
+        return outcome
+    if passed:
+        latest = _complete_accepted_run(promotion, repository, current, service, quality, revision_id, state, latest)
+        return
+
+    outcome = _settle_failed_acceptance(current, latest, repository, service, failures, result, planning_assessment, revision, reviews, state)
+    if outcome is not _CONTINUE:
+        return outcome
+
+
+def _acceptance_failures(current, repository, quality_failures, result, workspace_changed_after_review, planning_assessment, service, revision_id, state, change_set):
+    """All acceptance failures, then promotion of a passing candidate."""
     non_reviewer_children = [
         child for child in repository.list_children(current.run_id)
         if child.spec.profile != "coding-reviewer"
@@ -690,33 +736,11 @@ def _finalize_acceptance(
         except WorkspacePromotionError as exc:
             failures.append(f"workspace_promotion_failed:{exc}")
             passed = False
+    return failures, passed, promotion
 
-    repository.append_event(
-        AgentEvent(
-            run_id=current.run_id,
-            event_type="acceptance.completed",
-            payload={
-                **result.model_dump(mode="json"),
-                "passed": passed,
-                "failures": failures,
-                "retrying": False,
-                "task_revision_id": revision_id,
-                "workspace_state_id": state.state_id if state else None,
-                "evidence_set": evidence_set.model_dump(mode="json"),
-                "quality_policy": current.spec.quality_policy,
-                "workspace_promotion": promotion,
-                "planning": {
-                    "mode": planning_assessment.mode,
-                    "plan_revision_id": planning_assessment.plan_revision_id,
-                    "would_block": planning_assessment.would_block,
-                    "blocks_acceptance": planning_assessment.blocks_acceptance,
-                    "fail_closed": planning_assessment.fail_closed,
-                    "failures": list(planning_assessment.failures),
-                },
-            },
-        )
-    )
-    latest = repository.get_run(current.run_id) or current
+
+def _refresh_after_review_drift(workspace_changed_after_review, planning_assessment, service, repository, latest, reviewed_workspace_state_id, revision, state):
+    """The workspace changed after review: re-review the new state, or fail when that is impossible."""
     if workspace_changed_after_review:
         if planning_assessment.blocks_acceptance:
             service._quality_fail(
@@ -741,33 +765,40 @@ def _finalize_acceptance(
             prior_workspace_state_id=reviewed_workspace_state_id,
         )
         return
-    if passed:
-        if promotion is not None:
-            repository.append_event(
-                AgentEvent(
-                    run_id=current.run_id,
-                    event_type="run.completed",
-                    payload={"source": "omnix", "workspace_promotion": promotion},
-                )
-            )
-        service._set_quality_stage(
-            repository,
-            run_id=current.run_id,
-            stage="acceptance",
-            attempt=max(1, int((quality.get_stage(current.run_id) or {}).get("attempt") or 1)),
-            task_revision_id=revision_id,
-            workspace_state_id=state.state_id if state else None,
-        )
-        latest = repository.get_run(current.run_id) or latest
-        repository.update_state(
-            current.run_id,
-            expected_revision=latest.revision,
-            status="completed",
-            worker_id=service.worker_id,
-            last_error=None,
-        )
-        return
+    return _CONTINUE
 
+
+def _complete_accepted_run(promotion, repository, current, service, quality, revision_id, state, latest):
+    """Record the promotion, the acceptance stage and completion of an accepted run."""
+    if promotion is not None:
+        repository.append_event(
+            AgentEvent(
+                run_id=current.run_id,
+                event_type="run.completed",
+                payload={"source": "omnix", "workspace_promotion": promotion},
+            )
+        )
+    service._set_quality_stage(
+        repository,
+        run_id=current.run_id,
+        stage="acceptance",
+        attempt=max(1, int((quality.get_stage(current.run_id) or {}).get("attempt") or 1)),
+        task_revision_id=revision_id,
+        workspace_state_id=state.state_id if state else None,
+    )
+    latest = repository.get_run(current.run_id) or latest
+    repository.update_state(
+        current.run_id,
+        expected_revision=latest.revision,
+        status="completed",
+        worker_id=service.worker_id,
+        last_error=None,
+    )
+    return latest
+
+
+def _settle_failed_acceptance(current, latest, repository, service, failures, result, planning_assessment, revision, reviews, state):
+    """A failed acceptance ends Pi-native runs, requests a bounded repair when the failure is repairable, and fails closed otherwise."""
     if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
         # In Pi-native mode, settling ends Pi's single autonomous coding
         # turn. Deterministic acceptance may reject the candidate, but it
@@ -822,3 +853,4 @@ def _finalize_acceptance(
         worker_id=service.worker_id,
         last_error=("acceptance_failed:" + ",".join(failures))[:2000],
     )
+    return _CONTINUE

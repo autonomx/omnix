@@ -111,30 +111,7 @@ def compile_turn_plan(
         task,
         routing_environment=routing_environment,
     )
-    graph_composite = bool(
-        task.ambiguity != "clarification_required"
-        and compilation.anomalies
-        and all(
-            anomaly.code == "unsupported_composite_profiles"
-            for anomaly in compilation.anomalies
-        )
-    )
-    if graph_composite:
-        # Phase 16 owns this previously fail-closed boundary. The profile-less
-        # Agent lane is not executable as a normal Agent run; run_action below
-        # forces the dedicated per-node TaskGraph compiler/runtime path.
-        compilation = compilation.model_copy(
-            update={
-                "lane": "agent",
-                # A composite graph has no single executable profile. Keep
-                # TurnPlan metadata aligned with the coordinator boundary even
-                # when the lower-level semantic compiler happened to retain
-                # the first profile it encountered.
-                "profile_id": None,
-                "requires_clarification": False,
-                "reason_code": f"{compilation.reason_code}:task_graph"[:96],
-            }
-        )
+    compilation, graph_composite = _composite_graph_compilation(task, compilation)
     relation = normalize_objective_relation(latest, task.objective_relation)
 
     active = (
@@ -180,6 +157,109 @@ def compile_turn_plan(
         )
     )
 
+    disposition, effective_request = _continuity_disposition(latest, active, relation, task, active_objective)
+
+    final_compilation = compilation
+    if cross_profile_agent_continuation:
+        # The latest turn may describe only the newly added profile ("also
+        # email me the result") while the durable objective already owns the
+        # active coding/research work. Promote the executor boundary here;
+        # Chat reparses the combined effective objective before compiling the
+        # TaskGraph, so no prior authority is inferred from this coarse signal.
+        final_compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                "requires_clarification": False,
+                "reason_code": (
+                    f"{compilation.reason_code}:cross_profile_continuation"
+                )[:96],
+            }
+        )
+
+    disposition, final_compilation = _response_only_continuation(active, profile_compatible, relation, disposition, compilation, active_objective, active_profile, active_task_graph, final_compilation)
+
+    response_only_graph_revision = bool(
+        active_task_graph
+        and relation == "revise"
+        and compilation.lane == "chat"
+        and not compilation.action_intents
+        and compilation.evidence_decision.policy.requirement != "required"
+        and not compilation.requires_clarification
+    )
+
+    final_compilation = _force_agent_lane(force_agent, response_only_graph_revision, final_compilation, active_profile, active, relation)
+
+    graph_steering = bool(
+        active_task_graph
+        and relation != "none"
+        and not final_compilation.requires_clarification
+        and (
+            disposition == "replay_objective"
+            or graph_composite
+            or final_compilation.profile_id is not None
+            or bool(final_compilation.action_intents)
+            or final_compilation.evidence_decision.policy.requirement == "required"
+        )
+    )
+    if graph_steering and final_compilation.lane != "agent":
+        final_compilation = final_compilation.model_copy(
+            update={
+                "lane": "agent",
+                "reason_code": f"{final_compilation.reason_code}:task_graph_steering"[:96],
+            }
+        )
+    run_action = _turn_run_action(cross_profile_agent_continuation, final_compilation, graph_composite, response_only_graph_revision, graph_steering, active_task_graph, active, active_objective, relation)
+
+    return TurnPlan(
+        latest_request=latest,
+        effective_request=effective_request,
+        relation=relation,
+        disposition=disposition,
+        lane=final_compilation.lane,
+        profile_id=final_compilation.profile_id,
+        run_action=run_action,
+        active_run_id=(
+            active_objective.run_id
+            if active_objective is not None and active
+            else None
+        ),
+        authority_delta=list(final_compilation.action_intents),
+        semantic_task=task,
+        compilation=final_compilation,
+    )
+
+
+def _composite_graph_compilation(task, compilation):
+    """Several profiles in one request become one task graph instead of failing closed."""
+    graph_composite = bool(
+        task.ambiguity != "clarification_required"
+        and compilation.anomalies
+        and all(
+            anomaly.code == "unsupported_composite_profiles"
+            for anomaly in compilation.anomalies
+        )
+    )
+    if graph_composite:
+        # Phase 16 owns this previously fail-closed boundary. The profile-less
+        # Agent lane is not executable as a normal Agent run; run_action below
+        # forces the dedicated per-node TaskGraph compiler/runtime path.
+        compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                # A composite graph has no single executable profile. Keep
+                # TurnPlan metadata aligned with the coordinator boundary even
+                # when the lower-level semantic compiler happened to retain
+                # the first profile it encountered.
+                "profile_id": None,
+                "requires_clarification": False,
+                "reason_code": f"{compilation.reason_code}:task_graph"[:96],
+            }
+        )
+    return compilation, graph_composite
+
+
+def _continuity_disposition(latest, active, relation, task, active_objective):
+    """How the turn relates to the active objective, and the request it effectively makes."""
     effective_request = latest
     disposition: ContinuityDisposition = "new_objective"
 
@@ -210,24 +290,11 @@ def compile_turn_plan(
         else:
             # A complete retry command remains authoritative as written.
             disposition = "continue_objective"
+    return disposition, effective_request
 
-    final_compilation = compilation
-    if cross_profile_agent_continuation:
-        # The latest turn may describe only the newly added profile ("also
-        # email me the result") while the durable objective already owns the
-        # active coding/research work. Promote the executor boundary here;
-        # Chat reparses the combined effective objective before compiling the
-        # TaskGraph, so no prior authority is inferred from this coarse signal.
-        final_compilation = compilation.model_copy(
-            update={
-                "lane": "agent",
-                "requires_clarification": False,
-                "reason_code": (
-                    f"{compilation.reason_code}:cross_profile_continuation"
-                )[:96],
-            }
-        )
 
+def _response_only_continuation(active, profile_compatible, relation, disposition, compilation, active_objective, active_profile, active_task_graph, final_compilation):
+    """A response-only follow-up to an active Agent run stays on that run."""
     if (
         active
         and profile_compatible
@@ -256,16 +323,11 @@ def compile_turn_plan(
                 )[:96],
             }
         )
+    return disposition, final_compilation
 
-    response_only_graph_revision = bool(
-        active_task_graph
-        and relation == "revise"
-        and compilation.lane == "chat"
-        and not compilation.action_intents
-        and compilation.evidence_decision.policy.requirement != "required"
-        and not compilation.requires_clarification
-    )
 
+def _force_agent_lane(force_agent, response_only_graph_revision, final_compilation, active_profile, active, relation):
+    """Persistent Agent mode moves a Chat-lane turn onto an Agent profile."""
     if (
         force_agent
         and not response_only_graph_revision
@@ -290,26 +352,11 @@ def compile_turn_plan(
                 )[:96],
             }
         )
+    return final_compilation
 
-    graph_steering = bool(
-        active_task_graph
-        and relation != "none"
-        and not final_compilation.requires_clarification
-        and (
-            disposition == "replay_objective"
-            or graph_composite
-            or final_compilation.profile_id is not None
-            or bool(final_compilation.action_intents)
-            or final_compilation.evidence_decision.policy.requirement == "required"
-        )
-    )
-    if graph_steering and final_compilation.lane != "agent":
-        final_compilation = final_compilation.model_copy(
-            update={
-                "lane": "agent",
-                "reason_code": f"{final_compilation.reason_code}:task_graph_steering"[:96],
-            }
-        )
+
+def _turn_run_action(cross_profile_agent_continuation, final_compilation, graph_composite, response_only_graph_revision, graph_steering, active_task_graph, active, active_objective, relation):
+    """What the turn does to durable runs: start, steer, replace or cancel an Agent run or task graph, chat, or clarify."""
     if cross_profile_agent_continuation:
         run_action: TurnRunAction = "replace_agent_with_task_graph"
     elif final_compilation.requires_clarification and not graph_composite:
@@ -340,24 +387,7 @@ def compile_turn_plan(
         )
     else:
         run_action = "start_agent"
-
-    return TurnPlan(
-        latest_request=latest,
-        effective_request=effective_request,
-        relation=relation,
-        disposition=disposition,
-        lane=final_compilation.lane,
-        profile_id=final_compilation.profile_id,
-        run_action=run_action,
-        active_run_id=(
-            active_objective.run_id
-            if active_objective is not None and active
-            else None
-        ),
-        authority_delta=list(final_compilation.action_intents),
-        semantic_task=task,
-        compilation=final_compilation,
-    )
+    return run_action
 
 
 __all__ = [

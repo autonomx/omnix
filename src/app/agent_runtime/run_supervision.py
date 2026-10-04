@@ -27,6 +27,10 @@ if TYPE_CHECKING:
     from app.agent_runtime.service_core import AgentRunService
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def start_supervisor(service: AgentRunService) -> None:
     """Start supervision through the composed worker startup lifecycle."""
     with service._supervisor_lock:
@@ -443,48 +447,9 @@ def _supervise_stalled_run(service: AgentRunService, run_id: str) -> None:
             runtime_confirmed_missing = (
                 callable(get_runtime_status) and get_runtime_status(run_id) is None
             )
-            if profile_produces_diff(current.spec.profile) and not runtime_confirmed_missing:
-                # Pi owns the complete coding loop. A quiet model/tool turn
-                # is not proof that its process died, and restarting it
-                # destroys the context it needs to finish efficiently.
-                # Persist one advisory warning per progress checkpoint and
-                # leave interruption/recovery to an explicit user command.
-                prior_warning = None
-                if callable(getattr(repository, "list_events", None)):
-                    prior_warning = latest_event(repository, run_id, "run.stall_suspected")
-                progress_sequence = progress_event.sequence if progress_event else None
-                warned_sequence = (
-                    prior_warning.payload.get("last_progress_sequence")
-                    if prior_warning is not None
-                    else None
-                )
-                if prior_warning is None or warned_sequence != progress_sequence:
-                    reason = (
-                        f"no durable agent activity for {int((now - progress_at).total_seconds())}s"
-                        f" after {progress_event.event_type if progress_event else 'run start'}"
-                    )
-                    repository.append_event(AgentEvent(
-                        run_id=run_id,
-                        event_type="run.stall_suspected",
-                        payload={
-                            "reason": reason,
-                            "idle_seconds": round((now - progress_at).total_seconds(), 3),
-                            "last_progress_event": progress_event.event_type if progress_event else None,
-                            "last_progress_sequence": progress_sequence,
-                            "automatic_recovery": False,
-                        },
-                    ))
-                    log_agent_activity(
-                        "service.recovery.stall_advisory_recorded",
-                        category="recovery",
-                        level="warning",
-                        run_id=run_id,
-                        fields={"reason": reason, "last_progress_sequence": progress_sequence},
-                    )
-                    work.commit()
-                else:
-                    work.rollback()
-                return
+            outcome = _record_stall_advisory(current, runtime_confirmed_missing, repository, run_id, progress_event, now, progress_at, work)
+            if outcome is not _CONTINUE:
+                return outcome
 
             attempt = repository.count_events(run_id, "run.recovery_requested") + 1
             quality_stage = None
@@ -511,68 +476,7 @@ def _supervise_stalled_run(service: AgentRunService, run_id: str) -> None:
                     "quality_stage": quality_stage,
                 },
             )
-            if attempt > _stalled_recovery_limit():
-                terminalize = True
-                log_agent_activity(
-                    "service.recovery.exhausted",
-                    category="recovery",
-                    level="error",
-                    run_id=run_id,
-                    fields={
-                        "attempt": attempt,
-                        "recovery_limit": _stalled_recovery_limit(),
-                        "reason": reason,
-                        "quality_stage": quality_stage,
-                    },
-                )
-                repository.append_event(AgentEvent(
-                    run_id=run_id,
-                    event_type="run.recovery_failed",
-                    payload={
-                        "attempt": attempt,
-                        "reason": reason,
-                        "recovery_limit": _stalled_recovery_limit(),
-                    },
-                ))
-                repository.update_state(
-                    run_id,
-                    expected_revision=current.revision,
-                    status="failed",
-                    desired_state="cancelled",
-                    worker_id=service.worker_id,
-                    last_error=f"stalled_run:{reason}; recovery limit exhausted"[:2000],
-                )
-            else:
-                log_agent_activity(
-                    "service.recovery.requested",
-                    category="recovery",
-                    level="warning",
-                    run_id=run_id,
-                    fields={
-                        "attempt": attempt,
-                        "recovery_limit": _stalled_recovery_limit(),
-                        "reason": reason,
-                        "quality_stage": quality_stage,
-                    },
-                )
-                repository.append_event(AgentEvent(
-                    run_id=run_id,
-                    event_type="run.recovery_requested",
-                    payload={
-                        "attempt": attempt,
-                        "reason": reason,
-                        "last_progress_event": progress_event.event_type if progress_event else None,
-                        "last_progress_sequence": progress_event.sequence if progress_event else None,
-                        "quality_stage": quality_stage,
-                    },
-                ))
-                current = repository.update_state(
-                    run_id,
-                    expected_revision=current.revision,
-                    status="resume_requested",
-                    desired_state="running",
-                    worker_id=service.worker_id,
-                )
+            current, terminalize = _request_stall_recovery(attempt, run_id, reason, quality_stage, repository, current, service, progress_event, terminalize)
             work.commit()
 
         if terminalize:
@@ -595,94 +499,213 @@ def _supervise_stalled_run(service: AgentRunService, run_id: str) -> None:
             run_id=run_id,
             fields={"attempt": attempt, "quality_stage": quality_stage},
         )
-        recovery_message = (
-            "The previous runtime stopped producing progress. The workspace and durable task "
-            "state are authoritative. Resume the current task from the existing workspace, "
-            "inspect the last failed or incomplete operation, and continue without changing scope. "
-            "The task and objective are already authoritative; do not ask the user to restate the "
-            "request or wait for clarification. "
-            + (
-                "This is an internal quality/self-review turn that did not finish its protocol. "
-                "Do not modify files or ask the user a question; inspect the current final state and "
-                "return ONLY the required structured verdict JSON, even if the verdict is blocked. "
-                if quality_stage == "self_review"
-                else "If this is an internal quality/self-review turn, return its required structured verdict exactly, even if the verdict is blocked. "
-            )
-            + f"This is automatic recovery attempt {attempt}."
-        )
-        get_runtime_status = getattr(service.runtime, "get_status", None)
-        runtime_status = (
-            get_runtime_status(run_id)
-            if callable(get_runtime_status)
+        _dispatch_stall_recovery(quality_stage, attempt, service, run_id, current)
+
+
+def _record_stall_advisory(current, runtime_confirmed_missing, repository, run_id, progress_event, now, progress_at, work):
+    """A coding run keeps its Pi loop: record one advisory per progress checkpoint instead of restarting it."""
+    if profile_produces_diff(current.spec.profile) and not runtime_confirmed_missing:
+        # Pi owns the complete coding loop. A quiet model/tool turn
+        # is not proof that its process died, and restarting it
+        # destroys the context it needs to finish efficiently.
+        # Persist one advisory warning per progress checkpoint and
+        # leave interruption/recovery to an explicit user command.
+        prior_warning = None
+        if callable(getattr(repository, "list_events", None)):
+            prior_warning = latest_event(repository, run_id, "run.stall_suspected")
+        progress_sequence = progress_event.sequence if progress_event else None
+        warned_sequence = (
+            prior_warning.payload.get("last_progress_sequence")
+            if prior_warning is not None
             else None
         )
-        reuse_active_session = quality_stage == "self_review" and runtime_status is not None
-        if not reuse_active_session:
-            service.runtime.close_run(run_id)
-        try:
-            if not reuse_active_session:
-                service.runtime.start(current.spec)
-            service.runtime.command(AgentRunCommand(
+        if prior_warning is None or warned_sequence != progress_sequence:
+            reason = (
+                f"no durable agent activity for {int((now - progress_at).total_seconds())}s"
+                f" after {progress_event.event_type if progress_event else 'run start'}"
+            )
+            repository.append_event(AgentEvent(
                 run_id=run_id,
-                command_type="resume",
-                payload={"message": recovery_message, "recovery_attempt": attempt},
-                idempotency_key=f"stalled-recovery:{run_id}:{attempt}",
+                event_type="run.stall_suspected",
+                payload={
+                    "reason": reason,
+                    "idle_seconds": round((now - progress_at).total_seconds(), 3),
+                    "last_progress_event": progress_event.event_type if progress_event else None,
+                    "last_progress_sequence": progress_sequence,
+                    "automatic_recovery": False,
+                },
             ))
-            with service.unit_of_work(service.database) as work:
-                repository = service.repository_factory(work.connection, service.context)
-                persisted = repository.get_run(run_id)
-                if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
-                    repository.update_state(
-                        run_id,
-                        expected_revision=persisted.revision,
-                        status="running",
-                        desired_state="running",
-                        worker_id=service.worker_id,
-                    )
-                work.commit()
             log_agent_activity(
-                "service.recovery.resume_dispatched",
+                "service.recovery.stall_advisory_recorded",
                 category="recovery",
                 level="warning",
                 run_id=run_id,
-                fields={
-                    "attempt": attempt,
-                    "reused_active_session": reuse_active_session,
-                },
+                fields={"reason": reason, "last_progress_sequence": progress_sequence},
             )
-        except Exception as exc:
-            log_agent_activity(
-                "service.recovery.resume_failed",
-                category="recovery",
-                level="error",
-                run_id=run_id,
-                fields={
-                    "attempt": attempt,
-                    "reused_active_session": reuse_active_session,
-                },
-                error=exc,
-                include_traceback=True,
-            )
-            service.runtime.close_run(run_id)
-            with service.unit_of_work(service.database) as work:
-                repository = service.repository_factory(work.connection, service.context)
-                persisted = repository.get_run(run_id)
-                if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
-                    repository.append_event(AgentEvent(
-                        run_id=run_id,
-                        event_type="run.recovery_failed",
-                        payload={"attempt": attempt, "reason": f"{type(exc).__name__}: {exc}"[:2000]},
-                    ))
-                    repository.update_state(
-                        run_id,
-                        expected_revision=persisted.revision,
-                        status="failed",
-                        desired_state="cancelled",
-                        worker_id=service.worker_id,
-                        last_error=f"stalled_recovery_failed:{type(exc).__name__}: {exc}"[:2000],
-                    )
-                work.commit()
-            service._cancel_descendants(run_id)
+            work.commit()
+        else:
+            work.rollback()
+        return
+    return _CONTINUE
+
+
+def _request_stall_recovery(attempt, run_id, reason, quality_stage, repository, current, service, progress_event, terminalize):
+    """Request a bounded recovery, or fail the run once the recovery limit is spent."""
+    if attempt > _stalled_recovery_limit():
+        terminalize = True
+        log_agent_activity(
+            "service.recovery.exhausted",
+            category="recovery",
+            level="error",
+            run_id=run_id,
+            fields={
+                "attempt": attempt,
+                "recovery_limit": _stalled_recovery_limit(),
+                "reason": reason,
+                "quality_stage": quality_stage,
+            },
+        )
+        repository.append_event(AgentEvent(
+            run_id=run_id,
+            event_type="run.recovery_failed",
+            payload={
+                "attempt": attempt,
+                "reason": reason,
+                "recovery_limit": _stalled_recovery_limit(),
+            },
+        ))
+        repository.update_state(
+            run_id,
+            expected_revision=current.revision,
+            status="failed",
+            desired_state="cancelled",
+            worker_id=service.worker_id,
+            last_error=f"stalled_run:{reason}; recovery limit exhausted"[:2000],
+        )
+    else:
+        log_agent_activity(
+            "service.recovery.requested",
+            category="recovery",
+            level="warning",
+            run_id=run_id,
+            fields={
+                "attempt": attempt,
+                "recovery_limit": _stalled_recovery_limit(),
+                "reason": reason,
+                "quality_stage": quality_stage,
+            },
+        )
+        repository.append_event(AgentEvent(
+            run_id=run_id,
+            event_type="run.recovery_requested",
+            payload={
+                "attempt": attempt,
+                "reason": reason,
+                "last_progress_event": progress_event.event_type if progress_event else None,
+                "last_progress_sequence": progress_event.sequence if progress_event else None,
+                "quality_stage": quality_stage,
+            },
+        ))
+        current = repository.update_state(
+            run_id,
+            expected_revision=current.revision,
+            status="resume_requested",
+            desired_state="running",
+            worker_id=service.worker_id,
+        )
+    return current, terminalize
+
+
+def _dispatch_stall_recovery(quality_stage, attempt, service, run_id, current):
+    """Restart or resume the runtime with the recovery prompt; fail the run when that fails."""
+    recovery_message = (
+        "The previous runtime stopped producing progress. The workspace and durable task "
+        "state are authoritative. Resume the current task from the existing workspace, "
+        "inspect the last failed or incomplete operation, and continue without changing scope. "
+        "The task and objective are already authoritative; do not ask the user to restate the "
+        "request or wait for clarification. "
+        + (
+            "This is an internal quality/self-review turn that did not finish its protocol. "
+            "Do not modify files or ask the user a question; inspect the current final state and "
+            "return ONLY the required structured verdict JSON, even if the verdict is blocked. "
+            if quality_stage == "self_review"
+            else "If this is an internal quality/self-review turn, return its required structured verdict exactly, even if the verdict is blocked. "
+        )
+        + f"This is automatic recovery attempt {attempt}."
+    )
+    get_runtime_status = getattr(service.runtime, "get_status", None)
+    runtime_status = (
+        get_runtime_status(run_id)
+        if callable(get_runtime_status)
+        else None
+    )
+    reuse_active_session = quality_stage == "self_review" and runtime_status is not None
+    if not reuse_active_session:
+        service.runtime.close_run(run_id)
+    try:
+        if not reuse_active_session:
+            service.runtime.start(current.spec)
+        service.runtime.command(AgentRunCommand(
+            run_id=run_id,
+            command_type="resume",
+            payload={"message": recovery_message, "recovery_attempt": attempt},
+            idempotency_key=f"stalled-recovery:{run_id}:{attempt}",
+        ))
+        with service.unit_of_work(service.database) as work:
+            repository = service.repository_factory(work.connection, service.context)
+            persisted = repository.get_run(run_id)
+            if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+                repository.update_state(
+                    run_id,
+                    expected_revision=persisted.revision,
+                    status="running",
+                    desired_state="running",
+                    worker_id=service.worker_id,
+                )
+            work.commit()
+        log_agent_activity(
+            "service.recovery.resume_dispatched",
+            category="recovery",
+            level="warning",
+            run_id=run_id,
+            fields={
+                "attempt": attempt,
+                "reused_active_session": reuse_active_session,
+            },
+        )
+    except Exception as exc:
+        log_agent_activity(
+            "service.recovery.resume_failed",
+            category="recovery",
+            level="error",
+            run_id=run_id,
+            fields={
+                "attempt": attempt,
+                "reused_active_session": reuse_active_session,
+            },
+            error=exc,
+            include_traceback=True,
+        )
+        service.runtime.close_run(run_id)
+        with service.unit_of_work(service.database) as work:
+            repository = service.repository_factory(work.connection, service.context)
+            persisted = repository.get_run(run_id)
+            if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+                repository.append_event(AgentEvent(
+                    run_id=run_id,
+                    event_type="run.recovery_failed",
+                    payload={"attempt": attempt, "reason": f"{type(exc).__name__}: {exc}"[:2000]},
+                ))
+                repository.update_state(
+                    run_id,
+                    expected_revision=persisted.revision,
+                    status="failed",
+                    desired_state="cancelled",
+                    worker_id=service.worker_id,
+                    last_error=f"stalled_recovery_failed:{type(exc).__name__}: {exc}"[:2000],
+                )
+            work.commit()
+        service._cancel_descendants(run_id)
 
 
 def heartbeat(service: AgentRunService, run_id: str, *, ttl_seconds: int = 60) -> None:

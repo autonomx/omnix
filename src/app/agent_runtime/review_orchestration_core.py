@@ -253,25 +253,7 @@ def launch_reviewer_children(
                     work.commit()
                     return
 
-                attempts = quality.list_review_attempts(
-                    parent_run_id,
-                    review_snapshot_id=snapshot.snapshot_id,
-                    task_revision_id=revision.revision_id,
-                )
-                results = [
-                    item
-                    for item in quality.list_review_results(
-                        parent_run_id,
-                        task_revision_id=revision.revision_id,
-                    )
-                    if item.review_snapshot_id == snapshot.snapshot_id
-                    and item.workspace_state_id == snapshot.workspace_state_id
-                ]
-                slots, pending, exhausted = retry_slots(
-                    required_slots=required,
-                    attempts=attempts,
-                    results=results,
-                )
+                attempts, exhausted, slots = _reviewer_slots(quality, parent_run_id, snapshot, revision, required)
                 if exhausted or not slots:
                     work.rollback()
                     return
@@ -297,60 +279,7 @@ def launch_reviewer_children(
                     f"Independently review immutable snapshot {snapshot.snapshot_id} "
                     f"for correctness and completeness (reviewer slot {slot})."
                 )
-                workspace = WorkspaceSpec(
-                    root=snapshot.workspace_root,
-                    repository=(parent.spec.workspace.repository if parent.spec.workspace else None)
-                    or (parent.spec.workspace.root if parent.spec.workspace else snapshot.workspace_root),
-                    base_ref=snapshot.base_commit_sha,
-                    worktree=snapshot.workspace_root,
-                    isolation_policy="immutable_review_snapshot",
-                    allowed_paths=list(parent.spec.workspace.allowed_paths if parent.spec.workspace else ["**"]),
-                    forbidden_paths=list(parent.spec.workspace.forbidden_paths if parent.spec.workspace else []),
-                )
-
-                grants = PostgresResourceGrantRepository(work.connection, service.context)
-                parent_usage = repository.get_usage(parent_run_id)
-                available = grants.available_capacity(
-                    parent,
-                    parent_usage=parent_usage,
-                    protected_fraction=0.10,
-                )
-                # Divide only among reviewer slots that need capacity *now*.
-                # Never divide by hypothetical future quality attempts.
-                slot_available = _per_slot_available(available, len(slots))
-                complexity = review_complexity_score(
-                    snapshot,
-                    revision,
-                    validation_count=len(validations),
-                )
-                limits = default_reviewer_limits(
-                    parent.spec.limits,
-                    complexity_score=complexity,
-                    available=slot_available,
-                )
-                request = ChildRunRequest(
-                    task=prompt,
-                    objective=reviewer_objective,
-                    profile_id="coding-reviewer",
-                    provider_id=parent.spec.model.provider_id,
-                    model_id=parent.spec.model.model_id,
-                    reasoning_effort=parent.spec.model.reasoning_effort,
-                    capabilities=list(_READ_REVIEW_CAPABILITIES),
-                    external_capabilities=[],
-                    success_criteria=[
-                        "Return a structured independent review verdict for the immutable snapshot."
-                    ],
-                    limits=limits,
-                )
-                child_spec = derive_child_spec(parent, request, workspace_override=workspace)
-                child_id = reviewer_child_run_id(
-                    parent_run_id=parent_run_id,
-                    snapshot=snapshot,
-                    reviewer_slot=slot,
-                    runtime_attempt=runtime_attempt,
-                    model=parent.spec.model,
-                )
-                child_spec = child_spec.model_copy(update={"run_id": child_id})
+                child_id, child_spec, grants, parent_usage = _reviewer_child_spec(snapshot, parent, service, work, parent_run_id, repository, slots, revision, validations, prompt, reviewer_objective, slot, runtime_attempt)
                 existing = repository.get_run(child_id)
                 if existing is not None:
                     # Deterministic retry identity makes concurrent supervisors
@@ -400,43 +329,132 @@ def launch_reviewer_children(
                     work.commit()
                     return
 
-                issued = service._prepare_workspace(service._bind_github_repository_authority(child_spec))
-                child_snapshot = service._persist_starting_run(repository, issued)
-                grants.add_grant(
-                    parent_run_id=parent_run_id,
-                    child_run_id=issued.run_id,
-                    limits=issued.limits,
-                )
-                attempt = new_review_attempt(
-                    parent_run_id=parent_run_id,
-                    reviewer_run_id=issued.run_id,
-                    snapshot=snapshot,
-                    reviewer_slot=slot,
-                    runtime_attempt=runtime_attempt,
-                    model=parent.spec.model,
-                )
-                quality.add_review_attempt(attempt)
-                repository.append_event(
-                    AgentEvent(
-                        run_id=parent_run_id,
-                        event_type="quality.review_attempt_started",
-                        payload={
-                            "review_attempt_id": attempt.review_attempt_id,
-                            "reviewer_run_id": issued.run_id,
-                            "review_snapshot_id": snapshot.snapshot_id,
-                            "reviewer_slot": slot,
-                            "runtime_attempt": runtime_attempt,
-                            "protocol_version": attempt.protocol_version,
-                            "limits": issued.limits.model_dump(mode="json"),
-                            "task_revision_id": revision.revision_id,
-                            "workspace_state_id": snapshot.workspace_state_id,
-                        },
-                    )
-                )
-                launch = (issued, child_snapshot)
+                launch = _start_reviewer_attempt(child_spec, service, repository, grants, parent_run_id, snapshot, slot, runtime_attempt, parent, quality, revision)
                 work.commit()
         if launch is not None:
             service._launch_runtime(launch[0], launch[1])
+
+
+def _reviewer_slots(quality, parent_run_id, snapshot, revision, required):
+    """Reviewer slots still to run for this snapshot, from prior attempts and results."""
+    attempts = quality.list_review_attempts(
+        parent_run_id,
+        review_snapshot_id=snapshot.snapshot_id,
+        task_revision_id=revision.revision_id,
+    )
+    results = [
+        item
+        for item in quality.list_review_results(
+            parent_run_id,
+            task_revision_id=revision.revision_id,
+        )
+        if item.review_snapshot_id == snapshot.snapshot_id
+        and item.workspace_state_id == snapshot.workspace_state_id
+    ]
+    slots, pending, exhausted = retry_slots(
+        required_slots=required,
+        attempts=attempts,
+        results=results,
+    )
+    return attempts, exhausted, slots
+
+
+def _reviewer_child_spec(snapshot, parent, service, work, parent_run_id, repository, slots, revision, validations, prompt, reviewer_objective, slot, runtime_attempt):
+    """The reviewer's run spec: the immutable snapshot workspace, read-only capabilities and a share of the parent budget."""
+    workspace = WorkspaceSpec(
+        root=snapshot.workspace_root,
+        repository=(parent.spec.workspace.repository if parent.spec.workspace else None)
+        or (parent.spec.workspace.root if parent.spec.workspace else snapshot.workspace_root),
+        base_ref=snapshot.base_commit_sha,
+        worktree=snapshot.workspace_root,
+        isolation_policy="immutable_review_snapshot",
+        allowed_paths=list(parent.spec.workspace.allowed_paths if parent.spec.workspace else ["**"]),
+        forbidden_paths=list(parent.spec.workspace.forbidden_paths if parent.spec.workspace else []),
+    )
+
+    grants = PostgresResourceGrantRepository(work.connection, service.context)
+    parent_usage = repository.get_usage(parent_run_id)
+    available = grants.available_capacity(
+        parent,
+        parent_usage=parent_usage,
+        protected_fraction=0.10,
+    )
+    # Divide only among reviewer slots that need capacity *now*.
+    # Never divide by hypothetical future quality attempts.
+    slot_available = _per_slot_available(available, len(slots))
+    complexity = review_complexity_score(
+        snapshot,
+        revision,
+        validation_count=len(validations),
+    )
+    limits = default_reviewer_limits(
+        parent.spec.limits,
+        complexity_score=complexity,
+        available=slot_available,
+    )
+    request = ChildRunRequest(
+        task=prompt,
+        objective=reviewer_objective,
+        profile_id="coding-reviewer",
+        provider_id=parent.spec.model.provider_id,
+        model_id=parent.spec.model.model_id,
+        reasoning_effort=parent.spec.model.reasoning_effort,
+        capabilities=list(_READ_REVIEW_CAPABILITIES),
+        external_capabilities=[],
+        success_criteria=[
+            "Return a structured independent review verdict for the immutable snapshot."
+        ],
+        limits=limits,
+    )
+    child_spec = derive_child_spec(parent, request, workspace_override=workspace)
+    child_id = reviewer_child_run_id(
+        parent_run_id=parent_run_id,
+        snapshot=snapshot,
+        reviewer_slot=slot,
+        runtime_attempt=runtime_attempt,
+        model=parent.spec.model,
+    )
+    child_spec = child_spec.model_copy(update={"run_id": child_id})
+    return child_id, child_spec, grants, parent_usage
+
+
+def _start_reviewer_attempt(child_spec, service, repository, grants, parent_run_id, snapshot, slot, runtime_attempt, parent, quality, revision):
+    """Issue the reviewer run, grant its budget and record the review attempt."""
+    issued = service._prepare_workspace(service._bind_github_repository_authority(child_spec))
+    child_snapshot = service._persist_starting_run(repository, issued)
+    grants.add_grant(
+        parent_run_id=parent_run_id,
+        child_run_id=issued.run_id,
+        limits=issued.limits,
+    )
+    attempt = new_review_attempt(
+        parent_run_id=parent_run_id,
+        reviewer_run_id=issued.run_id,
+        snapshot=snapshot,
+        reviewer_slot=slot,
+        runtime_attempt=runtime_attempt,
+        model=parent.spec.model,
+    )
+    quality.add_review_attempt(attempt)
+    repository.append_event(
+        AgentEvent(
+            run_id=parent_run_id,
+            event_type="quality.review_attempt_started",
+            payload={
+                "review_attempt_id": attempt.review_attempt_id,
+                "reviewer_run_id": issued.run_id,
+                "review_snapshot_id": snapshot.snapshot_id,
+                "reviewer_slot": slot,
+                "runtime_attempt": runtime_attempt,
+                "protocol_version": attempt.protocol_version,
+                "limits": issued.limits.model_dump(mode="json"),
+                "task_revision_id": revision.revision_id,
+                "workspace_state_id": snapshot.workspace_state_id,
+            },
+        )
+    )
+    launch = (issued, child_snapshot)
+    return launch
 
 
 def _legacy_slot(
@@ -724,6 +742,11 @@ def reconcile_review_progress_in_repository(
     if pending_slots:
         return None
 
+    return _settle_review_verdicts(attempts, results, required, service, repository, parent, snapshot, revision, parent_run_id, stage, state_id)
+
+
+def _settle_review_verdicts(attempts, results, required, service, repository, parent, snapshot, revision, parent_run_id, stage, state_id):
+    """Accept when enough reviewers approve; repair on a substantive rejection; fail closed on missing slots."""
     by_slot = results_by_slot(attempts, results)
     if len(by_slot) < required:
         # Every unresolved slot should have appeared in launch/pending/exhausted.

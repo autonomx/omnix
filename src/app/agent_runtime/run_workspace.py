@@ -147,22 +147,7 @@ def _capture_diff(
             )
             return None
         baseline_metadata = baseline_artifact.metadata
-        dirty_paths = [
-            str(path).replace(chr(92), "/")
-            for path in (
-                baseline_metadata.get("dirty_paths")
-                if isinstance(baseline_metadata.get("dirty_paths"), list)
-                else []
-            )
-        ]
-        dirty_digests = {
-            str(key).replace(chr(92), "/"): str(value)
-            for key, value in (
-                baseline_metadata.get("dirty_digests")
-                if isinstance(baseline_metadata.get("dirty_digests"), dict)
-                else {}
-            ).items()
-        }
+        dirty_digests, dirty_paths = _baseline_dirty_state(baseline_metadata)
         head = str(baseline_metadata.get("head") or authority.git_head())
         baseline_id = str(baseline_metadata.get("baseline_id") or baseline_identity(head, dirty_paths, dirty_digests))
         service._quarantine_isolated_workspace_contamination(
@@ -211,24 +196,7 @@ def _capture_diff(
         )
         return None
 
-    workspace_key = hashlib.sha256(service.context.workspace_id.encode("utf-8")).hexdigest()[:16]
-    run_key = hashlib.sha256(spec.run_id.encode("utf-8")).hexdigest()
-    base_key = f"agent/runs/{workspace_key}/{run_key}/changesets/{change_set_id}"
-    untracked_manifest: dict[str, dict[str, object]] = {}
-    for relative, digest in untracked_digests.items():
-        entry: dict[str, object] = {"sha256": digest, "content_storage_ref": None}
-        try:
-            source = authority.resolve_path(relative)
-            if source.is_file():
-                content_blob = service.blob_store.put_bytes(
-                    f"{base_key}/untracked/{hashlib.sha256(relative.encode('utf-8')).hexdigest()}.bin",
-                    source.read_bytes(),
-                )
-                entry["content_storage_ref"] = str(content_blob["storage_key"])
-        except Exception as exc:
-            log_recovered_exception("workspace artifact content upload", exc)
-            entry["content_storage_ref"] = None
-        untracked_manifest[relative] = entry
+    base_key, untracked_manifest = _upload_untracked_files(service, spec, change_set_id, untracked_digests, authority)
 
     patch_blob = service.blob_store.put_bytes(f"{base_key}/run-owned.patch", patch.encode("utf-8"))
     deletions, renames, mode_changes = patch_structure(tracked_patch)
@@ -279,6 +247,50 @@ def _capture_diff(
         )
     )
     return change_set
+
+
+def _baseline_dirty_state(baseline_metadata):
+    """The baseline's dirty paths and their content digests, with forward slashes."""
+    dirty_paths = [
+        str(path).replace(chr(92), "/")
+        for path in (
+            baseline_metadata.get("dirty_paths")
+            if isinstance(baseline_metadata.get("dirty_paths"), list)
+            else []
+        )
+    ]
+    dirty_digests = {
+        str(key).replace(chr(92), "/"): str(value)
+        for key, value in (
+            baseline_metadata.get("dirty_digests")
+            if isinstance(baseline_metadata.get("dirty_digests"), dict)
+            else {}
+        ).items()
+    }
+    return dirty_digests, dirty_paths
+
+
+def _upload_untracked_files(service, spec, change_set_id, untracked_digests, authority):
+    """Store each untracked run-owned file's content under the change set; record its digest and storage key."""
+    workspace_key = hashlib.sha256(service.context.workspace_id.encode("utf-8")).hexdigest()[:16]
+    run_key = hashlib.sha256(spec.run_id.encode("utf-8")).hexdigest()
+    base_key = f"agent/runs/{workspace_key}/{run_key}/changesets/{change_set_id}"
+    untracked_manifest: dict[str, dict[str, object]] = {}
+    for relative, digest in untracked_digests.items():
+        entry: dict[str, object] = {"sha256": digest, "content_storage_ref": None}
+        try:
+            source = authority.resolve_path(relative)
+            if source.is_file():
+                content_blob = service.blob_store.put_bytes(
+                    f"{base_key}/untracked/{hashlib.sha256(relative.encode('utf-8')).hexdigest()}.bin",
+                    source.read_bytes(),
+                )
+                entry["content_storage_ref"] = str(content_blob["storage_key"])
+        except Exception as exc:
+            log_recovered_exception("workspace artifact content upload", exc)
+            entry["content_storage_ref"] = None
+        untracked_manifest[relative] = entry
+    return base_key, untracked_manifest
 
 
 def _github_origin_repository(repository: str) -> str:

@@ -297,58 +297,63 @@ def compile_task_engineering_contract(
                 ),
             ]
         )
-        if _WEB.search(objective_text):
-            validation.append(
-                ValidationSpec(
-                    id="frontend-build-or-typecheck",
-                    kind="build",
-                    description="Run a frontend build or typecheck when the changed surface is web/UI code.",
-                    covers=["user-objective", "derived-regression-safety"],
-                    required=False,
-                    command_hint="npm --prefix src/apps/web run build",
-                )
-            )
-            validation.append(
-                ValidationSpec(
-                    id="browser-validation",
-                    kind="browser",
-                    description=(
-                        "Exercise the changed UI through the governed browser and prove the exact requested final "
-                        "state with a deterministic browser assertion. For removal/hiding work, use "
-                        "browser.assert_text_not_contains on the stable containing surface; positive-state work "
-                        "may use browser.assert_text_contains, browser.assert_attribute_contains, or "
-                        "browser.assert_url_contains."
-                    ),
-                    covers=["user-objective", "derived-regression-safety"],
-                    required=bool(
-                        not _BROWSER_FORBIDDEN.search(objective_text)
-                        and (_WEB.search(objective_text) or _BROWSER_VALIDATION.search(objective_text))
-                    ),
-                    command_hint="Use governed browser.* capabilities via omnix_capability",
-                )
-            )
-        if re.search(r"\b(?:typecheck|type\s+check|typing)\b", objective_text, re.I):
-            validation.append(
-                ValidationSpec(
-                    id="requested-typecheck",
-                    kind="typecheck",
-                    description="Run the requested typecheck against the final state.",
-                    covers=["user-objective"],
-                    required=True,
-                )
-            )
-        if re.search(r"\blint\b", objective_text, re.I):
-            validation.append(
-                ValidationSpec(
-                    id="requested-lint",
-                    kind="lint",
-                    description="Run the requested lint check against the final state.",
-                    covers=["user-objective"],
-                    required=True,
-                )
-            )
+        _add_requested_validations(objective_text, validation)
 
     return requirements, constraints, validation
+
+
+def _add_requested_validations(objective_text, validation):
+    """Web UI work adds build and browser validation; a requested typecheck or lint becomes required."""
+    if _WEB.search(objective_text):
+        validation.append(
+            ValidationSpec(
+                id="frontend-build-or-typecheck",
+                kind="build",
+                description="Run a frontend build or typecheck when the changed surface is web/UI code.",
+                covers=["user-objective", "derived-regression-safety"],
+                required=False,
+                command_hint="npm --prefix src/apps/web run build",
+            )
+        )
+        validation.append(
+            ValidationSpec(
+                id="browser-validation",
+                kind="browser",
+                description=(
+                    "Exercise the changed UI through the governed browser and prove the exact requested final "
+                    "state with a deterministic browser assertion. For removal/hiding work, use "
+                    "browser.assert_text_not_contains on the stable containing surface; positive-state work "
+                    "may use browser.assert_text_contains, browser.assert_attribute_contains, or "
+                    "browser.assert_url_contains."
+                ),
+                covers=["user-objective", "derived-regression-safety"],
+                required=bool(
+                    not _BROWSER_FORBIDDEN.search(objective_text)
+                    and (_WEB.search(objective_text) or _BROWSER_VALIDATION.search(objective_text))
+                ),
+                command_hint="Use governed browser.* capabilities via omnix_capability",
+            )
+        )
+    if re.search(r"\b(?:typecheck|type\s+check|typing)\b", objective_text, re.I):
+        validation.append(
+            ValidationSpec(
+                id="requested-typecheck",
+                kind="typecheck",
+                description="Run the requested typecheck against the final state.",
+                covers=["user-objective"],
+                required=True,
+            )
+        )
+    if re.search(r"\blint\b", objective_text, re.I):
+        validation.append(
+            ValidationSpec(
+                id="requested-lint",
+                kind="lint",
+                description="Run the requested lint check against the final state.",
+                covers=["user-objective"],
+                required=True,
+            )
+        )
 
 
 def quality_attempt_limit() -> int:

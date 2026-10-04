@@ -102,41 +102,7 @@ def _redirect_missing_candidate_tests_before_review(
             )
             events = all_events(repository, parent_run_id)
 
-            reconciled = reconcile_candidate_test_validation_results(
-                snapshot.subject_paths,
-                validations,
-                run_id=parent_run_id,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=snapshot.workspace_state_id,
-                events=events,
-                workspace_root=snapshot.workspace_root,
-                covers_requirement_ids=[item.id for item in revision.requirements if item.required],
-            )
-            for validation in reconciled:
-                quality.add_validation_result(validation)
-                repository.append_event(
-                    AgentEvent(
-                        run_id=parent_run_id,
-                        event_type="quality.validation_recorded",
-                        payload={
-                            "result_id": validation.result_id,
-                            "validation_id": validation.validation_id,
-                            "kind": validation.kind,
-                            "task_revision_id": validation.task_revision_id,
-                            "workspace_state_id": validation.workspace_state_id,
-                            "command": validation.command,
-                            "exit_code": validation.exit_code,
-                            "success": validation.success,
-                            "outcome": validation.outcome,
-                            "output_digest": validation.output_digest,
-                            "covers_requirement_ids": list(validation.covers_requirement_ids),
-                            "metadata": dict(validation.metadata),
-                            "source": "candidate_test_raw_reconciliation",
-                        },
-                    )
-                )
-            if reconciled:
-                validations.extend(reconciled)
+            reconciled = _reconcile_raw_test_runs(snapshot, validations, parent_run_id, revision, events, quality, repository)
 
             missing_paths = missing_candidate_test_execution(
                 snapshot.subject_paths,
@@ -185,6 +151,46 @@ def _redirect_missing_candidate_tests_before_review(
     if action is not None:
         service._execute_quality_action(action)
     return redirected
+
+
+def _reconcile_raw_test_runs(snapshot, validations, parent_run_id, revision, events, quality, repository):
+    """Record successful direct test runs after the last mutation as validation results for the snapshot state."""
+    reconciled = reconcile_candidate_test_validation_results(
+        snapshot.subject_paths,
+        validations,
+        run_id=parent_run_id,
+        task_revision_id=revision.revision_id,
+        workspace_state_id=snapshot.workspace_state_id,
+        events=events,
+        workspace_root=snapshot.workspace_root,
+        covers_requirement_ids=[item.id for item in revision.requirements if item.required],
+    )
+    for validation in reconciled:
+        quality.add_validation_result(validation)
+        repository.append_event(
+            AgentEvent(
+                run_id=parent_run_id,
+                event_type="quality.validation_recorded",
+                payload={
+                    "result_id": validation.result_id,
+                    "validation_id": validation.validation_id,
+                    "kind": validation.kind,
+                    "task_revision_id": validation.task_revision_id,
+                    "workspace_state_id": validation.workspace_state_id,
+                    "command": validation.command,
+                    "exit_code": validation.exit_code,
+                    "success": validation.success,
+                    "outcome": validation.outcome,
+                    "output_digest": validation.output_digest,
+                    "covers_requirement_ids": list(validation.covers_requirement_ids),
+                    "metadata": dict(validation.metadata),
+                    "source": "candidate_test_raw_reconciliation",
+                },
+            )
+        )
+    if reconciled:
+        validations.extend(reconciled)
+    return reconciled
 
 
 def launch_reviewer_children(

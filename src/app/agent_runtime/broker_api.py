@@ -36,6 +36,10 @@ from .service import default_agent_run_service
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 class BrokerToolBudgetRequest(BaseModel):
     tool_name: str
 
@@ -760,26 +764,7 @@ def execute_agent_capability(
 ) -> BrokerCapabilityResponse:
     # Agent step for traces (WP-10.4); identifiers only, never the capability input.
     set_span_attributes(agent_run_id=run_id, agent_step="capability", capability_id=capability_id)
-    service = default_agent_run_service()
-    snapshot = service.get(run_id)
-    if snapshot is None:
-        raise HTTPException(status_code=404, detail="agent_run_not_found")
-    if snapshot.status not in {"starting", "running", "waiting_for_approval"}:
-        raise HTTPException(
-            status_code=409,
-            detail=f"agent_run_not_runnable:{snapshot.status}",
-        )
-    if snapshot.desired_state != "running":
-        raise HTTPException(
-            status_code=409,
-            detail=f"agent_run_not_runnable:{snapshot.desired_state}",
-        )
-    capability = default_capability_registry().get(capability_id)
-    if capability is None or capability.execution_zone != "broker":
-        raise HTTPException(status_code=404, detail="agent_capability_not_found")
-    canonical = capability.id
-    if canonical not in snapshot.spec.external_capabilities:
-        raise HTTPException(status_code=403, detail="agent_capability_outside_run_spec")
+    canonical, capability, service, snapshot = _runnable_capability(run_id, capability_id)
     request = _normalize_capability_input(canonical, request)
     policy, task_revision_id, evidence_started_at, existing_receipts = _effective_evidence_context(
         service,
@@ -845,58 +830,11 @@ def execute_agent_capability(
         if stored["state"] in {"completed", "failed"}:
             work.rollback()
             return _stored_response(canonical, execution_key, stored)
-        if stored["state"] == "running":
-            reclaimed = False
-            if capability.effect == "read":
-                try:
-                    retry_after = max(
-                        1,
-                        int(_env_str("OMNIX_AGENT_READ_RETRY_AFTER_SECONDS", "30")),
-                    )
-                except ValueError:
-                    retry_after = 30
-                reclaimed = repository.reclaim_stale_read_capability_execution(
-                    run_id,
-                    execution_key,
-                    stale_before=datetime.now(timezone.utc) - timedelta(seconds=retry_after),
-                )
-                if reclaimed:
-                    stored = repository.ensure_capability_execution(
-                        run_id,
-                        execution_key,
-                        canonical,
-                        {"input": request.input, "approval_id": request.approval_id},
-                    )
-            if not reclaimed:
-                work.rollback()
-                raise HTTPException(
-                    status_code=409,
-                    detail="agent_execution_outcome_unknown_or_in_progress",
-                )
+        stored = _reclaim_running_execution(stored, capability, repository, run_id, execution_key, canonical, request, work)
 
-        if approval is not None and approval.state == "rejected":
-            repository.finish_capability_execution(
-                run_id,
-                execution_key,
-                result_payload={"error": "approval_rejected"},
-                error="approval_rejected",
-                state_changed=False,
-            )
-            if task_revision_id and is_evidence_capability(canonical):
-                repository.finish_evidence_query(
-                    run_id,
-                    task_revision_id,
-                    execution_key,
-                    actual_sources=0,
-                    actual_extracts=0,
-                    failed=True,
-                )
-            work.commit()
-            return BrokerCapabilityResponse(
-                capability_id=canonical,
-                execution_key=execution_key,
-                result={"error": "approval_rejected"},
-            )
+        outcome = _finish_rejected_capability(approval, repository, run_id, execution_key, canonical, task_revision_id, work)
+        if outcome is not _CONTINUE:
+            return outcome
 
         if approval is None and stored["state"] == "waiting_for_approval":
             approval = repository.find_capability_approval(
@@ -924,67 +862,12 @@ def execute_agent_capability(
             tool_request,
             snapshot.spec.approval_policy,
         )
-        if not decision.allowed:
-            error = decision.reason or "not_allowed"
-            result_payload: dict[str, Any] = {"error": error}
-            if evidence_requirement is not None and error in {"missing_connection", "tool_disabled"}:
-                fallbacks = fallback_capabilities_for_requirement(
-                    evidence_requirement,
-                    current_capability=canonical,
-                    issued_capabilities=snapshot.spec.external_capabilities,
-                )
-                if fallbacks:
-                    result_payload["evidence_fallback_capabilities"] = list(fallbacks)
-                    result_payload["evidence_requirement_id"] = evidence_requirement.id
-            repository.finish_capability_execution(
-                run_id,
-                execution_key,
-                result_payload=result_payload,
-                error=error,
-                state_changed=False,
-            )
-            if task_revision_id and is_evidence_capability(canonical):
-                repository.finish_evidence_query(
-                    run_id,
-                    task_revision_id,
-                    execution_key,
-                    actual_sources=0,
-                    actual_extracts=0,
-                    failed=True,
-                )
-            work.commit()
-            return BrokerCapabilityResponse(
-                capability_id=canonical,
-                execution_key=execution_key,
-                result=result_payload,
-            )
-        if decision.approval_required and approved_by is None:
-            repository.mark_capability_waiting_for_approval(run_id, execution_key)
-            if approval is None:
-                approval = AgentApproval(
-                    run_id=run_id,
-                    capability_id=canonical,
-                    request_payload={
-                        "input": request.input,
-                        "proposal_id": execution_key,
-                        "execution_key": execution_key,
-                    },
-                )
-                repository.add_approval(approval)
-                current = repository.get_run(run_id)
-                if current is not None and current.status != "waiting_for_approval":
-                    repository.update_state(
-                        run_id,
-                        expected_revision=current.revision,
-                        status="waiting_for_approval",
-                    )
-            work.commit()
-            return BrokerCapabilityResponse(
-                capability_id=canonical,
-                approval_required=True,
-                approval_id=approval.approval_id,
-                execution_key=execution_key,
-            )
+        outcome = _refuse_capability(decision, evidence_requirement, canonical, snapshot, repository, run_id, execution_key, task_revision_id, work)
+        if outcome is not _CONTINUE:
+            return outcome
+        outcome = _await_capability_approval(approved_by, decision, execution_key, repository, run_id, approval, canonical, request, work)
+        if outcome is not _CONTINUE:
+            return outcome
         if not repository.claim_capability_execution(run_id, execution_key):
             work.rollback()
             raise HTTPException(status_code=409, detail="agent_execution_not_claimable")
@@ -992,6 +875,207 @@ def execute_agent_capability(
 
     # The tool budget is charged here, once per claimed execution, so a run
     # cannot avoid it by skipping the Pi guard (WP-4.5).
+    _charge_capability_budget(canonical, run_id, service, execution_key, task_revision_id)
+
+    payload = execute_capability(
+        CapabilityGrant(
+            "agent_run",
+            run_id,
+            approved_by=approved_by,
+            policy_floor=(snapshot.spec.approval_policy if tool_request.tool_id != "browser" else None),
+        ),
+        tool_request,
+        user_request=f"agent:{run_id}",
+    )
+    result: AssistantToolResult = payload.execution_result
+    result_payload = _capability_result_payload(result, evidence_requirement, canonical, snapshot)
+
+    _record_capability_result(service, run_id, execution_key, result_payload, result, canonical, task_revision_id, policy, request, evidence_requirement, evidence_source_class)
+
+    return BrokerCapabilityResponse(
+        capability_id=canonical,
+        execution_key=execution_key,
+        executed=result.error is None,
+        approval_required=False,
+        approval_id=request.approval_id,
+        result=result_payload,
+    )
+
+
+def _capability_result_payload(result, evidence_requirement, canonical, snapshot):
+    """The result as stored; a failed evidence call names the issued capabilities that can still satisfy it."""
+    result_payload = result.model_dump(mode="json")
+    if result.error is not None and evidence_requirement is not None:
+        fallbacks = fallback_capabilities_for_requirement(
+            evidence_requirement,
+            current_capability=canonical,
+            issued_capabilities=snapshot.spec.external_capabilities,
+        )
+        if fallbacks:
+            result_payload["evidence_fallback_capabilities"] = list(fallbacks)
+            result_payload["evidence_requirement_id"] = evidence_requirement.id
+    return result_payload
+
+
+def _runnable_capability(run_id, capability_id):
+    """The run and the broker capability it may call: 404/409/403 when it cannot."""
+    service = default_agent_run_service()
+    snapshot = service.get(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if snapshot.status not in {"starting", "running", "waiting_for_approval"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.status}",
+        )
+    if snapshot.desired_state != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.desired_state}",
+        )
+    capability = default_capability_registry().get(capability_id)
+    if capability is None or capability.execution_zone != "broker":
+        raise HTTPException(status_code=404, detail="agent_capability_not_found")
+    canonical = capability.id
+    if canonical not in snapshot.spec.external_capabilities:
+        raise HTTPException(status_code=403, detail="agent_capability_outside_run_spec")
+    return canonical, capability, service, snapshot
+
+
+def _reclaim_running_execution(stored, capability, repository, run_id, execution_key, canonical, request, work):
+    """Reclaim a stale read still marked running; any other running call has an unknown outcome."""
+    if stored["state"] == "running":
+        reclaimed = False
+        if capability.effect == "read":
+            try:
+                retry_after = max(
+                    1,
+                    int(_env_str("OMNIX_AGENT_READ_RETRY_AFTER_SECONDS", "30")),
+                )
+            except ValueError:
+                retry_after = 30
+            reclaimed = repository.reclaim_stale_read_capability_execution(
+                run_id,
+                execution_key,
+                stale_before=datetime.now(timezone.utc) - timedelta(seconds=retry_after),
+            )
+            if reclaimed:
+                stored = repository.ensure_capability_execution(
+                    run_id,
+                    execution_key,
+                    canonical,
+                    {"input": request.input, "approval_id": request.approval_id},
+                )
+        if not reclaimed:
+            work.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="agent_execution_outcome_unknown_or_in_progress",
+            )
+    return stored
+
+
+def _finish_rejected_capability(approval, repository, run_id, execution_key, canonical, task_revision_id, work):
+    """Finish a call whose approval was rejected without running it."""
+    if approval is not None and approval.state == "rejected":
+        repository.finish_capability_execution(
+            run_id,
+            execution_key,
+            result_payload={"error": "approval_rejected"},
+            error="approval_rejected",
+            state_changed=False,
+        )
+        if task_revision_id and is_evidence_capability(canonical):
+            repository.finish_evidence_query(
+                run_id,
+                task_revision_id,
+                execution_key,
+                actual_sources=0,
+                actual_extracts=0,
+                failed=True,
+            )
+        work.commit()
+        return BrokerCapabilityResponse(
+            capability_id=canonical,
+            execution_key=execution_key,
+            result={"error": "approval_rejected"},
+        )
+    return _CONTINUE
+
+
+def _refuse_capability(decision, evidence_requirement, canonical, snapshot, repository, run_id, execution_key, task_revision_id, work):
+    """Finish a call the tool policy refuses, offering evidence fallbacks when the tool is only unavailable."""
+    if not decision.allowed:
+        error = decision.reason or "not_allowed"
+        result_payload: dict[str, Any] = {"error": error}
+        if evidence_requirement is not None and error in {"missing_connection", "tool_disabled"}:
+            fallbacks = fallback_capabilities_for_requirement(
+                evidence_requirement,
+                current_capability=canonical,
+                issued_capabilities=snapshot.spec.external_capabilities,
+            )
+            if fallbacks:
+                result_payload["evidence_fallback_capabilities"] = list(fallbacks)
+                result_payload["evidence_requirement_id"] = evidence_requirement.id
+        repository.finish_capability_execution(
+            run_id,
+            execution_key,
+            result_payload=result_payload,
+            error=error,
+            state_changed=False,
+        )
+        if task_revision_id and is_evidence_capability(canonical):
+            repository.finish_evidence_query(
+                run_id,
+                task_revision_id,
+                execution_key,
+                actual_sources=0,
+                actual_extracts=0,
+                failed=True,
+            )
+        work.commit()
+        return BrokerCapabilityResponse(
+            capability_id=canonical,
+            execution_key=execution_key,
+            result=result_payload,
+        )
+    return _CONTINUE
+
+
+def _await_capability_approval(approved_by, decision, execution_key, repository, run_id, approval, canonical, request, work):
+    """Park the call until a recorded approval: one approval row per execution key, run waits."""
+    if decision.approval_required and approved_by is None:
+        repository.mark_capability_waiting_for_approval(run_id, execution_key)
+        if approval is None:
+            approval = AgentApproval(
+                run_id=run_id,
+                capability_id=canonical,
+                request_payload={
+                    "input": request.input,
+                    "proposal_id": execution_key,
+                    "execution_key": execution_key,
+                },
+            )
+            repository.add_approval(approval)
+            current = repository.get_run(run_id)
+            if current is not None and current.status != "waiting_for_approval":
+                repository.update_state(
+                    run_id,
+                    expected_revision=current.revision,
+                    status="waiting_for_approval",
+                )
+        work.commit()
+        return BrokerCapabilityResponse(
+            capability_id=canonical,
+            approval_required=True,
+            approval_id=approval.approval_id,
+            execution_key=execution_key,
+        )
+    return _CONTINUE
+
+
+def _charge_capability_budget(canonical, run_id, service, execution_key, task_revision_id):
+    """Charge the run's tool budget once per claimed execution; refuse when it is spent."""
     try:
         default_agent_budget_manager().authorize_tool_call(run_id, tool_name=canonical)
     except AgentBudgetError as exc:
@@ -1016,28 +1100,9 @@ def execute_agent_capability(
             work.commit()
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
-    payload = execute_capability(
-        CapabilityGrant(
-            "agent_run",
-            run_id,
-            approved_by=approved_by,
-            policy_floor=(snapshot.spec.approval_policy if tool_request.tool_id != "browser" else None),
-        ),
-        tool_request,
-        user_request=f"agent:{run_id}",
-    )
-    result: AssistantToolResult = payload.execution_result
-    result_payload = result.model_dump(mode="json")
-    if result.error is not None and evidence_requirement is not None:
-        fallbacks = fallback_capabilities_for_requirement(
-            evidence_requirement,
-            current_capability=canonical,
-            issued_capabilities=snapshot.spec.external_capabilities,
-        )
-        if fallbacks:
-            result_payload["evidence_fallback_capabilities"] = list(fallbacks)
-            result_payload["evidence_requirement_id"] = evidence_requirement.id
 
+def _record_capability_result(service, run_id, execution_key, result_payload, result, canonical, task_revision_id, policy, request, evidence_requirement, evidence_source_class):
+    """Record the capability outcome, its evidence receipt and the tool event in one transaction."""
     with unit_of_work(service.database) as work:
         repository = PostgresAgentRunRepository(work.connection, service.context)
         repository.finish_capability_execution(
@@ -1095,12 +1160,3 @@ def execute_agent_capability(
             )
         )
         work.commit()
-
-    return BrokerCapabilityResponse(
-        capability_id=canonical,
-        execution_key=execution_key,
-        executed=result.error is None,
-        approval_required=False,
-        approval_id=request.approval_id,
-        result=result_payload,
-    )

@@ -149,6 +149,11 @@ def command_with_context(
             return current
         work.commit()
 
+    return _run_claimed_command(service, stored, reference_context, reference_images)
+
+
+def _run_claimed_command(service, stored, reference_context, reference_images):
+    """Apply a claimed command under the run lock, then cascade cancellation and parent completion."""
     try:
         # Runtime callbacks persist status changes from the Pi reader
         # thread. Keep command-side desired-state changes and the
@@ -306,87 +311,9 @@ def _compile_steering(
         repository = service.repository_factory(work.connection, service.context)
         revisions = repository.list_task_revisions(current.run_id)
         work.rollback()
-    latest = revisions[-1] if revisions else None
-    previous_objective = (
-        latest.effective_objective
-        if latest is not None
-        else (current.spec.objective or current.spec.task)
-    )
-    # Reconstruct the latest user instruction that actually changed
-    # executable objective authority. Response-only and replay revisions
-    # intentionally leave effective_objective unchanged and must not become
-    # the replay target for a later direct/API steering command.
-    prior_request = current.spec.task
-    prior_effective = str(current.spec.objective or current.spec.task)
-    for revision in revisions:
-        if revision.effective_objective != prior_effective:
-            prior_request = revision.user_instruction
-        prior_effective = revision.effective_objective
-    workspace_name = None
-    if current.spec.workspace is not None:
-        workspace_name = os.path.basename(
-            str(current.spec.workspace.root or "").rstrip("\\/")
-        ) or None
-    routing_environment = RoutingEnvironment(
-        active_workspace=workspace_name,
-        workspace_source=("configured_default" if workspace_name else "none"),
-        workspace_attached_this_turn=False,
-    )
+    latest, previous_objective, prior_request, routing_environment = _steering_context(revisions, current)
 
-    if turn_plan is not None:
-        # A TurnPlan passed through this keyword-only in-process boundary is
-        # compiler output from Chat, not user command payload. Validate its
-        # identity before using it, then compile authority again below.
-        if turn_plan.latest_request != message:
-            raise EvidenceCompilationError(
-                "turn_plan_message_mismatch",
-                "trusted TurnPlan does not match the steering message",
-            )
-        if turn_plan.active_run_id not in {None, current.run_id}:
-            raise EvidenceCompilationError(
-                "turn_plan_run_mismatch",
-                "trusted TurnPlan targets a different Agent run",
-            )
-        if turn_plan.run_action != "steer_agent":
-            raise EvidenceCompilationError(
-                "turn_plan_action_mismatch",
-                f"trusted TurnPlan cannot steer this run: {turn_plan.run_action}",
-            )
-        semantic_task = turn_plan.semantic_task
-        semantic_compilation = turn_plan.compilation
-    else:
-        # Direct/non-Chat command callers have no trusted plan, so the
-        # durable service performs the semantic parse exactly once here.
-        active_objective = make_active_objective(
-            canonical_request=prior_request,
-            base_request=current.spec.task,
-            profile=current.spec.profile,
-            status="active",
-            run_id=current.run_id,
-        )
-        semantic_task = classify_semantic_task_safely(
-            service.semantic_task_parser(
-                provider_id=current.spec.model.provider_id,
-                model_id=current.spec.model.model_id,
-            ),
-            message,
-            reference_context=reference_context,
-            previous_objective=previous_objective,
-            current_environment=routing_environment.model_dump(mode="json"),
-        )
-        if semantic_task is None:
-            raise EvidenceCompilationError(
-                "semantic_parser_unavailable",
-                "steering requires semantic parsing; Omnix will not guess a stateful domain",
-            )
-        turn_plan = compile_turn_plan(
-            message,
-            semantic_task,
-            active_objective=active_objective,
-            routing_environment=routing_environment,
-        )
-        semantic_task = turn_plan.semantic_task
-        semantic_compilation = turn_plan.compilation
+    semantic_compilation, turn_plan = _steering_turn_plan(turn_plan, message, current, prior_request, service, reference_context, previous_objective, routing_environment)
 
     effective = derive_effective_objective(
         previous_objective,
@@ -476,6 +403,101 @@ def _compile_steering(
     if fits:
         return {"revision": revision, "superseding_spec": None}
 
+    return _superseding_steering(current, target_profile, target_profile_id, command, turn_plan, effective, compiled, decision, expected_artifacts, revision)
+
+
+def _steering_context(revisions, current):
+    """The objective a steer revises, the latest request that changed it, and the run's routing environment."""
+    latest = revisions[-1] if revisions else None
+    previous_objective = (
+        latest.effective_objective
+        if latest is not None
+        else (current.spec.objective or current.spec.task)
+    )
+    # Reconstruct the latest user instruction that actually changed
+    # executable objective authority. Response-only and replay revisions
+    # intentionally leave effective_objective unchanged and must not become
+    # the replay target for a later direct/API steering command.
+    prior_request = current.spec.task
+    prior_effective = str(current.spec.objective or current.spec.task)
+    for revision in revisions:
+        if revision.effective_objective != prior_effective:
+            prior_request = revision.user_instruction
+        prior_effective = revision.effective_objective
+    workspace_name = None
+    if current.spec.workspace is not None:
+        workspace_name = os.path.basename(
+            str(current.spec.workspace.root or "").rstrip("\\/")
+        ) or None
+    routing_environment = RoutingEnvironment(
+        active_workspace=workspace_name,
+        workspace_source=("configured_default" if workspace_name else "none"),
+        workspace_attached_this_turn=False,
+    )
+    return latest, previous_objective, prior_request, routing_environment
+
+
+def _steering_turn_plan(turn_plan, message, current, prior_request, service, reference_context, previous_objective, routing_environment):
+    """The TurnPlan for a steering message: Chat's trusted plan after identity checks, or one semantic parse here."""
+    if turn_plan is not None:
+        # A TurnPlan passed through this keyword-only in-process boundary is
+        # compiler output from Chat, not user command payload. Validate its
+        # identity before using it, then compile authority again below.
+        if turn_plan.latest_request != message:
+            raise EvidenceCompilationError(
+                "turn_plan_message_mismatch",
+                "trusted TurnPlan does not match the steering message",
+            )
+        if turn_plan.active_run_id not in {None, current.run_id}:
+            raise EvidenceCompilationError(
+                "turn_plan_run_mismatch",
+                "trusted TurnPlan targets a different Agent run",
+            )
+        if turn_plan.run_action != "steer_agent":
+            raise EvidenceCompilationError(
+                "turn_plan_action_mismatch",
+                f"trusted TurnPlan cannot steer this run: {turn_plan.run_action}",
+            )
+        semantic_task = turn_plan.semantic_task
+        semantic_compilation = turn_plan.compilation
+    else:
+        # Direct/non-Chat command callers have no trusted plan, so the
+        # durable service performs the semantic parse exactly once here.
+        active_objective = make_active_objective(
+            canonical_request=prior_request,
+            base_request=current.spec.task,
+            profile=current.spec.profile,
+            status="active",
+            run_id=current.run_id,
+        )
+        semantic_task = classify_semantic_task_safely(
+            service.semantic_task_parser(
+                provider_id=current.spec.model.provider_id,
+                model_id=current.spec.model.model_id,
+            ),
+            message,
+            reference_context=reference_context,
+            previous_objective=previous_objective,
+            current_environment=routing_environment.model_dump(mode="json"),
+        )
+        if semantic_task is None:
+            raise EvidenceCompilationError(
+                "semantic_parser_unavailable",
+                "steering requires semantic parsing; Omnix will not guess a stateful domain",
+            )
+        turn_plan = compile_turn_plan(
+            message,
+            semantic_task,
+            active_objective=active_objective,
+            routing_environment=routing_environment,
+        )
+        semantic_task = turn_plan.semantic_task
+        semantic_compilation = turn_plan.compilation
+    return semantic_compilation, turn_plan
+
+
+def _superseding_steering(current, target_profile, target_profile_id, command, turn_plan, effective, compiled, decision, expected_artifacts, revision):
+    """A steer that needs more authority than the run holds starts a superseding run with exactly that authority."""
     workspace = current.spec.workspace
     if target_profile.requires_workspace and workspace is None:
         raise EvidenceCompilationError(

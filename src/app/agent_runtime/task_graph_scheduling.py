@@ -35,6 +35,10 @@ if TYPE_CHECKING:
     from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def _active_execution_count(states: list[TaskNodeRunState]) -> int:
     """Count active child executions rather than graph-node projections.
 
@@ -498,6 +502,15 @@ def _execute_claimed_node(
         )
         return True
 
+    outcome = _execute_capability_node(node, run_id, claimed, inputs, graph_runtime, graph)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    return _start_agent_node(node, claimed, graph_runtime, run_id, graph, selected_model, inputs)
+
+
+def _execute_capability_node(node, run_id, claimed, inputs, graph_runtime, graph):
+    """Run a capability node through the governed executor; an optional node that fails is skipped."""
     if node.kind == "capability":
         namespace = str(node.capability_id).split(".", 1)[0]
         request = AssistantToolRequest(
@@ -534,7 +547,11 @@ def _execute_claimed_node(
             graph_revision=graph.revision,
         )
         return True
+    return _CONTINUE
 
+
+def _start_agent_node(node, claimed, graph_runtime, run_id, graph, selected_model, inputs):
+    """Start the claimed node's Agent run with predecessor outputs as reference context only."""
     if node.kind not in _AGENT_NODE_KINDS:
         raise TaskGraphRuntimeError(
             f"unsupported executable node kind:{node.kind}"
@@ -821,6 +838,11 @@ def advance(graph_runtime: PostgresTaskGraphRuntime, run_id: str) -> TaskGraphRu
                 if node.kind in _AGENT_NODE_KINDS:
                     available_slots -= 1
 
+    return _settle_graph_status(graph_runtime, run_id)
+
+
+def _settle_graph_status(graph_runtime, run_id):
+    """The graph's status after a scheduling pass: failed, completed, waiting for approval, or running."""
     snapshot = graph_runtime.get_status(run_id)
     assert snapshot is not None
     node_map = graph_runtime._node_map(snapshot.graph)

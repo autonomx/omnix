@@ -73,6 +73,10 @@ if TYPE_CHECKING:
     from app.agent_runtime.service import AgentRunService
 
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def _quality_enabled(spec: AgentRunSpec) -> bool:
     return (
         profile_produces_diff(spec.profile)
@@ -610,80 +614,13 @@ def _advance_quality_on_settle(
             return service._quality_fail(repository, current, "quality_workspace_state_unavailable")
         quality.add_workspace_state(state)
 
-        if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
-            # Pi already performed the engineering loop and self-review.
-            # Final acceptance still performs deterministic scope, diff,
-            # evidence, and required-check enforcement.
-            service._set_quality_stage(
-                repository,
-                run_id=current.run_id,
-                stage="acceptance",
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-                reason="coding_quality_phases_disabled",
-            )
-            service._finalize_acceptance(repository, current)
-            return None
+        outcome = _accept_without_quality_phases(service, repository, current, attempt, revision, state)
+        if outcome is not _CONTINUE:
+            return outcome
 
-        service._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
-        artifacts = repository.list_artifacts(current.run_id)
-        diff_artifact = next(
-            (
-                artifact
-                for artifact in reversed(artifacts)
-                if artifact.kind == "diff"
-                and artifact.metadata.get("task_revision_id") == revision.revision_id
-            ),
-            None,
-        )
-        service._reconcile_change_set_validation(
-            repository,
-            current,
-            revision,
-            quality,
-            workspace_state_id=state.state_id,
-        )
-        validations = quality.list_validation_results(
-            current.run_id,
-            task_revision_id=revision.revision_id,
-        )
-        validation_gate, validation_details = candidate_validation_gate(
-            revision,
-            validations,
-            workspace_state_id=state.state_id,
-        )
-        if validation_gate == "validation_repair":
-            return service._request_validation_repair(
-                repository, current, revision, attempt=attempt,
-                workspace_state_id=state.state_id, failures=validation_details,
-            )
-        if validation_gate == "validation_retry":
-            return service._request_validation_retry(
-                repository, current, revision, attempt=attempt,
-                workspace_state_id=state.state_id, failures=validation_details,
-            )
-        if validation_gate == "validation_missing":
-            return service._request_validation_execution(
-                repository, current, revision, attempt=attempt,
-                workspace_state_id=state.state_id, missing=validation_details,
-            )
-        gate, gate_details = _pre_review_gate(
-            revision,
-            validations,
-            workspace_state_id=state.state_id,
-            diff_artifact=diff_artifact,
-        )
-        if gate == "implementing":
-            return service._request_implementation_continuation(
-                repository,
-                current,
-                revision,
-                attempt=attempt,
-                workspace_state_id=state.state_id,
-                failures=[str(item) for item in gate_details],
-                prior_stage=stage,
-            )
+        outcome = _pre_review_gates(current, repository, revision, service, state, quality, attempt, stage)
+        if outcome is not _CONTINUE:
+            return outcome
 
         service._set_quality_stage(
             repository,
@@ -705,6 +642,133 @@ def _advance_quality_on_settle(
         return service._quality_fail(repository, current, "quality_workspace_state_unavailable")
     quality.add_workspace_state(state)
 
+    outcome = _settle_self_review(stage, repository, current, attempt, revision, state, service, quality)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    if (
+        stage == "self_review"
+        and not CODING_VALIDATION_PHASE_ENABLED
+        and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
+    ):
+        service._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="acceptance",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=state.state_id,
+            reason="coding_quality_phases_disabled",
+        )
+        service._finalize_acceptance(repository, current)
+        return None
+
+    validations = _reconciled_validations(quality, current, revision, service, repository, state)
+    outcome = _dispatch_validation_gate(revision, validations, state, service, attempt, current, repository)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    review_count = required_review_count(current.spec, state)
+    if review_count <= 0:
+        service._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="acceptance",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=state.state_id,
+        )
+        service._finalize_acceptance(repository, current)
+        return None
+
+    return _start_quality_reviews(current, repository, revision, service, state, validations, quality, attempt, review_count)
+
+
+def _accept_without_quality_phases(service, repository, current, attempt, revision, state):
+    """With the validation and review phases off, go straight to final acceptance."""
+    if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+        # Pi already performed the engineering loop and self-review.
+        # Final acceptance still performs deterministic scope, diff,
+        # evidence, and required-check enforcement.
+        service._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="acceptance",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=state.state_id,
+            reason="coding_quality_phases_disabled",
+        )
+        service._finalize_acceptance(repository, current)
+        return None
+    return _CONTINUE
+
+
+def _pre_review_gates(current, repository, revision, service, state, quality, attempt, stage):
+    """Validation and implementation gates the candidate must pass before verification."""
+    service._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
+    artifacts = repository.list_artifacts(current.run_id)
+    diff_artifact = next(
+        (
+            artifact
+            for artifact in reversed(artifacts)
+            if artifact.kind == "diff"
+            and artifact.metadata.get("task_revision_id") == revision.revision_id
+        ),
+        None,
+    )
+    service._reconcile_change_set_validation(
+        repository,
+        current,
+        revision,
+        quality,
+        workspace_state_id=state.state_id,
+    )
+    validations = quality.list_validation_results(
+        current.run_id,
+        task_revision_id=revision.revision_id,
+    )
+    validation_gate, validation_details = candidate_validation_gate(
+        revision,
+        validations,
+        workspace_state_id=state.state_id,
+    )
+    if validation_gate == "validation_repair":
+        return service._request_validation_repair(
+            repository, current, revision, attempt=attempt,
+            workspace_state_id=state.state_id, failures=validation_details,
+        )
+    if validation_gate == "validation_retry":
+        return service._request_validation_retry(
+            repository, current, revision, attempt=attempt,
+            workspace_state_id=state.state_id, failures=validation_details,
+        )
+    if validation_gate == "validation_missing":
+        return service._request_validation_execution(
+            repository, current, revision, attempt=attempt,
+            workspace_state_id=state.state_id, missing=validation_details,
+        )
+    gate, gate_details = _pre_review_gate(
+        revision,
+        validations,
+        workspace_state_id=state.state_id,
+        diff_artifact=diff_artifact,
+    )
+    if gate == "implementing":
+        return service._request_implementation_continuation(
+            repository,
+            current,
+            revision,
+            attempt=attempt,
+            workspace_state_id=state.state_id,
+            failures=[str(item) for item in gate_details],
+            prior_stage=stage,
+        )
+    return _CONTINUE
+
+
+def _settle_self_review(stage, repository, current, attempt, revision, state, service, quality):
+    """Record the self-review of the exact state; repair when it is not approved."""
     if stage == "self_review":
         text = _self_review_response_from_repository(
             repository,
@@ -764,24 +828,11 @@ def _advance_quality_on_settle(
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
             )
+    return _CONTINUE
 
-    if (
-        stage == "self_review"
-        and not CODING_VALIDATION_PHASE_ENABLED
-        and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
-    ):
-        service._set_quality_stage(
-            repository,
-            run_id=current.run_id,
-            stage="acceptance",
-            attempt=attempt,
-            task_revision_id=revision.revision_id,
-            workspace_state_id=state.state_id,
-            reason="coding_quality_phases_disabled",
-        )
-        service._finalize_acceptance(repository, current)
-        return None
 
+def _reconciled_validations(quality, current, revision, service, repository, state):
+    """Validation results for the revision after reconciling the run change set."""
     validations = quality.list_validation_results(
         current.run_id,
         task_revision_id=revision.revision_id,
@@ -797,6 +848,11 @@ def _advance_quality_on_settle(
         current.run_id,
         task_revision_id=revision.revision_id,
     )
+    return validations
+
+
+def _dispatch_validation_gate(revision, validations, state, service, attempt, current, repository):
+    """Repair, retry or run missing validation before reviews."""
     validation_gate, validation_details = candidate_validation_gate(
         revision,
         validations,
@@ -817,20 +873,11 @@ def _advance_quality_on_settle(
             repository, current, revision, attempt=attempt,
             workspace_state_id=state.state_id, missing=validation_details,
         )
+    return _CONTINUE
 
-    review_count = required_review_count(current.spec, state)
-    if review_count <= 0:
-        service._set_quality_stage(
-            repository,
-            run_id=current.run_id,
-            stage="acceptance",
-            attempt=attempt,
-            task_revision_id=revision.revision_id,
-            workspace_state_id=state.state_id,
-        )
-        service._finalize_acceptance(repository, current)
-        return None
 
+def _start_quality_reviews(current, repository, revision, service, state, validations, quality, attempt, review_count):
+    """Snapshot the exact candidate for reviewers and wait for the review children."""
     service._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
     artifacts = repository.list_artifacts(current.run_id)
     diff_artifact = next(
