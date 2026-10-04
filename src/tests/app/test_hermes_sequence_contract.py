@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assist_core.hermes_sequence_contract import (
+from app.rpg.hermes.sequence_contract import (
     hermes_sequence_contract,
     hermes_sequence_contract_validate,
 )

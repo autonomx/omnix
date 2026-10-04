@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .core import AssistantRequest
-from .hermes_status import hermes_runtime_config, hermes_status_payload
+from app.providers.hermes_status import hermes_runtime_config, hermes_status_payload
 from .mode_chat import ModeChatRequest, plan_mode_chat
 
 

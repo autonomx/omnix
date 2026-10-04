@@ -4,19 +4,19 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from typing import Any
 
-from .hermes_rpg_approved_config import hermes_rpg_approved_flow_config_payload
-from .hermes_rpg_approved_flow import hermes_rpg_approved_flow
-from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
-from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_record
-from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
-from .hermes_rpg_submit_bridge import RpgSubmitter
-from .hermes_assist_mode import hermes_assist_mode_policy
-from .hermes_sequence_state import (
+from app.rpg.hermes.approved_config import hermes_rpg_approved_flow_config_payload
+from app.rpg.hermes.approved_flow import hermes_rpg_approved_flow
+from app.rpg.hermes.canonical_submitter import hermes_rpg_canonical_submitter
+from app.rpg.hermes.execution_ledger import hermes_rpg_execution_ledger_record
+from app.rpg.hermes.flow_readout import hermes_rpg_flow_readout
+from app.rpg.hermes.submit_bridge import RpgSubmitter
+from app.rpg.hermes.assist_mode import hermes_assist_mode_policy
+from app.rpg.hermes.sequence_state import (
     apply_hermes_sequence_item_result,
     latest_hermes_sequence_state,
     write_hermes_sequence_state,
 )
-from .hermes_sequence_loop_guard import hermes_sequence_loop_guard
+from app.rpg.hermes.sequence_loop_guard import hermes_sequence_loop_guard
 
 StateLoader = Callable[[str], dict[str, Any]]
 StateWriter = Callable[[dict[str, Any]], dict[str, Any]]

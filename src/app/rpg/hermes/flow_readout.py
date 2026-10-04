@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hermes_rpg_flow_audit import hermes_rpg_flow_audit
-from .hermes_rpg_flow_error import hermes_rpg_flow_error
+from app.rpg.hermes.flow_audit import hermes_rpg_flow_audit
+from app.rpg.hermes.flow_error import hermes_rpg_flow_error
 
 
 def hermes_rpg_flow_readout(flow: dict[str, Any]) -> dict[str, Any]:

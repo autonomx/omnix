@@ -139,7 +139,7 @@ class HermesSidecarRecoveryClient:
 
     def __init__(self, sidecar: Any | None = None) -> None:
         if sidecar is None:
-            from app.assist_core.hermes_client import HermesSidecarClient
+            from app.providers.hermes_client import HermesSidecarClient
 
             sidecar = HermesSidecarClient(timeout=4.0)
         self._sidecar = sidecar
@@ -1075,7 +1075,7 @@ def _hermes_enabled(state: Mapping[str, Any]) -> bool:
     if explicit is not None:
         return bool(explicit)
     try:
-        from app.assist_core.hermes_status import hermes_runtime_config
+        from app.providers.hermes_status import hermes_runtime_config
 
         return bool(hermes_runtime_config().enabled)
     except Exception:

@@ -53,7 +53,7 @@ class OfflineHermesClient:
 def test_live_agent_planner_forces_nonexecuting_review_proposal(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesSidecarClient",
+        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
         FakeHermesClient,
     )
 
@@ -71,7 +71,7 @@ def test_live_agent_planner_forces_nonexecuting_review_proposal(monkeypatch) -> 
 def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesSidecarClient",
+        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
         FakeKasaReadHermesClient,
     )
 
@@ -126,7 +126,7 @@ def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> No
 def test_live_agent_planner_reports_unavailability_for_provider_fallback(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setattr(
-        "app.assist_core.live_agent_planner.HermesSidecarClient",
+        "app.assist_core.live_agent_planner.HermesAssistantPlanner",
         OfflineHermesClient,
     )
 

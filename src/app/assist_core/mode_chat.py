@@ -4,8 +4,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .core import AssistantRequest, AssistantResult
-from .hermes_client import HermesSidecarClient
-from .hermes_status import hermes_runtime_config
+from .hermes_planner import HermesAssistantPlanner
+from app.providers.hermes_status import hermes_runtime_config
 from .house_plan import infer_house_plan
 from .mode_apply import apply_mode_result
 
@@ -57,7 +57,7 @@ def plan_mode_chat(request: ModeChatRequest) -> ModeChatResponse:
     config = hermes_runtime_config()
     if config.enabled:
         try:
-            result = HermesSidecarClient(base_url=config.base_url, timeout=config.timeout_seconds).plan(assistant_request)
+            result = HermesAssistantPlanner(base_url=config.base_url, timeout=config.timeout_seconds).plan(assistant_request)
             result = apply_mode_result(result, dry_run=request.dry_run)
             return ModeChatResponse(ok=result.success, mode="agent", backend="hermes", result=asdict(result))
         except Exception as exc:

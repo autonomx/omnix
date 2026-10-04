@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hermes_rpg_command_request import hermes_rpg_command_request
-from .hermes_rpg_pipeline_handoff import hermes_rpg_pipeline_handoff
-from .hermes_rpg_ready_packet import hermes_rpg_ready_packet
-from .hermes_rpg_request_guard import hermes_rpg_request_guard
-from .hermes_rpg_submit_bridge import RpgSubmitter, hermes_rpg_submit_bridge
+from app.rpg.hermes.command_request import hermes_rpg_command_request
+from app.rpg.hermes.pipeline_handoff import hermes_rpg_pipeline_handoff
+from app.rpg.hermes.ready_packet import hermes_rpg_ready_packet
+from app.rpg.hermes.request_guard import hermes_rpg_request_guard
+from app.rpg.hermes.submit_bridge import RpgSubmitter, hermes_rpg_submit_bridge
 
 
 def hermes_rpg_approved_flow(

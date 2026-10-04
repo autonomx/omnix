@@ -1,12 +1,12 @@
-"""Hermes/assist-core feature declaration."""
+"""The Hermes feature: RPG planning, approved sequences and the sidecar routes (depends on RPG)."""
 from __future__ import annotations
 
 from fastapi import APIRouter
 
 from app.runtime.features import FeatureContext, FeatureModule
 
-from .hermes_api import router as hermes_router
-from .hermes_rpg_approved_routes import hermes_rpg_approved_bp
+from app.rpg.hermes.api import router as hermes_router
+from app.rpg.hermes.approved_routes import hermes_rpg_approved_bp
 
 
 def _router(_context: FeatureContext) -> APIRouter:

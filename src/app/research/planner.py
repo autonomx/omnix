@@ -140,8 +140,8 @@ class ResearchPlanner:
             )
         warnings: list[str] = []
         try:
-            client = self.hermes_factory() if self.hermes_factory else _default_hermes_client()
-            plan = client.plan_research(request)
+            hermes = self.hermes_factory() if self.hermes_factory else HermesResearchPlanner(_default_hermes_client())
+            plan = hermes.plan_research(request)
             return ResearchPlannerDecision(
                 plan=enforce_research_plan_budget(plan, request.budget),
                 backend="hermes",
@@ -325,9 +325,38 @@ _PROVIDER_PLAN_BUDGET = StructuredRetryBudget(
 )
 
 
+class HermesResearchPlanner:
+    """A research plan from the Hermes sidecar, validated as a ``ResearchPlan``."""
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+
+    def plan_research(self, request: Any) -> ResearchPlan:
+        from app.providers import ChatMessage
+
+        validated_request = ResearchPlanningRequest.model_validate(request)
+        return self.client.structured(
+            [
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "Return only valid JSON matching the supplied research schema. Do not execute "
+                        "operations and do not propose operations outside the allowlist."
+                    ),
+                ),
+                ChatMessage(role="user", content=json.dumps(research_planning_payload(validated_request), sort_keys=True)),
+            ],
+            output_model=ResearchPlan,
+            contract_id="hermes.research_plan",
+            json_mode=False,
+            timeout=self.client.timeout,
+            error="Hermes did not return a valid research plan",
+        )
+
+
 def _default_hermes_client() -> Any:
-    from app.assist_core.hermes_client import HermesSidecarClient
-    from app.assist_core.hermes_status import hermes_runtime_config
+    from app.providers.hermes_client import HermesSidecarClient
+    from app.providers.hermes_status import hermes_runtime_config
 
     config = hermes_runtime_config()
     return HermesSidecarClient(

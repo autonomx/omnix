@@ -7,7 +7,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from app.assist_core.hermes_client import HermesSidecarClient
+from app.providers.hermes_client import HermesSidecarClient
 from app.providers.base import ChatResponse
 from tests.support.http import mock_http_client
 import app.research.planner as planner_module
@@ -99,8 +99,8 @@ def test_hermes_research_prompt_contains_no_general_tool_catalog(monkeypatch) ->
         captured.update(json.loads(request.content))
         return httpx.Response(200, json=FakeResponse(json.dumps(response_plan)).json())
 
-    monkeypatch.setattr("app.assist_core.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
-    plan = HermesSidecarClient().plan_research(
+    monkeypatch.setattr("app.providers.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
+    plan = planner_module.HermesResearchPlanner(HermesSidecarClient()).plan_research(
         ResearchPlanningRequest(question="Compare current options")
     )
 
@@ -115,7 +115,7 @@ def test_hermes_research_prompt_contains_no_general_tool_catalog(monkeypatch) ->
 
 def test_default_hermes_client_uses_runtime_config(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.assist_core.hermes_status.hermes_runtime_config",
+        "app.providers.hermes_status.hermes_runtime_config",
         lambda: SimpleNamespace(
             base_url="http://127.0.0.1:9000",
             timeout_seconds=17.0,

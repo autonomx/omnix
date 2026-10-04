@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assist_core.hermes_sequence_checkpoint_policy import (
+from app.rpg.hermes.sequence_checkpoint_policy import (
     hermes_sequence_checkpoint_policy,
     hermes_sequence_checkpoint_reason,
 )

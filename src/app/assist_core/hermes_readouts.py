@@ -18,7 +18,7 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
 
         return {"ok": True, "name": clean, "payload": {"state": load_house_state()}}
     if clean == "get_hermes_status":
-        from .hermes_status import hermes_status_payload
+        from app.providers.hermes_status import hermes_status_payload
 
         return {"ok": True, "name": clean, "payload": hermes_status_payload()}
     if clean == "get_hermes_diagnostics_schema":
@@ -26,7 +26,7 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
 
         return {"ok": True, "name": clean, "payload": hermes_diagnostics_schema()}
     if clean == "get_hermes_rpg_plan_summary":
-        from .hermes_rpg_plan_summary import hermes_rpg_plan_summary_payload
+        from app.rpg.hermes.plan_summary import hermes_rpg_plan_summary_payload
 
         return {"ok": True, "name": clean, "payload": hermes_rpg_plan_summary_payload()}
     return {"ok": False, "name": clean, "error": "unknown_readout"}

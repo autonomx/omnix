@@ -15,8 +15,8 @@ from app.assistant_tools.kasa_plan import (
 )
 
 from .core import AssistantRequest, ToolResult
-from .hermes_client import HermesSidecarClient
-from .hermes_status import hermes_runtime_config
+from .hermes_planner import HermesAssistantPlanner
+from app.providers.hermes_status import hermes_runtime_config
 from .mode_apply import apply_mode_result
 from .mode_chat import ModeChatResponse, detect_mode_domain
 
@@ -49,7 +49,7 @@ def plan_live_agent_proposal(
         },
     )
     try:
-        result = HermesSidecarClient(
+        result = HermesAssistantPlanner(
             base_url=config.base_url,
             api_key=environment().get("HERMES_API_KEY") or None,
             timeout=min(config.timeout_seconds, timeout_seconds),

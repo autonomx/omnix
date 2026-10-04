@@ -5,25 +5,25 @@ from typing import Any
 
 from fastapi import APIRouter, Body
 
-from .hermes_rpg_approved_config import (
+from app.rpg.hermes.approved_config import (
     hermes_rpg_approved_flow_config_payload,
     hermes_rpg_approved_flow_feature_enabled,
 )
-from .hermes_rpg_approved_flow import hermes_rpg_approved_flow
-from .hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
-from .hermes_rpg_execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
-from .hermes_rpg_flow_readout import hermes_rpg_flow_readout
-from .hermes_rpg_submit_bridge import RpgSubmitter
-from .hermes_assist_mode import hermes_assist_mode_policy
-from .hermes_rpg_context_pack import build_hermes_rpg_context_pack
-from .hermes_rpg_narrative_research import hermes_rpg_narrative_research_payload
-from .hermes_sequence_planner_loop import hermes_sequence_planner_loop
-from .hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
-from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
-from .hermes_sequence_contract import hermes_sequence_contract_validate
-from .hermes_sequence_gate import hermes_sequence_apply_gate
-from .hermes_sequence_loop_guard import hermes_sequence_loop_guard
-from .hermes_sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
+from app.rpg.hermes.approved_flow import hermes_rpg_approved_flow
+from app.rpg.hermes.canonical_submitter import hermes_rpg_canonical_submitter
+from app.rpg.hermes.execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_record
+from app.rpg.hermes.flow_readout import hermes_rpg_flow_readout
+from app.rpg.hermes.submit_bridge import RpgSubmitter
+from app.rpg.hermes.assist_mode import hermes_assist_mode_policy
+from app.rpg.hermes.context_pack import build_hermes_rpg_context_pack
+from app.rpg.hermes.narrative_research import hermes_rpg_narrative_research_payload
+from app.rpg.hermes.sequence_planner_loop import hermes_sequence_planner_loop
+from app.rpg.hermes.sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
+from app.rpg.hermes.sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
+from app.rpg.hermes.sequence_contract import hermes_sequence_contract_validate
+from app.rpg.hermes.sequence_gate import hermes_sequence_apply_gate
+from app.rpg.hermes.sequence_loop_guard import hermes_sequence_loop_guard
+from app.rpg.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
 
 hermes_rpg_approved_bp = APIRouter()
 

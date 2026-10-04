@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hermes_planner_context import hermes_planner_context_from_session
-from .hermes_rpg_plan_request import HermesRpgPlanClient, request_hermes_rpg_plan
-from .hermes_rpg_ticket import hermes_rpg_ticket_payload
-from .hermes_rpg_validator import validate_hermes_rpg_proposal
+from app.rpg.hermes.planner_context import hermes_planner_context_from_session
+from app.rpg.hermes.plan_request import HermesRpgPlanClient, request_hermes_rpg_plan
+from app.rpg.hermes.ticket import hermes_rpg_ticket_payload
+from app.rpg.hermes.validator import validate_hermes_rpg_proposal
 
 
 def hermes_rpg_plan_payload(request: dict[str, Any], *, client: HermesRpgPlanClient | None = None) -> dict[str, Any]:

@@ -5,13 +5,13 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from .hermes_adapter_contract import hermes_adapter_preview_payload
-from .hermes_rpg_context import hermes_rpg_context_payload
-from .hermes_rpg_plan import hermes_rpg_plan_payload
-from .hermes_rpg_suggestions import hermes_rpg_suggestions_payload
-from .hermes_rpg_turn_readout import hermes_rpg_turn_readout_payload
-from .omnix_mode_policy import omnix_mode_policy_payload
-from .omnix_route_decision import omnix_route_decision_payload
+from app.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
+from app.rpg.hermes.context import hermes_rpg_context_payload
+from app.rpg.hermes.plan import hermes_rpg_plan_payload
+from app.rpg.hermes.suggestions import hermes_rpg_suggestions_payload
+from app.rpg.hermes.turn_readout import hermes_rpg_turn_readout_payload
+from app.assist_core.omnix_mode_policy import omnix_mode_policy_payload
+from app.assist_core.omnix_route_decision import omnix_route_decision_payload
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 
@@ -84,7 +84,7 @@ class HermesStatusResponse(BaseModel):
 
 @router.get("/status", response_model=HermesStatusResponse)
 def hermes_status() -> dict[str, Any]:
-    from .hermes_diagnostics import hermes_diagnostics_status_payload
+    from app.assist_core.hermes_diagnostics import hermes_diagnostics_status_payload
 
     return hermes_diagnostics_status_payload()
 
@@ -92,7 +92,7 @@ def hermes_status() -> dict[str, Any]:
 @router.post("/test")
 def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     # Imported on use: diagnostics are not needed to compose the gateway.
-    from .hermes_diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
+    from app.assist_core.hermes_diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
 
     payload = request or HermesTestRequest()
     return hermes_diagnostics_test_payload(
@@ -127,7 +127,7 @@ def hermes_route_decision(mode: str | None = None) -> dict[str, Any]:
 
 @router.get("/candidate/demo")
 def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
-    from .hermes_candidate import hermes_demo_candidate
+    from app.rpg.hermes.candidate import hermes_demo_candidate
 
     return hermes_demo_candidate(note=note)
 
@@ -165,7 +165,7 @@ def hermes_approve(request: dict[str, Any] | None = None) -> dict[str, Any]:
 
 @router.post("/lookup")
 def hermes_lookup(request: HermesLookupRequest) -> dict[str, Any]:
-    from .hermes_readouts import readout_payload
+    from app.assist_core.hermes_readouts import readout_payload
 
     payload = readout_payload(request.name, request.args)
     return {**payload, "dry_run": True, "mode": "lookup"}

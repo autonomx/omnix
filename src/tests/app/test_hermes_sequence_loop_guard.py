@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assist_core.hermes_sequence_loop_guard import hermes_sequence_loop_guard
+from app.rpg.hermes.sequence_loop_guard import hermes_sequence_loop_guard
 
 
 def test_loop_guard_detects_duplicate_command_text() -> None:

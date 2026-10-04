@@ -3,9 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from .hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
-from .hermes_sequence_contract import hermes_sequence_contract_validate
-from .hermes_sequence_loop_guard import hermes_sequence_loop_guard
+from app.rpg.hermes.sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
+from app.rpg.hermes.sequence_contract import hermes_sequence_contract_validate
+from app.rpg.hermes.sequence_loop_guard import hermes_sequence_loop_guard
 
 SOURCE = "hermes_sequence_planner_loop"
 UNSUPPORTED_ACTIONS = {"delete", "teleport", "rewrite", "spawn", "grant"}

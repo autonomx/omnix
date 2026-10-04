@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import re
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 from .active_objective import normalize_objective_relation
@@ -195,19 +195,80 @@ SOURCE_CAPABILITIES: dict[str, tuple[str, str]] = {
 _SEMANTIC_SOURCE_CLASSES = frozenset(SOURCE_CAPABILITIES)
 
 
+_HERMES_EVIDENCE_SCHEMA = {
+    "requirement": "none|optional|required",
+    "external_access": "allowed|forbidden",
+    "requirements": [
+        {
+            "source_class": (
+                "general_current_web|breaking_news|market_news|company_filing|"
+                "software_release|repo_contents|repo_ci_state|home_state|"
+                "home_energy|calendar_state|email_state|market_quote|"
+                "market_status|weather_state"
+            ),
+            "freshness": "timeless|current",
+            "trust_floor": "authoritative|primary|reputable|general",
+            "fallback_policy": "fail_closed|allow_fallback",
+        }
+    ],
+    "user_visible_attribution": "none|when_used|required",
+    "retrieval_strategy": "lookup|bounded|adaptive",
+    "confidence": "number 0..1",
+    "reason": "short string",
+}
+
+
+def _hermes_evidence_decision(client: Any, task: str, profile_id: str) -> dict[str, Any]:
+    """Proposal-only semantic evidence classification for ambiguous Agent tasks.
+
+    The sidecar never executes tools. Omnix validates the returned source
+    classes against the selected profile ceiling before issuing authority.
+    """
+    from app.providers import ChatMessage
+    from app.providers.hermes_client import JsonObject
+
+    decision = client.structured(
+        [
+            ChatMessage(
+                role="system",
+                content=(
+                    "You are a non-executing evidence-policy adviser. Return one JSON object "
+                    "matching the supplied schema. Determine whether the task needs external "
+                    "evidence, what semantic source classes are required, freshness/trust, and "
+                    "attribution. Never execute tools, never name unlisted source classes, and "
+                    "never grant capabilities."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=json.dumps(
+                    {"task": task, "profile": profile_id, "schema": _HERMES_EVIDENCE_SCHEMA},
+                    sort_keys=True,
+                ),
+            ),
+        ],
+        output_model=JsonObject,
+        contract_id="hermes.evidence_decision",
+        json_mode=True,
+        timeout=min(client.timeout, 15.0),
+        error="Hermes did not return a valid evidence decision",
+    )
+    return decision.model_dump()
+
+
 def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision | None:
     enabled = str(_env_str("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
     if enabled not in {"1", "true", "yes", "hermes"}:
         return None
     try:
-        from app.assist_core.hermes_client import HermesSidecarClient
+        from app.providers.hermes_client import HermesSidecarClient
 
         client = HermesSidecarClient(
             base_url=str(_env_str("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
             api_key=_env_str("OMNIX_HERMES_API_KEY"),
             timeout=float(_env_str("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
         )
-        payload = client.classify_agent_evidence(task, profile_id)
+        payload = _hermes_evidence_decision(client, task, profile_id)
     except Exception as exc:
         # Advisory failures never weaken the policy. The caller falls back to
         # conservative Omnix classification.

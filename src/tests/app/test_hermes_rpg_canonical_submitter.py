@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assist_core import hermes_rpg_canonical_submitter as submitter
+from app.rpg.hermes import canonical_submitter as submitter
 from app.rpg.session import interactive_first_call_runtime, service
 
 

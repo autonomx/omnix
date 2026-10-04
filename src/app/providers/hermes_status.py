@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from .hermes_client import HermesSidecarClient
+from app.providers.hermes_client import HermesSidecarClient
 
 
 def _flag(name: str, default: bool = False) -> bool:

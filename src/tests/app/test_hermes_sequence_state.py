@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import create_fastapi_app
-from app.assist_core import hermes_rpg_approved_routes
-from app.assist_core.hermes_sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
+from app.rpg.hermes import approved_routes as hermes_rpg_approved_routes
+from app.rpg.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
 
 
 def reviewed_payload(*, ok: bool = True, statement: str = "look around", allowed: bool = True) -> dict:

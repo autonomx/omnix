@@ -8,10 +8,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
 | `CONDA_ROOT` | string | — | launcher | Controls conda root for launcher. |
-| `HERMES_API_KEY` | string | — | hermes, research, trading | Controls hermes api key for hermes, research, trading. |
-| `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | hermes, launcher | Controls hermes base url for hermes, launcher. |
-| `HERMES_ENABLED` | string | — | hermes, launcher, research | Controls hermes enabled for hermes, launcher, research. |
-| `HERMES_TIMEOUT_SECONDS` | string | `45` | hermes | Controls hermes timeout seconds for hermes. |
+| `HERMES_API_KEY` | string | — | hermes, providers, research, rpg, trading | Controls hermes api key for hermes, providers, research, rpg, trading. |
+| `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
+| `HERMES_ENABLED` | string | — | hermes, launcher, providers, research | Controls hermes enabled for hermes, launcher, providers, research. |
+| `HERMES_TIMEOUT_SECONDS` | string | `45` | providers | Controls hermes timeout seconds for providers. |
 | `HF_TOKEN` | string | — | image | Controls hf token for image. |
 | `LIVE_SPEECH_INPUT_SAMPLE_RATE` | string | `16000` | live-speech | Controls live speech input sample rate for live-speech. |
 | `LIVE_SPEECH_LLM_BASE_URL` | string | `http://127.0.0.1:1234/v1` | live-speech | Controls live speech llm base url for live-speech. |

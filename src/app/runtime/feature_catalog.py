@@ -19,7 +19,7 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
     "characters": "app.characters.feature:FEATURE",
     "character-interactions": "app.character_interactions.feature:FEATURE",
     "desktop-companion": "app.desktop_companion.feature:FEATURE",
-    "hermes": "app.assist_core.feature:FEATURE",
+    "hermes": "app.rpg.hermes.feature:FEATURE",
     "image": "app.image.feature:FEATURE",
     "voice": "app.voice.feature:FEATURE",
     "live-voice": "app.live_voice.feature:FEATURE",

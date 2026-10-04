@@ -5,9 +5,9 @@ from app.config.env import env_str, environment
 import os
 from typing import Any, Protocol
 
-from .hermes_client import HermesSidecarClient
-from .hermes_planner_contract import normalize_hermes_planner_response
-from .hermes_status import hermes_runtime_config
+from app.providers.hermes_client import HermesSidecarClient
+from app.rpg.hermes.planner_contract import normalize_hermes_planner_response
+from app.providers.hermes_status import hermes_runtime_config
 
 
 class HermesRpgPlanClient(Protocol):

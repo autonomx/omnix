@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.assist_core.hermes_contract import normalize_hermes_response, tool_calls_from_hermes
 from app.assist_core.hermes_diagnostics import hermes_diagnostics_schema, hermes_diagnostics_status_payload
 from app.assist_core.hermes_readouts import readout_payload
-from app.assist_core.hermes_status import hermes_status_payload
+from app.providers.hermes_status import hermes_status_payload
 
 
 def test_hermes_status_payload_disabled_by_default(monkeypatch) -> None:

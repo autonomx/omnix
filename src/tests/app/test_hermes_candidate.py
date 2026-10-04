@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.assist_core.hermes_candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
+from app.rpg.hermes.candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
 from app.gateway.main import create_gateway_app
 
 

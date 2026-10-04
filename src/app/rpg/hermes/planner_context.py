@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Any
 
-from .hermes_rpg_context import hermes_rpg_context_from_session
+from app.rpg.hermes.context import hermes_rpg_context_from_session
 
 
 def hermes_planner_context_from_session(session_id: str, session: dict[str, Any]) -> dict[str, Any]:

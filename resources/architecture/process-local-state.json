@@ -88,7 +88,7 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/assist_core/hermes_rpg_execution_ledger.py",
+      "path": "src/app/rpg/hermes/execution_ledger.py",
       "symbol": "_LEDGER",
       "category": "cache",
       "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",

@@ -43,7 +43,7 @@ def _masked_api_key(api_key: str) -> str:
 
 def _hermes_status_payload() -> dict[str, Any]:
     try:
-        from app.assist_core.hermes_status import hermes_status_payload
+        from app.providers.hermes_status import hermes_status_payload
 
         return hermes_status_payload()
     except Exception as exc:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from .hermes_rpg_pipeline_result import hermes_rpg_pipeline_result
-from .hermes_rpg_submit_adapter import hermes_rpg_submit_adapter
+from app.rpg.hermes.pipeline_result import hermes_rpg_pipeline_result
+from app.rpg.hermes.submit_adapter import hermes_rpg_submit_adapter
 
 RpgSubmitter = Callable[[dict[str, Any]], dict[str, Any]]
 

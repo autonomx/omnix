@@ -25,7 +25,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.agent_runtime.semantic_task_parser",
     "app.agent_runtime.service",
     "app.agent_runtime.service_core",
-    "app.assist_core.hermes_client",
+    "app.assist_core.hermes_planner",
     "app.assist_core.rpg_direction",
     "app.assistant_context.vision",
     "app.assistant_memory.initiative",
