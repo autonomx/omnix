@@ -23,105 +23,6 @@
   "violations": [
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.gate",
-      "lines": [
-        21
-      ],
-      "path": "src/app/agent_runtime/broker_api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.models",
-      "lines": [
-        11
-      ],
-      "path": "src/app/agent_runtime/capability_requests.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.gate",
-      "lines": [
-        14
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_routing_context:app.chat.prompt_assembly",
-      "lines": [
-        197
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_routing_context:app.chat.routing_context",
-      "lines": [
-        198
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_security_subject:app.trading.catalog",
-      "lines": [
-        419
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_security_subject:app.trading.models",
-      "lines": [
-        420
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "validate_required_evidence_capabilities:app.assistant_tools.gate",
-      "lines": [
-        1304
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.repo_adapter",
-      "lines": [
-        17
-      ],
-      "path": "src/app/agent_runtime/run_workspace.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.capability_dashboard",
-      "lines": [
-        13
-      ],
-      "path": "src/app/assistant_memory/initiative.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_workspace_for_preview:app.agent_runtime.service",
-      "lines": [
-        953
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_character_integration_routes.memory_repository_factory:app.assistant_memory.owner_repository",
       "lines": [
         102
@@ -188,15 +89,6 @@
       "fingerprint": "<module>:app.assistant_tools.contracts",
       "lines": [
         23
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
-      "lines": [
-        162
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -276,15 +168,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "route_typed_stream_boundary:app.agent_runtime.chat_bridge",
-      "lines": [
-        153
-      ],
-      "path": "src/app/chat/prompt_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
         6
@@ -299,15 +182,6 @@
         9
       ],
       "path": "src/app/chat/sqlite_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ChatSessionStore._generate_reply:app.agent_runtime.chat_bridge",
-      "lines": [
-        595
-      ],
-      "path": "src/app/chat/store.py",
       "rule": "AL001"
     },
     {
@@ -347,24 +221,6 @@
       ],
       "path": "src/app/persistence/cli.py",
       "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.agent_runtime<->app.assistant_tools",
-      "lines": [
-        1
-      ],
-      "path": "src/app/agent_runtime/",
-      "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.agent_runtime<->app.chat",
-      "lines": [
-        1
-      ],
-      "path": "src/app/agent_runtime/",
-      "rule": "AL015"
     },
     {
       "count": 1,

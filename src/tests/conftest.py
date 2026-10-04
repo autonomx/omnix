@@ -104,7 +104,12 @@ def capability_runtime_installed():
     from app.capabilities.registry import TOOL_DECLARATIONS
     from app.chat.contracts import CHAT_RESEARCH
     from app.research.assistant_tool import ResearchTool
-    from app.trading.assistant_tool import TradingMarketDataTool
+    from app.agent_runtime.chat_bridge import route_typed_chat_turn
+    from app.agent_runtime.contracts import SECURITY_INSTRUMENTS
+    from app.agent_runtime.feature import _RunWorkspaces
+    from app.assistant_tools.contracts import AGENT_RUN_WORKSPACES
+    from app.chat.contracts import TYPED_TURN_ROUTER
+    from app.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
     from app.research.api import ChatResearchAdapter
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
     from app.runtime_composition import composition_port_bindings
@@ -115,6 +120,9 @@ def capability_runtime_installed():
         PortBinding(CHAT_RESEARCH, ChatResearchAdapter(), owner="research"),
         PortBinding(TOOL_DECLARATIONS, ResearchTool(), owner="research"),
         PortBinding(TOOL_DECLARATIONS, TradingMarketDataTool(), owner="trading"),
+        PortBinding(TYPED_TURN_ROUTER, route_typed_chat_turn, owner="agent-runtime"),
+        PortBinding(AGENT_RUN_WORKSPACES, _RunWorkspaces(), owner="agent-runtime"),
+        PortBinding(SECURITY_INSTRUMENTS, TradingSecurityInstruments(), owner="trading"),
         *composition_port_bindings(),
     ]))
     yield

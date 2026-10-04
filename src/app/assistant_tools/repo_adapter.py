@@ -472,3 +472,7 @@ def _repository_parts(repository: str) -> tuple[str, str]:
     if len(parts) != 2 or not all(parts):
         raise ValueError("repository must be owner/name")
     return parts[0], parts[1]
+
+
+# Public name for the agent runtime's workspace setup (assistant_tools.contracts).
+github_repository_from_remote = _github_repository_from_remote

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.capabilities import default_capability_registry
-from app.assistant_tools.gate import review_assistant_tool_request
+from app.assistant_tools.contracts import review_assistant_tool_request
 from app.capabilities.executor import LEGACY_APPROVER, CapabilityGrant, execute_capability
 from .capability_requests import AssistantToolRequest, AssistantToolResult
 from app.observability.tracing import set_span_attributes

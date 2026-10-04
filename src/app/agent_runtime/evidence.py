@@ -416,18 +416,15 @@ def _security_subject(ticker: str) -> SubjectRef:
     canonical_id = f"{ticker}:US"
     qualifiers: dict[str, object] = {"ticker": ticker}
     try:
-        from app.trading.catalog import search_instruments
-        from app.trading.models import AssetClass
+        from app.runtime.ports import optional
 
-        candidates = [
-            item
-            for item in search_instruments(ticker)
-            if item.asset_class is AssetClass.EQUITY
-            and item.display_symbol.upper() == ticker
-        ]
-        if len(candidates) == 1:
-            canonical_id = candidates[0].instrument_id
-            qualifiers["instrument_id"] = candidates[0].instrument_id
+        from .contracts import SECURITY_INSTRUMENTS
+
+        instruments = optional(SECURITY_INSTRUMENTS)
+        instrument_id = instruments.equity_instrument_id(ticker) if instruments is not None else None
+        if instrument_id:
+            canonical_id = instrument_id
+            qualifiers["instrument_id"] = instrument_id
     except Exception as exc:
         log_recovered_exception("security instrument resolution", exc, level="DEBUG")
         pass
@@ -1301,7 +1298,7 @@ def validate_required_evidence_capabilities(
     """Require one live capability per evidence requirement, not every fallback."""
     if not capabilities:
         return
-    from app.assistant_tools.gate import review_assistant_tool_request
+    from app.assistant_tools.contracts import review_assistant_tool_request
     from .capability_requests import AssistantToolRequest
 
     allowed_set = set(capabilities)

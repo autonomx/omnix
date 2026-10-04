@@ -592,7 +592,7 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         routing_deadline_at = provider_turn_deadline(
             provider_id,

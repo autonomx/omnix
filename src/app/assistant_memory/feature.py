@@ -59,6 +59,8 @@ FEATURE = FeatureModule(
     title="Assistant Memory",
     tier="platform",
     depends_on=("chat",),
+    # Initiative planning reads the tools capability dashboard when tools are enabled.
+    uses=("assistant-tools",),
     routers=(_router,),
     job_handlers=(
         JobHandlerSpec(

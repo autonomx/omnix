@@ -150,7 +150,7 @@ def route_typed_stream_boundary(
 
     already_routed = bool(user_message.metadata.get("omnix_chat_routed"))
     if not already_routed:
-        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         routing_deadline_at = provider_turn_deadline(
             provider_id,

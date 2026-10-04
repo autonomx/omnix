@@ -948,22 +948,23 @@ def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path, An
     if not run_id:
         raise ValueError("workspace preview requires a run-scoped broker proposal")
 
-    # Lazy import avoids coupling the assistant-tool module graph to the Agent
-    # service at import time while still resolving the authoritative RunSpec.
-    from app.agent_runtime.service import default_agent_run_service
+    # The agent runtime supplies the authoritative issued workspace (ADR-0016).
+    from app.runtime.ports import optional
 
-    snapshot = default_agent_run_service().get(run_id)
-    if snapshot is None or snapshot.spec.workspace is None:
+    from .contracts import AGENT_RUN_WORKSPACES
+
+    workspaces = optional(AGENT_RUN_WORKSPACES)
+    preview = workspaces.preview(run_id) if workspaces is not None else None
+    if preview is None:
         raise ValueError("workspace preview requires an issued Agent workspace")
-    workspace = snapshot.spec.workspace
+    workspace, launcher = preview
     root = Path(workspace.worktree or workspace.root).resolve()
     package = _preview_package_path()
     package_json = root / package / "package.json"
     if not package_json.is_file():
         raise ValueError(f"workspace preview package is missing: {package}")
     # A sandboxed run's preview runs in the sandbox too: the dev server executes
-    # code the agent may have changed (WP-4.7).
-    launcher = default_agent_run_service().workspace_preview_launcher(snapshot.spec)
+    # code the agent may have changed (WP-4.7); the launcher comes with the workspace.
     return run_id, root, launcher
 
 

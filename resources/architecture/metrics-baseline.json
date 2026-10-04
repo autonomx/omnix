@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 36,
+      "AL001": 22,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -2481,8 +2481,6 @@
     "package_cycles": [],
     "platform_architecture": {
       "any_scope_package_cycles": [
-        "app.agent_runtime<->app.assistant_tools",
-        "app.agent_runtime<->app.chat",
         "app.assets<->app.persistence",
         "app.persistence<->app.security"
       ],
@@ -6487,7 +6485,7 @@
     "any_scope_package_cycles": {
       "direction": "lower",
       "target": 0,
-      "value": 4
+      "value": 2
     },
     "app_to_app_imports": {
       "direction": "lower",
@@ -6592,7 +6590,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 36
+      "value": 22
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6797,5 +6795,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "631967354c3d7a22f6bba98798f94afade3e73bdc75523265bda2bd34883b17c"
+  "source_digest": "92dd8dc487bd33853449aa12565a6ec03a409ed80168ac44434d7a0340e219c6"
 }

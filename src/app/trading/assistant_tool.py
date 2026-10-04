@@ -111,3 +111,17 @@ class TradingMarketDataTool:
 
     def run(self, request: AssistantToolRequest) -> AssistantToolResult:
         return run_trading_tool_request(request)
+
+
+class TradingSecurityInstruments:
+    """Trading's canonical-instrument lookup for agent evidence subjects."""
+
+    def equity_instrument_id(self, ticker: str) -> str | None:
+        from app.trading.catalog import search_instruments
+        from app.trading.models import AssetClass
+
+        candidates = [
+            item for item in search_instruments(ticker)
+            if item.asset_class is AssetClass.EQUITY and item.display_symbol.upper() == ticker
+        ]
+        return candidates[0].instrument_id if len(candidates) == 1 else None

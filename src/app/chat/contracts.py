@@ -92,6 +92,23 @@ class ChatResearch(Protocol):
 CHAT_RESEARCH: Port[ChatResearch] = Port("chat.research", ChatResearch, "at_most_one")
 
 
+class TypedTurnRouter(Protocol):
+    """Routes a typed chat turn to the agent runtime; returns None to let chat answer."""
+
+    def __call__(self, session: Any, user_message: Any, **options: Any) -> Any: ...
+
+
+# The agent runtime contributes this; without it chat answers every turn itself.
+TYPED_TURN_ROUTER: Port[TypedTurnRouter] = Port("chat.typed_turn_router", TypedTurnRouter, "at_most_one")
+
+
+def route_typed_turn(session: Any, user_message: Any, **options: Any) -> Any:
+    from app.runtime.ports import optional
+
+    router = optional(TYPED_TURN_ROUTER)
+    return router(session, user_message, **options) if router is not None else None
+
+
 def hermes_assist_status_payload() -> dict:
     from app.chat.assist.diagnostics import hermes_diagnostics_status_payload
 
@@ -112,6 +129,9 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "TYPED_TURN_ROUTER",
+    "TypedTurnRouter",
+    "route_typed_turn",
     "CHAT_STORE_FACTORY",
     "CHAT_RESEARCH",
     "ChatResearch",
@@ -154,6 +174,7 @@ __all__ = [
 
 # Services apps import through this contract, loaded on first use (ADR-0016).
 _LAZY_EXPORTS = {
+    "build_chat_routing_context": "routing_context",
     "stream_live_call_greeting_chunks": "live_call_greeting",
     "ProactiveDeliveryRequest": "live_conversation_proactive",
     "ProactiveDeliveryResponse": "live_conversation_proactive",

@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 import secrets
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from app.runtime.ports import Port
 
 AgentRunStatus = Literal[
     "queued",
@@ -755,3 +757,15 @@ class WorkerLease(BaseModel):
     lease_expires_at: datetime
     heartbeat_at: datetime
     revision: int
+
+
+class SecurityInstruments(Protocol):
+    """Resolves an exact US equity ticker to its canonical instrument id, or None."""
+
+    def equity_instrument_id(self, ticker: str) -> str | None: ...
+
+
+# Trading contributes this; without it evidence subjects use the ticker form.
+SECURITY_INSTRUMENTS: Port[SecurityInstruments] = Port(
+    "agent_runtime.security_instruments", SecurityInstruments, "at_most_one",
+)

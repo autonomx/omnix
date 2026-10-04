@@ -159,7 +159,7 @@ def stream_live_agent_turn(
             yield from _governed_rejection_events(user_message, request)
             return
 
-        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         generalized = route_typed_chat_turn(
             session,

@@ -14,7 +14,7 @@ import json
 import subprocess
 from pathlib import Path
 import tempfile
-from app.assistant_tools.repo_adapter import _github_repository_from_remote
+from app.assistant_tools.contracts import github_repository_from_remote
 from .isolation import run_mutates
 from .request_policy import allowed_workspace_root
 from .contracts import (
@@ -307,7 +307,7 @@ def _github_origin_repository(repository: str) -> str:
     )
     if completed.returncode != 0:
         raise ValueError("github authority requires a readable origin remote")
-    owner, name = _github_repository_from_remote(completed.stdout.strip())
+    owner, name = github_repository_from_remote(completed.stdout.strip())
     return f"{owner}/{name}"
 
 

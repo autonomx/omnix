@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
 from app.capabilities.executor import CapabilityGrant, execute_capability
 
 # A capability node's executor: (session id, request) -> tool result.
