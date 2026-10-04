@@ -1,9 +1,11 @@
-"""Canonical contracts for shared image generation jobs."""
+"""Image feature contract (ADR-0016): job payloads and the ports other modules implement."""
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator
+
+from app.runtime.ports import Port
 
 
 ImageJobErrorCode = Literal[
@@ -116,3 +118,22 @@ def image_title_from_prompt(prompt: str, *, fallback: str = "Generated image", l
     if len(compact) <= limit:
         return compact
     return compact[: max(1, limit - 1)].rstrip() + "…"
+
+
+class CharacterAvatarFinisher(Protocol):
+    """Character-specific steps of an image job that generates an avatar frame."""
+
+    def stabilize(
+        self, job: Any, request: Any, storage_path: str, request_metadata: dict[str, Any], store: Any,
+    ) -> dict[str, Any]:
+        """Adjust a generated frame and return metadata to record with the asset."""
+        ...
+
+    def completed(self, job: Any) -> None:
+        """React to a finished avatar image job."""
+        ...
+
+
+CHARACTER_AVATAR_FINISHER: Port[CharacterAvatarFinisher] = Port(
+    "image.character_avatar_finisher", CharacterAvatarFinisher, "at_most_one",
+)

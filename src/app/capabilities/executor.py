@@ -2,10 +2,11 @@
 
 Every caller (agent broker, task graph, workflow, chat, live agent, tool
 proposals) describes its authority as a ``CapabilityGrant`` and calls
-``execute_capability``. The assistant-tools feature installs the runtime that
-reviews the request against the current tool policy, dispatches to an adapter
-from a fail-closed registry and records the ledger entry. Without that
-feature, execution fails closed.
+``execute_capability``. The assistant-tools feature contributes the runtime
+(``CAPABILITY_RUNTIME``, an at-most-one port) that reviews the request
+against the current tool policy, dispatches to an adapter from a fail-closed
+registry and records the ledger entry. Without that feature, execution fails
+closed.
 
 A grant is approved only when ``approved_by`` names the principal whose
 recorded decision approved this exact call. Callers never pass a bare
@@ -16,14 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, get_args
 
-from app.runtime.hooks import invoke_runtime_hook
+from app.runtime.ports import Port, optional
 
 GrantSource = Literal["agent_run", "task_graph", "workflow", "chat", "live_agent", "tool_proposal"]
 ApprovalFloor = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
-
-EXECUTE_HOOK = "capabilities.execute"
-_MISSING = object()
-
 
 class CapabilityRuntimeUnavailable(RuntimeError):
     """No capability runtime is installed (the assistant-tools feature is off)."""
@@ -67,18 +64,23 @@ class CapabilityExecutor(Protocol):
     def __call__(self, grant: CapabilityGrant, request: Any, *, user_request: str = "") -> Any: ...
 
 
+# Contributing the runtime makes tools executable; it grants nothing. The
+# runtime itself enforces the grant, approvals and the tool policy.
+CAPABILITY_RUNTIME: Port[CapabilityExecutor] = Port("capabilities.runtime", CapabilityExecutor, "at_most_one")
+
+
 def execute_capability(grant: CapabilityGrant, request: Any, *, user_request: str = "") -> Any:
-    """Execute ``request`` under ``grant`` through the installed runtime."""
+    """Execute ``request`` under ``grant`` through the composed runtime."""
     if not isinstance(grant, CapabilityGrant):
         raise TypeError("execute_capability requires a CapabilityGrant")
-    result = invoke_runtime_hook(EXECUTE_HOOK, grant, request, user_request=user_request, default=_MISSING)
-    if result is _MISSING:
+    runtime = optional(CAPABILITY_RUNTIME)
+    if runtime is None:
         raise CapabilityRuntimeUnavailable("capability runtime is not installed (assistant-tools feature disabled)")
-    return result
+    return runtime(grant, request, user_request=user_request)
 
 
 __all__ = [
-    "EXECUTE_HOOK",
+    "CAPABILITY_RUNTIME",
     "LEGACY_APPROVER",
     "CapabilityExecutor",
     "CapabilityGrant",

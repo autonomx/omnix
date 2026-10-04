@@ -7,7 +7,7 @@ from app.platform.effective_defaults import apply_job_defaults
 from app.runtime.features import FeatureContext, FeatureModule
 
 from .jobs import execute_image_job
-from .job_contracts import ImageGenerateInput
+from .contracts import ImageGenerateInput
 from .routes.assets import create_image_asset_file_router
 from .routes.models import create_image_model_router
 from .routes.references import create_image_reference_router

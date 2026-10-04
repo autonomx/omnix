@@ -14,7 +14,7 @@ from app.persistence.shared_repository_specs import shared_repository_specs
 from app.runtime.background import register_background_worker
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
-from app.runtime.hooks import install_runtime_hooks
+from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
 from app.runtime.scheduler import ScheduledTaskSpec as RuntimeScheduledTaskSpec
 from app.security.permissions import feature_permission_guard, internal_permission_guard
 
@@ -65,6 +65,7 @@ def _register_feature_modules(gateway) -> None:
     loaded_features = []
     internal_paths: list[str] = []
     public_paths: list[str] = []
+    port_bindings: list[PortBinding] = []
     job_handlers = JobHandlerRegistry()
     # Kernel-owned synthetic job used by canaries and deployment tests.
     job_handlers.register(PLATFORM_PROBE_JOB)
@@ -78,7 +79,6 @@ def _register_feature_modules(gateway) -> None:
         settings_service = getattr(services, "settings", None)
         if feature.settings and settings_service is not None:
             settings_service.register_specs(tuple(feature.settings))
-        install_runtime_hooks(feature.hooks)
         for handler in feature.job_handlers:
             job_handlers.register(handler)
         for observer_factory in feature.job_observers:
@@ -96,6 +96,12 @@ def _register_feature_modules(gateway) -> None:
             logger=logging.getLogger(f"app.feature.{feature.id}"),
             runtime_state=gateway.state,
         )
+        # ADR-0016: typed ports replace string hooks; each contribution is built
+        # from its own feature's context and validated with the rest below.
+        for contribution in feature.contributions:
+            port_bindings.append(PortBinding(
+                contribution.port, contribution.factory(context), owner=feature.id, priority=contribution.priority,
+            ))
         # Every feature route is authorized (WP-4.3): its declared permission,
         # else the feature's read/write default.
         permission_guard = feature_permission_guard(feature.id)
@@ -131,6 +137,9 @@ def _register_feature_modules(gateway) -> None:
 
     # The authentication middleware accepts the service token only on these
     # paths and lets declared public paths through without a principal.
+    bindings = PortBindings.build(port_bindings)
+    install_port_bindings(bindings)
+    gateway.state.port_bindings = bindings
     gateway.state.internal_route_paths = tuple(dict.fromkeys(internal_paths))
     gateway.state.public_route_paths = tuple(dict.fromkeys(public_paths))
     gateway.state.feature_modules = tuple(registered)

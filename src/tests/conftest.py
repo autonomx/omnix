@@ -99,10 +99,13 @@ def capability_runtime_installed():
     # Composition installs the assistant-tools runtime behind
     # app.capabilities.executor (WP-4.5); tests that call capability paths
     # without composing a gateway get the same runtime.
-    from app.assistant_tools.executor import CAPABILITY_RUNTIME_HOOK
-    from app.runtime.hooks import install_runtime_hooks
+    from app.assistant_tools.executor import execute_with_grant
+    from app.capabilities.executor import CAPABILITY_RUNTIME
+    from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
 
-    install_runtime_hooks((CAPABILITY_RUNTIME_HOOK,))
+    install_port_bindings(PortBindings.build([
+        PortBinding(CAPABILITY_RUNTIME, execute_with_grant, owner="assistant-tools"),
+    ]))
     yield
 
 

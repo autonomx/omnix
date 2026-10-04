@@ -116,13 +116,17 @@ def test_image_feature_is_mounted_from_its_routers_and_can_be_disabled() -> None
     assert "/api/assets/{asset_id}/file" in enabled_paths
     assert "image" in enabled.state.feature_modules
 
-    disabled = create_gateway_app(runtime_config=RuntimeConfig(disabled_features=("image",)))
+    # Characters implements image's avatar port (ADR-0016), so disabling image
+    # disables characters and the features built on it.
+    dependents = {feature_id for feature_id in FEATURE_CATALOG if "image" in _dependency_closure(feature_id)}
+    disabled = create_gateway_app(runtime_config=RuntimeConfig(disabled_features=("image", *sorted(dependents))))
     disabled_paths = _paths(disabled)
     assert "/health" in disabled_paths
     assert "/api/runtime/status" in disabled_paths
     assert not any(path.startswith("/api/image-generation/") for path in disabled_paths)
     assert "/api/assets/{asset_id}/file" not in disabled_paths
     assert "image" not in disabled.state.feature_modules
+    assert "characters" in dependents
 
 
 def test_unknown_feature_configuration_fails_closed() -> None:

@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.jobs.models import JobStatus
-from app.runtime.hooks import invoke_runtime_hook
+from app.runtime.ports import optional
 
 from app.jobs.inline_execution import require_execution_authority
 from app.jobs.models import (
@@ -23,7 +23,8 @@ from app.jobs.models import (
     ResourceClass,
 )
 
-from app.image.job_contracts import (
+from app.image.contracts import (
+    CHARACTER_AVATAR_FINISHER,
     ImageGenerateInput,
     ImageOutputRef,
     image_title_from_prompt,
@@ -211,7 +212,9 @@ def execute_image_job(
             ],
         ),
     )
-    invoke_runtime_hook("image.character_avatar.completed", job)
+    finisher = optional(CHARACTER_AVATAR_FINISHER)
+    if finisher is not None:
+        finisher.completed(job)
     return completed or job
 
 
@@ -322,15 +325,10 @@ def _stabilize_character_avatar_frame(
     request_metadata: dict[str, Any],
     store: SharedAssetStore,
 ) -> dict[str, Any]:
-    value = invoke_runtime_hook(
-        "image.character_avatar.stabilize",
-        job,
-        request,
-        storage_path,
-        request_metadata,
-        store,
-        default={},
-    )
+    finisher = optional(CHARACTER_AVATAR_FINISHER)
+    if finisher is None:
+        return {}
+    value = finisher.stabilize(job, request, storage_path, request_metadata, store)
     return value if isinstance(value, dict) else {}
 
 

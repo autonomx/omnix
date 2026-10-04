@@ -10,13 +10,15 @@ A feature package exposes `feature.py` with one `FEATURE = FeatureModule(...)` v
 
 | Field | Use |
 |---|---|
+| `tier` | Required: `"platform"` (a capability other features build on) or `"app"` (a product no other feature imports); see ADR-0016. |
 | `routers` | Router factories for the public HTTP and WebSocket API. |
 | `internal_routers` | Service-token or other internal HTTP surfaces only. |
 | `background_workers` | Long-running loops owned by the background runtime. |
 | `job_handlers` | Durable jobs executed by the shared durable worker. |
-| `scheduled_tasks`, `outbox_consumers`, `hooks` | Periodic work, outbox delivery and runtime hooks. |
+| `scheduled_tasks`, `outbox_consumers` | Periodic work and outbox delivery. |
+| `contributions` | Implementations of typed ports (`app.runtime.ports`) declared in another module's contract; the composition root binds them. |
 | `repositories`, `settings`, `permissions` | Persistence, configuration and permission declarations. |
-| `depends_on`, `requires` | Other features and runtime capabilities the feature needs. |
+| `depends_on`, `requires` | Other features and runtime capabilities the feature needs. A feature imports another only through its `contracts` module, and only in the `depends_on` direction. |
 
 Factories receive a `FeatureContext` (runtime configuration, capabilities, kernel services, a feature logger). A feature never imports the gateway composition root and never patches other packages at import time.
 

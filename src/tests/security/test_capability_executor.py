@@ -19,7 +19,7 @@ from app.capabilities.executor import (
     CapabilityRuntimeUnavailable,
     execute_capability,
 )
-from app.runtime import hooks
+from app.runtime import ports
 from app.runtime.tenant_context import TenantContext, pop_tenant, push_tenant
 
 APP = Path(__file__).resolve().parents[2] / "app"
@@ -50,7 +50,7 @@ def test_unknown_adapter_is_an_error_not_pending() -> None:
 
 
 def test_execution_fails_closed_without_the_capability_runtime() -> None:
-    hooks.reset_runtime_hooks_for_tests()
+    ports.reset_port_bindings_for_tests()
     with pytest.raises(CapabilityRuntimeUnavailable):
         execute_capability(
             CapabilityGrant("chat", "session"),

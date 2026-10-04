@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from types import MappingProxyType
 
-from app.capabilities.executor import EXECUTE_HOOK, CapabilityGrant
+from app.capabilities.executor import CAPABILITY_RUNTIME, CapabilityGrant
 from app.observability.tracing import annotate, span
-from app.runtime.hooks import RuntimeHookSpec
+from app.runtime.ports import ContributionSpec
 from app.security import audit
 
 from .browser_adapter import run_browser_tool_request
@@ -151,6 +151,6 @@ def execute_with_grant(
     )
 
 
-CAPABILITY_RUNTIME_HOOK = RuntimeHookSpec(EXECUTE_HOOK, execute_with_grant)
+CAPABILITY_RUNTIME_CONTRIBUTION = ContributionSpec(CAPABILITY_RUNTIME, lambda _context: execute_with_grant)
 
-__all__ = ["ADAPTERS", "CAPABILITY_RUNTIME_HOOK", "execute_with_grant", "run_capability_adapter"]
+__all__ = ["ADAPTERS", "CAPABILITY_RUNTIME_CONTRIBUTION", "execute_with_grant", "run_capability_adapter"]

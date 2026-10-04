@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.image.job_contracts import ImageGenerateInput
+from app.image.contracts import ImageGenerateInput
 
 
 def test_image_job_contract_carries_reference_assets_and_disables_cache() -> None:

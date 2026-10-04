@@ -86,7 +86,6 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
-    monkeypatch.setattr(feature_registry, "install_runtime_hooks", lambda _hooks: None)
     monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
 
     gateway = FastAPI()
@@ -140,7 +139,6 @@ def test_feature_composition_registers_scheduled_tasks(monkeypatch):
     monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
-    monkeypatch.setattr(feature_registry, "install_runtime_hooks", lambda _hooks: None)
     monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
 
     gateway = FastAPI()

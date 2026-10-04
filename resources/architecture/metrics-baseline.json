@@ -433,10 +433,10 @@
       "app.image.asset_store",
       "app.image.cache",
       "app.image.config",
+      "app.image.contracts",
       "app.image.downloads",
       "app.image.feature",
       "app.image.flux_pipeline_loading",
-      "app.image.job_contracts",
       "app.image.jobs",
       "app.image.lifecycle",
       "app.image.models",
@@ -1865,7 +1865,6 @@
       "app.runtime.background",
       "app.runtime.feature_catalog",
       "app.runtime.features",
-      "app.runtime.hooks",
       "app.runtime.live_voice_config",
       "app.runtime.logging",
       "app.runtime.process_environment",
@@ -2571,11 +2570,7 @@
         "src/parakeet_stt_server.py",
         "src/tts_server.py"
       ],
-      "string_runtime_hooks": [
-        "src/app/assistant_tools/executor.py:154",
-        "src/app/characters/feature.py:93",
-        "src/app/characters/feature.py:94"
-      ],
+      "string_runtime_hooks": [],
       "tracked_runtime_data_in_src": [
         "src/app/data/sessions.json",
         "src/app/data/voice_clones.json"
@@ -4398,15 +4393,6 @@
       },
       {
         "approved": true,
-        "category": "cache",
-        "kind": "lock",
-        "line": 20,
-        "path": "src/app/runtime/hooks.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_LOCK"
-      },
-      {
-        "approved": true,
         "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
         "category": "cache",
         "invalidation": "shared_http_client.cache_clear",
@@ -4418,6 +4404,15 @@
         "reason": "Pooled HTTP clients per service name and policy (WP-7.2). Each holds only reusable connections and a circuit-breaker state, never request data; losing one costs a reconnect. Bounded, expiring, and cleared with cache_clear.",
         "symbol": "shared_http_client.__cache__",
         "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "lock",
+        "line": 118,
+        "path": "src/app/runtime/ports.py",
+        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
+        "symbol": "_LOCK"
       },
       {
         "approved": true,
@@ -5663,13 +5658,13 @@
       },
       {
         "approved": true,
-        "path": "src/app/runtime/hooks.py",
-        "symbol": "_LOCK"
+        "path": "src/app/runtime/http_client.py",
+        "symbol": "shared_http_client.__cache__"
       },
       {
         "approved": true,
-        "path": "src/app/runtime/http_client.py",
-        "symbol": "shared_http_client.__cache__"
+        "path": "src/app/runtime/ports.py",
+        "symbol": "_LOCK"
       },
       {
         "approved": true,
@@ -6821,7 +6816,7 @@
     "string_runtime_hooks": {
       "direction": "lower",
       "target": 0,
-      "value": 3
+      "value": 0
     },
     "tracked_runtime_data_in_src": {
       "direction": "lower",
@@ -6926,5 +6921,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "58f67f98d67a495ba97f1b16e2ce8905ec23a6ca63259617f032d9f4cea2bbcc"
+  "source_digest": "71a9a2b6e417f2163abed6143ae6dacc3acef43916354487bfa29249798db92c"
 }

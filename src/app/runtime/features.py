@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from .background import BackgroundWorker
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .config import RuntimeConfig
-from .hooks import RuntimeHookSpec
+from .ports import ContributionSpec
 
 from app.runtime.contracts import KernelServices
 
@@ -134,7 +134,7 @@ class FeatureModule:
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()
     scheduled_tasks: tuple[ScheduledTaskFactory, ...] = ()
     repositories: tuple[RepositorySpec, ...] = ()
-    hooks: tuple[RuntimeHookSpec, ...] = ()
+    contributions: tuple[ContributionSpec, ...] = ()
     outbox_consumers: tuple[OutboxConsumerSpec, ...] = ()
     settings: tuple[SettingSpec, ...] = ()
     permissions: tuple[PermissionSpec, ...] = ()
@@ -147,5 +147,7 @@ class FeatureModule:
             raise ValueError(f"Invalid feature id: {self.id!r}")
         if self.tier not in FEATURE_TIERS:
             raise ValueError(f"Feature {self.id} has invalid tier: {self.tier!r}")
+        if any(not isinstance(item, ContributionSpec) for item in self.contributions):
+            raise TypeError(f"Feature {self.id} contributions must be ContributionSpec values")
         if self.id in self.depends_on:
             raise ValueError(f"Feature {self.id} cannot depend on itself")

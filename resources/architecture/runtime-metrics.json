@@ -392,9 +392,9 @@
         "app.gateway.scheduler_runtime",
         "app.gateway.schemas",
         "app.image",
+        "app.image.contracts",
         "app.image.downloads",
         "app.image.feature",
-        "app.image.job_contracts",
         "app.image.jobs",
         "app.image.providers",
         "app.image.providers.registry",
@@ -1248,7 +1248,6 @@
         "app.runtime.drain",
         "app.runtime.feature_catalog",
         "app.runtime.features",
-        "app.runtime.hooks",
         "app.runtime.http_client",
         "app.runtime.live_voice_config",
         "app.runtime.logging",
@@ -1257,6 +1256,7 @@
         "app.runtime.ownership_fencing",
         "app.runtime.pagination",
         "app.runtime.paths",
+        "app.runtime.ports",
         "app.runtime.process_environment",
         "app.runtime.scheduler",
         "app.runtime.statement_class",
@@ -2125,7 +2125,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8188,
+      "collected_tests": 8195,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-04T17:51:08.190170+00:00",
+  "measured_at": "2026-10-04T18:25:10.629491+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "58f67f98d67a495ba97f1b16e2ce8905ec23a6ca63259617f032d9f4cea2bbcc"
+  "source_digest": "71a9a2b6e417f2163abed6143ae6dacc3acef43916354487bfa29249798db92c"
 }

@@ -7,7 +7,8 @@ from fastapi import APIRouter
 from typing import Any
 
 from app.runtime.features import FeatureContext, FeatureModule
-from app.runtime.hooks import RuntimeHookSpec
+from app.image.contracts import CHARACTER_AVATAR_FINISHER
+from app.runtime.ports import ContributionSpec
 from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 from .api import register_character_routes
@@ -82,15 +83,25 @@ def _avatar_generation_completed(job: Any) -> None:
         return
 
 
+class _AvatarFinisher:
+    """Characters' implementation of image's CharacterAvatarFinisher port."""
+
+    def stabilize(
+        self, job: Any, request: Any, storage_path: str, request_metadata: dict[str, Any], store: Any,
+    ) -> dict[str, Any]:
+        return _stabilize_avatar_frame(job, request, storage_path, request_metadata, store)
+
+    def completed(self, job: Any) -> None:
+        _avatar_generation_completed(job)
+
+
 FEATURE = FeatureModule(
     id="characters",
     title="Characters",
     tier="platform",
-    depends_on=("chat", "assistant-memory", "companion-activity"),
+    # Implements image's avatar finisher port, so it depends on image (ADR-0016).
+    depends_on=("chat", "assistant-memory", "companion-activity", "image"),
     routers=(_router,),
     repositories=CHARACTER_REPOSITORY_SPECS,
-    hooks=(
-        RuntimeHookSpec("image.character_avatar.stabilize", _stabilize_avatar_frame),
-        RuntimeHookSpec("image.character_avatar.completed", _avatar_generation_completed),
-    ),
+    contributions=(ContributionSpec(CHARACTER_AVATAR_FINISHER, lambda _context: _AvatarFinisher()),),
 )
