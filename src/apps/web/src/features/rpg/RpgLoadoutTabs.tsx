@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { omnixApiClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from '../../api/client';
+import { rpgSessionClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from './api/rpgSessionClient';
 import { applyRpgItemCommand, applyRpgItemResolve, fetchRpgAbilityDetails, fetchRpgItemDiagnostics } from './rpgItemApi';
 import { RpgItemPanel } from './RpgItemPanel';
 import {
@@ -136,7 +136,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const sessionQuery = useQuery({
     enabled: Boolean(selectedSessionId),
     queryKey: ['feature', 'rpg', 'ability-tree-session', selectedSessionId],
-    queryFn: () => omnixApiClient.getRpgSession(selectedSessionId ?? ''),
+    queryFn: () => rpgSessionClient.getRpgSession(selectedSessionId ?? ''),
     staleTime: 0,
   });
   const itemDiagnosticsQuery = useQuery({
@@ -356,7 +356,7 @@ function applyRpgItemPanelRequest(sessionId: string, request: RpgItemPanelReques
   if (request.kind === 'action') {
     const loadoutRequest = loadoutRequestFromPayload(request.action.payload);
     if (loadoutRequest) {
-      return omnixApiClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
+      return rpgSessionClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
     }
     if (request.action.mode === 'merchant') {
       return applyRpgItemCommand(sessionId, request.action.command);

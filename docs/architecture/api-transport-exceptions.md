@@ -83,6 +83,5 @@ Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src
 | `src/apps/web/src/features/trading/TradingWatchlist.tsx` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
 | `src/apps/web/src/features/trading/tradingFormula.ts` | `TradingFormulaPayload` | Formula document content in `TradingDocument.payload` |
 | `src/apps/web/src/features/rpg/*` | `*` | The RPG web surface, which is being retired and keeps its handwritten clients until then (DECISIONS 2026-10-03) |
-| `src/apps/web/src/api/client.ts` | `Rpg*` | RPG methods of the shared client (retiring) |
 
 Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `src/apps/web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `src/apps/web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `src/apps/web/src/features/storyteller/storyAudioMessages.ts`.

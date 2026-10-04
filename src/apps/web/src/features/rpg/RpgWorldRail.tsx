@@ -1,7 +1,7 @@
 import { Progress, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { omnixApiClient } from '../../api/client';
+import { rpgSessionClient } from './api/rpgSessionClient';
 import { RpgMapDialog } from './RpgMapDialog';
 import type {
   RpgCheckpointSummaryPreview,
@@ -71,7 +71,7 @@ export function RpgWorldRail({
   const isPreview = selectedSessionSummary.source === 'preview';
   const liveSessionQuery = useQuery({
     queryKey: ['feature', 'rpg', 'session', selectedSessionSummary.id],
-    queryFn: () => omnixApiClient.getRpgSession(selectedSessionSummary.id),
+    queryFn: () => rpgSessionClient.getRpgSession(selectedSessionSummary.id),
     enabled: !isPreview && Boolean(selectedSessionSummary.id.trim()),
   });
   const sessionRecord = recordValue(liveSessionQuery.data?.session);

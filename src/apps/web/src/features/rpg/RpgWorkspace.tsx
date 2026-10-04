@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
+import { ApiTimeoutError, omnixApiClient, type JobRecord } from '../../api/client';
+import { rpgSessionClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from './api/rpgSessionClient';
 import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import {
   getHermesRouteDecision,
@@ -238,7 +239,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [hermesAssistMode, setHermesAssistMode] = useState('review_each_step');
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
-    queryFn: () => omnixApiClient.listRpgSessionSummaries(),
+    queryFn: () => rpgSessionClient.listRpgSessionSummaries(),
   });
   const jobsQuery = useQuery({
     queryKey: ['platform', 'jobs'],
@@ -285,7 +286,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }, [fallbackLiveSessionId, requestedSessionId, setValue]);
   const selectedSessionQuery = useQuery({
     queryKey: ['feature', 'rpg', 'session', selectedSummarySessionId],
-    queryFn: () => omnixApiClient.getRpgSession(selectedSummarySessionId ?? ''),
+    queryFn: () => rpgSessionClient.getRpgSession(selectedSummarySessionId ?? ''),
     enabled: Boolean(selectedSummarySessionId),
   });
   useEffect(() => {
@@ -539,7 +540,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) => {
       const sessionId = values.sessionId || selectedLiveSessionId;
-      return omnixApiClient.createJob(
+      return rpgSessionClient.submitTurnJob(
         {
           module: 'rpg',
           type: 'rpg.turn',
@@ -630,13 +631,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     },
   });
   const loadoutActionMutation = useMutation({
-    mutationFn: ({ sessionId, request }: { sessionId: string; request: RpgLoadoutActionRequest }) => omnixApiClient.applyRpgLoadoutAction(sessionId, request),
+    mutationFn: ({ sessionId, request }: { sessionId: string; request: RpgLoadoutActionRequest }) => rpgSessionClient.applyRpgLoadoutAction(sessionId, request),
     onSuccess: async () => {
       await invalidateRpgWorkspaceQueries();
     },
   });
   const createCampaignMutation = useMutation({
-    mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
+    mutationFn: (request: RpgNewGameRequest) => rpgSessionClient.createRpgNewGame(request),
     onSuccess: (result) => {
       if (result.ok && result.session_id) {
         trustedUnindexedSessionIdsRef.current.add(result.session_id);

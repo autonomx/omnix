@@ -1,4 +1,5 @@
-import { omnixApiClient, type ApiRequestOptions, type RpgLaunchResponse } from '../../api/client';
+import { omnixApiClient, type ApiRequestOptions } from '../../api/client';
+import type { RpgLaunchResponse } from './api/rpgSessionClient';
 
 export type RpgItemCompatResponse = RpgLaunchResponse & Record<string, unknown>;
 

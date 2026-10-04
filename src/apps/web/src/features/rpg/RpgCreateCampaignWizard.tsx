@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
+import { rpgSessionClient, type RpgLaunchResponse, type RpgNewGameRequest } from './api/rpgSessionClient';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
@@ -194,7 +194,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     setIsContinuing(true);
     setCatalogError(undefined);
     try {
-      const result = await omnixApiClient.continueRpgSession(campaignId);
+      const result = await rpgSessionClient.continueRpgSession(campaignId);
       if (!result.ok) throw new Error(result.error ?? 'The selected campaign could not be continued.');
       const sessionId = result.session_id ?? campaignId;
       storeSelectedSession(sessionId);

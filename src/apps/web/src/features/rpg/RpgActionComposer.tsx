@@ -5,12 +5,12 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import {
-  omnixApiClient,
+  rpgSessionClient,
   type RpgCapability,
   type RpgLaunchResponse,
   type RpgNewGameRequest,
   type RpgPowerSource,
-} from '../../api/client';
+} from './api/rpgSessionClient';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgSessionLauncher.css';
 
@@ -312,7 +312,7 @@ export function RpgActionComposer({
     setLaunchError(undefined);
     setLaunchStatus('Creating configured Level 1 campaign…');
     try {
-      const response = await omnixApiClient.createRpgNewGame(buildNewGameRequest());
+      const response = await rpgSessionClient.createRpgNewGame(buildNewGameRequest());
       await finishLaunch(response, undefined, 'New Game ready and selected');
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : 'RPG new game launch failed.');
@@ -326,7 +326,7 @@ export function RpgActionComposer({
     setLaunchError(undefined);
     setLaunchStatus('Cloning demo session…');
     try {
-      const response = await omnixApiClient.startRpgPreset('demo_glimmerdeep_pass_lvl14');
+      const response = await rpgSessionClient.startRpgPreset('demo_glimmerdeep_pass_lvl14');
       await finishLaunch(response, undefined, 'Demo Session ready and selected');
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : 'RPG demo session launch failed.');
@@ -340,7 +340,7 @@ export function RpgActionComposer({
     setLaunchError(undefined);
     setLaunchStatus(`Loading session ${sessionId}…`);
     try {
-      const response = await omnixApiClient.continueRpgSession(sessionId);
+      const response = await rpgSessionClient.continueRpgSession(sessionId);
       await finishLaunch(response, sessionId, 'Session loaded and selected');
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : 'RPG session load failed.');
@@ -359,7 +359,7 @@ export function RpgActionComposer({
     setLaunchError(undefined);
     setLaunchStatus(`Renaming session ${session.id}…`);
     try {
-      const response = await omnixApiClient.renameRpgSession(session.id, nextName.trim());
+      const response = await rpgSessionClient.renameRpgSession(session.id, nextName.trim());
       if (!response.ok) {
         throw new Error(response.error ?? 'RPG session rename failed.');
       }
@@ -382,7 +382,7 @@ export function RpgActionComposer({
     setLaunchError(undefined);
     setLaunchStatus(`Deleting session ${session.id}…`);
     try {
-      const response = await omnixApiClient.deleteRpgSession(session.id);
+      const response = await rpgSessionClient.deleteRpgSession(session.id);
       if (!response.ok) {
         throw new Error(response.error ?? 'RPG session delete failed.');
       }

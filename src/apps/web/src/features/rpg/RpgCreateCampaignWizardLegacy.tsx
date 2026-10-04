@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
+import type { RpgLaunchResponse, RpgNewGameRequest } from './api/rpgSessionClient';
 import {
   BASE_STAT,
   MAX_STAT,
