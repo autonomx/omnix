@@ -98,6 +98,11 @@ settings_service = SettingsService(
 )
 install_settings_service(settings_service)
 
+# The composition root binds its exactly-one ports (the chat store factory, ADR-0016).
+from app.runtime.ports import PortBindings, install_port_bindings
+from app.runtime_composition import composition_port_bindings
+install_port_bindings(PortBindings.build(composition_port_bindings()))
+
 from app.characters import service as character_service
 assert character_service.CharacterRepository.__name__ == "InMemoryCharacterRepository"
 assert character_service.default_character_service().repository.__class__.__name__ == "PostgresCharacterRepositoryAdapter"

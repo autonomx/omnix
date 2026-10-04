@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
+
+from app.runtime.ports import Port, required
 
 from app.assistant_memory.contracts import default_memory_service, resolve_session_memory_scope
 from app.characters.contracts import (
@@ -344,11 +346,19 @@ class InMemoryChatSessionStore(_CharacterSessionMixin, BaseInMemoryChatSessionSt
     pass
 
 
+class ChatStoreFactory(Protocol):
+    def __call__(self) -> Any: ...
+
+
+# The PostgreSQL chat store wires memory, live voice and desktop companion into
+# chat; only the composition root knows them, so it binds this port (ADR-0016).
+CHAT_STORE_FACTORY: Port[ChatStoreFactory] = Port("chat.store_factory", ChatStoreFactory, "exactly_one")
+
+
 def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_chat_store
-        return production_chat_store()
+        return required(CHAT_STORE_FACTORY)()
     if chat_sqlite_store_enabled():
         return InMemoryChatSessionStore()
     raise RuntimeError("PostgreSQL chat persistence is required when local memory storage is disabled")

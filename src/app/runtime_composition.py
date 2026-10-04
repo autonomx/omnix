@@ -66,6 +66,14 @@ def production_chat_store(*, job_service=None, live_agent_planner=None):
     )
 
 
+def composition_port_bindings():
+    """Ports only the composition root can bind (exactly-one; ADR-0016)."""
+    from app.chat.character_store import CHAT_STORE_FACTORY
+    from app.runtime.ports import PortBinding
+
+    return [PortBinding(CHAT_STORE_FACTORY, production_chat_store)]
+
+
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_model_residency_store():
     from app.persistence.model_residency import PostgresModelResidencyStore

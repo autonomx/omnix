@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 70,
+      "AL001": 69,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -2487,9 +2487,7 @@
         "app.persistence<->app.security"
       ],
       "app_to_app_imports": [],
-      "composition_imports_outside_composition": [
-        "src/app/chat/character_store.py:350:app.runtime_composition"
-      ],
+      "composition_imports_outside_composition": [],
       "kernel_tools_naming_apps": [
         "market.status",
         "research.web_search",
@@ -2506,8 +2504,8 @@
       ],
       "reverse_contract_imports": [
         "src/app/chat/assist/live_agent.py:10:app.assistant_tools.contracts",
-        "src/app/chat/character_store.py:8:app.assistant_memory.contracts",
-        "src/app/chat/character_store.py:9:app.characters.contracts",
+        "src/app/chat/character_store.py:10:app.assistant_memory.contracts",
+        "src/app/chat/character_store.py:11:app.characters.contracts",
         "src/app/chat/compaction.py:18:app.assistant_memory.contracts",
         "src/app/chat/context_budget.py:9:app.assistant_memory.contracts",
         "src/app/chat/history_search.py:13:app.assistant_memory.contracts",
@@ -4443,7 +4441,7 @@
         "category": "cache",
         "invalidation": "production_model_residency_store.cache_clear",
         "kind": "function_cache",
-        "line": 70,
+        "line": 78,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -6533,7 +6531,7 @@
     "composition_imports_outside_composition": {
       "direction": "lower",
       "target": 0,
-      "value": 1
+      "value": 0
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6598,7 +6596,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 70
+      "value": 69
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6803,5 +6801,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "07ddf2ba4ce6c66b0a7403268812603864a3b0a61b7c192fafa970032a042079"
+  "source_digest": "1c9a406a400876e8e6b338155f48e563573663250e9d4d2183fa5150722475e6"
 }

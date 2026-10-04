@@ -137,7 +137,9 @@ def _register_feature_modules(gateway) -> None:
 
     # The authentication middleware accepts the service token only on these
     # paths and lets declared public paths through without a principal.
-    bindings = PortBindings.build(port_bindings)
+    from app.runtime_composition import composition_port_bindings
+
+    bindings = PortBindings.build([*composition_port_bindings(), *port_bindings])
     install_port_bindings(bindings)
     gateway.state.port_bindings = bindings
     gateway.state.internal_route_paths = tuple(dict.fromkeys(internal_paths))

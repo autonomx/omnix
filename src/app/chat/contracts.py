@@ -13,6 +13,7 @@ from app.chat.live_chat_async_sse_bridge import eager_async_sse_stream
 from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest, SendChatMessageResponse
 from app.chat.research_jobs import link_user_message_to_research_job
+from app.chat.character_store import CHAT_STORE_FACTORY
 from app.chat.prompt_assembly import (
     PromptAssembly,
     build_prompt_assembly,
@@ -109,6 +110,7 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "CHAT_STORE_FACTORY",
     "CHAT_RESEARCH",
     "ChatResearch",
     "ResearchTurn",

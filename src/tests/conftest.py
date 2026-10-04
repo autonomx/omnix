@@ -104,11 +104,13 @@ def capability_runtime_installed():
     from app.chat.contracts import CHAT_RESEARCH
     from app.research.api import ChatResearchAdapter
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
+    from app.runtime_composition import composition_port_bindings
 
     # Every feature is enabled by default, so tests see the ports composition binds.
     install_port_bindings(PortBindings.build([
         PortBinding(CAPABILITY_RUNTIME, execute_with_grant, owner="assistant-tools"),
         PortBinding(CHAT_RESEARCH, ChatResearchAdapter(), owner="research"),
+        *composition_port_bindings(),
     ]))
     yield
 

@@ -126,4 +126,5 @@ def test_composition_builds_contributions_from_the_feature_context(monkeypatch):
 
     assert seen == ["sample-feature"]
     assert ports.optional(ONE_OR_NONE).greet() == "hello"
-    assert gateway.state.port_bindings.owners() == {"test.greeter": 1}
+    # Composition also binds its own exactly-one ports (the chat store factory).
+    assert gateway.state.port_bindings.owners() == {"chat.store_factory": 1, "test.greeter": 1}
