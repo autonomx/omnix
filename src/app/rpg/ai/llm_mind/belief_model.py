@@ -72,10 +72,6 @@ class BeliefModel:
         record[key] = _clamp_signed(_safe_float(record.get(key), 0.0) + float(delta))
         return record[key]
 
-    def get_beliefs(self, target_id: str) -> Dict[str, float]:
-        record = self._ensure_target(target_id)
-        return dict(record)
-
     def summarize(self, limit: int = 8) -> Dict[str, Dict[str, float]]:
         items = sorted(self.beliefs.items(), key=lambda pair: pair[0])
         out: Dict[str, Dict[str, float]] = {}

@@ -68,10 +68,6 @@ LOCATIONS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def list_locations() -> List[Dict[str, Any]]:
-    return [deepcopy(location) for location in LOCATIONS.values()]
-
-
 def get_location(location_id: str) -> Dict[str, Any]:
     return deepcopy(_safe_dict(LOCATIONS.get(_safe_str(location_id))))
 
@@ -149,23 +145,6 @@ def find_location_by_name(value: str) -> Dict[str, Any]:
 def available_exits(simulation_state: Dict[str, Any]) -> Dict[str, str]:
     location = get_location(current_location_id(simulation_state))
     return dict(_safe_dict(location.get("exits")))
-
-
-def resolve_exit_destination(simulation_state: Dict[str, Any], destination_text: str) -> str:
-    destination_text = normalize_location_name(destination_text)
-    exits = available_exits(simulation_state)
-    for alias, destination_id in exits.items():
-        if normalize_location_name(alias) == destination_text:
-            return _safe_str(destination_id)
-    for alias, destination_id in exits.items():
-        if normalize_location_name(alias) in destination_text:
-            return _safe_str(destination_id)
-
-    direct = find_location_by_name(destination_text)
-    direct_id = _safe_str(direct.get("location_id"))
-    if direct_id and direct_id in set(exits.values()):
-        return direct_id
-    return ""
 
 
 def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:

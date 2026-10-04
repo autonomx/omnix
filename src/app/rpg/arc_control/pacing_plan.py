@@ -20,12 +20,6 @@ class PacingPlanController:
         """Return a single plan by ID, or ``None``."""
         return state.get(plan_id)
 
-    def set_plan(
-        self, state: dict[str, PacingPlanState], plan: PacingPlanState
-    ) -> None:
-        """Insert or replace a pacing plan."""
-        state[plan.plan_id] = plan
-
     def get_active_plan(
         self, state: dict[str, PacingPlanState]
     ) -> PacingPlanState | None:
@@ -40,25 +34,3 @@ class PacingPlanController:
         # Return the last-inserted plan (Python 3.7+ dict ordering).
         return next(reversed(state.values()), None)
 
-    def apply_to_control_output(
-        self, plan: PacingPlanState | None, control_output: dict
-    ) -> dict:
-        """Annotate a control-output payload with pacing bias hints.
-
-        This does *not* remove or replace keys — it only adds a
-        ``"pacing_bias"`` section.
-        """
-        if plan is None:
-            return control_output
-        bias = {
-            "danger_bias": plan.danger_bias,
-            "mystery_bias": plan.mystery_bias,
-            "social_bias": plan.social_bias,
-            "combat_bias": plan.combat_bias,
-            "target_scene_count": plan.target_scene_count,
-            "plan_id": plan.plan_id,
-            "label": plan.label,
-        }
-        output = dict(control_output)
-        output["pacing_bias"] = bias
-        return output

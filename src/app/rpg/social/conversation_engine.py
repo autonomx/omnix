@@ -200,15 +200,6 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
     )
 
 
-def should_close_conversation(conversation: dict[str, Any], simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> bool:
-    conversation = _safe_dict(conversation)
-    if _safe_str(conversation.get("status")) != "active":
-        return True
-    if int(conversation.get("turn_count", 0) or 0) >= int(conversation.get("max_turns", 1) or 1):
-        return True
-    return False
-
-
 def try_start_ambient_conversations(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     if not settings["ambient_conversations_enabled"]:

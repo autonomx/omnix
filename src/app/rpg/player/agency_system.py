@@ -271,17 +271,6 @@ class AgencySystem:
         """
         return self.flags.get(key, default)
     
-    def has_flag(self, key: str) -> bool:
-        """Check if a flag exists.
-        
-        Args:
-            key: Flag key.
-            
-        Returns:
-            True if flag exists.
-        """
-        return key in self.flags
-    
     @property
     def killed_entities(self) -> Set[str]:
         """Get set of entities the player has killed.
@@ -335,36 +324,6 @@ class AgencySystem:
                 if isinstance(v, bool) and v
             },
         }
-    
-    def get_flags_for_director(self) -> str:
-        """Format key flags for Director prompt injection.
-        
-        Returns:
-            Formatted string of active world flags.
-        """
-        lines = ["=== World State Flags ==="]
-        
-        # Boolean flags
-        true_flags = [k for k, v in self.flags.items() if isinstance(v, bool) and v]
-        if true_flags:
-            lines.append("Active:")
-            for flag in sorted(true_flags):
-                lines.append(f"  ✓ {flag}")
-                
-        # Numeric flags
-        numeric_flags = {k: v for k, v in self.flags.items()
-                        if isinstance(v, (int, float)) and not isinstance(v, bool)}
-        if numeric_flags:
-            lines.append("Values:")
-            for flag, value in sorted(numeric_flags.items()):
-                lines.append(f"  {flag}: {value}")
-        
-        if len(self._killed_entities) > 0:
-            lines.append(f"Killed: {', '.join(sorted(self._killed_entities))}")
-        if len(self._ally_entities) > 0:
-            lines.append(f"Allies: {', '.join(sorted(self._ally_entities))}")
-            
-        return "\n".join(lines) if len(lines) > 1 else "=== World State Flags ===\n  None"
     
     def reset(self) -> None:
         """Clear all agency data."""

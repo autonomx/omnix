@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 from typing import Iterable, Mapping
 
 from .contracts import (
@@ -56,14 +55,6 @@ class ResponseRenderer:
                 **dict(metadata or {}),
             },
         )
-
-    def rerender_with_sections(
-        self,
-        plan: SemanticResponsePlan,
-        sections: Iterable[SemanticSection],
-        **kwargs,
-    ) -> RenderedResponse:
-        return self.render(replace(plan, sections=tuple(sections)), **kwargs)
 
     def _deduplicate_sections(
         self,

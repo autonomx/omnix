@@ -58,14 +58,6 @@ class TimelineNode:
         """
         return len(self.children) == 0
 
-    def is_root(self) -> bool:
-        """Check if this node is a root (no parent).
-
-        Returns:
-            True if the node has no parent, False otherwise.
-        """
-        return self.parent_id is None
-
     def __repr__(self) -> str:
         return (
             f"TimelineNode(event_id={self.event_id!r}, "

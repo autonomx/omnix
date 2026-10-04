@@ -85,10 +85,6 @@ DEFAULT_OBJECTS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_default_object(object_id: str) -> Dict[str, Any]:
-    return deepcopy(_safe_dict(DEFAULT_OBJECTS.get(_safe_str(object_id).strip())))
-
-
 def normalize_world_object(value: Any) -> Dict[str, Any]:
     obj = dict(_safe_dict(value))
     if not obj:

@@ -684,18 +684,3 @@ class NarrativeSurfaceEngine:
             "emotional_contexts": 0,
         }
     
-    def get_recent_headlines(self) -> List[str]:
-        """Get recent headlines for debugging/testing.
-        
-        Returns:
-            List of recent headlines.
-        """
-        return list(self._recent_headlines)
-    
-    def get_recent_descriptions(self) -> List[str]:
-        """Get recent descriptions for debugging/testing.
-        
-        Returns:
-            List of recent descriptions.
-        """
-        return list(self._recent_descriptions)

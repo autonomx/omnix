@@ -158,10 +158,3 @@ def maybe_seed_quest_rumor_from_conversation(
     }
 
 
-def quest_rumors_for_location(
-    simulation_state: Dict[str, Any],
-    *,
-    limit: int = 8,
-) -> List[Dict[str, Any]]:
-    state = ensure_quest_rumor_state(simulation_state)
-    return deepcopy(_safe_list(state.get("rumors"))[: max(0, int(limit or 0))])

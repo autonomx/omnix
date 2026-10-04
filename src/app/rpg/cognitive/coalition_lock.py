@@ -334,36 +334,6 @@ class CoalitionLockManager:
         
         return False
     
-    def release_all_locks(self, character_id: str) -> int:
-        """Release all locks for a character.
-        
-        Args:
-            character_id: Character to release locks for.
-            
-        Returns:
-            Number of locks released.
-        """
-        count = len(self._locks.get(character_id, []))
-        self._locks.pop(character_id, None)
-        return count
-    
-    def get_active_locks(
-        self,
-        character_id: str,
-        current_tick: int = 0,
-    ) -> List[CoalitionLock]:
-        """Get active locks for a character.
-        
-        Args:
-            character_id: Character to query.
-            current_tick: Current simulation tick.
-            
-        Returns:
-            List of active CoalitionLock objects.
-        """
-        locks = self._locks.get(character_id, [])
-        return [l for l in locks if l.is_active(current_tick)]
-    
     def _clean_expired_locks(
         self,
         character_id: str,
@@ -390,24 +360,6 @@ class CoalitionLockManager:
             )
         
         return self._locks.get(character_id, [])
-    
-    def tick_cleanup(self, current_tick: int) -> int:
-        """Clean up expired locks across all characters.
-        
-        Call this during tick update to prevent lock accumulation.
-        
-        Args:
-            current_tick: Current simulation tick.
-            
-        Returns:
-            Number of locks cleaned up.
-        """
-        total_cleaned = 0
-        
-        for char_id in list(self._locks.keys()):
-            cleaned = self._clean_expired_locks(char_id, current_tick)
-        
-        return total_cleaned
     
     def get_stats(self) -> Dict[str, int]:
         """Get lock manager statistics.

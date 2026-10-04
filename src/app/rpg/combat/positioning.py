@@ -48,12 +48,6 @@ def normalize_position(value: Any) -> Dict[str, Any]:
     }
 
 
-def normalize_participant_position(participant: Dict[str, Any]) -> Dict[str, Any]:
-    participant = dict(_safe_dict(participant))
-    participant["position"] = normalize_position(participant.get("position"))
-    return participant
-
-
 def participant_is_ranged(participant: Dict[str, Any]) -> bool:
     tags = {_safe_str(x).strip().lower() for x in _safe_list(_safe_dict(participant).get("tags"))}
     return "ranged" in tags or "archer" in tags
@@ -138,14 +132,3 @@ def reposition_participant(
     return combat_state, result
 
 
-def flee_penalty_from_position(combat_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
-    participants = _safe_dict(_safe_dict(combat_state).get("participants"))
-    participant = _safe_dict(participants.get(actor_id))
-    position = normalize_position(participant.get("position"))
-    engaged = bool(position.get("engaged_with"))
-    return {
-        "applied": engaged,
-        "actor_id": actor_id,
-        "penalty": 5 if engaged else 0,
-        "reason": "engaged" if engaged else "not_engaged",
-    }

@@ -12,7 +12,6 @@ from app.runtime.clock import utc_now
 from typing import Any, Literal
 
 from app.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
-from app.rpg.session.service import load_session, save_session
 
 CreationJobStatus = Literal["queued", "running", "completed", "failed"]
 
@@ -89,13 +88,6 @@ def _utc_now() -> str:
 
 def creation_job_id(session_id: str) -> str:
     return f"rpg-create:{session_id}"
-
-
-def _session_id_from_job_id(job_id_or_session_id: str) -> str:
-    text = str(job_id_or_session_id or "").strip()
-    if text.startswith("rpg-create:"):
-        return text.split(":", 1)[1].strip()
-    return text
 
 
 def _stage_index_for_status(status: CreationJobStatus) -> int:
@@ -193,13 +185,6 @@ def attach_creation_metadata(session: dict[str, Any], job: dict[str, Any], progr
     return _attach_creation_metadata(session, job, progress)
 
 
-def _persist_creation_job(session_id: str, job: dict[str, Any], progress: dict[str, Any]) -> dict[str, Any] | None:
-    session = load_session(session_id)
-    if not session:
-        return None
-    return save_session(_attach_creation_metadata(session, job, progress), compact=True)
-
-
 def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[str, Any]:
     """Create a new game and attach backend-authored progress/job status.
 
@@ -227,25 +212,3 @@ def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[st
     return {**result, "creation_job": job, "creation_progress": progress}
 
 
-def get_new_game_creation_job(job_id_or_session_id: str) -> dict[str, Any]:
-    session_id = _session_id_from_job_id(job_id_or_session_id)
-    if not session_id:
-        return {"ok": False, "error": "missing_creation_job_id"}
-    session = load_session(session_id)
-    if not session:
-        return {"ok": False, "error": "creation_job_not_found", "job_id": job_id_or_session_id}
-    runtime_state = dict(session.get("runtime_state") or {})
-    job = dict(runtime_state.get("creation_job") or {})
-    progress = dict(runtime_state.get("creation_progress") or {})
-    if not job:
-        job = build_creation_job(session_id=session_id, status="completed")
-    if not progress:
-        progress = build_creation_progress_snapshot(session_id=session_id, status="completed")
-    return {
-        "ok": True,
-        "job_id": job.get("job_id") or creation_job_id(session_id),
-        "session_id": session_id,
-        "status": job.get("status") or progress.get("status") or "completed",
-        "creation_job": job,
-        "creation_progress": progress,
-    }

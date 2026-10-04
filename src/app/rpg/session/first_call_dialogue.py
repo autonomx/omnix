@@ -62,17 +62,6 @@ def _b(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
-def _visible_response_text(visible_response: dict[str, Any]) -> str:
-    visible_response = _d(visible_response)
-    npc = _d(visible_response.get("npc"))
-    line = _s(npc.get("line")).strip()
-    speaker = _s(npc.get("speaker")).strip()
-    narration = _s(visible_response.get("narration")).strip()
-    if speaker and line:
-        return f"{speaker}: {line}"
-    return line or narration
-
-
 def _looks_stateful(advisory: dict[str, Any]) -> bool:
     advisory = _d(advisory)
     action_type = _s(advisory.get("action_type")).strip().lower()
@@ -136,16 +125,6 @@ def _is_interpretive_dialogue_candidate(advisory: dict[str, Any]) -> bool:
     semantic_family = _s(advisory.get("semantic_family")).strip().lower()
     return action_type in _INTERPRETIVE_DIALOGUE_ACTION_TYPES or (
         semantic_family == "social" and action_type in {"", "observe"}
-    )
-
-
-def _direct_response_gate_allows(advisory: dict[str, Any]) -> bool:
-    gate = _d(_d(advisory).get("direct_response_gate"))
-    if gate:
-        return _b(gate.get("safe_to_display_now"), False)
-    return not (
-        _b(_d(advisory).get("stateful"), True)
-        or _b(_d(advisory).get("needs_runtime_resolution"), True)
     )
 
 

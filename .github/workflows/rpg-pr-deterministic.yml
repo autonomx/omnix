@@ -73,7 +73,7 @@ jobs:
       - name: RPG turn characterization regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/characterization/test_rpg_turn.py -q --tb=short 2>&1 | tee rpg-turn-characterization-output.txt
+          python -m pytest src/tests/characterization/test_rpg_production_turn.py -q --tb=short 2>&1 | tee rpg-turn-characterization-output.txt
 
       - name: Upload RPG turn characterization diagnostics
         if: failure()

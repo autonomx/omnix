@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from app.config.env import environment
 
-import os
 from app.caching.bounded_cache import bounded_lru_cache
 from threading import RLock
 from typing import Any, Callable, Mapping, Protocol
@@ -176,10 +175,6 @@ def build_production_narrative_retirement_repository(
     environ: Mapping[str, str] | None = None,
 ) -> NarrativeRetirementRepository:
     return _cached_repository(_repository_mode(environ))
-
-
-def reset_narrative_retirement_repository_cache() -> None:
-    _cached_repository.cache_clear()
 
 
 def record_narrative_retirement(

@@ -6,7 +6,6 @@ from typing import Any, Iterable
 # Phase 8.29: ensure player turns always carry a visible fallback narration
 # so the UI never gets stuck on a queued placeholder when a deferred job is
 # missing, missed by SSE, or still pending.
-from .turn_payload_projection import _apply_phase4_travel_and_panels as _base_apply_turn_authoritative
 
 _PHASE8_NARRATION_FALLBACK_SOURCE = "deterministic_phase8_queued_narration_visible_fallback_gate"
 _PHASE8_EMPTY_VISIBLE_TEXT = {
@@ -227,19 +226,5 @@ def _phase8_patch_visible_fallback(authoritative_result: dict[str, Any]) -> dict
 
     return authoritative_result
 
-
-def _apply_visible_fallback(
-    session_id: str,
-    player_input: str,
-    action: dict[str, Any] | None = None,
-    performance_override: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    result = _base_apply_turn_authoritative(
-        session_id,
-        player_input,
-        action=action,
-        performance_override=performance_override,
-    )
-    return _phase8_patch_visible_fallback(result)
 
 __all__ = ['_phase8_patch_visible_fallback']

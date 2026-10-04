@@ -6,6 +6,7 @@ from typing import Any
 
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
 
 MAX_COMPACT_TURN_RESPONSE_BYTES = 20_000
@@ -156,14 +157,34 @@ class PostgresRpgRepository:
         *,
         limit: int = 100,
         status: str = "active",
+        before: tuple[str, str] | None = None,
     ) -> list[dict[str, Any]]:
+        """One page, newest first; pass the last row's ``(updated_at, id)`` as ``before``."""
         rows = self.connection.execute(
             f"SELECT {_CAMPAIGN_COLUMNS} FROM omnix_rpg_campaigns "
             "WHERE workspace_id = %s AND status = %s "
+            "AND (%s::timestamptz IS NULL OR (updated_at, id) < (%s::timestamptz, %s::text)) "
             "ORDER BY updated_at DESC, id DESC LIMIT %s",
-            (context.workspace_id, status, max(1, min(int(limit), 500))),
+            (
+                context.workspace_id,
+                status,
+                before[0] if before else None,
+                before[0] if before else None,
+                before[1] if before else None,
+                page_limit(limit, default=100),
+            ),
         ).fetchall()
         return [_campaign(row) for row in rows]
+
+    def iter_campaigns(self, context: TenantContext, *, status: str = "active"):
+        """Every campaign with ``status``, newest first, a page at a time."""
+        before: tuple[str, str] | None = None
+        while True:
+            page = self.list_campaigns(context, limit=MAX_PAGE_SIZE, status=status, before=before)
+            yield from page
+            if len(page) < MAX_PAGE_SIZE:
+                return
+            before = (page[-1]["updated_at"], page[-1]["id"])
 
     def get_turn_by_submission(
         self,
@@ -177,27 +198,6 @@ class PostgresRpgRepository:
             (context.workspace_id, campaign_id, submission_id),
         ).fetchone()
         return _turn(row) if row is not None else None
-
-    def list_turns(
-        self,
-        context: TenantContext,
-        campaign_id: str,
-        *,
-        after_sequence: int = 0,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            f"SELECT {_TURN_COLUMNS} FROM omnix_rpg_turns "
-            "WHERE workspace_id = %s AND campaign_id = %s AND sequence > %s "
-            "ORDER BY sequence ASC LIMIT %s",
-            (
-                context.workspace_id,
-                campaign_id,
-                int(after_sequence),
-                max(1, min(int(limit), 500)),
-            ),
-        ).fetchall()
-        return [_turn(row) for row in rows]
 
     def commit_turn(
         self,

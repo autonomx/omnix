@@ -323,32 +323,6 @@ class NarratorAgent:
         transitions = ["Then, ", "Meanwhile, ", "Suddenly, ", "Moments later, ", ""]
         return rng_for_current_turn("text:narrator_transition", sub_index).choice(transitions)
     
-    def narrate_turn(
-        self,
-        events: List[Dict[str, Any]],
-        context: Optional[str] = None,
-    ) -> str:
-        """Narrate a complete turn with optional scene context.
-        
-        Convenience method that wraps generate() with context support.
-        
-        Args:
-            events: Events from this turn.
-            context: Optional scene context string (location, mood, etc).
-            
-        Returns:
-            Complete narrative text for the turn.
-        """
-        if not events:
-            return context or ""
-            
-        if context and self.llm:
-            # Include context in the narration
-            narrative = self.generate(events)
-            return f"{context}\n\n{narrative}"
-            
-        return self.generate(events)
-    
     def reset(self) -> None:
         """Reset narrator state."""
         pass  # Stateless, nothing to reset

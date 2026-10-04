@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, Mapping, TypeVar
+from typing import Callable, Generic, TypeVar
 
 from .contracts import ResponseMode
 from .profiles import ResponseGenerationProfile
@@ -43,14 +43,6 @@ class VersionedResponseCache(Generic[T]):
         value = factory()
         self.values[key] = value
         return value, False
-
-    def invalidate_namespace(self, namespace: str) -> int:
-        # Namespaces are hashed into keys, so deterministic wholesale invalidation
-        # is represented by clearing this bounded in-memory cache.
-        count = len(self.values)
-        self.values.clear()
-        return count
-
 
 @dataclass(frozen=True)
 class BlockingPathDecision:

@@ -32,35 +32,6 @@ class PostgresNarrativeEventStore:
         self.session_id = session_id or f"session:{int(datetime.now().timestamp())}"
         self.documents = PostgresDocumentStore()
 
-    def save_events(
-        self,
-        events: list[NarrativeEvent],
-        session_id: str | None = None,
-        tick: int = 0,
-    ) -> int:
-        sid = session_id or self.session_id
-        for event in events:
-            self.documents.write(
-                {
-                    "id": event.id,
-                    "event_type": event.type,
-                    "description": event.description,
-                    "actors": list(event.actors),
-                    "location": event.location,
-                    "importance": event.importance,
-                    "emotional_weight": event.emotional_weight,
-                    "tags": list(event.tags),
-                    "session_id": sid,
-                    "tick": int(tick),
-                    "timestamp": datetime.now(timezone.utc).timestamp(),
-                    "raw_event": dict(event.raw_event or {}),
-                },
-                module="rpg",
-                record_type="narrative-event",
-                record_id=event.id,
-            )
-        return len(events)
-
     def get_history(
         self,
         limit: int = 100,
@@ -83,46 +54,6 @@ class PostgresNarrativeEventStore:
         )
         return [self._event(item) for item in rows[max(0, offset) : max(0, offset) + max(0, limit)]]
 
-    def get_session_events(
-        self,
-        session_id: str | None = None,
-        limit: int = 100,
-    ) -> list[NarrativeEvent]:
-        sid = session_id or self.session_id
-        rows = [
-            payload
-            for _, payload, _ in self.documents.list(
-                module="rpg", record_type="narrative-event", limit=5000
-            )
-            if isinstance(payload, dict) and payload.get("session_id") == sid
-        ]
-        rows.sort(key=lambda item: float(item.get("timestamp") or 0.0), reverse=True)
-        return [self._event(item) for item in rows[: max(0, limit)]]
-
-    def get_session_ids(self) -> list[str]:
-        return sorted(
-            {
-                str(payload.get("session_id"))
-                for _, payload, _ in self.documents.list(
-                    module="rpg", record_type="narrative-event", limit=5000
-                )
-                if isinstance(payload, dict) and payload.get("session_id")
-            }
-        )
-
-    def get_event_counts(self, session_id: str | None = None) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for _, payload, _ in self.documents.list(
-            module="rpg", record_type="narrative-event", limit=5000
-        ):
-            if not isinstance(payload, dict):
-                continue
-            if session_id and payload.get("session_id") != session_id:
-                continue
-            kind = str(payload.get("event_type") or "unknown")
-            counts[kind] = counts.get(kind, 0) + 1
-        return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
-
     def delete_session(self, session_id: str) -> int:
         deleted = 0
         for record_id, payload, _ in self.documents.list(
@@ -137,14 +68,6 @@ class PostgresNarrativeEventStore:
                     )
                 )
         return deleted
-
-    def clear_all(self) -> None:
-        self.documents.clear(module="rpg", record_type="narrative-event")
-
-    def get_total_count(self) -> int:
-        return len(
-            self.documents.list(module="rpg", record_type="narrative-event", limit=5000)
-        )
 
     @staticmethod
     def _event(payload: dict[str, Any]) -> NarrativeEvent:

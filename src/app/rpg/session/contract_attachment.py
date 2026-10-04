@@ -78,10 +78,6 @@ def attach_contracts_to_result(result: dict[str, Any], contracts: dict[str, Any]
     return copied
 
 
-def contract_attachment_ready() -> bool:
-    return True
-
-
 def _d(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 

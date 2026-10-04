@@ -46,17 +46,6 @@ def default_content_balance() -> ContentBalance:
     )
 
 
-def _make_id(prefix: str) -> str:
-    """Generate a stable unique id with the given prefix."""
-    return f"{prefix}_{uuid.uuid4().hex[:8]}"
-
-
-
-
-
-
-
-
 def apply_adventure_defaults(setup_data: dict) -> dict:
     """Apply default values to a raw adventure setup dict.
 

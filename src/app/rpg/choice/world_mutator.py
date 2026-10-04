@@ -239,25 +239,6 @@ class WorldMutator:
         flags = world_state.get("history_flags", set())
         return tag in flags
 
-    def check_faction_exists(
-        self,
-        world_state: Dict[str, Any],
-        faction_name: str,
-    ) -> bool:
-        """Check if a faction exists and is not destroyed.
-
-        Args:
-            world_state: World state dict.
-            faction_name: Faction name to check.
-
-        Returns:
-            True if faction exists and is not destroyed.
-        """
-        factions = world_state.get("factions", {})
-        if faction_name not in factions:
-            return False
-        return not factions[faction_name].get("destroyed", False)
-
     def prevent_respawn(
         self,
         world_state: Dict[str, Any],

@@ -21,20 +21,6 @@ class GameLoopPanelsPacksMixin:
             "alliances": [a.to_dict() for a in state.alliances.values()],
         }
 
-    def get_npc_social_view(self, npc_id: str, target_id: str | None = None) -> dict:
-        """Return a social view for a specific NPC."""
-        if self.social_state_core is None:
-            return {
-                "npc_id": npc_id,
-                "target_id": target_id,
-                "relationship": None,
-                "reputation": None,
-                "active_rumors": [],
-            }
-        query = self.social_state_core.get_query()
-        state = self.social_state_core.get_state()
-        return query.build_npc_social_view(state, npc_id, target_id)
-
     # ------------------------------------------------------------------
     # Phase 7.7 — Memory / Read-Model Panels
     # ------------------------------------------------------------------
@@ -86,12 +72,6 @@ class GameLoopPanelsPacksMixin:
         if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
             return {"title": "Reveals", "items": [], "count": 0}
         return self.arc_control_presenter.present_reveal_panel(self.arc_control_controller)
-
-    def get_pacing_plan_panel(self) -> dict:
-        """Return a presenter-shaped pacing-plan panel."""
-        if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
-            return {"title": "Pacing Plan", "items": [], "count": 0}
-        return self.arc_control_presenter.present_pacing_plan_panel(self.arc_control_controller)
 
     def get_scene_bias_panel(self) -> dict:
         """Return a presenter-shaped scene-bias panel."""
@@ -219,57 +199,3 @@ class GameLoopPanelsPacksMixin:
             "pack_data": pack.to_dict(),
         }
 
-    def apply_pack_seed(self, payload: dict) -> dict:
-        """Apply a seed payload from pack loading into existing systems.
-
-        Seeds flow through the canonical systems:
-        - creator canon (creator_seed)
-        - arc control (arc_seed)
-        - social state (social_seed)
-        - memory/codex (memory_seed)
-        """
-        pack_id = payload.get("pack_id")
-        if pack_id and pack_id in self._applied_pack_ids:
-            return {"ok": True, "skipped": True}
-
-        applied: list[str] = []
-
-        # Creator seed — apply facts and content to creator canon
-        creator_seed = payload.get("creator_seed", {})
-        if creator_seed and hasattr(self, "creator_canon_state"):
-            canon = self.creator_canon_state
-            if hasattr(canon, "load_pack_seed"):
-                canon.load_pack_seed(creator_seed)
-                applied.append("creator_seed")
-
-        # Arc seed — apply arc/reveal/pacing seeds to arc control
-        arc_seed = payload.get("arc_seed", {})
-        if arc_seed and hasattr(self, "arc_control_controller"):
-            controller = self.arc_control_controller
-            if hasattr(controller, "load_arc_seed"):
-                controller.load_arc_seed(arc_seed)
-                applied.append("arc_seed")
-
-        # Social seed — apply social seeds to social state
-        social_seed = payload.get("social_seed", {})
-        if social_seed and hasattr(self, "social_state_core"):
-            core = self.social_state_core
-            if hasattr(core, "load_social_seed"):
-                core.load_social_seed(social_seed)
-                applied.append("social_seed")
-
-        # Memory seed — apply memory seeds to campaign memory
-        memory_seed = payload.get("memory_seed", {})
-        if memory_seed and hasattr(self, "campaign_memory_core"):
-            core = self.campaign_memory_core
-            if hasattr(core, "load_memory_seed"):
-                core.load_memory_seed(memory_seed)
-                applied.append("memory_seed")
-
-        if pack_id:
-            self._applied_pack_ids.add(pack_id)
-
-        return {
-            "ok": True,
-            "applied": applied,
-        }

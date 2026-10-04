@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import env_str
 
 import json
 import logging
@@ -495,15 +495,3 @@ class _RpgJsonLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def _reset_rpg_debug_logging_for_tests() -> None:
-    global _configured, _configuring, _handler, _last_cleanup_date
-    with _lock:
-        if _handler is not None:
-            for logger_name in _LOGGER_NAMES:
-                logger = logging.getLogger(logger_name)
-                if _handler in logger.handlers:
-                    logger.removeHandler(_handler)
-        _configured = False
-        _configuring = False
-        _handler = None
-        _last_cleanup_date = None

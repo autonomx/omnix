@@ -140,30 +140,6 @@ def _matches_query_terms(entry: Dict[str, Any], query_terms: List[str]) -> bool:
     return any(term in haystack for term in query_terms)
 
 
-def get_recent_turn_memory(
-    session: Dict[str, Any],
-    limit: int = DEFAULT_RECENT_MEMORY_LIMIT,
-) -> List[Dict[str, Any]]:
-    """Return recent turn memory, oldest-to-newest within the selected window."""
-    entries = [entry for entry in _memory_entries(session) if entry["kind"] == "turn"]
-    return _recent_entries(entries, limit)
-
-
-def get_recent_dialogue_memory(
-    session: Dict[str, Any],
-    limit: int = DEFAULT_RECENT_MEMORY_LIMIT,
-    npc_id: Any = None,
-) -> List[Dict[str, Any]]:
-    """Return recent dialogue memory, optionally scoped to one NPC."""
-    npc_key = _clean_id(npc_id).casefold()
-    entries = [
-        entry
-        for entry in _memory_entries(session)
-        if entry["kind"] == "dialogue" and _matches_npc(entry, npc_key)
-    ]
-    return _recent_entries(entries, limit)
-
-
 def get_relevant_recent_memory(
     session: Dict[str, Any],
     *,

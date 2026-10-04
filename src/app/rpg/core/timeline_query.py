@@ -198,41 +198,6 @@ class TimelineQueryEngine:
         """
         return self.event_bus.timeline.get_branch(event_id)
 
-    def get_sibling_events(self, event_id: str) -> List[Event]:
-        """Get events that are siblings of the given event (same tick, different events).
-
-        Addresses rpg-design.txt Issue #4: Branch Replay Is Incomplete.
-        Sibling events in the same tick are needed for complete world
-        reconstruction during replay.
-
-        Args:
-            event_id: The event to find siblings for.
-
-        Returns:
-            List of events in the same tick but with different event IDs.
-        """
-        # Find the tick of the target event
-        target_event = None
-        for event in self.event_bus.history():
-            if event.event_id == event_id:
-                target_event = event
-                break
-
-        if target_event is None:
-            return []
-
-        target_tick = target_event.payload.get("tick")
-        if target_tick is None:
-            return []
-
-        # Find all events in the same tick (excluding self)
-        siblings = []
-        for event in self.event_bus.history():
-            if (event.payload.get("tick") == target_tick and
-                    event.event_id != event_id):
-                siblings.append(event)
-        return siblings
-
     def get_tick_groups(self) -> Dict[int, List[str]]:
         """Group all events by tick number.
 
@@ -310,32 +275,6 @@ class TimelineQueryEngine:
 
         return max(scores, key=lambda s: s.score)
 
-    def list_all_branches(self) -> List[BranchScore]:
-        """List all known branches with their scores.
-
-        Returns:
-            List of BranchScore objects for all branches.
-        """
-        branches = []
-        event_map = {e.event_id: e for e in self.event_bus.history()}
-
-        for leaf_id in self.event_bus.timeline.get_leaves():
-            leaf_node = self.event_bus.timeline.get_node(leaf_id)
-            if leaf_node and leaf_node.is_leaf():
-                # Reconstruct branch events
-                branch_ids = self.event_bus.timeline.get_branch(leaf_id)
-                branch_events = [event_map[eid] for eid in branch_ids if eid in event_map]
-                score = self._evaluator.evaluate(branch_events)
-
-                branches.append(BranchScore(
-                    branch_id=leaf_id,
-                    score=score,
-                    event_count=len(branch_events),
-                    causal_depth=len(branch_ids),
-                ))
-
-        return sorted(branches, key=lambda b: b.score, reverse=True)
-
     # -------------------------------------------------------
     # PARTIAL REPLAY / SIMULATION MODE (rpg-design.txt - Missing)
     # -------------------------------------------------------
@@ -410,99 +349,6 @@ class TimelineQueryEngine:
     # -------------------------------------------------------
     # SNAPSHOT CAPTURE (rpg-design.txt Issue #5)
     # -------------------------------------------------------
-
-    def capture_timeline_snapshot(self, tick: int) -> TimelineSnapshot:
-        """Capture a complete timeline state snapshot.
-
-        Addresses rpg-design.txt Issue #5: Snapshot Does Not Include Timeline State.
-        Previous snapshots only saved world/NPC state, not the timeline graph,
-        seen event IDs, or last_event_id. This snapshot captures ALL timeline state.
-
-        Args:
-            tick: The current game tick.
-
-        Returns:
-            TimelineSnapshot with complete timeline state.
-        """
-        snapshot = TimelineSnapshot(tick=tick)
-
-        # Capture DAG edges
-        for eid, node in self.event_bus.timeline.nodes.items():
-            snapshot.edges.append((eid, node.parent_id))
-
-        # Capture deduplication state
-        snapshot.seen_event_ids = set(self.event_bus._seen_event_ids)
-
-        # Capture fork points
-        snapshot.fork_points = self.event_bus.timeline.get_forks()
-
-        # Capture roots
-        snapshot.roots = self.event_bus.timeline.get_roots()
-
-        # Capture metadata if available
-        if hasattr(self.event_bus.timeline, 'metadata'):
-            if hasattr(self.event_bus.timeline.metadata, 'get_all_labels'):
-                snapshot.labels = dict(self.event_bus.timeline.metadata.get_all_labels())
-            if hasattr(self.event_bus.timeline.metadata, 'get_all_notes'):
-                snapshot.annotations = dict(self.event_bus.timeline.metadata.get_all_notes())
-
-        return snapshot
-
-    def restore_timeline_snapshot(self, snapshot: TimelineSnapshot) -> None:
-        """Restore timeline state from a snapshot.
-
-        Addresses rpg-design.txt Issue #5: After load, DAG must be preserved.
-
-        Args:
-            snapshot: The TimelineSnapshot to restore.
-        """
-        # Restore deduplication state
-        if snapshot.seen_event_ids:
-            self.event_bus._seen_event_ids = set(snapshot.seen_event_ids)
-
-        # Restore DAG structure (in topological order)
-        # First pass: create all nodes without linking
-        restored_ids = set()
-        for eid, _ in snapshot.edges:
-            if eid not in restored_ids:
-                self.event_bus.timeline.nodes[eid] = self.event_bus.timeline.nodes.get(
-                    eid, type('TimelineNode', (), {'event_id': eid, 'parent_id': None, 'children': []})()
-                )
-                restored_ids.add(eid)
-
-        # Second pass: properly rebuild through add_event
-        self.event_bus.timeline.clear()
-        # Process edges - roots first, then children
-        edges_by_parent: Dict[Optional[str], List[str]] = {}
-        all_ids = set()
-        for eid, parent_id in snapshot.edges:
-            all_ids.add(eid)
-            if parent_id not in edges_by_parent:
-                edges_by_parent[parent_id] = []
-            edges_by_parent[parent_id].append(eid)
-
-        # Add roots first (parent_id=None)
-        for eid in edges_by_parent.get(None, []):
-            self.event_bus.timeline.add_event(eid, parent_id=None)
-
-        # Add children level by level
-        added = set(edges_by_parent.get(None, []))
-        pending = True
-        while pending:
-            pending = False
-            for parent_id, children in edges_by_parent.items():
-                if parent_id in added:
-                    for child_id in children:
-                        if child_id not in added:
-                            self.event_bus.timeline.add_event(child_id, parent_id=parent_id)
-                            added.add(child_id)
-                            pending = True
-
-        # Restore fork points explicitly
-        for fork_id, children in snapshot.fork_points.items():
-            if not self.event_bus.timeline.has_event(fork_id):
-                self.event_bus.timeline.add_event(fork_id, parent_id=None)
-
 
 class DefaultBranchEvaluator:
     """Default branch evaluation implementation.

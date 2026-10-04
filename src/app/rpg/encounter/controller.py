@@ -15,7 +15,6 @@ from typing import Any
 
 from .models import (
     SUPPORTED_ENCOUNTER_MODES,
-    SUPPORTED_ENCOUNTER_STATUSES,
     EncounterChoiceContext,
     EncounterObjective,
     EncounterParticipant,
@@ -166,24 +165,6 @@ class EncounterController:
 
         self.active_encounter = state
         return state
-
-    def end_encounter(
-        self,
-        status: str = "resolved",
-        resolution_summary: dict[str, Any] | None = None,
-    ) -> None:
-        """Mark the encounter as finished.
-
-        The resolved state is retained until the next explicit start or
-        clear so that UX and memory layers can still read it.
-        """
-        if self.active_encounter is None:
-            return
-        if status not in SUPPORTED_ENCOUNTER_STATUSES:
-            status = "resolved"
-        self.active_encounter.status = status
-        if resolution_summary:
-            self.active_encounter.resolution_summary = dict(resolution_summary)
 
     def clear_encounter(self) -> None:
         """Explicitly discard the encounter state."""

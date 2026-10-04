@@ -83,44 +83,6 @@ class TimelineMetadata:
         self.labels.clear()
         self.notes.clear()
 
-    def has_label(self, event_id: str) -> bool:
-        """Check if an event has a label.
-
-        Args:
-            event_id: The event identifier.
-
-        Returns:
-            True if the event has a label, False otherwise.
-        """
-        return event_id in self.labels
-
-    def has_note(self, event_id: str) -> bool:
-        """Check if an event has an annotation note.
-
-        Args:
-            event_id: The event identifier.
-
-        Returns:
-            True if the event has a note, False otherwise.
-        """
-        return event_id in self.notes
-
-    def get_all_labels(self) -> Dict[str, str]:
-        """Return a copy of all labels.
-
-        Returns:
-            Dictionary mapping event IDs to labels.
-        """
-        return dict(self.labels)
-
-    def get_all_notes(self) -> Dict[str, str]:
-        """Return a copy of all notes.
-
-        Returns:
-            Dictionary mapping event IDs to notes.
-        """
-        return dict(self.notes)
-
     def __repr__(self) -> str:
         return (
             f"TimelineMetadata(labels={len(self.labels)}, notes={len(self.notes)})"

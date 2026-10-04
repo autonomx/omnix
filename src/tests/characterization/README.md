@@ -40,11 +40,16 @@ frames through the accepted TTS lane using `FakeTTS`.
 
 ## RPG turn scenario
 
-`rpg-turn` records a seeded 20-turn execution-pipeline run. Prompt-hash keyed
-`FakeLLMProvider` actions cover first call, combat, dialogue, item use, travel,
-idle and fast-path conflict resolution. The golden stores each turn's visible
-response, emitted events, director feedback, arc updates and simulation-state
-hash; the test replays the same recorded inputs before comparing it.
+`rpg-production-turn` plays a seeded new game (seed 7) through the production
+turn route, `POST /api/rpg/sessions/{id}/turn`, against PostgreSQL: look, talk,
+buy, travel and wait. Model calls are answered by a scripted fake keyed on each
+call's contract (semantic intent, narration candidates, turn narration, canon
+dossier) and the narrative engine writes through a scripted structured writer.
+The golden records each turn's visible response, interaction and simulation
+counters, changed domains, state revision, session summary, narrative blocks
+and validation, and the kinds of model call the turn made. It replaced the
+earlier `rpg-turn` golden, which exercised an execution pipeline production
+never used (2026-10-04).
 
 ## Trading evaluation scenario
 

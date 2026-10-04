@@ -291,15 +291,6 @@ def _social_summary(resolved_result: Dict[str, Any], owner_name: str) -> str:
     return "The player had a social interaction."
 
 
-def apply_social_effects(
-    simulation_state: Dict[str, Any],
-    resolved_result: Dict[str, Any],
-    *,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    return apply_general_social_effects(simulation_state, resolved_result, tick=tick)
-
-
 def apply_general_social_effects(
     simulation_state: Dict[str, Any],
     resolved_result: Dict[str, Any],

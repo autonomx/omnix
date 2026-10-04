@@ -25,35 +25,8 @@ Usage:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Optional
 
-
-class SerializableSystem(Protocol):
-    """Protocol for systems that can be serialized/deserialized."""
-    
-    def serialize(self) -> Dict[str, Any]:
-        """Serialize system state to a dictionary.
-        
-        Returns:
-            Dictionary containing all system state data.
-        """
-        ...
-    
-    def deserialize(self, data: Dict[str, Any]) -> None:
-        """Restore system state from a dictionary.
-        
-        Args:
-            data: Dictionary containing serialized state data.
-        """
-        ...
-
-
-class GameLoopLike(Protocol):
-    """Protocol for game loop objects that support snapshot operations."""
-    
-    world: Optional[SerializableSystem]
-    npc_system: Optional[SerializableSystem]
-    
 
 @dataclass
 class Snapshot:
@@ -300,31 +273,6 @@ class SnapshotManager:
         candidates = [t for t in self._snapshots if t <= tick]
         return max(candidates) if candidates else None
     
-    def has_snapshot(self, tick: int) -> bool:
-        """Check if a snapshot exists for the given tick.
-        
-        Args:
-            tick: The tick number to check.
-            
-        Returns:
-            True if a snapshot exists for the given tick.
-        """
-        return tick in self._snapshots
-    
-    def remove_snapshot(self, tick: int) -> bool:
-        """Remove a snapshot at the given tick.
-        
-        Args:
-            tick: The tick number of the snapshot to remove.
-            
-        Returns:
-            True if snapshot was removed, False if it didn't exist.
-        """
-        if tick in self._snapshots:
-            del self._snapshots[tick]
-            return True
-        return False
-    
     def clear(self) -> None:
         """Remove all snapshots and free memory."""
         self._snapshots.clear()
@@ -332,10 +280,6 @@ class SnapshotManager:
     def snapshot_count(self) -> int:
         """Return the number of snapshots currently stored."""
         return len(self._snapshots)
-    
-    def snapshot_ticks(self) -> List[int]:
-        """Return a sorted list of all snapshot tick numbers."""
-        return sorted(self._snapshots.keys())
     
     def should_snapshot(self, tick: int) -> bool:
         """Check if the current tick matches the snapshot interval.

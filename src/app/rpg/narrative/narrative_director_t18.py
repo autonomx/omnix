@@ -42,10 +42,6 @@ class NarrativeDirector:
         self.pacing.adjust(self.state, world)
         return events
 
-    def force_emergence_boost(self):
-        """If emergence is low, boost tension."""
-        self.state.tension = min(1.0, self.state.tension + 0.1)
-
     def reset(self):
         self.state = StoryState()
         self.tension_engine.reset()

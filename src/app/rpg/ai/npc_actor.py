@@ -175,15 +175,6 @@ class NPCActor:
         """
         self.goals.append(goal)
 
-    def clear_goals(self) -> None:
-        """Clear all goals."""
-        self.goals.clear()
-        self.legacy_goals.clear()
-
-    def clear_plan(self) -> None:
-        """Clear current plan."""
-        self.current_plan.clear()
-
     def update_belief(self, key: str, delta: float) -> float:
         """Update a belief value by a delta.
 
@@ -222,58 +213,6 @@ class NPCActor:
             Belief value.
         """
         return self.beliefs.get(key, default)
-
-    def select_highest_priority_goal(self) -> Optional[Dict[str, Any]]:
-        """Select the highest priority goal.
-
-        For backward compatibility, returns a dict representation
-        of the highest priority goal.
-
-        Returns:
-            Highest priority goal dict, or None if no goals.
-        """
-        best_goal: Optional[Dict[str, Any]] = None
-        best_priority = -1.0
-
-        # Check dict goals (backward compat)
-        for goal in self.goals:
-            if isinstance(goal, dict):
-                priority = goal.get("priority", 0)
-                if priority > best_priority:
-                    best_priority = priority
-                    best_goal = goal
-
-        # Check legacy goals
-        for goal in self.legacy_goals:
-            priority = goal.get("priority", 0)
-            if priority > best_priority:
-                best_priority = priority
-                best_goal = goal
-
-        # Check NPCGoal objects
-        from .npc_actor import NPCGoal
-        for goal in self.goals:
-            if isinstance(goal, NPCGoal) and goal.status == "active":
-                if goal.priority > best_priority:
-                    best_priority = goal.priority
-                    best_goal = goal.to_dict()
-
-        return best_goal
-
-    def select_best_active_goal(self) -> Optional[NPCGoal]:
-        """Select the highest priority active stateful goal.
-
-        Returns:
-            Highest priority active NPCGoal, or None.
-        """
-        # Only consider NPCGoal objects with status attribute
-        active_goals = [
-            g for g in self.goals
-            if isinstance(g, NPCGoal) and g.status == "active"
-        ]
-        if not active_goals:
-            return None
-        return max(active_goals, key=lambda g: g.priority)
 
     def get_relationship(self, npc_id: str, default: float = 0.0) -> float:
         """Get relationship value with another NPC.

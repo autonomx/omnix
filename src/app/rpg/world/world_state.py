@@ -74,62 +74,6 @@ class WorldState:
         self.entities[entity_id] = properties or {}
         self._active_entities.add(entity_id)
         
-    def remove_entity(self, entity_id: str) -> Optional[Dict[str, Any]]:
-        """Remove an entity from the world state.
-        
-        Args:
-            entity_id: Entity to remove.
-            
-        Returns:
-            The entity's properties if it existed, None otherwise.
-        """
-        if entity_id in self.entities:
-            self._active_entities.discard(entity_id)
-            return self.entities.pop(entity_id)
-        return None
-        
-    def get_entity(self, entity_id: str) -> Optional[Dict[str, Any]]:
-        """Get entity properties.
-        
-        Args:
-            entity_id: Entity identifier.
-            
-        Returns:
-            Entity properties dict, or None if not found.
-        """
-        return self.entities.get(entity_id)
-        
-    def update_entity(self, entity_id: str, properties: Dict[str, Any]) -> None:
-        """Update entity properties.
-        
-        Args:
-            entity_id: Entity to update.
-            properties: Properties to merge (overwrites existing keys).
-        """
-        if entity_id in self.entities:
-            self.entities[entity_id].update(properties)
-        else:
-            self.add_entity(entity_id, properties)
-            
-    def has_entity(self, entity_id: str) -> bool:
-        """Check if an entity exists.
-        
-        Args:
-            entity_id: Entity identifier.
-            
-        Returns:
-            True if entity exists.
-        """
-        return entity_id in self.entities
-        
-    def get_active_entities(self) -> Set[str]:
-        """Get all active entity IDs.
-        
-        Returns:
-            Set of active entity IDs.
-        """
-        return self._active_entities.copy()
-        
     def apply_event(self, event: Dict[str, Any]) -> None:
         """Apply an event to update world state.
         
@@ -275,49 +219,6 @@ class WorldState:
         key = self._relationship_key(a, b)
         return self.relationships.get(key, 0.0)
         
-    def get_all_relationships(self, entity: str) -> Dict[str, float]:
-        """Get all relationships for an entity.
-        
-        Args:
-            entity: Entity to get relationships for.
-            
-        Returns:
-            Dict mapping other entity IDs to relationship values.
-        """
-        result = {}
-        for (a, b), value in self.relationships.items():
-            if a == entity:
-                result[b] = value
-            elif b == entity:
-                result[a] = value
-        return result
-        
-    def has_hostile_relationship(self, a: str, b: str, threshold: float = -0.3) -> bool:
-        """Check if two entities have a hostile relationship.
-        
-        Args:
-            a: First entity.
-            b: Second entity.
-            threshold: Threshold below which is considered hostile.
-            
-        Returns:
-            True if relationship is below threshold.
-        """
-        return self.get_relationship(a, b) < threshold
-        
-    def has_friendly_relationship(self, a: str, b: str, threshold: float = 0.3) -> bool:
-        """Check if two entities have a friendly relationship.
-        
-        Args:
-            a: First entity.
-            b: Second entity.
-            threshold: Threshold above which is considered friendly.
-            
-        Returns:
-            True if relationship is above threshold.
-        """
-        return self.get_relationship(a, b) > threshold
-        
     @staticmethod
     def _relationship_key(a: str, b: str) -> Tuple[str, str]:
         """Get canonical relationship key (sorted).
@@ -371,52 +272,6 @@ class WorldState:
             "flags": self.flags.copy(),
             "locations": dict(self.locations),
         }
-        
-    def serialize_for_prompt(self) -> str:
-        """Serialize world state as human-readable text for LLM prompt.
-        
-        Returns:
-            Formatted string representation.
-        """
-        lines = ["## World State"]
-        lines.append(f"Time: {self.time}")
-        lines.append("")
-        
-        # Entities
-        lines.append("### Entities")
-        for eid, props in self.entities.items():
-            status = "ALIVE" if props.get("is_active", True) else "DEAD"
-            hp = props.get("hp", "??")
-            pos = props.get("position", "?")
-            lines.append(f"- {eid}: {status}, HP={hp}, Pos={pos}")
-        lines.append("")
-        
-        # Relationships
-        if self.relationships:
-            lines.append("### Relationships")
-            for (a, b), value in self.relationships.items():
-                sentiment = "hostile" if value < -0.2 else "friendly" if value > 0.2 else "neutral"
-                lines.append(f"- {a} ↔ {b}: {sentiment} ({value:.2f})")
-            lines.append("")
-            
-        # Flags
-        if self.flags:
-            lines.append("### Flags")
-            for key, value in self.flags.items():
-                lines.append(f"- {key}: {value}")
-            lines.append("")
-            
-        return "\n".join(lines)
-        
-    def to_short_summary(self) -> str:
-        """Get a very short world summary for tight token budgets.
-        
-        Returns:
-            Single line summary of world state.
-        """
-        active = sum(1 for p in self.entities.values() if p.get("is_active", True))
-        hostile = sum(1 for v in self.relationships.values() if v < -0.3)
-        return f"World T={self.time}: {active} active entities, {hostile} hostile pairs"
         
     # =========================================================
     # LIFECYCLE

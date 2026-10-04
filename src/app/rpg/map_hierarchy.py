@@ -57,19 +57,6 @@ def switch_active_map(
     return map_state, destination_location_id
 
 
-def hierarchy_breadcrumbs(map_id: str, repository: MapDefinitionRepository) -> tuple[str, ...]:
-    trail: list[str] = []
-    seen: set[str] = set()
-    current = repository.get(map_id)
-    while current.map_id not in seen:
-        seen.add(current.map_id)
-        trail.append(current.map_id)
-        if not current.parent_map_id:
-            break
-        current = repository.get(current.parent_map_id)
-    return tuple(reversed(trail))
-
-
 def _location_for_map(definition: object, preferred_location_id: str | None) -> str:
     objects = tuple(getattr(definition, "objects", ()))
     if preferred_location_id and any(getattr(item, "location_id", None) == preferred_location_id for item in objects):

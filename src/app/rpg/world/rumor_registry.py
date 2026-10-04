@@ -52,10 +52,6 @@ def list_rumors() -> List[Dict[str, Any]]:
     return [deepcopy(rumor) for rumor in RUMORS.values()]
 
 
-def get_rumor(rumor_id: str) -> Dict[str, Any]:
-    return deepcopy(_safe_dict(RUMORS.get(_safe_str(rumor_id))))
-
-
 def select_rumor_for_service(
     service_result: Dict[str, Any],
     simulation_state: Dict[str, Any] | None = None,

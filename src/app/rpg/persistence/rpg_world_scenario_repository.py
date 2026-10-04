@@ -5,6 +5,7 @@ from typing import Any, Mapping
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from .rpg_repository import canonical_json
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import page_limit
 
 
 class RpgWorldRevisionConflict(RevisionConflict):
@@ -131,7 +132,7 @@ class PostgresRpgWorldScenarioRepository:
             "genre, tone, seed, draft_revision, metadata_jsonb, created_at, updated_at "
             "FROM omnix_rpg_worlds WHERE workspace_id = %s "
             "ORDER BY updated_at DESC, id LIMIT %s",
-            (context.workspace_id, max(1, min(int(limit), 500))),
+            (context.workspace_id, page_limit(limit, default=100)),
         ).fetchall()
         return [_world_row(row) for row in rows]
 

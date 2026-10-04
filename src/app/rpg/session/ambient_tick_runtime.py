@@ -67,10 +67,6 @@ def _forced_player_mode(command: str) -> str:
     return ""
 
 
-def is_forced_player_invited_command(player_input: str) -> bool:
-    return _safe_str(player_input).strip().lower() == "__ambient_tick_player_invited__"
-
-
 def _forced_topic_type(command: str) -> str:
     command = _safe_str(command).strip().lower()
     if command == "__ambient_tick_quest__":

@@ -247,21 +247,3 @@ def recall_service_memories_for_narration(
     }
 
 
-def has_backing_service_memory(
-    recalled_service_memories: List[Dict[str, Any]],
-    *,
-    kinds: List[str] | None = None,
-    service_kind: str = "",
-    offer_id: str = "",
-) -> bool:
-    kinds = kinds or []
-    for memory in _safe_list(recalled_service_memories):
-        memory = _safe_dict(memory)
-        if kinds and _safe_str(memory.get("kind")) not in kinds:
-            continue
-        if service_kind and _safe_str(memory.get("service_kind")) != service_kind:
-            continue
-        if offer_id and _safe_str(memory.get("offer_id")) != offer_id:
-            continue
-        return True
-    return False

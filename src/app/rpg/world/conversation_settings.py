@@ -311,17 +311,6 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     return merged
 
 
-def write_conversation_settings_to_runtime(
-    runtime_state: Dict[str, Any],
-    settings: Dict[str, Any],
-) -> Dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
-    runtime_settings["conversation_settings"] = normalize_conversation_settings(settings)
-    runtime_state["runtime_settings"] = runtime_settings
-    return runtime_state
-
-
 def should_attempt_autonomous_conversation(
     *,
     tick: int,

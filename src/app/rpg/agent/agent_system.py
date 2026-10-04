@@ -190,14 +190,6 @@ class AgentSystem:
         
         return events
     
-    def get_active_plan_count(self) -> int:
-        """Get number of NPCs with active plans.
-        
-        Returns:
-            Number of active plans.
-        """
-        return len(self.active_plans)
-    
     def get_active_plan(self, char_id: str) -> Optional[Plan]:
         """Get the active plan for a character.
         
@@ -208,29 +200,6 @@ class AgentSystem:
             Plan object, or None if no active plan.
         """
         return self.active_plans.get(char_id)
-    
-    def cancel_plan(self, char_id: str) -> Optional[Plan]:
-        """Cancel a character's active plan.
-        
-        Args:
-            char_id: Character ID.
-            
-        Returns:
-            Cancelled plan, or None if no plan.
-        """
-        return self.active_plans.pop(char_id, None)
-    
-    def get_scheduler_stats(self) -> Dict[str, Any]:
-        """Get scheduler statistics.
-        
-        Returns:
-            Dict with scheduling stats.
-        """
-        return {
-            "active_plans": self.get_active_plan_count(),
-            "selection_stats": self.scheduler.get_selection_stats(),
-            "last_selected": self.scheduler.get_last_selected(),
-        }
     
     def reset(self) -> None:
         """Reset all agent system state."""

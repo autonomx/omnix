@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Iterable
+from typing import Any
 
 LEGACY_INTERACTION_MIGRATION_VERSION = "rpg_legacy_interaction_migration_v1"
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"

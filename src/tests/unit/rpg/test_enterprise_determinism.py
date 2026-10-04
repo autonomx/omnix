@@ -4,7 +4,6 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 
 from app.rpg.action_resolver import resolve_player_action
-from app.rpg.core.action_resolver import ActionResolver, ResolutionStrategy
 from app.rpg.core.determinism import (
     deterministic_turn_uuid,
     rng_for,
@@ -15,9 +14,6 @@ from app.rpg.core.determinism import (
 )
 from app.rpg.core.clock import DeterministicClock
 from app.rpg.core.event_bus import DeterminismConfig, Event, EventBus
-from app.rpg.core.execution_pipeline import ExecutionPipeline
-from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
-from app.rpg.core.world_loop import WorldSimulationLoop
 from app.rpg.session.idle_time import recorded_idle_tick_time
 from app.runtime.clock import Clock, TurnContext, bind_turn_context, utc_now
 from app.rpg.session import service as session_service
@@ -194,19 +190,6 @@ def test_text_rng_fails_closed_without_a_seeded_turn_context() -> None:
         raise AssertionError("text RNG must require a seeded turn context")
 
 
-def test_execution_pipeline_reuses_the_captured_turn_time() -> None:
-    initial = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
-    clock = FixedClock(initial)
-    context = TurnContext.capture(clock, session_seed=44, turn_index=7)
-    pipeline = ExecutionPipeline(clock=clock)
-
-    with bind_turn_context(context):
-        result = pipeline.execute_turn({}, [], "wait")
-
-    assert clock.now_calls == 1
-    assert result["trace"]["timestamp"] == initial.timestamp()
-
-
 def test_replay_turn_context_uses_recorded_time_without_reading_the_clock() -> None:
     recorded_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     clock = FixedClock(datetime(2030, 1, 1, tzinfo=timezone.utc))
@@ -238,31 +221,6 @@ def test_idle_replay_turn_time_comes_from_the_recorded_input() -> None:
     assert now == datetime.fromisoformat(recorded_now)
 
 
-def test_world_loop_choices_and_probabilistic_execution_are_seeded() -> None:
-    loop_a = WorldSimulationLoop(session_seed=55, passive_events={})
-    loop_b = WorldSimulationLoop(session_seed=55, passive_events={})
-    loop_a.tick = loop_b.tick = 9
-
-    assert loop_a._generate_passive_event_data("weather_change") == loop_b._generate_passive_event_data(
-        "weather_change"
-    )
-    assert loop_a._schedule_next_tick("npc-1") == loop_b._schedule_next_tick("npc-1")
-
-    executor = ProbabilisticActionExecutor(enable_critical=False)
-    action = {"action": "attack", "success_rate": 0.5}
-    result_a = executor.execute_with_uncertainty(action, rng=rng_for(55, 9, "execution"))
-    result_b = executor.execute_with_uncertainty(action, rng=rng_for(55, 9, "execution"))
-    assert result_a == result_b
-
-
-def test_world_loop_legacy_seed_is_upcast_from_session_identity() -> None:
-    session = {"session_id": "legacy-world-loop", "seed": 1234}
-
-    assert WorldSimulationLoop._seed_from_session(session) == rng_seed_from_session_id(
-        "legacy-world-loop"
-    )
-
-
 def test_political_system_uses_named_turn_streams(monkeypatch) -> None:
     from types import SimpleNamespace
 
@@ -287,25 +245,6 @@ def test_political_system_uses_named_turn_streams(monkeypatch) -> None:
 
     assert first == second
     assert first[0]["type"] == "coup"
-
-
-def test_random_action_conflict_requires_and_uses_an_injected_stream() -> None:
-    actions = [
-        {"action": "move", "npc_id": "a", "parameters": {"target": "same"}},
-        {"action": "equip", "npc_id": "b", "parameters": {"target": "same"}},
-    ]
-    resolver = ActionResolver(strategy=ResolutionStrategy.RANDOM)
-
-    try:
-        resolver.resolve(actions)
-    except ValueError as exc:
-        assert "injected RNG" in str(exc)
-    else:
-        raise AssertionError("random strategy must fail without an explicit RNG")
-
-    first = resolver.resolve(actions, rng=rng_for(77, 3, "conflict"))
-    second = resolver.resolve(actions, rng=rng_for(77, 3, "conflict"))
-    assert first == second
 
 
 def test_fifty_turn_replay_matches_each_state_hash() -> None:

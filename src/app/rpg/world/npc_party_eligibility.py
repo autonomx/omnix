@@ -82,17 +82,3 @@ def evaluate_npc_party_join_eligibility(
     }
 
 
-def party_eligible_npcs(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_ids: List[str],
-) -> List[Dict[str, Any]]:
-    out = []
-    for npc_id in npc_ids[:16]:
-        result = evaluate_npc_party_join_eligibility(
-            simulation_state,
-            npc_id=_safe_str(npc_id),
-        )
-        if result.get("eligible"):
-            out.append(result)
-    return out

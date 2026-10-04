@@ -5,7 +5,6 @@ from typing import Any
 
 from ..creator.defaults import (
     apply_adventure_defaults,
-    build_setup_template,
     infer_default_opening,
     list_setup_templates,
 )
@@ -35,50 +34,6 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
-
-
-def _normalize_setup(setup: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(setup, dict):
-        setup = {}
-
-    return {
-        "world": dict(setup.get("world") or {}),
-        "player": dict(setup.get("player") or {}),
-        "npcs": list(setup.get("npcs") or []),
-        "locations": list(setup.get("locations") or []),
-        "quests": list(setup.get("quests") or []),
-        "items": list(setup.get("items") or []),
-        "factions": list(setup.get("factions") or []),
-    }
-
-
-def _validate_generated_content(setup: dict[str, Any]) -> dict[str, Any]:
-    # Ensure safe NPC structure
-    safe_npcs = []
-    for i, npc in enumerate(setup.get("npcs", [])):
-        if not isinstance(npc, dict):
-            continue
-        safe_npcs.append({
-            "id": str(npc.get("id") or f"npc_{i}"),
-            "name": str(npc.get("name") or f"NPC {i}"),
-            "role": str(npc.get("role") or "unknown"),
-        })
-
-    setup["npcs"] = safe_npcs
-
-    # Same pattern for locations
-    safe_locations = []
-    for i, loc in enumerate(setup.get("locations", [])):
-        if not isinstance(loc, dict):
-            continue
-        safe_locations.append({
-            "id": str(loc.get("id") or f"loc_{i}"),
-            "name": str(loc.get("name") or f"Location {i}"),
-        })
-
-    setup["locations"] = safe_locations
-
-    return setup
 
 
 def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
@@ -157,13 +112,6 @@ def _truncate(text: str, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 1] + "…"
-
-
-def _first_or(items: list[Any], default: str = "") -> str:
-    """Return the first element of *items* as a string, or *default*."""
-    if items:
-        return str(items[0])
-    return default
 
 
 def summarize_understood_setup(setup: dict[str, Any]) -> dict[str, Any]:
@@ -478,22 +426,6 @@ def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
 def get_templates() -> list[dict[str, Any]]:
     """Return available adventure setup templates with metadata."""
     return list_setup_templates()
-
-
-def build_template_payload(template_name: str) -> dict[str, Any]:
-    """Build a full editable setup dict from a named template.
-
-    Applies canonical defaults after template hydration so the caller
-    receives a complete payload ready for UI editing.
-    """
-    try:
-        raw = build_setup_template(template_name)
-    except ValueError:
-        return {"success": False, "error": f"Unknown template: {template_name}"}
-    if raw is None:
-        return {"success": False, "error": f"Unknown template: {template_name}"}
-    payload = apply_adventure_defaults(dict(raw))
-    return {"success": True, "setup": payload}
 
 
 # ---------------------------------------------------------------------------

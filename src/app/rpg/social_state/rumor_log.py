@@ -51,33 +51,3 @@ class RumorLog:
         state.rumors[rumor_id] = rumor
         return rumor
 
-    def increase_spread(
-        self,
-        state: SocialState,
-        rumor_id: str,
-        amount: int = 1,
-        event_id: str | None = None,
-    ) -> RumorRecord | None:
-        """Increase the spread level of an existing rumor."""
-        rumor = state.rumors.get(rumor_id)
-        if rumor is None:
-            return None
-        rumor.spread_level += amount
-        if event_id is not None:
-            rumor.last_event_id = event_id
-        return rumor
-
-    def deactivate(
-        self,
-        state: SocialState,
-        rumor_id: str,
-        event_id: str | None = None,
-    ) -> RumorRecord | None:
-        """Deactivate a rumor."""
-        rumor = state.rumors.get(rumor_id)
-        if rumor is None:
-            return None
-        rumor.active = False
-        if event_id is not None:
-            rumor.last_event_id = event_id
-        return rumor

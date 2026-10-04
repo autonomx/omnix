@@ -86,14 +86,6 @@ class ProviderDocumentDraft(BaseModel):
     entities: list[StrictStr] = Field(default_factory=list, max_length=32)
 
 
-class ProviderFactDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    content: StrictStr
-    expanded_description: StrictStr
-    entity_refs: list[StrictStr] = Field(min_length=1, max_length=32)
-
-
 class ProviderRelationshipDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

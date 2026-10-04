@@ -372,5 +372,3 @@ def get_npc_biography(npc_id_or_name: Any) -> Dict[str, Any]:
     )
 
 
-def list_npc_biographies() -> List[Dict[str, Any]]:
-    return [deepcopy(value) for value in NPC_BIOGRAPHIES.values()]

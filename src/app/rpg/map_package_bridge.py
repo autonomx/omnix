@@ -58,7 +58,3 @@ def restore_map_state_from_package(
     return restored
 
 
-def packaged_map_state(package_payload: Mapping[str, object]) -> dict[str, object]:
-    simulation_state = package_payload.get("simulation_state")
-    value = simulation_state.get(_PACKAGE_MAP_KEY) if isinstance(simulation_state, Mapping) else None
-    return deepcopy(dict(value)) if isinstance(value, Mapping) else {}

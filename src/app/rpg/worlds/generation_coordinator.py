@@ -226,28 +226,6 @@ def available_completed_topics(
     return available, tuple(reusable), tuple(protected)
 
 
-def reusable_completed_topics(
-    graph: CampaignTopicGraph,
-    *,
-    rows: Mapping[str, Mapping[str, Any]],
-    generation_context: Mapping[str, Any],
-    topic_directives: Mapping[str, Mapping[str, Any]],
-    entity_manifest_hash: str,
-    settings: WorldTopicGenerationSettings,
-) -> dict[str, Mapping[str, Any]]:
-    """Backward-compatible generated-topic reuse projection."""
-
-    available, reusable, _protected_ids = available_completed_topics(
-        graph,
-        rows=rows,
-        generation_context=generation_context,
-        topic_directives=topic_directives,
-        entity_manifest_hash=entity_manifest_hash,
-        settings=settings,
-    )
-    return {topic_id: available[topic_id] for topic_id in reusable}
-
-
 def start_world_generation(
     *,
     world_id: str,

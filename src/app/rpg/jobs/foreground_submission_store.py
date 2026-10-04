@@ -252,6 +252,3 @@ def submission_store_for_job_store(job_store: Any) -> InMemoryForegroundSubmissi
     return InMemoryForegroundSubmissionStore(getattr(job_store, "db_path", None))
 
 
-def reset_in_memory_submission_stores() -> None:
-    with _STATES_LOCK:
-        _STATES.clear()

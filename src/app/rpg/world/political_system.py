@@ -44,7 +44,7 @@ Key Features:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
@@ -185,28 +185,6 @@ class PoliticalSystem:
         """
         self.leaders[faction_id] = leader
         
-    def remove_leader(self, faction_id: str) -> Optional[Leader]:
-        """Remove a faction's leader.
-        
-        Args:
-            faction_id: Faction identifier.
-            
-        Returns:
-            Removed leader, or None if none existed.
-        """
-        return self.leaders.pop(faction_id, None)
-    
-    def get_leader(self, faction_id: str) -> Optional[Leader]:
-        """Get the current leader of a faction.
-        
-        Args:
-            faction_id: Faction identifier.
-            
-        Returns:
-            Leader object, or None if no leader assigned.
-        """
-        return self.leaders.get(faction_id)
-    
     def update(self, faction_system: Any) -> List[Dict[str, Any]]:
         """Check for political upheaval in all factions.
         

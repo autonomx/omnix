@@ -156,30 +156,6 @@ def map_arc_pressure_to_reveal_level(arc_context: dict[str, Any]) -> str:
 # Scene bias → dialogue shaping tags
 # ------------------------------------------------------------------
 
-def map_scene_bias_to_dialogue_tags(bias: dict[str, Any]) -> list[str]:
-    """Map a scene-bias dict to dialogue shaping tags.
-
-    Returns a list of tags such as ``['tense', 'guarded']``.
-    """
-    tags: list[str] = []
-    scene_type = bias.get("scene_type_bias", "")
-    _BIAS_TAG_MAP: dict[str, str] = {
-        "tense": "tense",
-        "guarded": "guarded",
-        "urgent": "urgent",
-        "revelatory": "revelatory",
-        "misdirecting": "misdirecting",
-        "calm": "calm",
-        "climax": "urgent",
-    }
-    tag = _BIAS_TAG_MAP.get(scene_type)
-    if tag:
-        tags.append(tag)
-    if bias.get("force_option_framing"):
-        tags.append("framed")
-    return tags
-
-
 # ------------------------------------------------------------------
 # Normalize
 # ------------------------------------------------------------------

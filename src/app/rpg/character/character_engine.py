@@ -113,20 +113,6 @@ class Character:
         if goal not in self.goals:
             self.goals.append(goal)
     
-    def remove_goal(self, goal: str) -> bool:
-        """Remove a goal.
-        
-        Args:
-            goal: Goal to remove.
-            
-        Returns:
-            True if goal was removed, False if not found.
-        """
-        if goal in self.goals:
-            self.goals.remove(goal)
-            return True
-        return False
-    
     def add_memory(self, event: Dict[str, Any]) -> None:
         """Add an event to memory.
         
@@ -134,17 +120,6 @@ class Character:
             event: Event dict to remember.
         """
         self.memory.append(event)
-    
-    def get_recent_memories(self, count: int = 10) -> List[Dict[str, Any]]:
-        """Get most recent memories.
-        
-        Args:
-            count: Number of memories to return.
-            
-        Returns:
-            List of recent memory dicts.
-        """
-        return self.memory[-count:]
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict.
@@ -224,25 +199,6 @@ class CharacterEngine:
             Character object, or None if not found.
         """
         return self.characters.get(char_id)
-    
-    def remove_character(self, char_id: str) -> Optional[Character]:
-        """Remove a character.
-        
-        Args:
-            char_id: Character to remove.
-            
-        Returns:
-            Removed character, or None if not found.
-        """
-        return self.characters.pop(char_id, None)
-    
-    def get_all_characters(self) -> Dict[str, Character]:
-        """Get all characters.
-        
-        Returns:
-            Dict of char_id → Character.
-        """
-        return dict(self.characters)
     
     def update_from_events(self, events: List[Dict[str, Any]]) -> None:
         """Update character beliefs and goals from world events.
@@ -413,20 +369,6 @@ class CharacterEngine:
                 entities.append(actor)
         
         return list(set(entities))  # Deduplicate
-    
-    def get_char_summary(self, char_id: str) -> Dict[str, Any]:
-        """Get summary of a character's state.
-        
-        Args:
-            char_id: Character identifier.
-            
-        Returns:
-            Summary dict, or empty dict if character not found.
-        """
-        char = self.characters.get(char_id)
-        if char:
-            return char.to_dict()
-        return {}
     
     def reset(self) -> None:
         """Clear all character data."""

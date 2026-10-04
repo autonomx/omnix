@@ -185,17 +185,6 @@ class QuestEngine:
             return self.director.generate_summary(quest)
         return None
 
-    def get_all_active_quests_status(self) -> List[Dict[str, Any]]:
-        """Get status for all active quests.
-
-        Returns:
-            List of quest status dicts.
-        """
-        return [
-            self.director.generate_summary(quest)
-            for quest in self.tracker.get_active_quests()
-        ]
-
     def get_quest_description(self, quest_id: str) -> Optional[str]:
         """Get human-readable description for a quest.
 
@@ -220,18 +209,6 @@ class QuestEngine:
             Completed quest or None if not found.
         """
         return self.tracker.complete(quest_id)
-
-    def fail_quest(self, quest_id: str, reason: str = "") -> Optional[Any]:
-        """Manually fail a quest.
-
-        Args:
-            quest_id: Quest ID to fail.
-            reason: Reason for failure.
-
-        Returns:
-            Failed quest or None if not found.
-        """
-        return self.tracker.fail(quest_id, reason)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get engine statistics.
@@ -424,19 +401,6 @@ class QuestEngine:
             "narrative_events": narrative_events,
             "consequences": consequence_dicts,
         }
-
-    def get_choice_consequences(self, choice: Any, quest: Any, world_state: Dict[str, Any]) -> List[Any]:
-        """Preview consequences for a choice without applying them.
-
-        Args:
-            choice: PlayerChoice (resolved or not).
-            quest: Quest object.
-            world_state: Current world state.
-
-        Returns:
-            List of consequence preview dicts.
-        """
-        return self.consequence_engine.apply(choice, quest, world_state)
 
     def check_irreversible(self, world_state: Dict[str, Any], tag: str) -> bool:
         """Check if an irreversible flag exists in world history.

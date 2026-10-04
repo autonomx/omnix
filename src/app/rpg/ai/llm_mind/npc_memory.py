@@ -47,13 +47,6 @@ class NPCMemory:
         )
         self.entries = self.entries[:_MAX_MEMORIES]
 
-    def top_memories(self, limit: int = 5) -> List[Dict[str, Any]]:
-        ranked = sorted(
-            self.entries,
-            key=lambda x: (-x["salience"], -x["tick"], x["memory_id"])
-        )
-        return [dict(item) for item in ranked[:max(0, limit)]]
-
     def summary(self, limit: int = 5) -> List[str]:
         return [m["summary"] for m in self.entries[:limit] if m.get("summary")]
 

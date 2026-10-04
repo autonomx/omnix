@@ -50,7 +50,7 @@ Key Features:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -92,15 +92,6 @@ class Faction:
     # Territory / influence
     influence: Dict[str, float] = field(default_factory=dict)
     
-    def set_relation(self, faction_id: str, value: float) -> None:
-        """Set relationship with another faction.
-        
-        Args:
-            faction_id: Target faction ID.
-            value: Relationship value (-1.0 to 1.0).
-        """
-        self.relations[faction_id] = max(-1.0, min(1.0, value))
-    
     def get_relation(self, faction_id: str) -> float:
         """Get relationship with another faction.
         
@@ -126,15 +117,6 @@ class Faction:
         new_value = max(-1.0, min(1.0, current + delta))
         self.relations[faction_id] = new_value
         return new_value
-    
-    def set_influence(self, location_id: str, level: float) -> None:
-        """Set influence level in a location.
-        
-        Args:
-            location_id: Location identifier.
-            level: Influence level (0.0 to 1.0).
-        """
-        self.influence[location_id] = max(0.0, min(1.0, level))
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict.
@@ -209,35 +191,6 @@ class FactionSystem:
         """
         self.factions[faction.id] = faction
         
-    def remove_faction(self, faction_id: str) -> Optional[Faction]:
-        """Remove a faction from the simulation.
-        
-        Args:
-            faction_id: ID of faction to remove.
-            
-        Returns:
-            Removed faction, or None if not found.
-        """
-        faction = self.factions.pop(faction_id, None)
-        
-        # Clean up relations from other factions
-        if faction is not None:
-            for f in self.factions.values():
-                f.relations.pop(faction_id, None)
-                
-        return faction
-    
-    def get_faction(self, faction_id: str) -> Optional[Faction]:
-        """Get a faction by ID.
-        
-        Args:
-            faction_id: Faction identifier.
-            
-        Returns:
-            Faction object, or None if not found.
-        """
-        return self.factions.get(faction_id)
-    
     def update(self) -> List[Dict[str, Any]]:
         """Advance the faction simulation by one tick.
         

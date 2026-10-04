@@ -869,14 +869,6 @@ def build_deterministic_fallback_narration(
     }
 
 
-def build_fallback_narration(
-    turn_contract: Mapping[str, Any],
-    *,
-    reason: str = "grounding_validation_failed",
-) -> Dict[str, Any]:
-    return build_deterministic_fallback_narration(turn_contract, reason=reason)
-
-
 def _reward_pattern_is_only_price_quote(text: str, reward_pattern: Optional[str]) -> bool:
     if not reward_pattern:
         return False
@@ -1001,17 +993,3 @@ def select_grounded_narration_candidate(
     return deterministic
 
 
-def validate_or_fallback_narration(
-    narration_payload: Mapping[str, Any],
-    turn_contract: Mapping[str, Any],
-    *,
-    state_snapshot: Optional[Mapping[str, Any]] = None,
-    strict_named_fact_check: bool = False,
-) -> Dict[str, Any]:
-    return select_grounded_narration_candidate(
-        narration_payload,
-        turn_contract,
-        state_snapshot=state_snapshot,
-        grounding_settings=None,
-        strict_named_fact_check=strict_named_fact_check,
-    )

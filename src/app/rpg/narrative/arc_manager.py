@@ -15,12 +15,6 @@ class ArcManager:
         self.active_arcs: List[Dict[str, Any]] = []
         self.resolved_arcs: List[Dict[str, Any]] = []
 
-    def add_arc(self, arc_id, description, progress=0.0, tags=None):
-        arc = {"id": arc_id, "description": description, "progress": progress,
-               "status": "active", "tags": tags or []}
-        self.active_arcs.append(arc)
-        return arc
-
     def update(self, story_state):
         for arc in list(self.active_arcs):
             arc["progress"] += 0.05
@@ -28,9 +22,6 @@ class ArcManager:
                 arc["status"] = "resolved"
                 story_state.resolved_arcs.append(arc)
                 self.active_arcs.remove(arc)
-
-    def get_active_arc_ids(self):
-        return [a["id"] for a in self.active_arcs]
 
     def get_summary(self):
         lines = ["Active Arcs:"]

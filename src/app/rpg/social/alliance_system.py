@@ -75,31 +75,6 @@ class AllianceSystem:
         self._trim()
         return dict(created)
 
-    def weaken_or_break(self, member_ids: List[str], reason: str, delta: float = 0.2):
-        """Weaken or break an existing alliance.
-
-        Returns the updated alliance dict, or None if no matching alliance.
-        """
-        member_ids = sorted([_safe_str(m) for m in member_ids if _safe_str(m)])
-        alliance_id = _alliance_id(member_ids)
-        for item in self.alliances:
-            if item["alliance_id"] == alliance_id:
-                item["strength"] = max(0.0, item["strength"] - _safe_float(delta, 0.2))
-                if item["strength"] <= 0.05:
-                    item["status"] = "broken"
-                if reason:
-                    item["reason"] = _safe_str(reason)
-                self._trim()
-                return dict(item)
-        return None
-
-    def active_for_member(self, member_id: str, limit: int = 8):
-        """Return active alliances for a given member, sorted by strength descending."""
-        member_id = _safe_str(member_id)
-        items = [dict(item) for item in self.alliances if item.get("status") == "active" and member_id in (item.get("member_ids") or [])]
-        items.sort(key=lambda item: (-item.get("strength", 0.0), item.get("alliance_id", "")))
-        return items[:max(0, limit)]
-
     def _trim(self):
         """Sort alliances by strength and trim to max capacity."""
         self.alliances.sort(key=lambda item: (-item.get("strength", 0.0), item.get("alliance_id", "")))

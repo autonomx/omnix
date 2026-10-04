@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity, merge_inventory_stack
+from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity
 
 MODIFICATION_DEFINITIONS: dict[str, dict[str, Any]] = {
     "edge_damage_minor": {
@@ -196,6 +196,3 @@ def replace_inventory_item(inventory: list[dict[str, Any]], original_name: str, 
     return True
 
 
-def restore_consumed_materials(inventory: list[dict[str, Any]], consumed_materials: list[dict[str, Any]]) -> None:
-    for material in consumed_materials:
-        merge_inventory_stack(inventory, material)

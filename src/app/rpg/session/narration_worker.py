@@ -68,12 +68,6 @@ def ensure_narration_worker_running() -> None:
         _worker_thread.start()
 
 
-def request_narration_worker_stop() -> None:
-    global _stop_requested
-    with _worker_lock:
-        _stop_requested = True
-
-
 def signal_narration_work(session_id: Any) -> bool:
     """Signal that a session has pending narration work.
 
@@ -207,30 +201,3 @@ def publish_narration_event(session_id: str, event: dict[str, Any]) -> int:
     return 1
 
 
-def latest_narration_event_id(session_id: str) -> int:
-    from app.persistence.database import default_database
-    from app.persistence.rpg_narration_event_repository import (
-        PostgresRpgNarrationEventRepository,
-    )
-
-    with default_database().transaction() as connection:
-        return PostgresRpgNarrationEventRepository(connection).latest_event_id(session_id)
-
-
-def list_narration_events_after(
-    session_id: str,
-    after_event_id: int,
-    *,
-    limit: int = 32,
-) -> list[tuple[int, dict[str, Any]]]:
-    from app.persistence.database import default_database
-    from app.persistence.rpg_narration_event_repository import (
-        PostgresRpgNarrationEventRepository,
-    )
-
-    with default_database().transaction() as connection:
-        return PostgresRpgNarrationEventRepository(connection).list_after(
-            session_id,
-            after_event_id,
-            limit=limit,
-        )

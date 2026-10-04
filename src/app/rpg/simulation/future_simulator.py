@@ -182,27 +182,3 @@ class FutureSimulator:
         scores.sort(key=lambda s: s.score, reverse=True)
         return scores
 
-    def get_best_candidate(
-        self,
-        base_events: List[Event],
-        candidates: List[List[Event]],
-        evaluator: Any,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional[List[Event]]:
-        """Get the best scoring candidate.
-
-        Convenience method for when you just need the best action sequence.
-
-        Args:
-            base_events: The base event history.
-            candidates: List of candidate action sequences.
-            evaluator: Evaluator with evaluate(events, context) -> float.
-            context: Optional context for evaluation.
-
-        Returns:
-            The best scoring candidate events, or None if no candidates.
-        """
-        scores = self.simulate_and_score(base_events, candidates, evaluator, context)
-        if scores:
-            return scores[0].candidate
-        return None

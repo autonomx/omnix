@@ -30,7 +30,6 @@ from .orchestration import RpgResponseGenerator, semantic_plan_from_legacy_paylo
 from .profiles import ResponseGenerationProfile, ResponseProfileRegistry
 from .proposal_policy import (
     ProposalBudget,
-    ProposalDecision,
     ProposalPolicy,
     ProposalRisk,
     ProposalStore,

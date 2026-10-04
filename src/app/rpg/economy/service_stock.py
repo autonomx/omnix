@@ -92,15 +92,6 @@ def _runtime_offer_record(
     return _safe_dict(offers.get(offer_id))
 
 
-def get_offer_runtime_state(
-    simulation_state: Dict[str, Any],
-    offer_id: str,
-) -> Dict[str, Any]:
-    service_offer_state = _safe_dict(_safe_dict(simulation_state).get("service_offer_state"))
-    offers = _safe_dict(service_offer_state.get("offers"))
-    return deepcopy(_safe_dict(offers.get(_safe_str(offer_id))))
-
-
 def annotate_offer_availability(
     simulation_state: Dict[str, Any],
     offer: Dict[str, Any],

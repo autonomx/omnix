@@ -548,12 +548,6 @@ class AdventureSetup:
 
         return result
 
-    def validate_for_ui(self) -> dict:
-        """Run structured validation and return a UI-ready result dict."""
-        from .validation import validate_adventure_setup_payload
-
-        return validate_adventure_setup_payload(self.to_dict()).to_dict()
-
     # ------------------------------------------------------------------
     # Serialisation
     # ------------------------------------------------------------------

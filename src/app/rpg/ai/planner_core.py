@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any, Optional
 
-from .npc_actor import NPCActor, NPCGoal
+from .npc_actor import NPCActor
 from .strategy_profiles import get_strategy_bias
 
 
@@ -332,23 +332,3 @@ class Planner:
             {"type": "adapt", "weight": 0.3},
         ]
 
-    def create_plan_for_npc_goal(
-        self,
-        npc: NPCActor,
-        goal: NPCGoal,
-        world: Optional[dict[str, Any]] = None,
-    ) -> list[dict[str, Any]]:
-        """Create a plan from a stateful NPCGoal.
-
-        Tier 17.5 Patch: Works with persistent goals.
-
-        Args:
-            npc: NPC actor.
-            goal: Stateful NPCGoal.
-            world: Optional world state.
-
-        Returns:
-            Action plan list.
-        """
-        goal_dict = goal.to_dict()
-        return self.create_plan(npc, goal_dict, world)

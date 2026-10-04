@@ -1,9 +1,8 @@
 """Production persistence adapters for canonical RPG narrative responses."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 from app.caching.bounded_cache import bounded_lru_cache
 from threading import RLock
 from typing import Any, Callable
@@ -136,5 +135,3 @@ def build_production_narrative_repository(
     return _cached_repository(_repository_mode(environ))
 
 
-def reset_narrative_repository_cache() -> None:
-    _cached_repository.cache_clear()

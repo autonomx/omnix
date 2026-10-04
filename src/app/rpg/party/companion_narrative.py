@@ -71,17 +71,6 @@ def _pick_tone(comp: Dict[str, Any]) -> str:
     return "guarded"
 
 
-def _is_companion_eligible(comp: Dict[str, Any]) -> bool:
-    """Check if a companion is eligible to narrate (not downed/absent)."""
-    status = _safe_str(comp.get("status"))
-    hp = _safe_float(comp.get("hp"), 0.0)
-    if status in ("downed", "absent"):
-        return False
-    if hp <= 0:
-        return False
-    return True
-
-
 def _sort_companions(companions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sort companions by npc_id for deterministic output."""
     return sorted(companions, key=lambda c: str(c.get("npc_id", "")))

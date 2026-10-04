@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
 
 # RPG is being retired; reads stay bounded until it is removed (WP-5.5).
@@ -20,13 +21,18 @@ class PostgresRpgWorldLibraryRepository:
         *,
         world_id: str | None = None,
         limit: int = 200,
+        before: tuple[str, str] | None = None,
     ) -> list[dict[str, Any]]:
+        """One page, newest first; pass the last row's ``(updated_at, id)`` as ``before``."""
         clauses = ["workspace_id = %s"]
         params: list[Any] = [context.workspace_id]
         if world_id:
             clauses.append("world_id = %s")
             params.append(world_id)
-        params.append(max(1, min(int(limit), 500)))
+        if before:
+            clauses.append("(updated_at < %s::timestamptz OR (updated_at = %s::timestamptz AND id > %s))")
+            params.extend([before[0], before[0], before[1]])
+        params.append(page_limit(limit, default=200))
         rows = self.connection.execute(
             "SELECT id, world_id, title, description, status, metadata_jsonb, "
             "created_at, updated_at FROM omnix_rpg_scenarios WHERE "
@@ -69,7 +75,7 @@ class PostgresRpgWorldLibraryRepository:
              ORDER BY campaigns.updated_at DESC, bindings.campaign_id
              LIMIT %s
             """,
-            (context.workspace_id, max(1, min(int(limit), 500))),
+            (context.workspace_id, page_limit(limit, default=200)),
         ).fetchall()
         return [
             {
@@ -208,13 +214,18 @@ class PostgresRpgWorldLibraryRepository:
         *,
         world_id: str | None = None,
         limit: int = 100,
+        before: tuple[str, str] | None = None,
     ) -> list[dict[str, Any]]:
+        """One page, newest first; pass the last row's ``(updated_at, run_id)`` as ``before``."""
         clauses = ["workspace_id = %s"]
         params: list[Any] = [context.workspace_id]
         if world_id:
             clauses.append("world_id = %s")
             params.append(world_id)
-        params.append(max(1, min(int(limit), 500)))
+        if before:
+            clauses.append("(updated_at < %s::timestamptz OR (updated_at = %s::timestamptz AND run_id > %s))")
+            params.extend([before[0], before[0], before[1]])
+        params.append(page_limit(limit, default=100))
         rows = self.connection.execute(
             "SELECT run_id, world_id, draft_revision, status, graph_jsonb, "
             "context_jsonb, settings_jsonb, plan_jsonb, progress_jsonb, "
@@ -244,3 +255,43 @@ class PostgresRpgWorldLibraryRepository:
             }
             for row in rows
         ]
+
+    def iter_scenarios(self, context: TenantContext, *, world_id: str | None = None):
+        """Every scenario (of one world), newest first, a page at a time."""
+        before: tuple[str, str] | None = None
+        while True:
+            page = self.list_scenarios(context, world_id=world_id, limit=MAX_PAGE_SIZE, before=before)
+            yield from page
+            if len(page) < MAX_PAGE_SIZE:
+                return
+            before = (page[-1]["updated_at"], page[-1]["id"])
+
+    def iter_generation_runs(self, context: TenantContext, *, world_id: str | None = None):
+        """Every generation run (of one world), newest first, a page at a time."""
+        before: tuple[str, str] | None = None
+        while True:
+            page = self.list_generation_runs(context, world_id=world_id, limit=MAX_PAGE_SIZE, before=before)
+            yield from page
+            if len(page) < MAX_PAGE_SIZE:
+                return
+            before = (page[-1]["updated_at"], page[-1]["run_id"])
+
+    def published_scenario_counts(self, context: TenantContext, world_ids: list[str]) -> dict[str, int]:
+        if not world_ids:
+            return {}
+        rows = self.connection.execute(
+            "SELECT world_id, count(*) FROM omnix_rpg_scenarios "
+            "WHERE workspace_id = %s AND world_id = ANY(%s) AND lower(status) = 'published' "
+            "GROUP BY world_id LIMIT %s",
+            (context.workspace_id, list(world_ids), len(world_ids)),
+        ).fetchall()
+        return {str(row[0]): int(row[1]) for row in rows}
+
+    def latest_generation_runs(self, context: TenantContext, world_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Each world's most recently updated generation run."""
+        latest: dict[str, dict[str, Any]] = {}
+        for world_id in world_ids:
+            page = self.list_generation_runs(context, world_id=world_id, limit=1)
+            if page:
+                latest[world_id] = page[0]
+        return latest

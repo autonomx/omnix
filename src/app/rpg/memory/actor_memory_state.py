@@ -83,46 +83,6 @@ def ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     return simulation_state
 
 
-def append_actor_short_term_memory(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    entry: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Append a normalized entry to an actor's short-term memory lane."""
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-
-    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
-    items = _safe_list(actor_state.get("short_term"))
-    items.append(_normalize_entry(entry))
-    actor_state["short_term"] = items[-_MAX_ACTOR_SHORT_TERM:]
-    actor_memory[_safe_str(actor_id)] = actor_state
-    memory_state["actor_memory"] = dict(list(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS])
-    return simulation_state
-
-
-def append_actor_long_term_memory(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    entry: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Append a normalized entry to an actor's long-term memory lane."""
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-
-    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
-    items = _safe_list(actor_state.get("long_term"))
-    items.append(_normalize_entry(entry))
-    actor_state["long_term"] = items[-_MAX_ACTOR_LONG_TERM:]
-    actor_memory[_safe_str(actor_id)] = actor_state
-    memory_state["actor_memory"] = dict(list(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS])
-    return simulation_state
-
-
 def get_actor_memory(
     simulation_state: Dict[str, Any],
     actor_id: str,

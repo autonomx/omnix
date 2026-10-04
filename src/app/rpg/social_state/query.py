@@ -80,56 +80,6 @@ class SocialStateQuery:
     # Phase 8.2 — Encounter seeding helpers
     # ------------------------------------------------------------------
 
-    def get_hostile_entities_in_scene(
-        self, state: SocialState, entity_ids: list[str], player_id: str = "player"
-    ) -> list[str]:
-        """Return entity_ids with hostile relationship toward the player."""
-        from .relationship_tracker import RelationshipTracker
-        tracker = RelationshipTracker()
-        hostile: list[str] = []
-        for eid in entity_ids:
-            if eid == player_id:
-                continue
-            record = tracker.get(state, eid, player_id)
-            if record is not None and record.status in ("hostile", "enemy"):
-                hostile.append(eid)
-        return sorted(hostile)
-
-    def get_allied_entities_in_scene(
-        self, state: SocialState, entity_ids: list[str], player_id: str = "player"
-    ) -> list[str]:
-        """Return entity_ids allied with the player."""
-        from .alliance_tracker import AllianceTracker
-        tracker = AllianceTracker()
-        allied: list[str] = []
-        for eid in entity_ids:
-            if eid == player_id:
-                continue
-            record = tracker.get(state, player_id, eid)
-            if record is not None and record.status == "active":
-                allied.append(eid)
-        return sorted(allied)
-
-    def get_pressure_relationships(
-        self, state: SocialState, entity_ids: list[str]
-    ) -> dict:
-        """Return a summary of relationship pressure among entities."""
-        from .relationship_tracker import RelationshipTracker
-        tracker = RelationshipTracker()
-        pressure: dict = {"hostile_count": 0, "allied_count": 0, "neutral_count": 0}
-        for i, a in enumerate(entity_ids):
-            for b in entity_ids[i + 1:]:
-                record = tracker.get(state, a, b)
-                if record is None:
-                    pressure["neutral_count"] += 1
-                elif record.status in ("hostile", "enemy"):
-                    pressure["hostile_count"] += 1
-                elif record.status in ("allied", "friendly"):
-                    pressure["allied_count"] += 1
-                else:
-                    pressure["neutral_count"] += 1
-        return pressure
-
     # ------------------------------------------------------------------
     # Phase 8.3 — World simulation seeding helpers
     # ------------------------------------------------------------------
@@ -161,16 +111,6 @@ class SocialStateQuery:
             str(x.get("subject_entity_id", "")),
         ))
         return rows[-limit:]
-
-    def get_faction_pressure_map(self, state: SocialState) -> dict[str, str]:
-        """Derive faction pressure from relationship hostility."""
-        pressure: dict[str, str] = {}
-        for rel in state.relationships.values():
-            status = getattr(rel, "status", "")
-            source = getattr(rel, "source_id", "")
-            if status in ("hostile", "enemy") and source:
-                pressure[source] = "high"
-        return pressure
 
     def get_relationship_hotspots(self, state: SocialState) -> list[dict]:
         """Return a list of high-tension relationship pairs, sorted."""

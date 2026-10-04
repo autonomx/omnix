@@ -4,7 +4,6 @@ import json
 from typing import Any
 
 from app.providers.structured.legacy import decode_legacy_json_object
-from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 from app.prompts import prompt_template
 
@@ -497,60 +496,6 @@ def _line_restates_player_input(line: str, advisory: dict[str, Any]) -> bool:
     return line_norm == player_input or (
         player_input in line_norm and len(line_norm) <= len(player_input) + 30
     )
-
-
-def _is_action_fast_path_advisory(candidate_action: dict[str, Any]) -> bool:
-    candidate_action = _safe_dict(candidate_action)
-    diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
-    return bool(
-        candidate_action.get("pre_runtime_intent_fast_path")
-        or diagnostics.get("intent_fast_path_used")
-        or diagnostics.get("source") == FAST_PATH_SOURCE
-        or diagnostics.get("provider_status") == "fast_path"
-    )
-
-
-def _semantic_action_from_action_fast_path(candidate_action: dict[str, Any]) -> dict[str, Any]:
-    candidate_action = _safe_dict(candidate_action)
-    diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
-    reason = _safe_str(
-        candidate_action.get("pre_runtime_intent_fast_path_reason")
-        or diagnostics.get("intent_fast_path_reason")
-        or "action_fast_path_reused"
-    )
-    action_type = _safe_str(candidate_action.get("action_type")).strip().lower()
-    raw = {
-        "action_type": action_type,
-        "semantic_family": _semantic_family_for_action(action_type),
-        "interaction_mode": "direct" if _safe_str(candidate_action.get("target_id")) else "solo",
-        "activity_label": "fast_path_" + (reason or action_type or "intent"),
-        "target_id": _safe_str(candidate_action.get("target_id")),
-        "target_name": _safe_str(candidate_action.get("target_name")),
-        "secondary_actor_ids": [],
-        "visibility": "local",
-        "intensity": 1,
-        "stakes": 1,
-        "social_axes": [],
-        "observer_hooks": [],
-        "scene_impact": "none",
-        "utterance_mode": _safe_str(candidate_action.get("utterance_mode")),
-        "literal_action_requested": _safe_bool(candidate_action.get("literal_action_requested"), False),
-        "state_mutation_requested": _safe_bool(candidate_action.get("state_mutation_requested"), True),
-        "risk_domain": _safe_str(candidate_action.get("risk_domain") or "unknown"),
-        "intent_summary": _safe_str(candidate_action.get("intent_summary")),
-        "evidence_spans": _safe_list(candidate_action.get("evidence_spans")),
-        "stateful": _safe_bool(candidate_action.get("stateful"), True),
-        "needs_runtime_resolution": _safe_bool(candidate_action.get("needs_runtime_resolution"), True),
-        "visible_response": _safe_dict(candidate_action.get("visible_response")),
-        "direct_response_gate": _safe_dict(candidate_action.get("direct_response_gate")),
-        "reason": f"semantic router reused action fast path: {reason}",
-        "pre_runtime_intent_fast_path": True,
-        "pre_runtime_intent_fast_path_reason": reason,
-        "pre_runtime_intent_fast_path_source": _safe_str(candidate_action.get("pre_runtime_intent_fast_path_source") or diagnostics.get("intent_fast_path_source") or FAST_PATH_SOURCE),
-        "semantic_fast_path_used": True,
-        "semantic_reused_action_fast_path": True,
-    }
-    return normalize_semantic_action_advisory(raw, candidate_action)
 
 
 def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: dict[str, Any], runtime_state: dict[str, Any], candidate_action: dict[str, Any]) -> dict[str, Any]:

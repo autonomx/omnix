@@ -196,12 +196,6 @@ def _stateful_runtime_performance_override(
     return merged
 
 
-def _fast_turn_mode(performance_override: dict[str, Any] | None) -> bool:
-    # First-call shortcuts are disabled: every gameplay turn must build the
-    # foreground semantic packet through the provider before runtime acts.
-    return False
-
-
 def _fast_direct_action(player_input: str, performance_override: dict[str, Any] | None) -> dict[str, Any]:
     # Disabled for now.  Keep the helper as a compatibility stub for older
     # harnesses, but never bypass the first-call semantic LLM.

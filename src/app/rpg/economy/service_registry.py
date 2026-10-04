@@ -261,10 +261,6 @@ def get_service_provider(provider_id: str) -> Dict[str, Any]:
     return deepcopy(provider) if provider else {}
 
 
-def list_service_providers() -> List[Dict[str, Any]]:
-    return [deepcopy(provider) for provider in SERVICE_PROVIDERS.values()]
-
-
 def get_provider_offers(provider_id: str, service_kind: str = "") -> List[Dict[str, Any]]:
     provider_id = _safe_str(provider_id)
     service_kind = _safe_str(service_kind)

@@ -565,41 +565,6 @@ def _apply_combat_narration_if_needed(
     return payload
 
 
-def _sync_combat_narration_fields(
-    target: dict[str, Any],
-    source: dict[str, Any],
-) -> dict[str, Any]:
-    """Copy combat narration fields into the object that feeds final response assembly."""
-    target = _safe_dict(target)
-    source = _safe_dict(source)
-
-    keys = (
-        "combat_narration_attempted",
-        "llm_called",
-        "llm_purpose",
-        "combat_narration_contract",
-        "combat_narration_validation",
-        "combat_narration_payload",
-        "combat_narration_error",
-        "combat_narration_accepted",
-        "combat_narration_rejected",
-        "narration",
-        "final_narration",
-        "narration_preview",
-        "raw_payload_narration",
-        "action",
-        "npc",
-        "reward",
-        "followup_hooks",
-    )
-
-    for key in keys:
-        if key in source:
-            target[key] = deepcopy(source.get(key))
-
-    return target
-
-
 from app.rpg.narration.combat_contract import (
     build_combat_narration_contract,
     combat_contract_requires_llm,

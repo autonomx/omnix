@@ -92,29 +92,6 @@ class PostgresRpgWorldForgeRepository:
         ).fetchone()
         return _row(row) if row is not None else None
 
-    def list_for_campaign(
-        self,
-        context: TenantContext,
-        campaign_id: str,
-        *,
-        status: str | None = None,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            f"SELECT {_COLUMNS} FROM omnix_rpg_world_forge_proposals "
-            "WHERE workspace_id = %s AND campaign_id = %s "
-            "AND (%s::text IS NULL OR status = %s::text) "
-            "ORDER BY created_at DESC, proposal_id DESC LIMIT %s",
-            (
-                context.workspace_id,
-                campaign_id,
-                status,
-                status,
-                max(1, min(int(limit), 500)),
-            ),
-        ).fetchall()
-        return [_row(row) for row in rows]
-
     def decide(
         self,
         context: TenantContext,

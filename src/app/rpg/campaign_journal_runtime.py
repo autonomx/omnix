@@ -178,40 +178,6 @@ def _sentence_join(parts: List[str], *, max_items: int = 4) -> str:
     return " ".join(cleaned).strip()
 
 
-def _contains_learning_signal(text: str) -> bool:
-    lower = _safe_str(text).lower()
-    return any(
-        token in lower
-        for token in (
-            "heard",
-            "learned",
-            "told",
-            "mentioned",
-            "warned",
-            "revealed",
-            "rumor",
-            "witness",
-            "missing",
-            "danger",
-            "strange lights",
-            "road",
-            "woods",
-            "quest",
-            "clue",
-            "trail",
-            "sign",
-            "saw",
-            "seen",
-            "knows",
-            "asked",
-            "answer",
-            "answers",
-            "lowered his voice",
-            "lowered her voice",
-        )
-    )
-
-
 def _contains_next_signal(text: str) -> bool:
     lower = _safe_str(text).lower()
     return any(
@@ -231,15 +197,6 @@ def _contains_next_signal(text: str) -> bool:
             "witness",
         )
     )
-
-
-def _infer_learned_lines(results: List[str]) -> List[str]:
-    learned: List[str] = []
-    for result in _safe_list(results):
-        text = _clean_journal_text(result, max_len=260)
-        if text and (_contains_learning_signal(text) or len(text.split()) >= 10):
-            learned.append(text)
-    return learned
 
 
 def _infer_next_lines(actions: List[str], results: List[str]) -> List[str]:
@@ -588,105 +545,6 @@ def _extract_result_summary(
     )
 
 
-def _journal_text(
-    actions: List[str],
-    results: List[str],
-    *,
-    runtime_state: Dict[str, Any] | None = None,
-) -> str:
-    clean_actions = [
-        _clean_journal_text(action, max_len=220)
-        for action in _safe_list(actions)[-4:]
-    ]
-    clean_actions = [action for action in clean_actions if action]
-    clean_results = [
-        _clean_journal_text(result, max_len=320)
-        for result in _safe_list(results)[-4:]
-    ]
-    clean_results = [result for result in clean_results if result]
-
-    learned = _infer_learned_lines(clean_results)
-    next_lines = _infer_next_lines(clean_actions, clean_results)
-    quest_lines = _quest_progress_lines(_safe_dict(runtime_state))
-    next_lines = quest_lines + next_lines
-
-    sections: List[str] = []
-    did = _sentence_join(clean_actions, max_items=4)
-    if did:
-        sections.append(f"What I did: {did}")
-
-    learned_text = _sentence_join(learned, max_items=2)
-    if learned_text:
-        sections.append(f"What I learned: {learned_text}")
-
-    changed_candidates = [
-        item for item in clean_results
-        if item and item not in learned
-    ] or clean_results
-    changed_text = _sentence_join(changed_candidates, max_items=2)
-    if changed_text and changed_text.lower() != learned_text.lower():
-        sections.append(f"What changed: {changed_text}")
-
-    next_text = _sentence_join(next_lines, max_items=2)
-    if next_text:
-        sections.append(f"Next: {next_text}")
-
-    if not sections:
-        sections.append("I kept moving, watching for what changed around me.")
-
-    raw = "\n".join(_normalize_sentence_punctuation(section) for section in sections if section).strip()
-    return _repair_required_journal_sections(
-        raw,
-        actions=actions,
-        results=results,
-        runtime_state=_safe_dict(runtime_state),
-    )
-
-
-def _repair_required_journal_sections(
-    text: str,
-    *,
-    actions: List[str],
-    results: List[str],
-    runtime_state: Dict[str, Any] | None = None,
-) -> str:
-    text = _safe_str(text).strip()
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    by_prefix: Dict[str, str] = {}
-    for line in lines:
-        lower = line.lower()
-        for prefix in ("what i did:", "what i learned:", "what changed:", "next:"):
-            if lower.startswith(prefix) and prefix not in by_prefix:
-                by_prefix[prefix] = line
-
-    clean_actions = [_clean_journal_text(item, max_len=220) for item in _safe_list(actions)[-4:]]
-    clean_actions = [item for item in clean_actions if item]
-    clean_results = [_clean_journal_text(item, max_len=300) for item in _safe_list(results)[-4:]]
-    clean_results = [item for item in clean_results if item]
-    quest_lines = _quest_progress_lines(_safe_dict(runtime_state))
-
-    if "what i did:" not in by_prefix:
-        fallback = _sentence_join(clean_actions, max_items=2) or "I pursued the strongest available lead."
-        by_prefix["what i did:"] = "What I did: " + fallback
-    if "what i learned:" not in by_prefix:
-        learned = _sentence_join(_infer_learned_lines(clean_results), max_items=2)
-        by_prefix["what i learned:"] = "What I learned: " + (learned or "I reviewed the current situation for actionable clues.")
-    if "what changed:" not in by_prefix:
-        changed = _sentence_join(clean_results, max_items=2)
-        by_prefix["what changed:"] = "What changed: " + (changed or "The campaign state remained stable while I looked for a stronger lead.")
-    if "next:" not in by_prefix:
-        next_text = _sentence_join(quest_lines + _infer_next_lines(clean_actions, clean_results), max_items=2)
-        by_prefix["next:"] = "Next: " + (next_text or "I should take a concrete action that advances a quest, location, or story lead.")
-
-    ordered = [
-        by_prefix["what i did:"],
-        by_prefix["what i learned:"],
-        by_prefix["what changed:"],
-        by_prefix["next:"],
-    ]
-    return "\n".join(_normalize_sentence_punctuation(line) for line in ordered if line).strip()
-
-
 def advance_campaign_journal_for_turn(
     *,
     runtime_state: Dict[str, Any],
@@ -803,26 +661,3 @@ def advance_campaign_journal_for_turn(
     return runtime_state
 
 
-def summarize_campaign_calendar(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
-    history = _safe_list(calendar.get("history"))
-    return {
-        "minutes_per_turn": calendar.get("minutes_per_turn", 30),
-        "turns_tracked": len(history),
-        "start": history[0] if history else _safe_dict(calendar.get("current")),
-        "end": _safe_dict(calendar.get("current")),
-        "rows": history[-20:],
-    }
-
-
-def summarize_player_journal(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    journal = _safe_dict(runtime_state.get("player_journal"))
-    entries = _safe_list(journal.get("entries"))
-    return {
-        "entry_count": len(entries),
-        "entries": entries[-20:],
-        "pending_action_count": len(_safe_list(journal.get("pending_actions"))),
-        "pending_result_count": len(_safe_list(journal.get("pending_results"))),
-    }

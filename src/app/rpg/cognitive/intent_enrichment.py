@@ -434,21 +434,3 @@ class IntentEnrichment:
             "invalid_responses": 0,
         }
     
-    def set_cooldown(self, ticks: int) -> None:
-        """Set the cooldown between LLM calls.
-        
-        Args:
-            ticks: Number of ticks for cooldown.
-        """
-        self.cooldown_ticks = max(0, ticks)
-    
-    def is_ready(self, current_tick: int) -> bool:
-        """Check if LLM enrichment is ready (not on cooldown).
-        
-        Args:
-            current_tick: Current simulation tick.
-            
-        Returns:
-            True if LLM can be called.
-        """
-        return current_tick - self._last_llm_call_tick >= self.cooldown_ticks

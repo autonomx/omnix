@@ -147,21 +147,6 @@ def get_latest_beat(simulation_state: Dict[str, Any], thread_id: str) -> Optiona
 
 # ── Beat advancement logic ────────────────────────────────────────────────
 
-def should_advance_thread(conversation: Dict[str, Any], tick: int) -> bool:
-    """Determine if a conversation thread should advance one beat."""
-    conversation = _safe_dict(conversation)
-    if _safe_str(conversation.get("status")) != "active":
-        return False
-    beat_count = int(conversation.get("beat_count", 0) or 0)
-    max_turns = int(conversation.get("max_turns", 1) or 1)
-    if beat_count >= max_turns:
-        return False
-    expires = int(conversation.get("expires_at_tick", 0) or 0)
-    if expires > 0 and tick > expires:
-        return False
-    return True
-
-
 def compute_beat_caps(mode: str) -> tuple:
     """Return (min_beats, max_beats) for a conversation mode."""
     return MODE_BEAT_CAPS.get(_safe_str(mode), MODE_BEAT_CAPS["ambient"])

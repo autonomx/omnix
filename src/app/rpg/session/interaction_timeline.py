@@ -95,12 +95,6 @@ def commit_turn_interaction(
     return session, result, event
 
 
-def interaction_events(session: dict[str, Any]) -> list[dict[str, Any]]:
-    runtime = _dict(_dict(session).get("runtime_state"))
-    timeline = _dict(runtime.get("interaction_timeline"))
-    return [deepcopy(item) for item in _list(timeline.get("events")) if isinstance(item, dict)]
-
-
 def _attach_interaction_result(
     result: dict[str, Any],
     event: dict[str, Any],

@@ -153,8 +153,8 @@ def list_sessions_from_postgres() -> list[dict[str, Any]]:
     database = _database()
     context = _context(database)
     with unit_of_work(database) as work:
-        campaigns = work.rpg.list_campaigns(context, limit=500, status="active")
-        archived = work.rpg.list_campaigns(context, limit=500, status="archived")
+        campaigns = list(work.rpg.iter_campaigns(context, status="active"))
+        archived = list(work.rpg.iter_campaigns(context, status="archived"))
         work.rollback()
     return [_campaign_state_for_listing(record) for record in campaigns + archived]
 

@@ -71,31 +71,3 @@ def ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return simulation_state
 
 
-def append_short_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    """Append entry to short-term memory lane (bounded)."""
-    simulation_state = ensure_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("short_term"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["short_term"] = items[-_MAX_SHORT_TERM:]
-    return simulation_state
-
-
-def append_long_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    """Append entry to long-term memory lane (bounded)."""
-    simulation_state = ensure_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("long_term"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["long_term"] = items[-_MAX_LONG_TERM:]
-    return simulation_state
-
-
-def append_world_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    """Append entry to world memory lane (bounded, shared/rumor style)."""
-    simulation_state = ensure_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("world_memory"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["world_memory"] = items[-_MAX_WORLD_MEMORY:]
-    return simulation_state

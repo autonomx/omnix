@@ -134,5 +134,3 @@ def production_legacy_retirement_audit() -> LegacyPublisherRetirementAudit:
     return audit_legacy_publisher_retirement(Path(__file__).resolve().parents[4])
 
 
-def reset_legacy_retirement_audit_cache() -> None:
-    production_legacy_retirement_audit.cache_clear()

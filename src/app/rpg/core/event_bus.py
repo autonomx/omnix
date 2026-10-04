@@ -70,7 +70,6 @@ ALLOWED_LAYERS = {
     "app.rpg.systems",
     "app.rpg.events",
     "app.rpg.narration",
-    "app.rpg.tools",
     "tests",
 }
 
@@ -591,20 +590,6 @@ class EventBus:
         raise RuntimeError(
             "Illegal call path detected. Systems must communicate via EventBus."
         )
-
-    def current_head(self) -> Optional[str]:
-        """Get the current head event ID for parent linking.
-
-        Addresses rpg-design.txt Issue #8: GameLoop Pointer Is Weak.
-        Instead of using history[-1].event_id, use this method for
-        the true current head of the event stream.
-
-        Returns:
-            The event_id of the most recently emitted event, or None.
-        """
-        if self._history:
-            return self._history[-1].event_id
-        return None
 
     def set_replay_mode(self, enabled: bool = True) -> None:
         """Set replay mode to influence deterministic behavior.

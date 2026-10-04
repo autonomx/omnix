@@ -1,7 +1,6 @@
 """Deterministic item-system report sections for RPG sessions."""
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 from app.rpg.session.item_action_summary import build_item_action_summary
@@ -136,11 +135,3 @@ def build_item_report_section(state: dict[str, Any], *, station: str | None = No
     }
 
 
-def record_item_report_section(state: dict[str, Any], *, station: str | None = None, genre: str = "classic_fantasy") -> dict[str, Any]:
-    """Prepend the current report section into mechanics without mutating inventory."""
-    section = build_item_report_section(state, station=station, genre=genre)
-    mechanics = _safe_dict(state.get("mechanics"))
-    sections = _safe_list(mechanics.get("item_report_sections"))
-    mechanics["item_report_sections"] = [deepcopy(section), *sections][:20]
-    state["mechanics"] = mechanics
-    return section

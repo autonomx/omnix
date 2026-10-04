@@ -76,18 +76,6 @@ class ReputationGraph:
         target_id = _safe_str(target_id)
         return dict((self.edges.get(source_id) or {}).get(target_id) or {key: 0.0 for key in _KEYS})
 
-    def top_targets(self, source_id: str, limit: int = 8):
-        """Return top targets by absolute reputation sum, sorted descending."""
-        source = self.edges.get(_safe_str(source_id)) or {}
-        items = list(source.items())
-        items.sort(
-            key=lambda item: (
-                -(abs(item[1].get("trust", 0.0)) + abs(item[1].get("hostility", 0.0)) + abs(item[1].get("fear", 0.0)) + abs(item[1].get("respect", 0.0))),
-                item[0],
-            )
-        )
-        return [(target_id, dict(rec)) for target_id, rec in items[:max(0, limit)]]
-
     def _trim_source(self, source_id: str):
         """Keep only the top N targets by absolute reputation sum."""
         source = self.edges.get(source_id) or {}

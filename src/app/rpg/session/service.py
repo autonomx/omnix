@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.rpg.core.determinism import rng_seed_from_session_id
-from app.rpg.map_package_bridge import attach_map_state_to_package, restore_map_state_from_package
 from app.rpg.map_persistence import ensure_session_map_state
 from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
@@ -19,13 +18,11 @@ from app.rpg.session.durable_store import (
 from app.rpg.session.environment import ensure_session_environment_seed_state
 from app.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.rpg.session.migrations import migrate_session_payload
-from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.session.published_opening_progress import (
     ensure_published_opening_progress,
 )
 from app.rpg.session.survival_persistence import normalize_session_survival_for_persistence
 from app.rpg.validation.integrity import (
-    assert_package_integrity,
     assert_session_integrity,
     validate_session_integrity,
 )
@@ -230,19 +227,3 @@ def archive_session(session_id: str) -> dict[str, Any]:
     return archive_session_on_disk(session_id)
 
 
-def export_session_as_package(session: dict[str, Any]) -> dict[str, Any]:
-    session = create_or_normalize_session(session)
-    assert_session_integrity(session)
-    package = session_to_package(session)
-    return attach_map_state_to_package(package, session)
-
-
-def import_session_from_package(package_payload: dict[str, Any]) -> dict[str, Any]:
-    assert_package_integrity(package_payload)
-    result = package_to_session(package_payload)
-    if not result.get("ok"):
-        return result
-    session = restore_map_state_from_package(_safe_dict(result.get("session")), package_payload)
-    session = create_or_normalize_session(session)
-    assert_session_integrity(session)
-    return {"ok": True, "session": session}

@@ -77,16 +77,6 @@ def _set_cooldown(
     cooldowns[key] = current_tick
 
 
-def _scaled_cooldown(base: int, level: str) -> int:
-    """Scale cooldowns by world-behavior intensity."""
-    level = _safe_str(level).lower()
-    if level in ("high", "talkative", "frequent", "strong"):
-        return max(1, base - 1)
-    if level in ("low", "quiet", "minimal", "light", "off"):
-        return base + 1
-    return base
-
-
 def _personality_bias(npc_info: Dict[str, Any], kind: str) -> float:
     """Small deterministic personality bias for initiative kinds."""
     personality = _safe_str(_safe_dict(npc_info.get("personality")).get("style") or npc_info.get("personality")).lower()

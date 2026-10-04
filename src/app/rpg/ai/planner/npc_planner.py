@@ -210,15 +210,6 @@ class NPCPlanner:
             logger.error(f"Simulation failed: {e}")
             return None
 
-    def reset_cooldown(self) -> None:
-        """Reset planning cooldown.
-
-        Call this when NPC circumstances change dramatically
-        (e.g., health drops, new enemy appears) to force
-        immediate replanning.
-        """
-        self._cooldown_remaining = 0
-
     @property
     def is_cooling_down(self) -> bool:
         """Check if planning is on cooldown."""

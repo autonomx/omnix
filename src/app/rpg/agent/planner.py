@@ -262,21 +262,3 @@ class Planner:
         """
         self._templates[intention_type] = steps
     
-    def get_template(self, intention_type: str) -> List[Dict[str, Any]]:
-        """Get a plan template by type.
-        
-        Args:
-            intention_type: Template type.
-            
-        Returns:
-            List of action dicts, or empty list.
-        """
-        return list(self._templates.get(intention_type, []))
-    
-    def get_available_templates(self) -> List[str]:
-        """Get list of available intention types.
-        
-        Returns:
-            List of template type strings.
-        """
-        return list(self._templates.keys())

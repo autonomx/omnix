@@ -104,29 +104,12 @@ class GameLoopCreatorMixin:
     def apply_gm_directives(self) -> None:
         self.gm_directive_state.apply_to_coherence(self.coherence_core)
 
-    def build_creator_context(self) -> dict:
-        return {
-            "canon": self.creator_canon_state.serialize_state(),
-            "gm": self.gm_directive_state.build_director_context(),
-        }
-
-    def get_recap(self) -> dict:
-        return self.recap_builder.build_session_recap(self.coherence_core, self.gm_directive_state)
-
     def get_canon_summary(self) -> dict:
         return self.recap_builder.build_canon_summary(self.coherence_core, self.creator_canon_state)
-
-    def get_unresolved_threads_summary(self) -> dict:
-        return self.recap_builder.build_unresolved_threads_summary(self.coherence_core)
 
     # ------------------------------------------------------------------
     # Phase 7.1 — validation / preview helpers
     # ------------------------------------------------------------------
-
-    def validate_new_adventure(self, setup_data: dict) -> dict:
-        from ..creator.validation import validate_adventure_setup_payload
-        result = validate_adventure_setup_payload(setup_data)
-        return result.to_dict()
 
     def prepare_new_adventure(self, setup_data: dict) -> dict:
         from ..creator import AdventureSetup

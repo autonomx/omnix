@@ -674,12 +674,3 @@ def get_pending_ambient_updates(session: Dict[str, Any], after_seq: int = 0, lim
     return result
 
 
-def acknowledge_ambient_updates(session: Dict[str, Any], up_to_seq: int) -> Dict[str, Any]:
-    """Acknowledge ambient updates up to a given seq, updating subscription state."""
-    session = _safe_dict(session)
-    runtime = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
-    sub = _safe_dict(runtime.get("subscription_state"))
-    sub["last_polled_seq"] = max(int(sub.get("last_polled_seq", 0) or 0), int(up_to_seq))
-    runtime["subscription_state"] = sub
-    session["runtime_state"] = runtime
-    return session

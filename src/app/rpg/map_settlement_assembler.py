@@ -16,7 +16,7 @@ from app.rpg.map_contracts import (
     MapRouteGeometry,
     MapSprite,
 )
-from app.rpg.map_serialization import canonical_map_bytes, with_definition_revision
+from app.rpg.map_serialization import with_definition_revision
 from app.rpg.world_graph import RpgRegionGraph
 
 ASSEMBLER_VERSION = 1
@@ -48,10 +48,6 @@ class SettlementAssembly:
     zones: tuple[SettlementZone, ...]
     parcels: tuple[SettlementParcel, ...]
     definition: MapDefinition
-
-    def canonical_bytes(self) -> bytes:
-        return canonical_map_bytes(self)
-
 
 class StableMapRng:
     """Small fixed 64-bit generator whose behavior is independent of Python random."""

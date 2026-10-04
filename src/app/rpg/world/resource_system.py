@@ -204,23 +204,6 @@ class ResourcePool:
         min_threshold = self.config.get(resource, {}).get("min_for_action", 0)
         return current < min_threshold
         
-    def get_exhaustion_penalty(self, resource: str = "stamina") -> float:
-        """Get action effectiveness penalty for exhaustion.
-        
-        Args:
-            resource: Resource type to check.
-            
-        Returns:
-            Multiplier (1.0 = no penalty, 0.0 = completely ineffective).
-        """
-        if not self.is_exhausted(resource):
-            return 1.0
-            
-        penalty = self.config.get(resource, {}).get("exhaustion_penalty", 0)
-        ratio = max(0, self.resources.get(resource, 0) / 
-                   max(self.config.get(resource, {}).get("min_for_action", 1), 1))
-        return max(1 - penalty, 1 - penalty * (1 - ratio))
-        
     def get_status(self) -> Dict[str, Any]:
         """Get resource status summary.
         
@@ -309,30 +292,6 @@ class ResourceManager:
         self.pools[entity_id] = pool
         return pool
         
-    def get_pool(self, entity_id: str) -> Optional[ResourcePool]:
-        """Get resource pool for an entity.
-        
-        Args:
-            entity_id: Entity identifier.
-            
-        Returns:
-            ResourcePool, or None.
-        """
-        return self.pools.get(entity_id)
-        
-    def set_action_cost(
-        self,
-        action_name: str,
-        costs: Dict[str, float],
-    ) -> None:
-        """Set resource costs for an action.
-        
-        Args:
-            action_name: Action identifier.
-            costs: Dict of resource → cost.
-        """
-        self.action_costs[action_name] = costs
-        
     def get_action_cost(self, action_name: str) -> Dict[str, float]:
         """Get resource costs for an action.
         
@@ -344,63 +303,3 @@ class ResourceManager:
         """
         return self.action_costs.get(action_name, {})
         
-    def can_afford_action(
-        self,
-        entity_id: str,
-        action_name: str,
-    ) -> bool:
-        """Check if entity can afford an action.
-        
-        Args:
-            entity_id: Entity identifier.
-            action_name: Action to check.
-            
-        Returns:
-            True if entity has enough resources.
-        """
-        pool = self.pools.get(entity_id)
-        if not pool:
-            return True  # No pool = no restrictions
-            
-        costs = self.get_action_cost(action_name)
-        for resource, amount in costs.items():
-            if not pool.can_afford(resource, amount):
-                return False
-        return True
-        
-    def consume_action_resources(
-        self,
-        entity_id: str,
-        action_name: str,
-    ) -> bool:
-        """Consume resources for an action.
-        
-        Args:
-            entity_id: Entity identifier.
-            action_name: Action being executed.
-            
-        Returns:
-            True if resources were consumed.
-        """
-        pool = self.pools.get(entity_id)
-        if not pool:
-            return True
-            
-        costs = self.get_action_cost(action_name)
-        for resource, amount in costs.items():
-            if not pool.consume(resource, amount):
-                return False
-        return True
-        
-    def tick_all(self) -> Dict[str, Dict[str, float]]:
-        """Process resource regeneration for all entities.
-        
-        Returns:
-            Dict of entity_id → resource changes.
-        """
-        changes = {}
-        for entity_id, pool in self.pools.items():
-            entity_changes = pool.tick()
-            if entity_changes:
-                changes[entity_id] = entity_changes
-        return changes

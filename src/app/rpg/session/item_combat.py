@@ -1,7 +1,6 @@
 """Deterministic RPG item damage and defense resolution."""
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 
@@ -54,24 +53,6 @@ def item_damage_profile(item: dict[str, Any]) -> dict[str, int]:
     return normalize_damage_profile(_safe_dict(item).get("damage") or _safe_dict(item).get("damage_profile"))
 
 
-def equipment_defense_profile(equipment: list[Any]) -> dict[str, int]:
-    defense: dict[str, int] = {}
-    for raw in _safe_list(equipment):
-        item = _safe_dict(raw)
-        for defense_type, amount in normalize_defense_profile(item.get("defense") or item.get("defense_profile")).items():
-            defense[defense_type] = defense.get(defense_type, 0) + amount
-    return defense
-
-
-def equipment_resistance_profile(equipment: list[Any]) -> dict[str, int]:
-    resistances: dict[str, int] = {}
-    for raw in _safe_list(equipment):
-        item = _safe_dict(raw)
-        for damage_type, amount in normalize_defense_profile(item.get("resistances") or item.get("resistance_profile")).items():
-            resistances[damage_type] = resistances.get(damage_type, 0) + amount
-    return resistances
-
-
 def resolve_damage_against_defense(incoming_damage: Any, defense_profile: Any, *, resistances: Any | None = None) -> dict[str, Any]:
     incoming = normalize_damage_profile(incoming_damage)
     defense = normalize_defense_profile(defense_profile)
@@ -119,14 +100,3 @@ def build_attack_profile_from_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def resolve_item_attack_against_equipment(attacker_item: dict[str, Any], defender_equipment: list[Any]) -> dict[str, Any]:
-    attack = build_attack_profile_from_item(attacker_item)
-    defense = equipment_defense_profile(defender_equipment)
-    resistances = equipment_resistance_profile(defender_equipment)
-    resolution = resolve_damage_against_defense(attack["damage"], defense, resistances=resistances)
-    return {
-        "attack": attack,
-        "defender_equipment": [deepcopy(_safe_dict(item)) for item in _safe_list(defender_equipment) if _safe_dict(item)],
-        "resolution": resolution,
-        "mechanics_source": "engine_item_combat_resolution_v1",
-    }

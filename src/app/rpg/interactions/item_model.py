@@ -166,23 +166,6 @@ def normalize_item_instance(item: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def split_stack(item: Dict[str, Any], quantity: int) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    item = normalize_item_instance(item)
-    quantity = max(0, min(_safe_int(quantity, 0), _safe_int(item.get("quantity"), 1)))
-
-    taken = deepcopy(item)
-    remaining = deepcopy(item)
-
-    taken["quantity"] = quantity
-    taken["total_weight"] = round(_safe_float(taken.get("unit_weight"), 0.0) * quantity, 4)
-
-    remaining_qty = _safe_int(item.get("quantity"), 1) - quantity
-    remaining["quantity"] = remaining_qty
-    remaining["total_weight"] = round(_safe_float(remaining.get("unit_weight"), 0.0) * remaining_qty, 4)
-
-    return taken, remaining
-
-
 def can_stack_items(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     a = normalize_item_instance(a)
     b = normalize_item_instance(b)

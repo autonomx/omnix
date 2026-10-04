@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from app.config.env import environment
 
-import os
 from app.caching.bounded_cache import bounded_lru_cache
 from threading import RLock
 from typing import Any, Callable, Mapping
@@ -142,10 +141,6 @@ def build_production_narrative_delivery_repository(
     environ: Mapping[str, str] | None = None,
 ) -> NarrativeDeliveryRepository:
     return _cached_delivery_repository(_delivery_repository_mode(environ))
-
-
-def reset_narrative_delivery_repository_cache() -> None:
-    _cached_delivery_repository.cache_clear()
 
 
 def prepare_canonical_result_delivery(

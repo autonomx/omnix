@@ -15,26 +15,11 @@ Example:
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional
 
 from ...core.event_bus import Event
 
 logger = logging.getLogger(__name__)
-
-
-class ActionTemplate(Protocol):
-    """Protocol for action templates."""
-
-    def create_event(self, context: Dict[str, Any]) -> Event:
-        """Create an event from this template with context.
-
-        Args:
-            context: Current world/NPC context.
-
-        Returns:
-            Event instance for simulation.
-        """
-        ...
 
 
 @dataclass
@@ -260,30 +245,3 @@ class CandidateGenerator:
 
         return candidates[: self.max_candidates]
 
-    def add_custom_action(
-        self,
-        name: str,
-        conditions: Optional[Dict[str, Any]] = None,
-        priority: float = 1.0,
-        create_event_fn: Optional[Callable[[Dict[str, Any]], Event]] = None,
-    ) -> None:
-        """Add a custom action option.
-
-        Args:
-            name: Action type name.
-            conditions: Applicability conditions.
-            priority: Generation priority.
-            create_event_fn: Custom event factory function.
-        """
-        self.actions.append(
-            ActionOption(
-                name=name,
-                conditions=conditions or {},
-                priority=priority,
-                create_event_fn=create_event_fn,
-            )
-        )
-
-    def clear_actions(self) -> None:
-        """Clear all registered actions."""
-        self.actions.clear()

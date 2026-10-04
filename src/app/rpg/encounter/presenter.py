@@ -70,22 +70,6 @@ class EncounterPresenter:
             "metadata": dict(state.metadata),
         }
 
-    def present_encounter_trace(
-        self, resolution: EncounterResolution | None
-    ) -> dict:
-        """Build a debug-safe trace payload (GM-facing, not player-facing)."""
-        if resolution is None:
-            return {}
-
-        return {
-            "mode": resolution.mode,
-            "outcome_type": resolution.outcome_type,
-            "reasons": resolution.trace.get("reason", ""),
-            "participant_updates": [dict(u) for u in resolution.participant_updates],
-            "objective_updates": [dict(u) for u in resolution.objective_updates],
-            "state_updates": dict(resolution.state_updates),
-        }
-
     def present_journal_payload(
         self,
         resolution: EncounterResolution | None,

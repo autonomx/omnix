@@ -90,69 +90,6 @@ class TimelineRecorder:
 
         return entry
 
-    def get_entries(
-        self,
-        quest_id: Optional[str] = None,
-        stage: Optional[str] = None,
-    ) -> List[TimelineEntry]:
-        """Get timeline entries, optionally filtered.
-
-        Args:
-            quest_id: Filter by quest ID (None for all).
-            stage: Filter by stage name (None for all).
-
-        Returns:
-            List of matching TimelineEntry objects.
-        """
-        entries = self.entries
-
-        if quest_id:
-            entries = [
-                e for e in entries
-                if self._get_choice_field(e.choice_id, "quest_id") == quest_id
-            ]
-
-        if stage:
-            entries = [
-                e for e in entries
-                if self._get_choice_field(e.choice_id, "stage") == stage
-            ]
-
-        return entries
-
-    def _get_choice_field(
-        self,
-        choice_id: str,
-        field: str,
-    ) -> Optional[str]:
-        """Get a field value from a choice by ID.
-
-        Note: This is a simplified lookup since we don't store
-        full choice objects in the timeline.
-
-        Args:
-            choice_id: Choice ID to look up.
-            field: Field to get.
-
-        Returns:
-            Field value or None.
-        """
-        # Look through world state timeline for choice data
-        for entry in self.entries:
-            if entry.choice_id == choice_id:
-                # Return the stage from entry data
-                if field == "stage":
-                    return entry.option_selected.get("stage")
-        return None
-
-    def get_latest_entry(self) -> Optional[TimelineEntry]:
-        """Get the most recent timeline entry.
-
-        Returns:
-            Latest TimelineEntry, or None if no entries.
-        """
-        return self.entries[-1] if self.entries else None
-
     def get_entry_count(self) -> int:
         """Get the total number of entries.
 
@@ -160,37 +97,6 @@ class TimelineRecorder:
             Total entry count.
         """
         return len(self.entries)
-
-    def has_tag_in_history(
-        self,
-        tag: str,
-    ) -> bool:
-        """Check if a tag appears anywhere in the timeline.
-
-        Args:
-            tag: Tag to search for.
-
-        Returns:
-            True if the tag exists in any entry.
-        """
-        for entry in self.entries:
-            if entry.has_tag(tag):
-                return True
-        return False
-
-    def get_entries_with_tag(
-        self,
-        tag: str,
-    ) -> List[TimelineEntry]:
-        """Get all entries that have a specific tag.
-
-        Args:
-            tag: Tag to search for.
-
-        Returns:
-            List of entries containing the tag.
-        """
-        return [e for e in self.entries if e.has_tag(tag)]
 
     def get_summary(self) -> Dict[str, Any]:
         """Get a summary of the timeline.
@@ -207,21 +113,6 @@ class TimelineRecorder:
                 entry.choice_id for entry in self.entries
             )),
         }
-
-    def to_world_state(
-        self,
-        world_state: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Serialize timeline to world state format.
-
-        Args:
-            world_state: World state dict to update.
-
-        Returns:
-            Updated world state dict.
-        """
-        world_state["timeline"] = [e.to_dict() for e in self.entries]
-        return world_state
 
     @classmethod
     def from_world_state(

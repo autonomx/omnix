@@ -171,21 +171,6 @@ class PostgresRpgWorldGenerationRepository:
         ).fetchone()
         return _run_row(row) if row is not None else None
 
-    def get_for_world_revision(
-        self,
-        context: TenantContext,
-        *,
-        world_id: str,
-        draft_revision: int,
-    ) -> dict[str, Any] | None:
-        row = self.connection.execute(
-            f"SELECT {_RUN_COLUMNS} FROM omnix_rpg_world_generation_runs "
-            "WHERE workspace_id = %s AND world_id = %s AND draft_revision = %s "
-            "ORDER BY created_at DESC LIMIT 1",
-            (context.workspace_id, world_id, int(draft_revision)),
-        ).fetchone()
-        return _run_row(row) if row is not None else None
-
     def update(
         self,
         context: TenantContext,

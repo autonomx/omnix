@@ -341,14 +341,3 @@ def load_npc_evolution_profiles_for_runtime(
     }
 
 
-def attach_loaded_profiles_to_runtime_state(
-    *,
-    runtime_state: Dict[str, Any],
-    load_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Attach loaded NPC profiles to runtime state."""
-    runtime_state = _safe_dict(runtime_state)
-    load_result = _safe_dict(load_result)
-    evo = runtime_state.setdefault("npc_evolution", {})
-    evo["loaded_profiles"] = _safe_dict(load_result.get("loaded"))
-    return runtime_state

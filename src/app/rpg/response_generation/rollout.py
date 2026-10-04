@@ -118,16 +118,6 @@ class ResponseRolloutController:
             ),
         }
 
-    def may_remove_legacy(self, evidence: RolloutEvidence) -> bool:
-        return bool(
-            evidence.production_turns >= 100
-            and evidence.exact_head_checks_passed
-            and evidence.release_gate_passed
-            and evidence.shadow_mismatch_rate <= 0.05
-            and evidence.rollback_tested
-        )
-
-
 def coerce_rollout_stage(value: RolloutStage | str | int) -> RolloutStage:
     if isinstance(value, RolloutStage):
         return value

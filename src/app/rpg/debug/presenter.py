@@ -169,23 +169,3 @@ class DebugPresenter:
             "warnings": warnings,
         }
 
-    def present_system_summary(
-        self,
-        tick: int | None = None,
-        choice_count: int = 0,
-        has_dialogue: bool = False,
-        has_encounter: bool = False,
-        world_effect_count: int = 0,
-        warning_count: int = 0,
-        arc_summary: dict | None = None,
-    ) -> dict:
-        """Return a quick top-level inspection summary."""
-        return {
-            "tick": tick,
-            "choice_count": choice_count,
-            "has_dialogue": has_dialogue,
-            "has_encounter": has_encounter,
-            "world_effect_count": world_effect_count,
-            "warning_count": warning_count,
-            "arc_summary": dict(arc_summary) if arc_summary else {},
-        }

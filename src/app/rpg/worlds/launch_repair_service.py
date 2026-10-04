@@ -216,7 +216,8 @@ def _publish_repaired_world(
         world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
             raise KeyError(f"world_not_found:{world_id}")
-        runs = work.world_library.list_generation_runs(context, world_id=world_id)
+        # Only the latest run is used.
+        runs = work.world_library.list_generation_runs(context, world_id=world_id, limit=1)
         imported_topics = str(world.get("source_mode") or "") == "imported"
         if not runs and not imported_topics:
             raise ValueError(f"world_launch_repair_generation_missing:{world_id}")
@@ -329,10 +330,7 @@ def repair_world_for_launch(
         scenario = next(
             (
                 row
-                for row in work.world_library.list_scenarios(
-                    context,
-                    world_id=world_id,
-                )
+                for row in work.world_library.iter_scenarios(context, world_id=world_id)
                 if str(row.get("id") or "") == scenario_id
             ),
             None,
@@ -456,7 +454,7 @@ def prepare_opening_scenarios_for_launch(
         runs = work.world_library.list_generation_runs(context, world_id=world_id, limit=1)
         existing_ids = {
             str(row.get("id") or "")
-            for row in work.world_library.list_scenarios(context, world_id=world_id)
+            for row in work.world_library.iter_scenarios(context, world_id=world_id)
         }
         work.rollback()
 

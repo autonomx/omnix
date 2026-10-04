@@ -22,7 +22,6 @@ from .map_instance_runtime import (
     ActorMovedEvent,
     CampaignMapInstanceSnapshot,
     FrozenRuntimeModel,
-    MapMovementError,
     MoveActorCommand,
     resolve_move_command,
 )

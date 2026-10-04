@@ -44,24 +44,6 @@ class DeterministicClock:
         self._time += self._increment
         return self._time
     
-    def current_time(self) -> float:
-        """Get current time without advancing.
-        
-        Returns:
-            Current simulated timestamp.
-        """
-        return self._time
-    
-    def set_time(self, value: float) -> None:
-        """Set the current time to a specific value.
-        
-        Useful for time-travel debugging or loading snapshots.
-        
-        Args:
-            value: The time value to set.
-        """
-        self._time = value
-    
     def advance(self, amount: float) -> float:
         """Advance the clock by a specific amount.
         

@@ -1,7 +1,6 @@
 """Deterministic item-system metrics helpers for RPG sessions."""
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 from app.rpg.session.inventory_items import display_item_name, inventory_quantity, item_type
@@ -115,10 +114,3 @@ def build_item_metrics_snapshot(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def record_item_metrics_snapshot(state: dict[str, Any]) -> dict[str, Any]:
-    snapshot = build_item_metrics_snapshot(state)
-    mechanics = _safe_dict(state.get("mechanics"))
-    snapshots = _safe_list(mechanics.get("item_metric_snapshots"))
-    mechanics["item_metric_snapshots"] = [deepcopy(snapshot), *snapshots][:20]
-    state["mechanics"] = mechanics
-    return snapshot

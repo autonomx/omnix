@@ -70,14 +70,6 @@ def deterministic_fast_combat_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def prefer_fast_combat_narration(result: Dict[str, Any], fallback: Any = "") -> str:
-    payload = deterministic_fast_combat_payload(result)
-    narration = _safe_str(payload.get("narration")).strip()
-    if narration:
-        return narration
-    return _safe_str(fallback).strip()
-
-
 def _remove_unsupported_combat_claims(validation: Dict[str, Any]) -> Dict[str, Any]:
     validation = _safe_dict(validation)
     if not validation:

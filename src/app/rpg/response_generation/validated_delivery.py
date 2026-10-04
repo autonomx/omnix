@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterable, Mapping
+from typing import Iterable, Mapping
 
 from .contracts import RenderedResponse
 from .profiles import DeliveryMode, ResponseGenerationProfile

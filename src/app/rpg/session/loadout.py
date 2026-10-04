@@ -18,15 +18,13 @@ from app.rpg.session.ability_system import (
     upgrade_ability_rank_in_state,
 )
 from app.rpg.session.crafting import craft_from_inventory
-from app.rpg.session.equipment import equip_item_for_player, normalize_equipment, resolve_equipment_slot
+from app.rpg.session.equipment import equip_item_for_player, resolve_equipment_slot
 from app.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
-    inventory_quantity,
     is_protected_item,
     merge_inventory_stack,
     normalize_player_inventory,
-    set_inventory_quantity,
 )
 from app.rpg.session.item_materials import salvage_item
 from app.rpg.session.item_modifications import apply_item_modification, replace_inventory_item
@@ -108,14 +106,6 @@ def _metric(player: dict[str, Any], key: str) -> dict[str, Any]:
     return metric
 
 
-def _change_metric(player: dict[str, Any], key: str, delta: int) -> tuple[int, int]:
-    metric = _metric(player, key)
-    current = int(metric.get("current") or 0)
-    maximum = int(metric.get("max") or current)
-    metric["current"] = max(0, min(maximum, current + delta))
-    return int(metric["current"]), maximum
-
-
 def _inventory(player: dict[str, Any]) -> list[dict[str, Any]]:
     return normalize_player_inventory(player)["inventory"]
 
@@ -124,26 +114,12 @@ def _find_item(player: dict[str, Any], item_name: str | None) -> tuple[list[dict
     return find_inventory_item(player, item_name)
 
 
-def _quantity(item: dict[str, Any]) -> int:
-    return inventory_quantity(item)
-
-
-def _set_quantity(inventory: list[dict[str, Any]], index: int, quantity: int) -> None:
-    set_inventory_quantity(inventory, index, quantity)
-
-
 def _consume(inventory: list[dict[str, Any]], index: int, amount: int = 1) -> None:
     consume_inventory_item(inventory, index, amount)
 
 
 def _item_slot(item: dict[str, Any]) -> str:
     return resolve_equipment_slot(item)
-
-
-def _equipment(player: dict[str, Any]) -> list[dict[str, Any]]:
-    equipment = normalize_equipment(_safe_list(player.get("equipment")))
-    player["equipment"] = equipment
-    return equipment
 
 
 def _equip_item(player: dict[str, Any], item: dict[str, Any]) -> str:

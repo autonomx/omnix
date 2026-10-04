@@ -10,6 +10,7 @@ from app.rpg.map_observer_runtime import (
 from app.persistence.errors import RevisionConflict
 from .rpg_repository import canonical_json
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import page_limit
 
 
 class ObserverKnowledgeRevisionConflict(RevisionConflict):
@@ -222,7 +223,7 @@ class PostgresRpgObserverRepository:
                 campaign_id,
                 map_instance_id,
                 observer_actor_id,
-                max(1, min(int(limit), 500)),
+                page_limit(limit, default=100),
             ),
         ).fetchall()
         return [dict(row[0]) for row in rows]

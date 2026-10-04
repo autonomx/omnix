@@ -217,14 +217,6 @@ def _story_policy_record_replay_artifacts(runtime_state: dict[str, Any]) -> bool
     return bool(_normalize_story_policy(runtime_state).get("record_replay_artifacts", False))
 
 
-def _story_policy_strict_replay(runtime_state: dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("strict_replay", False))
-
-
-def _story_policy_save_load_stable(runtime_state: dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("save_load_stable", True))
-
-
 def _normalize_performance_settings(runtime_state: dict[str, Any]) -> dict[str, Any]:
     perf = {}
     if isinstance(runtime_state, dict):

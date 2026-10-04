@@ -34,9 +34,6 @@ class CreatorCanonState:
     def remove_fact(self, fact_id: str) -> None:
         self.facts.pop(fact_id, None)
 
-    def get_fact(self, fact_id: str) -> CreatorCanonFact | None:
-        return self.facts.get(fact_id)
-
     def list_facts(self) -> list[CreatorCanonFact]:
         return list(self.facts.values())
 

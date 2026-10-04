@@ -28,7 +28,7 @@ FIXES (from rpg-design.txt):
 - deterministic ID generator in test mode
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 from .state_hash import compute_state_hash
 
@@ -93,95 +93,3 @@ class DeterminismValidator:
             "hash2": hash2,
         }
 
-    def run_n_times(
-        self,
-        events: List[Any],
-        num_runs: int = 5,
-        num_ticks: int = 10,
-    ) -> Dict[str, Any]:
-        """Run identical game loops N times and compare all results.
-
-        More thorough than run_twice_and_compare — catches rare
-        non-determinism that might not manifest in just 2 runs.
-
-        Args:
-            events: List of events to emit in all loops.
-            num_runs: Number of identical runs. Default 5.
-            num_ticks: Number of ticks per run. Default 10.
-
-        Returns:
-            Dictionary with:
-            - match: bool - whether ALL hashes are identical
-            - hashes: list[str] - hash from each run
-            - unique_count: int - number of unique hashes observed
-        """
-        hashes = []
-
-        for _ in range(num_runs):
-            loop = self.engine_factory()
-
-            for e in events:
-                loop.event_bus.emit(e)
-
-            for _ in range(num_ticks):
-                loop.tick()
-
-            hashes.append(compute_state_hash(loop))
-
-        unique_hashes = set(hashes)
-
-        return {
-            "match": len(unique_hashes) == 1,
-            "hashes": hashes,
-            "unique_count": len(unique_hashes),
-        }
-
-    def determine_break_point(
-        self,
-        events: List[Any],
-        max_ticks: int = 50,
-    ) -> Dict[str, Any]:
-        """Find the tick where determinism breaks.
-
-        Binary search approach: runs two loops tick by tick and
-        checks if hashes diverge.
-
-        Args:
-            events: List of events to emit.
-            max_ticks: Maximum ticks to check. Default 50.
-
-        Returns:
-            Dictionary with:
-            - match: bool - whether all ticks matched
-            - divergence_tick: Optional[int] - first tick with mismatch, or None
-            - details: list[str] - per-tick comparison results
-        """
-        loop1 = self.engine_factory()
-        loop2 = self.engine_factory()
-
-        details: List[str] = []
-        divergence_tick: Optional[int] = None
-
-        # Emit events to both
-        for e in events:
-            loop1.event_bus.emit(e)
-            loop2.event_bus.emit(e)
-
-        for tick_num in range(1, max_ticks + 1):
-            loop1.tick()
-            loop2.tick()
-
-            h1 = compute_state_hash(loop1)
-            h2 = compute_state_hash(loop2)
-
-            if h1 != h2 and divergence_tick is None:
-                divergence_tick = tick_num
-                details.append(f"Tick {tick_num}: DIVERGED")
-            else:
-                details.append(f"Tick {tick_num}: match")
-
-        return {
-            "match": divergence_tick is None,
-            "divergence_tick": divergence_tick,
-            "details": details,
-        }
