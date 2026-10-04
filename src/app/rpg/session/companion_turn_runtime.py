@@ -8,9 +8,7 @@ from app.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug as get_pending_companion_offer_debug, hydrate_companion_acceptance_from_pending_offers as hydrate_companion_acceptance_from_pending_offers,
     resolve_pending_companion_offer_response as resolve_pending_companion_offer_response,
 )
-from copy import (
-    copy as copy,
-)
+import copy
 from app.rpg.profiles.character_cards import (
     list_character_cards_for_simulation_state as list_character_cards_for_simulation_state,
 )

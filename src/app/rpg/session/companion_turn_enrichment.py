@@ -23,9 +23,7 @@ from app.rpg.party.companion_turns import (
 from app.rpg.party.party_composition import (
     project_party_composition_effects as project_party_composition_effects,
 )
-from copy import (
-    copy as copy,
-)
+import copy
 from app.rpg.session.companion_turn_runtime import (
     _active_companion_profiles_summary as _active_companion_profiles_summary, _sync_session_if_companion_runtime_mutated as _sync_session_if_companion_runtime_mutated,
 )

@@ -29,6 +29,16 @@ def migrate_legacy_interactions(session: dict[str, Any]) -> dict[str, Any]:
 
     rows, source = _find_legacy_rows(session)
     if not rows:
+        # Nothing predates the timeline. Record that, so a later pass during a
+        # turn does not read the turn's own history as a legacy interaction
+        # and give it a state revision that was never committed.
+        runtime["legacy_interaction_migration"] = {
+            "format_version": LEGACY_INTERACTION_MIGRATION_VERSION,
+            "source": "",
+            "source_row_count": 0,
+            "event_count": 0,
+            "status": "no_legacy_rows",
+        }
         session["runtime_state"] = runtime
         return session
 
