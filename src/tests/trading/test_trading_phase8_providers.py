@@ -260,7 +260,7 @@ def test_yahoo_discards_malformed_ohlc_rows() -> None:
 
     provider = YahooEquityProvider(
         runtime=YahooRuntime(),  # type: ignore[arg-type]
-        cache=TradingMarketDataCache(cache_dir=None),
+        cache=TradingMarketDataCache(),
     )
 
     response = provider.get_bars(AAPL, "1d", 10)

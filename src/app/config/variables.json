@@ -806,8 +806,8 @@
   },
   {
     "default": null,
-    "description": "Controls database url for kernel.",
-    "feature": "kernel",
+    "description": "Controls database url for kernel, trading.",
+    "feature": "kernel, trading",
     "name": "OMNIX_DATABASE_URL",
     "type": "string"
   },
@@ -1848,13 +1848,6 @@
     "type": "string"
   },
   {
-    "default": "",
-    "description": "Controls trading ibkr evidence dir for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_IBKR_EVIDENCE_DIR",
-    "type": "string"
-  },
-  {
     "default": "1",
     "description": "Controls trading interday learning for trading.",
     "feature": "trading",
@@ -2105,13 +2098,6 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS",
     "type": "boolean"
-  },
-  {
-    "default": "",
-    "description": "Controls trading yahoo evidence dir for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_YAHOO_EVIDENCE_DIR",
-    "type": "string"
   },
   {
     "default": null,

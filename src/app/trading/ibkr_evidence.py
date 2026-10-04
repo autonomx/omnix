@@ -1,72 +1,45 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+"""Durable zero-authority IBKR observation and recovery diagnostics.
 
-"""Durable zero-authority IBKR observation and recovery diagnostics."""
+Session diagnostics live in PostgreSQL (WP-8.3). Quote callbacks queue their
+updates; the queue is applied in one transaction every 50 events or 2 seconds,
+and before any read, so the market-data thread does not write per tick.
+"""
 
-import json
-import os
-import tempfile
+import logging
 import threading
-from contextlib import contextmanager
-from datetime import date, datetime, timezone
+import time
+from collections import defaultdict
+from collections.abc import Callable
+from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
+from .evidence_storage import IbkrSessionEvidence, default_ibkr_session_evidence
 
-def _default_root() -> Path:
-    configured = env_str("OMNIX_TRADING_IBKR_EVIDENCE_DIR", "").strip()
-    if configured:
-        return Path(configured)
-    if env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
-        return Path(tempfile.gettempdir()) / f"omnix-ibkr-evidence-test-{os.getpid()}"
-    return Path("resources/trading/ibkr_evidence")
-
-
-@contextmanager
-def _interprocess_file_lock(path: Path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = path.open("a+b")
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        yield
-    finally:
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        finally:
-            handle.close()
+logger = logging.getLogger(__name__)
 
 
 class IbkrEvidenceStore:
     """Session-scoped diagnostics used to decide whether IBKR may be promoted."""
 
-    def __init__(self, root: Path | None = None) -> None:
-        self.root = Path(root) if root is not None else _default_root()
+    def __init__(
+        self,
+        backend: IbkrSessionEvidence | None = None,
+        *,
+        flush_events: int = 50,
+        flush_seconds: float = 2.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.backend = backend if backend is not None else default_ibkr_session_evidence()
+        self.flush_events = max(1, int(flush_events))
+        self.flush_seconds = max(0.0, float(flush_seconds))
+        self._clock = clock
         self._lock = threading.RLock()
-
-    def _session_path(self, session_date: date) -> Path:
-        return self.root / "sessions" / f"{session_date.isoformat()}.json"
+        self._pending: dict[date, list[Callable[[dict[str, Any]], None]]] = defaultdict(list)
+        self._pending_count = 0
+        self._last_flush = clock()
 
     @staticmethod
     def _empty(session_date: date) -> dict[str, Any]:
@@ -101,33 +74,35 @@ class IbkrEvidenceStore:
         }
 
     def _read(self, session_date: date) -> dict[str, Any]:
-        baseline = self._empty(session_date)
-        path = self._session_path(session_date)
-        if not path.exists():
-            return baseline
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            return baseline
-        if not isinstance(payload, dict):
-            return baseline
-        baseline.update(payload)
-        return baseline
+        self.flush()
+        payload = self._empty(session_date)
+        stored = self.backend.read(session_date)
+        if stored:
+            payload.update(stored)
+        return payload
 
-    def _mutate(self, session_date: date, mutator) -> None:
-        path = self._session_path(session_date)
-        lock_path = path.with_suffix(".lock")
-        with self._lock, _interprocess_file_lock(lock_path):
-            payload = self._read(session_date)
-            mutator(payload)
-            payload["updated_at"] = datetime.now(timezone.utc).isoformat()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
-            temporary.write_text(
-                json.dumps(payload, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
+    def _mutate(self, session_date: date, mutator: Callable[[dict[str, Any]], None]) -> None:
+        with self._lock:
+            self._pending[session_date].append(mutator)
+            self._pending_count += 1
+            due = (
+                self._pending_count >= self.flush_events
+                or self._clock() - self._last_flush >= self.flush_seconds
             )
-            temporary.replace(path)
+        if due:
+            self.flush()
+
+    def flush(self) -> None:
+        """Apply every queued update; a failed write is logged and dropped."""
+        with self._lock:
+            pending, self._pending = self._pending, defaultdict(list)
+            self._pending_count = 0
+            self._last_flush = self._clock()
+        for session_date, mutators in pending.items():
+            try:
+                self.backend.apply(session_date, self._empty(session_date), mutators)
+            except Exception:
+                logger.warning("IBKR evidence for %s not recorded", session_date, exc_info=True)
 
     @staticmethod
     def _decimal(payload: dict[str, Any], key: str) -> Decimal:

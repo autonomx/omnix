@@ -260,7 +260,7 @@ failure, causal rejection, policy rejection, and successful rescue.
 **Instrumentation implemented; prospective elapsed-session gate remains open.**
 
 The runtime now persists one session-scoped soak record per U.S.-equity date
-under `resources/trading/yahoo_evidence/sessions/YYYY-MM-DD.json`. It records
+in PostgreSQL (`omnix_trading_evidence_session_counters`). It records
 the number of Yahoo-primary evaluations observed, evaluations rescued by Yahoo
 repair, evaluations that still passed, genuinely blocked evaluations, repairs
 that were insufficient to unblock the feature, and blocked-reason counts. The
@@ -286,12 +286,16 @@ be attributed to the strategies themselves.
 
 ## Persistent evidence
 
-Finalized Yahoo 1m bars are stored under
-`resources/trading/yahoo_evidence` by default. The location can be changed with
-`OMNIX_TRADING_YAHOO_EVIDENCE_DIR`.
-
-Writes use atomic replacement plus an interprocess advisory lock. Evidence is
-independent of the disposable market-data cache.
+Finalized Yahoo 1m bars are stored in PostgreSQL
+(`omnix_trading_yahoo_bar_revisions`, WP-8.3), shared by every workspace. A
+revision is identified by its content, every field except `received_at`:
+seeing the same bar again adds nothing, and the stored `received_at` is the
+earliest receipt, which is what causal replay may know. Counters are
+incremented atomically (`omnix_trading_evidence_counters`). Evidence is
+independent of the disposable in-memory market-data cache, and nothing on the
+decision path reads local files. Bars from the earlier file store are imported
+with `python -m app.trading.evidence_import yahoo`; the import records each file
+and can be re-run.
 
 ## Diagnostics endpoints
 

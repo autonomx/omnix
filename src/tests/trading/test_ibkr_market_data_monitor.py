@@ -9,6 +9,7 @@ import pytest
 from app.trading import ibkr_market_data_monitor as monitor_module
 from app.trading.execution import ExecutionObservation, assess_execution_observation
 from app.trading.execution_observation_plane import ExecutionObservationPlane
+from app.trading.evidence_storage import MemoryIbkrSessionEvidence
 from app.trading.ibkr_evidence import IbkrEvidenceStore
 from app.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
 from app.trading.streaming.manager import StreamingQuoteUpdate
@@ -21,7 +22,7 @@ NOW = datetime(2026, 9, 17, 14, 0, tzinfo=timezone.utc)
 
 def _monitor(tmp_path):
     plane = ExecutionObservationPlane()
-    store = IbkrEvidenceStore(tmp_path)
+    store = IbkrEvidenceStore(MemoryIbkrSessionEvidence())
     monitor = TradingIbkrMarketDataMonitor(
         plane=plane,
         evidence_store=store,

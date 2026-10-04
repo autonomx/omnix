@@ -119,7 +119,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_COMPANION_ROLLOUT_STAGE` | string | — | assistant-memory | Controls companion rollout stage for assistant-memory. |
 | `OMNIX_DATABASE_APPLICATION_NAME` | string | `omnix` | kernel | Controls database application name for kernel. |
 | `OMNIX_DATABASE_POOL_MAX` | string | — | kernel | Controls database pool max for kernel. |
-| `OMNIX_DATABASE_URL` | string | — | kernel | Controls database url for kernel. |
+| `OMNIX_DATABASE_URL` | string | — | kernel, trading | Controls database url for kernel, trading. |
 | `OMNIX_DEEP_RESEARCH_HERMES_ENABLED` | string | `0` | research | Controls deep research hermes enabled for research. |
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DEPLOYMENT_PROCESS_COUNTS` | string | — | kernel | Controls deployment process counts for kernel. |
@@ -268,7 +268,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION_IN_TESTS` | boolean | `0` | trading | Controls trading finviz shadow autoprovision in tests for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_INITIAL_CASH` | string | `1000` | trading | Controls trading finviz shadow initial cash for trading. |
 | `OMNIX_TRADING_HERMES_RESEARCH_ENABLED` | string | — | launcher | Controls trading hermes research enabled for launcher. |
-| `OMNIX_TRADING_IBKR_EVIDENCE_DIR` | string | — | trading | Controls trading ibkr evidence dir for trading. |
 | `OMNIX_TRADING_INTERDAY_LEARNING` | boolean | `1` | trading | Controls trading interday learning for trading. |
 | `OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS` | boolean | `0` | trading | Controls trading interday learning in tests for trading. |
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR` | boolean | `1` | trading | Controls trading liquidation collector for trading. |
@@ -305,7 +304,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_YAHOO_ACQUISITION` | boolean | `1` | trading | Controls trading yahoo acquisition for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS` | string | `30` | trading | Controls trading yahoo acquisition interval seconds for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS` | boolean | `0` | trading | Controls trading yahoo acquisition in tests for trading. |
-| `OMNIX_TRADING_YAHOO_EVIDENCE_DIR` | string | — | trading | Controls trading yahoo evidence dir for trading. |
 | `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
 | `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |

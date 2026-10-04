@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 from collections.abc import AsyncIterator
 from datetime import date, datetime, time, timedelta, timezone
-from pathlib import Path
 from threading import Lock
 from typing import Any
 
@@ -67,10 +66,7 @@ class TradingMarketDataService:
         yahoo_evidence_store: YahooEvidenceStore | None = None,
         ibkr_evidence_store: IbkrEvidenceStore | None = None,
     ) -> None:
-        self.cache = cache or TradingMarketDataCache(
-            max_entries=256,
-            cache_dir=Path("resources/cache/trading"),
-        )
+        self.cache = cache or TradingMarketDataCache(max_entries=256)
         self.registry = registry or ProviderRegistry(cache=self.cache)
         if provider is not None:
             self.registry._providers["binance"] = provider
