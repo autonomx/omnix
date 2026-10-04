@@ -40,6 +40,25 @@ describe('web ESLint architecture rules', () => {
     expect(publicImportRuleIds).not.toContain('no-restricted-imports');
   });
 
+  it('rejects a feature import from core web code', async () => {
+    const staticRuleIds = await lintSource(
+      "import type { RpgNewGameRequest } from '../features/rpg/api/rpgSessionClient';",
+      'src/api/eslint-contract-fixture.ts',
+    );
+    const dynamicRuleIds = await lintSource(
+      "void import('../features/trading');",
+      'src/events/eslint-contract-fixture.ts',
+    );
+    const coreRuleIds = await lintSource(
+      "import { ApiError } from '../api/errors';",
+      'src/events/eslint-contract-fixture.ts',
+    );
+
+    expect(staticRuleIds).toContain('omnix/no-core-feature-import');
+    expect(dynamicRuleIds).toContain('omnix/no-core-feature-import');
+    expect(coreRuleIds).not.toContain('omnix/no-core-feature-import');
+  });
+
   it('allows the ModuleWorkspace shell and rejects direct application imports', async () => {
     const workspaceRuleIds = await lintSource(
       "import { ModuleWorkspace } from '../features/ModuleWorkspace';",

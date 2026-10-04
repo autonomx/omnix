@@ -1,4 +1,6 @@
 import { defineModule } from '../../app/moduleManifest';
+// The assistant's events on the in-page bus (types only).
+import './assistantEvents';
 
 /** The workspace module this feature provides (WP-9.7). */
 export const chatbotModule = defineModule({

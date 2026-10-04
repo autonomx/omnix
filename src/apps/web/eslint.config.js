@@ -190,6 +190,32 @@ const omnixBoundaryPlugin = {
         };
       },
     },
+    'no-core-feature-import': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'keep core web code (api, events, design, shared) independent of features' },
+        schema: [],
+        messages: {
+          featureImport: 'Core web code must not import a feature ({{feature}}); move the code into the feature or let the feature extend a core contract.',
+        },
+      },
+      create(context) {
+        const filename = context.filename ?? context.getFilename();
+        const check = (node) => {
+          const specifier = node.source?.type === 'Literal' ? node.source.value : null;
+          const target = featureImportTarget(filename, specifier);
+          if (target) {
+            context.report({ node, messageId: 'featureImport', data: { feature: target.feature } });
+          }
+        };
+        return {
+          ImportDeclaration: check,
+          ExportNamedDeclaration: check,
+          ExportAllDeclaration: check,
+          ImportExpression: check,
+        };
+      },
+    },
     'no-app-direct-feature-dynamic-import': {
       meta: {
         type: 'problem',
@@ -367,6 +393,14 @@ export default [
       'max-lines-per-function': ['error', { max, skipBlankLines: true, skipComments: true }],
     },
   })),
+  {
+    // Core web code never depends on a feature (PA-2.4); tests may combine them.
+    files: ['src/{api,events,design,shared}/**/*.{js,jsx,ts,tsx}', 'src/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'src/main.tsx'],
+    rules: {
+      'omnix/no-core-feature-import': 'error',
+    },
+  },
   {
     files: ['src/app/**/*.{js,jsx,ts,tsx}'],
     ignores: ['src/app/modules.ts', 'src/app/*Manifest.ts'],
