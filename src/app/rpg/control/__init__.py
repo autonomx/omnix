@@ -11,7 +11,7 @@ and creator/GM layers. It is responsible for:
 
 from __future__ import annotations
 
-from .controller import GameplayControlController
+from .controller import GameplayControlController, PacingController
 from .framing import FramingEngine
 from .models import (
     ChoiceOption,

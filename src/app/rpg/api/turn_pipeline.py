@@ -44,6 +44,25 @@ async def execute_foreground_rpg_turn(
     command: str,
     request: Request,
 ) -> Response:
+    """Run the whole turn on a worker thread.
+
+    Every stage loads or saves the session in PostgreSQL or may call a model,
+    so none of it may run on the gateway's event loop (PERF1).
+    """
+    return await asyncio.to_thread(
+        _execute_foreground_rpg_turn,
+        session_id=session_id,
+        command=command,
+        request=request,
+    )
+
+
+def _execute_foreground_rpg_turn(
+    *,
+    session_id: str,
+    command: str,
+    request: Request,
+) -> Response:
     submission_id = (
         str(request.headers.get("x-omnix-rpg-submission-id") or "").strip()
         or f"submit:{uuid.uuid4().hex}"
@@ -125,9 +144,7 @@ async def execute_foreground_rpg_turn(
                         },
                     )
 
-            result = await asyncio.to_thread(
-                apply_foreground_turn
-            )
+            result = apply_foreground_turn()
             attach_rpg_result_timing(result)
             span["ok"] = (
                 result.get("ok") is True if isinstance(result, dict) else False

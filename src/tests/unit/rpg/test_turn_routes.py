@@ -45,6 +45,36 @@ def test_turn_for_missing_session_is_rejected_before_any_turn_is_applied(monkeyp
     assert calls == []
 
 
+def test_turn_stages_run_off_the_event_loop(monkeypatch) -> None:
+    # Session load and save, presentation and projection read or write
+    # PostgreSQL or call a model; on the loop they stall every other request.
+    import threading
+
+    from app.rpg.session import service
+
+    threads: dict[str, int] = {}
+
+    def load_session(session_id: str):
+        threads["load_session"] = threading.get_ident()
+        return None
+
+    monkeypatch.setattr(service, "load_session", load_session)
+    app = FastAPI(title="rpg-turn-routes")
+    include_router_registrar(app, register_rpg_session_routes)
+
+    @app.get("/loop-thread")
+    async def loop_thread() -> dict[str, int]:
+        return {"ident": threading.get_ident()}
+
+    with TestClient(app) as client:  # one event loop thread for both requests
+        loop_ident = client.get("/loop-thread").json()["ident"]
+        response = client.post("/api/rpg/sessions/rpg_missing/turn", json={"command": "look around"})
+        assert client.get("/loop-thread").json()["ident"] == loop_ident
+
+    assert response.status_code == 404
+    assert threads["load_session"] != loop_ident
+
+
 def test_turn_without_a_command_is_rejected(monkeypatch) -> None:
     calls = _record_apply_turn(monkeypatch)
 
