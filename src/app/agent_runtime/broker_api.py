@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from app.capabilities import default_capability_registry
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.capabilities.executor import LEGACY_APPROVER, CapabilityGrant, execute_capability
-from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from .capability_requests import AssistantToolRequest, AssistantToolResult
 from app.observability.tracing import set_span_attributes
 from app.persistence.unit_of_work import unit_of_work
 from app.security.run_tokens import RunTokenClaims, issue_run_token, verify_run_token

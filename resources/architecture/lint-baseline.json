@@ -33,25 +33,16 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        19
+        11
       ],
-      "path": "src/app/agent_runtime/broker_api.py",
+      "path": "src/app/agent_runtime/capability_requests.py",
       "rule": "AL001"
     },
     {
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
-        24
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.models",
-      "lines": [
-        26
+        14
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -60,7 +51,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.prompt_assembly",
       "lines": [
-        396
+        197
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -69,7 +60,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.routing_context",
       "lines": [
-        397
+        198
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -103,38 +94,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "validate_required_evidence_capabilities:app.assistant_tools.models",
-      "lines": [
-        1216
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.repo_adapter",
       "lines": [
-        16
+        17
       ],
       "path": "src/app/agent_runtime/run_workspace.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.models",
-      "lines": [
-        9
-      ],
-      "path": "src/app/agent_runtime/task_graph_capabilities.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.models",
-      "lines": [
-        10
-      ],
-      "path": "src/app/agent_runtime/workflow_execution.py",
       "rule": "AL001"
     },
     {

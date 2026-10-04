@@ -7,7 +7,7 @@ import threading
 from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
 
-from .task_graph_capabilities import CapabilityExecutor, default_capability_executor
+from .capability_requests import CapabilityExecutor, default_capability_executor
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work

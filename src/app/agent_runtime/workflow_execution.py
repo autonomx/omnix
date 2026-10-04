@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from typing import Any
-from app.assistant_tools.models import AssistantToolRequest
+from .capability_requests import AssistantToolRequest
 from app.capabilities.executor import (
     LEGACY_APPROVER,
     CapabilityGrant,

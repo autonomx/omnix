@@ -9,7 +9,7 @@ from app.agent_runtime.service import AgentRunService
 
 def test_start_paths_require_diff_only_for_workspace_mutation_authority() -> None:
     root = Path(__file__).parents[2] / "app" / "agent_runtime"
-    for name in ("api.py", "chat_bridge.py"):
+    for name in ("api.py", "chat_lane_agent.py"):
         source = (root / name).read_text(encoding="utf-8")
         assert "task_requires_workspace_mutation" in source
         assert 'expected_artifacts=["diff"] if profile.requires_workspace' not in source

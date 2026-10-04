@@ -1213,7 +1213,7 @@ def validate_required_evidence_capabilities(
     if not capabilities:
         return
     from app.assistant_tools.gate import review_assistant_tool_request
-    from app.assistant_tools.models import AssistantToolRequest
+    from .capability_requests import AssistantToolRequest
 
     allowed_set = set(capabilities)
 

@@ -9,7 +9,7 @@ from .exception_logging import log_recovered_exception
 import json
 import uuid
 from typing import Any
-from .task_graph_capabilities import AssistantToolRequest
+from .capability_requests import AssistantToolRequest
 from app.persistence.unit_of_work import unit_of_work
 from .contracts import ModelRef
 from .task_graph import (
