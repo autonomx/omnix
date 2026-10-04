@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from .service_core import (
     _LeaseBoundRunRepository,
 )
+from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
     from app.agent_runtime.service_core import AgentRunService
@@ -417,15 +418,7 @@ def _create_child_start(service: AgentRunService, parent_run_id: str, request):
 
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
-        locked = work.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (service.context.workspace_id, parent_run_id),
-        ).fetchone()
+        locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(parent_run_id).fetchone()
         if locked is None:
             raise KeyError(parent_run_id)
         parent = repository.get_run(parent_run_id)

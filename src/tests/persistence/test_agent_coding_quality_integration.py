@@ -491,10 +491,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
 
         service = _RecoveryService()
         with unit_of_work(database) as work:
-            candidates = orphaned_quality_review_run_ids(
-                work.connection,
-                context.workspace_id,
-            )
+            candidates = orphaned_quality_review_run_ids(work.connection, context)
             work.rollback()
         assert run_id in candidates
 
@@ -515,10 +512,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 review_snapshot_id=review_snapshot.snapshot_id,
                 task_revision_id=revision.revision_id,
             )
-            remaining_candidates = orphaned_quality_review_run_ids(
-                work.connection,
-                context.workspace_id,
-            )
+            remaining_candidates = orphaned_quality_review_run_ids(work.connection, context)
             work.rollback()
 
         assert recovered is not None

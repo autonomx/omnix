@@ -22,7 +22,7 @@ def test_child_start_locks_parent_checks_grant_then_persists_child_before_grant(
     create_block = _implementation("_create_child_start", "run_lifecycle.py")
 
     ordered = (
-        "FOR UPDATE",
+        ".lock_run(parent_run_id)",
         "._reserve_child_start(",
         "repository.create_run(child_spec)",
         "._record_child_grant(",

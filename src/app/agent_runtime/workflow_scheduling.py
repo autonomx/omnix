@@ -49,35 +49,9 @@ def schedule(
     normalized_run_at = run_at.astimezone(timezone.utc)
     interval = int(interval_seconds) if interval_seconds is not None else None
     with unit_of_work(workflow.database) as work:
-        inserted = work.connection.execute(
-            """
-            INSERT INTO omnix_workflow_schedules (
-                workspace_id, schedule_id, workflow_id, workflow_version,
-                input_payload, interval_seconds, next_run_at, enabled
-            ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, TRUE)
-            ON CONFLICT (workspace_id, schedule_id) DO NOTHING
-            RETURNING schedule_id
-            """,
-            (
-                workflow.context.workspace_id,
-                issued_id,
-                definition.id,
-                definition.version,
-                _json(input_payload),
-                interval,
-                normalized_run_at,
-            ),
-        ).fetchone()
+        inserted = workflow.repository(work.connection).insert_schedule(issued_id, definition.id, definition.version, _json(input_payload), interval, normalized_run_at).fetchone()
         if inserted is None:
-            existing = work.connection.execute(
-                """
-                SELECT workflow_id, workflow_version, input_payload,
-                       interval_seconds, next_run_at, enabled
-                  FROM omnix_workflow_schedules
-                 WHERE workspace_id = %s AND schedule_id = %s
-                """,
-                (workflow.context.workspace_id, issued_id),
-            ).fetchone()
+            existing = workflow.repository(work.connection).schedule_row(issued_id).fetchone()
             if existing is None:
                 raise WorkflowRuntimeError("workflow_schedule_conflict")
             same = (
@@ -102,16 +76,7 @@ def schedule(
 
 def list_schedules(workflow: PostgresWorkflowRuntime) -> list[WorkflowScheduleSnapshot]:
     with unit_of_work(workflow.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT schedule_id, workflow_id, workflow_version, input_payload,
-                   interval_seconds, next_run_at, enabled, last_enqueued_at
-              FROM omnix_workflow_schedules
-             WHERE workspace_id = %s
-             ORDER BY created_at, schedule_id
-            """,
-            (workflow.context.workspace_id,),
-        ).fetchall()
+        rows = workflow.repository(work.connection).schedules().fetchall()
         work.rollback()
     return [
         WorkflowScheduleSnapshot(
@@ -130,29 +95,10 @@ def list_schedules(workflow: PostgresWorkflowRuntime) -> list[WorkflowScheduleSn
 
 def cancel_schedule(workflow: PostgresWorkflowRuntime, schedule_id: str) -> None:
     with unit_of_work(workflow.database) as work:
-        row = work.connection.execute(
-            """
-            UPDATE omnix_workflow_schedules
-               SET enabled = FALSE, next_run_at = NULL,
-                   updated_at = CURRENT_TIMESTAMP
-             WHERE workspace_id = %s AND schedule_id = %s
-            RETURNING schedule_id
-            """,
-            (workflow.context.workspace_id, schedule_id),
-        ).fetchone()
+        row = workflow.repository(work.connection).disable_schedule(schedule_id).fetchone()
         if row is None:
             raise KeyError(schedule_id)
-        work.connection.execute(
-            """
-            UPDATE omnix_workflow_schedule_fires
-               SET status = 'cancelled',
-                   last_error = 'schedule_cancelled_before_dispatch',
-                   updated_at = CURRENT_TIMESTAMP
-             WHERE workspace_id = %s AND schedule_id = %s
-               AND status = 'pending'
-            """,
-            (workflow.context.workspace_id, schedule_id),
-        )
+        workflow.repository(work.connection).cancel_pending_fires(schedule_id)
         work.commit()
 
 
@@ -162,67 +108,13 @@ def _supervise_once(workflow: PostgresWorkflowRuntime) -> None:
     error = "step_outcome_unknown_after_worker_loss"
     resumable: list[str] = []
     with unit_of_work(workflow.database) as work:
-        work.connection.execute(
-            """
-            UPDATE omnix_workflow_step_runs
-               SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '90 seconds',
-                   updated_at = CURRENT_TIMESTAMP
-             WHERE workspace_id = %s AND worker_id = %s
-               AND status = 'running'
-            """,
-            (workflow.context.workspace_id, workflow.worker_id),
-        )
-        stale = work.connection.execute(
-            """
-            SELECT step.run_id, step.step_id
-              FROM omnix_workflow_step_runs AS step
-              JOIN omnix_workflow_runs AS run
-                ON run.workspace_id = step.workspace_id
-               AND run.run_id = step.run_id
-             WHERE step.workspace_id = %s
-               AND run.status = 'running'
-               AND run.current_step_id = step.step_id
-               AND step.status = 'running'
-               AND step.lease_expires_at <= CURRENT_TIMESTAMP
-             FOR UPDATE OF step SKIP LOCKED
-            """,
-            (workflow.context.workspace_id,),
-        ).fetchall()
+        workflow.repository(work.connection).renew_step_leases(workflow.worker_id)
+        stale = workflow.repository(work.connection).expired_running_steps().fetchall()
         for run_id, step_id in stale:
-            claimed = work.connection.execute(
-                """
-                UPDATE omnix_workflow_step_runs
-                   SET status = 'failed', last_error = %s,
-                       completed_at = CURRENT_TIMESTAMP,
-                       worker_id = NULL, lease_expires_at = NULL,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'running'
-                   AND lease_expires_at <= CURRENT_TIMESTAMP
-                RETURNING step_id
-                """,
-                (
-                    error,
-                    workflow.context.workspace_id,
-                    str(run_id),
-                    str(step_id),
-                ),
-            ).fetchone()
+            claimed = workflow.repository(work.connection).fail_expired_step(error, str(run_id), str(step_id)).fetchone()
             if claimed is None:
                 continue
-            failed_run = work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET status = 'failed', last_error = %s,
-                       revision = revision + 1,
-                       updated_at = CURRENT_TIMESTAMP,
-                       completed_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s
-                   AND status = 'running'
-                RETURNING run_id
-                """,
-                (error, workflow.context.workspace_id, str(run_id)),
-            ).fetchone()
+            failed_run = workflow.repository(work.connection).fail_run_for_expired_step(error, str(run_id)).fetchone()
             if failed_run is not None:
                 workflow._append_event(
                     work.connection,
@@ -245,21 +137,7 @@ def _supervise_once(workflow: PostgresWorkflowRuntime) -> None:
                 )
         resumable = [
             str(row[0])
-            for row in work.connection.execute(
-                """
-                SELECT DISTINCT run.run_id
-                  FROM omnix_workflow_runs AS run
-                  JOIN omnix_workflow_step_runs AS step
-                    ON step.workspace_id = run.workspace_id
-                   AND step.run_id = run.run_id
-                   AND step.step_id = run.current_step_id
-                 WHERE run.workspace_id = %s
-                   AND run.status = 'running'
-                   AND step.status IN ('pending','approved','completed')
-                 ORDER BY run.run_id
-                """,
-                (workflow.context.workspace_id,),
-            ).fetchall()
+            for row in workflow.repository(work.connection).runs_to_advance().fetchall()
         ]
         work.commit()
     for run_id in resumable:
@@ -275,34 +153,9 @@ def _supervise_once(workflow: PostgresWorkflowRuntime) -> None:
 def _enqueue_due_schedule_fires(workflow: PostgresWorkflowRuntime) -> None:
     now = datetime.now(timezone.utc)
     with unit_of_work(workflow.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT schedule_id, next_run_at, interval_seconds
-              FROM omnix_workflow_schedules
-             WHERE workspace_id = %s AND enabled
-               AND next_run_at IS NOT NULL
-               AND next_run_at <= CURRENT_TIMESTAMP
-             ORDER BY next_run_at, schedule_id
-             FOR UPDATE SKIP LOCKED
-             LIMIT 50
-            """,
-            (workflow.context.workspace_id,),
-        ).fetchall()
+        rows = workflow.repository(work.connection).due_schedules().fetchall()
         for schedule_id, scheduled_for, interval_seconds in rows:
-            work.connection.execute(
-                """
-                INSERT INTO omnix_workflow_schedule_fires (
-                    workspace_id, schedule_id, scheduled_for, status
-                ) VALUES (%s, %s, %s, 'pending')
-                ON CONFLICT (workspace_id, schedule_id, scheduled_for)
-                DO NOTHING
-                """,
-                (
-                    workflow.context.workspace_id,
-                    str(schedule_id),
-                    scheduled_for,
-                ),
-            )
+            workflow.repository(work.connection).insert_schedule_fire(str(schedule_id), scheduled_for)
             if interval_seconds is None:
                 next_run_at = None
                 enabled = False
@@ -317,41 +170,13 @@ def _enqueue_due_schedule_fires(workflow: PostgresWorkflowRuntime) -> None:
                     seconds=interval * intervals_to_advance
                 )
                 enabled = True
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_schedules
-                   SET last_enqueued_at = %s, next_run_at = %s,
-                       enabled = %s, updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND schedule_id = %s
-                """,
-                (
-                    scheduled_for,
-                    next_run_at,
-                    enabled,
-                    workflow.context.workspace_id,
-                    str(schedule_id),
-                ),
-            )
+            workflow.repository(work.connection).advance_schedule(scheduled_for, next_run_at, enabled, str(schedule_id))
         work.commit()
 
 
 def _dispatch_pending_schedule_fires(workflow: PostgresWorkflowRuntime) -> None:
     with unit_of_work(workflow.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT fire.schedule_id, fire.scheduled_for,
-                   schedule.workflow_id, schedule.workflow_version,
-                   schedule.input_payload
-              FROM omnix_workflow_schedule_fires AS fire
-              JOIN omnix_workflow_schedules AS schedule
-                ON schedule.workspace_id = fire.workspace_id
-               AND schedule.schedule_id = fire.schedule_id
-             WHERE fire.workspace_id = %s AND fire.status = 'pending'
-             ORDER BY fire.created_at, fire.schedule_id, fire.scheduled_for
-             LIMIT 50
-            """,
-            (workflow.context.workspace_id,),
-        ).fetchall()
+        rows = workflow.repository(work.connection).pending_schedule_fires().fetchall()
         work.rollback()
     for schedule_id, scheduled_for, workflow_id, version, input_payload in rows:
         definition = workflow._definition(
@@ -360,21 +185,7 @@ def _dispatch_pending_schedule_fires(workflow: PostgresWorkflowRuntime) -> None:
         )
         if definition is None:
             with unit_of_work(workflow.database) as work:
-                work.connection.execute(
-                    """
-                    UPDATE omnix_workflow_schedule_fires
-                       SET status = 'failed',
-                           last_error = 'workflow_definition_missing',
-                           updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND schedule_id = %s
-                       AND scheduled_for = %s AND status = 'pending'
-                    """,
-                    (
-                        workflow.context.workspace_id,
-                        str(schedule_id),
-                        scheduled_for,
-                    ),
-                )
+                workflow.repository(work.connection).fail_schedule_fire(str(schedule_id), scheduled_for)
                 work.commit()
             continue
         payload = dict(input_payload or {})
@@ -391,19 +202,5 @@ def _dispatch_pending_schedule_fires(workflow: PostgresWorkflowRuntime) -> None:
             log_recovered_exception("scheduled workflow dispatch", exc)
             continue
         with unit_of_work(workflow.database) as work:
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_schedule_fires
-                   SET status = 'started', run_id = %s, last_error = NULL,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND schedule_id = %s
-                   AND scheduled_for = %s AND status = 'pending'
-                """,
-                (
-                    run_id,
-                    workflow.context.workspace_id,
-                    str(schedule_id),
-                    scheduled_for,
-                ),
-            )
+            workflow.repository(work.connection).start_schedule_fire(run_id, str(schedule_id), scheduled_for)
             work.commit()

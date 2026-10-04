@@ -14,6 +14,7 @@ from .profiles import profile_produces_diff
 from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
+from .run_repository_queries import PostgresAgentRunQueries
 
 logger = logging.getLogger(__name__)
 
@@ -262,15 +263,7 @@ class AgentBudgetManager:
         repository: PostgresAgentRunRepository,
         run_id: str,
     ) -> None:
-        row = repository.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (repository.context.workspace_id, run_id),
-        ).fetchone()
+        row = PostgresAgentRunQueries(repository.connection, repository.context).lock_run(run_id).fetchone()
         if row is None:
             raise KeyError(run_id)
 
@@ -280,14 +273,7 @@ class AgentBudgetManager:
         snapshot: AgentRunSnapshot,
     ) -> tuple[str | None, int]:
         try:
-            row = repository.connection.execute(
-                """
-                SELECT stage, attempt
-                  FROM omnix_agent_coding_quality_state
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (repository.context.workspace_id, snapshot.run_id),
-            ).fetchone()
+            row = PostgresAgentRunQueries(repository.connection, repository.context).quality_stage(snapshot.run_id).fetchone()
         except Exception:
             return None, 1
         return (str(row[0]), max(1, int(row[1] or 1))) if row else (None, 1)

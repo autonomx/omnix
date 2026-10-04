@@ -25,6 +25,52 @@ class PostgresPlanningRepository:
         self.connection = connection
         self.context = context
 
+    def lock_state(self, run_id: str) -> None:
+        """Row-lock the run's planning state for the rest of the transaction."""
+        self.connection.execute(
+            """
+            SELECT run_id
+              FROM omnix_agent_planning_state
+             WHERE workspace_id = %s AND run_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+
+    def completed_semantic_review_rejections(self, run_id: str, task_revision_id: str) -> int:
+        """Count completed blocking reviews in the current consensus cycle.
+
+        A successful approved plan ends a cycle. Structural rejections and reviewer
+        transport failures do not consume semantic consensus rounds.
+        """
+        row = self.connection.execute(
+            """
+            WITH last_approved AS (
+                SELECT COALESCE(MAX(sequence), 0) AS sequence
+                  FROM omnix_agent_plan_revisions
+                 WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
+                   AND status = 'approved'
+            )
+            SELECT COUNT(*)
+              FROM omnix_agent_plan_revisions, last_approved
+             WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
+               AND omnix_agent_plan_revisions.sequence > last_approved.sequence
+               AND status = 'rejected'
+               AND payload ? 'semantic_review'
+               AND payload -> 'semantic_review' IS NOT NULL
+               AND payload -> 'semantic_review' ->> 'status' = 'completed'
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                task_revision_id,
+                self.context.workspace_id,
+                run_id,
+                task_revision_id,
+            ),
+        ).fetchone()
+        return int(row[0] or 0)
+
     def get_state(self, run_id: str) -> dict[str, object] | None:
         row = self.connection.execute(
             """

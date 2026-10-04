@@ -375,18 +375,6 @@ def _inspection_response(mode, revision, evidence, candidates, lenses, state):
     }
 
 
-def _lock_planning_state(work, workspace_id: str, run_id: str) -> None:
-    work.connection.execute(
-        """
-        SELECT run_id
-          FROM omnix_agent_planning_state
-         WHERE workspace_id = %s AND run_id = %s
-         FOR UPDATE
-        """,
-        (workspace_id, run_id),
-    ).fetchone()
-
-
 def _unknown_command_is_explicitly_planned(plan, command: str) -> bool:
     if plan is None or not command.strip():
         return False
@@ -410,47 +398,6 @@ def _candidate_review_signature(candidates) -> tuple[tuple[object, ...], ...]:
         )
         for item in candidates
     )
-
-
-def _completed_semantic_review_rejections(
-    work,
-    workspace_id: str,
-    run_id: str,
-    task_revision_id: str,
-) -> int:
-    """Count completed blocking reviews in the current consensus cycle.
-
-    A successful approved plan ends a cycle. Structural rejections and reviewer
-    transport failures do not consume semantic consensus rounds.
-    """
-
-    row = work.connection.execute(
-        """
-        WITH last_approved AS (
-            SELECT COALESCE(MAX(sequence), 0) AS sequence
-              FROM omnix_agent_plan_revisions
-             WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
-               AND status = 'approved'
-        )
-        SELECT COUNT(*)
-          FROM omnix_agent_plan_revisions, last_approved
-         WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
-           AND omnix_agent_plan_revisions.sequence > last_approved.sequence
-           AND status = 'rejected'
-           AND payload ? 'semantic_review'
-           AND payload -> 'semantic_review' IS NOT NULL
-           AND payload -> 'semantic_review' ->> 'status' = 'completed'
-        """,
-        (
-            workspace_id,
-            run_id,
-            task_revision_id,
-            workspace_id,
-            run_id,
-            task_revision_id,
-        ),
-    ).fetchone()
-    return int(row[0] or 0)
 
 
 def _plan_next_action(
@@ -599,7 +546,7 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
 
         # Serialize lineage while producing the immutable review snapshot. The
         # lock is deliberately released before the model review call below.
-        _lock_planning_state(work, service.context.workspace_id, run_id)
+        planning.lock_state(run_id)
         state = planning.get_state(run_id) or state
         active_id = str(state.get("active_plan_revision_id") or "") or None
 
@@ -680,12 +627,7 @@ def _previous_plan_revision(request, amend, active_id, planning, run_id, revisio
 def _semantic_plan_review(failures, review_required, work, service, run_id, revision, max_review_rounds, active_id, baseline_id, authority, candidates, snapshot, submission, evidence, runs, planning, paths, baseline, review_round, semantic_review):
     """Model review of the plan outside the lineage lock; every authority-bearing input is revalidated after it."""
     if not failures and review_required:
-        completed_rejections = _completed_semantic_review_rejections(
-            work,
-            service.context.workspace_id,
-            run_id,
-            revision.revision_id,
-        )
+        completed_rejections = planning.completed_semantic_review_rejections(run_id, revision.revision_id)
         if completed_rejections >= max_review_rounds:
             failures.append("plan_semantic_review_consensus_exhausted")
         else:
@@ -717,7 +659,7 @@ def _semantic_plan_review(failures, review_required, work, service, run_id, revi
             except AgentBudgetError as exc:
                 raise _planning_budget_http_exception(exc) from exc
 
-            _lock_planning_state(work, service.context.workspace_id, run_id)
+            planning.lock_state(run_id)
             refreshed_revision = _current_revision(service, runs, run_id)
             refreshed_state = planning.get_state(run_id)
             refreshed_active_id = (

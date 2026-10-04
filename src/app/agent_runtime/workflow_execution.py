@@ -34,50 +34,15 @@ def _resolve_approval(workflow: PostgresWorkflowRuntime, run_id: str, step_id: s
     with unit_of_work(workflow.database) as work:
         if approved:
             # The approver is kept with the step until it executes (WP-4.5).
-            row = work.connection.execute(
-                """
-                UPDATE omnix_workflow_step_runs
-                   SET status = 'approved', result = jsonb_build_object('approved_by', %s::text)
-                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'waiting_for_approval'
-                RETURNING step_id
-                """,
-                (approved_by, workflow.context.workspace_id, run_id, step_id),
-            ).fetchone()
+            row = workflow.repository(work.connection).approve_step(approved_by, run_id, step_id).fetchone()
             if row is None:
                 raise WorkflowRuntimeError("workflow step is not waiting for approval")
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET status = 'running', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (workflow.context.workspace_id, run_id),
-            )
+            workflow.repository(work.connection).resume_run_after_approval(run_id)
         else:
-            row = work.connection.execute(
-                """
-                UPDATE omnix_workflow_step_runs
-                   SET status = 'failed', last_error = 'approval_rejected',
-                       completed_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'waiting_for_approval'
-                RETURNING step_id
-                """,
-                (workflow.context.workspace_id, run_id, step_id),
-            ).fetchone()
+            row = workflow.repository(work.connection).reject_step(run_id, step_id).fetchone()
             if row is None:
                 raise WorkflowRuntimeError("workflow step is not waiting for approval")
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET status = 'cancelled', last_error = 'approval_rejected',
-                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP,
-                       completed_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (workflow.context.workspace_id, run_id),
-            )
+            workflow.repository(work.connection).cancel_run_after_rejection(run_id)
         workflow._append_event(
             work.connection,
             WorkflowEvent(
@@ -289,15 +254,7 @@ def _execute_step(
 
 def _context(workflow: PostgresWorkflowRuntime, run_id: str, input_payload: dict[str, Any]) -> dict[str, Any]:
     with unit_of_work(workflow.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT step_id, result
-              FROM omnix_workflow_step_runs
-             WHERE workspace_id = %s AND run_id = %s AND result IS NOT NULL
-             ORDER BY ordinal
-            """,
-            (workflow.context.workspace_id, run_id),
-        ).fetchall()
+        rows = workflow.repository(work.connection).step_results(run_id).fetchall()
         work.rollback()
     return {
         "input": input_payload,

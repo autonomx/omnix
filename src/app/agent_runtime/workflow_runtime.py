@@ -22,6 +22,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from app.capabilities import default_capability_registry
 from .interfaces import WorkflowRuntime
+from .workflow_repository import PostgresWorkflowRepository
 from .workflows import (
     WorkflowDefinition,
     WorkflowEvent,
@@ -57,48 +58,21 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self._supervisor_lock = threading.Lock()
         self._supervisor_stop = threading.Event()
 
+    def repository(self, connection: Any) -> PostgresWorkflowRepository:
+        """The workflow tables on ``connection``, scoped to the current tenant."""
+        return PostgresWorkflowRepository(connection, self.context)
+
     def _append_event(
         self,
         connection,
         event: WorkflowEvent,
     ) -> WorkflowEvent:
-        locked = connection.execute(
-            """
-            SELECT revision
-              FROM omnix_workflow_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (self.context.workspace_id, event.run_id),
-        ).fetchone()
+        locked = self.repository(connection).lock_run_revision(event.run_id).fetchone()
         if locked is None:
             raise KeyError(event.run_id)
-        row = connection.execute(
-            """
-            SELECT COALESCE(MAX(sequence), 0) + 1
-              FROM omnix_workflow_run_events
-             WHERE workspace_id = %s AND run_id = %s
-            """,
-            (self.context.workspace_id, event.run_id),
-        ).fetchone()
+        row = self.repository(connection).next_event_sequence(event.run_id).fetchone()
         stored = event.model_copy(update={"sequence": int(row[0])})
-        connection.execute(
-            """
-            INSERT INTO omnix_workflow_run_events (
-                workspace_id, run_id, sequence, event_id,
-                event_type, payload, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
-            """,
-            (
-                self.context.workspace_id,
-                stored.run_id,
-                stored.sequence,
-                stored.event_id,
-                stored.event_type,
-                _json(stored.payload),
-                stored.created_at,
-            ),
-        )
+        self.repository(connection).insert_event(stored.run_id, stored.sequence, stored.event_id, stored.event_type, _json(stored.payload), stored.created_at)
         PostgresOutboxRepository(connection).append(
             self.context,
             aggregate_type="workflow_run",
@@ -113,31 +87,9 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def register(self, definition: WorkflowDefinition) -> WorkflowDefinition:
         self._validate_definition_capabilities(definition)
         with unit_of_work(self.database) as work:
-            inserted = work.connection.execute(
-                """
-                INSERT INTO omnix_workflow_definitions (
-                    workspace_id, workflow_id, version, name, definition, active
-                ) VALUES (%s, %s, %s, %s, %s::jsonb, TRUE)
-                ON CONFLICT (workspace_id, workflow_id, version) DO NOTHING
-                RETURNING workflow_id
-                """,
-                (
-                    self.context.workspace_id,
-                    definition.id,
-                    definition.version,
-                    definition.name,
-                    _json(definition),
-                ),
-            ).fetchone()
+            inserted = self.repository(work.connection).insert_definition(definition.id, definition.version, definition.name, _json(definition)).fetchone()
             if inserted is None:
-                row = work.connection.execute(
-                    """
-                    SELECT definition
-                      FROM omnix_workflow_definitions
-                     WHERE workspace_id = %s AND workflow_id = %s AND version = %s
-                    """,
-                    (self.context.workspace_id, definition.id, definition.version),
-                ).fetchone()
+                row = self.repository(work.connection).definition_by_version(definition.id, definition.version).fetchone()
                 if row is None:
                     raise WorkflowRuntimeError("workflow_version_conflict")
                 existing = WorkflowDefinition.model_validate(row[0])
@@ -172,15 +124,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
 
     def list_definitions(self) -> list[WorkflowDefinition]:
         with unit_of_work(self.database) as work:
-            rows = work.connection.execute(
-                """
-                SELECT DISTINCT ON (workflow_id) definition
-                  FROM omnix_workflow_definitions
-                 WHERE workspace_id = %s AND active
-                 ORDER BY workflow_id, version DESC
-                """,
-                (self.context.workspace_id,),
-            ).fetchall()
+            rows = self.repository(work.connection).active_definitions().fetchall()
             work.rollback()
         return [WorkflowDefinition.model_validate(row[0]) for row in rows]
 
@@ -189,17 +133,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         if not value:
             return None
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """
-                SELECT workflow_id
-                  FROM omnix_workflow_definitions
-                 WHERE workspace_id = %s AND active
-                   AND (lower(workflow_id) = %s OR lower(name) = %s OR lower(name) LIKE %s)
-                 ORDER BY version DESC
-                 LIMIT 1
-                """,
-                (self.context.workspace_id, value, value, f"%{value}%"),
-            ).fetchone()
+            row = self.repository(work.connection).lookup_workflow_id(value, value, f"%{value}%").fetchone()
             work.rollback()
         return str(row[0]) if row else None
 
@@ -218,37 +152,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         run_id = uuid.uuid4().hex
         idempotency_key = str(input_payload.get("idempotency_key") or "").strip() or None
         with unit_of_work(self.database) as work:
-            inserted = work.connection.execute(
-                """
-                INSERT INTO omnix_workflow_runs (
-                    workspace_id, run_id, workflow_id, workflow_version,
-                    input_payload, status, current_step_id, idempotency_key
-                ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s)
-                ON CONFLICT (workspace_id, idempotency_key) DO NOTHING
-                RETURNING run_id
-                """,
-                (
-                    self.context.workspace_id,
-                    run_id,
-                    definition.id,
-                    definition.version,
-                    _json(input_payload),
-                    "running" if definition.steps else "completed",
-                    definition.steps[0].id if definition.steps else None,
-                    idempotency_key,
-                ),
-            ).fetchone()
+            inserted = self.repository(work.connection).insert_run(run_id, definition.id, definition.version, _json(input_payload), "running" if definition.steps else "completed", definition.steps[0].id if definition.steps else None, idempotency_key).fetchone()
             if inserted is None:
                 if not idempotency_key:
                     raise WorkflowRuntimeError("workflow_run_insert_conflict")
-                existing = work.connection.execute(
-                    """
-                    SELECT run_id, workflow_id, workflow_version
-                      FROM omnix_workflow_runs
-                     WHERE workspace_id = %s AND idempotency_key = %s
-                    """,
-                    (self.context.workspace_id, idempotency_key),
-                ).fetchone()
+                existing = self.repository(work.connection).run_by_idempotency_key(idempotency_key).fetchone()
                 if existing is None:
                     raise WorkflowRuntimeError("workflow_idempotency_conflict")
                 if (
@@ -261,14 +169,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 work.rollback()
                 return str(existing[0])
             for ordinal, step in enumerate(definition.steps):
-                work.connection.execute(
-                    """
-                    INSERT INTO omnix_workflow_step_runs (
-                        workspace_id, run_id, step_id, ordinal, status
-                    ) VALUES (%s, %s, %s, %s, 'pending')
-                    """,
-                    (self.context.workspace_id, run_id, step.id, ordinal),
-                )
+                self.repository(work.connection).insert_step_run(run_id, step.id, ordinal)
             self._append_event(
                 work.connection,
                 WorkflowEvent(
@@ -295,21 +196,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         after_sequence: int = 0,
     ) -> list[WorkflowEvent]:
         with unit_of_work(self.database) as work:
-            rows = work.connection.execute(
-                """
-                SELECT event_id, sequence, event_type, payload, created_at
-                  FROM omnix_workflow_run_events
-                 WHERE workspace_id = %s AND run_id = %s
-                   AND sequence > %s
-                 ORDER BY sequence
-                 LIMIT 5000
-                """,
-                (
-                    self.context.workspace_id,
-                    run_id,
-                    max(0, int(after_sequence)),
-                ),
-            ).fetchall()
+            rows = self.repository(work.connection).events_after(run_id, max(0, int(after_sequence))).fetchall()
             work.rollback()
         return [
             WorkflowEvent(
@@ -332,27 +219,9 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         bounded = max(1, min(int(limit), 1000))
         with unit_of_work(self.database) as work:
             if workflow_id is None:
-                rows = work.connection.execute(
-                    """
-                    SELECT run_id
-                      FROM omnix_workflow_runs
-                     WHERE workspace_id = %s
-                     ORDER BY created_at DESC, run_id DESC
-                     LIMIT %s
-                    """,
-                    (self.context.workspace_id, bounded),
-                ).fetchall()
+                rows = self.repository(work.connection).recent_run_ids(bounded).fetchall()
             else:
-                rows = work.connection.execute(
-                    """
-                    SELECT run_id
-                      FROM omnix_workflow_runs
-                     WHERE workspace_id = %s AND workflow_id = %s
-                     ORDER BY created_at DESC, run_id DESC
-                     LIMIT %s
-                    """,
-                    (self.context.workspace_id, workflow_id, bounded),
-                ).fetchall()
+                rows = self.repository(work.connection).recent_run_ids_for_workflow(workflow_id, bounded).fetchall()
             work.rollback()
         result: list[dict[str, object]] = []
         for row in rows:
@@ -430,16 +299,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def get_status(self, run_id: str) -> dict[str, object] | None:
         self._ensure_supervisor()
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """
-                SELECT workflow_id, workflow_version, status, current_step_id,
-                       input_payload, revision, last_error,
-                       created_at, updated_at, completed_at
-                  FROM omnix_workflow_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (self.context.workspace_id, run_id),
-            ).fetchone()
+            row = self.repository(work.connection).run_status_row(run_id).fetchone()
             work.rollback()
         if row is None:
             return None
@@ -627,22 +487,9 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def _definition(self, workflow_id: str, *, version: int | None = None) -> WorkflowDefinition | None:
         with unit_of_work(self.database) as work:
             if version is None:
-                row = work.connection.execute(
-                    """
-                    SELECT definition FROM omnix_workflow_definitions
-                     WHERE workspace_id = %s AND workflow_id = %s AND active
-                     ORDER BY version DESC LIMIT 1
-                    """,
-                    (self.context.workspace_id, workflow_id),
-                ).fetchone()
+                row = self.repository(work.connection).latest_active_definition(workflow_id).fetchone()
             else:
-                row = work.connection.execute(
-                    """
-                    SELECT definition FROM omnix_workflow_definitions
-                     WHERE workspace_id = %s AND workflow_id = %s AND version = %s
-                    """,
-                    (self.context.workspace_id, workflow_id, version),
-                ).fetchone()
+                row = self.repository(work.connection).definition_by_version(workflow_id, version).fetchone()
             work.rollback()
         return WorkflowDefinition.model_validate(row[0]) if row else None
 

@@ -35,6 +35,7 @@ from .semantic_task_parser import (
 )
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from typing import TYPE_CHECKING
+from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
     from app.agent_runtime.service_core import AgentRunService
@@ -561,15 +562,7 @@ def _start_superseding_revision(
 
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
-        locked = work.connection.execute(
-            """
-            SELECT superseded_by_run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (service.context.workspace_id, current.run_id),
-        ).fetchone()
+        locked = PostgresAgentRunQueries(work.connection, service.context).lock_superseding_run_id(current.run_id).fetchone()
         if locked is None:
             raise KeyError(current.run_id)
         existing_replacement_id = str(locked[0]) if locked[0] else None
@@ -630,15 +623,7 @@ def _submit_superseding_revision(
     service._validate_evidence_authority(issued)
     with service.unit_of_work(service.database) as work:
         repository = service.repository_factory(work.connection, service.context)
-        locked = work.connection.execute(
-            """
-            SELECT superseded_by_run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (service.context.workspace_id, current.run_id),
-        ).fetchone()
+        locked = PostgresAgentRunQueries(work.connection, service.context).lock_superseding_run_id(current.run_id).fetchone()
         if locked is None:
             raise KeyError(current.run_id)
         existing_id = str(locked[0]) if locked[0] else None

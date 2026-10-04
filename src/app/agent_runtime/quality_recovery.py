@@ -25,6 +25,7 @@ from .review_orchestration import (
     review_snapshot_id_from_child,
 )
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
+from .run_repository_queries import PostgresAgentRunQueries
 
 _TERMINAL = {"completed", "failed", "cancelled"}
 
@@ -61,16 +62,7 @@ def _owned_active_run_ids(service: Any) -> list[str]:
     """Read lease-renewal targets without taking the service runtime lock."""
 
     with unit_of_work(service.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND worker_id = %s
-               AND status NOT IN ('completed','failed','cancelled')
-             ORDER BY created_at, run_id
-            """,
-            (service.context.workspace_id, service.worker_id),
-        ).fetchall()
+        rows = PostgresAgentRunQueries(work.connection, service.context).owned_active_run_ids(service.worker_id).fetchall()
         work.rollback()
     return [str(row[0]) for row in rows]
 
@@ -163,7 +155,7 @@ def _ensure_independent_lease_heartbeat(service: Any) -> None:
     ).start()
 
 
-def orphaned_quality_review_run_ids(connection: Any, workspace_id: str) -> list[str]:
+def orphaned_quality_review_run_ids(connection: Any, context: Any) -> list[str]:
     """Return parents whose durable quality protocol still needs reconciliation.
 
     Historical callers know this function by its orphan-recovery name, but it is
@@ -172,24 +164,7 @@ def orphaned_quality_review_run_ids(connection: Any, workspace_id: str) -> list[
     reviewer approval and final acceptance cannot leave a run stranded forever.
     """
 
-    rows = connection.execute(
-        """
-        SELECT run.run_id
-          FROM omnix_agent_runs AS run
-          JOIN omnix_agent_coding_quality_state AS quality
-            ON quality.workspace_id = run.workspace_id
-           AND quality.run_id = run.run_id
-         WHERE run.workspace_id = %s
-           AND run.desired_state = 'running'
-           AND (
-                (run.status = 'waiting_for_children' AND quality.stage = 'reviewing')
-                OR
-                (run.status = 'running' AND quality.stage = 'acceptance')
-           )
-         ORDER BY run.created_at, run.run_id
-        """,
-        (workspace_id,),
-    ).fetchall()
+    rows = PostgresAgentRunQueries(connection, context).quality_reconciliation_run_ids().fetchall()
     return [str(row[0]) for row in rows]
 
 
@@ -294,10 +269,7 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
     _ensure_independent_lease_heartbeat(service)
 
     with unit_of_work(service.database) as work:
-        run_ids = orphaned_quality_review_run_ids(
-            work.connection,
-            service.context.workspace_id,
-        )
+        run_ids = orphaned_quality_review_run_ids(work.connection, service.context)
         work.rollback()
 
     reconciled: list[str] = []
@@ -310,15 +282,7 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
             # Normal reviewer callbacks may be finishing the same parent. Do not
             # wait into the database lock timeout; skip this supervisor pass and
             # let the next idempotent pass reconcile it.
-            locked = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                 FOR UPDATE SKIP LOCKED
-                """,
-                (service.context.workspace_id, run_id),
-            ).fetchone()
+            locked = PostgresAgentRunQueries(work.connection, service.context).lock_run_skip_locked(run_id).fetchone()
             if locked is None:
                 work.rollback()
                 continue

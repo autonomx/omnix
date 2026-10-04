@@ -42,6 +42,7 @@ from .review_runtime import (
 )
 from .subagents import ChildRunRequest, default_reviewer_limits, derive_child_spec
 from app.prompts import prompt_template
+from .run_repository_queries import PostgresAgentRunQueries
 
 
 REVIEW_PROMPT_WITH_CONTEXT_TEMPLATE = prompt_template(
@@ -207,15 +208,7 @@ def launch_reviewer_children(
         with service._run_lock(parent_run_id):
             with service.unit_of_work(service.database) as work:
                 repository = service.repository_factory(work.connection, service.context)
-                locked = work.connection.execute(
-                    """
-                    SELECT run_id
-                      FROM omnix_agent_runs
-                     WHERE workspace_id = %s AND run_id = %s
-                     FOR UPDATE
-                    """,
-                    (service.context.workspace_id, parent_run_id),
-                ).fetchone()
+                locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(parent_run_id).fetchone()
                 if locked is None:
                     work.rollback()
                     return
@@ -825,15 +818,7 @@ def finalize_reviewer_child_in_repository(
         or child.status not in _TERMINAL
     ):
         return False
-    locked = repository.connection.execute(
-        """
-        SELECT run_id
-          FROM omnix_agent_runs
-         WHERE workspace_id = %s AND run_id = %s
-         FOR UPDATE
-        """,
-        (repository.context.workspace_id, child.spec.parent_run_id),
-    ).fetchone()
+    locked = PostgresAgentRunQueries(repository.connection, repository.context).lock_run(child.spec.parent_run_id).fetchone()
     if locked is None:
         return False
     parent = repository.get_run(child.spec.parent_run_id)

@@ -22,6 +22,7 @@ from .service_core import (
     _progress_idle_timeout_seconds,
     _stalled_recovery_limit,
 )
+from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
     from app.agent_runtime.service_core import AgentRunService
@@ -62,20 +63,7 @@ def recover_orphaned_runs(service: AgentRunService) -> list[str]:
     """Re-acquire expired/unowned non-terminal runs and resume from workspace truth."""
     recovered: list[str] = []
     with service.unit_of_work(service.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT run.run_id
-              FROM omnix_agent_runs AS run
-              LEFT JOIN omnix_agent_worker_leases AS lease
-                ON lease.workspace_id = run.workspace_id AND lease.run_id = run.run_id
-             WHERE run.workspace_id = %s
-               AND run.status IN ('starting','running','resume_requested')
-               AND run.desired_state = 'running'
-               AND (lease.run_id IS NULL OR lease.lease_expires_at <= CURRENT_TIMESTAMP)
-             ORDER BY run.created_at
-            """,
-            (service.context.workspace_id,),
-        ).fetchall()
+        rows = PostgresAgentRunQueries(work.connection, service.context).orphaned_run_ids().fetchall()
         work.rollback()
     for row in rows:
         run_id = str(row[0])
@@ -166,15 +154,7 @@ def recover_orphaned_runs(service: AgentRunService) -> list[str]:
 def _fail_recovery(service: AgentRunService, run_id: str, exc: Exception) -> None:
     service.runtime.close_run(run_id)
     with service.unit_of_work(service.database) as work:
-        locked = work.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (service.context.workspace_id, run_id),
-        ).fetchone()
+        locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(run_id).fetchone()
         if locked is None:
             work.rollback()
             return
@@ -211,15 +191,7 @@ def _supervisor_loop(service: AgentRunService) -> None:
 
 def _supervise_once(service: AgentRunService) -> None:
     with service.unit_of_work(service.database) as work:
-        rows = work.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND worker_id = %s
-               AND status NOT IN ('completed','failed','cancelled')
-            """,
-            (service.context.workspace_id, service.worker_id),
-        ).fetchall()
+        rows = PostgresAgentRunQueries(work.connection, service.context).owned_unfinished_run_ids(service.worker_id).fetchall()
         work.rollback()
     for row in rows:
         run_id = str(row[0])
@@ -296,20 +268,7 @@ def _supervise_once(service: AgentRunService) -> None:
             )
 
     with service.unit_of_work(service.database) as work:
-        terminal_parents = work.connection.execute(
-            """
-            SELECT DISTINCT parent.run_id
-              FROM omnix_agent_runs AS parent
-              JOIN omnix_agent_runs AS child
-                ON child.workspace_id = parent.workspace_id
-               AND child.parent_run_id = parent.run_id
-             WHERE parent.workspace_id = %s
-               AND parent.status IN ('completed','failed','cancelled')
-               AND child.status NOT IN ('completed','failed','cancelled')
-             ORDER BY parent.run_id
-            """,
-            (service.context.workspace_id,),
-        ).fetchall()
+        terminal_parents = PostgresAgentRunQueries(work.connection, service.context).finished_parents_with_unfinished_children().fetchall()
         work.rollback()
     for row in terminal_parents:
         service._cancel_descendants(str(row[0]))
@@ -317,16 +276,7 @@ def _supervise_once(service: AgentRunService) -> None:
     active_ids = service.runtime.active_run_ids()
     if active_ids:
         with service.unit_of_work(service.database) as work:
-            terminal_runtime_rows = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s
-                   AND run_id = ANY(%s)
-                   AND status IN ('completed','failed','cancelled')
-                """,
-                (service.context.workspace_id, list(active_ids)),
-            ).fetchall()
+            terminal_runtime_rows = PostgresAgentRunQueries(work.connection, service.context).finished_run_ids(list(active_ids)).fetchall()
             work.rollback()
         for row in terminal_runtime_rows:
             service.runtime.close_run(str(row[0]))

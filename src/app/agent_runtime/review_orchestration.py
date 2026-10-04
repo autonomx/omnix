@@ -17,6 +17,7 @@ from .candidate_test_validation import (
 )
 from .contracts import AgentEvent
 from .repository import PostgresAgentRunRepository
+from .run_repository_queries import PostgresAgentRunQueries
 
 
 # Explicit aliases preserve the existing import surface without mutating the
@@ -58,15 +59,7 @@ def _redirect_missing_candidate_tests_before_review(
     with service._run_lock(parent_run_id):
         with service.unit_of_work(service.database) as work:
             repository = service.repository_factory(work.connection, service.context)
-            locked = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                 FOR UPDATE
-                """,
-                (service.context.workspace_id, parent_run_id),
-            ).fetchone()
+            locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(parent_run_id).fetchone()
             if locked is None:
                 work.rollback()
                 return False
