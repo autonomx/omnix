@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
+import type { RpgWorldGenerationRun } from './api/rpgWorldLibraryClient';
 import { RpgWorldGenerationPanel } from './RpgWorldGenerationPanel';
 import { createTestQueryClient } from '../../test/renderWithProviders';
 

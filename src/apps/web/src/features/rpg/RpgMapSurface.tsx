@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { applyRpgMapAction } from '../../api/rpgMapActionClient';
+import { applyRpgMapAction } from './api/rpgMapActionClient';
 import {
   getRpgMapDefinition,
   getRpgMapOverlay,
@@ -10,7 +10,7 @@ import {
   type RpgMapObjectDynamicState,
   type RpgMapOverlay,
   type RpgMapOverlayResponse,
-} from '../../api/rpgMapClient';
+} from './api/rpgMapClient';
 import { RpgMapChildControls, RpgMapHierarchyNav } from './RpgMapHierarchyNav';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
 import './RpgMapSurface.css';

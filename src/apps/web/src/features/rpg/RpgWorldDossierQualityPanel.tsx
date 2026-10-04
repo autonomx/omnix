@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { rpgWorldAuthoringClient } from '../../api/rpgWorldAuthoringClient';
+import { rpgWorldAuthoringClient } from './api/rpgWorldAuthoringClient';
 import './RpgWorldDossierQualityPanel.css';
 
 interface RpgWorldDossierQualityPanelProps {

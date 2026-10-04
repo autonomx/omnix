@@ -1,4 +1,4 @@
-import type { RpgNewGameRequest } from './client';
+import type { RpgNewGameRequest } from '../../../api/client';
 import { withRpgGenesisContract as withBaseRpgGenesisContract } from './rpgGenesis';
 
 function asRecord(value: unknown): Record<string, unknown> {

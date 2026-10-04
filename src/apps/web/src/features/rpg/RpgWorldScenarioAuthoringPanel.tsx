@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioSummary,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import {
   certification,
   matchingRelease,

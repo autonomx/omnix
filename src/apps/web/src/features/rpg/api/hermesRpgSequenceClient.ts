@@ -1,4 +1,4 @@
-import { omnixApiClient } from './client';
+import { omnixApiClient } from '../../../api/client';
 
 export type HermesRpgSequenceRequest = {
   session_id?: string;

@@ -1,5 +1,5 @@
 import type { RpgAuthoringEntityCard } from './rpgWorldAuthoringClient';
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 
 export interface RpgCampaignLoreResponse {
   ok: boolean;

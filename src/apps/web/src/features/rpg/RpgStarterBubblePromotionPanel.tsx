@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
   type RpgStarterBubbleResponse,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import './RpgStarterBubblePromotionPanel.css';
 
 function record(value: unknown): Record<string, unknown> {

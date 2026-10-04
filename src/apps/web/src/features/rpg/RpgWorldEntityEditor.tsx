@@ -6,7 +6,7 @@ import {
   type RpgAuthoringEntityCard,
   type RpgAuthoringEntityDossier,
   type RpgAuthoringTopic,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import { RpgWorldDossierSectionEditor } from './RpgWorldDossierSectionEditor';
 
 interface RpgWorldEntityEditorProps {

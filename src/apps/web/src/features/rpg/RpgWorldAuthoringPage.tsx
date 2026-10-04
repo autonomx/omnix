@@ -6,9 +6,9 @@ import type {
   RpgAuthoringEntityCard,
   RpgAuthoringPage,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import { rpgWorldImageClient } from './api/rpgWorldImageClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import {
   documentAnchors,
   presentLoreBlocks,

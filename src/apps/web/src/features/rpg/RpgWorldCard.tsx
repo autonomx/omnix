@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import './RpgWorldCampaignCatalog.css';
 
 function text(value: unknown): string {

@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
-import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
+import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import {
   getHermesRouteDecision,
   getHermesRpgSuggestions,
   readHermesRpgTurn,
   type HermesRpgSuggestion,
-} from '../../api/hermesClient';
-import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
+} from './api/hermesClient';
+import { checkHermesRpgSequence } from './api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';

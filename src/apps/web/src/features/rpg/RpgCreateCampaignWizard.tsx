@@ -8,7 +8,7 @@ import {
   type RpgScenarioSummary,
   type RpgWorldRelease,
   type RpgWorldSummary,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import { loadSettingsProfile } from '../settings';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
 import { RpgWorldCampaignCatalog } from './RpgWorldCampaignCatalog';

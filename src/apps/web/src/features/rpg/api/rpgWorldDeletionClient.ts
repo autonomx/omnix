@@ -1,4 +1,4 @@
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 export interface RpgWorldDeletionBlocker {
   code: string;
   count: number;

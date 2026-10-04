@@ -5,7 +5,7 @@ import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
   type RpgWorldRelease,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import './RpgWorldCampaignSetup.css';
 
 interface RpgWorldCampaignSetupProps {

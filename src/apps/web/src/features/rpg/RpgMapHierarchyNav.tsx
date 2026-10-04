@@ -1,4 +1,4 @@
-import type { RpgMapDefinition } from '../../api/rpgMapClient';
+import type { RpgMapDefinition } from './api/rpgMapClient';
 import './RpgMapHierarchyNav.css';
 
 export function RpgMapHierarchyNav({

@@ -1,5 +1,5 @@
 import type { RpgWorldGenerationRun, RpgWorldSummary } from './rpgWorldLibraryClient';
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 
 export type RpgAuthoringGroup = 'workspace' | 'world' | 'lore' | 'game-master';
 export type RpgAuthoringPageKind = 'document' | 'collection';

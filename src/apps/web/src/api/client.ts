@@ -1,7 +1,7 @@
 import type { components, paths } from './generated/types';
 import { ApiError, ApiTimeoutError } from './errors';
 import { createGatewayClient, requestTimeout, unwrap, type GatewayClient } from './http';
-import { withRpgGenesisContract } from './rpgGenesisPresentation';
+import { withRpgGenesisContract } from '../features/rpg/api/rpgGenesisPresentation';
 import { pipelineFetch } from './fetchPipeline';
 
 export { ApiError, ApiTimeoutError } from './errors';

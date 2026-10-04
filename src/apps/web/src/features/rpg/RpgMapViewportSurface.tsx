@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
-import type { RpgMapDefinition, RpgMapOverlay } from '../../api/rpgMapClient';
+import type { RpgMapDefinition, RpgMapOverlay } from './api/rpgMapClient';
 import { RpgMapObjectLayer, RpgMapObjectTooltip } from './RpgMapObjectInteractions';
 import {
   DEFAULT_RPG_MAP_LAYERS,

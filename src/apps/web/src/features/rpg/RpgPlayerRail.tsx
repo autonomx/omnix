@@ -1,5 +1,5 @@
-import type { HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
-import type { HermesRpgSuggestion } from '../../api/hermesClient';
+import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
+import type { HermesRpgSuggestion } from './api/hermesClient';
 import type {
   RpgGearPreview,
   RpgHeroSummaryPreview,

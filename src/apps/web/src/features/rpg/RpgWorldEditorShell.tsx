@@ -7,8 +7,8 @@ import {
   type RpgAuthoringGroup,
   type RpgAuthoringPage,
   type RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { RpgWorldAdvancedPanel } from './RpgWorldAdvancedPanel';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
 import {

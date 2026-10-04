@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringDocumentBlock } from './api/rpgWorldAuthoringClient';
 import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 
 const factBlock: RpgAuthoringDocumentBlock = {

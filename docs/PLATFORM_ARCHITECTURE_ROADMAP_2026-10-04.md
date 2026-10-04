@@ -835,7 +835,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-2.1 | not started | — | — | — | Needs a design first: the settings profile is one typed API document with every module's section and module-dispatched job defaults; assembling it from declared sections at composition must keep the OpenAPI document and persisted settings unchanged |
 | PA-2.2 | in progress | — | 2026-10-04 | tables_without_owner 0; historical_owner_map_additions 0; cross_module_sql 84 (AL016 baseline); kernel_named_module_tables 36 | Frozen historical owner map (248 tables) and generator; AL016 for Python SQL and module-folder migrations, with the retention registration exception. Remaining: drive the 84 references to zero (retention declarations, RPG repositories out of the kernel, module-record users) |
 | PA-2.3 | done | — | 2026-10-04 | app_migrations_in_kernel_dir 110 → 0; SCHEMA_KNOWN derived | Discovery in three places, derived `SCHEMA_KNOWN`, stem-based AL014, stray `.sql` lint; 110 single-owner migrations moved to their modules (schema dump identical on fresh databases); 37 kernel and multi-owner migrations stay |
-| PA-2.4 | not started | — | — | — | |
+| PA-2.4 | in progress | — | 2026-10-04 | web_feature_clients_in_shared_api 15 → 0 | Step 1 done: the 12 RPG and 3 Hermes clients (and their tests) moved with `git mv` into `features/rpg/api/`; imports rewritten. Remaining: route-owner export, per-feature generated types with re-exported shared schemas, ESLint boundary rules |
 | PA-2.5 | not started | — | — | — | |
 | PA-3.1 | not started | — | — | — | |
 | PA-3.2 | blocked | — | — | — | Waits for the memory v2 live switch |

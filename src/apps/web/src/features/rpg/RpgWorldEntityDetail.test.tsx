@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { RpgAuthoringEntityCard } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringEntityCard } from './api/rpgWorldAuthoringClient';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
 import { createTestQueryClient } from '../../test/renderWithProviders';
 

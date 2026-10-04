@@ -1,4 +1,4 @@
-import { omnixApiClient } from './client';
+import { omnixApiClient } from '../../../api/client';
 
 export type HermesRpgApprovedFlowConfig = {
   ok?: boolean;

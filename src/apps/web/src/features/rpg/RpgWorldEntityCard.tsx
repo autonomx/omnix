@@ -1,7 +1,7 @@
 import type {
   RpgAuthoringEntityCard,
   RpgAuthoringTopic,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
 import './RpgWorldCollectionToolbar.css';
 

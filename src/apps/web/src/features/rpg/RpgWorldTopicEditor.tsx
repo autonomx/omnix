@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
   type RpgAuthoringTopic,
-} from '../../api/rpgWorldAuthoringClient';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
 import './RpgWorldTopicEditor.css';
 
 interface RpgWorldTopicEditorProps {

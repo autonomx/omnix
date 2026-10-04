@@ -3,8 +3,8 @@ import type {
   RpgAuthoringDocumentPage,
   RpgAuthoringEntityCard,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import './RpgWorldOverviewDesign.css';
 

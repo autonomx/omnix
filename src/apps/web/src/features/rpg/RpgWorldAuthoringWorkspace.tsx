@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
   type RpgWorldSummary,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import { RpgWorldCampaignSetup } from './RpgWorldCampaignSetup';
 import { RpgWorldCard } from './RpgWorldCard';
 import {

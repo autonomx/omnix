@@ -1,4 +1,4 @@
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 export interface RpgWorldProfilePresentation {
   page_kind?: 'document' | 'collection' | string;
   card_variant?: string;

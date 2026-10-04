@@ -1,5 +1,5 @@
 import type { RpgWorldSummary } from './rpgWorldLibraryClient';
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 
 export interface RpgWorldImageAttempt {
   job_id: string;

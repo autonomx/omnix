@@ -1,4 +1,4 @@
-import { omnixApiClient } from './client';
+import { omnixApiClient } from '../../../api/client';
 import type { RpgMapOverlay } from './rpgMapClient';
 
 export interface RpgMapActionRequest {

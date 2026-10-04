@@ -6,7 +6,7 @@ import type {
   RpgMapOverlay,
   RpgMapRouteGeometry,
   RpgMapRouteOverlay,
-} from '../../api/rpgMapClient';
+} from './api/rpgMapClient';
 
 export interface RpgMapLayerVisibility {
   fog: boolean;

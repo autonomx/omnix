@@ -1,4 +1,4 @@
-import type { RpgCapability, RpgNewGameRequest } from './client';
+import type { RpgCapability, RpgNewGameRequest } from '../../../api/client';
 
 const GENESIS_VERSION = 'rpg_genesis_v2';
 

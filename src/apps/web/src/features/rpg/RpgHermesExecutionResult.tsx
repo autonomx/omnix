@@ -1,4 +1,4 @@
-import type { HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
+import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 
 interface RpgHermesExecutionResultProps {
   result?: HermesRpgApprovedFlowResponse | null;

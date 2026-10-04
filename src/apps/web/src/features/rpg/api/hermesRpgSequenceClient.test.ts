@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from './client';
+import { omnixApiClient } from '../../../api/client';
 import { checkHermesRpgSequence } from './hermesRpgSequenceClient';
 
-vi.mock('./client', () => ({
+vi.mock('../../../api/client', () => ({
   omnixApiClient: {
     post: vi.fn(),
   },

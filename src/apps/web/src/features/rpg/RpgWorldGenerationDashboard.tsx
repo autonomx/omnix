@@ -6,12 +6,12 @@ import {
   type RpgAuthoringSection,
   type RpgDossierEnrichmentCandidate,
   type RpgWorldTokenUsage,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import {
   rpgWorldGenerationReviewClient,
   type RpgWorldGenerationTopicResult,
-} from '../../api/rpgWorldGenerationReviewClient';
-import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldGenerationReviewClient';
+import type { RpgWorldGenerationRun } from './api/rpgWorldLibraryClient';
 import { RpgWorldGenerationCandidateReview } from './RpgWorldGenerationCandidateReview';
 import {
   RpgWorldGenerationPanel,

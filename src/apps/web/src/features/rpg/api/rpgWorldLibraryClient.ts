@@ -1,4 +1,4 @@
-import { pipelineFetch } from './fetchPipeline';
+import { pipelineFetch } from '../../../api/fetchPipeline';
 export interface RpgWorldSummary {
   id: string;
   title: string;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
-import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
+import { rpgWorldImageClient } from './api/rpgWorldImageClient';
 import { RpgWorldMapAuthoringPanel } from './RpgWorldMapAuthoringPanel';
 import { array, record, text, worldLocationOptions } from './rpgWorldAuthoringData';
 

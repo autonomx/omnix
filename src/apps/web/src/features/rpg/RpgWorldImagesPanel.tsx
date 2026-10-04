@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldImageClient,
   type RpgWorldImageTarget,
-} from '../../api/rpgWorldImageClient';
+} from './api/rpgWorldImageClient';
 import './RpgWorldImagesPanel.css';
 
 interface RpgWorldImagesPanelProps {

@@ -1,4 +1,4 @@
-import type { HermesRpgTurnReadoutResponse } from '../../api/hermesClient';
+import type { HermesRpgTurnReadoutResponse } from './api/hermesClient';
 
 export interface RpgTurnReadoutPreviewState {
   category?: string;

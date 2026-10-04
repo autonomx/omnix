@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { rpgWorldBundleClient } from '../../api/rpgWorldBundleClient';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
+import { rpgWorldBundleClient } from './api/rpgWorldBundleClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
 import './RpgWorldBundleTransfer.css';
 import { downloadBlob } from '../../shared/download';
 
