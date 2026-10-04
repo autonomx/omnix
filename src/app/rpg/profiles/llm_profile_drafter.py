@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from typing import Any, Dict
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.profiles_llm_profile_drafter.build_profile_draft_prompt', "1", 'You are drafting editable NPC character-card text for a deterministic RPG engine.\nDo not invent world-changing secrets, quest outcomes, hidden knowledge, or facts that imply new simulation truth.\nYou may add flavor, personality texture, speech style, and plausible background consistent with the structured scaffold.\nReturn STRICT JSON only with keys: biography, history, personality.\n\nScaffold:\n{v0}\n\nRequired JSON shape:\n{{\n  "biography": {{\n    "short_summary": "...",\n    "full_biography": "...",\n    "public_reputation": "...",\n    "private_notes": "..."\n  }},\n  "history": {{\n    "background": "...",\n    "major_life_events": [],\n    "recent_events": []\n  }},\n  "personality": {{\n    "traits": [],\n    "temperament": "...",\n    "speech_style": "...",\n    "risk_tolerance": "...",\n    "conflict_style": "..."\n  }}\n}}\n')
 
 
 def _safe_str(value: Any) -> str:
@@ -16,33 +19,7 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 def build_profile_draft_prompt(profile: Dict[str, Any]) -> str:
     profile = _safe_dict(profile)
     return (
-        "You are drafting editable NPC character-card text for a deterministic RPG engine.\n"
-        "Do not invent world-changing secrets, quest outcomes, hidden knowledge, or facts that imply new simulation truth.\n"
-        "You may add flavor, personality texture, speech style, and plausible background consistent with the structured scaffold.\n"
-        "Return STRICT JSON only with keys: biography, history, personality.\n\n"
-        "Scaffold:\n"
-        f"{json.dumps(profile, ensure_ascii=False, indent=2)}\n\n"
-        "Required JSON shape:\n"
-        "{\n"
-        '  "biography": {\n'
-        '    "short_summary": "...",\n'
-        '    "full_biography": "...",\n'
-        '    "public_reputation": "...",\n'
-        '    "private_notes": "..."\n'
-        "  },\n"
-        '  "history": {\n'
-        '    "background": "...",\n'
-        '    "major_life_events": [],\n'
-        '    "recent_events": []\n'
-        "  },\n"
-        '  "personality": {\n'
-        '    "traits": [],\n'
-        '    "temperament": "...",\n'
-        '    "speech_style": "...",\n'
-        '    "risk_tolerance": "...",\n'
-        '    "conflict_style": "..."\n'
-        "  }\n"
-        "}\n"
+        _PROMPT_1.format(v0=(json.dumps(profile, ensure_ascii=False, indent=2)))
     )
 
 

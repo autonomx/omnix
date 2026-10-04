@@ -26,6 +26,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.rpg.core.determinism import rng_for_current_turn
 from .narrative_event import NarrativeEvent
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narrative_narrative_generator.prompt', "1", "You are a cinematic RPG narrator.\n\nScene:\n- Location: {v0}\n- Participants: {v1}\n- Mood: {v2}\n\nEvents that occur:\n{v3}\n\nDialogue:\n{v4}\n\n{v5}\n\nRules:\n- Write a vivid, immersive narration of what happens\n- Include the dialogue naturally within the narrative\n- Focus on clarity, flow, and emotional impact\n- Do not contradict the events\n- Do not add events that aren't listed\n- Keep it under {v6} words\n- Use present tense\n- Second person ('you') if the player is involved\n\nNarrative:")
+_PROMPT_2 = prompt_template('rpg.narrative_narrative_generator.prompt_2', "1", "You are a cinematic RPG narrator.\n\nScene:\n- Location: {v0}\n- Participants: {v1}\n- Mood: {v2}\n\nEvents that occur:\n{v3}\n\n{v4}\n\nRules:\n- Write a vivid, immersive narration of what happens\n- Focus on clarity, flow, and emotional impact\n- Do not contradict the events\n- Do not add events that aren't listed\n- Keep it under {v5} words\n- Use present tense\n- Second person ('you') if the player is involved\n\nNarrative:")
 
 # Style prompts for different narrative moods
 STYLE_PROMPTS: Dict[str, str] = {
@@ -190,32 +194,7 @@ class NarrativeGenerator:
         
         dialogue_text = "\n".join(dialogue_lines) if dialogue_lines else ""
         
-        prompt = f"""You are a cinematic RPG narrator.
-
-Scene:
-- Location: {location}
-- Participants: {participants}
-- Mood: {mood}
-
-Events that occur:
-{event_descriptions}
-
-Dialogue:
-{dialogue_text}
-
-{style_instruction}
-
-Rules:
-- Write a vivid, immersive narration of what happens
-- Include the dialogue naturally within the narrative
-- Focus on clarity, flow, and emotional impact
-- Do not contradict the events
-- Do not add events that aren't listed
-- Keep it under {self.max_words} words
-- Use present tense
-- Second person ('you') if the player is involved
-
-Narrative:"""
+        prompt = _PROMPT_1.format(v0=(location), v1=(participants), v2=(mood), v3=(event_descriptions), v4=(dialogue_text), v5=(style_instruction), v6=(self.max_words))
         
         try:
             result = self.llm(prompt)
@@ -267,28 +246,7 @@ Narrative:"""
         
         style_instruction = STYLE_PROMPTS.get(self.style, STYLE_PROMPTS["cinematic"])
         
-        prompt = f"""You are a cinematic RPG narrator.
-
-Scene:
-- Location: {location}
-- Participants: {participants}
-- Mood: {mood}
-
-Events that occur:
-{event_descriptions}
-
-{style_instruction}
-
-Rules:
-- Write a vivid, immersive narration of what happens
-- Focus on clarity, flow, and emotional impact
-- Do not contradict the events
-- Do not add events that aren't listed
-- Keep it under {self.max_words} words
-- Use present tense
-- Second person ('you') if the player is involved
-
-Narrative:"""
+        prompt = _PROMPT_2.format(v0=(location), v1=(participants), v2=(mood), v3=(event_descriptions), v4=(style_instruction), v5=(self.max_words))
         
         try:
             result = self.llm(prompt)

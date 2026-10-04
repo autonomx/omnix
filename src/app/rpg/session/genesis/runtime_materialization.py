@@ -27,6 +27,26 @@ from .campaign_lore_store import (
     _text,
     load_campaign_lore,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_genesis_runtime_materialization.common', "1", 'Materialize the campaign-local {v0} named "{v1}". Return strict JSON only. Generate structured executable truth first and lore_text from that same truth. lore_text must be 350-650 words in 4-7 natural paragraphs, player-safe, vivid, and internally consistent. Preserve compatible existing canon and definition fields. Do not emit code, formulas, headings, markdown, or unsupported mechanics. ')
+_PROMPT_2 = prompt_template('rpg.session_genesis_runtime_materialization.prompt', "1", (
+    "Use root keys kind, name, lore_text, creature, and location. Set kind to "
+        '"location" and creature to null. The location object must contain definition_id, '
+        "name, region_id, environment, tags, services, exits, hazards, and atmosphere. "
+        "Each exit must contain destination_id, label, access, requirement. Each hazard must "
+        "contain hazard_id, name, trigger, check, difficulty, consequence. Allowed checks are "
+        "agility, endurance, intellect, perception, and survival."
+))
+_PROMPT_3 = prompt_template('rpg.session_genesis_runtime_materialization.prompt_2', "1", (
+    "Use root keys kind, name, lore_text, creature, and location. Set kind to "
+            '"creature" and location to null. The creature object must contain definition_id, '
+            "name, level, hp, defense, armor, damage_min, damage_max, accuracy_bonus, "
+            "initiative_bonus, morale_threshold, tags, loot_table_id, xp_value, budget_cost, "
+            "condition_immunities, vulnerabilities, behavior, and habitat. Each vulnerability "
+            "must contain trigger_tag, aliases, condition, duration_turns, magnitude, and "
+            "description. Allowed conditions are bleeding, burning, poisoned, prone, and stunned."
+))
 
 _SUPPORTED_CONDITIONS = {
     "bleeding",
@@ -244,29 +264,14 @@ def _generation_context(
 
 def _prompt(kind: str, name: str) -> str:
     common = (
-        f'Materialize the campaign-local {kind} named "{name}". Return strict JSON only. '
-        "Generate structured executable truth first and lore_text from that same truth. "
-        "lore_text must be 350-650 words in 4-7 natural paragraphs, player-safe, vivid, "
-        "and internally consistent. Preserve compatible existing canon and definition fields. "
-        "Do not emit code, formulas, headings, markdown, or unsupported mechanics. "
+        _PROMPT_1.format(v0=(kind), v1=(name))
     )
     if kind == "creature":
         return common + (
-            "Use root keys kind, name, lore_text, creature, and location. Set kind to "
-            '"creature" and location to null. The creature object must contain definition_id, '
-            "name, level, hp, defense, armor, damage_min, damage_max, accuracy_bonus, "
-            "initiative_bonus, morale_threshold, tags, loot_table_id, xp_value, budget_cost, "
-            "condition_immunities, vulnerabilities, behavior, and habitat. Each vulnerability "
-            "must contain trigger_tag, aliases, condition, duration_turns, magnitude, and "
-            "description. Allowed conditions are bleeding, burning, poisoned, prone, and stunned."
+            _PROMPT_3.text
         )
     return common + (
-        "Use root keys kind, name, lore_text, creature, and location. Set kind to "
-        '"location" and creature to null. The location object must contain definition_id, '
-        "name, region_id, environment, tags, services, exits, hazards, and atmosphere. "
-        "Each exit must contain destination_id, label, access, requirement. Each hazard must "
-        "contain hazard_id, name, trigger, check, difficulty, consequence. Allowed checks are "
-        "agility, endurance, intellect, perception, and survival."
+        _PROMPT_2.text
     )
 
 

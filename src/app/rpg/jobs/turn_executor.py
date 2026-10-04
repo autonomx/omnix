@@ -8,6 +8,9 @@ from typing import Any
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
 from app.jobs.inline_execution import require_execution_authority
 from app.rpg.presentation.visible_response import visible_response_text
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.jobs_turn_executor.prompt', "1", 'Resolve this RPG player command as a concise game-master response.\nSession: {v0}\nCommand: {v1}\nReturn the visible RPG response only.')
 
 def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
     """Execute one leased RPG turn through the feature-owned handler."""
@@ -96,10 +99,7 @@ def _render_job(job: JobRecord, *, job_store: Any) -> dict[str, Any]:
         # Compatibility for tests and callers that intentionally submit a turn
         # without a persisted RPG session.
         prompt = (
-            "Resolve this RPG player command as a concise game-master response.\n"
-            f"Session: {session_id or 'new/current'}\n"
-            f"Command: {command}\n"
-            "Return the visible RPG response only."
+            _PROMPT_1.format(v0=(session_id or 'new/current'), v1=(command))
         )
         content, resolved_model = _call_chat_provider(prompt, provider_id=provider_id, model_id=model_id)
         return {

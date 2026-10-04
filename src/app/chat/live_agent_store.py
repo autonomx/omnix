@@ -31,6 +31,9 @@ from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession
 from .routing_deadline import provider_turn_deadline
 from .store import _pop_ready_sentences
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('chat.live_agent_store.confirmation_prompt', "1", "This will {v0} {v1}. Say 'confirm' to run it or 'cancel' to reject it.")
 
 _CONFIRM = re.compile(
     r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$",
@@ -829,8 +832,7 @@ def _confirmation_prompt(request: AssistantToolRequest) -> str:
     action = "turn on" if request.action_id == "kasa.turn_on" else "turn off"
     target = str(request.input.get("target") or "the selected Kasa plug")
     return (
-        f"This will {action} {target}. "
-        "Say 'confirm' to run it or 'cancel' to reject it."
+        _PROMPT_1.format(v0=(action), v1=(target))
     )
 
 

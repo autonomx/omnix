@@ -55,6 +55,9 @@ from typing import Any, Optional
 
 from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.cognitive_resolution_engine.prompt', "1", 'You are a narrative resolution engine. Generate a satisfying resolution for this storyline.\n\nStoryline Type: {v0}\nParticipants: {v1}\nResolution Type: {v2}\nProgress: {v3:.0%}\n\nEvent History:\n{v4}\n\nCharacter States:\n{v5}\n\nGenerate a resolution that:\n1. Is exactly 1-2 sentences long\n2. Reflects the consequences of the storyline events\n3. Matches the resolution type: {v6}\n4. Feels emotionally meaningful, not mechanical\n5. Updates relationships based on the outcome\n\nResolution:')
 
 logger = logging.getLogger(__name__)
 
@@ -582,27 +585,7 @@ class ResolutionEngine:
             event_desc = f"- {event.get('type', 'unknown')}: {event.get('description', '')}"
             event_history.append(event_desc)
         
-        prompt = f"""You are a narrative resolution engine. Generate a satisfying resolution for this storyline.
-
-Storyline Type: {story_type}
-Participants: {', '.join(str(p) for p in participants)}
-Resolution Type: {resolution_type}
-Progress: {progress:.0%}
-
-Event History:
-{chr(10).join(event_history)}
-
-Character States:
-{chr(10).join(char_summaries)}
-
-Generate a resolution that:
-1. Is exactly 1-2 sentences long
-2. Reflects the consequences of the storyline events
-3. Matches the resolution type: {resolution_type}
-4. Feels emotionally meaningful, not mechanical
-5. Updates relationships based on the outcome
-
-Resolution:"""
+        prompt = _PROMPT_1.format(v0=(story_type), v1=(', '.join(str(p) for p in participants)), v2=(resolution_type), v3=(progress), v4=(chr(10).join(event_history)), v5=(chr(10).join(char_summaries)), v6=(resolution_type))
         return prompt
     
     def _calculate_emotional_impact(

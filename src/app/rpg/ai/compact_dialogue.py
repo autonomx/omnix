@@ -7,6 +7,9 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_compact_dialogue.prompt', "1", 'Reply as the NPC in one or two concise spoken sentences. Output only the words they say. No label, narration, JSON, or markdown. Use only public context; do not invent facts. If unsupported, say you do not know. Preserve recent continuity without repeating lines.\nPLAYER: {v0}\nCONTEXT: ')
 
 COMPACT_DIALOGUE_SOURCE = "compact_grounded_dialogue_v1"
 
@@ -294,11 +297,7 @@ def build_compact_dialogue_advisory(
     profile = _d(_l(_d(packet.get("npc_context")).get("addressed_npcs"))[0])
     speaker = _clip(profile.get("name") or profile.get("id"), 80)
     prompt = (
-        "Reply as the NPC in one or two concise spoken sentences. Output only the words they say. "
-        "No label, narration, JSON, or markdown. Use only public context; do not invent facts. "
-        "If unsupported, say you do not know. Preserve recent continuity without repeating lines.\n"
-        f"PLAYER: {_clip(player_input, 500)}\n"
-        "CONTEXT: "
+        _PROMPT_1.format(v0=(_clip(player_input, 500)))
         + json.dumps(_compact_context(packet), ensure_ascii=False, separators=(",", ":"))
     )
     raw = llm_gateway.generate(

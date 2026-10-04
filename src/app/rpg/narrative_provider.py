@@ -26,6 +26,16 @@ from app.rpg.narrative_engine.writer import (
     parse_structured_blocks,
     writer_payload,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narrative_provider.system_prompt', "1", (
+    "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
+        "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
+        "Return exactly one block per beat and include a claims array for every factual assertion. "
+        "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
+        "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
+        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
+))
 
 
 class NarrativeClaimPayload(BaseModel):
@@ -153,12 +163,7 @@ class NarrativeProviderConfig:
 
 def _system_prompt() -> str:
     return (
-        "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
-        "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
-        "Return exactly one block per beat and include a claims array for every factual assertion. "
-        "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
-        "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
-        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
+        _PROMPT_1.text
     )
 
 

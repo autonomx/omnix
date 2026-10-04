@@ -11,6 +11,12 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block', "1", "- Simulation is authoritative for hunger, thirst, fatigue, inventory, purchases, meals, water, and rest.")
+_PROMPT_2 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block_2', "1", "- Mention water/meals/rest/supplies only when backed by survival_result, service_result, merchant_result, effects, or inventory_delta.")
+_PROMPT_3 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block_3', "1", "- Do not say the player is refreshed unless fatigue decreased. Do not say thirst/hunger is relieved unless thirst/hunger decreased.")
+_PROMPT_4 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block_4', "1", "- Do not invent healing from rest or meals unless authoritative healing evidence exists.")
 
 SURVIVAL_NARRATION_GROUNDING_SOURCE = "survival_narration_grounding_contract"
 SURVIVAL_NARRATION_GROUNDING_VERSION = "survival_narration_grounding_v1"
@@ -288,10 +294,10 @@ def survival_narration_prompt_block(context: Mapping[str, Any]) -> str:
     survival = _safe_dict(evidence.get("survival"))
     lines = [
         "Survival grounding contract:",
-        "- Simulation is authoritative for hunger, thirst, fatigue, inventory, purchases, meals, water, and rest.",
-        "- Mention water/meals/rest/supplies only when backed by survival_result, service_result, merchant_result, effects, or inventory_delta.",
-        "- Do not say the player is refreshed unless fatigue decreased. Do not say thirst/hunger is relieved unless thirst/hunger decreased.",
-        "- Do not invent healing from rest or meals unless authoritative healing evidence exists.",
+        _PROMPT_1.text,
+        _PROMPT_2.text,
+        _PROMPT_3.text,
+        _PROMPT_4.text,
     ]
     if survival:
         lines.append(

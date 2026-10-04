@@ -2,6 +2,17 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.npc_dialogue_intelligence.system', "1", (
+    "You are an RPG NPC dialogue intelligence layer. "
+        "You may only use known_facts and active_objectives. "
+        "Do not invent quest facts, rewards, locations, or outcomes. "
+        "Respond as the NPC would, based on personality, fear, trust, role, and recent repetition. "
+        "If the player's question is vague, redirect them to a specific grounded lead. "
+        "Return JSON only."
+))
+_PROMPT_2 = prompt_template('rpg.npc_dialogue_intelligence.user', "1", 'Generate one intelligent in-character NPC reply.\n\nRequirements:\n- Do not repeat recent_lines.\n- If the player asks a vague objective question, ask them to be specific or point to a grounded known lead.\n- If a known fact can help, reveal it in-character.\n- If the NPC would be afraid, cautious, evasive, or helpful, reflect that.\n- The line must be 1-3 sentences.\n\nCONTEXT_JSON:\n{v0}\n\nReturn exactly:\n{{\n  "intent": "...",\n  "known_fact_used": "...",\n  "line": "...",\n  "next_hook": "..."\n}}')
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -37,31 +48,11 @@ def build_npc_intelligence_prompt(
     }
 
     system = (
-        "You are an RPG NPC dialogue intelligence layer. "
-        "You may only use known_facts and active_objectives. "
-        "Do not invent quest facts, rewards, locations, or outcomes. "
-        "Respond as the NPC would, based on personality, fear, trust, role, and recent repetition. "
-        "If the player's question is vague, redirect them to a specific grounded lead. "
-        "Return JSON only."
+        _PROMPT_1.text
     )
 
     user = (
-        "Generate one intelligent in-character NPC reply.\n\n"
-        "Requirements:\n"
-        "- Do not repeat recent_lines.\n"
-        "- If the player asks a vague objective question, ask them to be specific or point to a grounded known lead.\n"
-        "- If a known fact can help, reveal it in-character.\n"
-        "- If the NPC would be afraid, cautious, evasive, or helpful, reflect that.\n"
-        "- The line must be 1-3 sentences.\n\n"
-        "CONTEXT_JSON:\n"
-        f"{json.dumps(payload, ensure_ascii=False, sort_keys=True)}\n\n"
-        "Return exactly:\n"
-        "{\n"
-        '  "intent": "...",\n'
-        '  "known_fact_used": "...",\n'
-        '  "line": "...",\n'
-        '  "next_hook": "..."\n'
-        "}"
+        _PROMPT_2.format(v0=(json.dumps(payload, ensure_ascii=False, sort_keys=True)))
     )
 
     return [

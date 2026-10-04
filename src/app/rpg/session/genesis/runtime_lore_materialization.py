@@ -18,6 +18,22 @@ from .world_forge_dossiers import (
     project_entity_dossier,
     validate_entity_dossier,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_genesis_runtime_lore_materialization.prompt', "1", (
+    "Return one JSON object that materializes durable, player-safe RPG canon "
+        "for the target. Existing world lore is binding. Never contradict it or "
+        "invent quest solutions, hidden secrets, mechanical stats, or facts the "
+        "player could not know. For a location, include a rich location dossier, "
+        "two to four local NPC dossiers, overview and history documents, public "
+        "facts, and explicit relationships. For an NPC, creature, or monster, "
+        "include one consistent dossier and lore document. Every entity must include "
+        "short_summary and a dossier matching the supplied dossier contract. NPC "
+        "entities must additionally include "
+        "description, appearance, personality, backstory, speech_style, goals, motives, "
+        "relationships, known_facts, and current_situation. Required top-level "
+        "arrays: entities, documents, facts, relationships. Return JSON only."
+))
 
 logger = logging.getLogger(__name__)
 
@@ -748,18 +764,7 @@ def _generate_bundle(
     if gateway is None or gateway is False:
         return fallback
     prompt = (
-        "Return one JSON object that materializes durable, player-safe RPG canon "
-        "for the target. Existing world lore is binding. Never contradict it or "
-        "invent quest solutions, hidden secrets, mechanical stats, or facts the "
-        "player could not know. For a location, include a rich location dossier, "
-        "two to four local NPC dossiers, overview and history documents, public "
-        "facts, and explicit relationships. For an NPC, creature, or monster, "
-        "include one consistent dossier and lore document. Every entity must include "
-        "short_summary and a dossier matching the supplied dossier contract. NPC "
-        "entities must additionally include "
-        "description, appearance, personality, backstory, speech_style, goals, motives, "
-        "relationships, known_facts, and current_situation. Required top-level "
-        "arrays: entities, documents, facts, relationships. Return JSON only."
+        _PROMPT_1.text
     )
     try:
         raw = gateway.generate(

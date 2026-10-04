@@ -35,6 +35,64 @@ from typing import (
 )
 
 import re as re
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract', "1", (
+    "You are a deterministic state-change generator for an RPG simulation.\n\n"
+        "OUTPUT FORMAT REQUIREMENTS (MANDATORY):\n"
+        "- Output ONLY valid JSON\n"
+        "- No explanations\n"
+        "- No thinking\n"
+        "- No commentary\n"
+        "- No markdown\n"
+        "- No text outside JSON\n"
+        "- JSON MUST be inside <RESPONSE> ... </RESPONSE>\n\n"
+        "REQUIRED JSON STRUCTURE:\n\n"
+        "<RESPONSE>{\n"
+        '  "actor_id": "<npc_id>",\n'
+        '  "proposal_kind": "state_delta",\n'
+        '  "semantic_action": "<action>",\n'
+        '  "delta": {\n'
+        '    "activity": "<non-empty>",\n'
+        '    "engagement": "<non-empty>"\n'
+        '  },\n'
+        '  "beat_summary": "<short sentence>"\n'
+        "}</RESPONSE>\n\n"
+))
+_PROMPT_2 = prompt_template('rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract_2', "1", (
+    "RULES:\n"
+        '- "delta" MUST NOT be empty\n'
+        '- "activity" MUST be meaningful (not "active")\n'
+        '- "engagement" MUST be meaningful (not "ongoing")\n'
+        "- Choose actions based on scene context\n"
+        "- Prefer interaction, movement, or reactions over idle\n"
+        "- When a player action is happening, NPCs should react to it\n\n"
+        "EXAMPLES OF GOOD ACTIONS:\n"
+        "- argue\n"
+        "- observe\n"
+        "- investigate\n"
+        "- negotiate\n"
+        "- rest\n"
+        "- trade\n"
+        "- react_to_player\n\n"
+        "INPUT:\n"
+))
+_PROMPT_3 = prompt_template('rpg.session_semantic_state_changes.player_context_instruction', "1", (
+    "IMPORTANT — REACT TO PLAYER ACTION:\n"
+            "The player recently performed an action (see recent_player_action in INPUT).\n"
+            "NPCs MUST react to the player's action rather than continuing generic routines.\n"
+            "- NPCs nearby should watch, react, comment, or be affected by what the player is doing.\n"
+            "- Do NOT generate generic patrol/observe/tidy actions when a notable player action is happening.\n"
+            "- beat_summary MUST reference the player's ongoing activity, not routine NPC behavior.\n\n"
+))
+_PROMPT_4 = prompt_template('rpg.session_semantic_state_changes.interaction_context_instruction', "1", (
+    "IMPORTANT — ACTIVE INTERACTION IS STILL ONGOING:\n"
+            "There is an unresolved active interaction in the scene (see active_interactions in INPUT).\n"
+            "NPCs nearby MUST continue reacting to that interaction until it expires or resolves.\n"
+            "- Do NOT revert to generic patrol, tidy, serve, or idle routines while the interaction is active.\n"
+            "- beat_summary should reference the ongoing contest / performance / confrontation when appropriate.\n"
+            "- Nearby authority figures should watch or react if the interaction is public.\n\n"
+))
 
 logger = logging.getLogger(__name__)
 
@@ -466,23 +524,13 @@ def _build_semantic_state_change_prompt_contract(
     player_context_instruction = ""
     if player_action_context:
         player_context_instruction = (
-            "IMPORTANT — REACT TO PLAYER ACTION:\n"
-            "The player recently performed an action (see recent_player_action in INPUT).\n"
-            "NPCs MUST react to the player's action rather than continuing generic routines.\n"
-            "- NPCs nearby should watch, react, comment, or be affected by what the player is doing.\n"
-            "- Do NOT generate generic patrol/observe/tidy actions when a notable player action is happening.\n"
-            "- beat_summary MUST reference the player's ongoing activity, not routine NPC behavior.\n\n"
+            _PROMPT_3.text
         )
 
     interaction_context_instruction = ""
     if active_interactions_context:
         interaction_context_instruction = (
-            "IMPORTANT — ACTIVE INTERACTION IS STILL ONGOING:\n"
-            "There is an unresolved active interaction in the scene (see active_interactions in INPUT).\n"
-            "NPCs nearby MUST continue reacting to that interaction until it expires or resolves.\n"
-            "- Do NOT revert to generic patrol, tidy, serve, or idle routines while the interaction is active.\n"
-            "- beat_summary should reference the ongoing contest / performance / confrontation when appropriate.\n"
-            "- Nearby authority figures should watch or react if the interaction is public.\n\n"
+            _PROMPT_4.text
         )
 
     _log_interaction_trace(
@@ -499,44 +547,10 @@ def _build_semantic_state_change_prompt_contract(
     )
 
     return (
-        "You are a deterministic state-change generator for an RPG simulation.\n\n"
-        "OUTPUT FORMAT REQUIREMENTS (MANDATORY):\n"
-        "- Output ONLY valid JSON\n"
-        "- No explanations\n"
-        "- No thinking\n"
-        "- No commentary\n"
-        "- No markdown\n"
-        "- No text outside JSON\n"
-        "- JSON MUST be inside <RESPONSE> ... </RESPONSE>\n\n"
-        "REQUIRED JSON STRUCTURE:\n\n"
-        "<RESPONSE>{\n"
-        '  "actor_id": "<npc_id>",\n'
-        '  "proposal_kind": "state_delta",\n'
-        '  "semantic_action": "<action>",\n'
-        '  "delta": {\n'
-        '    "activity": "<non-empty>",\n'
-        '    "engagement": "<non-empty>"\n'
-        '  },\n'
-        '  "beat_summary": "<short sentence>"\n'
-        "}</RESPONSE>\n\n"
+        _PROMPT_1.text
         + player_context_instruction
         + interaction_context_instruction
-        + "RULES:\n"
-        '- "delta" MUST NOT be empty\n'
-        '- "activity" MUST be meaningful (not "active")\n'
-        '- "engagement" MUST be meaningful (not "ongoing")\n'
-        "- Choose actions based on scene context\n"
-        "- Prefer interaction, movement, or reactions over idle\n"
-        "- When a player action is happening, NPCs should react to it\n\n"
-        "EXAMPLES OF GOOD ACTIONS:\n"
-        "- argue\n"
-        "- observe\n"
-        "- investigate\n"
-        "- negotiate\n"
-        "- rest\n"
-        "- trade\n"
-        "- react_to_player\n\n"
-        "INPUT:\n"
+        + _PROMPT_2.text
         + json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True)
     )
 

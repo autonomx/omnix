@@ -11,6 +11,21 @@ from app.persistence.unit_of_work import unit_of_work
 from .generation_jobs import canonical_hash
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.worlds_world_images.threat_portrait_prompt', "1", 'Cinematic {v0} RPG threat key art of {v1}. Show one complete, immediately readable threat design in a three-quarter view, with the head or primary sensor cluster and full silhouette clearly separated from the background. Define anatomy, chassis, armour, weapons, movement, damage, and scale directly from this canon: {v2} Depict one controlled threatening action and one visible weakness or functional limitation. Use a simple environment with a single scale cue and minimal out-of-focus background activity. Dramatic rim light, realistic materials, restrained volumetric atmosphere, readable detail. No generic soldier or monster design, no duplicate creatures, no crowded background, no excessive armour unrelated to canon, no extra limbs, malformed anatomy, fused equipment, text, logos, watermarks, or UI.')
+_PROMPT_2 = prompt_template('rpg.worlds_world_images.character_portrait_prompt', "1", 'Cinematic {v0} RPG character key art of {v1}, a {v2}. Tight chest-up portrait; head and both shoulders fully inside the frame; face occupying roughly one-third of the image; eye-level camera; three-quarter view; shallow depth of field. Establish one consistent identity from this canonical appearance: {v3} Use an alert, controlled pose that visibly expresses the {v4} tone. Prioritize the face, clothing silhouette, augmentations or signature equipment, and one unique identifying feature. Use a simple environment with only one clear story element and minimal out-of-focus background figures. Realistic materials and skin, dramatic rim light, restrained blue-orange contrast, volumetric atmosphere, intricate but readable detail. No generic model appearance, symmetrical implants unless canonical, excessive armour, bulky exoskeleton, superhero pose, glowing lines covering the face, crowded background, extra limbs or fingers, distorted ears, fused clothing, text, logos, watermarks, UI, or modern photography artifacts.')
+_PROMPT_3 = prompt_template('rpg.worlds_world_images.prompt', "1", '{v0}. {v1} World: {v2}. Genre: {v3}. Tone: {v4}. Premium cinematic, poster-quality illustration, dramatic composition, theatrical lighting, volumetric atmosphere, rich colour grading, intricate but readable detail, cohesive art direction. Preserve canonical features and avoid rendered text, logos, watermarks, UI, or modern photography artifacts.')
+_PROMPT_4 = prompt_template('rpg.worlds_world_images.character_portrait_prompt_2', "1", 'Cinematic cyberpunk RPG character key art of {v0}, shown in a tight chest-up portrait. His head and both shoulders are fully visible, with his face occupying roughly one-third of the composition. He is a lean, battle-worn covert operative in his early thirties with a narrow angular face, pale olive skin, short dark hair shaved at the sides, grey-green eyes, light stubble, and a thin diagonal scar crossing his right eyebrow. A distinctive matte-titanium augmentation runs from his left temple, around the ear, and down the jaw, built from fitted surgical plates, flexible black synthetic joints, visible mounting seams, and a compact optical-camouflage emitter behind the ear. The augmentation is functional and restrained, not decorative. His left iris contains a subtle mechanical aperture. He wears a weathered asymmetric stealth coat made from matte black technical fabric, with one reinforced ceramic shoulder panel and concealed magnetic fasteners. No bulky armour, excessive pouches, or superhero styling. He turns sharply toward the viewer while touching the camouflage control behind his ear. One edge of his shoulder is partially obscured by physically believable optical distortion, bending rain and background light around his silhouette. His expression is controlled, suspicious, and defiant. Behind him is a simplified cyberpunk maintenance district with one elevated catwalk, large filtration pipes, rain, drifting steam, and a distant corporate searchlight sweeping through the haze. A dismantled surveillance drone on a workbench subtly suggests rebel activity. Keep background figures minimal and out of focus. Eye-level camera, three-quarter facial angle, shallow depth of field, strong cool blue rim light on one side and restrained warm industrial light on the other, realistic skin texture, believable metal and fabric materials, volumetric rain and steam, rich cinematic colour grading, premium poster-quality realistic illustration, intricate but readable detail. Preserve the canonical subtle neural interfaces and faint eye patterns. No text, logos, watermarks, UI, generic fashion-model appearance, symmetrical implants, glowing facial lines, excessive cybernetics, crowded background, distorted anatomy, extra fingers, malformed ears, fused clothing, or modern photography artifacts.')
+_PROMPT_5 = prompt_template('rpg.worlds_world_images.prompt_2', "1", "cinematic RPG key art with a striking, poster-quality composition")
+_PROMPT_6 = prompt_template('rpg.worlds_world_images.prompt_3', "1", "vertical cinematic key art for a premium RPG poster, with an iconic central composition")
+_PROMPT_7 = prompt_template('rpg.worlds_world_images.prompt_4', "1", "widescreen cinematic key art for a premium RPG poster, with a bold focal point and negative space for title treatment")
+_PROMPT_8 = prompt_template('rpg.worlds_world_images.prompt_5', "1", "cinematic character key art, shoulders and face visible, expressive pose and dramatic rim lighting")
+_PROMPT_9 = prompt_template('rpg.worlds_world_images.prompt_6', "1", "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette")
+_PROMPT_10 = prompt_template('rpg.worlds_world_images.prompt_7', "1", "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette")
+_PROMPT_11 = prompt_template('rpg.worlds_world_images.prompt_8', "1", "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background")
+_PROMPT_12 = prompt_template('rpg.worlds_world_images.prompt_9', "1", "cinematic environmental key art with a strong focal point, story details, and a sense of scale")
+_PROMPT_13 = prompt_template('rpg.worlds_world_images.prompt_10', "1", "cinematic editorial RPG key art with a striking, poster-quality composition")
 
 _ROLE_BY_TOPIC: Mapping[str, str] = {
     "realm": "landscape",
@@ -122,15 +137,7 @@ def _entity_canon_details(
 
 def _threat_portrait_prompt(*, subject: str, genre: str, details: str) -> str:
     return (
-        f"Cinematic {genre} RPG threat key art of {subject}. Show one complete, immediately readable "
-        "threat design in a three-quarter view, with the head or primary sensor cluster and full silhouette "
-        "clearly separated from the background. Define anatomy, chassis, armour, weapons, movement, damage, "
-        f"and scale directly from this canon: {details} Depict one controlled threatening action and one visible "
-        "weakness or functional limitation. Use a simple environment with a single scale cue and minimal "
-        "out-of-focus background activity. Dramatic rim light, realistic materials, restrained volumetric "
-        "atmosphere, readable detail. No generic soldier or monster design, no duplicate creatures, no crowded "
-        "background, no excessive armour unrelated to canon, no extra limbs, malformed anatomy, fused equipment, "
-        "text, logos, watermarks, or UI."
+        _PROMPT_1.format(v0=(genre), v1=(subject), v2=(details))
     )
 
 
@@ -145,47 +152,13 @@ def _character_portrait_prompt(
     subject_key = subject.casefold().replace("’", "'")
     if "kaelen" in subject_key and "voss" in subject_key:
         return (
-            f"Cinematic cyberpunk RPG character key art of {subject}, shown in a tight chest-up portrait. "
-            "His head and both shoulders are fully visible, with his face occupying roughly one-third "
-            "of the composition. He is a lean, battle-worn covert operative in his early thirties with "
-            "a narrow angular face, pale olive skin, short dark hair shaved at the sides, grey-green eyes, "
-            "light stubble, and a thin diagonal scar crossing his right eyebrow. "
-            "A distinctive matte-titanium augmentation runs from his left temple, around the ear, and down "
-            "the jaw, built from fitted surgical plates, flexible black synthetic joints, visible mounting "
-            "seams, and a compact optical-camouflage emitter behind the ear. The augmentation is functional "
-            "and restrained, not decorative. His left iris contains a subtle mechanical aperture. "
-            "He wears a weathered asymmetric stealth coat made from matte black technical fabric, with one "
-            "reinforced ceramic shoulder panel and concealed magnetic fasteners. No bulky armour, excessive "
-            "pouches, or superhero styling. He turns sharply toward the viewer while touching the camouflage "
-            "control behind his ear. One edge of his shoulder is partially obscured by physically believable "
-            "optical distortion, bending rain and background light around his silhouette. His expression is "
-            "controlled, suspicious, and defiant. Behind him is a simplified cyberpunk maintenance district "
-            "with one elevated catwalk, large filtration pipes, rain, drifting steam, and a distant corporate "
-            "searchlight sweeping through the haze. A dismantled surveillance drone on a workbench subtly "
-            "suggests rebel activity. Keep background figures minimal and out of focus. Eye-level camera, "
-            "three-quarter facial angle, shallow depth of field, strong cool blue rim light on one side and "
-            "restrained warm industrial light on the other, realistic skin texture, believable metal and "
-            "fabric materials, volumetric rain and steam, rich cinematic colour grading, premium poster-quality "
-            "realistic illustration, intricate but readable detail. Preserve the canonical subtle neural "
-            "interfaces and faint eye patterns. No text, logos, watermarks, UI, generic fashion-model appearance, "
-            "symmetrical implants, glowing facial lines, excessive cybernetics, crowded background, distorted "
-            "anatomy, extra fingers, malformed ears, fused clothing, or modern photography artifacts."
+            _PROMPT_4.format(v0=(subject))
         )
 
     appearance = _dossier_section_text(entity, "appearance") or details
     role = _text(entity.get("registry_role") or entity.get("kind"), "character")
     return (
-        f"Cinematic {genre} RPG character key art of {subject}, a {role}. Tight chest-up portrait; "
-        "head and both shoulders fully inside the frame; face occupying roughly one-third of the image; "
-        "eye-level camera; three-quarter view; shallow depth of field. Establish one consistent identity "
-        f"from this canonical appearance: {appearance} Use an alert, controlled pose that visibly expresses "
-        f"the {tone} tone. Prioritize the face, clothing silhouette, augmentations or signature equipment, "
-        "and one unique identifying feature. Use a simple environment with only one clear story element and "
-        "minimal out-of-focus background figures. Realistic materials and skin, dramatic rim light, restrained "
-        "blue-orange contrast, volumetric atmosphere, intricate but readable detail. No generic model appearance, "
-        "symmetrical implants unless canonical, excessive armour, bulky exoskeleton, superhero pose, glowing "
-        "lines covering the face, crowded background, extra limbs or fingers, distorted ears, fused clothing, "
-        "text, logos, watermarks, UI, or modern photography artifacts."
+        _PROMPT_2.format(v0=(genre), v1=(subject), v2=(role), v3=(appearance), v4=(tone))
     )
 
 
@@ -513,16 +486,16 @@ def _prompt(
     if role == "portrait" and entity is not None:
         return _threat_portrait_prompt(subject=subject, genre=genre, details=details)
     format_hint = {
-        "cover": "vertical cinematic key art for a premium RPG poster, with an iconic central composition",
-        "banner": "widescreen cinematic key art for a premium RPG poster, with a bold focal point and negative space for title treatment",
-        "portrait": "cinematic character key art, shoulders and face visible, expressive pose and dramatic rim lighting",
-        "icon": "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette",
-        "emblem": "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette",
-        "landscape": "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background",
+        "cover": _PROMPT_6.text,
+        "banner": _PROMPT_7.text,
+        "portrait": _PROMPT_8.text,
+        "icon": _PROMPT_9.text,
+        "emblem": _PROMPT_10.text,
+        "landscape": _PROMPT_11.text,
         "map": _map_format_hint(genre),
-        "scene": "cinematic environmental key art with a strong focal point, story details, and a sense of scale",
-        "illustration": "cinematic editorial RPG key art with a striking, poster-quality composition",
-    }.get(role, "cinematic RPG key art with a striking, poster-quality composition")
+        "scene": _PROMPT_12.text,
+        "illustration": _PROMPT_13.text,
+    }.get(role, _PROMPT_5.text)
     visual_brief = _visual_subject_brief(
         subject=subject,
         details=details,
@@ -530,11 +503,7 @@ def _prompt(
         role=role,
     )
     return (
-        f"{format_hint}. {visual_brief} World: {title}. Genre: {genre}. "
-        f"Tone: {tone}. Premium cinematic, poster-quality illustration, "
-        "dramatic composition, theatrical lighting, volumetric atmosphere, rich colour grading, "
-        "intricate but readable detail, cohesive art direction. Preserve canonical features and "
-        "avoid rendered text, logos, watermarks, UI, or modern photography artifacts."
+        _PROMPT_3.format(v0=(format_hint), v1=(visual_brief), v2=(title), v3=(genre), v4=(tone))
     )
 
 

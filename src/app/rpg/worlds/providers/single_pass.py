@@ -41,6 +41,13 @@ from app.rpg.worlds.providers.world_forge import (
     _token_estimate,
     _topic_contract,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.worlds_providers_single_pass.prompt', "1", (
+    " PROFILE_FIELD_CONTRACT is authoritative. Use the exact allocated ID "
+            "and entity kind, include all required top-level fields, obey declared "
+            "JSON types, and use only listed reference IDs. Unknown fields are forbidden."
+))
 
 _SAFE_MODEL = re.compile(r"[^A-Za-z0-9_]+")
 
@@ -285,9 +292,7 @@ class SinglePassProviderWorldForgeTopicGenerator(ProviderWorldForgeTopicGenerato
             assigned_entity_ids=ids,
             assigned_entities=assigned_entities,
         ) + (
-            " PROFILE_FIELD_CONTRACT is authoritative. Use the exact allocated ID "
-            "and entity kind, include all required top-level fields, obey declared "
-            "JSON types, and use only listed reference IDs. Unknown fields are forbidden."
+            _PROMPT_1.text
         )
         request = _payload(
             node,

@@ -15,6 +15,9 @@ from app.rpg.worlds.profile_aware_world_images import (
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.api_feature_routes_rpg_world_image_routes.rpg_regenerate_world_image_prompts', "1", "/api/rpg/worlds/{world_id}/image-prompts/regenerate")
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -118,7 +121,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
             raise
 
     @router.post(
-        "/api/rpg/worlds/{world_id}/image-prompts/regenerate",
+        _PROMPT_1.text,
         tags=["rpg-world"],
     )
     def rpg_regenerate_world_image_prompts(

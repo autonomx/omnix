@@ -10,6 +10,11 @@ from app.providers.structured import StructuredCapabilities, StructuredContract
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.worlds_providers_world_forge_foundation.prompt', "1", 'You are the Omnix Campaign World Forge. Return strict JSON only for the single requested topic. Build rich, internally consistent campaign canon, not player-facing turn narration. The campaign_context.world_brief is authoritative: its title and description override generic genre, tone, or template labels. Ground every name, institution, conflict, technology, culture, creature, and location in that brief and its dependencies. Do not fall back to generic fantasy conventions (such as magic, elves, kingdoms, or medieval classes) unless the world brief explicitly supports them. Produce exactly the requested target_count of distinct, substantive entities. Never pad output with numbered topic names or generic placeholder canon. Respect dependency entities and IDs. Return topic_id plus arrays named documents, entities, facts, relationships, knowledge_rules, and story_threads, and a provenance object. Set provenance to exactly {{}}; Omnix adds trusted provider, authorship, usage, and validation provenance after accepting the response. Never copy dependency provenance or authorship ledgers into the response. Every generated entity must include short_summary plus a dossier object matching the supplied rpg_world_entity_dossier_v1 contract. Dossier sections use stable IDs, titled sections, and one to three substantial paragraphs per substantive section. Use short_summary only for cards; do not replace the long dossier with a one- or two-line description. Keep mechanics and canonical references in their structured fields rather than hiding them in prose. NPC dossiers must include appearance, personality, backstory, goals, motives, speech_style, faction_ids, location_id, secrets, and known_facts. Location dossiers must include a sensory_profile and region_id. Every factual row must use stable IDs, generated_proposal authority, approved objective_canon authority, visibility, and entity_refs. Facts use content for a concise one-sentence canon summary and expanded_description for one or two self-contained lore paragraphs that explain origins, impact, or consequences. Never invent an unresolved dependency ID. The requested domain is {v0}; follow its domain-specific section template exactly.')
+_PROMPT_2 = prompt_template('rpg.worlds_providers_world_forge_foundation.system_prompt', "1", "{v0} This is entity batch {v1} of {v2}. Return only this batch's requested entities, with no overlap with earlier batches. Earlier entities are: {v3}. Use these preallocated entity IDs exactly, one per returned entity: {v4}. Expand the allocated registry slots exactly; preserve each assigned name, role, and distinction: {v5}.")
+_PROMPT_3 = prompt_template('rpg.worlds_providers_world_forge_foundation.entity_registry_system_prompt', "1", 'You are the Omnix Campaign World Forge planner. Return strict JSON only. Create a compact registry for the requested topic before any dossiers are written. Use every allocated ID exactly once. Give every entry a unique, setting-grounded name, role, and distinction so later parallel writers can expand different canon rather than inventing overlapping entities. Return only topic_id, entities, and provenance. Each entity must contain id, name, role, and distinction; set provenance to exactly {{}}; do not write dossiers, facts, documents, dependency provenance, or authorship ledgers. The requested domain is {v0}.')
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -329,37 +334,7 @@ def _system_prompt(
     assigned_entities: tuple[Mapping[str, str], ...] = (),
 ) -> str:
     prompt = (
-        "You are the Omnix Campaign World Forge. Return strict JSON only for the "
-        "single requested topic. Build rich, internally consistent campaign canon, "
-        "not player-facing turn narration. The campaign_context.world_brief is "
-        "authoritative: its title and description override generic genre, tone, or "
-        "template labels. Ground every name, institution, conflict, technology, "
-        "culture, creature, and location in that brief and its dependencies. Do not "
-        "fall back to generic fantasy conventions (such as magic, elves, kingdoms, "
-        "or medieval classes) unless the world brief explicitly supports them. Produce "
-        "exactly the requested target_count of distinct, substantive entities. Never "
-        "pad output with numbered topic names or generic placeholder canon. Respect "
-        "dependency entities and IDs. "
-        "Return topic_id plus arrays named documents, entities, facts, relationships, "
-        "knowledge_rules, and story_threads, and a provenance object. Set provenance "
-        "to exactly {}; Omnix adds trusted provider, authorship, usage, and validation "
-        "provenance after accepting the response. Never copy dependency provenance or "
-        "authorship ledgers into the response. Every generated "
-        "entity must include short_summary plus a dossier object matching the supplied "
-        "rpg_world_entity_dossier_v1 contract. Dossier sections use stable IDs, titled "
-        "sections, and one to three substantial paragraphs per substantive section. "
-        "Use short_summary only for cards; do not replace the long dossier with a one- "
-        "or two-line description. Keep mechanics and canonical references in their "
-        "structured fields rather than hiding them in prose. NPC dossiers must include "
-        "appearance, personality, backstory, goals, motives, speech_style, faction_ids, "
-        "location_id, secrets, and known_facts. Location dossiers must include a "
-        "sensory_profile and region_id. Every factual row must use stable IDs, "
-        "generated_proposal authority, approved objective_canon authority, visibility, "
-        "and entity_refs. Facts use content for a concise one-sentence canon summary "
-        "and expanded_description for one or two self-contained lore paragraphs that "
-        "explain origins, impact, or consequences. Never invent an unresolved dependency "
-        "ID. The requested "
-        f"domain is {node.topic_id}; follow its domain-specific section template exactly."
+        _PROMPT_1.format(v0=(node.topic_id))
     )
     if batch_index is None or batch_count is None:
         return prompt
@@ -372,13 +347,7 @@ def _system_prompt(
         for row in assigned_entities
     )
     return (
-        f"{prompt} This is entity batch {batch_index + 1} of {batch_count}. "
-        "Return only this batch's requested entities, with no overlap with earlier "
-        f"batches. Earlier entities are: {exclusions or 'none'}. "
-        "Use these preallocated entity IDs exactly, one per returned entity: "
-        f"{', '.join(assigned_entity_ids) or 'no allocation supplied'}. "
-        "Expand the allocated registry slots exactly; preserve each assigned name, "
-        f"role, and distinction: {assigned_slot_text or 'no registry slot supplied'}."
+        _PROMPT_2.format(v0=(prompt), v1=(batch_index + 1), v2=(batch_count), v3=(exclusions or 'none'), v4=(', '.join(assigned_entity_ids) or 'no allocation supplied'), v5=(assigned_slot_text or 'no registry slot supplied'))
     )
 
 
@@ -464,15 +433,7 @@ def _payload(
 
 def _entity_registry_system_prompt(node: CampaignTopicNode) -> str:
     return (
-        "You are the Omnix Campaign World Forge planner. Return strict JSON only. "
-        "Create a compact registry for the requested topic before any dossiers are "
-        "written. Use every allocated ID exactly once. Give every entry a unique, "
-        "setting-grounded name, role, and distinction so later parallel writers can "
-        "expand different canon rather than inventing overlapping entities. Return "
-        "only topic_id, entities, and provenance. Each entity must contain id, name, "
-        "role, and distinction; set provenance to exactly {}; do not write dossiers, "
-        "facts, documents, dependency provenance, or authorship ledgers. The "
-        f"requested domain is {node.topic_id}."
+        _PROMPT_3.format(v0=(node.topic_id))
     )
 
 

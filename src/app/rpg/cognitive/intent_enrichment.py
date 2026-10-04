@@ -41,6 +41,9 @@ import logging
 from typing import Any, Optional
 
 from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.cognitive_intent_enrichment.prompt', "1", 'Character:\n- Name: {v0}\n- Traits: {v1}\n- Goals: {v2}\n- Beliefs: {v3}\n\nCurrent Intent:\n- Type: {v4}\n- Priority: {v5}\n- Target: {v6}\n- Reasoning: {v7}\n\nWorld Context:\n- Nearby threats: {v8}\n- Potential allies: {v9}\n- Faction dynamics: {v10}\n\nRefine the intent:\n- Keep the SAME intent type (required)\n- Adjust priority (0-10): higher if situation is urgent, lower if not\n- Optionally suggest a target entity (must exist in context)\n- Add brief reasoning\n\nReturn JSON ONLY with this structure:\n{{\n  "priority": 5.0,\n  "target": "entity_id or null",\n  "reasoning": "brief explanation"\n}}\n')
 
 logger = logging.getLogger(__name__)
 
@@ -223,36 +226,7 @@ class IntentEnrichment:
         allies = self._extract_allies(world_state, character)
         factions_info = self._extract_faction_context(world_state, character)
         
-        prompt = f"""Character:
-- Name: {char_id}
-- Traits: {', '.join(char_traits) if char_traits else 'None specified'}
-- Goals: {', '.join(char_goals) if char_goals else 'None specified'}
-- Beliefs: {self._format_beliefs(beliefs)}
-
-Current Intent:
-- Type: {intent.get('type', 'unknown')}
-- Priority: {intent.get('priority', 5.0)}
-- Target: {intent.get('target', 'None')}
-- Reasoning: {intent.get('reasoning', 'Unknown')}
-
-World Context:
-- Nearby threats: {', '.join(threats) if threats else 'None identified'}
-- Potential allies: {', '.join(allies) if allies else 'None identified'}
-- Faction dynamics: {factions_info}
-
-Refine the intent:
-- Keep the SAME intent type (required)
-- Adjust priority (0-10): higher if situation is urgent, lower if not
-- Optionally suggest a target entity (must exist in context)
-- Add brief reasoning
-
-Return JSON ONLY with this structure:
-{{
-  "priority": 5.0,
-  "target": "entity_id or null",
-  "reasoning": "brief explanation"
-}}
-"""
+        prompt = _PROMPT_1.format(v0=(char_id), v1=(', '.join(char_traits) if char_traits else 'None specified'), v2=(', '.join(char_goals) if char_goals else 'None specified'), v3=(self._format_beliefs(beliefs)), v4=(intent.get('type', 'unknown')), v5=(intent.get('priority', 5.0)), v6=(intent.get('target', 'None')), v7=(intent.get('reasoning', 'Unknown')), v8=(', '.join(threats) if threats else 'None identified'), v9=(', '.join(allies) if allies else 'None identified'), v10=(factions_info))
         
         try:
             # Call LLM with expected JSON response

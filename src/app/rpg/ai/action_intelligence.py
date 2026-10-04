@@ -8,6 +8,18 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_action_intelligence.instructions', "1", (
+    "You are the RPG first-call action-intent extraction layer.\n"
+        "Return JSON only. Use the provided turn_grounding_packet before classifying intent.\n"
+        "World/runtime state is authoritative. Do not decide outcomes, damage, XP, prices, "
+        "inventory mutation, quest completion, travel success, or rewards.\n"
+        "Return action_type, difficulty, skill_id, intent_tags, narrative_goal, target_id, "
+        "target_name, strict boolean stateful, strict boolean needs_runtime_resolution, "
+        "visible_response, and reason. Never reveal private context.\n"
+        "Prefer candidate_action.action_type unless the text clearly implies a better allowed action.\n"
+))
 
 _ALLOWED_ACTION_TYPES = {
     "attack_melee", "attack_ranged", "attack_unarmed", "block", "dodge", "parry",
@@ -239,14 +251,7 @@ def build_action_intelligence_prompt(
         "allowed_skills": sorted(_ALLOWED_SKILLS),
     }
     instructions = (
-        "You are the RPG first-call action-intent extraction layer.\n"
-        "Return JSON only. Use the provided turn_grounding_packet before classifying intent.\n"
-        "World/runtime state is authoritative. Do not decide outcomes, damage, XP, prices, "
-        "inventory mutation, quest completion, travel success, or rewards.\n"
-        "Return action_type, difficulty, skill_id, intent_tags, narrative_goal, target_id, "
-        "target_name, strict boolean stateful, strict boolean needs_runtime_resolution, "
-        "visible_response, and reason. Never reveal private context.\n"
-        "Prefer candidate_action.action_type unless the text clearly implies a better allowed action.\n"
+        _PROMPT_1.text
     )
     return instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
 

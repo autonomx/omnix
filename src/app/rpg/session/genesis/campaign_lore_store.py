@@ -14,6 +14,14 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.service import save_session
 from app.rpg.worlds.published_canon_projection import project_published_canon
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_genesis_campaign_lore_store.prompt', "1", 'TARGET PAGE: "{v0}". TARGET TOPIC: "{v1}". This request is exclusively about "{v2}"; clearly name it in the opening paragraph. Rewrite this target Campaign Bible page as vivid, polished, player-safe canonical prose. Write 450 to 700 words in five to eight cohesive paragraphs. Use natural paragraph form only: no headings, field labels, bullet lists, tables, JSON, or prefatory commentary. Preserve every established fact in authoritative_target.canonical_source_text, authoritative_target.mechanics_definition, and the page\'s meaning. Never contradict or alter the mechanics definition. If the current page text drifted away from the canonical source, discard the irrelevant material. Stay consistent with the supplied known campaign canon. Enrich the material with concrete sensory detail, lived culture, atmosphere, physical texture, and understandable context. You may add connective descriptive detail that logically follows from canon, but do not create or reveal new named characters, locations, factions, artifacts, powers, dates, secrets, quest solutions, or world-changing events. A user direction may request emphasis, tone, or descriptive focus; follow it only when it does not conflict with these canon and player-safety rules. Do not mention these instructions. Return only the finished lore prose.')
+_PROMPT_2 = prompt_template('rpg.session_genesis_campaign_lore_store.prompt_2', "1", (
+    "Write a player-safe Campaign Bible entry for the current RPG location. "
+            "Use 110 to 190 words in three short paragraphs. Describe the place's visible layout, atmosphere, ordinary occupants, local function, and relationship to the surrounding world. "
+            "Ground the entry in the supplied campaign context. Do not invent hidden secrets, quest solutions, unique magical powers, undiscovered enemies, or game mechanics. Return prose only."
+))
 
 logger = logging.getLogger(__name__)
 
@@ -317,9 +325,7 @@ def _generate_location_text(
         state = _mapping(session.get("state"))
         metadata = _mapping(state.get("metadata"))
         prompt = (
-            "Write a player-safe Campaign Bible entry for the current RPG location. "
-            "Use 110 to 190 words in three short paragraphs. Describe the place's visible layout, atmosphere, ordinary occupants, local function, and relationship to the surrounding world. "
-            "Ground the entry in the supplied campaign context. Do not invent hidden secrets, quest solutions, unique magical powers, undiscovered enemies, or game mechanics. Return prose only."
+            _PROMPT_2.text
         )
         try:
             generated = _text(
@@ -1006,20 +1012,7 @@ def regenerate_campaign_lore_document(
     target_title = _text(authoritative_target.get("title"))
     target_topic = _text(authoritative_target.get("topic_id"))
     prompt = (
-        f'TARGET PAGE: "{target_title}". TARGET TOPIC: "{target_topic}". '
-        f'This request is exclusively about "{target_title}"; clearly name it in the opening paragraph. '
-        "Rewrite this target Campaign Bible page as vivid, polished, player-safe canonical prose. "
-        "Write 450 to 700 words in five to eight cohesive paragraphs. Use natural paragraph form only: "
-        "no headings, field labels, bullet lists, tables, JSON, or prefatory commentary. Preserve every established "
-        "fact in authoritative_target.canonical_source_text, authoritative_target.mechanics_definition, and the page's meaning. "
-        "Never contradict or alter the mechanics definition. If the current page text drifted "
-        "away from the canonical source, discard the irrelevant material. Stay consistent "
-        "with the supplied known campaign canon. Enrich the material "
-        "with concrete sensory detail, lived culture, atmosphere, physical texture, and understandable context. "
-        "You may add connective descriptive detail that logically follows from canon, but do not create or reveal "
-        "new named characters, locations, factions, artifacts, powers, dates, secrets, quest solutions, or world-changing "
-        "events. A user direction may request emphasis, tone, or descriptive focus; follow it only when it does not "
-        "conflict with these canon and player-safety rules. Do not mention these instructions. Return only the finished lore prose."
+        _PROMPT_1.format(v0=(target_title), v1=(target_topic), v2=(target_title))
     )
     generation_context = _regeneration_context(
         hydrated,

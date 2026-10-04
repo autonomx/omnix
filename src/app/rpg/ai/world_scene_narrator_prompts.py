@@ -58,6 +58,72 @@ from app.rpg.session.memory_prompt import (
     build_relevant_memory_context_from_runtime,
     build_relevant_memory_prompt_block,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules', "1", (
+    "NARRATOR: 2 to 3 short sentence describing the scene.\n"
+        "ACTION: 2 to 3 short sentence describing the result of the player's action.\n"
+        'NPC: <npc_name>: "2 - 3 short reply" (omit if none)\n'
+        "REWARD: <xp/items if any, else omit>"
+))
+_PROMPT_2 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt', "1", 'You are a deterministic RPG narration engine.\n\nCONTEXT:\n{v0}\n\nRecent authoritative facts:\n{v1}\n\nAuthoritative combat facts:\n{v2}\n\nTurn contract PRIMARY TRUTH:\n{v3}\n\nCURRENT_TURN_PROMPT_CONTRACT_JSON:\n{v4}\n\nNPC_RESPONSE_ARCHITECTURE_JSON:\n{v5}\n\nCURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON:\n{v6}\n\n{v7}\n\nNPC STATE SUMMARY (must influence tone and dialogue):\n{v8}\n\nNPC behavior context:\n{v9}\n\nOngoing conversation threads:\n{v10}\n\n{v11}\n\n{v12}\n\nYOUR ONLY TASK: Generate narration for a player\'s action in an RPG.\n\nOUTPUT ONLY VALID JSON.\nDo not include markdown fences.\nDo not include commentary outside JSON.\n{v13}\n\n IMPORTANT RULES:\n - Output ONLY valid JSON with no extra text\n - NO markdown fences or commentary outside the JSON object\n - NO content about ticks, time, or system messages\n - NO faction goals, loyalty, awareness, or ambient content\nTURN CONTRACT RULES:\n- turn_contract is the primary truth for this turn.\n- CURRENT_TURN_PROMPT_CONTRACT_JSON is the presentation boundary for this exact player action.\n- required_focus must be addressed before older context, memories, profile hooks, or recent events.\n- NPC_RESPONSE_ARCHITECTURE_JSON may shape speaker, tone, persona, and continuity only.\n- resolved_result is legacy compatibility; prefer turn_contract when both are present.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON, when present, is current-turn dialogue guidance from the intent/advisory pass. Preserve its speaker, answer intent, and emotional direction unless the authoritative turn_contract forbids NPC dialogue.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON outranks conversation_threads recent_lines, older NPC memories, and prior NPC questions. Use those older records only for continuity after answering this current player input.\n- Do not copy an older NPC question from conversation_threads when the current player input is answering, correcting, or emotionally disclosing to that question.\n- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON is not permission to invent rewards, combat, travel, purchases, inventory changes, or quest progress.\n- Relevant Memory is continuity context only. It may shape tone, recall, and wording after the current turn is satisfied.\n- Relevant Memory never authorizes new rewards, combat, travel, purchases, inventory changes, quest progress, secret disclosure, or relationship changes.\n- Private Relevant Memory may shape NPC tone only; do not reveal private memory directly unless current runtime state or turn_contract exposes it.\n- You MUST base the narration primarily on turn_contract.narration_brief.\n- You MUST reflect turn_contract.state_delta when it exists.\n- You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.\n- HIGH-RISK CLAIM RULE:\n    You MUST NOT mention rewards, currency, items, XP, inventory, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless they are explicitly present in turn_contract, state_delta, resolved_result, or combat facts.\n- If the player makes an unsupported claim such as "you owe me gold", the primary and safe_fallback must refuse or defer the claim unless the turn contract explicitly authorizes payment.\n- The safe_fallback must be conservative and natural. It must never include rewards, combat, injury, blood, travel, quest completion, or hidden facts.\n- The safe_fallback should sound in-character, but it must be safe over dramatic.\n- You may freely add sensory detail, body language, pacing, and natural dialogue as presentation only.\n- NEVER copy or restate narration_brief directly. Convert it into in-world description.\n- NEVER refer to "the player" in narration. Always describe actions in-world (e.g., "You step forward..." or omit subject).\n- NEVER output internal IDs like npc:0, npc_bran, player, target_id, action_type, state_delta, narration_brief, or turn_contract.\n- The final prose must sound like an RPG narrator, not a debug summary.\n- If your output resembles an instruction, rewrite it into a natural in-world description.\n- If narration sounds like a system description, rewrite it before finalizing.\n- Never output generic filler like "Action: You act."\n\nNPC REACTION RULES:\n- If turn_contract.interpreted_action.target_id exists, that NPC MUST visibly react.\n- If npc_behavior_context.required_reaction is true, include either:\n  1. physical/body-language reaction, or\n  2. direct dialogue, preferably both.\n- NPC dialogue must match npc_behavior_context.reaction_tone.\n- hostile/angry NPCs should not respond as friendly.\n- wary NPCs should remain cautious even after an apology.\n- recent_memories MUST influence tone and dialogue.\n- If a memory includes violence or betrayal, NPC should reference or emotionally reflect it.\n- If the player recently harmed an NPC, that NPC should remember it and respond accordingly.\n- NPC dialogue should sound natural, not like a summary of emotions.\n- Avoid phrases like "I am wary" or "I feel cautious".\n- Express emotion through tone, word choice, and implication.\n- Any combat description MUST match the authoritative combat facts block\n- Do NOT invent hits, misses, damage, knockdowns, or combatants\n- The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain\n- Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context\n- NPC speaker MUST be one present actor or the explicit target NPC from context\n- Keep continuity with the recent authoritative facts block below\n- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them\n- Do not end the response with an ellipsis\n- Finish with complete sentences\n- Do not leave dialogue, action, or scene description trailing mid-thought\n\nConversation thread rules:\n- If conversation_threads are provided, treat them as ongoing local dialogue context.\n- Do not restart the same NPC line from scratch.\n- Continue from recent_lines when the player\'s input references an ongoing exchange.\n- NPCs may answer, pivot, interrupt, or defer, but must not invent rewards, inventory, combat results, locations, or new NPCs.\n- If a thread has world_signals, phrase them as rumors, tension, suspicions, or social shifts only.\n- Do not resolve or mutate authoritative state unless action_result already says it happened.\n\nRelevant NPC memories from deterministic simulation:\n{v14}\n\nRelevant general NPC memories:\n{v15}\n\nDeterministic NPC-to-NPC conversation beat:\n{v16}\n\nMemory rules:\n- NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.\n- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.\n- If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.\n- If a deterministic NPC-to-NPC conversation beat is provided, use only that speaker and line for the NPC dialogue. Do not invent additional conversation consequences.\n\nSCENE:\nTitle: {v17}\nLocation: {v18}\nTone: {v19}\nTension: {v20}\nSummary: {v21}\nActors present:\n{v22}\nStakes: {v23}\n')
+_PROMPT_3 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt_2', "1", 'You are generating NPC reactions for an RPG.\n\nCharacter: {v0}\n{v1}\n{v2}\n{v3}\n{v4}\n{v5}\n{v6}\n{v7}\n{v8}\n    {v9}\n    {v10}\n    {v11}\n    {v12}\n    {v13}\n    {v14}\n\nScene: {v15}\n\nNarrative:\n{v16}\n\n=== INSTRUCTIONS ===\nDescribe {v17}\'s internal reaction to what just happened.\n- Use the NPC\'s active goals to shape what they want right now.\n- Use belief_summary about the player to determine tone.\n- Use memory_summary to maintain continuity.\n- Use last_decision so reactions align with recent intent.\n- Do not contradict the provided structured state.\nThen provide a short line of dialogue they might say.\nSpecify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).\nSpecify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).\n\nRespond ONLY in JSON format:\n{{\n  "reaction": "...",\n  "dialogue": "...",\n  "emotion": "...",\n  "intent": "..."\n}}\n')
+_PROMPT_4 = prompt_template('rpg.ai_world_scene_narrator_prompts.prompt_3', "1", 'You are generating player choices for an RPG scene.\n\nScene: {v0}\nStakes: {v1}\n{v2}\nNarrative situation:\n{v3}\n\n=== INSTRUCTIONS ===\nGenerate exactly {v4} meaningful choices for the player.\nEach choice should have:\n  - A short, action-oriented description (5-10 words)\n  - An implied risk or consequence\n  - A distinct approach (combat, stealth, diplomacy, observation, etc.)\n  - A mapped action type from the available action types above\n\nRespond ONLY in JSON format:\n{{\n  "choices": [\n    {{\n      "text": "...",\n      "type": "action|observe|dialogue|stealth|combat|diplomacy",\n      "action": {{\n        "type": "intervene_thread|escalate_conflict|observe_situation|...",\n        "target_id": "..."\n      }}\n    }}\n  ]\n}}\n')
+_PROMPT_5 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_2', "1", (
+    "NARRATOR: 5 to 7 sentences describing the scene.\n"
+            "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
+            'NPC: <npc_name>: "no restrictions on length" (omit if none)\n'
+            "REWARD: <xp/items if any, else omit>"
+))
+_PROMPT_6 = prompt_template('rpg.ai_world_scene_narrator_prompts.response_length_prompt_rules_3', "1", (
+    "NARRATOR: 3 to 5 sentences describing the scene.\n"
+            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
+            'NPC: <npc_name>: "3 to 5 short sentences" (omit if none)\n'
+            "REWARD: <xp/items if any, else omit>"
+))
+_PROMPT_7 = prompt_template('rpg.ai_world_scene_narrator_prompts.schema', "1", """
+Use exactly this object shape:
+{
+    "format_version": "rpg_narration_candidates_v1",
+    "primary": {
+        "format_version": "rpg_narration_v2",
+        "narration": "<descriptive scene narration grounded in turn_contract>",
+        "action": "<short, in-world description of what happened; consequence only, no meta language>",
+        "npc": {
+            "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
+            "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
+        },
+        "reward": null,
+        "followup_hooks": []
+    },
+    "safe_fallback": {
+        "format_version": "rpg_narration_v2",
+        "narration": "<safe conservative narration that refuses or defers unsupported claims>",
+        "action": "<safe consequence only; no state changes unless explicitly in turn_contract>",
+        "npc": {
+            "speaker": "<same allowed speaker as primary when possible>",
+            "line": "<safe in-character fallback line; no rewards, no combat, no travel, no quest completion, no hidden facts>"
+        },
+        "reward": null,
+        "followup_hooks": []
+    }
+}
+""")
+_PROMPT_8 = prompt_template('rpg.ai_world_scene_narrator_prompts.schema_2', "1", """
+Use exactly this object shape:
+{
+    "format_version": "rpg_narration_v2",
+    "narration": "<descriptive scene narration grounded in turn_contract>",
+    "action": "<short, in-world description of what happened; consequence only, no meta language>",
+    "npc": {
+        "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
+        "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
+    },
+    "reward": null,
+    "followup_hooks": []
+}
+""")
+_PROMPT_9 = prompt_template('rpg.ai_world_scene_narrator_prompts.hooks_text', "1", '\nAvailable action types:\n  - intervene_thread: target={v0}\n  - escalate_conflict: target={v1}\n  - observe_situation: target={v2}\n')
 
 
 @dataclass
@@ -100,25 +166,16 @@ def _response_length_prompt_rules(response_length: str) -> str:
 
     if response_length == "long":
         return (
-            "NARRATOR: 5 to 7 sentences describing the scene.\n"
-            "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
-            'NPC: <npc_name>: "no restrictions on length" (omit if none)\n'
-            "REWARD: <xp/items if any, else omit>"
+            _PROMPT_5.text
         )
 
     if response_length == "medium":
         return (
-            "NARRATOR: 3 to 5 sentences describing the scene.\n"
-            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
-            'NPC: <npc_name>: "3 to 5 short sentences" (omit if none)\n'
-            "REWARD: <xp/items if any, else omit>"
+            _PROMPT_6.text
         )
 
     return (
-        "NARRATOR: 2 to 3 short sentence describing the scene.\n"
-        "ACTION: 2 to 3 short sentence describing the result of the player's action.\n"
-        'NPC: <npc_name>: "2 - 3 short reply" (omit if none)\n'
-        "REWARD: <xp/items if any, else omit>"
+        _PROMPT_1.text
     )
 
 
@@ -392,188 +449,11 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     )
 
     if use_safe_fallback_candidate:
-        schema = """
-Use exactly this object shape:
-{
-    "format_version": "rpg_narration_candidates_v1",
-    "primary": {
-        "format_version": "rpg_narration_v2",
-        "narration": "<descriptive scene narration grounded in turn_contract>",
-        "action": "<short, in-world description of what happened; consequence only, no meta language>",
-        "npc": {
-            "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
-            "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
-        },
-        "reward": null,
-        "followup_hooks": []
-    },
-    "safe_fallback": {
-        "format_version": "rpg_narration_v2",
-        "narration": "<safe conservative narration that refuses or defers unsupported claims>",
-        "action": "<safe consequence only; no state changes unless explicitly in turn_contract>",
-        "npc": {
-            "speaker": "<same allowed speaker as primary when possible>",
-            "line": "<safe in-character fallback line; no rewards, no combat, no travel, no quest completion, no hidden facts>"
-        },
-        "reward": null,
-        "followup_hooks": []
-    }
-}
-"""
+        schema = _PROMPT_7.text
     else:
-        schema = """
-Use exactly this object shape:
-{
-    "format_version": "rpg_narration_v2",
-    "narration": "<descriptive scene narration grounded in turn_contract>",
-    "action": "<short, in-world description of what happened; consequence only, no meta language>",
-    "npc": {
-        "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
-        "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
-    },
-    "reward": null,
-    "followup_hooks": []
-}
-"""
+        schema = _PROMPT_8.text
 
-    prompt = f"""You are a deterministic RPG narration engine.
-
-CONTEXT:
-{safe_context_block}
-
-Recent authoritative facts:
-{recent_facts_block}
-
-Authoritative combat facts:
-{combat_facts_block}
-
-Turn contract PRIMARY TRUTH:
-{turn_contract_block}
-
-CURRENT_TURN_PROMPT_CONTRACT_JSON:
-{current_turn_contract_block}
-
-NPC_RESPONSE_ARCHITECTURE_JSON:
-{npc_response_architecture_block}
-
-CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON:
-{current_turn_visible_response_block}
-
-{runtime_guardrails_block}
-
-NPC STATE SUMMARY (must influence tone and dialogue):
-{npc_state_summary_block}
-
-NPC behavior context:
-{npc_behavior_context_block}
-
-Ongoing conversation threads:
-{conversation_threads_block}
-
-{relevant_memory_block}
-
-{memory_grounding_block}
-
-YOUR ONLY TASK: Generate narration for a player's action in an RPG.
-
-OUTPUT ONLY VALID JSON.
-Do not include markdown fences.
-Do not include commentary outside JSON.
-{schema}
-
- IMPORTANT RULES:
- - Output ONLY valid JSON with no extra text
- - NO markdown fences or commentary outside the JSON object
- - NO content about ticks, time, or system messages
- - NO faction goals, loyalty, awareness, or ambient content
-TURN CONTRACT RULES:
-- turn_contract is the primary truth for this turn.
-- CURRENT_TURN_PROMPT_CONTRACT_JSON is the presentation boundary for this exact player action.
-- required_focus must be addressed before older context, memories, profile hooks, or recent events.
-- NPC_RESPONSE_ARCHITECTURE_JSON may shape speaker, tone, persona, and continuity only.
-- resolved_result is legacy compatibility; prefer turn_contract when both are present.
-- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON, when present, is current-turn dialogue guidance from the intent/advisory pass. Preserve its speaker, answer intent, and emotional direction unless the authoritative turn_contract forbids NPC dialogue.
-- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON outranks conversation_threads recent_lines, older NPC memories, and prior NPC questions. Use those older records only for continuity after answering this current player input.
-- Do not copy an older NPC question from conversation_threads when the current player input is answering, correcting, or emotionally disclosing to that question.
-- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON is not permission to invent rewards, combat, travel, purchases, inventory changes, or quest progress.
-- Relevant Memory is continuity context only. It may shape tone, recall, and wording after the current turn is satisfied.
-- Relevant Memory never authorizes new rewards, combat, travel, purchases, inventory changes, quest progress, secret disclosure, or relationship changes.
-- Private Relevant Memory may shape NPC tone only; do not reveal private memory directly unless current runtime state or turn_contract exposes it.
-- You MUST base the narration primarily on turn_contract.narration_brief.
-- You MUST reflect turn_contract.state_delta when it exists.
-- You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.
-- HIGH-RISK CLAIM RULE:
-    You MUST NOT mention rewards, currency, items, XP, inventory, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless they are explicitly present in turn_contract, state_delta, resolved_result, or combat facts.
-- If the player makes an unsupported claim such as "you owe me gold", the primary and safe_fallback must refuse or defer the claim unless the turn contract explicitly authorizes payment.
-- The safe_fallback must be conservative and natural. It must never include rewards, combat, injury, blood, travel, quest completion, or hidden facts.
-- The safe_fallback should sound in-character, but it must be safe over dramatic.
-- You may freely add sensory detail, body language, pacing, and natural dialogue as presentation only.
-- NEVER copy or restate narration_brief directly. Convert it into in-world description.
-- NEVER refer to "the player" in narration. Always describe actions in-world (e.g., "You step forward..." or omit subject).
-- NEVER output internal IDs like npc:0, npc_bran, player, target_id, action_type, state_delta, narration_brief, or turn_contract.
-- The final prose must sound like an RPG narrator, not a debug summary.
-- If your output resembles an instruction, rewrite it into a natural in-world description.
-- If narration sounds like a system description, rewrite it before finalizing.
-- Never output generic filler like "Action: You act."
-
-NPC REACTION RULES:
-- If turn_contract.interpreted_action.target_id exists, that NPC MUST visibly react.
-- If npc_behavior_context.required_reaction is true, include either:
-  1. physical/body-language reaction, or
-  2. direct dialogue, preferably both.
-- NPC dialogue must match npc_behavior_context.reaction_tone.
-- hostile/angry NPCs should not respond as friendly.
-- wary NPCs should remain cautious even after an apology.
-- recent_memories MUST influence tone and dialogue.
-- If a memory includes violence or betrayal, NPC should reference or emotionally reflect it.
-- If the player recently harmed an NPC, that NPC should remember it and respond accordingly.
-- NPC dialogue should sound natural, not like a summary of emotions.
-- Avoid phrases like "I am wary" or "I feel cautious".
-- Express emotion through tone, word choice, and implication.
-- Any combat description MUST match the authoritative combat facts block
-- Do NOT invent hits, misses, damage, knockdowns, or combatants
-- The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
-- Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context
-- NPC speaker MUST be one present actor or the explicit target NPC from context
-- Keep continuity with the recent authoritative facts block below
-- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them
-- Do not end the response with an ellipsis
-- Finish with complete sentences
-- Do not leave dialogue, action, or scene description trailing mid-thought
-
-Conversation thread rules:
-- If conversation_threads are provided, treat them as ongoing local dialogue context.
-- Do not restart the same NPC line from scratch.
-- Continue from recent_lines when the player's input references an ongoing exchange.
-- NPCs may answer, pivot, interrupt, or defer, but must not invent rewards, inventory, combat results, locations, or new NPCs.
-- If a thread has world_signals, phrase them as rumors, tension, suspicions, or social shifts only.
-- Do not resolve or mutate authoritative state unless action_result already says it happened.
-
-Relevant NPC memories from deterministic simulation:
-{_format_recalled_service_memories_for_prompt(narration_context)}
-
-Relevant general NPC memories:
-{_format_recalled_npc_memories_for_prompt(narration_context)}
-
-Deterministic NPC-to-NPC conversation beat:
-{_format_conversation_beat_for_prompt(narration_context)}
-
-Memory rules:
-- NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.
-- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
-- If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
-- If a deterministic NPC-to-NPC conversation beat is provided, use only that speaker and line for the NPC dialogue. Do not invent additional conversation consequences.
-
-SCENE:
-Title: {title}
-Location: {location}
-Tone: {tone}
-Tension: {tension}
-Summary: {summary}
-Actors present:
-{actor_list}
-Stakes: {stakes}
-"""
+    prompt = _PROMPT_2.format(v0=(safe_context_block), v1=(recent_facts_block), v2=(combat_facts_block), v3=(turn_contract_block), v4=(current_turn_contract_block), v5=(npc_response_architecture_block), v6=(current_turn_visible_response_block), v7=(runtime_guardrails_block), v8=(npc_state_summary_block), v9=(npc_behavior_context_block), v10=(conversation_threads_block), v11=(relevant_memory_block), v12=(memory_grounding_block), v13=(schema), v14=(_format_recalled_service_memories_for_prompt(narration_context)), v15=(_format_recalled_npc_memories_for_prompt(narration_context)), v16=(_format_conversation_beat_for_prompt(narration_context)), v17=(title), v18=(location), v19=(tone), v20=(tension), v21=(summary), v22=(actor_list), v23=(stakes))
     logger.debug("[RPG PROMPT] Final prompt length: %d", len(prompt))
     return append_survival_grounding_to_prompt(
         prompt,
@@ -662,48 +542,7 @@ def build_npc_reaction_prompt(
         else ""
     )
 
-    prompt = f"""You are generating NPC reactions for an RPG.
-
-Character: {npc_name}
-{personality_info}
-{goals_info}
-{relation_info}
-{memory_info}
-{beliefs_info}
-{relationships_info}
-{rumor_info}
-{alliance_info}
-    {faction_position_info}
-    {sandbox_info}
-    {world_consequence_info}
-    {goals_list_info}
-    {last_decision_info}
-    {debug_context_info}
-
-Scene: {scene_title}
-
-Narrative:
-{narrative[:1000]}
-
-=== INSTRUCTIONS ===
-Describe {npc_name}'s internal reaction to what just happened.
-- Use the NPC's active goals to shape what they want right now.
-- Use belief_summary about the player to determine tone.
-- Use memory_summary to maintain continuity.
-- Use last_decision so reactions align with recent intent.
-- Do not contradict the provided structured state.
-Then provide a short line of dialogue they might say.
-Specify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).
-Specify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).
-
-Respond ONLY in JSON format:
-{{
-  "reaction": "...",
-  "dialogue": "...",
-  "emotion": "...",
-  "intent": "..."
-}}
-"""
+    prompt = _PROMPT_3.format(v0=(npc_name), v1=(personality_info), v2=(goals_info), v3=(relation_info), v4=(memory_info), v5=(beliefs_info), v6=(relationships_info), v7=(rumor_info), v8=(alliance_info), v9=(faction_position_info), v10=(sandbox_info), v11=(world_consequence_info), v12=(goals_list_info), v13=(last_decision_info), v14=(debug_context_info), v15=(scene_title), v16=(narrative[:1000]), v17=(npc_name))
     return prompt
 
 
@@ -737,43 +576,9 @@ def build_choice_prompt(
             hooks_text += f"  - {hook.get('type', 'unknown')}: target={hook.get('target_id', source)}\n"
     else:
         # Default action hooks
-        hooks_text = f"""
-Available action types:
-  - intervene_thread: target={source}
-  - escalate_conflict: target={source}
-  - observe_situation: target={source}
-"""
+        hooks_text = _PROMPT_9.format(v0=(source), v1=(source), v2=(source))
 
-    prompt = f"""You are generating player choices for an RPG scene.
-
-Scene: {title}
-Stakes: {stakes}
-{hooks_text}
-Narrative situation:
-{narrative[-500:]}
-
-=== INSTRUCTIONS ===
-Generate exactly {num_choices} meaningful choices for the player.
-Each choice should have:
-  - A short, action-oriented description (5-10 words)
-  - An implied risk or consequence
-  - A distinct approach (combat, stealth, diplomacy, observation, etc.)
-  - A mapped action type from the available action types above
-
-Respond ONLY in JSON format:
-{{
-  "choices": [
-    {{
-      "text": "...",
-      "type": "action|observe|dialogue|stealth|combat|diplomacy",
-      "action": {{
-        "type": "intervene_thread|escalate_conflict|observe_situation|...",
-        "target_id": "..."
-      }}
-    }}
-  ]
-}}
-"""
+    prompt = _PROMPT_4.format(v0=(title), v1=(stakes), v2=(hooks_text), v3=(narrative[-500:]), v4=(num_choices))
     return prompt
 
 

@@ -41,6 +41,11 @@ from app.rpg.worlds.providers.single_pass import (
     _literal,
     _one_call_budget,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.worlds_generation_first_pass_provider.authored_system_prompt', "1", 'You are the Omnix Campaign World Forge. Author rich, internally consistent campaign canon for exactly one topic, not player-facing turn narration. The campaign_context.world_brief and supplied dependencies are authoritative. Ground every name, institution, conflict, technology, culture, creature, and location in that brief. Do not fall back to generic genre conventions unless the brief supports them. Return exactly one bare JSON object: no markdown fences, commentary, or reasoning. The JSON Schema at required_output.authored_draft_schema is the sole output contract; unknown fields are forbidden. The root keys must be exactly topic_id, documents, entities, relationships, knowledge_rules, and story_threads. Include every root key even when its array is empty. Never return provenance or facts. Omnix materializes canonical IDs, facts, authority, visibility, provenance, and dossier display metadata after validation. Use the exact root topic_id {v0!r}. Never place an entity ID in root topic_id. Use each allocated entity ID exactly once and only at entities[].id: {v1}. Every entity must include the schema-required profile fields, short_summary, and dossier. The dossier object must contain subtitle, quote, quick_facts, sections, and related_entity_ids. Dossier section keys must be nested under entities[].dossier.sections, never directly under dossier. The exact dossier sections fragment is {v2}. Each section object contains only paragraphs; never return section id or title fields. Use short_summary for cards and substantive dossier paragraphs for lore. Put mechanics and references in their schema-defined fields. Never invent an unresolved dependency ID. This is entity batch {v3} of {v4}. Earlier entities that must not be duplicated: {v5}. Preserve assigned registry names, roles, and distinctions: {v6}.')
+_PROMPT_2 = prompt_template('rpg.worlds_generation_first_pass_provider.authored_registry_system_prompt', "1", 'You are the Omnix Campaign World Forge planner. Return exactly one bare JSON object with no markdown, commentary, or reasoning. The root keys are exactly topic_id and entities; never return provenance. Set root topic_id to {v0!r}. Create exactly {v1} compact registry entries, one for every allocated ID, using each exactly once: {v2}. Each entity contains exactly id, name, role, and distinction. Names and distinctions must be unique, substantive, and grounded in the world brief and dependencies. Do not return dossiers, facts, documents, or authorship metadata.')
+_PROMPT_3 = prompt_template('rpg.worlds_generation_first_pass_provider.targeted_instruction', "1", ' This is a dossier-only regeneration for the existing canonical entity {v0!r} named {v1!r}. Return exactly that entity and preserve its ID, name, structured facts, references, mechanics, and all schema-required profile fields from campaign_context.entity_dossier_regeneration. Author new prose only for short_summary and dossier. The dossier must contain at least {v2} words across all required sections (the validator requires {v3}, and this safety margin is intentional), use at least {v4} substantive sections, give every paragraph at least 24 words, and never repeat a paragraph. Keep each section distinct and grounded in the supplied canonical entity and quality issues.')
 
 _SAFE_MODEL = re.compile(r"[^A-Za-z0-9_]+")
 
@@ -100,47 +105,10 @@ def _authored_system_prompt(
         minimum_words, minimum_sections = content_target(node.topic_id)
         requested_words = math.ceil(minimum_words * 1.25)
         targeted_instruction = (
-            " This is a dossier-only regeneration for the existing canonical entity "
-            f"{target_id!r} named {target_name!r}. Return exactly that entity and preserve "
-            "its ID, name, structured facts, references, mechanics, and all schema-required "
-            "profile fields from campaign_context.entity_dossier_regeneration."
-            " Author new prose only for short_summary and dossier. The dossier must contain "
-            f"at least {requested_words} words across all required sections (the validator "
-            f"requires {minimum_words}, and this safety margin is intentional), use at least "
-            f"{minimum_sections} substantive sections, give every paragraph at least 24 "
-            "words, and never repeat a paragraph. Keep each section distinct and grounded "
-            "in the supplied canonical entity and quality issues."
+            _PROMPT_3.format(v0=(target_id), v1=(target_name), v2=(requested_words), v3=(minimum_words), v4=(minimum_sections))
         )
     return (
-        "You are the Omnix Campaign World Forge. Author rich, internally consistent "
-        "campaign canon for exactly one topic, not player-facing turn narration. The "
-        "campaign_context.world_brief and supplied dependencies are authoritative. "
-        "Ground every name, institution, conflict, technology, culture, creature, and "
-        "location in that brief. Do not fall back to generic genre conventions unless "
-        "the brief supports them. Return exactly one bare JSON object: no markdown "
-        "fences, commentary, or reasoning. The JSON Schema at "
-        "required_output.authored_draft_schema is the sole output contract; unknown "
-        "fields are forbidden. The root keys must be exactly topic_id, documents, "
-        "entities, relationships, knowledge_rules, and story_threads. Include every "
-        "root key even when its array is empty. Never return provenance or facts. "
-        "Omnix materializes canonical IDs, facts, authority, visibility, provenance, "
-        "and dossier display metadata after validation. Use the exact root topic_id "
-        f"{node.topic_id!r}. Never place an entity ID in root topic_id. Use each "
-        "allocated entity ID exactly once and only at "
-        f"entities[].id: {', '.join(assigned_entity_ids) or 'none'}. Every entity must "
-        "include the schema-required profile fields, short_summary, and dossier. The "
-        "dossier object must contain subtitle, quote, quick_facts, sections, and "
-        "related_entity_ids. Dossier section keys must be nested under "
-        "entities[].dossier.sections, never directly under dossier. The exact dossier "
-        "sections fragment is "
-        f"{json.dumps(sections_fragment, ensure_ascii=False, sort_keys=True)}. "
-        "Each section object contains only paragraphs; never return section id or title "
-        "fields. Use short_summary for cards and substantive dossier paragraphs for "
-        "lore. Put mechanics and references in their schema-defined fields. Never "
-        "invent an unresolved dependency ID. "
-        f"This is entity batch {batch_index + 1} of {batch_count}. Earlier entities "
-        f"that must not be duplicated: {exclusions or 'none'}. Preserve assigned "
-        f"registry names, roles, and distinctions: {assigned_slot_text or 'none'}."
+        _PROMPT_1.format(v0=(node.topic_id), v1=(', '.join(assigned_entity_ids) or 'none'), v2=(json.dumps(sections_fragment, ensure_ascii=False, sort_keys=True)), v3=(batch_index + 1), v4=(batch_count), v5=(exclusions or 'none'), v6=(assigned_slot_text or 'none'))
         + targeted_instruction
     )
 
@@ -150,16 +118,7 @@ def _authored_registry_system_prompt(
     entity_ids: tuple[str, ...],
 ) -> str:
     return (
-        "You are the Omnix Campaign World Forge planner. Return exactly one bare JSON "
-        "object with no markdown, commentary, or reasoning. The root keys are exactly "
-        "topic_id and entities; never return provenance. Set root topic_id to "
-        f"{node.topic_id!r}. Create exactly {len(entity_ids)} compact registry "
-        "entries, one for every allocated ID, "
-        "using each exactly once: "
-        f"{', '.join(entity_ids) or 'none'}. Each entity contains exactly id, name, "
-        "role, and distinction. Names and distinctions must be unique, substantive, "
-        "and grounded in the world brief and dependencies. Do not return dossiers, "
-        "facts, documents, or authorship metadata."
+        _PROMPT_2.format(v0=(node.topic_id), v1=(len(entity_ids)), v2=(', '.join(entity_ids) or 'none'))
     )
 
 

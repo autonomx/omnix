@@ -7,6 +7,9 @@ from app.rpg.profiles.dynamic_npc_profiles import (
     load_npc_profile,
     save_npc_profile,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.profiles_profile_portraits.prompt', "1", 'Medieval fantasy RPG character portrait of {v0}. {v1}. Bust portrait, expressive face, grounded realistic fantasy style, detailed clothing appropriate to their role, neutral background, no text, no watermark.')
 
 
 def _safe_str(value: Any) -> str:
@@ -59,10 +62,7 @@ def build_npc_profile_portrait_prompt(profile: Dict[str, Any]) -> Dict[str, Any]
     context = "; ".join(descriptors)
 
     prompt = (
-        f"Medieval fantasy RPG character portrait of {name}. "
-        f"{context}. "
-        "Bust portrait, expressive face, grounded realistic fantasy style, "
-        "detailed clothing appropriate to their role, neutral background, no text, no watermark."
+        _PROMPT_1.format(v0=(name), v1=(context))
     )
 
     return {

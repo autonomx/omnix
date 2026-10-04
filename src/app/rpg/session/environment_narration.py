@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from typing import Any
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_environment_narration.environment_narration_prompt_block', "1", "Narration rule: describe these values only; never mutate weather, time, season, temperature, visibility, hazards, or terrain.")
 
 FORBIDDEN_ENVIRONMENT_MUTATIONS = (
     "create_new_weather",
@@ -51,7 +54,7 @@ def environment_narration_prompt_block(snapshot: dict[str, Any] | None) -> str:
             f"- Weather: {weather}",
             f"- Temperature: {display.get('temperature') or 'Not tracked yet'}",
             f"- Terrain: {display.get('terrain') or 'Not tracked yet'}",
-            "Narration rule: describe these values only; never mutate weather, time, season, temperature, visibility, hazards, or terrain.",
+            _PROMPT_1.text,
         ]
     )
 

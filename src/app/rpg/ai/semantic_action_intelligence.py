@@ -6,6 +6,25 @@ from typing import Any
 from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_semantic_action_intelligence.instructions', "1", (
+    "You are the RPG first-call semantic intent router.\n"
+        "Return JSON only.\n"
+        "Use the turn_grounding_packet before classifying intent. It includes current scene, active modes, recent turns, relevant_memory, rich NPC biography/personality/speech examples, relationship, inventory, capabilities, and knowledge boundaries.\n"
+        "Use relevant_memory only for continuity and dialogue context; current runtime state remains authoritative and private memory must not be revealed directly.\n"
+        "World/runtime state is authoritative and overrides older profile memory.\n"
+        "Convert freeform player intent into a bounded semantic action object.\n"
+        "Do not decide success, failure, damage, XP, prices, stock, inventory mutation, quest completion, travel success, rewards, or final state.\n"
+        "Do not invent absent actors. Prefer a nearby/addressed NPC id when the target role or name strongly implies one.\n"
+        "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide final_narration_candidate.\n"
+        "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate state, set stateful true and needs_runtime_resolution true.\n"
+        "Classify semantic risk by meaning, not keywords. Use evidence_spans to cite the smallest player-input phrases supporting your classification.\n"
+        "Always include dialogue_gate. Set safe_to_display_now true only for non-mutating dialogue; set it false for any state risk.\n"
+        "Never reveal private_context or private NPC biography/inventory in final_narration_candidate.\n"
+        "Return exactly action_intent, semantic_advisory, dialogue_gate, final_narration_candidate, and reason with all nested fields required by the schema.\n"
+))
+_PROMPT_2 = prompt_template('rpg.ai_semantic_action_intelligence.build_semantic_action_prompt', "1", "{v0}\nDIALOGUE_QUALITY_CONTRACT:\n{v1}\n\nSTRICT VISIBLE RESPONSE RULES:\n- final_narration_candidate.npc.speaker must be the NPC who answers, never Player, you, narrator, scene, or system.\n- final_narration_candidate.npc.line must be the NPC's answer, not a restatement of the player's request.\n- priority_context.dialogue_resolution is authoritative when locked is true; keep that target_id even when the current utterance does not repeat the NPC's name.\n- Use priority_context.dialogue_context.recent_turns as an exact speaker/target transcript. Declarative answers, corrections, pronouns, and topic continuations may all be dialogue replies.\n- Resolve a different target only when dialogue_resolution supplies multiple candidate_target_ids and the transcript genuinely disambiguates one of them.\n- If you cannot safely produce an NPC answer, leave final_narration_candidate empty and set dialogue_gate.safe_to_display_now false.\n- Use only allowed utterance_mode and risk_domain enum values from the input lists.\n")
 
 _ALLOWED_ACTION_TYPES = {"attack_unarmed", "attack_melee", "attack_ranged", "block", "dodge", "parry", "persuade", "intimidate", "deceive", "sneak", "investigate", "hack", "cast_spell", "use_item", "pickup_item", "drop_item", "equip_item", "unequip_item", "observe", "social_activity", "social_competition", "social_affection", "social_performance", "trade", "ritual", "exploration", "threat", "service_inquiry", "service_purchase", "service_consumption", "duration_action"}
 _ALLOWED_SEMANTIC_FAMILIES = {"combat", "defense", "social", "trade", "commerce", "ritual", "exploration", "stealth", "magic", "technical", "item", "threat", "observation"}
@@ -261,34 +280,13 @@ def build_semantic_action_prompt(player_input: str, simulation_state: dict[str, 
         "allowed_scene_impacts": sorted(_ALLOWED_SCENE_IMPACTS),
     }
     instructions = (
-        "You are the RPG first-call semantic intent router.\n"
-        "Return JSON only.\n"
-        "Use the turn_grounding_packet before classifying intent. It includes current scene, active modes, recent turns, relevant_memory, rich NPC biography/personality/speech examples, relationship, inventory, capabilities, and knowledge boundaries.\n"
-        "Use relevant_memory only for continuity and dialogue context; current runtime state remains authoritative and private memory must not be revealed directly.\n"
-        "World/runtime state is authoritative and overrides older profile memory.\n"
-        "Convert freeform player intent into a bounded semantic action object.\n"
-        "Do not decide success, failure, damage, XP, prices, stock, inventory mutation, quest completion, travel success, rewards, or final state.\n"
-        "Do not invent absent actors. Prefer a nearby/addressed NPC id when the target role or name strongly implies one.\n"
-        "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide final_narration_candidate.\n"
-        "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate state, set stateful true and needs_runtime_resolution true.\n"
-        "Classify semantic risk by meaning, not keywords. Use evidence_spans to cite the smallest player-input phrases supporting your classification.\n"
-        "Always include dialogue_gate. Set safe_to_display_now true only for non-mutating dialogue; set it false for any state risk.\n"
-        "Never reveal private_context or private NPC biography/inventory in final_narration_candidate.\n"
-        "Return exactly action_intent, semantic_advisory, dialogue_gate, final_narration_candidate, and reason with all nested fields required by the schema.\n"
+        _PROMPT_1.text
     )
     from app.rpg.presentation.dialogue_quality import dialogue_quality_contract_text
 
     prompt = instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
     return (
-        f"{prompt}\nDIALOGUE_QUALITY_CONTRACT:\n{dialogue_quality_contract_text()}"
-        "\n\nSTRICT VISIBLE RESPONSE RULES:\n"
-        "- final_narration_candidate.npc.speaker must be the NPC who answers, never Player, you, narrator, scene, or system.\n"
-        "- final_narration_candidate.npc.line must be the NPC's answer, not a restatement of the player's request.\n"
-        "- priority_context.dialogue_resolution is authoritative when locked is true; keep that target_id even when the current utterance does not repeat the NPC's name.\n"
-        "- Use priority_context.dialogue_context.recent_turns as an exact speaker/target transcript. Declarative answers, corrections, pronouns, and topic continuations may all be dialogue replies.\n"
-        "- Resolve a different target only when dialogue_resolution supplies multiple candidate_target_ids and the transcript genuinely disambiguates one of them.\n"
-        "- If you cannot safely produce an NPC answer, leave final_narration_candidate empty and set dialogue_gate.safe_to_display_now false.\n"
-        "- Use only allowed utterance_mode and risk_domain enum values from the input lists.\n"
+        _PROMPT_2.format(v0=(prompt), v1=(dialogue_quality_contract_text()))
     )
 
 
