@@ -73,6 +73,7 @@ def _campaign_genesis_worker(context):
 FEATURE = FeatureModule(
     id="rpg",
     title="RPG",
+    tier="app",
     # The Hermes routes in app/rpg/hermes read assist mode through app.chat.contracts.
     depends_on=("chat",),
     routers=(_rpg_routes_router, _compatibility_router),

@@ -22,6 +22,7 @@ def _background_worker(_context: FeatureContext):
 FEATURE = FeatureModule(
     id="audiobook",
     title="Audiobook",
+    tier="app",
     routers=(_http_router, _streaming_router),
     background_workers=(_background_worker,),
 )

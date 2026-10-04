@@ -53,6 +53,7 @@ def _workspace_router(context: FeatureContext):
 FEATURE = FeatureModule(
     id="image",
     title="Images",
+    tier="platform",
     routers=(_model_router, _asset_file_router, _reference_router, _workspace_router),
     job_handlers=(
         JobHandlerSpec(

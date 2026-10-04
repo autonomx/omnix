@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "d1467a7a1515eba3ea726e6f3be8f43a48e9e1180fbdaa3e64957e000547835f",
+  "policy_digest": "94b7d65f801de2eec7516def926ac5321fff44acba45c68df4076430a81ffc13",
   "rules": [
     "AL001",
     "AL002",
@@ -130,27 +130,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "_legacy_memory_write_guard:app.assistant_memory_v2.authority",
-      "lines": [
-        78
-      ],
-      "path": "src/app/assistant_memory/owner_defaults.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "MemoryService.__init__:app.runtime_composition",
       "lines": [
         73
-      ],
-      "path": "src/app/assistant_memory/service.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_default_legacy_write_guard:app.assistant_memory_v2.authority",
-      "lines": [
-        393
       ],
       "path": "src/app/assistant_memory/service.py",
       "rule": "AL001"
@@ -169,6 +151,24 @@
       "fingerprint": "_default_tool_enabled:app.trading.providers.alpaca_iex",
       "lines": [
         152
+      ],
+      "path": "src/app/assistant_tools/config_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "load_assistant_tools_config:app.runtime_document_services",
+      "lines": [
+        102
+      ],
+      "path": "src/app/assistant_tools/config_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_assistant_tools_config:app.runtime_document_services",
+      "lines": [
+        120
       ],
       "path": "src/app/assistant_tools/config_store.py",
       "rule": "AL001"
@@ -211,6 +211,132 @@
     },
     {
       "count": 1,
+      "fingerprint": "<module>:app.characters.live_call",
+      "lines": [
+        24
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.live_conversation_profile",
+      "lines": [
+        25
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.management",
+      "lines": [
+        29
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.repository",
+      "lines": [
+        33
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.service",
+      "lines": [
+        35
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.session_models",
+      "lines": [
+        34
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.chat.live_call_greeting",
+      "lines": [
+        17
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.chat.live_conversation_proactive",
+      "lines": [
+        18
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.companion_activity.initiative",
+      "lines": [
+        12
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes.memory_repository_factory:app.assistant_memory.owner_repository",
+      "lines": [
+        102
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes.memory_repository_factory:app.runtime_composition",
+      "lines": [
+        107
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes:app.assistant_memory",
+      "lines": [
+        93
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes:app.assistant_memory.character_hermes_adapter",
+      "lines": [
+        89
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes:app.characters.interaction",
+      "lines": [
+        94
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
       "fingerprint": "<module>:app.image.reference_assets",
       "lines": [
         10
@@ -238,6 +364,105 @@
     },
     {
       "count": 1,
+      "fingerprint": "<module>:app.assistant_tools.contracts",
+      "lines": [
+        10
+      ],
+      "path": "src/app/chat/assist/live_agent.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "readout_payload:app.rpg.contracts",
+      "lines": [
+        38
+      ],
+      "path": "src/app/chat/assist/modes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "add_pending:app.runtime_document_services",
+      "lines": [
+        47
+      ],
+      "path": "src/app/chat/assist/review.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "append_log:app.runtime_document_services",
+      "lines": [
+        57
+      ],
+      "path": "src/app/chat/assist/review.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "read_pending:app.runtime_document_services",
+      "lines": [
+        25
+      ],
+      "path": "src/app/chat/assist/review.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "write_pending:app.runtime_document_services",
+      "lines": [
+        39
+      ],
+      "path": "src/app/chat/assist/review.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.research.contracts",
+      "lines": [
+        10
+      ],
+      "path": "src/app/chat/assistant_context/models.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.research.contracts",
+      "lines": [
+        19
+      ],
+      "path": "src/app/chat/assistant_context/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.research.contracts",
+      "lines": [
+        7
+      ],
+      "path": "src/app/chat/assistant_context/service.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        8
+      ],
+      "path": "src/app/chat/character_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/character_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
       "fingerprint": "default_chat_store:app.runtime_composition",
       "lines": [
         350
@@ -247,20 +472,75 @@
     },
     {
       "count": 1,
-      "fingerprint": "default_summary_repository:app.runtime_composition",
+      "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
-        225
+        18
       ],
       "path": "src/app/chat/compaction.py",
       "rule": "AL001"
     },
     {
       "count": 1,
-      "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
+      "fingerprint": "default_summary_repository:app.runtime_composition",
       "lines": [
-        159
+        242
+      ],
+      "path": "src/app/chat/compaction.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/context_budget.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        13
+      ],
+      "path": "src/app/chat/history_search.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_tools.contracts",
+      "lines": [
+        23
       ],
       "path": "src/app/chat/live_agent_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
+      "lines": [
+        162
+      ],
+      "path": "src/app/chat/live_agent_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/memory_commands.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 2,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        8,
+        16
+      ],
+      "path": "src/app/chat/memory_prompt.py",
       "rule": "AL001"
     },
     {
@@ -268,6 +548,15 @@
       "fingerprint": "<module>:app.assistant_memory_v2",
       "lines": [
         17
+      ],
+      "path": "src/app/chat/memory_prompt.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.contracts",
+      "lines": [
+        18
       ],
       "path": "src/app/chat/memory_prompt.py",
       "rule": "AL001"
@@ -283,11 +572,74 @@
     },
     {
       "count": 1,
+      "fingerprint": "<module>:app.characters.contracts",
+      "lines": [
+        12
+      ],
+      "path": "src/app/chat/models.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.characters.contracts",
+      "lines": [
+        11
+      ],
+      "path": "src/app/chat/prompt_assembly.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        14
+      ],
+      "path": "src/app/chat/prompt_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
       "fingerprint": "route_typed_stream_boundary:app.agent_runtime.chat_bridge",
       "lines": [
         153
       ],
       "path": "src/app/chat/prompt_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.research.contracts",
+      "lines": [
+        6
+      ],
+      "path": "src/app/chat/research_citations.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.research.contracts",
+      "lines": [
+        4
+      ],
+      "path": "src/app/chat/research_release.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        6
+      ],
+      "path": "src/app/chat/retention_policy.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/sqlite_store.py",
       "rule": "AL001"
     },
     {
@@ -409,6 +761,51 @@
     },
     {
       "count": 1,
+      "fingerprint": "cleanup_unused_image_assets:app.runtime_document_services",
+      "lines": [
+        162
+      ],
+      "path": "src/app/image/asset_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "delete_image_asset:app.runtime_document_services",
+      "lines": [
+        123
+      ],
+      "path": "src/app/image/asset_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "get_image_asset_manifest:app.runtime_document_services",
+      "lines": [
+        114
+      ],
+      "path": "src/app/image/asset_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_image_asset_file:app.runtime_document_services",
+      "lines": [
+        95
+      ],
+      "path": "src/app/image/asset_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_image_asset_bytes:app.runtime_document_services",
+      "lines": [
+        67
+      ],
+      "path": "src/app/image/asset_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
       "fingerprint": "default_provider_model_refresh_store:app.runtime_composition",
       "lines": [
         175
@@ -436,65 +833,119 @@
     },
     {
       "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.create_checkpoint:app.rpg.interactive_cli_state_checkpoint",
-      "lines": [
-        72
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.list_sessions:app.rpg.session.durable_store",
-      "lines": [
-        93
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.load_checkpoint_file:app.rpg.interactive_cli_state_checkpoint",
-      "lines": [
-        88
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.restore_checkpoint:app.rpg.interactive_cli_state_checkpoint",
-      "lines": [
-        78
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.save_checkpoint_file:app.rpg.interactive_cli_state_checkpoint",
-      "lines": [
-        83
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RpgReplayPersistenceAdapter.state_hash:app.rpg.validation.state_hash",
-      "lines": [
-        57
-      ],
-      "path": "src/app/replay/rpg_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "default_research_source_store:app.runtime_composition",
       "lines": [
         262
       ],
       "path": "src/app/research/source_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "load_npc_evolution_profiles_for_runtime:app.runtime_document_services",
+      "lines": [
+        308
+      ],
+      "path": "src/app/rpg/npc_evolution/profile_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "load_npc_profile:app.runtime_document_services",
+      "lines": [
+        73
+      ],
+      "path": "src/app/rpg/npc_evolution/profile_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "persist_npc_evolution_profiles:app.runtime_document_services",
+      "lines": [
+        158
+      ],
+      "path": "src/app/rpg/npc_evolution/profile_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_load_session_from_disk:app.runtime_document_services",
+      "lines": [
+        294
+      ],
+      "path": "src/app/rpg/session/durable_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_save_session_to_disk:app.runtime_document_services",
+      "lines": [
+        247
+      ],
+      "path": "src/app/rpg/session/durable_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "archive_session_on_disk:app.runtime_document_services",
+      "lines": [
+        332
+      ],
+      "path": "src/app/rpg/session/durable_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "list_sessions_from_disk:app.runtime_document_services",
+      "lines": [
+        308
+      ],
+      "path": "src/app/rpg/session/durable_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "append_interaction_event:app.runtime_document_services",
+      "lines": [
+        28
+      ],
+      "path": "src/app/rpg/session/interaction_event_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "compact_interaction_event_log:app.runtime_document_services",
+      "lines": [
+        135
+      ],
+      "path": "src/app/rpg/session/interaction_event_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "interaction_event_log_status:app.runtime_document_services",
+      "lines": [
+        149
+      ],
+      "path": "src/app/rpg/session/interaction_event_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "load_interaction_events:app.runtime_document_services",
+      "lines": [
+        58
+      ],
+      "path": "src/app/rpg/session/interaction_event_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "list_session_summaries_from_disk:app.runtime_document_services",
+      "lines": [
+        127
+      ],
+      "path": "src/app/rpg/session/list_summaries.py",
       "rule": "AL001"
     },
     {

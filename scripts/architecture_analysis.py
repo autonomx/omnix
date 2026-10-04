@@ -215,9 +215,21 @@ def package_prefix(module: str, prefix: str) -> bool:
 
 
 def layer_for(module: str, config: dict) -> tuple[str, str] | None:
+    """The statically listed layer (kernel, shared services, composition) of a module."""
     matches = [(name, prefix) for name, layer in config.get("layers", {}).items()
-               for prefix in layer["packages"] if package_prefix(module, prefix)]
+               for prefix in layer.get("packages", ()) if package_prefix(module, prefix)]
     return max(matches, key=lambda pair: len(pair[1]), default=None)
+
+
+@dataclass(frozen=True)
+class ModuleUnit:
+    """An ADR-0016 module: a feature package with its nested features folded in."""
+
+    package: str
+    tier: str | None
+    ids: frozenset[str]
+    depends_on: frozenset[str]
+    tier_conflicts: tuple[str, ...]
 
 
 def load_layers(path: Path) -> dict:
@@ -244,10 +256,11 @@ class SourceAnalysis:
                 self.syntax_errors.append(path)
         self.modules = {module_name(path): path for path in self.trees if path.startswith("src/")}
         self._bindings: dict[str, PythonBindings] = {}
+        self._units: dict[str, ModuleUnit] | None = None
 
-    def feature_dependencies(self) -> dict[str, tuple[str, frozenset[str]]]:
-        """Read package feature ids and declared dependencies without imports."""
-        result: dict[str, tuple[str, frozenset[str]]] = {}
+    def feature_dependencies(self) -> dict[str, tuple[str, frozenset[str], str | None]]:
+        """Read package feature ids, declared dependencies and tiers without imports."""
+        result: dict[str, tuple[str, frozenset[str], str | None]] = {}
         for module, path in self.modules.items():
             if not module.endswith(".feature"):
                 continue
@@ -281,9 +294,67 @@ class SourceAnalysis:
                     or any(not isinstance(item, str) for item in dependencies)
                 ):
                     continue
-                result[package] = (feature_id, frozenset(dependencies))
+                try:
+                    tier = ast.literal_eval(values["tier"]) if "tier" in values else None
+                except (ValueError, TypeError):
+                    tier = None
+                result[package] = (feature_id, frozenset(dependencies), tier if isinstance(tier, str) else None)
                 break
         return result
+
+    def module_units(self) -> dict[str, ModuleUnit]:
+        """Feature packages grouped into ADR-0016 module units, keyed by the outermost package."""
+        if self._units is None:
+            features = self.feature_dependencies()
+            roots = [package for package in features
+                     if not any(other != package and package_prefix(package, other) for other in features)]
+            units = {}
+            for root in roots:
+                members = {package: features[package] for package in features if package_prefix(package, root)}
+                ids = frozenset(member[0] for member in members.values())
+                tier = features[root][2]
+                units[root] = ModuleUnit(
+                    package=root,
+                    tier=tier,
+                    ids=ids,
+                    depends_on=frozenset().union(*(member[1] for member in members.values())) - ids,
+                    tier_conflicts=tuple(sorted(package for package, member in members.items()
+                                                if package != root and member[2] != tier)),
+                )
+            self._units = units
+        return self._units
+
+    def layer_of(self, module: str) -> tuple[str, str] | None:
+        """The layer and owning unit of a module: a listed layer, a declared tier, or a transitional owner."""
+        layers = self.config.get("layers", {})
+        tier_layers = {layer["tier"]: name for name, layer in layers.items() if "tier" in layer}
+        units = self.module_units()
+        candidates = [(len(prefix), name, prefix) for name, layer in layers.items()
+                      for prefix in layer.get("packages", ()) if package_prefix(module, prefix)]
+        candidates += [(len(package), tier_layers[unit.tier], package) for package, unit in units.items()
+                       if unit.tier in tier_layers and package_prefix(module, package)]
+        owners = self.config.get("modules", {}).get("package_owners", {})
+        candidates += [(len(prefix), tier_layers[units[owner].tier], owner) for prefix, owner in owners.items()
+                       if owner in units and units[owner].tier in tier_layers and package_prefix(module, prefix)]
+        if not candidates:
+            return None
+        _, layer, unit = max(candidates)
+        return layer, unit
+
+    def import_allowed(self, source: tuple[str, str], target: tuple[str, str], module: str) -> bool:
+        """ADR-0016 dependency rules for one import between classified modules."""
+        layers = self.config["layers"]
+        allowed = layers[source[0]]["may_import"]
+        if "*" in allowed or source[1] == target[1]:
+            return True
+        target_tier = layers[target[0]].get("tier")
+        if target_tier is None:
+            return target[0] in allowed
+        units = self.module_units()
+        if layers[source[0]].get("tier") is None or target_tier != "platform":
+            return False
+        contract = target[1] + "." + self.config.get("modules", {}).get("contract_module", "contracts")
+        return package_prefix(module, contract) and bool(units[target[1]].ids & units[source[1]].depends_on)
 
     def bindings(self, path: str) -> PythonBindings:
         if path not in self._bindings:
@@ -328,10 +399,8 @@ class SourceAnalysis:
     def violations(self) -> list[Violation]:
         result = []
         owners = self.config.get("owners", {})
-        feature_dependencies = self.feature_dependencies()
-        feature_contract_module = self.config.get("layers", {}).get("features", {}).get(
-            "feature_contract_module", "contracts"
-        )
+        units = self.module_units()
+        unit_paths = {"src/" + package.replace(".", "/") + "/feature.py": package for package in units}
         for path, tree in self.trees.items():
             if not is_production(path, self.config):
                 continue
@@ -349,37 +418,29 @@ class SourceAnalysis:
             def foreign(node: ast.AST) -> bool:
                 return bindings.foreign(node)
 
+            # ADR-0016: every app module belongs to a layer, and a feature's
+            # nested features share its tier.
+            source_module = module_name(path)
+            source_layer = self.layer_of(source_module)
+            if source_layer is None and source_module.startswith("app."):
+                add("AL001", tree, "<uncovered>", "")
+            if path in unit_paths:
+                unit = units[unit_paths[path]]
+                if unit.tier is None:
+                    add("AL001", tree, "<missing-tier>", "")
+                for conflict in unit.tier_conflicts:
+                    add("AL001", tree, "<tier-conflict>:" + conflict, "")
+
             for node, scope in scoped_nodes(tree):
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
                     imports = ([item.name for item in node.names] if isinstance(node, ast.Import)
                                else sorted({f"{import_target(node, path)}.{item.name}"
                                             if f"{import_target(node, path)}.{item.name}" in self.modules
                                             else import_target(node, path) for item in node.names}))
-                    source_layer = layer_for(module_name(path), self.config)
                     for target in imports:
-                        target_layer = layer_for(target, self.config)
-                        if source_layer and target_layer:
-                            allowed = self.config["layers"][source_layer[0]]["may_import"]
-                            same_feature = source_layer[0] == target_layer[0] == "features" and source_layer[1] == target_layer[1]
-                            declared_contract_dependency = False
-                            if (
-                                source_layer[0] == target_layer[0] == "features"
-                                and target == f"{target_layer[1]}.{feature_contract_module}"
-                            ):
-                                source_feature = feature_dependencies.get(source_layer[1])
-                                target_feature = feature_dependencies.get(target_layer[1])
-                                declared_contract_dependency = bool(
-                                    source_feature
-                                    and target_feature
-                                    and (
-                                        target_feature[0] in source_feature[1]
-                                        or source_feature[0] in target_feature[1]
-                                    )
-                                )
-                            if ("*" not in allowed and not same_feature and (target_layer[0] not in allowed
-                                or source_layer[0] == target_layer[0] == "features")
-                                and not declared_contract_dependency):
-                                add("AL001", node, target, scope)
+                        target_layer = self.layer_of(target)
+                        if source_layer and target_layer and not self.import_allowed(source_layer, target_layer, target):
+                            add("AL001", node, target, scope)
                     if isinstance(node, ast.ImportFrom) and path.startswith("src/app/") and any(item.name == "*" for item in node.names):
                         add("AL010", node, import_target(node, path), scope)
 

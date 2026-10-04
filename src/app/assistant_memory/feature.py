@@ -57,6 +57,7 @@ def _router(context: FeatureContext) -> APIRouter:
 FEATURE = FeatureModule(
     id="assistant-memory",
     title="Assistant Memory",
+    tier="platform",
     depends_on=("chat",),
     routers=(_router,),
     job_handlers=(

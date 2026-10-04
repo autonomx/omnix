@@ -75,6 +75,7 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     feature = FeatureModule(
         id="sample-feature",
         title="Sample feature",
+        tier="app",
         config_model=SampleFeatureConfig,
         routers=(router_factory,),
     )
@@ -130,6 +131,7 @@ def test_feature_composition_registers_scheduled_tasks(monkeypatch):
     feature = FeatureModule(
         id="sample-feature",
         title="Sample feature",
+        tier="app",
         scheduled_tasks=(lambda _context: task,),
     )
     monkeypatch.setattr(feature_registry, "enabled_feature_ids", lambda _config: (feature.id,))

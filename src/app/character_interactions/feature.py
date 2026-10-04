@@ -20,6 +20,7 @@ def _router(context: FeatureContext) -> APIRouter:
 FEATURE = FeatureModule(
     id="character-interactions",
     title="Character interactions",
+    tier="app",
     depends_on=("characters", "chat", "assistant-memory", "companion-activity"),
     routers=(_router,),
 )

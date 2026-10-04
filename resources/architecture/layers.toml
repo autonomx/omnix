@@ -3,17 +3,36 @@ packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.sec
 may_import = ["kernel"]
 
 [layers.shared_services]
-packages = ["app.providers", "app.prompts", "app.platform"]
+packages = ["app.providers", "app.prompts", "app.platform", "app.models", "app.tts_http_client", "app.tts_stream_audio", "app.voice_debug"]
 may_import = ["kernel", "shared_services"]
 
-[layers.features]
-packages = ["app.chat", "app.live_voice", "app.characters", "app.assistant_memory", "app.assistant_memory_v2", "app.rpg", "app.trading", "app.agent_runtime", "app.assistant_tools", "app.audiobook", "app.image", "app.voice", "app.research", "app.story", "app.hermes", "app.companion_activity", "app.desktop_companion", "app.live_speech", "app.replay"]
+# ADR-0016: platform and app modules are not listed here. Each feature package
+# declares its tier in feature.py (FeatureModule.tier); a nested feature belongs
+# to the outermost feature package that contains it.
+[layers.platform]
+tier = "platform"
 may_import = ["kernel", "shared_services"]
-feature_contract_module = "contracts"
+
+[layers.apps]
+tier = "app"
+may_import = ["kernel", "shared_services"]
 
 [layers.composition]
-packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition"]
+packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "app.runtime_document_services", "app.image_service_app", "app.image_service_runtime"]
 may_import = ["*"]
+
+[modules]
+# A module imports another module only through this contract module (or a
+# package of that name), only when it declares the other in depends_on, and
+# only when the other is a platform capability.
+contract_module = "contracts"
+
+# Transitional (PA-0.2): code that belongs to a module but lives outside its
+# package. Empty after PA-1.5 (replay), PA-3.2 (memory v2) and PA-5.2 (loose files).
+[modules.package_owners]
+"app.assistant_memory_v2" = "app.assistant_memory"
+"app.replay" = "app.rpg"
+"app.image_http_client" = "app.image"
 
 [owners]
 platform_table_sql = ["app/persistence/job_repository.py", "app/persistence/execution_repositories.py", "app/persistence/outbox_repository.py", "app/persistence/identity_service.py", "app/persistence/audit.py", "app/persistence/migrations.py", "app/persistence/retention.py"]

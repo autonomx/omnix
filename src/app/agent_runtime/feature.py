@@ -31,6 +31,7 @@ def _supervisor_worker(context: FeatureContext) -> BackgroundWorker | None:
 FEATURE = FeatureModule(
     id="agent-runtime",
     title="Agent Runtime",
+    tier="platform",
     routers=(create_agent_runtime_router,),
     job_handlers=AGENT_RUN_JOB_HANDLERS,
     background_workers=(_supervisor_worker,),

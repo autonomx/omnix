@@ -823,8 +823,8 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | WP | Status | PRs | Date | Metric deltas | Notes |
 |---|---|---|---|---|---|
 | PA-0.1 | done | — | 2026-10-04 | — | [ADR-0016](architecture/ADR-0016-platform-tiers.md) accepted by the owner; linked from `ARCHITECTURE.md` and the FeatureModule guide |
-| PA-0.2 | not started | — | — | — | |
-| PA-0.3 | not started | — | — | — | |
+| PA-0.2 | done | — | 2026-10-04 | AL001: 59 → 110 (policy re-seed: 27 reverse-direction contract imports, 26 imports of `runtime_document_services`, 16 from the newly covered `character_interactions`; −8 now inside one module); uncovered `app.*` modules: 0; lint regressions: 11 new | Required `FeatureModule.tier`; tiers read from `feature.py`, not `layers.toml`; one-direction contract rule; `contracts/` packages accepted; stale `app.hermes` removed; transitional `[modules.package_owners]` for `assistant_memory_v2`, `replay`, `image_http_client`. Feature matrix, lint/metrics tests (270), unit gate, mypy and metrics check pass |
+| PA-0.3 | in progress | — | 2026-10-04 | — | Started |
 | PA-1.1 | not started | — | — | — | After PA-1.3 step 1 |
 | PA-1.2 | not started | — | — | — | |
 | PA-1.3 | not started | — | — | — | Step 1 first; memory excluded (PA-3.2) |

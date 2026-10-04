@@ -85,6 +85,7 @@ def _avatar_generation_completed(job: Any) -> None:
 FEATURE = FeatureModule(
     id="characters",
     title="Characters",
+    tier="platform",
     depends_on=("chat", "assistant-memory", "companion-activity"),
     routers=(_router,),
     repositories=CHARACTER_REPOSITORY_SPECS,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Literal, Protocol, get_args
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -113,10 +113,17 @@ RouterFactory = Callable[[FeatureContext], APIRouter]
 BackgroundWorkerFactory = Callable[[FeatureContext], BackgroundWorker | None]
 
 
+# ADR-0016: a platform capability is reusable by other features through its
+# contract; an app is a user-facing product that no other feature imports.
+FeatureTier = Literal["platform", "app"]
+FEATURE_TIERS: frozenset[str] = frozenset(get_args(FeatureTier))
+
+
 @dataclass(frozen=True, slots=True)
 class FeatureModule:
     id: str
     title: str
+    tier: FeatureTier
     requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
     depends_on: tuple[str, ...] = ()
     config_model: type[BaseModel] | None = None
@@ -138,5 +145,7 @@ class FeatureModule:
         feature_id = self.id.strip()
         if not feature_id or feature_id != self.id or not feature_id.replace("_", "").replace("-", "").isalnum():
             raise ValueError(f"Invalid feature id: {self.id!r}")
+        if self.tier not in FEATURE_TIERS:
+            raise ValueError(f"Feature {self.id} has invalid tier: {self.tier!r}")
         if self.id in self.depends_on:
             raise ValueError(f"Feature {self.id} cannot depend on itself")

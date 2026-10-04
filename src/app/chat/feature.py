@@ -47,6 +47,7 @@ def _research_mode_router(context):
 FEATURE = FeatureModule(
     id="chat",
     title="Chat and Realtime",
+    tier="platform",
     routers=(_chat_context_router, _research_mode_router),
     repositories=CHAT_REPOSITORY_SPECS,
 )

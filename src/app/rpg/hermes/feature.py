@@ -19,6 +19,7 @@ def _router(_context: FeatureContext) -> APIRouter:
 FEATURE = FeatureModule(
     id="hermes",
     title="Hermes",
+    tier="app",
     depends_on=("rpg",),
     routers=(_router,),
 )

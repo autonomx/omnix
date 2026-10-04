@@ -44,6 +44,7 @@ def _submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
 FEATURE = FeatureModule(
     id="story",
     title="Storyteller and Podcast",
+    tier="app",
     routers=(_story_asset_router,),
     job_handlers=(
         JobHandlerSpec(

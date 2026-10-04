@@ -584,7 +584,7 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     )
     feature_package_paths = tuple(
         "src/" + package.replace(".", "/") + "/"
-        for package in analysis.config.get("layers", {}).get("features", {}).get("packages", [])
+        for package in sorted(analysis.module_units())
     ) + (
         # Composed into the gateway through guarded routers as well; the
         # runtime test in src/tests/security/test_permissions.py proves every

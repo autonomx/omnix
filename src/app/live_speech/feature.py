@@ -15,5 +15,6 @@ def _router(_context: FeatureContext) -> APIRouter:
 FEATURE = FeatureModule(
     id="live-speech",
     title="Live Speech",
+    tier="platform",
     routers=(_router,),
 )

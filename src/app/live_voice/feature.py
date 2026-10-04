@@ -39,6 +39,7 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
 FEATURE = FeatureModule(
     id="live-voice",
     title="Live voice",
+    tier="platform",
     depends_on=("chat", "characters", "assistant-memory"),
     routers=(_live_voice_router,),
 )

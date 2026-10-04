@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 59,
+      "AL001": 110,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -6584,7 +6584,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 59
+      "value": 110
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6639,7 +6639,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 39
+      "value": 27
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -6749,5 +6749,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "d86b3cc25a9ea1387abd7ffa8dd01a36e70a6ec13a1f56867c2e5c13e5f47032"
+  "source_digest": "60db30518cb05b868608d574614f9ea91b6ea6bacf9a53f8eb2230d8ef20de76"
 }

@@ -51,6 +51,7 @@ def _voice_router(context):
 FEATURE = FeatureModule(
     id="voice",
     title="Voice",
+    tier="platform",
     routers=(_voice_router,),
     job_handlers=tuple(
         JobHandlerSpec(

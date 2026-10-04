@@ -8,6 +8,7 @@ from .route_registration import create_trading_router, trading_scheduled_task_fa
 FEATURE = FeatureModule(
     id="trading",
     title="Trading",
+    tier="app",
     routers=(create_trading_router,),
     scheduled_tasks=trading_scheduled_task_factories(),
     job_handlers=(STRATEGY_RANGE_BACKTEST_JOB,),

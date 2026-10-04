@@ -20,12 +20,21 @@ OLD = lint.MIGRATIONS + "0001_platform.sql"
 NEW = lint.MIGRATIONS + "0002_more.sql"
 
 
+# ADR-0016: modules get their tier from feature.py. Synthetic sources under
+# chat/ and rpg/ belong to these declared features unless a test supplies its own.
+DECLARED_FEATURES = {
+    APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')\n",
+    APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')\n",
+}
+
+
 def report(sources):
-    return lint.measure(sources, CONFIG, {})
+    return lint.measure({**DECLARED_FEATURES, **sources}, CONFIG, {})
 
 
 CASES = [
-    ("AL001", {APP + "jobs/a.py": "def work():\n    from app.chat import service"}),
+    ("AL001", {APP + "jobs/a.py": "def work():\n    from app.chat import service",
+               APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', tier='platform')"}),
     ("AL002", {APP + "chat/a.py": "import app.jobs.a", APP + "jobs/a.py": "import app.chat.a"}),
     ("AL003", {APP + "chat/a.py": "import external as other\nother.method = replacement"}),
     ("AL003", {APP + "chat/a.py": "from external import Foreign\nsetattr(Foreign, 'method', replacement)"}),
@@ -70,55 +79,116 @@ def test_all_fourteen_rules_are_exercised():
     assert {rule for rule, _ in CASES} == set(lint.RULES)
 
 
+def feature(feature_id, tier, depends_on=()):
+    return f"FEATURE = FeatureModule(id={feature_id!r}, title='T', tier={tier!r}, depends_on={tuple(depends_on)!r})\n"
+
+
+def layer_violations(sources):
+    return [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+
+
 def test_declared_feature_dependency_may_import_only_the_contract_module():
     sources = {
-        APP + "chat/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='chat')\n"
-        ),
-        APP + "live_voice/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='live-voice', depends_on=('chat',))\n"
-        ),
+        APP + "chat/feature.py": feature("chat", "platform"),
+        APP + "live_voice/feature.py": feature("live-voice", "platform", ("chat",)),
         APP + "chat/contracts.py": "class ChatPort: ...\n",
         APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
     }
-    assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+    assert not layer_violations(sources)
 
     sources[APP + "live_voice/adapter.py"] = "from app.chat.store import ChatSessionStore\n"
-    assert [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+    assert layer_violations(sources)
 
 
 def test_feature_contract_import_requires_a_declared_dependency():
     sources = {
-        APP + "chat/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='chat')\n"
-        ),
-        APP + "live_voice/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='live-voice')\n"
-        ),
+        APP + "chat/feature.py": feature("chat", "platform"),
+        APP + "live_voice/feature.py": feature("live-voice", "platform"),
         APP + "chat/contracts.py": "class ChatPort: ...\n",
         APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
     }
-    assert [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+    assert layer_violations(sources)
 
 
-def test_feature_contract_import_is_allowed_for_the_declared_dependency_owner():
+def test_contract_import_against_the_declared_direction_is_a_violation():
+    """ADR-0016: if characters depends on chat, chat may not import characters' contract."""
     sources = {
-        APP + "chat/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='chat')\n"
-        ),
-        APP + "characters/feature.py": (
-            "from app.runtime.features import FeatureModule\n"
-            "FEATURE = FeatureModule(id='characters', depends_on=('chat',))\n"
-        ),
+        APP + "chat/feature.py": feature("chat", "platform"),
+        APP + "characters/feature.py": feature("characters", "platform", ("chat",)),
         APP + "characters/contracts.py": "class CharacterPort: ...\n",
         APP + "chat/adapter.py": "from app.characters.contracts import CharacterPort\n",
     }
-    assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "chat/adapter.py"]
+
+
+def test_an_app_never_imports_another_app_even_through_its_contract():
+    sources = {
+        APP + "trading/feature.py": feature("trading", "app"),
+        APP + "story/feature.py": feature("story", "app", ("trading",)),
+        APP + "trading/contracts.py": "class Quote: ...\n",
+        APP + "story/adapter.py": "from app.trading.contracts import Quote\n",
+    }
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "story/adapter.py"]
+
+
+def test_a_platform_capability_never_imports_an_app_contract():
+    sources = {
+        APP + "chat/feature.py": feature("chat", "platform", ("rpg",)),
+        APP + "rpg/feature.py": feature("rpg", "app"),
+        APP + "rpg/contracts.py": "class Turn: ...\n",
+        APP + "chat/adapter.py": "from app.rpg.contracts import Turn\n",
+    }
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "chat/adapter.py"]
+
+
+def test_a_contracts_package_is_a_contract():
+    sources = {
+        APP + "chat/feature.py": feature("chat", "platform"),
+        APP + "rpg/feature.py": feature("rpg", "app", ("chat",)),
+        APP + "chat/contracts/__init__.py": "",
+        APP + "chat/contracts/ports.py": "class Port: ...\n",
+        APP + "rpg/adapter.py": "from app.chat.contracts.ports import Port\n",
+    }
+    assert not layer_violations(sources)
+
+
+def test_a_new_feature_is_classified_by_its_declared_tier_without_editing_layers():
+    sources = {
+        APP + "jobs/a.py": "from app.brand_new_app import service\n",
+        APP + "brand_new_app/feature.py": feature("brand-new-app", "app"),
+        APP + "brand_new_app/service.py": "from app.jobs import a\n",
+    }
+    assert "app.brand_new_app" not in str(CONFIG)
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "jobs/a.py"]
+
+
+def test_an_app_package_outside_every_layer_is_a_violation():
+    sources = {APP + "unclassified_thing/helper.py": "VALUE = 1\n"}
+    assert [entry["fingerprint"] for entry in layer_violations(sources)] == ["<module>:<uncovered>"]
+
+
+def test_a_feature_without_a_tier_and_a_nested_feature_with_another_tier_are_violations():
+    untiered = {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='T')\n"}
+    assert "<module>:<missing-tier>" in {entry["fingerprint"] for entry in layer_violations(untiered)}
+
+    conflicting = {
+        APP + "rpg/feature.py": feature("rpg", "app"),
+        APP + "rpg/hermes/feature.py": feature("hermes", "platform", ("rpg",)),
+    }
+    assert {entry["fingerprint"] for entry in layer_violations(conflicting)} == {
+        "<module>:<tier-conflict>:app.rpg.hermes"
+    }
+
+
+def test_nested_features_and_transitional_owners_belong_to_their_unit():
+    sources = {
+        APP + "rpg/feature.py": feature("rpg", "app"),
+        APP + "rpg/hermes/feature.py": feature("hermes", "app", ("rpg",)),
+        APP + "rpg/hermes/flow.py": "from app.rpg import engine\n",
+        APP + "rpg/engine.py": "VALUE = 1\n",
+        APP + "replay/adapter.py": "from app.rpg import engine\n",
+    }
+    assert not layer_violations(sources)
 
 
 PROVENANCE_CASES = [

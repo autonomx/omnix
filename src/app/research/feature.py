@@ -28,6 +28,7 @@ def _research_router(_context: FeatureContext):
 FEATURE = FeatureModule(
     id="research",
     title="Research",
+    tier="platform",
     # Deep research is asked for in chat and answers into chat sessions, and chat
     # reaches research only through research.contracts (WP-8.2).
     depends_on=("chat",),
