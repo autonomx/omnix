@@ -10,6 +10,9 @@ the account lock:
 - an order that opens or adds exposure needs entry authority (a manual risk
   preview or a strategy entry authorization) and no engaged kill switch for the
   workspace, the account or the strategy (``omnix_trading_kill_switches``);
+- an entry stops for the rest of the Eastern trading day once the account's
+  realized loss reaches the daily limit (the strategy's risk profile, or the
+  manual paper risk policy);
 - accounts are long-only unless they allow shorting: a sell must be covered by
   an unreserved long position;
 - the idempotency key returns the order already placed;
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from app.trading.us_equity_calendar import EASTERN as _ET
@@ -35,6 +39,7 @@ from .market_evidence import (
     premarket_evidence_feature_compatible,
 )
 from .paper import OrderAuthority, PaperOrder, PaperOrderRequest
+from .paper_risk import PaperRiskPolicy
 from .strategy_evaluability import (
     assess_session_evaluability,
     build_trade_authorization,
@@ -45,7 +50,7 @@ from .strategy_evaluability import (
 )
 
 REDUCE_ONLY = OrderAuthority("reduce_only")
-MANUAL_RISK = OrderAuthority("manual_risk")
+MANUAL_RISK = OrderAuthority("manual_risk", max_daily_loss_pct=PaperRiskPolicy().max_daily_loss_pct)
 
 
 class OrderGateway:
@@ -70,12 +75,18 @@ class OrderGateway:
         *,
         strategy_id: str,
         trade_attempt_id: str,
+        max_daily_loss_pct: Decimal | None = None,
     ) -> PaperOrder:
         """A strategy entry, authorized for its own trade attempt before it is placed."""
         if self._entry_authorizer is None:
             raise ValueError("trade_authorization_denied:AUTHORIZER_MISSING")
         self._entry_authorizer.authorize(account_id, request, trade_attempt_id=trade_attempt_id)
-        authority = OrderAuthority("strategy_entry", strategy_id=strategy_id, trade_attempt_id=trade_attempt_id)
+        authority = OrderAuthority(
+            "strategy_entry",
+            strategy_id=strategy_id,
+            trade_attempt_id=trade_attempt_id,
+            max_daily_loss_pct=max_daily_loss_pct,
+        )
         return self._repository.place_order(account_id, request, authority=authority)
 
     def cancel(self, account_id: str, order_id: str) -> PaperOrder:
@@ -97,10 +108,18 @@ _ORDER_METHODS = frozenset({"place_order", "cancel_order", "replace_order"})
 class StrategyPaperAccess:
     """A strategy's view of its paper account: reads, and orders through the gateway."""
 
-    def __init__(self, repository: Any, gateway: OrderGateway, *, strategy_id: str) -> None:
+    def __init__(
+        self,
+        repository: Any,
+        gateway: OrderGateway,
+        *,
+        strategy_id: str,
+        max_daily_loss_pct: Decimal | None = None,
+    ) -> None:
         self._repository = repository
         self._gateway = gateway
         self._strategy_id = strategy_id
+        self._max_daily_loss_pct = max_daily_loss_pct
 
     def __getattr__(self, name: str):
         if name in _ORDER_METHODS:
@@ -116,6 +135,7 @@ class StrategyPaperAccess:
             request,
             strategy_id=self._strategy_id,
             trade_attempt_id=trade_attempt_id,
+            max_daily_loss_pct=self._max_daily_loss_pct,
         )
 
 
@@ -134,7 +154,9 @@ def strategy_paper_access(repository, *, monitor, config, strategy_repository, m
         qualification_module=strategy_v2_qualification,
     )
     gateway = OrderGateway(repository, entry_authorizer=authorizer)
-    return StrategyPaperAccess(repository, gateway, strategy_id=config.strategy_id)
+    return StrategyPaperAccess(
+        repository, gateway, strategy_id=config.strategy_id, max_daily_loss_pct=config.risk.max_daily_loss_pct
+    )
 
 
 def _morning_evidence(candidate, config):

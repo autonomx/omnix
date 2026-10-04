@@ -702,6 +702,8 @@ class IbkrRuntime:
         self._contract_cache: dict[str, IbkrContractIdentity] = {}
         self._quote_tokens: dict[str, int] = {}
         self._latest_quotes: dict[str, IbkrQuoteSnapshot] = {}
+        # Notified on every quote, so waiting for one does not poll.
+        self._quote_arrived = threading.Condition()
         self._quote_listeners: dict[str, list[Callable[[IbkrQuoteSnapshot], None]]] = {}
         self.connect_count = 0
         self.connect_failure_count = 0
@@ -882,6 +884,8 @@ class IbkrRuntime:
             with self._lock:
                 self._latest_quotes[instrument_id] = snapshot
                 listeners = tuple(self._quote_listeners.get(instrument_id, ()))
+            with self._quote_arrived:
+                self._quote_arrived.notify_all()
             for callback in listeners:
                 try:
                     callback(snapshot)
@@ -941,13 +945,17 @@ class IbkrRuntime:
             }
 
     def wait_for_quote(self, instrument_id: str, timeout_seconds: float = 3.0) -> IbkrQuoteSnapshot | None:
+        """The latest quote with a last price, waiting up to the timeout for one to arrive."""
         deadline = time_module.monotonic() + max(0.0, timeout_seconds)
-        while time_module.monotonic() <= deadline:
-            snapshot = self.latest_quote(instrument_id)
-            if snapshot is not None and snapshot.last is not None:
-                return snapshot
-            time_module.sleep(0.02)
-        return self.latest_quote(instrument_id)
+        with self._quote_arrived:
+            while True:
+                snapshot = self.latest_quote(instrument_id)
+                if snapshot is not None and snapshot.last is not None:
+                    return snapshot
+                remaining = deadline - time_module.monotonic()
+                if remaining <= 0:
+                    return snapshot
+                self._quote_arrived.wait(remaining)
 
     def historical_bars(
         self,

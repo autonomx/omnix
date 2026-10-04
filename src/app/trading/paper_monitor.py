@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import asyncio
 import hashlib
-import os
 from collections import defaultdict
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import ExecutionObservation
 from .order_gateway import OrderGateway
 from .providers.request_budget import in_provider_lane
@@ -92,7 +90,7 @@ def _paper_observation(execution: ExecutionObservation) -> PaperMarketObservatio
     )
 
 
-class TradingPaperMonitor:
+class TradingPaperMonitor(ScheduledTradingMonitor):
     """Server-authoritative paper execution and OCO protection monitor.
 
     Idle accounts are scanned conservatively, but once an order or protection is
@@ -115,8 +113,6 @@ class TradingPaperMonitor:
         self.market_service_factory = market_service_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.active_interval_seconds = active_interval_seconds or _active_interval_seconds()
-        self._task: asyncio.Task[None] | None = None
-        self._wake_event: asyncio.Event | None = None
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
         self.last_execution_observation_at: datetime | None = None
@@ -130,24 +126,11 @@ class TradingPaperMonitor:
         self.active_order_count = 0
         self.active_protection_count = 0
 
-    def start(self) -> None:
-        if self._task is None:
-            self._wake_event = asyncio.Event()
-            self._task = asyncio.create_task(self._run_loop())
+    def tick_seconds(self) -> float:
+        return min(self.interval_seconds, self.active_interval_seconds)
 
-    def wake(self) -> None:
-        """Wake the dispatcher early when server-side activity changes."""
-        if self._wake_event is not None:
-            self._wake_event.set()
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-        self._wake_event = None
+    def current_interval_seconds(self) -> float:
+        return self.active_interval_seconds if self.active_target_count else self.interval_seconds
 
     @in_provider_lane("protective")
     async def _reconcile_protection(
@@ -388,7 +371,7 @@ class TradingPaperMonitor:
     def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": trading_paper_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "idle_interval_seconds": self.interval_seconds,
             "active_interval_seconds": self.active_interval_seconds,
             "current_interval_seconds": (
@@ -416,42 +399,12 @@ class TradingPaperMonitor:
             "adaptive_execution_cadence": True,
         }
 
-    async def _sleep_until_next_cycle(self) -> None:
-        delay = self.active_interval_seconds if self.active_target_count else self.interval_seconds
-        event = self._wake_event
-        if event is None:
-            await asyncio.sleep(delay)
-            return
-        event.clear()
-        try:
-            await asyncio.wait_for(event.wait(), timeout=delay)
-        except TimeoutError:
-            pass
 
-    async def _run_loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await self._sleep_until_next_cycle()
-
-
-def create_trading_paper_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_paper_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingPaperMonitor):
         return None
     monitor = TradingPaperMonitor()
     setattr(state, _MONITOR_STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if trading_paper_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=trading_paper_monitor_enabled)

@@ -16180,6 +16180,11 @@
             "title": "Require Catalyst Evidence",
             "type": "boolean"
           },
+          "research_score_adjustment_enabled": {
+            "default": false,
+            "title": "Research Score Adjustment Enabled",
+            "type": "boolean"
+          },
           "reward_multiple": {
             "anyOf": [
               {
@@ -16597,6 +16602,11 @@
             "title": "Require Catalyst Evidence",
             "type": "boolean"
           },
+          "research_score_adjustment_enabled": {
+            "default": false,
+            "title": "Research Score Adjustment Enabled",
+            "type": "boolean"
+          },
           "reward_multiple": {
             "default": "2",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -16770,6 +16780,7 @@
           "breakout_hold_bars",
           "breakout_hold_tolerance_bps",
           "minimum_quality_score",
+          "research_score_adjustment_enabled",
           "v2_recovery_min_pct",
           "v2_second_pullback_min_pct",
           "v2_minimum_l1_to_b1_minutes",
@@ -20411,6 +20422,42 @@
         "type": "string"
       },
       "JsonValue": {},
+      "KillSwitchChange": {
+        "additionalProperties": false,
+        "properties": {
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "global",
+              "account",
+              "strategy"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Scope Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "engaged"
+        ],
+        "title": "KillSwitchChange",
+        "type": "object"
+      },
       "LegacyGenerateTitleRequest": {
         "properties": {
           "ai_response": {
@@ -45641,6 +45688,75 @@
           "evidence_ids"
         ],
         "title": "TradingFactSet",
+        "type": "object"
+      },
+      "TradingKillSwitch": {
+        "additionalProperties": false,
+        "properties": {
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scope": {
+            "enum": [
+              "global",
+              "account",
+              "strategy"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "scope",
+          "engaged",
+          "scope_id",
+          "reason",
+          "updated_by",
+          "revision",
+          "updated_at"
+        ],
+        "title": "TradingKillSwitch",
         "type": "object"
       },
       "TradingMarketBrief": {
@@ -73009,6 +73125,71 @@
         "summary": "Instruments",
         "tags": [
           "trading"
+        ]
+      }
+    },
+    "/api/trading/kill-switches": {
+      "get": {
+        "operationId": "list_kill_switches_api_trading_kill_switches_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TradingKillSwitch"
+                  },
+                  "title": "Response List Kill Switches Api Trading Kill Switches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Kill Switches",
+        "tags": [
+          "trading-kill-switches"
+        ]
+      },
+      "put": {
+        "description": "Engage or release a switch; takes effect for the next order, without a restart.",
+        "operationId": "set_kill_switch_api_trading_kill_switches_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KillSwitchChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingKillSwitch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Kill Switch",
+        "tags": [
+          "trading-kill-switches"
         ]
       }
     },

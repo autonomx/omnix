@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol
 
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
+from app.trading.us_equity_calendar import EASTERN
 
 from .paper import (
     PaperAccount,
@@ -266,6 +268,30 @@ class TradingPaperRepository:
         scope = self._engaged_kill_switch(uow, account.account_id, authority.strategy_id)
         if scope is not None:
             raise ValueError(f"trading_kill_switch_engaged:{scope}")
+        if authority.max_daily_loss_pct is not None and self._daily_loss_reached(
+            uow, account.account_id, authority.max_daily_loss_pct
+        ):
+            raise ValueError("paper_daily_loss_limit_reached")
+
+    def _daily_loss_reached(self, uow: PostgresUnitOfWork, account_id: str, max_loss_pct: Decimal) -> bool:
+        """Today's realized loss (Eastern day, commissions included) against account equity."""
+        start = datetime.now(timezone.utc).astimezone(EASTERN).replace(hour=0, minute=0, second=0, microsecond=0)
+        realized, equity = uow.connection.execute(
+            """
+            SELECT
+                (SELECT COALESCE(SUM(amount), 0) FROM omnix_trading_paper_ledger
+                  WHERE workspace_id = %(workspace)s AND account_id = %(account)s
+                    AND entry_type IN ('realized_pnl', 'commission') AND created_at >= %(start)s),
+                (SELECT COALESCE(SUM(available + reserved), 0) FROM omnix_trading_paper_balances
+                  WHERE workspace_id = %(workspace)s AND account_id = %(account)s)
+                + (SELECT COALESCE(SUM(quantity * COALESCE(last_price, average_cost)), 0)
+                     FROM omnix_trading_paper_positions
+                    WHERE workspace_id = %(workspace)s AND account_id = %(account)s)
+            """,
+            {"workspace": self.context.workspace_id, "account": account_id, "start": start},
+        ).fetchone()
+        limit = Decimal(equity) * max_loss_pct / Decimal("100")
+        return limit > 0 and Decimal(realized) <= -limit
 
     def _place_locked(
         self,

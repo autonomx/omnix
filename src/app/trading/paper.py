@@ -118,6 +118,10 @@ class OrderAuthority:
     kind: OrderAuthorityKind
     strategy_id: str | None = None
     trade_attempt_id: str | None = None
+    # Entries stop for the rest of the Eastern trading day once the account's
+    # realized loss reaches this share of its equity, checked in the order's
+    # own transaction.
+    max_daily_loss_pct: Decimal | None = None
 
     @property
     def may_add_exposure(self) -> bool:

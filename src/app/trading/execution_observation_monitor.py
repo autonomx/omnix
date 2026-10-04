@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.model_executor import ModelExecutor
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .binding_authority import binding_can_execute
 from .execution_observation_plane import (
     ExecutionObservationPlane,
@@ -59,7 +57,7 @@ def _interval_seconds() -> float:
     return max(0.25, value)
 
 
-class TradingExecutionObservationMonitor:
+class TradingExecutionObservationMonitor(ScheduledTradingMonitor):
     def __init__(
         self,
         *,
@@ -74,7 +72,6 @@ class TradingExecutionObservationMonitor:
         self.plane = plane or default_execution_observation_plane()
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.capture_count = 0
@@ -186,7 +183,7 @@ class TradingExecutionObservationMonitor:
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": execution_observation_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -198,49 +195,19 @@ class TradingExecutionObservationMonitor:
             "causal_fill_policy": "first_source_and_recorded_quote_after_actionable_at",
         }
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
 
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-def create_trading_execution_observation_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_execution_observation_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingExecutionObservationMonitor):
         return None
     monitor = TradingExecutionObservationMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if execution_observation_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=execution_observation_monitor_enabled)
 
 
 __all__ = [
     "TradingExecutionObservationMonitor",
     "execution_observation_monitor_enabled",
-    "create_trading_execution_observation_monitor_worker",
+    "create_trading_execution_observation_monitor_task",
 ]

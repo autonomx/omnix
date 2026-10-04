@@ -107,6 +107,11 @@ class GapPullbackConfig(BaseModel):
     breakout_hold_bars: int = Field(default=1, ge=1, le=5)
     breakout_hold_tolerance_bps: Decimal = Field(default=Decimal("25"), ge=0, le=1000)
     minimum_quality_score: int = Field(default=0, ge=0, le=10)
+    # 1.2.0 only: let reviewed research change the setup score. Off, research
+    # may still block an entry through its hard gates but never raises or
+    # lowers the score. Changing it is a strategy update: it needs
+    # trading:strategies:admin and is audited (WP-8.3).
+    research_score_adjustment_enabled: bool = False
 
     # 2.0.0-only causal failed-selloff geometry/management. These defaults are
     # the V11 prospective profile selected before the external April/May check.

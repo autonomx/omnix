@@ -185,7 +185,7 @@ def test_solana_ai_monitor_control_router_stops_only_registered_monitor() -> Non
     assert response.json()["status"] == "stopped"
     assert response.json()["execution_authority"] is False
     assert app.state.scheduler_runtime.calls == [("pause", SCHEDULED_TASK_ID)]
-    assert monitor._task is None
+    assert monitor.scheduled is False
 
     response = client.post("/api/trading/solana-ai/start")
     assert response.status_code == 202

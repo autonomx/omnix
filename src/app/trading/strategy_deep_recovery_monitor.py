@@ -12,13 +12,12 @@ from app.config.env import env_str as _env_str
 import asyncio
 import hashlib
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import (
     DEEP_RECOVERY_RULE_VERSION,
@@ -79,8 +78,10 @@ def _eligible(config: TradingStrategyConfigDocument) -> bool:
     )
 
 
-class TradingStrategyDeepRecoveryShadowMonitor:
+class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
     """Collect a second setup family beside V2 without sharing execution authority."""
+
+    error_event = "deep_recovery_shadow_monitor_error"
 
     def __init__(
         self,
@@ -94,25 +95,12 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         self.market_service_factory = market_service_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.evaluation_count = 0
         self.state_transition_count = 0
         self.signal_count = 0
         self.execution_observation_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def _append_event(
         self,
@@ -409,25 +397,10 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         self.last_run_at = now
         return emitted
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "deep_recovery_shadow_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": strategy_deep_recovery_shadow_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -441,28 +414,18 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         }
 
 
-def create_trading_strategy_deep_recovery_shadow_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_strategy_deep_recovery_shadow_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyDeepRecoveryShadowMonitor):
         return None
     monitor = TradingStrategyDeepRecoveryShadowMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if strategy_deep_recovery_shadow_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_deep_recovery_shadow_monitor_enabled)
 
 
 __all__ = [
     "TradingStrategyDeepRecoveryShadowMonitor",
-    "create_trading_strategy_deep_recovery_shadow_monitor_worker",
+    "create_trading_strategy_deep_recovery_shadow_monitor_task",
     "strategy_deep_recovery_shadow_monitor_enabled",
 ]

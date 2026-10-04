@@ -1,6 +1,7 @@
 """Shared stream ownership and gap recovery for Omnix Trading."""
 
 from .manager import (
+    SharedBarStreamHub,
     SharedSubscriptionManager,
     StreamKind,
     StreamingBarUpdate,
@@ -9,6 +10,7 @@ from .manager import (
 )
 
 __all__ = [
+    "SharedBarStreamHub",
     "SharedSubscriptionManager",
     "StreamKind",
     "StreamingBarUpdate",

@@ -169,7 +169,9 @@ Catalyst context is an evidence pipeline, not an LLM opinion field.
 - Capture timestamped immutable evidence with source type (`sec`, `company`, `news`, `manual`), source locator, publication/capture timestamps, text hash, deterministic facts, and dilution evidence.
 - Dilution flags such as ATM, warrants, convertible securities, shelf/resale registration, and equity lines are extracted from supplied evidence and retained with the immutable fingerprint.
 - `classify-shadow` can ask the configured model to classify only the supplied evidence IDs. It must cite exactly those IDs and returns `shadow_only=true`.
-- Catalyst/AI output is not imported by `strategy_monitor.py` and cannot authorize an order.
+- No AI output can authorize an order. Two research paths do reach `strategy_monitor.py`, and both are bounded:
+  - The intraday LLM (`intraday_llm_enabled`) runs as a research annotation beside the strategy cycle. Proposals never wait for it, and its assessments are recorded as `intraday_llm` events only.
+  - For gap pullback `1.2.0`, the reviewed research policy (HTR) can block an entry through its hard gates. It changes the setup quality score only when the strategy sets `research_score_adjustment_enabled`. That setting is off by default. Changing it is a strategy update, which needs `trading:strategies:admin` and is audited. Every `research_policy` event records the proposed adjustment and whether it was applied.
 
 Use only sources whose access, retention, and redistribution terms are appropriate for the configured environment. Source acquisition adapters may be added separately; the evidence boundary must remain immutable and timestamped.
 

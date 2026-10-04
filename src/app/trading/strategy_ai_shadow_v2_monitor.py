@@ -5,18 +5,17 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 from pydantic import BaseModel, ConfigDict
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import TradingResearchRepository, default_research_repository
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v2 import (
@@ -309,7 +308,9 @@ def _apply_fill(state: V2PositionState, side: str, units: Decimal, price: Decima
     })
 
 
-class TradingAIShadowV2Monitor:
+class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
+    error_event = "ai_shadow_v2_monitor_error"
+
     def __init__(
         self,
         *,
@@ -328,7 +329,6 @@ class TradingAIShadowV2Monitor:
         self.catalyst_analyzer_factory = catalyst_analyzer_factory
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.alpha_call_count = 0
@@ -336,17 +336,6 @@ class TradingAIShadowV2Monitor:
         self.decision_count = 0
         self.fill_count = 0
         self.episode_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task, self._task = self._task, None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def _append(
         self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument,
@@ -1006,21 +995,9 @@ class TradingAIShadowV2Monitor:
         self.last_run_at = now
         return self.decision_count
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading", "ai_shadow_v2_monitor_error",
-                    error_type=type(exc).__name__, detail=str(exc), execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
     def diagnostics(self) -> dict[str, object]:
         return {
-            "enabled": ai_shadow_v2_monitor_enabled(), "running": self._task is not None,
+            "enabled": ai_shadow_v2_monitor_enabled(), "running": self.scheduled,
             "version": AI_SHADOW_V2_VERSION, "arms": list(_ARMS),
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error, "alpha_call_count": self.alpha_call_count,
@@ -1030,27 +1007,17 @@ class TradingAIShadowV2Monitor:
         }
 
 
-def create_trading_ai_shadow_v2_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_ai_shadow_v2_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingAIShadowV2Monitor):
         return None
     monitor = TradingAIShadowV2Monitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if ai_shadow_v2_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=ai_shadow_v2_monitor_enabled)
 
 
 __all__ = [
     "TradingAIShadowV2Monitor", "V2PositionState",
-    "ai_shadow_v2_monitor_enabled", "create_trading_ai_shadow_v2_monitor_worker",
+    "ai_shadow_v2_monitor_enabled", "create_trading_ai_shadow_v2_monitor_task",
 ]

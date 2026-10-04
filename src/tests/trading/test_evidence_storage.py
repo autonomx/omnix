@@ -93,3 +93,22 @@ def test_a_failed_ibkr_write_is_dropped_without_raising_on_the_market_data_threa
 
     store = IbkrEvidenceStore(Broken(), flush_events=1)
     store.record_missing_quote(date(2026, 9, 17), "NO_DATA")
+
+
+def test_network_thread_quotes_only_queue_and_the_ring_drops_the_oldest() -> None:
+    sessions = MemoryIbkrSessionEvidence()
+    store = IbkrEvidenceStore(sessions, flush_events=1, flush_seconds=0, max_pending=3)
+    session = date(2026, 10, 5)
+    for _ in range(5):
+        store.record_quote(
+            session, market_data_type="LIVE", live_entitled=True,
+            quote_age_seconds=Decimal("0.1"), spread_bps=Decimal("2"), defer=True,
+        )
+    # Deferred updates never write from the caller's thread.
+    assert sessions.read(session) is None
+    assert store.pending_count() == 3
+    assert store.dropped_update_count == 2
+
+    store.flush()
+    assert sessions.read(session)["quote_event_count"] == 3
+    assert store.pending_count() == 0

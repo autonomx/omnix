@@ -436,4 +436,4 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
 
     gateway = Path("src/app/trading/route_registration.py").read_text()
     assert "create_trading_paper_router" in gateway
-    assert "create_trading_paper_monitor_worker" in gateway
+    assert "create_trading_paper_monitor_task" in gateway

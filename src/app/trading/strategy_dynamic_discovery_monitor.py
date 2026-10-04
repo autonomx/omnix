@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from app.config.env import env_str as _env_str
 
-import asyncio
-from contextlib import suppress
 from datetime import datetime, time, timezone
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .strategy_discovery_acquisition import (
     CausalMarketObservation,
     install_default_discovery_sources,
@@ -19,7 +17,6 @@ from .strategy_dynamic_discovery import (
     INTERDAY_TRADING_STRATEGY_ID,
 )
 from .strategy_repository import TradingStrategyRepository
-from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
 
 _STATE_KEY = "_omnix_interday_dynamic_discovery_monitor"
@@ -68,27 +65,24 @@ async def run_dynamic_discovery_once(
     )
 
 
-class InterdayDynamicDiscoveryMonitor:
+class InterdayDynamicDiscoveryMonitor(ScheduledTradingMonitor):
     """Continuously rediscover market leadership without changing order authority."""
+
+    error_event = "interday_dynamic_discovery_error"
+
+    def error_log_fields(self) -> dict[str, object]:
+        return {
+            "strategy_id": INTERDAY_TRADING_STRATEGY_ID,
+            "observed_at": datetime.now(timezone.utc),
+            "research_only": True,
+            "execution_authority": False,
+        }
 
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.candidate_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def run_once(self) -> int:
         candidates = await run_dynamic_discovery_once()
@@ -97,26 +91,8 @@ class InterdayDynamicDiscoveryMonitor:
         self.last_error = None
         return len(candidates)
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "interday_dynamic_discovery_error",
-                    strategy_id=INTERDAY_TRADING_STRATEGY_ID,
-                    observed_at=datetime.now(timezone.utc),
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    research_only=True,
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
 
-
-def create_interday_dynamic_discovery_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_interday_dynamic_discovery_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, InterdayDynamicDiscoveryMonitor):
@@ -124,22 +100,12 @@ def create_interday_dynamic_discovery_monitor_worker(context: FeatureContext) ->
     install_default_discovery_sources()
     monitor = InterdayDynamicDiscoveryMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if dynamic_discovery_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=dynamic_discovery_monitor_enabled)
 
 
 __all__ = [
     "InterdayDynamicDiscoveryMonitor",
     "dynamic_discovery_monitor_enabled",
-    "create_interday_dynamic_discovery_monitor_worker",
+    "create_interday_dynamic_discovery_monitor_task",
     "run_dynamic_discovery_once",
 ]

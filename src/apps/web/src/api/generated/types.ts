@@ -7144,6 +7144,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/kill-switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Kill Switches */
+        get: operations["list_kill_switches_api_trading_kill_switches_get"];
+        /**
+         * Set Kill Switch
+         * @description Engage or release a switch; takes effect for the next order, without a restart.
+         */
+        put: operations["set_kill_switch_api_trading_kill_switches_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/market-data/providers/coinmarketcap/credentials": {
         parameters: {
             query?: never;
@@ -15829,6 +15850,11 @@ export interface components {
              */
             require_catalyst_evidence?: boolean;
             /**
+             * Research Score Adjustment Enabled
+             * @default false
+             */
+            research_score_adjustment_enabled?: boolean;
+            /**
              * Reward Multiple
              * @default 2
              */
@@ -16122,6 +16148,11 @@ export interface components {
              * @default false
              */
             require_catalyst_evidence: boolean;
+            /**
+             * Research Score Adjustment Enabled
+             * @default false
+             */
+            research_score_adjustment_enabled: boolean;
             /**
              * Reward Multiple
              * @default 2
@@ -17425,6 +17456,26 @@ export interface components {
          */
         JobStatus: "queued" | "leased" | "running" | "waiting" | "retrying" | "completed" | "failed" | "cancel_requested" | "paused" | "canceled" | "stale";
         JsonValue: unknown;
+        /** KillSwitchChange */
+        KillSwitchChange: {
+            /** Engaged */
+            engaged: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason?: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "global" | "account" | "strategy";
+            /**
+             * Scope Id
+             * @default
+             */
+            scope_id?: string;
+        };
         /** LegacyGenerateTitleRequest */
         LegacyGenerateTitleRequest: {
             /**
@@ -27495,6 +27546,35 @@ export interface components {
              * @default []
              */
             unresolved_facts: string[];
+        };
+        /** TradingKillSwitch */
+        TradingKillSwitch: {
+            /** Engaged */
+            engaged: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "global" | "account" | "strategy";
+            /**
+             * Scope Id
+             * @default
+             */
+            scope_id: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Updated By */
+            updated_by: string | null;
         };
         /** TradingMarketBrief */
         TradingMarketBrief: {
@@ -44771,6 +44851,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstrumentSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_kill_switches_api_trading_kill_switches_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingKillSwitch"][];
+                };
+            };
+        };
+    };
+    set_kill_switch_api_trading_kill_switches_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KillSwitchChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingKillSwitch"];
                 };
             };
             /** @description Validation Error */

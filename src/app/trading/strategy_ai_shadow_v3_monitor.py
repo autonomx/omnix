@@ -12,15 +12,14 @@ from app.config.env import env_str as _env_str
 import asyncio
 import hashlib
 import time as monotonic_time
-from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution_observation_plane import (
     ExecutionObservationPlane,
     default_execution_observation_plane,
@@ -202,7 +201,7 @@ def _trigger_quality_ready(
     return not failed, tuple(f"TRIGGER_FEATURE_INVALID:{name}" for name in failed)
 
 
-class TradingAIShadowV3Monitor:
+class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
     def __init__(
         self,
         *,
@@ -223,7 +222,6 @@ class TradingAIShadowV3Monitor:
         self.reliability = reliability_ledger or LLMReliabilityLedger()
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.decision_count = 0
@@ -1065,7 +1063,7 @@ class TradingAIShadowV3Monitor:
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": ai_shadow_v3_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "policy_version": AI_SHADOW_V3_POLICY_VERSION,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
@@ -1082,49 +1080,19 @@ class TradingAIShadowV3Monitor:
             "execution_authority": False,
         }
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
 
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-def create_trading_ai_shadow_v3_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_ai_shadow_v3_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingAIShadowV3Monitor):
         return None
     monitor = TradingAIShadowV3Monitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if ai_shadow_v3_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=ai_shadow_v3_monitor_enabled)
 
 
 __all__ = [
     "TradingAIShadowV3Monitor",
     "ai_shadow_v3_monitor_enabled",
-    "create_trading_ai_shadow_v3_monitor_worker",
+    "create_trading_ai_shadow_v3_monitor_task",
 ]

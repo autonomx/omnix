@@ -13,6 +13,7 @@ from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
 from app.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError, ProviderFallbackEligibleError
 from .http_runtime import ProviderHttpRuntime
@@ -105,7 +106,7 @@ def fetch_yahoo_chart_result(
     return result, received
 
 
-class YahooEquityProvider:
+class YahooEquityProvider(ProviderAdapter):
     provider_id = "yahoo"
     policy = POLICIES["yahoo"]
 
@@ -520,7 +521,7 @@ class YahooEquityProvider:
         }
 
 
-class StooqEquityProvider:
+class StooqEquityProvider(ProviderAdapter):
     provider_id = "stooq"
     policy = POLICIES["stooq"]
 

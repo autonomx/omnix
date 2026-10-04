@@ -11,6 +11,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 
 from app.trading.binding_authority import MarketDataAuthorityDecision
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
@@ -29,6 +30,7 @@ from app.trading.models import (
 )
 from app.trading.us_equity_calendar import us_equity_session
 
+from .base import ProviderAdapter
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .ibkr_runtime import (
     IbkrContractAmbiguousError,
@@ -73,9 +75,17 @@ def _quote_age(snapshot: IbkrQuoteSnapshot, now: datetime) -> Decimal:
     )
 
 
-class IbkrEquityProvider:
+class IbkrEquityProvider(ProviderAdapter):
     provider_id = "ibkr"
     policy = POLICIES[provider_id]
+    display_name = "IBKR Gateway"
+
+    def configured(self) -> bool:
+        return ibkr_configured(self.runtime)
+
+    def runtime_status(self) -> tuple[str, dict[str, Any]]:
+        diagnostics = dict(self.runtime.diagnostics())
+        return ("ready" if diagnostics.get("connected") else "unavailable"), diagnostics
 
     def __init__(
         self,

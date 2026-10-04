@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import inspect
 
 from fastapi import APIRouter
 
 from app.runtime.features import FeatureContext
-from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
+from app.runtime.scheduler import ScheduledTaskSpec
 
 
 def create_trading_router(context: FeatureContext) -> APIRouter:
@@ -17,6 +16,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.trading.catalyst_api import create_trading_catalyst_router
     from app.trading.execution_api import create_trading_execution_router
     from app.trading.hermes_research_api import create_trading_hermes_research_router
+    from app.trading.kill_switches import create_trading_kill_switch_router
     from app.trading.market_data_api import create_trading_market_data_router
     from app.trading.metric_api import create_trading_metric_router
     from app.trading.model_api import create_trading_model_router
@@ -42,6 +42,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_scanner_router,
         create_trading_replay_router,
         create_trading_paper_router,
+        create_trading_kill_switch_router,
         create_trading_paper_analytics_router,
         create_trading_prospective_gap_router,
         create_trading_research_router,
@@ -64,176 +65,60 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
 
 
 def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], ScheduledTaskSpec | None], ...]:
-    """Build per-monitor tasks while preserving feature-owned enablement and cleanup."""
-    from app.trading.alerts_monitor import (
-        create_trading_alert_monitor_worker,
-        trading_alert_monitor_enabled,
-    )
-    from app.trading.execution_observation_monitor import (
-        create_trading_execution_observation_monitor_worker,
-        execution_observation_monitor_enabled,
-    )
-    from app.trading.ibkr_market_data_monitor import (
-        create_trading_ibkr_market_data_monitor_worker,
-        ibkr_market_data_monitor_enabled,
-    )
-    from app.trading.metric_monitor import (
-        create_trading_metric_monitor_worker,
-        trading_liquidation_collector_enabled,
-    )
-    from app.trading.paper_monitor import (
-        create_trading_paper_monitor_worker,
-        trading_paper_monitor_enabled,
-    )
-    from app.trading.prospective_gap_monitor import (
-        create_prospective_gap_monitor_worker,
-        prospective_gap_monitor_enabled,
-    )
-    from app.trading.providers.alpaca_iex_status import (
-        create_alpaca_iex_status_monitor_worker,
-        alpaca_iex_status_monitor_enabled,
-    )
-    from app.trading.session_reconciliation_monitor import (
-        create_trading_session_reconciliation_monitor_worker,
-        session_reconciliation_monitor_enabled,
-    )
-    from app.trading.strategy_ai_shadow_monitor import (
-        create_trading_ai_shadow_monitor_worker,
-        ai_shadow_monitor_enabled,
-    )
-    from app.trading.strategy_ai_shadow_v2_monitor import (
-        create_trading_ai_shadow_v2_monitor_worker,
-        ai_shadow_v2_monitor_enabled,
-    )
-    from app.trading.strategy_ai_shadow_v3_monitor import (
-        create_trading_ai_shadow_v3_monitor_worker,
-        ai_shadow_v3_monitor_enabled,
-    )
-    from app.trading.strategy_deep_recovery_monitor import (
-        create_trading_strategy_deep_recovery_shadow_monitor_worker,
-        strategy_deep_recovery_shadow_monitor_enabled,
-    )
-    from app.trading.strategy_dynamic_discovery_monitor import (
-        create_interday_dynamic_discovery_monitor_worker,
-        dynamic_discovery_monitor_enabled,
-    )
-    from app.trading.strategy_interday_learning_monitor import (
-        create_interday_learning_monitor_worker,
-        interday_learning_monitor_enabled,
-    )
-    from app.trading.strategy_monitor import (
-        create_trading_strategy_monitor_worker,
-        prepare_trading_strategy_monitor_for_scheduled_execution,
-        trading_strategy_monitor_enabled,
-    )
-    from app.trading.strategy_prospective_economic_monitor import (
-        create_trading_strategy_prospective_economic_monitor_worker,
-        strategy_prospective_economic_monitor_enabled,
-    )
-    from app.trading.strategy_research_monitor import (
-        create_trading_strategy_research_monitor_worker,
-        strategy_research_monitor_enabled,
-    )
-    from app.trading.strategy_research_outcome_monitor import (
-        create_trading_strategy_research_outcome_monitor_worker,
-        strategy_research_outcome_monitor_enabled,
-    )
-    from app.trading.strategy_solana_ai_monitor import (
-        create_trading_solana_ai_monitor_worker,
-        solana_ai_monitor_enabled,
-    )
-    from app.trading.strategy_universe_archive_monitor import (
-        create_trading_strategy_universe_archive_monitor_worker,
-        strategy_universe_archive_monitor_enabled,
-    )
-    from app.trading.strategy_v2_qualification_monitor import (
-        create_trading_strategy_v2_qualification_monitor_worker,
-        strategy_v2_qualification_monitor_enabled,
-    )
-    from app.trading.yahoo_acquisition_monitor import (
-        create_trading_yahoo_acquisition_monitor_worker,
-        yahoo_acquisition_monitor_enabled,
+    """Each monitor is a task on the shared scheduler (WP-8.3); enablement stays with its module."""
+    from app.trading.alerts_monitor import create_trading_alert_monitor_task
+    from app.trading.execution_observation_monitor import create_trading_execution_observation_monitor_task
+    from app.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_task
+    from app.trading.metric_monitor import create_trading_metric_monitor_task
+    from app.trading.paper_monitor import create_trading_paper_monitor_task
+    from app.trading.prospective_gap_monitor import create_prospective_gap_monitor_task
+    from app.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_task
+    from app.trading.session_reconciliation_monitor import create_trading_session_reconciliation_monitor_task
+    from app.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_task
+    from app.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_task
+    from app.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_task
+    from app.trading.strategy_deep_recovery_monitor import create_trading_strategy_deep_recovery_shadow_monitor_task
+    from app.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_task
+    from app.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_task
+    from app.trading.strategy_monitor import create_trading_strategy_monitor_task
+    from app.trading.strategy_prospective_economic_monitor import create_trading_strategy_prospective_economic_monitor_task
+    from app.trading.strategy_research_monitor import create_trading_strategy_research_monitor_task
+    from app.trading.strategy_research_outcome_monitor import create_trading_strategy_research_outcome_monitor_task
+    from app.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_task
+    from app.trading.strategy_universe_archive_monitor import create_trading_strategy_universe_archive_monitor_task
+    from app.trading.strategy_v2_qualification_monitor import create_trading_strategy_v2_qualification_monitor_task
+    from app.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_task
+    from app.trading.monitor_task import scheduled_task_spec
+
+    monitor_tasks = (
+        create_trading_alert_monitor_task,
+        create_trading_execution_observation_monitor_task,
+        create_trading_ibkr_market_data_monitor_task,
+        create_trading_metric_monitor_task,
+        create_trading_paper_monitor_task,
+        create_prospective_gap_monitor_task,
+        create_alpaca_iex_status_monitor_task,
+        create_trading_session_reconciliation_monitor_task,
+        create_trading_ai_shadow_monitor_task,
+        create_trading_ai_shadow_v2_monitor_task,
+        create_trading_ai_shadow_v3_monitor_task,
+        create_trading_strategy_deep_recovery_shadow_monitor_task,
+        create_interday_dynamic_discovery_monitor_task,
+        create_interday_learning_monitor_task,
+        create_trading_strategy_monitor_task,
+        create_trading_strategy_prospective_economic_monitor_task,
+        create_trading_strategy_research_monitor_task,
+        create_trading_strategy_research_outcome_monitor_task,
+        create_trading_solana_ai_monitor_task,
+        create_trading_strategy_universe_archive_monitor_task,
+        create_trading_strategy_v2_qualification_monitor_task,
+        create_trading_yahoo_acquisition_monitor_task,
     )
 
-    registrations = (
-        (create_trading_alert_monitor_worker, trading_alert_monitor_enabled),
-        (create_trading_execution_observation_monitor_worker, execution_observation_monitor_enabled),
-        (create_trading_ibkr_market_data_monitor_worker, ibkr_market_data_monitor_enabled),
-        (create_trading_metric_monitor_worker, trading_liquidation_collector_enabled),
-        (create_trading_paper_monitor_worker, trading_paper_monitor_enabled),
-        (create_prospective_gap_monitor_worker, prospective_gap_monitor_enabled),
-        (create_alpaca_iex_status_monitor_worker, alpaca_iex_status_monitor_enabled),
-        (create_trading_session_reconciliation_monitor_worker, session_reconciliation_monitor_enabled),
-        (create_trading_ai_shadow_monitor_worker, ai_shadow_monitor_enabled),
-        (create_trading_ai_shadow_v2_monitor_worker, ai_shadow_v2_monitor_enabled),
-        (create_trading_ai_shadow_v3_monitor_worker, ai_shadow_v3_monitor_enabled),
-        (create_trading_strategy_deep_recovery_shadow_monitor_worker, strategy_deep_recovery_shadow_monitor_enabled),
-        (create_interday_dynamic_discovery_monitor_worker, dynamic_discovery_monitor_enabled),
-        (create_interday_learning_monitor_worker, interday_learning_monitor_enabled),
-        (create_trading_strategy_monitor_worker, trading_strategy_monitor_enabled),
-        (create_trading_strategy_prospective_economic_monitor_worker, strategy_prospective_economic_monitor_enabled),
-        (create_trading_strategy_research_monitor_worker, strategy_research_monitor_enabled),
-        (create_trading_strategy_research_outcome_monitor_worker, strategy_research_outcome_monitor_enabled),
-        (create_trading_solana_ai_monitor_worker, solana_ai_monitor_enabled),
-        (create_trading_strategy_universe_archive_monitor_worker, strategy_universe_archive_monitor_enabled),
-        (create_trading_strategy_v2_qualification_monitor_worker, strategy_v2_qualification_monitor_enabled),
-        (create_trading_yahoo_acquisition_monitor_worker, yahoo_acquisition_monitor_enabled),
-    )
-
-    def factory_for(worker_factory, enabled):
+    def factory_for(create_task):
         def create(context: FeatureContext) -> ScheduledTaskSpec | None:
-            worker = worker_factory(context)
-            if worker is None:
-                return None
-            monitor = worker.monitor
-            run_once = getattr(monitor, "run_once", None)
-            if not callable(run_once):
-                raise TypeError(
-                    f"Scheduled trading monitor {worker.name} must expose run_once()"
-                )
-            interval_seconds = getattr(monitor, "interval_seconds", 60.0)
-            active_interval = getattr(monitor, "active_interval_seconds", None)
-            if active_interval is not None:
-                interval_seconds = min(interval_seconds, active_interval)
-
-            if inspect.iscoroutinefunction(run_once):
-                async def run(_task_context: TaskContext) -> None:
-                    await run_once()
-
-                executor = "async"
-            else:
-                def run(_task_context: TaskContext) -> None:
-                    result = run_once()
-                    if inspect.isawaitable(result):
-                        raise TypeError(
-                            f"Synchronous trading monitor {worker.name} returned an awaitable"
-                        )
-
-                executor = "thread"
-
-            startup = getattr(monitor, "prepare_for_scheduled_execution", None)
-            if startup is None and worker.name.endswith("metric_monitor"):
-                startup_callbacks = worker.startup
-            elif startup is None and worker.name.endswith(".strategy_monitor"):
-                startup_callbacks = (
-                    lambda: prepare_trading_strategy_monitor_for_scheduled_execution(
-                        monitor
-                    ),
-                )
-            else:
-                startup_callbacks = (startup,) if callable(startup) else ()
-
-            return ScheduledTaskSpec(
-                task_id=worker.name,
-                run=run,
-                interval_seconds=max(0.25, float(interval_seconds)),
-                jitter_seconds=min(1.0, max(0.0, float(interval_seconds) * 0.05)),
-                timeout_seconds=max(60.0, float(interval_seconds)),
-                executor=executor,
-                enabled=enabled,
-                on_startup=tuple(startup_callbacks),
-                on_shutdown=worker.shutdown,
-            )
+            task = create_task(context)
+            return None if task is None else scheduled_task_spec(task)
 
         return create
 
@@ -241,10 +126,10 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
     from app.trading.strategies.runner import strategy_runner_task
 
     return (
-        *(factory_for(worker_factory, enabled) for worker_factory, enabled in registrations),
+        *(factory_for(create_task) for create_task in monitor_tasks),
         # Registered strategies run through the generic runner (WP-8.3).
         strategy_runner_task,
-        # Opt-in: import the premarket handoff from GitHub into PostgreSQL.
+        # Import the premarket handoff and climatology from GitHub into PostgreSQL.
         handoff_import_task,
     )
 

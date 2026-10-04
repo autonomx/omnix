@@ -17,6 +17,7 @@ from app.trading.catalog import (
     instrument_by_id,
 )
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar
+from app.trading.providers.base import ProviderAdapter
 from app.trading.providers.errors import ProviderUnavailableError
 from app.trading.providers.equity import YahooEquityProvider
 from app.trading.providers.registry import ProviderRegistry
@@ -68,7 +69,7 @@ def bars_response(instrument_id: str, provider_id: str) -> BarsResponse:
     )
 
 
-class FixtureProvider:
+class FixtureProvider(ProviderAdapter):
     def __init__(self, provider_id: str, *, fail: bool = False) -> None:
         self.provider_id = provider_id
         self.policy = POLICIES[provider_id]
@@ -268,3 +269,21 @@ def test_yahoo_discards_malformed_ohlc_rows() -> None:
     assert len(response.bars) == 1
     assert response.bars[0].open == Decimal("5.00")
     assert response.bars[0].high == Decimal("5.10")
+
+
+def test_every_registered_provider_implements_the_adapter_interface() -> None:
+    """WP-8.3: the registry describes providers through one interface, not name branches."""
+    import inspect as source_inspect
+
+    from app.trading.catalog import POLICIES
+    from app.trading.providers.base import MarketDataProvider
+    from app.trading.providers.registry import ProviderRegistry
+
+    registry = ProviderRegistry()
+    for provider_id in POLICIES:
+        provider = registry.provider(provider_id)
+        assert isinstance(provider, MarketDataProvider), provider_id
+        status, runtime = provider.runtime_status()
+        assert isinstance(status, str) and isinstance(runtime, dict)
+    descriptors = source_inspect.getsource(ProviderRegistry.descriptors)
+    assert 'provider_id == "' not in descriptors

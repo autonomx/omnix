@@ -13,6 +13,7 @@ from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import COINMARKETCAP_POLICY, bindings_for_instrument, instrument_by_id
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -83,9 +84,13 @@ def _date_key(value: object) -> date:
     return _timestamp(value).date()
 
 
-class CoinMarketCapProvider:
+class CoinMarketCapProvider(ProviderAdapter):
     provider_id = "coinmarketcap"
     policy = COINMARKETCAP_POLICY
+    display_name = "CoinMarketCap"
+
+    def configured(self) -> bool:
+        return coinmarketcap_configured()
 
     def __init__(
         self,

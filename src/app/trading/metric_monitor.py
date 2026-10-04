@@ -5,10 +5,10 @@ from app.config.env import environment
 import asyncio
 from typing import Any
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .catalog import INSTRUMENTS, bindings_for_instrument
 from .metric_data import TradingMetricDataService, default_metric_data_service
 
@@ -40,7 +40,7 @@ def _binance_symbols() -> tuple[str, ...]:
     return tuple(sorted(symbols))
 
 
-class TradingMetricMonitor:
+class TradingMetricMonitor(ScheduledTradingMonitor):
     """Starts bounded runtime collectors needed by stream-only chart metrics."""
 
     def __init__(self, service: TradingMetricDataService | None = None) -> None:
@@ -75,24 +75,23 @@ class TradingMetricMonitor:
             },
         }
 
-    async def stop(self) -> None:
+    async def close(self) -> None:
         if self.service is not None:
             await asyncio.to_thread(self.service.binance.liquidation_buffer.close)
         self.started_symbols = ()
 
 
-def create_trading_metric_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_metric_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingMetricMonitor):
         return None
     monitor = TradingMetricMonitor()
     setattr(state, _MONITOR_STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if trading_liquidation_collector_enabled():
-            monitor.start()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(monitor.stop,),
+    return TradingMonitorTask(
+        name=__name__,
+        monitor=monitor,
+        enabled=trading_liquidation_collector_enabled,
+        startup=(monitor.start,),
+        shutdown=(monitor.close,),
     )

@@ -20,7 +20,7 @@ from app.trading.strategy_managed_finviz_shadow import (
 from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig
 from app.runtime.features import FeatureContext
-from app.trading.strategy_monitor import create_trading_strategy_monitor_worker
+from app.trading.strategy_monitor import create_trading_strategy_monitor_task
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
@@ -28,7 +28,7 @@ from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 def _strategy_monitor_worker(app):
     config = RuntimeConfig()
-    return create_trading_strategy_monitor_worker(
+    return create_trading_strategy_monitor_task(
         FeatureContext(
             feature_id="trading",
             config=None,
@@ -403,7 +403,7 @@ async def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> No
         "detail": None,
     }
     assert monitor.managed_finviz_shadow_provision_error is None
-    assert monitor._task is None
+    assert monitor.scheduled is False
 
 
 @pytest.mark.anyio
@@ -446,7 +446,7 @@ async def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch)
     assert monitor.last_error == (
         "managed_finviz_shadow_provision: RuntimeError: database unavailable"
     )
-    assert monitor._task is None
+    assert monitor.scheduled is False
 
 
 def test_legacy_test_mode_does_not_autoprovision_without_opt_in(monkeypatch) -> None:

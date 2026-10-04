@@ -2,15 +2,18 @@ from __future__ import annotations
 
 """Durable zero-authority IBKR observation and recovery diagnostics.
 
-Session diagnostics live in PostgreSQL (WP-8.3). Quote callbacks queue their
-updates; the queue is applied in one transaction every 50 events or 2 seconds,
-and before any read, so the market-data thread does not write per tick.
+Session diagnostics live in PostgreSQL (WP-8.3). Updates queue in a bounded
+in-memory ring and are applied in one transaction every 50 events or 2
+seconds, and before any read. Quote callbacks run on the IBKR network thread,
+so they only queue (``defer=True``): the market-data monitor's scheduled cycle
+applies the ring on a worker thread. When the ring is full the oldest queued
+update is dropped and counted.
 """
 
 import logging
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
@@ -30,6 +33,7 @@ class IbkrEvidenceStore:
         *,
         flush_events: int = 50,
         flush_seconds: float = 2.0,
+        max_pending: int = 20_000,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.backend = backend if backend is not None else default_ibkr_session_evidence()
@@ -37,8 +41,8 @@ class IbkrEvidenceStore:
         self.flush_seconds = max(0.0, float(flush_seconds))
         self._clock = clock
         self._lock = threading.RLock()
-        self._pending: dict[date, list[Callable[[dict[str, Any]], None]]] = defaultdict(list)
-        self._pending_count = 0
+        self._pending: deque[tuple[date, Callable[[dict[str, Any]], None]]] = deque(maxlen=max(1, int(max_pending)))
+        self.dropped_update_count = 0
         self._last_flush = clock()
 
     @staticmethod
@@ -81,23 +85,37 @@ class IbkrEvidenceStore:
             payload.update(stored)
         return payload
 
-    def _mutate(self, session_date: date, mutator: Callable[[dict[str, Any]], None]) -> None:
+    def _mutate(
+        self,
+        session_date: date,
+        mutator: Callable[[dict[str, Any]], None],
+        *,
+        defer: bool = False,
+    ) -> None:
         with self._lock:
-            self._pending[session_date].append(mutator)
-            self._pending_count += 1
-            due = (
-                self._pending_count >= self.flush_events
+            if len(self._pending) == self._pending.maxlen:
+                self.dropped_update_count += 1
+            self._pending.append((session_date, mutator))
+            due = not defer and (
+                len(self._pending) >= self.flush_events
                 or self._clock() - self._last_flush >= self.flush_seconds
             )
         if due:
             self.flush()
 
+    def pending_count(self) -> int:
+        with self._lock:
+            return len(self._pending)
+
     def flush(self) -> None:
         """Apply every queued update; a failed write is logged and dropped."""
         with self._lock:
-            pending, self._pending = self._pending, defaultdict(list)
-            self._pending_count = 0
+            queued = list(self._pending)
+            self._pending.clear()
             self._last_flush = self._clock()
+        pending: dict[date, list[Callable[[dict[str, Any]], None]]] = defaultdict(list)
+        for session_date, mutator in queued:
+            pending[session_date].append(mutator)
         for session_date, mutators in pending.items():
             try:
                 self.backend.apply(session_date, self._empty(session_date), mutators)
@@ -127,6 +145,7 @@ class IbkrEvidenceStore:
         spread_bps: Decimal | None,
         last_price_diff_bps: Decimal | None = None,
         spread_diff_bps: Decimal | None = None,
+        defer: bool = False,
     ) -> None:
         def mutate(payload: dict[str, Any]) -> None:
             payload["quote_event_count"] = int(payload["quote_event_count"]) + 1
@@ -166,14 +185,14 @@ class IbkrEvidenceStore:
                         self._decimal(payload, "spread_diff_bps_sum") + spread_diff_bps
                     )
 
-        self._mutate(session_date, mutate)
+        self._mutate(session_date, mutate, defer=defer)
 
-    def record_missing_quote(self, session_date: date, reason: str) -> None:
+    def record_missing_quote(self, session_date: date, reason: str, *, defer: bool = False) -> None:
         def mutate(payload: dict[str, Any]) -> None:
             payload["missing_quote_count"] = int(payload["missing_quote_count"]) + 1
             self._increment_reason(payload, reason)
 
-        self._mutate(session_date, mutate)
+        self._mutate(session_date, mutate, defer=defer)
 
     def record_subscription_error(self, session_date: date, reason: str) -> None:
         def mutate(payload: dict[str, Any]) -> None:

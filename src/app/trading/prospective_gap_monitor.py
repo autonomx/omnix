@@ -11,10 +11,10 @@ from app.config.env import environment
 import asyncio
 from datetime import date, datetime, time, timedelta, timezone
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
 from .us_equity_calendar import regular_holidays
 from app.trading.us_equity_calendar import EASTERN as _ET
@@ -36,7 +36,7 @@ def prospective_gap_monitor_enabled() -> bool:
     return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR", "1")
 
 
-class ProspectiveGapMonitor:
+class ProspectiveGapMonitor(ScheduledTradingMonitor):
     def __init__(
         self,
         *,
@@ -45,7 +45,6 @@ class ProspectiveGapMonitor:
     ) -> None:
         self.interval_seconds = max(15.0, float(interval_seconds))
         self.runtime_factory = runtime_factory
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.confirmation_run_count = 0
@@ -56,6 +55,11 @@ class ProspectiveGapMonitor:
         self._no_session_reported_dates: set[date] = set()
 
     async def run_once(self, *, now: datetime | None = None) -> int:
+        completed = await self._run_cycle(now=now)
+        self.last_error = None
+        return completed
+
+    async def _run_cycle(self, *, now: datetime | None = None) -> int:
         observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         local = observed.astimezone(_ET)
         self.last_run_at = observed
@@ -113,57 +117,23 @@ class ProspectiveGapMonitor:
                 return 1
         return 0
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-                self.last_error = None
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
-
-    def start(self) -> None:
-        if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        self._task = None
-
     @property
     def running(self) -> bool:
-        return self._task is not None and not self._task.done()
+        return self.scheduled
 
 
-def create_prospective_gap_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_prospective_gap_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, ProspectiveGapMonitor):
         return None
     monitor = ProspectiveGapMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=prospective_gap_monitor_enabled)
 
 
 __all__ = [
     "ProspectiveGapMonitor",
     "prospective_gap_monitor_enabled",
-    "create_prospective_gap_monitor_worker",
+    "create_prospective_gap_monitor_task",
 ]

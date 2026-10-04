@@ -761,6 +761,7 @@ def run_gap_pullback_backtest(
                         research_decision,
                         base_quality_score=proposal.quality_score,
                         minimum_quality_score=active.minimum_quality_score,
+                        score_adjustment_enabled=active.research_score_adjustment_enabled,
                     )
                     research_reason = None if quality_gate.allowed else quality_gate.reason_code
                     adjusted_quality_score = quality_gate.adjusted_quality_score

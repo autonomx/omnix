@@ -3,15 +3,14 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
@@ -380,27 +379,16 @@ def replay_v2_shadow_session(
     return result
 
 
-class TradingStrategyV2QualificationMonitor:
+class TradingStrategyV2QualificationMonitor(ScheduledTradingMonitor):
     """Evidence-only prospective V2 replay monitor across SHADOW/AUTO PAPER; never creates orders."""
+
+    error_event = "v2_shadow_replay_monitor_error"
 
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.replay_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def run_once(self) -> int:
         repository = default_strategy_repository()
@@ -439,45 +427,20 @@ class TradingStrategyV2QualificationMonitor:
         self.last_run_at = datetime.now(timezone.utc)
         return replays
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "v2_shadow_replay_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
 
-
-def create_trading_strategy_v2_qualification_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_strategy_v2_qualification_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyV2QualificationMonitor):
         return None
     monitor = TradingStrategyV2QualificationMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if strategy_v2_qualification_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_v2_qualification_monitor_enabled)
 
 
 __all__ = [
     "TradingStrategyV2QualificationMonitor",
-    "create_trading_strategy_v2_qualification_monitor_worker",
+    "create_trading_strategy_v2_qualification_monitor_task",
     "replay_v2_shadow_session",
     "strategy_v2_qualification_monitor_enabled",
 ]

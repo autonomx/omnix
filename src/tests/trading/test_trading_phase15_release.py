@@ -126,9 +126,9 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
         "create_trading_strategy_router",
         "create_trading_catalyst_router",
         "create_trading_model_router",
-        "create_trading_alert_monitor_worker",
-        "create_trading_paper_monitor_worker",
-        "create_trading_strategy_monitor_worker",
+        "create_trading_alert_monitor_task",
+        "create_trading_paper_monitor_task",
+        "create_trading_strategy_monitor_task",
     ):
         assert registration in gateway
 

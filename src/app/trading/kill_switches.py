@@ -4,6 +4,10 @@ A kill switch stops paper orders that open or add exposure; the order gateway
 checks the engaged switches for the workspace, the order's account and its
 strategy in the same transaction that writes the order. Orders that only
 reduce a position are never blocked, so protective exits keep working.
+
+Switches change at runtime through ``PUT /api/trading/kill-switches``, which
+needs the ``trading:control`` permission and is audited as
+``trading.control.update``.
 """
 from __future__ import annotations
 
@@ -20,22 +24,25 @@ from app.security.tenant_context import RequestTenant, TenantContext
 KillSwitchScope = Literal["global", "account", "strategy"]
 
 
-class TradingKillSwitch(BaseModel):
+class KillSwitchChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scope: KillSwitchScope
     scope_id: str = Field(default="", max_length=200)
     engaged: bool
     reason: str = Field(default="", max_length=500)
-    updated_by: str | None = None
-    revision: int = 1
-    updated_at: datetime | None = None
 
     @model_validator(mode="after")
     def scope_id_matches_scope(self):
         if (self.scope == "global") != (self.scope_id == ""):
             raise ValueError("a global kill switch has no scope_id; account and strategy switches need one")
         return self
+
+
+class TradingKillSwitch(KillSwitchChange):
+    updated_by: str | None = None
+    revision: int = 1
+    updated_at: datetime | None = None
 
 
 class TradingKillSwitchRepository:
@@ -103,3 +110,22 @@ def _switch(row) -> TradingKillSwitch:
         revision=int(row[5]),
         updated_at=row[6],
     )
+
+
+def create_trading_kill_switch_router(
+    repository_factory: Callable[[], TradingKillSwitchRepository] = TradingKillSwitchRepository,
+):
+    from fastapi import APIRouter
+
+    router = APIRouter(prefix="/api/trading/kill-switches", tags=["trading-kill-switches"])
+
+    @router.get("", response_model=list[TradingKillSwitch])
+    def list_kill_switches() -> list[TradingKillSwitch]:
+        return repository_factory().list()
+
+    @router.put("", response_model=TradingKillSwitch)
+    def set_kill_switch(change: KillSwitchChange) -> TradingKillSwitch:
+        """Engage or release a switch; takes effect for the next order, without a restart."""
+        return repository_factory().set(change.scope, change.scope_id, engaged=change.engaged, reason=change.reason)
+
+    return router

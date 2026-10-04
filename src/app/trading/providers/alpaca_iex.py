@@ -18,6 +18,7 @@ from app.trading.execution import (
 from app.trading.models import AdjustmentMode, MarketBar, ProviderBinding
 from app.trading.us_equity_calendar import us_equity_session
 
+from .base import ProviderAdapter
 from .alpaca_iex_status import default_alpaca_iex_status_cache
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -171,7 +172,7 @@ def _decimal_bar_value(value: Any, *, field: str) -> Decimal:
         ) from exc
 
 
-class AlpacaIexExecutionProvider:
+class AlpacaIexExecutionProvider(ProviderAdapter):
     """Official Alpaca IEX adapter for paper execution and causal evidence.
 
     Alpaca Basic/Paper Only accounts expose real-time IEX data rather than the
@@ -183,6 +184,10 @@ class AlpacaIexExecutionProvider:
 
     provider_id = "alpaca_iex"
     policy = POLICIES[provider_id]
+    display_name = "Alpaca IEX"
+
+    def configured(self) -> bool:
+        return alpaca_iex_configured()
 
     def __init__(
         self,

@@ -13,8 +13,8 @@ from datetime import datetime, time, timezone
 from typing import Any
 
 import certifi
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
+from app.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from app.trading.us_equity_calendar import EASTERN as _ET
 
 
@@ -306,15 +306,15 @@ def _status_stream_ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=certifi.where())
 
 
-class AlpacaIexStatusMonitor:
+class AlpacaIexStatusMonitor(ScheduledTradingMonitor):
     """Optional low-volume status stream used to reject known trading halts and capture research history."""
 
     def __init__(self, cache: AlpacaIexStatusCache | None = None) -> None:
         self.cache = cache or default_alpaca_iex_status_cache()
-        self._task: asyncio.Task[None] | None = None
         self.last_error: str | None = None
         self.last_message_at: datetime | None = None
         self.reconnect_count = 0
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         if self._task is None:
@@ -327,7 +327,6 @@ class AlpacaIexStatusMonitor:
 
     async def stop(self) -> None:
         task = self._task
-        self._task = None
         if task is not None:
             task.cancel()
             try:
@@ -425,21 +424,11 @@ class AlpacaIexStatusMonitor:
         }
 
 
-def create_alpaca_iex_status_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_alpaca_iex_status_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, AlpacaIexStatusMonitor):
         return None
     monitor = AlpacaIexStatusMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if _enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    )
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=_enabled, shutdown=(monitor.stop,))

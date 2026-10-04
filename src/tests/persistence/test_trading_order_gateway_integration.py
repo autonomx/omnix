@@ -207,3 +207,70 @@ def test_an_idempotent_retry_returns_the_placed_order_even_after_a_kill_switch(p
     switches.set("account", account_id, engaged=True)
 
     assert gateway.place_manual_entry(account_id, request) == first
+
+
+def test_the_kill_switch_http_control_takes_effect_without_a_restart(paper) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.trading.kill_switches import create_trading_kill_switch_router
+
+    repository, switches, account_id, instrument_id, _ = paper
+    app = FastAPI()
+    app.include_router(create_trading_kill_switch_router(lambda: switches))
+    client = TestClient(app)
+
+    engaged = client.put(
+        "/api/trading/kill-switches",
+        json={"scope": "account", "scope_id": account_id, "engaged": True, "reason": "operator stop"},
+    )
+    assert engaged.status_code == 200
+    assert engaged.json()["engaged"] is True
+    with pytest.raises(ValueError, match="kill_switch"):
+        OrderGateway(repository).place_manual_entry(account_id, _order(instrument_id, "buy", "1", uuid.uuid4().hex))
+
+    listed = client.get("/api/trading/kill-switches").json()
+    assert {"scope": "account", "scope_id": account_id, "engaged": True}.items() <= next(
+        item for item in listed if item["scope_id"] == account_id
+    ).items()
+
+    released = client.put(
+        "/api/trading/kill-switches", json={"scope": "account", "scope_id": account_id, "engaged": False}
+    )
+    assert released.json()["revision"] == engaged.json()["revision"] + 1
+    assert OrderGateway(repository).place_manual_entry(
+        account_id, _order(instrument_id, "buy", "1", uuid.uuid4().hex)
+    ).status == "open"
+
+    # A global switch has no scope id; account and strategy switches need one.
+    assert client.put("/api/trading/kill-switches", json={"scope": "global", "scope_id": "x", "engaged": True}).status_code == 422
+    assert client.put("/api/trading/kill-switches", json={"scope": "strategy", "engaged": True}).status_code == 422
+
+
+def test_entries_stop_once_the_daily_loss_limit_is_reached_but_exits_continue(paper) -> None:
+    repository, _, account_id, instrument_id, database = paper
+    _open_long(repository, account_id, instrument_id, "10")
+    # 1.5% of the 100,000 account is the manual policy's daily limit.
+    with unit_of_work(database) as uow:
+        uow.connection.execute(
+            """
+            INSERT INTO omnix_trading_paper_ledger (
+                workspace_id, account_id, ledger_id, entry_type, currency, amount, idempotency_key, payload
+            ) VALUES (%s, %s, %s, 'realized_pnl', 'USD', %s, %s, '{}'::jsonb)
+            """,
+            (repository.context.workspace_id, account_id, f"loss-{account_id}", Decimal("-1600"), f"loss-{account_id}"),
+        )
+        uow.commit()
+
+    with pytest.raises(ValueError, match="paper_daily_loss_limit_reached"):
+        OrderGateway(repository).place_manual_entry(account_id, _order(instrument_id, "buy", "1", uuid.uuid4().hex))
+    # A strategy with a wider limit in its risk profile may still enter.
+    authorizer = _ApprovingAuthorizer()
+    placed = OrderGateway(repository, entry_authorizer=authorizer).place_strategy_entry(
+        account_id, _order(instrument_id, "buy", "1", uuid.uuid4().hex),
+        strategy_id="strategy-wide", trade_attempt_id="attempt-1", max_daily_loss_pct=Decimal("5"),
+    )
+    assert placed.status == "open"
+    # Exits are never stopped by the loss limit.
+    exit_order = OrderGateway(repository).place_reducing(account_id, _order(instrument_id, "sell", "5", uuid.uuid4().hex))
+    assert exit_order.side == "sell"

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import threading
-from collections.abc import Callable
+import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+
+from .gap_recovery import recovery_window
+
+logger = logging.getLogger(__name__)
 
 
 StreamKind = Literal["BAR", "QUOTE"]
@@ -243,7 +251,122 @@ class SharedSubscriptionManager:
             return len(self._subscriptions)
 
 
+UpstreamFactory = Callable[..., AsyncIterator[StreamingBarUpdate]]
+# (binding_id, instrument_id, interval, start, end) -> finalized bars in [start, end).
+GapRecovery = Callable[[str, str, str, datetime, datetime], Awaitable[list[StreamingBarUpdate]]]
+
+
+class SharedBarStreamHub:
+    """One upstream socket per binding and interval, shared by every browser client (WP-8.3).
+
+    The first client opens the upstream; later clients join it and the last
+    one to leave closes it. A dropped upstream reconnects with backoff, and the
+    finalized bars that closed while it was down are fetched over REST and
+    published before the live stream resumes. A slow client loses its oldest
+    queued updates instead of holding the others back.
+    """
+
+    def __init__(
+        self,
+        subscriptions: SharedSubscriptionManager,
+        *,
+        open_upstream: UpstreamFactory,
+        recover_gap: GapRecovery,
+        queue_size: int = 256,
+        max_backoff_seconds: float = 30.0,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self.subscriptions = subscriptions
+        self.open_upstream = open_upstream
+        self.recover_gap = recover_gap
+        self.queue_size = queue_size
+        self.max_backoff_seconds = max_backoff_seconds
+        self.sleep = sleep
+        self._upstreams: dict[str, asyncio.Task[None]] = {}
+
+    @asynccontextmanager
+    async def listen(
+        self,
+        *,
+        provider_symbol: str,
+        binding_id: str,
+        instrument_id: str,
+        interval: str,
+    ) -> AsyncIterator[asyncio.Queue[StreamingBarUpdate]]:
+        queue: asyncio.Queue[StreamingBarUpdate] = asyncio.Queue(maxsize=self.queue_size)
+
+        def offer(update: StreamingBarUpdate) -> None:
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(update)
+
+        listener_id = uuid.uuid4().hex
+        key, _created = self.subscriptions.subscribe(
+            listener_id=listener_id,
+            binding_id=binding_id,
+            instrument_id=instrument_id,
+            interval=interval,
+            listener=offer,
+        )
+        upstream = self._upstreams.get(key)
+        if upstream is None or upstream.done():
+            self._upstreams[key] = asyncio.create_task(
+                self._run_upstream(key, provider_symbol, binding_id, instrument_id, interval)
+            )
+        try:
+            yield queue
+        finally:
+            if self.subscriptions.unsubscribe(key, listener_id):
+                task = self._upstreams.pop(key, None)
+                if task is not None:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+
+    def upstream_count(self) -> int:
+        return sum(1 for task in self._upstreams.values() if not task.done())
+
+    async def _run_upstream(
+        self,
+        key: str,
+        provider_symbol: str,
+        binding_id: str,
+        instrument_id: str,
+        interval: str,
+    ) -> None:
+        backoff = 1.0
+        last_final_start: datetime | None = None
+        while True:
+            try:
+                first = True
+                async for update in self.open_upstream(
+                    provider_symbol=provider_symbol,
+                    binding_id=binding_id,
+                    instrument_id=instrument_id,
+                    interval=interval,
+                ):
+                    if first:
+                        first = False
+                        backoff = 1.0
+                        self.subscriptions.mark_connected(key)
+                        window = recovery_window(last_final_start, update.start_time, interval=interval)
+                        if window is not None:
+                            for bar in await self.recover_gap(binding_id, instrument_id, interval, *window):
+                                self.subscriptions.publish(bar)
+                                last_final_start = bar.start_time
+                    self.subscriptions.publish(update)
+                    if update.is_final and (last_final_start is None or update.start_time > last_final_start):
+                        last_final_start = update.start_time
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("market stream %s dropped: %s: %s", key, type(exc).__name__, exc)
+            self.subscriptions.mark_disconnected(key)
+            await self.sleep(backoff)
+            backoff = min(self.max_backoff_seconds, backoff * 2)
+
+
 __all__ = [
+    "SharedBarStreamHub",
     "SharedSubscriptionManager",
     "StreamKind",
     "StreamingBarUpdate",

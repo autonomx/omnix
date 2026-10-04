@@ -9,6 +9,7 @@ from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import BINANCE_POLICY, bindings_for_instrument, instrument_by_id, search_instruments
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -42,7 +43,7 @@ def _request_weight(path: str, params: dict[str, Any]) -> int:
         return 80
     return 2
 
-class BinanceMarketDataProvider:
+class BinanceMarketDataProvider(ProviderAdapter):
     provider_id = "binance"
     policy = BINANCE_POLICY
 

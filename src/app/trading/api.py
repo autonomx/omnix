@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import aclosing
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -292,8 +293,10 @@ def create_trading_router(
                 if binding_id is None
                 else service.stream_updates(instrument_id, interval, binding_id)
             )
-            async for update in updates:
-                await websocket.send_json(_stream_payload(update))
+            # Closing the generator releases this client's share of the upstream.
+            async with aclosing(updates):
+                async for update in updates:
+                    await websocket.send_json(_stream_payload(update))
         except WebSocketDisconnect:
             return
         except ValueError as exc:

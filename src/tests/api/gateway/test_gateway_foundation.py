@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import sys
-import logging
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 import pytest
 
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -173,73 +171,6 @@ def test_gateway_payload_policy_forbids_browser_worker_access() -> None:
     assert payload["gateway_worker_access"] == "required"
     assert payload["generated_artifacts"] == "return_asset_reference"
     assert payload["base64_media_payloads"] == "transitional_only"
-
-
-def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None:
-    from app.gateway import main as gateway_main
-    from app.gateway import app_factory as gateway_app_factory
-    from app.trading import strategy_monitor as monitor_module
-    from app.runtime.capabilities import RuntimeCapabilities
-    from app.runtime.config import RuntimeConfig
-    from app.runtime.features import FeatureContext
-    from app.trading.strategy_monitor import (
-        TradingStrategyMonitor,
-        create_trading_strategy_monitor_worker,
-    )
-
-    monkeypatch.setattr(
-        gateway_app_factory,
-        "recover_abandoned_chat_generation_jobs",
-        lambda *_args: 0,
-    )
-    monkeypatch.setattr(
-        monitor_module,
-        "managed_finviz_shadow_autoprovision_enabled",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        monitor_module,
-        "trading_strategy_monitor_enabled",
-        lambda: True,
-    )
-
-    async def no_op_run_once(_monitor: TradingStrategyMonitor) -> None:
-        return None
-
-    monkeypatch.setattr(TradingStrategyMonitor, "run_once", no_op_run_once)
-
-    app = FastAPI(
-        lifespan=lambda current_app: gateway_app_factory._gateway_lifespan(
-            current_app,
-            get_chat_store=lambda: object(),
-            get_job_store=lambda: object(),
-        )
-    )
-    from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
-    from app.runtime.background import register_background_worker
-
-    app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
-    config = RuntimeConfig()
-    worker = create_trading_strategy_monitor_worker(
-        FeatureContext(
-            feature_id="trading",
-            config=None,
-            runtime=config,
-            capabilities=RuntimeCapabilities.from_config(config),
-            services=None,
-            logger=logging.getLogger("tests.trading"),
-            runtime_state=app.state,
-        )
-    )
-    assert worker is not None
-    monitor = worker.monitor
-    register_background_worker(app.state.background_registry, worker)
-
-    with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}):
-        assert monitor._task is not None
-        assert not monitor._task.done()
-
-    assert monitor._task is None
 
 
 def test_gateway_compatibility_handoff_reports_current_owners() -> None:

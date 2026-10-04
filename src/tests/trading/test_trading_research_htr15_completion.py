@@ -230,6 +230,7 @@ def test_v12_backtest_arbitrates_with_research_adjusted_quality() -> None:
     )
     config = GapPullbackConfig(
         strategy_version="1.2.0",
+        research_score_adjustment_enabled=True,
         pivot_left_bars=1,
         pivot_right_bars=1,
         volume_lookback_bars=5,

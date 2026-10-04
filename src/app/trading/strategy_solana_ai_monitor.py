@@ -7,15 +7,14 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 from app.runtime.scheduler import SchedulerOwnershipUnavailable
 from pydantic import BaseModel, ConfigDict, Field
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_repository import StrategyEvent
 from .strategy_solana_ai_repository import (
@@ -95,13 +94,15 @@ def _interval_seconds() -> float:
     return max(2.0, min(value, 60.0))
 
 
-class TradingSolanaAIMonitor:
+class TradingSolanaAIMonitor(ScheduledTradingMonitor):
     """Poll completed 1m candles and ask the AI for one shadow decision.
 
     The monitor intentionally does not accept a paper repository or execution
     adapter. Decisions are durably recorded for strategy history, but no order
     can be created by this strategy.
     """
+
+    error_event = "solana_ai_monitor_error"
 
     def __init__(
         self,
@@ -117,7 +118,6 @@ class TradingSolanaAIMonitor:
         self.strategy_repository_factory = strategy_repository_factory
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self._last_processed_bar_end: datetime | None = None
         self.last_run_at: datetime | None = None
         self.last_bar_end: datetime | None = None
@@ -135,7 +135,6 @@ class TradingSolanaAIMonitor:
         self._decision_events: list[StrategyEvent] = []
 
     def strategy_record(self) -> SolanaAIStrategyRecord:
-        task = self._task
         decision_count = self.decision_count
         signal_count = self.signal_count
         repository = self.strategy_repository_factory()
@@ -150,7 +149,7 @@ class TradingSolanaAIMonitor:
                 logger.debug("suppressed error in %s", "TradingSolanaAIMonitor.strategy_record", exc_info=True)
         return SolanaAIStrategyRecord(
             configured_enabled=solana_ai_monitor_enabled(),
-            running=bool(task is not None and not task.done()),
+            running=self.scheduled,
             last_run_at=self.last_run_at,
             last_error=self.last_error,
             decision_count=decision_count,
@@ -218,6 +217,32 @@ class TradingSolanaAIMonitor:
                 return False
         return True
 
+    def error_log_fields(self) -> dict[str, object]:
+        return {
+            "strategy_id": SOLANA_AI_STRATEGY_ID,
+            "instrument_id": SOLANA_INSTRUMENT_ID,
+            "paper_only": True,
+            "execution_authority": False,
+        }
+
+    def record_cycle_error(self, exc: Exception) -> None:
+        self.error_count += 1
+        super().record_cycle_error(exc)
+
+    def close(self, *, reason: str = "gateway_shutdown") -> None:
+        trade_log(
+            "auto_trading",
+            "solana_ai_monitor_stopped",
+            strategy_id=SOLANA_AI_STRATEGY_ID,
+            instrument_id=SOLANA_INSTRUMENT_ID,
+            binding_id=SOLANA_BINDING_ID,
+            chart_interval="1m",
+            reason=reason,
+            paper_only=True,
+            research_only=True,
+            execution_authority=False,
+        )
+
     def _log_started(self) -> None:
         trade_log(
             "auto_trading",
@@ -240,36 +265,6 @@ class TradingSolanaAIMonitor:
             )
         self.last_error = None
         self._log_started()
-
-    def start(self) -> bool:
-        if self._task is not None and not self._task.done():
-            return True
-        if not self._ensure_strategy_record():
-            return False
-        self._task = asyncio.create_task(self._loop())
-        self.last_error = None
-        self._log_started()
-        return True
-
-    async def stop(self, *, reason: str = "gateway_shutdown") -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-            trade_log(
-                "auto_trading",
-                "solana_ai_monitor_stopped",
-                strategy_id=SOLANA_AI_STRATEGY_ID,
-                instrument_id=SOLANA_INSTRUMENT_ID,
-                binding_id=SOLANA_BINDING_ID,
-                chart_interval="1m",
-                reason=reason,
-                paper_only=True,
-                research_only=True,
-                execution_authority=False,
-            )
 
     async def run_once(self) -> int:
         now = self.now_factory()
@@ -444,45 +439,16 @@ class TradingSolanaAIMonitor:
             )
         return 1
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                self.error_count += 1
-                trade_log(
-                    "auto_trading",
-                    "solana_ai_monitor_error",
-                    strategy_id=SOLANA_AI_STRATEGY_ID,
-                    instrument_id=SOLANA_INSTRUMENT_ID,
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    paper_only=True,
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
 
-
-def create_trading_solana_ai_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_solana_ai_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingSolanaAIMonitor):
         return None
     monitor = TradingSolanaAIMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if solana_ai_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    return TradingMonitorTask(
+        name=__name__, monitor=monitor, enabled=solana_ai_monitor_enabled, shutdown=(monitor.close,),
     )
 
 
@@ -555,6 +521,6 @@ __all__ = [
     "TradingSolanaAIMonitor",
     "SCHEDULED_TASK_ID",
     "create_trading_solana_ai_control_router",
-    "create_trading_solana_ai_monitor_worker",
+    "create_trading_solana_ai_monitor_task",
     "solana_ai_monitor_enabled",
 ]

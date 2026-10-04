@@ -4,16 +4,15 @@ from app.config.env import env_str as _env_str
 import asyncio
 import hashlib
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
+from .monitor_task import ScheduledTradingMonitor, SingleFlightTasks, TradingMonitorTask
 from .binding_authority import require_execution_binding
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
@@ -351,12 +350,17 @@ class _EntryProposal:
         )
 
 
-class TradingStrategyMonitor:
+class TradingStrategyMonitor(ScheduledTradingMonitor):
     """Deterministic strategy runner with OFF/SHADOW/AUTO_PAPER modes only.
 
     AUTO_PAPER can create orders exclusively in the existing paper repository.
     There is intentionally no live-broker adapter or AI order-placement path.
     """
+
+    error_event = "monitor_loop_error"
+
+    def error_log_fields(self) -> dict[str, object]:
+        return {"run_id": self.current_run_id}
 
     def __init__(
         self,
@@ -372,7 +376,6 @@ class TradingStrategyMonitor:
         self.market_service_factory = market_service_factory
         self.intraday_llm_analyzer_factory = intraday_llm_analyzer_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.current_run_id: str | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
@@ -400,6 +403,13 @@ class TradingStrategyMonitor:
         self.auto_paper_blocked_strategy_count = 0
         self.auto_paper_archive_not_ready_strategy_count = 0
         self.auto_paper_qualification_blocked_strategy_count = 0
+        # Intraday LLM annotations run beside the cycle, one per strategy (WP-8.3).
+        self.intraday_llm_annotations = SingleFlightTasks(on_error=self._intraday_llm_failed)
+
+    def _intraday_llm_failed(self, exc: BaseException) -> None:
+        self.intraday_llm_error_count += 1
+        trade_log("auto_trading", "intraday_llm_error", error_type=type(exc).__name__, detail=str(exc),
+                  execution_authority=False)
 
     def _set_auto_paper_readiness(
         self,
@@ -419,18 +429,6 @@ class TradingStrategyMonitor:
             "universe_id": universe_id,
             "paper_execution_authority": state == "ready",
         }
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     def _should_log_diagnostic(
         self,
@@ -2172,6 +2170,7 @@ class TradingStrategyMonitor:
                             research_decision,
                             base_quality_score=result.features.quality_score,
                             minimum_quality_score=config.config.minimum_quality_score,
+                            score_adjustment_enabled=config.config.research_score_adjustment_enabled,
                         )
                         reason_code = quality_gate.reason_code
                         detail = None
@@ -2199,6 +2198,10 @@ class TradingStrategyMonitor:
                             quality_gate.adjusted_quality_score if research_decision is not None else result.features.quality_score
                         ),
                         "minimum_quality_score": config.config.minimum_quality_score,
+                        "proposed_score_adjustment": (
+                            quality_gate.proposed_score_adjustment if research_decision is not None else 0
+                        ),
+                        "score_adjustment_enabled": config.config.research_score_adjustment_enabled,
                         "detail": detail,
                         "decision_at": observed_at,
                     }
@@ -2290,12 +2293,9 @@ class TradingStrategyMonitor:
                 execution_authority=False,
             )
 
-            await self._run_intraday_llm(
-                config,
-                strategy_repository,
-                universe,
-                ranked_learning,
-            )
+            # Research annotation: proposals never wait on the LLM (WP-8.3).
+            self.intraday_llm_annotations.start(config.strategy_id, lambda: self._run_intraday_llm(
+                config, strategy_repository, universe, list(ranked_learning)))
 
         proposals.sort(key=lambda proposal: proposal.priority)
         if evaluated_any or proposals:
@@ -3371,7 +3371,7 @@ class TradingStrategyMonitor:
     def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": trading_strategy_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "current_run_id": self.current_run_id,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
@@ -3393,21 +3393,6 @@ class TradingStrategyMonitor:
             "managed_finviz_shadow_provision": self.managed_finviz_shadow_provision,
             "managed_finviz_shadow_provision_error": self.managed_finviz_shadow_provision_error,
         }
-
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "monitor_loop_error",
-                    run_id=self.current_run_id,
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                )
-            await asyncio.sleep(self.interval_seconds)
 
 async def prepare_trading_strategy_monitor_for_scheduled_execution(
     monitor: TradingStrategyMonitor,
@@ -3444,22 +3429,17 @@ async def prepare_trading_strategy_monitor_for_scheduled_execution(
         )
 
 
-def create_trading_strategy_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+def create_trading_strategy_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
     state = context.runtime_state
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyMonitor):
         return None
     monitor = TradingStrategyMonitor()
     setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        await prepare_trading_strategy_monitor_for_scheduled_execution(monitor)
-        if trading_strategy_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    return BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    return TradingMonitorTask(
+        name=__name__,
+        monitor=monitor,
+        enabled=trading_strategy_monitor_enabled,
+        startup=(lambda: prepare_trading_strategy_monitor_for_scheduled_execution(monitor),),
+        shutdown=(monitor.intraday_llm_annotations.close,),
     )
