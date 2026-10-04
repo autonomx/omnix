@@ -7,6 +7,7 @@ validation evidence and parses structured review evidence.
 """
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
@@ -232,7 +233,7 @@ def compile_task_engineering_contract(
 
     constraints: list[TaskConstraint] = []
     validation: list[ValidationSpec] = []
-    if profile == "coding" and mutating:
+    if profile_produces_diff(profile) and mutating:
         requirements.extend(
             [
                 TaskRequirement(
@@ -366,7 +367,7 @@ CODING_INDEPENDENT_REVIEW_PHASE_ENABLED = False
 
 
 def _policy_required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = None) -> int:
-    if spec.profile != "coding" or "diff" not in spec.expected_artifacts or spec.quality_policy == "off":
+    if not profile_produces_diff(spec.profile) or "diff" not in spec.expected_artifacts or spec.quality_policy == "off":
         return 0
     if spec.quality_policy == "critical":
         return 2
@@ -1019,7 +1020,7 @@ def quality_failure_reasons(
     reviews: Iterable[ReviewResult],
     self_reviews: Iterable[SelfReviewResult],
 ) -> list[str]:
-    if snapshot.spec.profile != "coding" or "diff" not in snapshot.spec.expected_artifacts:
+    if not profile_produces_diff(snapshot.spec.profile) or "diff" not in snapshot.spec.expected_artifacts:
         return []
     if snapshot.spec.quality_policy == "off":
         return []

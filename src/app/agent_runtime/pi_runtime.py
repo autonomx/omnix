@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from .profiles import profile_produces_diff, profile_repository_guidance
 from .coding_skills import compile_coding_skills, trusted_skill_paths
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from app.observability.agent_logging import log_agent_activity
@@ -75,7 +76,7 @@ _BROWSER_ASSERTION_CAPABILITIES = frozenset({
 def _mandatory_browser_validation_prompt(spec: AgentRunSpec) -> str:
     """Make the deterministic browser gate visible during the implementation turn."""
 
-    if spec.profile != "coding" or not _BROWSER_ASSERTION_CAPABILITIES.intersection(
+    if not profile_produces_diff(spec.profile) or not _BROWSER_ASSERTION_CAPABILITIES.intersection(
         set(spec.external_capabilities)
     ):
         return ""
@@ -93,7 +94,7 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     for skill_path in trusted_skill_paths(profile=spec.profile):
         argv.extend(["--skill", str(skill_path)])
     planning_enabled = (
-        spec.profile == "coding"
+        profile_produces_diff(spec.profile)
         and "diff" in spec.expected_artifacts
         and spec.quality_policy != "off"
     )
@@ -293,7 +294,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
             spec,
             reference_context=reference_context,
         )
-        if spec.profile not in {"coding", "coding-reviewer"}:
+        if not profile_repository_guidance(spec.profile):
             return base
 
         objective = spec.objective or spec.task
@@ -326,7 +327,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
             "Trusted native Pi skill digest: " + skills_digest,
             "Issued Omnix path roots JSON:\n" + json.dumps(path_roots, sort_keys=True),
         ]
-        if spec.profile == "coding":
+        if profile_produces_diff(spec.profile):
             sections.append(_ENGINEERING_WORKFLOW)
             browser_prompt = _mandatory_browser_validation_prompt(spec)
             if browser_prompt:

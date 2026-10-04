@@ -57,7 +57,7 @@ from .local_workspace import (
     local_workspace_repository_root,
     validate_local_workspace_root,
 )
-from .profiles import get_agent_profile, select_agent_profile_id
+from .profiles import get_agent_profile, profile_produces_diff, select_agent_profile_id
 from .router import OmnixRouteDecision, route_omnix_fast_path, semantic_authority_risk
 from .semantic_classifier import (
     SemanticIntentDecision,
@@ -700,7 +700,7 @@ def _localize_attached_workspace_evidence(
         metadata = {}
     if not metadata.get("workspace_root") or semantic_compilation is None:
         return semantic_compilation
-    if semantic_compilation.profile_id != "coding":
+    if not profile_produces_diff(semantic_compilation.profile_id):
         return semantic_compilation
     if not set(semantic_compilation.action_intents) & {
         "workspace_read",
@@ -2543,7 +2543,7 @@ def _agent_result(
         evidence_policy=evidence_decision.policy,
         workspace=workspace,
         approval_policy=(
-            coding_approval_policy if profile_id == "coding" else "ask_sensitive"
+            coding_approval_policy if profile_produces_diff(profile_id) else "ask_sensitive"
         ),
         success_criteria=[
             SuccessCriterion(
@@ -2556,7 +2556,7 @@ def _agent_result(
         ],
         expected_artifacts=(
             ["diff"]
-            if profile_id == "coding"
+            if profile_produces_diff(profile_id)
             and task_requires_workspace_mutation(
                 authority_task,
                 semantic_action_intents=semantic_actions,
@@ -2710,7 +2710,7 @@ def _agent_semantic_reference_context(
 
     if not attached_workspace or semantic_task is None or semantic_compilation is None:
         return reference_context
-    if semantic_compilation.profile_id != "coding":
+    if not profile_produces_diff(semantic_compilation.profile_id):
         return reference_context
     if not set(semantic_compilation.action_intents) & {
         "workspace_read",

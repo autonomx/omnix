@@ -6,6 +6,7 @@ from typing import Any
 
 from app.persistence.tenant import TenantContext
 
+from .profiles import profile_produces_diff
 from .contracts import AgentRunSnapshot, TaskRevision
 from .planning import (
     engineering_contract_digest,
@@ -81,7 +82,7 @@ def evaluate_planning_acceptance(
     mode = planning_mode()
     if (
         mode == "off"
-        or snapshot.spec.profile != "coding"
+        or not profile_produces_diff(snapshot.spec.profile)
         or "diff" not in snapshot.spec.expected_artifacts
     ):
         return PlanningAcceptanceAssessment(mode=mode, plan_revision_id=None)

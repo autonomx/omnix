@@ -1,6 +1,7 @@
 """Omnix-authoritative acceptance checks for agent completion."""
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .exception_logging import log_recovered_exception
 
 from pathlib import Path
@@ -43,7 +44,7 @@ def compile_acceptance_plan(spec: AgentRunSpec, *, task_revision: TaskRevision |
         else list(spec.expected_artifacts)
     )
     mutating_code = (
-        spec.profile == "coding"
+        profile_produces_diff(spec.profile)
         and (
             "diff" in expected_artifacts
             if task_revision is not None
@@ -158,7 +159,7 @@ def evaluate_acceptance(
         expected=(requested_replacement[1] if requested_replacement is not None else None),
     )
 
-    if spec.profile == "coding" and plan.require_diff and _is_web_ui_task(spec, task_revision):
+    if profile_produces_diff(spec.profile) and plan.require_diff and _is_web_ui_task(spec, task_revision):
         relevant_paths = any(_is_web_ui_path(path) for path in modified_paths)
         relevant_validation = any(
             success and _is_web_ui_validation(command)

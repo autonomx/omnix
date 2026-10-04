@@ -42,7 +42,7 @@ from .local_workspace import (
     local_request_origin_allowed,
     pick_local_workspace,
 )
-from .profiles import get_agent_profile, resolve_profile_capabilities
+from .profiles import get_agent_profile, profile_produces_diff, resolve_profile_capabilities
 from .request_policy import allowed_workspace_root, validate_request_policy
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
@@ -199,7 +199,7 @@ def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> Age
         ],
         expected_artifacts=(
             ["diff"]
-            if request.profile == "coding" and task_requires_workspace_mutation(effective_task)
+            if profile_produces_diff(request.profile) and task_requires_workspace_mutation(effective_task)
             else []
         ),
     )

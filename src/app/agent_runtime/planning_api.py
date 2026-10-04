@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.unit_of_work import unit_of_work
 
+from .profiles import profile_produces_diff
 from .budget import AgentBudgetError
 from .coding_quality_repository import PostgresCodingQualityRepository
 from .planning import (
@@ -69,7 +70,7 @@ def _load(service, run_id: str):
     snapshot = service.get(run_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
-    if snapshot.spec.profile != "coding" or "diff" not in snapshot.spec.expected_artifacts:
+    if not profile_produces_diff(snapshot.spec.profile) or "diff" not in snapshot.spec.expected_artifacts:
         raise HTTPException(status_code=409, detail="agent_planning_not_applicable")
     return snapshot
 

@@ -1066,7 +1066,7 @@ def compile_task_authority(
         if intent.startswith("workspace_surface:") and ":" in intent
     )
 
-    if profile.id == "coding":
+    if profile.produces_diff:
         read_caps = [
             capability
             for capability in profile.capabilities
@@ -1135,7 +1135,7 @@ def compile_task_authority(
         local = list(profile.capabilities)
 
     external = list(evidence.required_external)
-    if profile.id == "coding":
+    if profile.produces_diff:
         # Browser and MCP providers remain outside Pi. SemanticTask describes
         # whether the workspace surface is web UI; deterministic policy maps
         # that description to capabilities inside the coding profile ceiling.

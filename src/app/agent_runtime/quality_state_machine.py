@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
@@ -74,7 +75,7 @@ if TYPE_CHECKING:
 
 def _quality_enabled(spec: AgentRunSpec) -> bool:
     return (
-        spec.profile == "coding"
+        profile_produces_diff(spec.profile)
         and "diff" in spec.expected_artifacts
         and spec.quality_policy != "off"
     )

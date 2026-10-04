@@ -10,6 +10,7 @@ from app.security.tenant_context import RequestTenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
+from .profiles import profile_produces_diff
 from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
@@ -307,7 +308,7 @@ class AgentBudgetManager:
 
         spec = snapshot.spec
         if (
-            spec.profile != "coding"
+            not profile_produces_diff(spec.profile)
             or "diff" not in spec.expected_artifacts
             or spec.quality_policy == "off"
         ):

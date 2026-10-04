@@ -18,6 +18,7 @@ import tempfile
 
 
 from app.capabilities import browser_capability_ids
+from .profiles import profile_produces_diff
 from .coding_quality import (
     CODING_INDEPENDENT_REVIEW_PHASE_ENABLED,
     compile_task_engineering_contract,
@@ -109,7 +110,7 @@ def _quality_sized_run_spec(spec: AgentRunSpec) -> AgentRunSpec:
     """
 
     if (
-        spec.profile != "coding"
+        not profile_produces_diff(spec.profile)
         or "diff" not in spec.expected_artifacts
         or spec.quality_policy == "off"
         or "limits" in spec.model_fields_set

@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
@@ -423,7 +424,7 @@ def _promote_accepted_workspace(
     spec = current.spec
     workspace = spec.workspace
     if (
-        spec.profile != "coding"
+        not profile_produces_diff(spec.profile)
         or "diff" not in spec.expected_artifacts
         or workspace is None
         or not workspace.repository

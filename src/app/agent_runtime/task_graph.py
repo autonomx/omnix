@@ -26,7 +26,7 @@ from .contracts import (
     WorkspaceSpec,
 )
 from .evidence import EvidenceCompilationError, capability_for_requirement, compile_task_authority
-from .profiles import get_agent_profile, resolve_profile_capabilities
+from .profiles import get_agent_profile, profile_produces_diff, resolve_profile_capabilities
 from .semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
@@ -529,7 +529,7 @@ def _acceptance_plan_for_node(
 ) -> AcceptancePlan | None:
     """Preserve the single-Agent coding completion floor inside composites."""
 
-    if profile_id != "coding" or "workspace_mutate" not in set(action_intents):
+    if not profile_produces_diff(profile_id) or "workspace_mutate" not in set(action_intents):
         return None
     return AcceptancePlan(
         allowed_modified_paths=list(
@@ -684,7 +684,7 @@ def _compile_profile_node(
                 description=(
                     "Complete the scoped coding change, run the smallest relevant "
                     "validation, and report verifiable evidence."
-                    if profile_id == "coding"
+                    if profile_produces_diff(profile_id)
                     and "workspace_mutate" in set(compilation.action_intents)
                     else f"Complete the {profile_id} scoped portion of the user request."
                 ),

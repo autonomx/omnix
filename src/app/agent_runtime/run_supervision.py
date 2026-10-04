@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .event_queries import latest_event
 from datetime import datetime, timedelta, timezone
 import threading
@@ -442,7 +443,7 @@ def _supervise_stalled_run(service: AgentRunService, run_id: str) -> None:
             runtime_confirmed_missing = (
                 callable(get_runtime_status) and get_runtime_status(run_id) is None
             )
-            if current.spec.profile == "coding" and not runtime_confirmed_missing:
+            if profile_produces_diff(current.spec.profile) and not runtime_confirmed_missing:
                 # Pi owns the complete coding loop. A quiet model/tool turn
                 # is not proof that its process died, and restarting it
                 # destroys the context it needs to finish efficiently.

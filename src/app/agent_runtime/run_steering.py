@@ -5,6 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
 from .exception_logging import log_recovered_exception
 import hashlib
 import os
@@ -439,7 +440,7 @@ def _compile_steering(
     )
     expected_artifacts = (
         ["diff"]
-        if target_profile_id == "coding"
+        if profile_produces_diff(target_profile_id)
         and task_requires_workspace_mutation(
             turn_plan.effective_request,
             semantic_action_intents=semantic_actions,
