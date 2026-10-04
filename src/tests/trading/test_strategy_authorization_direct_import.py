@@ -84,6 +84,7 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
             ),
             risk=SimpleNamespace(
                 max_spread_bps=100,
+                max_daily_loss_pct=1.5,
                 kill_switch=False,
                 entry_start_et=time(0, 0),
                 last_entry_et=time(23, 59),

@@ -240,3 +240,17 @@ def test_the_research_score_opt_in_is_off_by_default_and_part_of_the_strategy_co
 
     assert GapPullbackConfig().research_score_adjustment_enabled is False
     assert GapPullbackConfig(research_score_adjustment_enabled=True).research_score_adjustment_enabled is True
+
+
+def test_the_opt_in_leaves_qualified_profile_fingerprints_unchanged_while_off():
+    """Qualification evidence is bound to the profile fingerprint; the new field must not move it."""
+    from app.trading.strategy_v2_qualification import (
+        FROZEN_V2_PROFILE_FINGERPRINT,
+        frozen_v2_config,
+        v2_profile_fingerprint,
+    )
+
+    config = frozen_v2_config()
+    assert v2_profile_fingerprint(config) == FROZEN_V2_PROFILE_FINGERPRINT
+    opted_in = config.model_copy(update={"research_score_adjustment_enabled": True})
+    assert v2_profile_fingerprint(opted_in) != FROZEN_V2_PROFILE_FINGERPRINT
