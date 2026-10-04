@@ -141,7 +141,8 @@ objects.
 The monitor intentionally attempts ingestion during **09:24-09:27:59 ET**.
 It reads the handoff imported into PostgreSQL (see
 `PROSPECTIVE_GAP_END_TO_END_RUNTIME.md`, "Scheduled inbox bridge"); the GitHub
-import is an explicit, opt-in job, never part of the decision path.
+import is a separate scheduled job with recorded provenance, never part of the
+decision path.
 
 The runtime then recovers the canonical RAW one-minute premarket evidence and
 historical close data. Three causal timestamps remain distinct:

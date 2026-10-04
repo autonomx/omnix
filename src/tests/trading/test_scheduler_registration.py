@@ -17,7 +17,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
-    # 22 monitors, the generic strategy runner and the opt-in handoff import (WP-8.3).
+    # 22 monitors, the generic strategy runner and the prospective-gap input import (WP-8.3).
     assert len(FEATURE.scheduled_tasks) == 24
     config = RuntimeConfig()
     context = FeatureContext(
@@ -32,9 +32,9 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
     *monitor_factories, runner_factory, handoff_import_factory = FEATURE.scheduled_tasks
     # No runner strategy is registered yet, so the runner has no task; the
-    # handoff import is off by default.
+    # prospective-gap input import runs by default.
     assert runner_factory(context) is None
-    assert handoff_import_factory(context) is None
+    assert handoff_import_factory(context).task_id == "trading.prospective_gap_handoff_import"
     tasks = [factory(context) for factory in monitor_factories]
 
     assert all(isinstance(task, ScheduledTaskSpec) for task in tasks)

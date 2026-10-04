@@ -8,8 +8,12 @@ their provenance (exact content, SHA-256, source, importer):
     python -m app.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD
     python -m app.trading.prospective_gap_inputs import-climatology --file PATH
 
-The scheduled GitHub import (``trading.prospective_gap_handoff_import``) is off
-unless ``OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT`` is enabled.
+The scheduled GitHub import (``trading.prospective_gap_handoff_import``) runs
+during the premarket window: it imports today's handoff from
+``resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`` and the climatology
+state from ``resources/trading/prospective_gap_state/climatology.json`` on the
+configured branch, where the research process publishes them. Set
+``OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT=0`` to turn it off.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ import argparse
 import base64
 import hashlib
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -33,6 +38,7 @@ from app.trading.us_equity_calendar import EASTERN
 from .prospective_gap_runtime import ProspectiveClimatologyState, SchedulerPremarketHandoff
 
 IMPORT_TASK_ID = "trading.prospective_gap_handoff_import"
+logger = logging.getLogger(__name__)
 
 
 class HandoffConflict(ValueError):
@@ -129,8 +135,17 @@ class ProspectiveGapInputs:
         return state
 
 
+HANDOFF_PATH = "resources/trading/prospective_gap_inbox/{session}.json"
+CLIMATOLOGY_PATH = "resources/trading/prospective_gap_state/climatology.json"
+
+
 def fetch_handoff_from_github(session_date: date) -> tuple[str, str] | None:
     """The scheduler's handoff for ``session_date`` from GitHub, as (content, source); None if absent."""
+    return fetch_from_github(HANDOFF_PATH.format(session=session_date.isoformat()))
+
+
+def fetch_from_github(path: str) -> tuple[str, str] | None:
+    """A file from the configured repository and ref, as (content, source); None if absent."""
     gh = shutil.which("gh")
     if not gh:
         raise RuntimeError("prospective_gap_handoff_import_requires_github_cli")
@@ -140,7 +155,6 @@ def fetch_handoff_from_github(session_date: date) -> tuple[str, str] | None:
         raise ValueError("invalid_prospective_gap_github_repository")
     if not ref:
         raise ValueError("invalid_prospective_gap_github_ref")
-    path = f"resources/trading/prospective_gap_inbox/{session_date.isoformat()}.json"
     completed = subprocess.run(
         [gh, "api", f"repos/{repository}/contents/{path}?ref={ref}"],
         capture_output=True,
@@ -168,7 +182,40 @@ def fetch_handoff_from_github(session_date: date) -> tuple[str, str] | None:
 
 
 def handoff_import_enabled() -> bool:
-    return env_str("OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT", "0").strip().lower() in {"1", "true", "yes", "on"}
+    return env_str("OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def previous_session(session_date: date) -> date:
+    """The last U.S. equity trading day before ``session_date``."""
+    from datetime import timedelta
+
+    from app.trading.us_equity_calendar import regular_holidays
+
+    day = session_date - timedelta(days=1)
+    while day.weekday() >= 5 or day in regular_holidays(day.year):
+        day -= timedelta(days=1)
+    return day
+
+
+def import_climatology_from_github(
+    inputs: ProspectiveGapInputs,
+    session_date: date,
+    *,
+    fetch: Callable[[str], tuple[str, str] | None] | None = None,
+) -> bool:
+    """Import the published climatology state unless the one through the previous session is in."""
+    current = inputs.climatology_before(session_date)
+    if current is not None and current.through_session >= previous_session(session_date):
+        return False
+    fetched = (fetch or fetch_from_github)(CLIMATOLOGY_PATH)
+    if fetched is None:
+        return False
+    content, source = fetched
+    state = ProspectiveClimatologyState.model_validate_json(content)
+    if current is not None and state.through_session <= current.through_session:
+        return False
+    inputs.import_climatology(content, source=source)
+    return True
 
 
 def import_todays_handoff_from_github(
@@ -176,11 +223,16 @@ def import_todays_handoff_from_github(
     *,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> bool:
-    """Import today's handoff during the premarket window; True when one was imported."""
+    """Import today's inputs during the premarket window; True when a handoff was imported."""
     current = now().astimezone(EASTERN)
     if not time(4, 0) <= current.time() <= time(9, 30):
         return False
     inputs = inputs or ProspectiveGapInputs()
+    try:
+        import_climatology_from_github(inputs, current.date())
+    except Exception:
+        # A missing climatology update leaves the last state; the handoff still imports.
+        logger.warning("prospective-gap climatology import failed", exc_info=True)
     if inputs.handoff(current.date()) is not None:
         return False
     fetched = fetch_handoff_from_github(current.date())
@@ -192,7 +244,7 @@ def import_todays_handoff_from_github(
 
 
 def handoff_import_task(context) -> Any:
-    """The opt-in scheduled GitHub import, or None when it is not enabled."""
+    """The scheduled GitHub import, or None when it is turned off."""
     if not handoff_import_enabled():
         return None
     from app.runtime.scheduler import ScheduledTaskSpec

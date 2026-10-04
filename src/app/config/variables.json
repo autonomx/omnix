@@ -1932,7 +1932,7 @@
     "type": "string"
   },
   {
-    "default": "0",
+    "default": "1",
     "description": "Controls trading prospective gap handoff import for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT",
