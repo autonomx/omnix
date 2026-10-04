@@ -237,12 +237,15 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
 
         return create
 
+    from app.trading.prospective_gap_inputs import handoff_import_task
     from app.trading.strategies.runner import strategy_runner_task
 
     return (
         *(factory_for(worker_factory, enabled) for worker_factory, enabled in registrations),
         # Registered strategies run through the generic runner (WP-8.3).
         strategy_runner_task,
+        # Opt-in: import the premarket handoff from GitHub into PostgreSQL.
+        handoff_import_task,
     )
 
 

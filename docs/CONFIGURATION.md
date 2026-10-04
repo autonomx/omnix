@@ -281,9 +281,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading prospective economic monitor in tests for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF` | string | `main` | trading | Controls trading prospective gap github ref for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY` | string | `autonomx/omnix` | trading | Controls trading prospective gap github repository for trading. |
+| `OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT` | string | `0` | trading | Controls trading prospective gap handoff import for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR` | boolean | `1` | trading | Controls trading prospective gap monitor for trading. |
 | `OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading prospective gap monitor in tests for trading. |
-| `OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX` | string | `1` | trading | Controls trading prospective gap remote inbox for trading. |
 | `OMNIX_TRADING_RESEARCH_MAX_REPORTS_PER_CANDIDATE_DAY` | integer | `3` | trading | Controls trading research max reports per candidate day for trading. |
 | `OMNIX_TRADING_RESEARCH_MONITOR` | boolean | `1` | trading | Controls trading research monitor for trading. |
 | `OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS` | string | `60` | trading | Controls trading research monitor interval seconds for trading. |

@@ -1,0 +1,243 @@
+"""Prospective-gap decision inputs in PostgreSQL, and the jobs that import them (WP-8.3).
+
+The prospective-gap runtime reads the premarket handoff and the climatology
+state only from PostgreSQL. They arrive through explicit imports that record
+their provenance (exact content, SHA-256, source, importer):
+
+    python -m app.trading.prospective_gap_inputs import-handoff --file PATH
+    python -m app.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD
+    python -m app.trading.prospective_gap_inputs import-climatology --file PATH
+
+The scheduled GitHub import (``trading.prospective_gap_handoff_import``) is off
+unless ``OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT`` is enabled.
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from datetime import date, datetime, time, timezone
+from pathlib import Path
+from typing import Any
+
+from app.config.env import env_str
+from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
+from app.trading.us_equity_calendar import EASTERN
+
+from .prospective_gap_runtime import ProspectiveClimatologyState, SchedulerPremarketHandoff
+
+IMPORT_TASK_ID = "trading.prospective_gap_handoff_import"
+
+
+class HandoffConflict(ValueError):
+    """A session already has a different imported handoff."""
+
+
+def _sha256(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+class ProspectiveGapInputs:
+    def __init__(
+        self,
+        *,
+        uow_factory: Callable[[], AbstractContextManager[PostgresUnitOfWork]] = unit_of_work,
+    ) -> None:
+        self.uow_factory = uow_factory
+
+    def handoff(self, session_date: date) -> SchedulerPremarketHandoff | None:
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                "SELECT content FROM omnix_trading_premarket_handoffs WHERE session_date = %s",
+                (session_date,),
+            ).fetchone()
+        return SchedulerPremarketHandoff.model_validate_json(row[0]) if row else None
+
+    def climatology_before(self, session_date: date) -> ProspectiveClimatologyState | None:
+        """The latest climatology state covering only sessions before ``session_date``."""
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                SELECT version, through_session, observation_count, positive_count, probability
+                  FROM omnix_trading_climatology_states
+                 WHERE through_session < %s
+                 ORDER BY through_session DESC
+                 LIMIT 1
+                """,
+                (session_date,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProspectiveClimatologyState(
+            version=row[0],
+            through_session=row[1],
+            observation_count=row[2],
+            positive_count=row[3],
+            probability=row[4],
+        )
+
+    def import_handoff(self, content: str, *, source: str, imported_by: str | None = None) -> SchedulerPremarketHandoff:
+        """Store a validated handoff once; the same content again is a no-op."""
+        handoff = SchedulerPremarketHandoff.model_validate_json(content)
+        digest = _sha256(content)
+        with self.uow_factory() as uow:
+            uow.connection.execute(
+                """
+                INSERT INTO omnix_trading_premarket_handoffs (
+                    session_date, handoff_version, content, content_sha256, source, imported_by
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (session_date) DO NOTHING
+                """,
+                (handoff.session_date, handoff.handoff_version, content, digest, source, imported_by),
+            )
+            stored = uow.connection.execute(
+                "SELECT content_sha256 FROM omnix_trading_premarket_handoffs WHERE session_date = %s",
+                (handoff.session_date,),
+            ).fetchone()
+            if stored[0] != digest:
+                uow.rollback()
+                raise HandoffConflict(f"premarket handoff for {handoff.session_date} was already imported with other content")
+            uow.commit()
+        return handoff
+
+    def import_climatology(self, content: str, *, source: str) -> ProspectiveClimatologyState:
+        state = ProspectiveClimatologyState.model_validate_json(content)
+        with self.uow_factory() as uow:
+            uow.connection.execute(
+                """
+                INSERT INTO omnix_trading_climatology_states (
+                    through_session, version, observation_count, positive_count, probability, source
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (through_session) DO UPDATE
+                   SET version = EXCLUDED.version,
+                       observation_count = EXCLUDED.observation_count,
+                       positive_count = EXCLUDED.positive_count,
+                       probability = EXCLUDED.probability,
+                       source = EXCLUDED.source,
+                       imported_at = CURRENT_TIMESTAMP
+                """,
+                (state.through_session, state.version, state.observation_count, state.positive_count,
+                 state.probability, source),
+            )
+            uow.commit()
+        return state
+
+
+def fetch_handoff_from_github(session_date: date) -> tuple[str, str] | None:
+    """The scheduler's handoff for ``session_date`` from GitHub, as (content, source); None if absent."""
+    gh = shutil.which("gh")
+    if not gh:
+        raise RuntimeError("prospective_gap_handoff_import_requires_github_cli")
+    repository = env_str("OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY", "autonomx/omnix").strip()
+    ref = env_str("OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF", "main").strip()
+    if repository.count("/") != 1 or not all(repository.split("/", 1)):
+        raise ValueError("invalid_prospective_gap_github_repository")
+    if not ref:
+        raise ValueError("invalid_prospective_gap_github_ref")
+    path = f"resources/trading/prospective_gap_inbox/{session_date.isoformat()}.json"
+    completed = subprocess.run(
+        [gh, "api", f"repos/{repository}/contents/{path}?ref={ref}"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=15,
+        check=False,
+        shell=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or "")[-2000:]
+        if "404" in detail or "Not Found" in detail:
+            return None
+        raise RuntimeError(f"prospective_gap_remote_inbox_fetch_failed:{detail}")
+    payload = json.loads(completed.stdout)
+    if payload.get("encoding") != "base64":
+        raise ValueError("prospective_gap_remote_inbox_requires_base64_content")
+    encoded = str(payload.get("content") or "").replace("\n", "")
+    try:
+        content = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except Exception as exc:
+        raise ValueError("prospective_gap_remote_inbox_invalid_base64") from exc
+    return content, f"github:{repository}@{ref}:{path}:{payload.get('sha', '')}"
+
+
+def handoff_import_enabled() -> bool:
+    return env_str("OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def import_todays_handoff_from_github(
+    inputs: ProspectiveGapInputs | None = None,
+    *,
+    now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+) -> bool:
+    """Import today's handoff during the premarket window; True when one was imported."""
+    current = now().astimezone(EASTERN)
+    if not time(4, 0) <= current.time() <= time(9, 30):
+        return False
+    inputs = inputs or ProspectiveGapInputs()
+    if inputs.handoff(current.date()) is not None:
+        return False
+    fetched = fetch_handoff_from_github(current.date())
+    if fetched is None:
+        return False
+    content, source = fetched
+    inputs.import_handoff(content, source=source, imported_by=IMPORT_TASK_ID)
+    return True
+
+
+def handoff_import_task(context) -> Any:
+    """The opt-in scheduled GitHub import, or None when it is not enabled."""
+    if not handoff_import_enabled():
+        return None
+    from app.runtime.scheduler import ScheduledTaskSpec
+
+    return ScheduledTaskSpec(
+        task_id=IMPORT_TASK_ID,
+        run=lambda _task_context: import_todays_handoff_from_github(),
+        interval_seconds=300.0,
+        jitter_seconds=10.0,
+        timeout_seconds=60.0,
+        executor="thread",
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m app.trading.prospective_gap_inputs", description=__doc__.splitlines()[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+    handoff = commands.add_parser("import-handoff", help="import a premarket handoff")
+    source = handoff.add_mutually_exclusive_group(required=True)
+    source.add_argument("--file", type=Path)
+    source.add_argument("--github", type=date.fromisoformat, metavar="YYYY-MM-DD")
+    climatology = commands.add_parser("import-climatology", help="import a climatology state")
+    climatology.add_argument("--file", type=Path, required=True)
+    args = parser.parse_args(argv)
+
+    from app.persistence.startup import bootstrap_postgresql_runtime
+
+    bootstrap_postgresql_runtime()
+    inputs = ProspectiveGapInputs()
+    if args.command == "import-climatology":
+        state = inputs.import_climatology(args.file.read_text(encoding="utf-8"), source=f"file:{args.file.resolve()}")
+        print(json.dumps({"imported": "climatology", "through_session": state.through_session.isoformat()}))
+        return 0
+    if args.file is not None:
+        content, origin = args.file.read_text(encoding="utf-8"), f"file:{args.file.resolve()}"
+    else:
+        fetched = fetch_handoff_from_github(args.github)
+        if fetched is None:
+            print(json.dumps({"imported": None, "reason": "not_found"}))
+            return 1
+        content, origin = fetched
+    imported = inputs.import_handoff(content, source=origin, imported_by="cli")
+    print(json.dumps({"imported": "handoff", "session_date": imported.session_date.isoformat(), "source": origin}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

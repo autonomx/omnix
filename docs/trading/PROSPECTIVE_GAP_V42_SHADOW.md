@@ -139,10 +139,9 @@ The scheduler does **not** fabricate runtime-owned `GapperCandidate`,
 objects.
 
 The monitor intentionally attempts ingestion during **09:24-09:27:59 ET**.
-It checks the local inbox first. If the local checkout is stale or the file is
-absent, it performs a read-only authenticated `gh api` fetch from the
-configured GitHub repository/ref; it never performs an automatic git pull or
-branch mutation.
+It reads the handoff imported into PostgreSQL (see
+`PROSPECTIVE_GAP_END_TO_END_RUNTIME.md`, "Scheduled inbox bridge"); the GitHub
+import is an explicit, opt-in job, never part of the decision path.
 
 The runtime then recovers the canonical RAW one-minute premarket evidence and
 historical close data. Three causal timestamps remain distinct:

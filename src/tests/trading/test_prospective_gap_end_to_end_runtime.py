@@ -653,50 +653,17 @@ def test_formal_outcome_accepts_standard_us_equity_early_close() -> None:
     assert outcome.canonical_bar_count == 42
 
 
-def test_scheduler_inbox_freezes_typed_request_once(tmp_path) -> None:
-    strategy_repo = _MemoryStrategyRepository()
-    repo = ProspectiveGapRepository(strategy_repo)
-    runtime = ProspectiveGapRuntime(repository=repo, market_service=_MarketService())
-    request = _premarket_request()
+def test_an_imported_handoff_with_malformed_content_is_refused_before_storage() -> None:
+    from app.trading.prospective_gap_inputs import ProspectiveGapInputs
 
-    inbox = tmp_path / "prospective_gap_inbox"
-    inbox.mkdir()
-    path = inbox / f"{SESSION.isoformat()}.json"
-    path.write_text(request.model_dump_json(indent=2), encoding="utf-8")
-
-    first = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
-    second = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
-
-    assert first is not None
-    assert first.session_date == SESSION
-    assert second is None
-    assert runtime.session_ledger(SESSION).latest(
-        kind="session_manifest",
-        instrument_id="__session__",
-    ) is not None
-
-
-def test_scheduler_inbox_rejects_malformed_authority_payload(tmp_path) -> None:
-    strategy_repo = _MemoryStrategyRepository()
-    runtime = ProspectiveGapRuntime(
-        repository=ProspectiveGapRepository(strategy_repo),
-        market_service=_MarketService(),
-    )
-    inbox = tmp_path / "prospective_gap_inbox"
-    inbox.mkdir()
-    (inbox / f"{SESSION.isoformat()}.json").write_text(
-        '{"session_date":"2026-09-22","not_a_freeze_request":true}',
-        encoding="utf-8",
-    )
+    def no_database():
+        raise AssertionError("a malformed handoff reached the database")
 
     with pytest.raises(Exception):
-        runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
-
-    assert runtime.session_ledger(SESSION).latest(
-        kind="session_manifest",
-        instrument_id="__session__",
-    ) is None
-
+        ProspectiveGapInputs(uow_factory=no_database).import_handoff(
+            '{"session_date":"2026-09-22","not_a_freeze_request":true}',
+            source="test",
+        )
 
 
 class _SchedulerMarketService(_MarketService):
@@ -966,8 +933,9 @@ def test_scheduler_handoff_fails_closed_when_recovery_completes_after_cutoff() -
     ) is None
 
 
-def test_scheduler_inbox_uses_remote_fetcher_when_local_file_is_absent(tmp_path) -> None:
+def test_the_imported_handoff_is_frozen_exactly_once() -> None:
     handoff = _scheduler_handoff_fixture()
+    requested: list[object] = []
     runtime = ProspectiveGapRuntime(
         repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
         market_service=_SchedulerMarketService(),
@@ -975,17 +943,20 @@ def test_scheduler_inbox_uses_remote_fetcher_when_local_file_is_absent(tmp_path)
         scheduler_handoff_fetcher=lambda session_date: (
             handoff if session_date == handoff.session_date else None
         ),
+        climatology_loader=lambda session_date: requested.append(session_date),
     )
 
     result = runtime.try_freeze_scheduler_inbox(
         handoff.session_date,
         observed_at=datetime(2026, 9, 23, 13, 25, tzinfo=timezone.utc),
-        inbox_root=tmp_path / "missing-local-inbox",
-        climatology_state_path=tmp_path / "missing-climatology.json",
     )
+    again = runtime.try_freeze_scheduler_inbox(handoff.session_date)
 
     assert result is not None
     assert result.session_date == handoff.session_date
+    assert again is None
+    # The climatology state is the latest one before the handoff's session.
+    assert requested == [handoff.session_date]
     manifest = runtime.session_ledger(handoff.session_date).latest(
         kind="session_manifest",
         instrument_id="__session__",

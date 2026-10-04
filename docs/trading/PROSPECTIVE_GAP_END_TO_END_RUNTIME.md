@@ -275,21 +275,26 @@ and is visible through the `no_session_count` runtime counter.
 
 ## Scheduled inbox bridge
 
-The cloud/scheduled research workflow and Omnix are joined by:
+The cloud/scheduled research workflow writes
+`resources/trading/prospective_gap_inbox/YYYY-MM-DD.json` on GitHub. The payload
+is a `SchedulerPremarketHandoff`, not a full `PremarketFreezeRequest`; that
+distinction prevents the scheduler from inventing runtime-owned market objects
+merely to satisfy an internal schema.
 
-`resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`
+The runtime reads the handoff only from PostgreSQL
+(`omnix_trading_premarket_handoffs`, WP-8.3). A handoff gets there through an
+explicit import that records its exact content, SHA-256, source and importer;
+once imported it is immutable, and a different handoff for the same session is
+refused:
 
-The cloud payload is a `SchedulerPremarketHandoff`, not a full
-`PremarketFreezeRequest`. That distinction prevents the scheduler from
-inventing runtime-owned market objects merely to satisfy an internal schema.
+- `python -m app.trading.prospective_gap_inputs import-handoff --file PATH`, or
+  `--github YYYY-MM-DD` to read it with the authenticated `gh api` client;
+- the scheduled task `trading.prospective_gap_handoff_import`, which imports
+  today's handoff from GitHub between 04:00 and 09:30 ET. It is **off** unless
+  `OMNIX_TRADING_PROSPECTIVE_GAP_HANDOFF_IMPORT=1`.
 
-Transport order:
-
-1. prefer the local inbox file when the checkout is current;
-2. otherwise read the same file from GitHub `main` with the authenticated
-   `gh api` client;
-3. never auto-pull, merge, or mutate the working tree as part of market
-   authority.
+Nothing on the decision path reads a local file, calls GitHub, pulls, merges or
+mutates the working tree.
 
 The monitor waits until **09:24 ET** so late premarket demand is represented,
 but stops initiating new handoffs after **09:27:59 ET**. The runtime must finish
@@ -342,15 +347,13 @@ the v4.2 market-state freeze boundary. Provider
 `received_at` timestamps are retained, and both the provider evidence and the
 runtime completion must be no later than the formal cutoff.
 
-The monitor checks the local inbox first and then uses read-only authenticated
-`gh api` fallback when needed. Repository/ref may be configured with
-`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY` and
-`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF`; remote fallback can be disabled
-with `OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX=0`. Authentication remains
-owned by the installed GitHub CLI.
+The GitHub import reads from
+`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY` at
+`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF`. Authentication remains owned by the
+installed GitHub CLI.
 
 ## Machine-readable climatology
 
-`resources/trading/prospective_gap_state/climatology.json` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`.
+`omnix_trading_climatology_states` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`, one row per through-session; a freeze uses the latest state covering only earlier sessions. Migration 0124 seeds it with the state that was committed as `resources/trading/prospective_gap_state/climatology.json` (through 2026-09-23). A new state is imported with `python -m app.trading.prospective_gap_inputs import-climatology --file PATH`.
 
 Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries `baseline_through_session` plus the counts. Authority is chosen by through-session recency: a newer handoff checkpoint may supersede a stale local checkout, a newer local state supersedes an older handoff, and equal-date count conflicts fail closed.
