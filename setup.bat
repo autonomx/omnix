@@ -232,7 +232,7 @@ if errorlevel 1 goto :error
 if errorlevel 1 goto :error
 "%RPG_FLUX_PYTHON%" -c "import diffusers; print('diffusers OK')"
 if errorlevel 1 goto :error
-"%RPG_FLUX_PYTHON%" -c "from app.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
+"%RPG_FLUX_PYTHON%" -c "from app.image.flux_pipeline_loading import validate_flux_pipeline_import; s=validate_flux_pipeline_import(); print('FLUX:', 'READY' if s.get('ok') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ok') else 1)"
 if errorlevel 1 goto :error
 echo [FLUX] Runtime verification complete.
 echo =============================================

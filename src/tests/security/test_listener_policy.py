@@ -106,10 +106,27 @@ def test_no_public_bind_literals_in_production_sources():
     assert not violations, violations
 
 
-def test_windows_startup_watchdog_sends_guard_header():
-    source = (ROOT / "start_all.bat").read_text(encoding="utf-8")
-    calls = source.split("Invoke-RestMethod -Method Post")[1:]
-    assert len(calls) == 2
-    for call in calls:
-        assert call.startswith(" -Headers @{'X-Omnix-Client'='launcher'} -Uri")
-    assert source.index("from app.runtime.net import bind_host") < source.index('start "Omnix Startup Check"')
+def test_launcher_autostart_sends_guard_header(monkeypatch):
+    """The launcher's own service starts carry the request-guard header (WP-0.3, WP-11.4)."""
+    import inspect
+
+    import httpx
+
+    from app.launcher import __main__ as launcher_main
+
+    created = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            created.append(kwargs.get("headers"))
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(httpx, "Client", Client)
+    launcher_main.start_services("http://launcher", "http://gateway", timeout_seconds=0)
+    assert created == [{"X-Omnix-Client": "launcher"}]
+    start = inspect.getsource(launcher_main.start)
+    # The bind host is validated before the autostart thread or the dashboard starts.
+    assert start.index("bind_host()") < start.index("threading.Thread(") < start.index("uvicorn.run(")
+

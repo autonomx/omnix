@@ -320,7 +320,7 @@ Image service        : 5301 (when enabled)
 PostgreSQL           : 5432 by default
 ```
 
-The exact environment paths in `start_all.bat` are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.
+Interpreter paths come from the launcher configuration (`RPG_*_PYTHON`, `resources/config/launcher.toml`, or the Conda environments) and are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.
 
 ```omnix-diagram service-topology
 ```

@@ -43,9 +43,16 @@ def test_start_stops_when_migrations_fail(monkeypatch):
         steps.append(args)
         return 1 if args[-1] == "migrate" else 0
 
+    from app.launcher import startup
+
     monkeypatch.setattr(launcher, "_module", fake_module)
     monkeypatch.setattr(sys, "version_info", (3, 11, 0))
-    result = launcher.start(argparse.Namespace(gateway_url="http://gateway", startup_timeout=1))
+    monkeypatch.setattr(startup, "launcher_already_running", lambda _port=5055: False)
+    monkeypatch.setattr(startup, "interpreter_problems", lambda _config: ([], []))
+    monkeypatch.setattr(startup, "apply_launcher_environment", lambda _root: {})
+    result = launcher.start(argparse.Namespace(
+        gateway_url="http://gateway", startup_timeout=1, postgres_container=None, postgres_only=False, check=False,
+    ))
     assert result == 1
     assert steps == [("app.persistence", "health"), ("app.persistence", "migrate")]
 

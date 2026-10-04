@@ -1,321 +1,45 @@
 @echo off
 setlocal EnableDelayedExpansion
-
-if exist "%~dp0.tools\npm-global" set "PATH=%~dp0.tools\npm-global;%PATH%"
-if exist "%~dp0.tools\npm-global\agent-browser.cmd" set "OMNIX_AGENT_BROWSER_COMMAND=%~dp0.tools\npm-global\agent-browser.cmd"
-if exist "%~dp0.tools\npm-global\mcporter.cmd" set "OMNIX_AGENT_MCPORTER_COMMAND=%~dp0.tools\npm-global\mcporter.cmd"
+REM Omnix launcher (Windows). A thin wrapper (WP-11.4): `python -m app.launcher start`
+REM checks the interpreters, starts the PostgreSQL container, checks the database,
+REM applies migrations, serves the launcher dashboard on http://127.0.0.1:5055 and
+REM starts the gateway and web app. This wrapper only finds the app interpreter and
+REM loads the protected database credential (Windows DPAPI) before calling it.
+REM Interpreters: RPG_FLUX_PYTHON / RPG_TTS_PYTHON / RPG_STT_PYTHON, else
+REM resources\config\launcher.toml, else the Conda environments under CONDA_ROOT.
+REM
+REM   start_all.bat                                   start Omnix
+REM   start_all.bat --postgres-only                   only start the PostgreSQL container
+REM   start_all.bat --database-credential-injected-check   check without starting services
 
 if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
-set "RPG_FLUX_PYTHON=%CONDA_ROOT%\envs\rpg-flux\python.exe"
-set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\rpg-tts\python.exe"
-set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
-
+if not defined RPG_FLUX_PYTHON set "RPG_FLUX_PYTHON=%CONDA_ROOT%\envs\rpg-flux\python.exe"
 if not exist "%RPG_FLUX_PYTHON%" (
-    echo ERROR: Locked rpg-flux runtime not found. Run setup.bat first.
+    echo ERROR: the app runtime is missing: %RPG_FLUX_PYTHON%. Run setup.bat first.
     exit /b 1
 )
-"%RPG_FLUX_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
-if errorlevel 1 (
-    echo ERROR: The locked image runtime requires Python 3.11. Run setup.bat.
-    exit /b 1
-)
-if exist "%RPG_STT_PYTHON%" (
-    "%RPG_STT_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
-    if errorlevel 1 (
-        echo ERROR: The locked STT runtime requires Python 3.11. Run setup.bat.
-        exit /b 1
-    )
-)
-
-REM A second launcher must not auto-start services before failing to bind 5055.
-if /I not "%~1"=="--postgres-only" if /I not "%~1"=="--database-credential-injected-check" (
-    if exist "%RPG_FLUX_PYTHON%" (
-        "%RPG_FLUX_PYTHON%" -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); rc=s.connect_ex(('127.0.0.1',5055)); s.close(); sys.exit(1 if rc==0 else 0)"
-        if errorlevel 1 (
-            echo [STARTUP] Launcher already listening on http://127.0.0.1:5055. Use the existing dashboard or stop it before relaunching.
-            endlocal & exit /b 1
-        )
-    )
-)
-
-set "OMNIX_TTS_URL=http://127.0.0.1:5101"
-set "OMNIX_STT_URL=http://127.0.0.1:5201"
-set "OMNIX_GATEWAY_URL=http://127.0.0.1:8000"
-set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
-if not defined OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=420"
-if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
+set "PYTHONPATH=%~dp0src"
 if not defined OMNIX_POSTGRES_CONTAINER set "OMNIX_POSTGRES_CONTAINER=omnix-postgres"
-if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT_ATTEMPTS=30"
-if not defined OMNIX_LAUNCHER_AUTO_START set "OMNIX_LAUNCHER_AUTO_START=1"
-if not defined OMNIX_LAUNCHER_OPEN_BROWSER set "OMNIX_LAUNCHER_OPEN_BROWSER=1"
-if not defined OMNIX_BLOB_ROOT for %%I in ("%~dp0..\omnix-runtime\blobs") do set "OMNIX_BLOB_ROOT=%%~fI"
-if not defined OMNIX_FFMPEG for %%F in ("%~dp0venv\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg*.exe") do if exist "%%~fF" set "OMNIX_FFMPEG=%%~fF"
 
-call :ensure_postgres
-if errorlevel 1 (
-    pause
-    exit /b 1
-)
-if /I "%~1"=="--postgres-only" (
-    endlocal
-    exit /b 0
-)
-if not defined OMNIX_DATABASE_URL (
-    if /I "%~1"=="--database-credential-injected" (
-        echo ERROR: The protected PostgreSQL credential loader did not inject OMNIX_DATABASE_URL.
-        exit /b 1
-    )
+set "OMNIX_LAUNCH_MODE="
+if /I "%~1"=="--postgres-only" set "OMNIX_LAUNCH_MODE=--postgres-only"
+if /I "%~1"=="--database-credential-injected-check" set "OMNIX_LAUNCH_MODE=--check"
+
+if /I not "%~1"=="--postgres-only" if not defined OMNIX_DATABASE_URL (
+    if /I "%~1"=="--database-credential-injected" goto :credential_missing
+    if /I "%~1"=="--database-credential-injected-check" goto :credential_missing
     echo [POSTGRES] Loading the current-user protected database credential...
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\manage_postgresql_credential.ps1" -Action launch -BatchPath "%~f0"
-    set "OMNIX_CREDENTIAL_LAUNCH_EXIT=!ERRORLEVEL!"
-    endlocal & exit /b !OMNIX_CREDENTIAL_LAUNCH_EXIT!
+    set "OMNIX_EXIT_CODE=!ERRORLEVEL!"
+    endlocal & exit /b !OMNIX_EXIT_CODE!
 )
 
-REM Live Agent pilot defaults. Override these before running start_all.bat to disable or tune the pilot.
-if not defined HERMES_ENABLED set "HERMES_ENABLED=1"
-if not defined HERMES_BASE_URL set "HERMES_BASE_URL=http://127.0.0.1:8642"
-if not defined OMNIX_TRADING_HERMES_RESEARCH_ENABLED set "OMNIX_TRADING_HERMES_RESEARCH_ENABLED=1"
-if not defined OMNIX_START_HERMES set "OMNIX_START_HERMES=1"
-if not defined OMNIX_LIVE_AGENT_ENABLED set "OMNIX_LIVE_AGENT_ENABLED=1"
-if not defined OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=1"
-if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"
-if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
-if not defined OMNIX_CHARACTER_MODE_ENABLED set "OMNIX_CHARACTER_MODE_ENABLED=1"
-
-REM Agent lifecycle diagnostics are opt-in: set OMNIX_AGENT_DEBUG_LOGS=1 to enable.
-if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=0"
-if not defined OMNIX_AGENT_LOG_DIR set "OMNIX_AGENT_LOG_DIR=%~dp0resources\logs\agent"
-if not defined OMNIX_AGENT_LOG_RETENTION_DAYS set "OMNIX_AGENT_LOG_RETENTION_DAYS=30"
-if not defined OMNIX_AGENT_LOG_MAX_FIELD_CHARS set "OMNIX_AGENT_LOG_MAX_FIELD_CHARS=12000"
-
-REM Local TP-Link Kasa smart-plug defaults. Host and alias are optional when only one device is discovered.
-if not defined OMNIX_KASA_ENABLED set "OMNIX_KASA_ENABLED=1"
-if not defined OMNIX_KASA_DISCOVERY_TARGET set "OMNIX_KASA_DISCOVERY_TARGET=255.255.255.255"
-if not defined OMNIX_KASA_TIMEOUT_SECONDS set "OMNIX_KASA_TIMEOUT_SECONDS=4"
-if not defined OMNIX_KASA_DEVICE_HOST set "OMNIX_KASA_DEVICE_HOST="
-if not defined OMNIX_KASA_DEVICE_ALIAS set "OMNIX_KASA_DEVICE_ALIAS="
-
-REM Start the lightweight image service, but keep FLUX.2 [klein] 4B unloaded.
-REM The model is loaded and unloaded on demand from the Image Generation page.
-REM Override these before running start_all.bat only when intentionally changing behavior.
-if not defined OMNIX_IMAGE_ENABLED set "OMNIX_IMAGE_ENABLED=1"
-if not defined OMNIX_START_IMAGE_SERVICE set "OMNIX_START_IMAGE_SERVICE=1"
-if not defined OMNIX_IMAGE_PRELOAD set "OMNIX_IMAGE_PRELOAD=0"
-if not defined OMNIX_IMAGE_WARMUP set "OMNIX_IMAGE_WARMUP=0"
-if not defined OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD set "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=1"
-set "OMNIX_IMAGE_URL="
-if /I "%OMNIX_IMAGE_ENABLED%"=="1" if /I "%OMNIX_START_IMAGE_SERVICE%"=="1" set "OMNIX_IMAGE_URL=http://127.0.0.1:5301"
-
-set "OMNIX_TTS_MODELS_DIR=%~dp0resources\models\tts"
-set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_TTS_MODELS_DIR%\Qwen3-TTS-12Hz-0.6B-Base"
-set "OMNIX_TTS_MODEL_DIR="
-set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV="
-
-if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\config.json" if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\preprocessor_config.json" (
-    set "OMNIX_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR%"
-    set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV=%OMNIX_QWEN3_TTS_MODEL_DIR%"
-)
-
-echo ========================================
-echo Omnix Launcher Control
-echo ========================================
-echo.
-echo This starts one launcher dashboard instead of opening separate service terminals.
-echo Dashboard: %OMNIX_LAUNCHER_URL%
-echo Private app button: %OMNIX_APP_OPEN_URL%
-echo API gateway: %OMNIX_GATEWAY_URL%
-echo.
-echo [LIVE AGENT] Enabled: %OMNIX_LIVE_AGENT_ENABLED%
-echo [LIVE AGENT] Automatic routing: %OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%
-echo [LIVE AGENT] Proposal-only Hermes required: %OMNIX_LIVE_AGENT_REQUIRE_HERMES%
-echo [LIVE AGENT] Planner timeout: %OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%s
-echo [AGENT] Debug logging: %OMNIX_AGENT_DEBUG_LOGS%
-echo [AGENT] Log directory: %OMNIX_AGENT_LOG_DIR%
-echo [HERMES] Enabled: %HERMES_ENABLED%
-echo [HERMES] Base URL: %HERMES_BASE_URL%
-echo [HERMES] Auto-start: %OMNIX_START_HERMES%
-echo [KASA] Enabled: %OMNIX_KASA_ENABLED%
-echo [KASA] Discovery target: %OMNIX_KASA_DISCOVERY_TARGET%
-echo [KASA] Device host: %OMNIX_KASA_DEVICE_HOST%
-echo [KASA] Device alias: %OMNIX_KASA_DEVICE_ALIAS%
-echo [KASA] Timeout: %OMNIX_KASA_TIMEOUT_SECONDS%s
-echo.
-echo [IMAGE] Service enabled: %OMNIX_IMAGE_ENABLED%
-echo [IMAGE] Start lightweight service: %OMNIX_START_IMAGE_SERVICE%
-echo [IMAGE] Preload model: %OMNIX_IMAGE_PRELOAD%
-echo [IMAGE] Warmup model: %OMNIX_IMAGE_WARMUP%
-echo [IMAGE] Explicit load required: %OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD%
-if defined OMNIX_IMAGE_URL (
-    echo [IMAGE] Service URL: %OMNIX_IMAGE_URL%
-    echo [IMAGE] FLUX.2 [klein] 4B will remain unloaded until requested in the web UI.
-) else (
-    echo [IMAGE] Service disabled for this startup.
-)
-
-if not exist "%RPG_FLUX_PYTHON%" (
-    echo ERROR: rpg-flux python not found:
-    echo   %RPG_FLUX_PYTHON%
-    pause
-    exit /b 1
-)
-
-if not exist "%RPG_TTS_PYTHON%" (
-    echo ERROR: rpg-tts python not found:
-    echo   %RPG_TTS_PYTHON%
-    pause
-    exit /b 1
-)
-
-if not exist "%RPG_STT_PYTHON%" (
-    echo ERROR: rpg-stt python not found:
-    echo   %RPG_STT_PYTHON%
-    pause
-    exit /b 1
-)
-
-echo.
-echo [ENV CHECK][APP]
-"%RPG_FLUX_PYTHON%" -c "import sys; print('[APP][PYTHON]', sys.executable)"
-set "PYTHONPATH=%~dp0src"
-"%RPG_FLUX_PYTHON%" -c "import fastapi, uvicorn; print('[LAUNCHER] FastAPI/uvicorn OK')"
-if errorlevel 1 (
-    echo ERROR: launcher environment verification failed
-    pause
-    exit /b 1
-)
-echo [POSTGRES] Verifying authoritative database connectivity...
-"%RPG_FLUX_PYTHON%" -m app.persistence health
-if errorlevel 1 (
-    echo ERROR: PostgreSQL connectivity verification failed. Omnix services were not started.
-    pause
-    exit /b 1
-)
-if /I "%~1"=="--database-credential-injected-check" (
-    endlocal
-    exit /b 0
-)
-echo [POSTGRES] Applying pending schema migrations before starting services...
-"%RPG_FLUX_PYTHON%" -m app.persistence migrate
-if errorlevel 1 (
-    echo ERROR: PostgreSQL migrations failed. Omnix services were not started.
-    pause
-    exit /b 1
-)
-if /I "%OMNIX_KASA_ENABLED%"=="1" (
-    "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
-    if errorlevel 1 (
-        echo WARNING: python-kasa could not be imported in rpg-flux; see the error above.
-        echo          Run setup.bat to install the hash-locked image runtime from requirements\image.lock.txt.
-    )
-)
-
-echo.
-echo Starting launcher dashboard in this window...
-echo Use Ctrl+C here to stop the launcher itself. Use the dashboard to stop services.
-if /I "%OMNIX_LAUNCHER_OPEN_BROWSER%"=="1" (
-    echo Opening browser: %OMNIX_LAUNCHER_URL%
-    start "" "%OMNIX_LAUNCHER_URL%"
-) else (
-    echo Browser launch disabled for this startup.
-)
-
-set "PYTHONPATH=%~dp0src"
-set "OMNIX_TTS_URL=%OMNIX_TTS_URL%"
-set "OMNIX_STT_URL=%OMNIX_STT_URL%"
-set "OMNIX_GATEWAY_URL=%OMNIX_GATEWAY_URL%"
-set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%"
-set "OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"
-set "OMNIX_START_IMAGE_SERVICE=%OMNIX_START_IMAGE_SERVICE%"
-set "OMNIX_IMAGE_PRELOAD=%OMNIX_IMAGE_PRELOAD%"
-set "OMNIX_IMAGE_WARMUP=%OMNIX_IMAGE_WARMUP%"
-set "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=%OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD%"
-set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
-set "OMNIX_APP_OPEN_URL=%OMNIX_APP_OPEN_URL%"
-set "OMNIX_LAUNCHER_AUTO_START=%OMNIX_LAUNCHER_AUTO_START%"
-set "OMNIX_LAUNCHER_OPEN_BROWSER=%OMNIX_LAUNCHER_OPEN_BROWSER%"
-set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
-set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
-set "HERMES_ENABLED=%HERMES_ENABLED%"
-set "HERMES_BASE_URL=%HERMES_BASE_URL%"
-set "OMNIX_TRADING_HERMES_RESEARCH_ENABLED=%OMNIX_TRADING_HERMES_RESEARCH_ENABLED%"
-set "OMNIX_LIVE_AGENT_ENABLED=%OMNIX_LIVE_AGENT_ENABLED%"
-set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=%OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%"
-set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=%OMNIX_LIVE_AGENT_REQUIRE_HERMES%"
-set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=%OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%"
-set "OMNIX_CHARACTER_MODE_ENABLED=%OMNIX_CHARACTER_MODE_ENABLED%"
-set "OMNIX_AGENT_DEBUG_LOGS=%OMNIX_AGENT_DEBUG_LOGS%"
-set "OMNIX_AGENT_LOG_DIR=%OMNIX_AGENT_LOG_DIR%"
-set "OMNIX_AGENT_LOG_RETENTION_DAYS=%OMNIX_AGENT_LOG_RETENTION_DAYS%"
-set "OMNIX_AGENT_LOG_MAX_FIELD_CHARS=%OMNIX_AGENT_LOG_MAX_FIELD_CHARS%"
-set "OMNIX_KASA_ENABLED=%OMNIX_KASA_ENABLED%"
-set "OMNIX_KASA_DISCOVERY_TARGET=%OMNIX_KASA_DISCOVERY_TARGET%"
-set "OMNIX_KASA_TIMEOUT_SECONDS=%OMNIX_KASA_TIMEOUT_SECONDS%"
-set "OMNIX_KASA_DEVICE_HOST=%OMNIX_KASA_DEVICE_HOST%"
-set "OMNIX_KASA_DEVICE_ALIAS=%OMNIX_KASA_DEVICE_ALIAS%"
-set "KASA_USERNAME=%KASA_USERNAME%"
-set "KASA_PASSWORD=%KASA_PASSWORD%"
-
-if not defined OMNIX_BIND_HOST set "OMNIX_BIND_HOST=127.0.0.1"
-"%RPG_FLUX_PYTHON%" -c "from app.runtime.net import bind_host; bind_host()"
-if errorlevel 1 exit /b 1
-
-REM The launcher normally auto-starts the gateway and web app. This watchdog
-REM retries the managed gateway, waits for API health, and then retries the web
-REM start so a slow first gateway boot cannot leave the web service stopped.
-start "Omnix Startup Check" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
-
-"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host "%OMNIX_BIND_HOST%" --port 5055 --lifespan on
+"%RPG_FLUX_PYTHON%" -m app.launcher start --postgres-container "%OMNIX_POSTGRES_CONTAINER%" %OMNIX_LAUNCH_MODE%
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
-
+REM Keep a double-clicked window open on failure.
+if not "%OMNIX_EXIT_CODE%"=="0" if not defined OMNIX_LAUNCH_MODE pause
 endlocal & exit /b %OMNIX_EXIT_CODE%
 
-:ensure_postgres
-echo [POSTGRES] Checking Docker and container %OMNIX_POSTGRES_CONTAINER%...
-where docker >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Docker CLI was not found. Install or repair Docker Desktop before starting Omnix.
-    exit /b 1
-)
-
-docker info >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Docker Desktop is not running or is not accessible.
-    echo        Start Docker Desktop, wait for it to become ready, and try again.
-    exit /b 1
-)
-
-docker inspect "%OMNIX_POSTGRES_CONTAINER%" >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: PostgreSQL container %OMNIX_POSTGRES_CONTAINER% does not exist.
-    echo        Provision it with docker-compose.postgres.yml and operator-owned credentials first.
-    exit /b 1
-)
-
-set "OMNIX_POSTGRES_RUNNING="
-for /f "usebackq delims=" %%S in (`docker inspect --format "{{.State.Running}}" "%OMNIX_POSTGRES_CONTAINER%" 2^>nul`) do set "OMNIX_POSTGRES_RUNNING=%%S"
-if /I not "!OMNIX_POSTGRES_RUNNING!"=="true" (
-    echo [POSTGRES] Starting existing container %OMNIX_POSTGRES_CONTAINER%...
-    docker start "%OMNIX_POSTGRES_CONTAINER%" >nul
-    if errorlevel 1 (
-        echo ERROR: Failed to start PostgreSQL container %OMNIX_POSTGRES_CONTAINER%.
-        exit /b 1
-    )
-) else (
-    echo [POSTGRES] Container is already running.
-)
-
-echo [POSTGRES] Waiting for the database health check...
-for /L %%I in (1,1,%OMNIX_POSTGRES_START_WAIT_ATTEMPTS%) do (
-    set "OMNIX_POSTGRES_HEALTH="
-    for /f "usebackq delims=" %%H in (`docker inspect --format "{{.State.Health.Status}}" "%OMNIX_POSTGRES_CONTAINER%" 2^>nul`) do set "OMNIX_POSTGRES_HEALTH=%%H"
-    if /I "!OMNIX_POSTGRES_HEALTH!"=="healthy" (
-        echo [POSTGRES] Database is healthy.
-        exit /b 0
-    )
-    timeout /t 2 /nobreak >nul
-)
-
-echo ERROR: PostgreSQL container %OMNIX_POSTGRES_CONTAINER% did not become healthy.
-docker ps --filter "name=%OMNIX_POSTGRES_CONTAINER%" --format "table {{.Names}}\t{{.Status}}"
-exit /b 1
+:credential_missing
+echo ERROR: The protected PostgreSQL credential loader did not inject OMNIX_DATABASE_URL.
+endlocal & exit /b 1

@@ -138,7 +138,7 @@ tags also push the images to GHCR.
 
 ### Windows launcher mode
 
-start_all.bat can coordinate PostgreSQL, the gateway, optional workers, Hermes, and the browser. Treat workstation-specific Python/Conda paths in that script as operator configuration. The portable contract is the service URLs and environment variables, not a particular absolute path.
+`python -m app.launcher start` (wrapped by start_all.bat and start_all.sh) coordinates PostgreSQL, the gateway, optional workers, Hermes, and the browser. Interpreter paths come from `RPG_*_PYTHON`, `resources/config/launcher.toml` or the Conda environments, not from the scripts. The portable contract is the service URLs and environment variables, not a particular absolute path.
 
 Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.
 
