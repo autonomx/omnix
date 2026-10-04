@@ -16,6 +16,7 @@ from app.runtime.features import FeatureContext
 
 
 from .execution import ExecutionObservation
+from .order_gateway import OrderGateway
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_protection import PaperPositionProtection
 from .paper_protection_repository import (
@@ -275,7 +276,7 @@ class TradingPaperMonitor:
         ) or execution.last
         try:
             await asyncio.to_thread(
-                repository.place_order,
+                OrderGateway(repository).place_reducing,
                 account_id,
                 PaperOrderRequest(
                     order_id=order_id,

@@ -18,6 +18,7 @@ from .paper import (
     PaperOrder,
     PaperOrderRequest,
 )
+from .order_gateway import OrderGateway
 from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .paper_protection_repository import (
@@ -277,7 +278,7 @@ def create_trading_paper_router(
             quantity=preview.recommended_quantity,
         )
         try:
-            order = await asyncio.to_thread(repository.place_order, account_id, order_request)
+            order = await asyncio.to_thread(OrderGateway(repository).place_manual_entry, account_id, order_request)
         except ValueError as exc:
             cleanup_error = None
             try:
@@ -384,7 +385,7 @@ def create_trading_paper_router(
                 detail="paper_entry_requires_server_risk_authority",
             )
         try:
-            return await asyncio.to_thread(repository.place_order, account_id, request)
+            return await asyncio.to_thread(OrderGateway(repository).place_reducing, account_id, request)
         except ValueError as exc:
             detail = str(exc)
             status = 404 if "not_found" in detail else 422
@@ -402,7 +403,7 @@ def create_trading_paper_router(
         _require_order_management(order_management)
         try:
             return await asyncio.to_thread(
-                repository_factory().cancel_order,
+                OrderGateway(repository_factory()).cancel,
                 account_id,
                 order_id,
             )
@@ -436,23 +437,20 @@ def create_trading_paper_router(
                 status_code=409,
                 detail="paper_order_replacement_requires_server_risk_authority",
             )
+        # Cancel and place in one transaction: a rejected replacement leaves
+        # the original order open (WP-8.3).
         try:
-            cancelled = await asyncio.to_thread(repository.cancel_order, account_id, order_id)
-        except ValueError as exc:
-            detail = str(exc)
-            status = 404 if "account_not_found" in detail else 409 if "not_open" in detail else 422
-            raise HTTPException(status_code=status, detail=detail) from exc
-        try:
-            replacement = await asyncio.to_thread(
-                repository.place_order,
+            cancelled, replacement = await asyncio.to_thread(
+                OrderGateway(repository).replace_reducing,
                 account_id,
+                order_id,
                 request.replacement,
             )
         except ValueError as exc:
-            raise HTTPException(
-                status_code=409,
-                detail=f"paper_order_replacement_failed_after_cancel:{exc}",
-            ) from exc
+            detail = str(exc)
+            conflict = "not_open" in detail or "insufficient" in detail
+            status = 404 if "account_not_found" in detail else 409 if conflict else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
         return PaperOrderReplaceResponse(cancelled=cancelled, replacement=replacement)
 
     @router.post(

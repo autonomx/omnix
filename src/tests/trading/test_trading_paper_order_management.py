@@ -49,6 +49,7 @@ class Repo:
             )
         }
         self.fail_replacement = False
+        self.authorities = []
 
     def list_accounts(self, limit=100):
         return [self.account]
@@ -74,12 +75,23 @@ class Repo:
         self.orders[order_id] = cancelled
         return cancelled
 
-    def place_order(self, account_id, request):
+    def place_order(self, account_id, request, *, authority):
+        self.authorities.append(authority)
         if self.fail_replacement:
             raise ValueError("insufficient_paper_cash")
         order = PaperOrder(account_id=account_id, **request.model_dump())
         self.orders[order.order_id] = order
         return order
+
+    def replace_order(self, account_id, order_id, replacement, *, authority):
+        # One transaction in the real repository: a failure changes nothing.
+        before = dict(self.orders)
+        try:
+            cancelled = self.cancel_order(account_id, order_id)
+            return cancelled, self.place_order(account_id, replacement, authority=authority)
+        except ValueError:
+            self.orders = before
+            raise
 
 
 class Lifecycle:
@@ -213,7 +225,7 @@ def test_replace_rejects_entry_bypass_before_cancelling_old_order() -> None:
     assert "new" not in repo.orders
 
 
-def test_replace_failure_never_resurrects_cancelled_order() -> None:
+def test_replace_failure_leaves_the_original_order_open() -> None:
     repo = Repo()
     repo.fail_replacement = True
     response = _client(repo).post(
@@ -222,6 +234,17 @@ def test_replace_failure_never_resurrects_cancelled_order() -> None:
         json=_replacement(),
     )
     assert response.status_code == 409
-    assert "replacement_failed_after_cancel" in response.json()["detail"]
-    assert repo.orders["old"].status == "cancelled"
+    assert response.json()["detail"] == "insufficient_paper_cash"
+    assert repo.orders["old"].status == "open"
     assert "new" not in repo.orders
+
+
+def test_raw_and_replacement_orders_carry_reduce_only_authority() -> None:
+    repo = Repo()
+    response = _client(repo).post(
+        "/api/trading/paper/accounts/paper-1/orders/old/replace",
+        headers=HEADERS,
+        json=_replacement(),
+    )
+    assert response.status_code == 200
+    assert [authority.kind for authority in repo.authorities] == ["reduce_only"]

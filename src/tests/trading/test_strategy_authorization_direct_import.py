@@ -19,10 +19,7 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
 
         assert "app.trading" not in sys.modules
         import app.trading.strategy_monitor as strategy_monitor
-        assert (
-            strategy_monitor._AuthorizedStrategyPaperRepository.__module__
-            == "app.trading.market_evidence_guards"
-        )
+        assert strategy_monitor.strategy_paper_access.__module__ == "app.trading.order_gateway"
 
         class StrategyRepository:
             def __init__(self):
@@ -39,7 +36,7 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
             def __init__(self):
                 self.place_calls = 0
 
-            def place_order(self, account_id, request):
+            def place_order(self, account_id, request, *, authority):
                 self.place_calls += 1
                 raise AssertionError("unauthorized order reached the delegate")
 
@@ -51,13 +48,20 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
 
         async def exercise_authorization(config, repository, guarded_repository, market_service):
             try:
-                guarded_repository.place_order(
+                guarded_repository.place_order
+            except AttributeError:
+                pass
+            else:
+                raise AssertionError("a strategy must not reach the repository's order methods")
+            try:
+                guarded_repository.place_entry(
                     config.account_id,
                     SimpleNamespace(
                         side="buy",
                         order_id="attempt-1",
                         instrument_id="equity:NASDAQ:TEST",
                     ),
+                    trade_attempt_id="attempt-1",
                 )
             except ValueError as exc:
                 assert str(exc).startswith("trade_authorization_denied:")

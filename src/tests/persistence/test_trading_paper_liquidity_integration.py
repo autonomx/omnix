@@ -16,6 +16,7 @@ from app.trading.paper import (
     PaperMarketObservation,
     PaperOrderRequest,
 )
+from app.trading.order_gateway import OrderGateway
 from app.trading.paper_repository import TradingPaperRepository
 
 
@@ -58,7 +59,7 @@ def test_paper_observation_liquidity_is_aggregate_and_replay_safe() -> None:
             )
         )
         for index in range(2):
-            repository.place_order(
+            OrderGateway(repository).place_manual_entry(
                 account_id,
                 PaperOrderRequest(
                     order_id=f"order-{suffix}-{index}",

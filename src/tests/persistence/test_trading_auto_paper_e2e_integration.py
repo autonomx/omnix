@@ -17,7 +17,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import market_evidence_guards as hardening_module
+from app.trading import order_gateway as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.market_evidence import (

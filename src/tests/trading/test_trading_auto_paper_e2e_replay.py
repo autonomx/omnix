@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import market_evidence_guards as hardening_module
+from app.trading import order_gateway as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.market_evidence import (
@@ -182,7 +182,7 @@ class InMemoryPaperRepository:
             recent_ledger=[],
         )
 
-    def place_order(self, account_id, request: PaperOrderRequest):
+    def place_order(self, account_id, request: PaperOrderRequest, *, authority):
         assert account_id == self.account.account_id
         existing = self.orders.get(request.order_id)
         if existing is not None:

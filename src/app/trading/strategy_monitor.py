@@ -3,7 +3,6 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import sys
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -78,8 +77,7 @@ from .strategy_v2_qualification import (
     v2_profile_fingerprint,
 )
 from .strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
-from .market_evidence_guards import _AuthorizedStrategyPaperRepository
-from . import strategy_v2_qualification as _strategy_v2_qualification
+from .order_gateway import strategy_paper_access
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -1164,7 +1162,7 @@ class TradingStrategyMonitor:
             )
             try:
                 await asyncio.to_thread(
-                    paper_repository.place_order,
+                    paper_repository.place_exit,
                     config.account_id,
                     PaperOrderRequest(
                         order_id=order_id,
@@ -2552,14 +2550,12 @@ class TradingStrategyMonitor:
         paper_repository: TradingPaperRepository,
         market_service: TradingMarketDataService,
     ) -> None:
-        paper_repository = _AuthorizedStrategyPaperRepository(
-            delegate=paper_repository,
+        paper_repository = strategy_paper_access(
+            paper_repository,
             monitor=self,
             config=config,
             strategy_repository=strategy_repository,
             market_service=market_service,
-            monitor_module=sys.modules[__name__],
-            qualification_module=_strategy_v2_qualification,
         )
         cycle_started_at = datetime.now(timezone.utc)
         log_cycle_heartbeat = self._should_log_diagnostic(
@@ -3170,7 +3166,7 @@ class TradingStrategyMonitor:
             await asyncio.to_thread(strategy_repository.save_protection, protection)
             try:
                 await asyncio.to_thread(
-                    paper_repository.place_order,
+                    paper_repository.place_entry,
                     config.account_id,
                     PaperOrderRequest(
                         order_id=order_id,
@@ -3182,6 +3178,7 @@ class TradingStrategyMonitor:
                         reference_price=execution.ask or execution.last,
                         idempotency_key=order_key,
                     ),
+                    trade_attempt_id=trade_attempt_id,
                 )
             except ValueError as exc:
                 protection.status = "cancelled"

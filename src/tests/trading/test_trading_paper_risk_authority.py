@@ -156,7 +156,7 @@ class Repo:
     def snapshot(self, account_id):
         return self.current
 
-    def place_order(self, account_id, request):
+    def place_order(self, account_id, request, *, authority):
         self.events.append("order")
         if self.fail_place:
             raise ValueError("insufficient_paper_cash")

@@ -106,7 +106,7 @@ def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> 
     arm = entry_block.index(
         "await asyncio.to_thread(strategy_repository.save_protection, protection)"
     )
-    submit = entry_block.index("paper_repository.place_order")
+    submit = entry_block.index("paper_repository.place_entry")
 
     assert arm < submit
     assert 'event_type="risk_decision"' in source

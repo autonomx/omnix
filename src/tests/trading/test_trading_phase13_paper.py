@@ -224,7 +224,7 @@ class FakePaperRepository:
             raise ValueError("paper_account_not_found")
         return self.current
 
-    def place_order(self, account_id, request):
+    def place_order(self, account_id, request, *, authority):
         value = PaperOrder(account_id=account_id, **request.model_dump())
         self.current = self.current.model_copy(
             update={"open_orders": [*self.current.open_orders, value]}

@@ -12,6 +12,7 @@ from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    OrderAuthority,
     PaperAccountSnapshot,
     PaperBalance,
     PaperFill,
@@ -164,173 +165,260 @@ class TradingPaperRepository:
         self,
         account_id: str,
         request: PaperOrderRequest,
+        *,
+        authority: OrderAuthority,
     ) -> PaperOrder:
+        """Insert an order under the account lock (called by the order gateway only)."""
         with self.uow_factory() as uow:
-            account_row = uow.connection.execute(
+            account, allow_short = self._lock_account(uow, account_id)
+            order = self._place_locked(uow, account, allow_short, request, authority)
+            uow.commit()
+            return order
+
+    def cancel_order(self, account_id: str, order_id: str) -> PaperOrder:
+        """Cancel an open order and release its reservation (order gateway only)."""
+        with self.uow_factory() as uow:
+            account, _ = self._lock_account(uow, account_id)
+            order = self._cancel_locked(uow, account, order_id)
+            uow.commit()
+            return order
+
+    def replace_order(
+        self,
+        account_id: str,
+        order_id: str,
+        replacement: PaperOrderRequest,
+        *,
+        authority: OrderAuthority,
+    ) -> tuple[PaperOrder, PaperOrder]:
+        """Cancel ``order_id`` and place ``replacement`` in one transaction.
+
+        Either both happen or neither: a rejected replacement leaves the
+        original order open with its reservation.
+        """
+        with self.uow_factory() as uow:
+            account, allow_short = self._lock_account(uow, account_id)
+            cancelled = self._cancel_locked(uow, account, order_id)
+            placed = self._place_locked(uow, account, allow_short, replacement, authority)
+            uow.commit()
+            return cancelled, placed
+
+    def _lock_account(self, uow: PostgresUnitOfWork, account_id: str) -> tuple[PaperAccount, bool]:
+        row = uow.connection.execute(
+            """
+            SELECT account_id, name, base_currency, commission_bps,
+                   enabled, revision, created_at, updated_at, allow_short
+              FROM omnix_trading_paper_accounts
+             WHERE workspace_id = %s AND account_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"paper_account_not_found: {account_id}")
+        return _account(row), bool(row[8])
+
+    def _engaged_kill_switch(
+        self,
+        uow: PostgresUnitOfWork,
+        account_id: str,
+        strategy_id: str | None,
+    ) -> str | None:
+        row = uow.connection.execute(
+            """
+            SELECT scope
+              FROM omnix_trading_kill_switches
+             WHERE workspace_id = %s AND engaged
+               AND (scope = 'global'
+                    OR (scope = 'account' AND scope_id = %s)
+                    OR (scope = 'strategy' AND scope_id = %s))
+             ORDER BY CASE scope WHEN 'global' THEN 0 WHEN 'account' THEN 1 ELSE 2 END
+             LIMIT 1
+             FOR SHARE
+            """,
+            (self.context.workspace_id, account_id, strategy_id or ""),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def _covers_short(self, uow: PostgresUnitOfWork, account_id: str, request: PaperOrderRequest) -> bool:
+        """A buy no larger than an open short only reduces exposure."""
+        row = uow.connection.execute(
+            """
+            SELECT quantity
+              FROM omnix_trading_paper_positions
+             WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account_id, request.instrument_id),
+        ).fetchone()
+        quantity = Decimal(row[0]) if row else Decimal("0")
+        return quantity < 0 and request.quantity <= -quantity
+
+    def _require_entry_authority(
+        self,
+        uow: PostgresUnitOfWork,
+        account: PaperAccount,
+        authority: OrderAuthority,
+    ) -> None:
+        """An order that opens or adds exposure needs entry authority and no engaged kill switch."""
+        if not authority.may_add_exposure:
+            raise ValueError("paper_order_requires_entry_authority")
+        scope = self._engaged_kill_switch(uow, account.account_id, authority.strategy_id)
+        if scope is not None:
+            raise ValueError(f"trading_kill_switch_engaged:{scope}")
+
+    def _place_locked(
+        self,
+        uow: PostgresUnitOfWork,
+        account: PaperAccount,
+        allow_short: bool,
+        request: PaperOrderRequest,
+        authority: OrderAuthority,
+    ) -> PaperOrder:
+        account_id = account.account_id
+        if not account.enabled:
+            raise ValueError(f"paper_account_disabled: {account_id}")
+
+        existing_row = uow.connection.execute(
+            f"""
+            SELECT {_ORDER_COLUMNS}
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s AND idempotency_key = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account_id, request.idempotency_key),
+        ).fetchone()
+        if existing_row is not None:
+            existing = _order(existing_row)
+            if not paper_order_request_matches(existing, request):
+                raise ValueError("paper_idempotency_payload_mismatch")
+            return existing
+
+        reserved_cash = Decimal("0")
+        if request.side == "buy":
+            if not self._covers_short(uow, account_id, request):
+                self._require_entry_authority(uow, account, authority)
+            balance_row = uow.connection.execute(
                 """
-                SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
-                  FROM omnix_trading_paper_accounts
-                 WHERE workspace_id = %s AND account_id = %s
+                SELECT available, reserved
+                  FROM omnix_trading_paper_balances
+                 WHERE workspace_id = %s AND account_id = %s AND currency = %s
                  FOR UPDATE
                 """,
-                (self.context.workspace_id, account_id),
+                (self.context.workspace_id, account_id, account.base_currency),
             ).fetchone()
-            if account_row is None:
-                raise ValueError(f"paper_account_not_found: {account_id}")
-            account = _account(account_row)
-            if not account.enabled:
-                raise ValueError(f"paper_account_disabled: {account_id}")
-
-            existing_row = uow.connection.execute(
-                f"""
-                SELECT {_ORDER_COLUMNS}
-                  FROM omnix_trading_paper_orders
-                 WHERE workspace_id = %s AND account_id = %s AND idempotency_key = %s
+            available = Decimal(balance_row[0]) if balance_row else Decimal("0")
+            reserved_cash = paper_buy_reservation(
+                request,
+                available_cash=available,
+                commission_bps=account.commission_bps,
+            )
+            if reserved_cash <= 0 or available < reserved_cash:
+                raise ValueError("insufficient_paper_cash")
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_balances
+                   SET available = available - %s,
+                       reserved = reserved + %s,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                """,
+                (
+                    reserved_cash,
+                    reserved_cash,
+                    self.context.workspace_id,
+                    account_id,
+                    account.base_currency,
+                ),
+            )
+        else:
+            position_row = uow.connection.execute(
+                """
+                SELECT quantity, reserved_quantity
+                  FROM omnix_trading_paper_positions
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                  FOR UPDATE
                 """,
-                (self.context.workspace_id, account_id, request.idempotency_key),
+                (self.context.workspace_id, account_id, request.instrument_id),
             ).fetchone()
-            if existing_row is not None:
-                existing = _order(existing_row)
-                if not paper_order_request_matches(existing, request):
-                    raise ValueError("paper_idempotency_payload_mismatch")
-                return existing
-
-            reserved_cash = Decimal("0")
-            if request.side == "buy":
-                balance_row = uow.connection.execute(
-                    """
-                    SELECT available, reserved
-                      FROM omnix_trading_paper_balances
-                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
-                     FOR UPDATE
-                    """,
-                    (self.context.workspace_id, account_id, account.base_currency),
-                ).fetchone()
-                available = Decimal(balance_row[0]) if balance_row else Decimal("0")
-                reserved_cash = paper_buy_reservation(
-                    request,
-                    available_cash=available,
-                    commission_bps=account.commission_bps,
-                )
-                if reserved_cash <= 0 or available < reserved_cash:
-                    raise ValueError("insufficient_paper_cash")
+            quantity = Decimal(position_row[0]) if position_row else Decimal("0")
+            already_reserved = Decimal(position_row[1]) if position_row else Decimal("0")
+            if quantity > 0 and quantity - already_reserved < request.quantity:
+                raise ValueError("insufficient_paper_position")
+            if quantity > 0:
                 uow.connection.execute(
                     """
-                    UPDATE omnix_trading_paper_balances
-                       SET available = available - %s,
-                           reserved = reserved + %s,
+                    UPDATE omnix_trading_paper_positions
+                       SET reserved_quantity = reserved_quantity + %s,
                            updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                     WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                     """,
                     (
-                        reserved_cash,
-                        reserved_cash,
+                        request.quantity,
                         self.context.workspace_id,
                         account_id,
-                        account.base_currency,
+                        request.instrument_id,
                     ),
                 )
             else:
-                position_row = uow.connection.execute(
-                    """
-                    SELECT quantity, reserved_quantity
-                      FROM omnix_trading_paper_positions
-                     WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
-                     FOR UPDATE
-                    """,
-                    (self.context.workspace_id, account_id, request.instrument_id),
-                ).fetchone()
-                quantity = Decimal(position_row[0]) if position_row else Decimal("0")
-                already_reserved = Decimal(position_row[1]) if position_row else Decimal("0")
-                if quantity > 0 and quantity - already_reserved < request.quantity:
-                    raise ValueError("insufficient_paper_position")
-                if quantity > 0:
-                    uow.connection.execute(
-                        """
-                        UPDATE omnix_trading_paper_positions
-                           SET reserved_quantity = reserved_quantity + %s,
-                               updated_at = CURRENT_TIMESTAMP
-                         WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
-                        """,
-                        (
-                            request.quantity,
-                            self.context.workspace_id,
-                            account_id,
-                            request.instrument_id,
-                        ),
-                    )
+                # Long-only unless the account opts in; a short opens exposure.
+                if not allow_short:
+                    raise ValueError("paper_short_not_allowed")
+                self._require_entry_authority(uow, account, authority)
 
-            row = uow.connection.execute(
-                f"""
-                INSERT INTO omnix_trading_paper_orders (
-                    workspace_id, account_id, order_id, instrument_id, binding_id,
-                    side, order_type, quantity, limit_price, stop_price,
-                    reference_price, status, idempotency_key, reserved_cash
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
-                RETURNING {_ORDER_COLUMNS}
-                """,
-                (
-                    self.context.workspace_id,
-                    account_id,
-                    request.order_id,
-                    request.instrument_id,
-                    request.binding_id,
-                    request.side,
-                    request.order_type,
-                    request.quantity,
-                    request.limit_price,
-                    request.stop_price,
-                    request.reference_price,
-                    request.idempotency_key,
-                    reserved_cash,
-                ),
-            ).fetchone()
-            uow.commit()
-            return _order(row)
+        row = uow.connection.execute(
+            f"""
+            INSERT INTO omnix_trading_paper_orders (
+                workspace_id, account_id, order_id, instrument_id, binding_id,
+                side, order_type, quantity, limit_price, stop_price,
+                reference_price, status, idempotency_key, reserved_cash
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
+            RETURNING {_ORDER_COLUMNS}
+            """,
+            (
+                self.context.workspace_id,
+                account_id,
+                request.order_id,
+                request.instrument_id,
+                request.binding_id,
+                request.side,
+                request.order_type,
+                request.quantity,
+                request.limit_price,
+                request.stop_price,
+                request.reference_price,
+                request.idempotency_key,
+                reserved_cash,
+            ),
+        ).fetchone()
+        return _order(row)
 
-    def cancel_order(self, account_id: str, order_id: str) -> PaperOrder:
-        with self.uow_factory() as uow:
-            account_row = uow.connection.execute(
-                """
-                SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
-                  FROM omnix_trading_paper_accounts
-                 WHERE workspace_id = %s AND account_id = %s
-                 FOR UPDATE
-                """,
-                (self.context.workspace_id, account_id),
-            ).fetchone()
-            if account_row is None:
-                raise ValueError(f"paper_account_not_found: {account_id}")
-            account = _account(account_row)
-            order_row = uow.connection.execute(
-                f"""
-                SELECT {_ORDER_COLUMNS}
-                  FROM omnix_trading_paper_orders
-                 WHERE workspace_id = %s AND account_id = %s AND order_id = %s
-                   AND status = 'open'
-                 FOR UPDATE
-                """,
-                (self.context.workspace_id, account_id, order_id),
-            ).fetchone()
-            if order_row is None:
-                raise ValueError("paper_order_not_open")
-            order = _order(order_row)
-            self._release_order_reservation(uow, account, order)
-            row = uow.connection.execute(
-                f"""
-                UPDATE omnix_trading_paper_orders
-                   SET status = 'cancelled', reserved_cash = 0,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND account_id = %s AND order_id = %s
-                RETURNING {_ORDER_COLUMNS}
-                """,
-                (self.context.workspace_id, account_id, order_id),
-            ).fetchone()
-            uow.commit()
-            return _order(row)
+    def _cancel_locked(self, uow: PostgresUnitOfWork, account: PaperAccount, order_id: str) -> PaperOrder:
+        order_row = uow.connection.execute(
+            f"""
+            SELECT {_ORDER_COLUMNS}
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+               AND status = 'open'
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account.account_id, order_id),
+        ).fetchone()
+        if order_row is None:
+            raise ValueError("paper_order_not_open")
+        order = _order(order_row)
+        self._release_order_reservation(uow, account, order)
+        row = uow.connection.execute(
+            f"""
+            UPDATE omnix_trading_paper_orders
+               SET status = 'cancelled', reserved_cash = 0,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+            RETURNING {_ORDER_COLUMNS}
+            """,
+            (self.context.workspace_id, account.account_id, order_id),
+        ).fetchone()
+        return _order(row)
 
     def _release_order_reservation(
         self,
