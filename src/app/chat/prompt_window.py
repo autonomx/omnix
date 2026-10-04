@@ -23,6 +23,9 @@ from app.observability.tts_stream_diagnostics import stream_log
 _DEFAULT_RECENT_MESSAGE_LIMIT = 24
 _MIN_RECENT_MESSAGE_LIMIT = 2
 _MAX_RECENT_MESSAGE_LIMIT = 200
+# The longest recent tail any prompt can use; a transcript window loads at
+# least this many eligible messages (WP-5.7).
+MAX_RECENT_MESSAGE_LIMIT = _MAX_RECENT_MESSAGE_LIMIT
 
 
 def _boolean_setting(name: str, fallback: bool) -> bool:

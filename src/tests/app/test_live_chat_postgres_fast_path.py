@@ -135,7 +135,7 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
         )
         return turn
 
-    monkeypatch.setattr(fast_path, "_load_single_session", fake_load)
+    monkeypatch.setattr(fast_path, "_load_session_window", fake_load)
     monkeypatch.setattr(fast_path, "_persist_user_turn", fake_persist)
     monkeypatch.setattr(fast_path, "_start_assistant_turn", fake_start)
     monkeypatch.setattr(fast_path, "stream_log", lambda *args, **kwargs: None)
@@ -366,7 +366,7 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
         assert current_user is user_message
         return True, False
 
-    monkeypatch.setattr(fast_path, "_load_single_session", fake_load)
+    monkeypatch.setattr(fast_path, "_load_session_window", fake_load)
     monkeypatch.setattr(fast_path, "_persist_assistant_completion", fake_persist)
     monkeypatch.setattr(
         fast_path,

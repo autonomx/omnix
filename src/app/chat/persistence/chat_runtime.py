@@ -90,6 +90,11 @@ def _load_single_session(store: Any, session_id: str) -> ChatSession | None:
     return session
 
 
+def _load_session_window(store: Any, session_id: str) -> ChatSession | None:
+    """Load only the newest part of the transcript a prompt can read (WP-5.7)."""
+    return store._repository.get_session_window(session_id)
+
+
 def _persist_user_turn(store: Any, session: ChatSession, message: ChatMessage) -> bool:
     """Update active session routing fields and append exactly one user message."""
     adapter = store._repository
@@ -273,7 +278,9 @@ def _completed_session_snapshot(
             metadata=assistant_metadata,
         )
         session.messages.append(assistant_message)
-        session.message_count = len(session.messages)
+        session.message_count = (
+            session.message_count + 1 if session.transcript_is_window else len(session.messages)
+        )
         session.updated_at = assistant_message.created_at
     return session
 
@@ -290,12 +297,20 @@ def _begin_user_message_fast(
 ) -> tuple[ChatSession, ChatMessage] | None:
     started = time.perf_counter()
     load_started = time.perf_counter()
-    session = _load_single_session(self, session_id)
+    session = _load_session_window(self, session_id)
     load_ms = (time.perf_counter() - load_started) * 1000.0
     if session is None:
         return None
 
     existing = _find_idempotent_user_turn(session, request.user_turn_id)
+    if (
+        existing is None
+        and request.user_turn_id
+        and session.transcript_is_window
+        and self._repository.find_user_turn(session_id, request.user_turn_id) is not None
+    ):
+        # A retry of a turn older than the window: answer with the whole transcript.
+        existing = _find_idempotent_user_turn(_load_single_session(self, session_id), request.user_turn_id)
     if existing is not None:
         stream_log(
             "gateway-live-chat-first-token",
@@ -357,13 +372,14 @@ def _begin_user_message_fast(
     coordinator_ms = (time.perf_counter() - coordinator_started) * 1000.0
 
     session.messages.append(message)
+    appended_count = session.message_count + 1 if session.transcript_is_window else len(session.messages)
     if route_metadata is not None:
         session.provider_id = route_metadata["provider_id"]
         session.model_id = route_metadata["model_id"]
     else:
         session.provider_id = request.provider_id or session.provider_id
         session.model_id = request.model_id or session.model_id
-    session.message_count = len(session.messages)
+    session.message_count = appended_count
     if session.title.strip().lower() in {"new chat", "new chat..."}:
         session.title = message.content[:48] or "New chat"
     session.updated_at = now
@@ -412,13 +428,21 @@ def _complete_streamed_reply_fast(
     started = time.perf_counter()
     stage = "load_session"
     try:
-        session = _load_single_session(self, session_id)
+        session = _load_session_window(self, session_id)
         if session is None:
             return None
         user_message = next(
             (message for message in session.messages if message.id == user_message_id),
             None,
         )
+        if user_message is None and session.transcript_is_window:
+            session = _load_single_session(self, session_id)
+            user_message = next(
+                (message for message in session.messages if message.id == user_message_id),
+                None,
+            ) if session is not None else None
+            if session is None:
+                return None
         if user_message is None:
             stream_log(
                 "gateway-live-chat-completion",
@@ -469,7 +493,7 @@ def _complete_streamed_reply_fast(
         persist_ms = (time.perf_counter() - persist_started) * 1000.0
         if assistant_already_present:
             stage = "reload_session"
-            completed = _load_single_session(self, session_id)
+            completed = _load_session_window(self, session_id)
             if completed is None:
                 return None
         else:
@@ -699,6 +723,10 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
 
     def get_session(self, session_id: str) -> ChatSession | None:
         return self._repository.get_session(session_id)
+
+    def get_session_window(self, session_id: str, *, through_message_id: str | None = None) -> ChatSession | None:
+        """The newest part of the transcript a prompt can read (WP-5.7)."""
+        return self._repository.get_session_window(session_id, through_message_id=through_message_id)
 
     def _save_session(self, session: ChatSession) -> None:
         self._repository.save_session(session)

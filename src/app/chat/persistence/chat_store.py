@@ -23,6 +23,40 @@ def _json(value: Any) -> str:
 _MESSAGE_PAGE_SIZE = MAX_PAGE_SIZE
 
 
+def transcript_window_complete(
+    messages: list[ChatMessage],
+    *,
+    active_segment_id: str | None,
+    through_message_id: str | None = None,
+) -> bool:
+    """Whether the newest ``messages`` hold everything a prompt can read (WP-5.7).
+
+    A prompt reads at most the newest ``MAX_RECENT_MESSAGE_LIMIT`` eligible
+    messages (user and assistant turns of the active segment) before the turn's
+    own message, plus a deterministic summary that keeps only the last
+    ``SUMMARY_TEXT_CHARS`` characters of the older ones. Once the loaded older
+    messages add more than that, any older message cannot change the prompt.
+    """
+    from app.chat.compaction import SUMMARY_TEXT_CHARS, summary_line_length
+    from app.chat.prompt_window import MAX_RECENT_MESSAGE_LIMIT
+
+    if through_message_id is not None:
+        index = next((i for i, message in enumerate(messages) if message.id == through_message_id), None)
+        if index is None:
+            return False
+        messages = messages[:index]
+    eligible = [
+        message
+        for message in messages
+        if message.role in {"user", "assistant"}
+        and (not active_segment_id or message.metadata.get("segment_id") == active_segment_id)
+    ]
+    if len(eligible) <= MAX_RECENT_MESSAGE_LIMIT:
+        return False
+    older = eligible[:-MAX_RECENT_MESSAGE_LIMIT]
+    return sum(summary_line_length(message) for message in older) > SUMMARY_TEXT_CHARS
+
+
 def _encode_session_cursor(record: dict[str, Any]) -> str:
     payload = json.dumps(
         [record["updated_at"], record["id"]], separators=(",", ":")
@@ -90,6 +124,50 @@ class PostgresChatRepositoryAdapter:
             work.rollback()
         return session
 
+    def get_session_window(self, session_id: str, *, through_message_id: str | None = None) -> ChatSession | None:
+        """Load the newest part of a transcript that a prompt can read (WP-5.7).
+
+        Pages newest first until ``transcript_window_complete`` holds or the
+        transcript starts. A session loaded this way says so
+        (``transcript_is_window``) and saves only what follows its first message.
+        """
+        with unit_of_work(self.database) as work:
+            record = work.chats.get_session(self.context, session_id)
+            if record is None:
+                work.rollback()
+                return None
+            session = self._to_session(record, [])
+            loaded: list[dict[str, Any]] = []
+            before: int | None = None
+            complete = False
+            while True:
+                page = work.chats.list_messages_before(
+                    self.context, session_id, before_position=before, limit=_MESSAGE_PAGE_SIZE
+                )
+                loaded[:0] = reversed(page)
+                if len(page) < _MESSAGE_PAGE_SIZE:
+                    break
+                before = int(page[-1]["position"])
+                session.messages = [self._to_message(message) for message in loaded]
+                if transcript_window_complete(
+                    session.messages,
+                    active_segment_id=session.active_segment_id,
+                    through_message_id=through_message_id,
+                ):
+                    complete = True
+                    break
+            work.rollback()
+        session.messages = [self._to_message(message) for message in loaded]
+        if complete and loaded:
+            session._window_first_position = int(loaded[0]["position"])
+        return session
+
+    def find_user_turn(self, session_id: str, user_turn_id: str) -> ChatMessage | None:
+        with unit_of_work(self.database) as work:
+            record = work.chats.find_user_turn(self.context, session_id, user_turn_id)
+            work.rollback()
+        return self._to_message(record) if record is not None else None
+
     def save_session(self, session: ChatSession) -> None:
         """Persist one session and its changed message rows atomically.
 
@@ -116,7 +194,14 @@ class PostgresChatRepositoryAdapter:
                     raise RuntimeError(
                         f"chat session {session.id} changed after it was loaded"
                     )
-                stored_messages = self._list_all_messages(work, session.id)
+                # A window saves against the stored messages from its first one on.
+                stored_messages = self._list_all_messages(
+                    work,
+                    session.id,
+                    after_position=(
+                        session._window_first_position - 1 if session.transcript_is_window else -1
+                    ),
+                )
                 work.connection.execute(
                     """
                     UPDATE omnix_chat_sessions SET
@@ -276,10 +361,9 @@ class PostgresChatRepositoryAdapter:
             work.commit()
         return changed
 
-    def _list_all_messages(self, work: Any, session_id: str) -> list[dict[str, Any]]:
-        """Load the full append-only transcript instead of truncating at 500 rows."""
+    def _list_all_messages(self, work: Any, session_id: str, *, after_position: int = -1) -> list[dict[str, Any]]:
+        """Load the append-only transcript (after ``after_position``) instead of truncating at 500 rows."""
         messages: list[dict[str, Any]] = []
-        after_position = -1
         while True:
             page = work.chats.list_messages(
                 self.context,
@@ -534,6 +618,16 @@ class PostgresChatRepositoryAdapter:
     def _to_summary(cls, record: dict[str, Any]) -> ChatSessionSummary:
         return ChatSessionSummary(**cls._summary_fields(record))
 
+    @staticmethod
+    def _to_message(message: dict[str, Any]) -> ChatMessage:
+        return ChatMessage(
+            id=message["id"],
+            role=message["role"],
+            content=message["content"],
+            created_at=message["created_at"],
+            metadata=dict(message.get("metadata") or {}),
+        )
+
     @classmethod
     def _to_session(
         cls,
@@ -542,16 +636,7 @@ class PostgresChatRepositoryAdapter:
     ) -> ChatSession:
         session = ChatSession(
             **cls._summary_fields(record),
-            messages=[
-                ChatMessage(
-                    id=message["id"],
-                    role=message["role"],
-                    content=message["content"],
-                    created_at=message["created_at"],
-                    metadata=dict(message.get("metadata") or {}),
-                )
-                for message in messages
-            ],
+            messages=[cls._to_message(message) for message in messages],
         )
         session._revision = int(record.get("revision") or 0)
         return session

@@ -734,7 +734,13 @@ def _run_chat_generation_job(
             _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
             return
 
-        session = chat_store.get_session(session_id)
+        # Only the newest part of the transcript a prompt can read (WP-5.7).
+        load_window = getattr(chat_store, "get_session_window", None)
+        session = (
+            load_window(session_id, through_message_id=message_id)
+            if callable(load_window)
+            else chat_store.get_session(session_id)
+        )
         if session is None:
             raise RuntimeError("Chat session not found while generation was starting.")
         user_index = next(
@@ -753,7 +759,11 @@ def _run_chat_generation_job(
         session = session.model_copy(
             update={
                 "messages": session.messages[: user_index + 1],
-                "message_count": user_index + 1,
+                "message_count": (
+                    session.message_count - (len(session.messages) - user_index - 1)
+                    if session.transcript_is_window
+                    else user_index + 1
+                ),
             }
         )
         user_message = session.messages[-1]

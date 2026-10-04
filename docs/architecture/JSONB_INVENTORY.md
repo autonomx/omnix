@@ -92,7 +92,7 @@ Decisions for queried columns are in `resources/architecture/jsonb-decisions.jso
 | `omnix_capacity_policy` | `metadata` | opaque | keep opaque |
 | `omnix_character_versions` | `profile` | opaque | keep opaque |
 | `omnix_characters` | `profile` | queried | keep; display_name orders one workspace's characters (keyset paging, WP-5.5); promote to a column if character counts grow past thousands |
-| `omnix_chat_messages` | `metadata` | queried | keep; assistant_turn_id and reply_to_message_id are matched within one session, narrowed by the session/position index |
+| `omnix_chat_messages` | `metadata` | queried | keep; assistant_turn_id and reply_to_message_id are matched within one session, narrowed by the session/position index; user_turn_id has a partial expression index (0126) for idempotent turn retries |
 | `omnix_chat_sessions` | `settings` | partial update | keep; updated in SQL |
 | `omnix_companion_activity_checkpoints` | `source_proposition_ids` | opaque | keep opaque |
 | `omnix_companion_activity_checkpoints` | `state_payload` | opaque | keep opaque |

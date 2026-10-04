@@ -64,7 +64,15 @@ class ChatSessionSummary(BaseModel):
 
 class ChatSession(ChatSessionSummary):
     _revision: int = PrivateAttr(default=0)
+    # When only the newest part of the transcript was loaded (WP-5.7): the
+    # stored position of the first loaded message. None: ``messages`` is the
+    # whole transcript.
+    _window_first_position: int | None = PrivateAttr(default=None)
     messages: list[ChatMessage] = Field(default_factory=list)
+
+    @property
+    def transcript_is_window(self) -> bool:
+        return self._window_first_position is not None
 
 
 class TranscriptReader(Protocol):

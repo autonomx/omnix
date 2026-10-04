@@ -215,6 +215,54 @@ class PostgresChatRepository:
             "created_at": row[6].isoformat(),
         }
 
+    def list_messages_before(
+        self,
+        context: TenantContext,
+        session_id: str,
+        *,
+        before_position: int | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """One page of the transcript, newest first, before ``before_position`` (WP-5.7)."""
+        rows = self.connection.execute(
+            """
+            SELECT id, session_id, position, role, content, metadata, created_at
+              FROM omnix_chat_messages
+             WHERE workspace_id = %s AND session_id = %s
+               AND (%s::bigint IS NULL OR position < %s::bigint)
+             ORDER BY position DESC, id DESC LIMIT %s
+            """,
+            (
+                context.workspace_id,
+                session_id,
+                before_position,
+                before_position,
+                page_limit(limit, default=100),
+            ),
+        ).fetchall()
+        return [_message_record(row) for row in rows]
+
+    def find_user_turn(
+        self,
+        context: TenantContext,
+        session_id: str,
+        user_turn_id: str,
+    ) -> dict[str, Any] | None:
+        """The user message a client turn id already created (idx_omnix_chat_messages_user_turn)."""
+        row = self.connection.execute(
+            """
+            SELECT id, session_id, position, role, content, metadata, created_at
+              FROM omnix_chat_messages
+             WHERE workspace_id = %s AND session_id = %s
+               AND role = 'user' AND metadata ? 'user_turn_id'
+               AND metadata->>'user_turn_id' = %s
+             ORDER BY position ASC
+             LIMIT 1
+            """,
+            (context.workspace_id, session_id, user_turn_id),
+        ).fetchone()
+        return _message_record(row) if row is not None else None
+
     def list_messages(
         self,
         context: TenantContext,
@@ -249,3 +297,15 @@ class PostgresChatRepository:
             }
             for row in rows
         ]
+
+
+def _message_record(row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row[0]),
+        "session_id": str(row[1]),
+        "position": int(row[2]),
+        "role": str(row[3]),
+        "content": str(row[4]),
+        "metadata": dict(row[5]),
+        "created_at": row[6].isoformat(),
+    }

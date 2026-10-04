@@ -4,9 +4,12 @@ Seeds one session with N messages (default 10,000) and 200 conversation
 summaries spread over other sessions in a disposable PostgreSQL database,
 then times the reads a chat turn performs:
 
-- the session transcript load;
+- the transcript window a turn loads (WP-5.7), and for comparison the whole
+  transcript;
 - the latest conversation summary of the session;
-- a history search.
+- a history search;
+- ``prompt_db_ms``: the three a turn performs together (window, summary,
+  search), the acceptance measure (p95 under 30 ms at 10,000 messages).
 
 Usage:
 
@@ -109,8 +112,20 @@ def main() -> int:
         if len(loaded) != args.messages:
             raise RuntimeError(f"loaded {len(loaded)} of {args.messages} messages")
 
+    def load_window() -> None:
+        window = adapter.get_session_window(session_id)
+        if window is None or not window.transcript_is_window:
+            raise RuntimeError("expected a transcript window")
+
+    def prompt_reads() -> None:
+        load_window()
+        summaries.latest(session_id)
+        search.search("topic42", profile_id="default", workspace_id=tenant.workspace_id, project_id=None)
+
     try:
         results = {
+            "prompt_db_ms": timed(prompt_reads),
+            "window_load_ms": timed(load_window),
             "transcript_load_ms": timed(load_transcript),
             "latest_summary_ms": timed(lambda: summaries.latest(session_id)),
             "history_search_ms": timed(lambda: search.search(
