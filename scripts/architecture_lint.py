@@ -18,7 +18,7 @@ from architecture_analysis import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = tuple(f"AL{number:03}" for number in range(1, 16))
+RULES = tuple(f"AL{number:03}" for number in range(1, 17))
 MIGRATIONS = "src/app/persistence/migrations/"
 REGISTRY = "resources/architecture/migration-checksums.json"
 SCOPE = "tracked_nonvendor_production_python_and_migrations"
@@ -197,6 +197,7 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
 def measure(sources: dict[str, str], config: dict, protected: dict[str, str]) -> dict:
     analysis = SourceAnalysis(sources, config)
     violations = (analysis.violations() + cycle_violations(analysis) + reciprocal_violations(analysis)
+                  + analysis.table_ownership_violations()
                   + migration_violations(sources, protected))
     counts = Counter((item.rule, item.path, item.fingerprint) for item in violations)
     lines = {}

@@ -105,6 +105,18 @@ CASES = [
                                            WEB + "api/http.ts": "export const http = 1;"}, 1),
     ("src_root_service_entrypoints", {"src/tts_server.py": "", "src/launch.py": ""}, 1),
     ("tracked_runtime_data_in_src", {APP + "data/sessions.json": "{}"}, 1),
+    # PA-2.2: table ownership (AL016).
+    ("cross_module_sql", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                          APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);",
+                          "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}',
+                          APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'"}, 1),
+    ("kernel_named_module_tables", {APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);",
+                                    "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}',
+                                    APP + "persistence/retention.py": "SQL = 'DELETE FROM omnix_rpg_turns'"}, 1),
+    ("tables_without_owner", {APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_a (id int);\nCREATE TABLE omnix_b (id int);",
+                              "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_a": {"owner": "kernel", "created_by": "0001_platform"}}}'}, 1),
+    ("historical_owner_map_additions", {"resources/architecture/historical-table-owners.json":
+                                        '{"frozen_after": "0001_platform", "tables": {"omnix_a": {"owner": "kernel", "created_by": "0002_new"}}}'}, 1),
 ]
 
 

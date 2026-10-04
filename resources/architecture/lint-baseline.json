@@ -16,7 +16,8 @@
     "AL012",
     "AL013",
     "AL014",
-    "AL015"
+    "AL015",
+    "AL016"
   ],
   "schema_version": 1,
   "scope": "tracked_nonvendor_production_python_and_migrations",
@@ -239,6 +240,658 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions",
+      "lines": [
+        38
+      ],
+      "path": "src/app/assistant_memory/persistence/owner_memory_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "AssistantToolProposalService.execute:omnix_module_records",
+      "lines": [
+        153
+      ],
+      "path": "src/app/assistant_tools/proposals.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "_assemble_claimed:omnix_assets",
+      "lines": [
+        94,
+        112
+      ],
+      "path": "src/app/audiobook/assembly_service.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "_export_claimed:omnix_assets",
+      "lines": [
+        266,
+        277
+      ],
+      "path": "src/app/audiobook/export_service.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "start_export:omnix_assets",
+      "lines": [
+        126,
+        178
+      ],
+      "path": "src/app/audiobook/export_service.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.cover_blob:omnix_assets",
+      "lines": [
+        550
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.cover_summary:omnix_assets",
+      "lines": [
+        279
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.current_source_blob:omnix_assets",
+      "lines": [
+        562
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.export_blob:omnix_assets",
+      "lines": [
+        632
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.list_exports:omnix_assets",
+      "lines": [
+        619
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.lock_asset:omnix_assets",
+      "lines": [
+        579
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookProjectRepository.source_summary:omnix_assets",
+      "lines": [
+        291
+      ],
+      "path": "src/app/audiobook/project_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "find_valid_render:omnix_assets",
+      "lines": [
+        33
+      ],
+      "path": "src/app/audiobook/render_cache.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_complete_span_preview:omnix_assets",
+      "lines": [
+        584
+      ],
+      "path": "src/app/audiobook/render_service.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_asset_check:omnix_assets",
+      "lines": [
+        20
+      ],
+      "path": "src/app/audiobook/report.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "audit_export:omnix_assets",
+      "lines": [
+        38
+      ],
+      "path": "src/app/audiobook/report.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresAudiobookRepository.append_source_revision:omnix_assets",
+      "lines": [
+        138
+      ],
+      "path": "src/app/audiobook/repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_ingest_claimed:omnix_assets",
+      "lines": [
+        181
+      ],
+      "path": "src/app/audiobook/worker.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._get:omnix_module_records",
+      "lines": [
+        105
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._list:omnix_module_records",
+      "lines": [
+        117
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._locked_get:omnix_module_records",
+      "lines": [
+        130
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._write:omnix_module_records",
+      "lines": [
+        142
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter._write:omnix_module_records",
+      "lines": [
+        265
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.get:omnix_module_records",
+      "lines": [
+        192
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.list:omnix_module_records",
+      "lines": [
+        204
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.update:omnix_module_records",
+      "lines": [
+        229
+      ],
+      "path": "src/app/characters/persistence/avatar_generation_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter._locked_get:omnix_module_records",
+      "lines": [
+        121
+      ],
+      "path": "src/app/characters/persistence/avatar_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter._write:omnix_module_records",
+      "lines": [
+        135
+      ],
+      "path": "src/app/characters/persistence/avatar_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter.delete:omnix_module_records",
+      "lines": [
+        110
+      ],
+      "path": "src/app/characters/persistence/avatar_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter.get:omnix_module_records",
+      "lines": [
+        38
+      ],
+      "path": "src/app/characters/persistence/avatar_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterRepositoryAdapter.close_segment:omnix_conversation_segments",
+      "lines": [
+        205
+      ],
+      "path": "src/app/characters/persistence/character_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterRepositoryAdapter.create_segment:omnix_conversation_segments",
+      "lines": [
+        175
+      ],
+      "path": "src/app/characters/persistence/character_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresCharacterRepositoryAdapter.segments:omnix_conversation_segments",
+      "lines": [
+        221
+      ],
+      "path": "src/app/characters/persistence/character_store.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 3,
+      "fingerprint": "mutate_legacy_chat_sessions:omnix_module_records",
+      "lines": [
+        39,
+        48,
+        60
+      ],
+      "path": "src/app/chat/persistence/legacy_sessions.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_candidates",
+      "lines": [
+        83
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_events",
+      "lines": [
+        159
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_snapshot_items",
+      "lines": [
+        141
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_snapshots",
+      "lines": [
+        118
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._rpg_history:omnix_rpg_foreground_submissions",
+      "lines": [
+        275
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._rpg_history:omnix_rpg_interactions",
+      "lines": [
+        246
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._rpg_history:omnix_rpg_snapshots",
+      "lines": [
+        306
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "CompletePostgresLegacyImporter._rpg_history:omnix_rpg_turns",
+      "lines": [
+        209,
+        241
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "CompletePostgresLegacyImporter._segments:omnix_conversation_segments",
+      "lines": [
+        52
+      ],
+      "path": "src/app/persistence/complete_cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
+      "lines": [
+        530
+      ],
+      "path": "src/app/persistence/cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresLegacyImporter._dispatch:omnix_rpg_participants",
+      "lines": [
+        552
+      ],
+      "path": "src/app/persistence/cutover.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:omnix_rpg_foreground_submissions",
+      "lines": [
+        79
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionRepository.attach_job:omnix_rpg_foreground_submissions",
+      "lines": [
+        889
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 3,
+      "fingerprint": "PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
+      "lines": [
+        827,
+        842,
+        866
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionRepository.complete:omnix_rpg_foreground_submissions",
+      "lines": [
+        939
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionRepository.fail:omnix_rpg_foreground_submissions",
+      "lines": [
+        969
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionRepository.start_execution:omnix_rpg_foreground_submissions",
+      "lines": [
+        916
+      ],
+      "path": "src/app/persistence/execution_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionStoreAdapter.get:omnix_rpg_foreground_submissions",
+      "lines": [
+        60
+      ],
+      "path": "src/app/persistence/foreground_submissions.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions",
+      "lines": [
+        82
+      ],
+      "path": "src/app/persistence/foreground_submissions.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresLifecycleRepository.capacity_report:omnix_rpg_turns",
+      "lines": [
+        23
+      ],
+      "path": "src/app/persistence/lifecycle.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresPromptRepository.create:omnix_prompt_templates",
+      "lines": [
+        400
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresPromptRepository.get:omnix_prompt_templates",
+      "lines": [
+        422
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresPromptRepository.update:omnix_prompt_templates",
+      "lines": [
+        442
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresProviderRepository.create:omnix_provider_configs",
+      "lines": [
+        263
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresProviderRepository.get:omnix_provider_configs",
+      "lines": [
+        285
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresProviderRepository.put_status:omnix_provider_status_projections",
+      "lines": [
+        342
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresProviderRepository.update:omnix_provider_configs",
+      "lines": [
+        308
+      ],
+      "path": "src/app/persistence/module_repositories.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "<module>:omnix_agent_run_events",
+      "lines": [
+        104,
+        104
+      ],
+      "path": "src/app/persistence/retention.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:omnix_agent_runs",
+      "lines": [
+        104
+      ],
+      "path": "src/app/persistence/retention.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "<module>:omnix_trading_strategy_events",
+      "lines": [
+        116,
+        116
+      ],
+      "path": "src/app/persistence/retention.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 3,
+      "fingerprint": "PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
+      "lines": [
+        27,
+        36,
+        36
+      ],
+      "path": "src/app/persistence/rpg_narration_event_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresRpgNarrationEventRepository.count_events:omnix_rpg_narration_events",
+      "lines": [
+        101
+      ],
+      "path": "src/app/persistence/rpg_narration_event_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 2,
+      "fingerprint": "PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events",
+      "lines": [
+        85,
+        85
+      ],
+      "path": "src/app/persistence/rpg_narration_event_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresRpgNarrationEventRepository.latest_event_id:omnix_rpg_narration_events",
+      "lines": [
+        52
+      ],
+      "path": "src/app/persistence/rpg_narration_event_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresRpgNarrationEventRepository.list_after:omnix_rpg_narration_events",
+      "lines": [
+        70
+      ],
+      "path": "src/app/persistence/rpg_narration_event_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresResearchReportRepository.create_report:omnix_reports",
+      "lines": [
+        84
+      ],
+      "path": "src/app/research/persistence/report_repository.py",
+      "rule": "AL016"
+    },
+    {
+      "count": 1,
+      "fingerprint": "TradingDocumentRepository.archive:omnix_module_records",
+      "lines": [
+        139
+      ],
+      "path": "src/app/trading/repositories.py",
+      "rule": "AL016"
     }
   ]
 }

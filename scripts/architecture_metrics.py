@@ -64,6 +64,9 @@ LOWER_TARGETS: dict[str, int | str] = {
     "platform_feature_specific_files": 0, "module_repositories_in_kernel": 0,
     "web_feature_clients_in_shared_api": 0, "src_root_service_entrypoints": 0,
     "tracked_runtime_data_in_src": 0,
+    # PA-2.2: table ownership and AL016.
+    "tables_without_owner": 0, "historical_owner_map_additions": 0,
+    "kernel_named_module_tables": 0, "cross_module_sql": 0,
 }
 HIGHER_TARGETS: dict[str, int | str] = {
     "rls_coverage_pct": 100, "retention_policies_executed_pct": 100,
@@ -1169,6 +1172,27 @@ def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str
     evidence["tracked_runtime_data_in_src"] = sorted(
         path for path in analysis.sources if path.startswith("src/app/data/") and path.endswith(".json")
     )
+    import table_ownership
+
+    ownership = analysis.table_ownership_violations()
+    evidence["cross_module_sql"] = sorted(f"{item.path}:{item.line}:{item.fingerprint}" for item in ownership)
+    owners = analysis.table_owner_map()
+    evidence["kernel_named_module_tables"] = sorted(
+        f"{item.path}:{item.line}:{item.fingerprint}" for item in ownership
+        if analysis._code_owner(module_name(item.path)) in (frozenset({"kernel"}), frozenset({"shared"}))
+        and owners.get(item.fingerprint.rsplit(":", 1)[-1]) not in {"kernel", "shared"}
+    ) if analysis.trees else []
+    historical_text = analysis.sources.get(table_ownership.HISTORICAL)
+    historical = json.loads(historical_text) if historical_text else {}
+    frozen_after = str(historical.get("frozen_after") or "")
+    evidence["historical_owner_map_additions"] = sorted(
+        table for table, entry in historical.get("tables", {}).items()
+        if frozen_after and str(entry.get("created_by", "")) > frozen_after
+    )
+    evidence["tables_without_owner"] = table_ownership.unowned_tables(
+        analysis.sources, table_ownership.load_historical(analysis.sources),
+        {"src/" + package.replace(".", "/"): sorted(unit.ids)[0] for package, unit in analysis.module_units().items()},
+    ) if historical_text else []
     values = {key: len(sites) for key, sites in evidence.items()}
     return values, evidence
 

@@ -448,6 +448,11 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 
     Any other kernel code that names module tables gets the same treatment, through a declaration or a port.
   - **AL016 covers kernel code too.** SQL in a kernel package that references a module-owned table is a violation. A kernel package that contains a module's repository is a violation. This catches what "kernel tables only through kernel repositories" missed.
+- **New metrics:**
+  - `tables_without_owner`
+  - `historical_owner_map_additions`
+  - `kernel_named_module_tables`
+  - `cross_module_sql`
 - **Steps:**
   1. Write and review the historical map.
   2. Generate the combined file.
@@ -825,8 +830,8 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-1.3 | in progress | — | 2026-10-04 | string_runtime_hooks 3 → 0; reverse_contract_imports 22 → 16; AL015 5 → 2; boot imports 2077 | Steps 1, 2 and 5 done (typed ports; hooks deleted). Step 3: RPG, research and agents/tools done (`ASSIST_READOUTS`, `CHAT_RESEARCH`, `TYPED_TURN_ROUTER`); chat store wiring done (`CHAT_STORE_FACTORY`). Remaining: characters (needs conversation-segment ownership moved out of characters), step 4 (prompt budget); memory excluded (PA-3.2) |
 | PA-1.4 | done | — | 2026-10-04 | kernel_tools_naming_apps 3 → 0; AL001 41 → 22 (with the PA-1.3 agents work); AL015 4 → 2 (only kernel pairs left: `assets<->persistence`, `persistence<->security`) | Tools declared through `TOOL_DECLARATIONS`; proposals and agent approvals bound to the capability definition hash (fail closed; migration 0127); catalog digest in diagnostics; permanent tool-catalog golden; agents capability one-way (agent runtime `uses` chat and tools; `TYPED_TURN_ROUTER`, `AGENT_RUN_WORKSPACES`); agent evidence's trading subject through `SECURITY_INSTRUMENTS` |
 | PA-1.5 | in progress | — | 2026-10-04 | AL001 69 → 41; app_to_app_imports 0 | New `FeatureModule.uses` (optional contract dependency). Trading uses research, RPG uses image, desktop companion uses assistant-memory; character interactions, desktop companion, RPG and characters import platform services only through contracts (lazy exports). `replay` was folded into the RPG unit in PA-0.2. Remaining: memory imports (PA-3.2) |
-| PA-2.1 | not started | — | — | — | |
-| PA-2.2 | not started | — | — | — | |
+| PA-2.1 | not started | — | — | — | Needs a design first: the settings profile is one typed API document with every module's section and module-dispatched job defaults; assembling it from declared sections at composition must keep the OpenAPI document and persisted settings unchanged |
+| PA-2.2 | in progress | — | 2026-10-04 | tables_without_owner 0; historical_owner_map_additions 0; cross_module_sql 84 (AL016 baseline); kernel_named_module_tables 36 | Frozen historical owner map (248 tables) and generator; AL016 for Python SQL and module-folder migrations, with the retention registration exception. Remaining: drive the 84 references to zero (retention declarations, RPG repositories out of the kernel, module-record users) |
 | PA-2.3 | not started | — | — | — | |
 | PA-2.4 | not started | — | — | — | |
 | PA-2.5 | not started | — | — | — | |

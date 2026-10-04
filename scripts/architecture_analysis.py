@@ -370,6 +370,83 @@ class SourceAnalysis:
         _, layer, unit = max(candidates)
         return layer, unit
 
+    def table_owner_map(self) -> dict[str, str]:
+        """Every live table's owner: the frozen historical map plus module-folder migrations (PA-2.2)."""
+        import table_ownership
+
+        packages = {"src/" + package.replace(".", "/"): sorted(unit.ids)[0] for package, unit in self.module_units().items()}
+        return table_ownership.table_owners(self.sources, table_ownership.load_historical(self.sources), packages)
+
+    def _code_owner(self, module: str) -> frozenset[str] | None:
+        layer = self.layer_of(module)
+        if layer is None:
+            return None
+        if layer[0] == "kernel":
+            return frozenset({"kernel"})
+        if layer[0] == "shared_services":
+            return frozenset({"shared"})
+        units = self.module_units()
+        return units[layer[1]].ids if layer[1] in units else None
+
+    def table_ownership_violations(self) -> list[Violation]:
+        """AL016: SQL may reference only tables its own module owns (ADR-0016, PA-2.2)."""
+        owners = self.table_owner_map()
+        if not owners:
+            return []
+        position = re.compile(
+            r"\b(?:from|join|into|update|table|references)\s+(?:only\s+|if\s+(?:not\s+)?exists\s+)?([a-z_][a-z0-9_]*)",
+            re.I,
+        )
+        result = []
+        for path, tree in self.trees.items():
+            if not is_production(path, self.config):
+                continue
+            own = self._code_owner(module_name(path))
+            if own is None:
+                continue
+            for node, scope in scoped_nodes(tree):
+                texts = []
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    texts = [node.value]
+                for text in texts:
+                    for match in position.finditer(text):
+                        table = match.group(1).lower()
+                        owner = owners.get(table)
+                        if owner is not None and owner not in own:
+                            result.append(Violation("AL016", path, f"{scope or '<module>'}:{table}", getattr(node, "lineno", 1)))
+        result.extend(self._migration_ownership_violations(owners))
+        return result
+
+    def _migration_ownership_violations(self, owners: dict[str, str]) -> list[Violation]:
+        """A migration in a module's own folder changes only that module's tables."""
+        import table_ownership
+
+        packages = {"src/" + package.replace(".", "/"): sorted(unit.ids)[0] for package, unit in self.module_units().items()}
+        units = {sorted(unit.ids)[0]: unit.ids for unit in self.module_units().values()}
+        statement = re.compile(
+            r"\b(alter\s+table|drop\s+table|create\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?[a-z_0-9]*\s+on|insert\s+into|update|delete\s+from)\s+(?:only\s+|if\s+exists\s+)?([a-z_][a-z0-9_]*)",
+            re.I,
+        )
+        result = []
+        for path, text in table_ownership.migration_sources(self.sources).items():
+            if path.startswith(table_ownership.KERNEL_MIGRATIONS):
+                continue
+            module = table_ownership.module_owner(path, packages)
+            if module is None:
+                continue
+            for match in statement.finditer(text):
+                verb, table = " ".join(match.group(1).lower().split()[:2]), match.group(2).lower()
+                owner = owners.get(table)
+                if owner is None or owner in units.get(module, frozenset({module})):
+                    continue
+                tail = text[match.end():match.end() + 400].lower()
+                if (table in table_ownership.REGISTRATION_TABLES and verb == "insert into"
+                        and "on conflict do nothing" in " ".join(tail.split()).split(";")[0]):
+                    continue
+                line = text.count("\n", 0, match.start()) + 1
+                result.append(Violation("AL016", path, f"<migration>:{verb}:{table}", line))
+        return result
+
     def reciprocal_dependencies(self) -> list[tuple[str, str]]:
         """Distinct packages or modules that import each other at any import scope (AL015).
 

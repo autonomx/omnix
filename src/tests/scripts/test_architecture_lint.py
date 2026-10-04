@@ -55,6 +55,7 @@ CASES = [
     ("AL013", {APP + "rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
     ("AL015", {APP + "chat/a.py": "def work():\n    import app.rpg.b", APP + "rpg/b.py": "def work():\n    import app.chat.a"}),
+    ("AL016", {APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]
 
 
@@ -492,3 +493,39 @@ def test_a_declared_use_allows_the_contract_import_in_one_direction():
 
     sources[APP + "rpg/adapter.py"] = "from app.image.providers import Provider\n"
     assert layer_violations(sources)
+
+
+HISTORICAL = "resources/architecture/historical-table-owners.json"
+
+
+def _owned_tables(**owners):
+    import json as _json
+
+    migration = "".join(f"CREATE TABLE {table} (id int);\n" for table in owners)
+    tables = {table: {"owner": owner, "created_by": "0001_platform"} for table, owner in owners.items()}
+    return {OLD: migration, HISTORICAL: _json.dumps({"schema_version": 1, "tables": tables})}
+
+
+def _al016(sources):
+    return {entry["fingerprint"] for entry in report(sources)["violations"] if entry["rule"] == "AL016"}
+
+
+def test_al016_flags_sql_against_another_modules_table_in_a_table_position():
+    sources = {**_owned_tables(omnix_rpg_turns="rpg", omnix_chat_sessions="chat"),
+               APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'\nOWN = 'UPDATE omnix_chat_sessions SET x = 1'\n"
+                                  "NOTE = 'the omnix_rpg_turns table is RPG data'\n"}
+    assert _al016(sources) == {"<module>:omnix_rpg_turns"}
+
+
+def test_al016_flags_kernel_code_naming_a_module_table():
+    sources = {**_owned_tables(omnix_rpg_turns="rpg"),
+               APP + "persistence/retention.py": "SQL = 'DELETE FROM omnix_rpg_turns WHERE x'\n"}
+    assert _al016(sources) == {"<module>:omnix_rpg_turns"}
+
+
+def test_al016_checks_migrations_in_module_folders_and_allows_registration_rows():
+    sources = {**_owned_tables(omnix_chat_sessions="chat", omnix_retention_policies="kernel"),
+               APP + "rpg/migrations/0200_rpg_extra.sql": (
+                   "ALTER TABLE omnix_chat_sessions ADD COLUMN x int;\n"
+                   "INSERT INTO omnix_retention_policies (record_type) VALUES ('rpg') ON CONFLICT DO NOTHING;\n")}
+    assert _al016(sources) == {"<migration>:alter table:omnix_chat_sessions"}
