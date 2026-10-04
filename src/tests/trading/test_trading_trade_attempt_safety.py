@@ -117,7 +117,7 @@ def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> 
 
 def test_trade_attempt_migration_versions_repeat_symbol_correlation_atomically() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0046_trading_trade_attempt_correlation.sql"
+        "src/app/trading/migrations/0046_trading_trade_attempt_correlation.sql"
     ).read_text()
     for token in (
         "trade_attempt_id",

@@ -17,7 +17,7 @@ from app.persistence.migrations import (
     SchemaCompatibilityError,
     apply_migrations,
     assert_schema_compatible,
-    migration_root,
+    migration_roots,
     migration_status,
 )
 
@@ -92,8 +92,10 @@ def test_migration_advisory_lock_excludes_second_connection() -> None:
 def _future_migration_root(tmp_path: Path) -> Path:
     root = tmp_path / "future-migrations"
     root.mkdir()
-    for migration in migration_root().glob("*.sql"):
-        shutil.copyfile(migration, root / migration.name)
+    # Every folder the runner reads (kernel and module migrations, PA-2.3).
+    for folder in migration_roots():
+        for migration in folder.glob("*.sql"):
+            shutil.copyfile(migration, root / migration.name)
     return root
 
 

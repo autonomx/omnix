@@ -148,7 +148,7 @@ def test_locked_model_reports_dated_oos_calibration_and_evidence_volume() -> Non
 
 
 def test_model_artifacts_have_relational_authority_and_no_execution_gate() -> None:
-    migration = Path("src/app/persistence/migrations/0040_trading_model_artifacts.sql").read_text()
+    migration = Path("src/app/trading/migrations/0040_trading_model_artifacts.sql").read_text()
     model_api = Path("src/app/trading/model_api.py").read_text().lower()
     strategy_monitor = Path("src/app/trading/strategy_monitor.py").read_text().lower()
 

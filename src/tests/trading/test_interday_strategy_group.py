@@ -39,7 +39,7 @@ def test_strategy_document_rejects_self_parent() -> None:
 
 
 def test_interday_migration_renames_and_attaches_children() -> None:
-    migration = Path(__file__).parents[2] / "app/persistence/migrations/0068_trading_interday_strategy_group.sql"
+    migration = Path(__file__).parents[2] / "app/trading/migrations/0068_trading_interday_strategy_group.sql"
     sql = migration.read_text(encoding="utf-8")
 
     assert "finviz-learning-v2-shadow" in sql
@@ -53,7 +53,7 @@ def test_interday_migration_renames_and_attaches_children() -> None:
 def test_early_single_migration_clones_stoch_rsi_child_into_interday_group() -> None:
     migration = (
         Path(__file__).parents[2]
-        / "app/persistence/migrations/0123_trading_interday_stoch_rsi_early_single.sql"
+        / "app/trading/migrations/0123_trading_interday_stoch_rsi_early_single.sql"
     )
     sql = migration.read_text(encoding="utf-8")
 

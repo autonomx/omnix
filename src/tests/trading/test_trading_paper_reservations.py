@@ -132,7 +132,7 @@ def test_idempotency_key_reuse_requires_identical_semantic_payload() -> None:
 
 def test_paper_reservation_schema_and_repository_guards_are_present() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0035_trading_paper_reservations.sql"
+        "src/app/trading/migrations/0035_trading_paper_reservations.sql"
     ).read_text()
     assert "reserved_quantity" in migration
     assert "reserved_cash" in migration

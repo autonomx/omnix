@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 def test_lifecycle_correlation_migration_uses_existing_canonical_trade_record() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0045_trading_trade_lifecycle_correlation.sql"
+        "src/app/trading/migrations/0045_trading_trade_lifecycle_correlation.sql"
     ).read_text()
     for token in (
         "omnix_trading_paper_trade_records",
@@ -32,7 +32,7 @@ def test_lifecycle_correlation_migration_uses_existing_canonical_trade_record() 
 
 def test_historical_strategy_revision_is_not_fabricated_during_backfill() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0045_trading_trade_lifecycle_correlation.sql"
+        "src/app/trading/migrations/0045_trading_trade_lifecycle_correlation.sql"
     ).read_text()
     assert "the historical\n-- config revision cannot be inferred safely" in migration
     # The current config revision is read only by the BEFORE INSERT trigger for

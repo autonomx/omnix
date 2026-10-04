@@ -277,14 +277,14 @@ def test_legal_operator_and_release_records_are_present() -> None:
 
 def test_release_migrations_preserve_integrity_evidence() -> None:
     sequencing = Path(
-        "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
+        "src/app/trading/migrations/0024_trading_backtest_bar_indices.sql"
     ).read_text(encoding="utf-8")
     assert "signal_bar_index IS NULL AND fill_bar_index IS NULL" in sequencing
     assert "fill_bar_index = signal_bar_index + 1" in sequencing
     assert "trade_index * 2" not in sequencing
 
     artifacts = Path(
-        "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
+        "src/app/trading/migrations/0025_trading_backtest_artifacts.sql"
     ).read_text(encoding="utf-8")
     for column in (
         "win_rate_percent",
@@ -298,7 +298,7 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
     assert "length(artifact_checksum_sha256) = 64" in artifacts
 
     strategy = Path(
-        "src/app/persistence/migrations/0038_trading_strategy_automation.sql"
+        "src/app/trading/migrations/0038_trading_strategy_automation.sql"
     ).read_text(encoding="utf-8")
     for table in (
         "omnix_trading_strategy_configs",
@@ -310,12 +310,12 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
         assert f"CREATE TABLE IF NOT EXISTS {table}" in strategy
 
     paper_protection = Path(
-        "src/app/persistence/migrations/0039_trading_paper_protections.sql"
+        "src/app/trading/migrations/0039_trading_paper_protections.sql"
     ).read_text(encoding="utf-8")
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in paper_protection
 
     model_artifacts = Path(
-        "src/app/persistence/migrations/0040_trading_model_artifacts.sql"
+        "src/app/trading/migrations/0040_trading_model_artifacts.sql"
     ).read_text(encoding="utf-8")
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_model_artifacts" in model_artifacts
     assert "CHECK (shadow_only = TRUE)" in model_artifacts

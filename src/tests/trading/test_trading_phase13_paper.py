@@ -401,7 +401,7 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
 
 
 def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> None:
-    migration = Path("src/app/persistence/migrations/0023_trading_paper.sql").read_text()
+    migration = Path("src/app/trading/migrations/0023_trading_paper.sql").read_text()
     for table in (
         "omnix_trading_paper_accounts",
         "omnix_trading_paper_balances",
@@ -414,7 +414,7 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     assert "idempotency_key" in migration
 
     protection_migration = Path(
-        "src/app/persistence/migrations/0039_trading_paper_protections.sql"
+        "src/app/trading/migrations/0039_trading_paper_protections.sql"
     ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in protection_migration
 

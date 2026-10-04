@@ -74,7 +74,7 @@ def test_monitor_does_not_poll_or_evaluate_expired_chart_alerts() -> None:
 
 def test_expiration_is_postgres_authority_and_evaluation_filter() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0026_trading_alert_expiration.sql"
+        "src/app/trading/migrations/0026_trading_alert_expiration.sql"
     ).read_text()
     implementation = Path("src/app/trading/alerts.py").read_text()
     assert "ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ" in migration

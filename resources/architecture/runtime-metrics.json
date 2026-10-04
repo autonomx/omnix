@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-04T22:33:09.554001+00:00",
+  "measured_at": "2026-10-04T22:55:24.569924+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "bfac1ab208b802edc473438387f225d0e9ffbfafa81c4cc2d6b6f101d8db47ff"
+  "source_digest": "9a387bb6e562253b3678a40b08fdce06e100b272c703bc31bb848c92ac6df1fd"
 }

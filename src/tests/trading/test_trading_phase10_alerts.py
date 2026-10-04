@@ -155,9 +155,9 @@ def alert(
 
 
 def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
-    migration = Path("src/app/persistence/migrations/0020_trading_alerts.sql").read_text()
+    migration = Path("src/app/trading/migrations/0020_trading_alerts.sql").read_text()
     trendline_migration = Path(
-        "src/app/persistence/migrations/0036_trading_trendline_alerts.sql"
+        "src/app/trading/migrations/0036_trading_trendline_alerts.sql"
     ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alerts" in migration
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alert_triggers" in migration
