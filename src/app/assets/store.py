@@ -14,13 +14,25 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, BinaryIO, Iterator
+from typing import Any, BinaryIO, Iterator, Protocol
 
 from app.runtime.paths import resources_data_root
+from app.runtime.ports import Port, optional
 
 from .content import delete_asset_content
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
 from .paging import paginate_assets
+
+
+class LegacyImageManifestReader(Protocol):
+    def __call__(self) -> dict[str, Any]: ...
+
+
+# ADR-0016: the image feature contributes its legacy manifest; the kernel never
+# imports image. Without the image feature there is no legacy image manifest.
+LEGACY_IMAGE_MANIFEST: Port[LegacyImageManifestReader] = Port(
+    "assets.legacy_image_manifest", LegacyImageManifestReader, "at_most_one",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,9 +261,8 @@ class SharedAssetStore:
         image_manifest: dict[str, Any] | None = None,
     ) -> AssetMigrationPreview:
         if image_manifest is None:
-            from app.image.asset_store import get_image_asset_manifest
-
-            image_manifest = get_image_asset_manifest()
+            reader = optional(LEGACY_IMAGE_MANIFEST)
+            image_manifest = reader() if reader is not None else {}
 
         records: list[AssetRecord] = []
         missing: list[dict[str, Any]] = []

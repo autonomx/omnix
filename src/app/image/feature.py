@@ -4,7 +4,10 @@ from __future__ import annotations
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.platform.effective_defaults import apply_job_defaults
+from app.assets.store import LEGACY_IMAGE_MANIFEST
+from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureContext, FeatureModule
+from app.runtime.ports import ContributionSpec
 
 from .jobs import execute_image_job
 from .contracts import ImageGenerateInput
@@ -50,6 +53,21 @@ def _workspace_router(context: FeatureContext):
     return create_image_workspace_router(jobs, assets)
 
 
+class _ImageProviderCatalog:
+    family = "image"
+
+    def list_providers(self):
+        from .providers.registry import list_image_providers
+
+        return list_image_providers()
+
+
+def _legacy_image_manifest():
+    from .asset_store import get_image_asset_manifest
+
+    return get_image_asset_manifest()
+
+
 FEATURE = FeatureModule(
     id="image",
     title="Images",
@@ -65,5 +83,9 @@ FEATURE = FeatureModule(
             max_attempts=3,
             submission_policy=_submission_defaults,
         ),
+    ),
+    contributions=(
+        ContributionSpec(PROVIDER_CATALOGS, lambda _context: _ImageProviderCatalog()),
+        ContributionSpec(LEGACY_IMAGE_MANIFEST, lambda _context: _legacy_image_manifest),
     ),
 )

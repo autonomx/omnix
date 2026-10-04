@@ -6,7 +6,9 @@ from app.jobs.models import CreateJobRequest, ResourceClass
 from app.platform.effective_defaults import apply_job_defaults
 from app.runtime.background import BackgroundWorker
 from app.runtime.capabilities import RuntimeCapability
+from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureModule
+from app.runtime.ports import ContributionSpec
 
 from .persistence.feature_repositories import RPG_REPOSITORY_SPECS
 from .api.compat_router import create_rpg_compatibility_router
@@ -70,6 +72,15 @@ def _campaign_genesis_worker(context):
         requires=frozenset({RuntimeCapability.RUN_JOB_WORKERS}),
     )
 
+class _VisualProviderCatalog:
+    family = "rpg_visual"
+
+    def list_providers(self):
+        from .visual.providers.registry import list_visual_provider_options
+
+        return list_visual_provider_options()
+
+
 FEATURE = FeatureModule(
     id="rpg",
     title="RPG",
@@ -97,4 +108,5 @@ FEATURE = FeatureModule(
             timeout_seconds=120,
         ),
     ),
+    contributions=(ContributionSpec(PROVIDER_CATALOGS, lambda _context: _VisualProviderCatalog()),),
 )

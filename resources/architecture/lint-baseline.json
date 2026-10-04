@@ -113,15 +113,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "SharedAssetStore.preview_image_manifest_import:app.image.asset_store",
-      "lines": [
-        252
-      ],
-      "path": "src/app/assets/store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.capability_dashboard",
       "lines": [
         13
@@ -816,24 +807,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "ProviderFacade._list_image:app.image.providers.registry",
-      "lines": [
-        311
-      ],
-      "path": "src/app/providers/facade.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ProviderFacade._list_visual:app.rpg.visual.providers.registry",
-      "lines": [
-        318
-      ],
-      "path": "src/app/providers/facade.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "default_research_source_store:app.runtime_composition",
       "lines": [
         262
@@ -1034,15 +1007,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "app.assets<->app.image",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assets/",
-      "rule": "AL015"
-    },
-    {
-      "count": 1,
       "fingerprint": "app.assets<->app.persistence",
       "lines": [
         1
@@ -1066,15 +1030,6 @@
         1
       ],
       "path": "src/app/persistence/",
-      "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.providers<->app.rpg",
-      "lines": [
-        1
-      ],
-      "path": "src/app/providers/",
       "rule": "AL015"
     }
   ]

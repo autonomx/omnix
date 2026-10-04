@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 110,
+      "AL001": 107,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -2485,11 +2485,9 @@
       "any_scope_package_cycles": [
         "app.agent_runtime<->app.assistant_tools",
         "app.agent_runtime<->app.chat",
-        "app.assets<->app.image",
         "app.assets<->app.persistence",
         "app.chat<->app.rpg",
-        "app.persistence<->app.security",
-        "app.providers<->app.rpg"
+        "app.persistence<->app.security"
       ],
       "app_to_app_imports": [],
       "composition_imports_outside_composition": [
@@ -2720,7 +2718,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 40,
+        "line": 52,
         "path": "src/app/assets/store.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROCESS_LOCK"
@@ -6611,7 +6609,7 @@
     "any_scope_package_cycles": {
       "direction": "lower",
       "target": 0,
-      "value": 7
+      "value": 5
     },
     "app_to_app_imports": {
       "direction": "lower",
@@ -6716,7 +6714,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 110
+      "value": 107
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6921,5 +6919,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "71a9a2b6e417f2163abed6143ae6dacc3acef43916354487bfa29249798db92c"
+  "source_digest": "b341d54e72c6e2c3965619ebabaa070075cc65feb9fecfcd100930f1924564b6"
 }
