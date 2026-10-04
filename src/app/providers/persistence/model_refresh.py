@@ -1,6 +1,8 @@
 """PostgreSQL-backed provider refresh persistence."""
 from __future__ import annotations
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 import uuid
 from typing import Any
 
@@ -86,3 +88,8 @@ class PostgresProviderModelRefreshStore:
 
 # Document shapes (WP-5.9).
 register_document_schema("providers", "model-refresh-snapshot", ProviderModelRefreshSnapshot)
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
+def production_provider_refresh_store() -> PostgresProviderModelRefreshStore:
+    return PostgresProviderModelRefreshStore()

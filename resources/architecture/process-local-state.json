@@ -1294,40 +1294,13 @@
       "invalidation": "_default_production_job_store.cache_clear"
     },
     {
-      "path": "src/app/runtime_composition.py",
+      "path": "src/app/persistence/shared_asset_store.py",
       "symbol": "production_asset_store.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
       "max_entries": 1,
       "ttl_seconds": 3600.0,
       "invalidation": "production_asset_store.cache_clear"
-    },
-    {
-      "path": "src/app/runtime_composition.py",
-      "symbol": "production_conversation_profile_store.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "production_conversation_profile_store.cache_clear"
-    },
-    {
-      "path": "src/app/runtime_composition.py",
-      "symbol": "production_evaluation_store.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "production_evaluation_store.cache_clear"
-    },
-    {
-      "path": "src/app/runtime_composition.py",
-      "symbol": "production_memory_settings_store.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "production_memory_settings_store.cache_clear"
     },
     {
       "path": "src/app/runtime_composition.py",
@@ -1339,7 +1312,7 @@
       "invalidation": "production_model_residency_store.cache_clear"
     },
     {
-      "path": "src/app/runtime_composition.py",
+      "path": "src/app/providers/persistence/model_refresh.py",
       "symbol": "production_provider_refresh_store.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1348,22 +1321,13 @@
       "invalidation": "production_provider_refresh_store.cache_clear"
     },
     {
-      "path": "src/app/runtime_composition.py",
+      "path": "src/app/research/persistence/source_store.py",
       "symbol": "production_research_source_store.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
       "max_entries": 1,
       "ttl_seconds": 3600.0,
       "invalidation": "production_research_source_store.cache_clear"
-    },
-    {
-      "path": "src/app/runtime_document_services.py",
-      "symbol": "production_document_services.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "production_document_services.cache_clear"
     },
     {
       "path": "src/app/settings/access.py",

@@ -172,7 +172,7 @@ def default_provider_model_refresh_db_path() -> Path:
 def default_provider_model_refresh_store() -> InMemoryProviderModelRefreshStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_provider_refresh_store
+        from app.providers.persistence.model_refresh import production_provider_refresh_store
         return production_provider_refresh_store()
     return InMemoryProviderModelRefreshStore()
 

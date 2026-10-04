@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 from pathlib import Path
 from typing import Any
 
@@ -215,3 +217,8 @@ class PostgresSharedAssetStoreAdapter:
         import json
 
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
+def production_asset_store() -> PostgresSharedAssetStoreAdapter:
+    return PostgresSharedAssetStoreAdapter()

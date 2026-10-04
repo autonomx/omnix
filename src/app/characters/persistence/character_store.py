@@ -284,3 +284,10 @@ class PostgresCharacterRepositoryAdapter:
             started_at=row[10].isoformat(),
             ended_at=row[11].isoformat() if row[11] is not None else None,
         )
+
+
+def production_character_repository() -> PostgresCharacterRepositoryAdapter:
+    from app.persistence.repository_registry import register_feature_repositories
+
+    register_feature_repositories("characters")
+    return PostgresCharacterRepositoryAdapter()

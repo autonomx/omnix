@@ -924,3 +924,10 @@ def reset_default_chat_runtime_caches() -> None:
 
 # Document shapes (WP-5.9).
 register_document_schema("chat", "conversation-summary", ConversationSummary)
+
+
+def production_summary_repository() -> PostgresConversationSummaryRepository:
+    from app.persistence.repository_registry import register_feature_repositories
+
+    register_feature_repositories("chat")
+    return PostgresConversationSummaryRepository()

@@ -2,55 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from app.persistence.document_store import PostgresDocumentStore
 from app.persistence.document_schemas import register_document_schema
-
-
-def read_assist_pending() -> dict[str, Any]:
-    value = PostgresDocumentStore().read(
-        module="assist-core",
-        record_type="pending-reviews",
-        default={},
-    )
-    return dict(value or {})
-
-
-def write_assist_pending(data: dict[str, Any]) -> None:
-    PostgresDocumentStore().write(
-        dict(data),
-        module="assist-core",
-        record_type="pending-reviews",
-    )
-
-
-def add_assist_pending(item: Any) -> None:
-    # Conditional read-modify-write: concurrent additions are not lost (WP-5.9).
-    PostgresDocumentStore().update(
-        lambda current: {**dict(current or {}), str(item.confirmation_id): asdict(item)},
-        module="assist-core",
-        record_type="pending-reviews",
-        default={},
-    )
-
-
-def append_assist_action_log(entry: Any) -> None:
-    payload = asdict(entry)
-    record_id = str(
-        payload.get("action_id")
-        or payload.get("confirmation_id")
-        or payload.get("id")
-        or f"action:{payload.get('created_at') or payload.get('timestamp')}"
-    )
-    PostgresDocumentStore().write(
-        payload,
-        module="assist-core",
-        record_type="action-log",
-        record_id=record_id,
-    )
 
 
 def load_assistant_tools_config(path: Path | None = None):

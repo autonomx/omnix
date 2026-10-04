@@ -1,6 +1,8 @@
 """PostgreSQL-backed research source persistence."""
 from __future__ import annotations
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -123,3 +125,11 @@ class ResearchProvenanceDocument(BaseModel):
 
 # Document shapes (WP-5.9).
 register_document_schema("research", "source-provenance-store", ResearchProvenanceDocument)
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
+def production_research_source_store() -> PostgresResearchSourceStore:
+    from app.persistence.repository_registry import register_feature_repositories
+
+    register_feature_repositories("research")
+    return PostgresResearchSourceStore()

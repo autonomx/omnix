@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 107,
+      "AL001": 76,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -2491,38 +2491,7 @@
       ],
       "app_to_app_imports": [],
       "composition_imports_outside_composition": [
-        "src/app/assets/__init__.py:282:app.runtime_composition",
-        "src/app/assistant_memory/service.py:73:app.runtime_composition",
-        "src/app/assistant_tools/config_store.py:102:app.runtime_document_services",
-        "src/app/assistant_tools/config_store.py:120:app.runtime_document_services",
-        "src/app/character_interactions/routes.py:107:app.runtime_composition",
-        "src/app/characters/avatar_service.py:30:app.runtime_composition",
-        "src/app/characters/service.py:86:app.runtime_composition",
-        "src/app/chat/assist/review.py:25:app.runtime_document_services",
-        "src/app/chat/assist/review.py:39:app.runtime_document_services",
-        "src/app/chat/assist/review.py:47:app.runtime_document_services",
-        "src/app/chat/assist/review.py:57:app.runtime_document_services",
-        "src/app/chat/character_store.py:350:app.runtime_composition",
-        "src/app/chat/compaction.py:242:app.runtime_composition",
-        "src/app/image/asset_store.py:114:app.runtime_document_services",
-        "src/app/image/asset_store.py:123:app.runtime_document_services",
-        "src/app/image/asset_store.py:162:app.runtime_document_services",
-        "src/app/image/asset_store.py:67:app.runtime_document_services",
-        "src/app/image/asset_store.py:95:app.runtime_document_services",
-        "src/app/providers/cache_status.py:175:app.runtime_composition",
-        "src/app/research/source_store.py:262:app.runtime_composition",
-        "src/app/rpg/npc_evolution/profile_store.py:158:app.runtime_document_services",
-        "src/app/rpg/npc_evolution/profile_store.py:308:app.runtime_document_services",
-        "src/app/rpg/npc_evolution/profile_store.py:73:app.runtime_document_services",
-        "src/app/rpg/session/durable_store.py:247:app.runtime_document_services",
-        "src/app/rpg/session/durable_store.py:294:app.runtime_document_services",
-        "src/app/rpg/session/durable_store.py:308:app.runtime_document_services",
-        "src/app/rpg/session/durable_store.py:332:app.runtime_document_services",
-        "src/app/rpg/session/interaction_event_store.py:135:app.runtime_document_services",
-        "src/app/rpg/session/interaction_event_store.py:149:app.runtime_document_services",
-        "src/app/rpg/session/interaction_event_store.py:28:app.runtime_document_services",
-        "src/app/rpg/session/interaction_event_store.py:58:app.runtime_document_services",
-        "src/app/rpg/session/list_summaries.py:127:app.runtime_document_services"
+        "src/app/chat/character_store.py:350:app.runtime_composition"
       ],
       "kernel_tools_naming_apps": [
         "market.status",
@@ -3968,6 +3937,20 @@
       },
       {
         "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "production_asset_store.cache_clear",
+        "kind": "function_cache",
+        "line": 223,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/persistence/shared_asset_store.py",
+        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+        "symbol": "production_asset_store.__cache__",
+        "ttl_seconds": 3600.0
+      },
+      {
+        "approved": true,
         "category": "cache",
         "invalidation": "clear_provider_refresh_history",
         "kind": "container",
@@ -4028,6 +4011,20 @@
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
         "symbol": "_SESSION_STATES",
         "ttl_seconds": 600.0
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "production_provider_refresh_store.cache_clear",
+        "kind": "function_cache",
+        "line": 94,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/providers/persistence/model_refresh.py",
+        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+        "symbol": "production_provider_refresh_store.__cache__",
+        "ttl_seconds": 3600.0
       },
       {
         "approved": true,
@@ -4169,6 +4166,20 @@
         "path": "src/app/research/jobs.py",
         "reason": "This set deduplicates local research threads only; durable job status and ownership remain in the job store, entries are capped at 32, and each thread removes its ID in finally.",
         "symbol": "_RESEARCH_THREAD_JOB_IDS"
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "production_research_source_store.cache_clear",
+        "kind": "function_cache",
+        "line": 131,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/research/persistence/source_store.py",
+        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+        "symbol": "production_research_source_store.__cache__",
+        "ttl_seconds": 3600.0
       },
       {
         "approved": true,
@@ -4427,7 +4438,7 @@
         "category": "cache",
         "invalidation": "_default_production_job_store.cache_clear",
         "kind": "function_cache",
-        "line": 38,
+        "line": 36,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -4439,112 +4450,14 @@
         "approved": true,
         "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
         "category": "cache",
-        "invalidation": "production_asset_store.cache_clear",
-        "kind": "function_cache",
-        "line": 45,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_asset_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_conversation_profile_store.cache_clear",
-        "kind": "function_cache",
-        "line": 123,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_conversation_profile_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_evaluation_store.cache_clear",
-        "kind": "function_cache",
-        "line": 130,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_evaluation_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_memory_settings_store.cache_clear",
-        "kind": "function_cache",
-        "line": 116,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_memory_settings_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
         "invalidation": "production_model_residency_store.cache_clear",
         "kind": "function_cache",
-        "line": 78,
+        "line": 70,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
         "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
         "symbol": "production_model_residency_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_provider_refresh_store.cache_clear",
-        "kind": "function_cache",
-        "line": 84,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_provider_refresh_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_research_source_store.cache_clear",
-        "kind": "function_cache",
-        "line": 137,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_composition.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_research_source_store.__cache__",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
-        "category": "cache",
-        "invalidation": "production_document_services.cache_clear",
-        "kind": "function_cache",
-        "line": 44,
-        "max_entries": 1,
-        "maxsize": 1,
-        "path": "src/app/runtime_document_services.py",
-        "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-        "symbol": "production_document_services.__cache__",
         "ttl_seconds": 3600.0
       },
       {
@@ -5456,6 +5369,11 @@
       },
       {
         "approved": true,
+        "path": "src/app/persistence/shared_asset_store.py",
+        "symbol": "production_asset_store.__cache__"
+      },
+      {
+        "approved": true,
         "path": "src/app/providers/cache_status.py",
         "symbol": "_REFRESH_HISTORY"
       },
@@ -5483,6 +5401,11 @@
         "approved": true,
         "path": "src/app/providers/nemotron_eou_live_websocket.py",
         "symbol": "_SESSION_STATES"
+      },
+      {
+        "approved": true,
+        "path": "src/app/providers/persistence/model_refresh.py",
+        "symbol": "production_provider_refresh_store.__cache__"
       },
       {
         "approved": true,
@@ -5553,6 +5476,11 @@
         "approved": true,
         "path": "src/app/research/jobs.py",
         "symbol": "_RESEARCH_THREAD_JOB_IDS"
+      },
+      {
+        "approved": true,
+        "path": "src/app/research/persistence/source_store.py",
+        "symbol": "production_research_source_store.__cache__"
       },
       {
         "approved": true,
@@ -5677,42 +5605,7 @@
       {
         "approved": true,
         "path": "src/app/runtime_composition.py",
-        "symbol": "production_asset_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
-        "symbol": "production_conversation_profile_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
-        "symbol": "production_evaluation_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
-        "symbol": "production_memory_settings_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
         "symbol": "production_model_residency_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
-        "symbol": "production_provider_refresh_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_composition.py",
-        "symbol": "production_research_source_store.__cache__"
-      },
-      {
-        "approved": true,
-        "path": "src/app/runtime_document_services.py",
-        "symbol": "production_document_services.__cache__"
       },
       {
         "approved": true,
@@ -6649,7 +6542,7 @@
     "composition_imports_outside_composition": {
       "direction": "lower",
       "target": 0,
-      "value": 32
+      "value": 1
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6714,7 +6607,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 107
+      "value": 76
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6919,5 +6812,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "b341d54e72c6e2c3965619ebabaa070075cc65feb9fecfcd100930f1924564b6"
+  "source_digest": "316a8e39625344f32b6284c80a2b87f487910d88ff2ac33beaf514ffee936918"
 }

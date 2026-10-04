@@ -104,7 +104,7 @@ assert character_service.default_character_service().repository.__class__.__name
 
 from app.characters.management import CharacterManagementService
 from app.assistant_memory.owner_defaults import default_memory_service
-from app.runtime_composition import production_owner_memory_repository
+from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 from app.memory_contracts import MemoryScopeContext
 management = CharacterManagementService(
     character_service.default_character_service(),

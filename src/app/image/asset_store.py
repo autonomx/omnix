@@ -64,8 +64,8 @@ def _safe_asset_filename_component(value: str) -> str:
 def save_image_asset_bytes(image_bytes: bytes, mime_type: str, asset_id: str, metadata: Dict[str, Any]):
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_image_asset_bytes(image_bytes, mime_type, asset_id, metadata)
+        from app.image.persistence.image_assets import save_image_asset_bytes_postgres
+        return save_image_asset_bytes_postgres(image_bytes, mime_type, asset_id, metadata)
     _ensure_dirs()
     manifest = _load_manifest()
 
@@ -92,8 +92,8 @@ def save_image_asset_bytes(image_bytes: bytes, mime_type: str, asset_id: str, me
 def register_image_asset_file(file_path: str, asset_id: str, metadata: Dict[str, Any]):
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().register_image_asset_file(file_path, asset_id, metadata)
+        from app.image.persistence.image_assets import register_image_asset_file_postgres
+        return register_image_asset_file_postgres(file_path, asset_id, metadata)
     _ensure_dirs()
     manifest = _load_manifest()
 
@@ -111,8 +111,8 @@ def register_image_asset_file(file_path: str, asset_id: str, metadata: Dict[str,
 def get_image_asset_manifest():
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().get_image_asset_manifest()
+        from app.image.persistence.image_assets import get_image_asset_manifest_postgres
+        return get_image_asset_manifest_postgres()
     return _load_manifest()
 
 
@@ -120,8 +120,8 @@ def delete_image_asset(asset_id: str, *, delete_file: bool = True) -> Dict[str, 
     """Delete a legacy image manifest entry and, by default, its file."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().delete_image_asset(asset_id, delete_file=delete_file)
+        from app.image.persistence.image_assets import delete_image_asset_postgres
+        return delete_image_asset_postgres(asset_id, delete_file=delete_file)
 
     manifest = _load_manifest()
     assets = manifest.setdefault("assets", {})
@@ -159,8 +159,8 @@ def delete_image_asset(asset_id: str, *, delete_file: bool = True) -> Dict[str, 
 def cleanup_unused_image_assets():
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().cleanup_unused_image_assets()
+        from app.image.persistence.image_assets import cleanup_unused_image_assets_postgres
+        return cleanup_unused_image_assets_postgres()
     manifest = _load_manifest()
     existing = set()
 

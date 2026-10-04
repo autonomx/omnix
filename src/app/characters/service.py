@@ -83,7 +83,7 @@ class CharacterService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.runtime_composition import production_character_repository
+                from app.characters.persistence.character_store import production_character_repository
                 repository = production_character_repository()
             else:
                 repository = CharacterRepository()

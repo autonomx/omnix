@@ -279,7 +279,7 @@ def _voice_clone_roots() -> list[AssetLegacyRootScan]:
 def default_asset_store() -> SharedAssetStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_asset_store
+        from app.persistence.shared_asset_store import production_asset_store
         return production_asset_store()
     return SharedAssetStore()
 

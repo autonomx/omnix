@@ -70,7 +70,7 @@ class MemoryService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.runtime_composition import production_memory_repository
+                from app.assistant_memory.persistence.memory_store import production_memory_repository
                 repository = production_memory_repository()
             else:
                 repository = InMemoryMemoryRepository()

@@ -553,3 +553,10 @@ class PostgresMemoryRepositoryAdapter:
             created_at=row[5].isoformat(),
             items=items,
         )
+
+
+def production_memory_repository() -> PostgresMemoryRepositoryAdapter:
+    from app.persistence.repository_registry import register_feature_repositories
+
+    register_feature_repositories("assistant-memory")
+    return PostgresMemoryRepositoryAdapter()

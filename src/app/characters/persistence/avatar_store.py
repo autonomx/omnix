@@ -159,3 +159,10 @@ __all__ = ["PostgresCharacterAvatarRepositoryAdapter"]
 
 # Document shapes (WP-5.9).
 register_document_schema(_MODULE, _RECORD_TYPE, CharacterAvatarPack)
+
+
+def production_avatar_repository() -> PostgresCharacterAvatarRepositoryAdapter:
+    from app.persistence.repository_registry import register_feature_repositories
+
+    register_feature_repositories("characters")
+    return PostgresCharacterAvatarRepositoryAdapter()

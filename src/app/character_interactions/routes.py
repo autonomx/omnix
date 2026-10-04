@@ -104,8 +104,8 @@ def register_character_integration_routes(
                 )
 
                 return OwnerAwareInMemoryMemoryRepository()
-            from app.runtime_composition import production_owner_memory_repository
-            return production_owner_memory_repository()
+            from app.assistant_memory.contracts import owner_memory_repository
+            return owner_memory_repository()
 
     def character_hermes_context(character_id: str):
         service_factory().get(character_id)

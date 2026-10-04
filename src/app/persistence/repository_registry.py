@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from threading import RLock
 from types import MappingProxyType
-from typing import Any, Callable, Hashable, Mapping
+from typing import Any, Callable, Hashable, Mapping, cast
 
 RepositoryFactory = Callable[[Any], Any]
 
@@ -72,3 +72,11 @@ def registered_repository_aliases() -> tuple[str, ...]:
 
 def clear_repository_specs_for_tests() -> None:
     reset_repository_specs()
+
+
+def register_feature_repositories(feature_id: str) -> None:
+    """Register one feature's repository specs outside gateway composition."""
+    from app.runtime.feature_catalog import load_feature
+
+    # FeatureModule types repositories structurally; the catalog holds this registry's specs.
+    register_repository_specs(cast(tuple[RepositorySpec, ...], tuple(load_feature(feature_id).repositories)))

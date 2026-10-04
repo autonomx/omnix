@@ -244,8 +244,8 @@ def _save_session_to_disk(
     """Normalize, migrate, and persist session to disk-backed JSON."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_session_to_disk(session, compact=compact)
+        from app.rpg.persistence.rpg_compat import save_session_to_postgres
+        return save_session_to_postgres(session, compact=compact)
     session = _normalize_session(session)
     session = migrate_session_payload(session)
     manifest = _safe_dict(session.get("manifest"))
@@ -291,8 +291,8 @@ def _load_session_from_disk(
     """Load and normalize a session from disk with migration. Returns None if not found."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_session_from_disk(session_id)
+        from app.rpg.persistence.rpg_compat import load_session_from_postgres
+        return load_session_from_postgres(session_id)
     path = _session_path(session_id, session_dir=session_dir)
     if not path.exists():
         return None
@@ -305,8 +305,8 @@ def list_sessions_from_disk() -> list[dict[str, Any]]:
     """List all persisted sessions from disk with migration, normalized and sorted."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().list_sessions_from_disk()
+        from app.rpg.persistence.rpg_compat import list_sessions_from_postgres
+        return list_sessions_from_postgres()
     ensure_session_dir()
     sessions: list[dict[str, Any]] = []
     for path in sorted(_SESSION_DIR.glob("*.json")):
@@ -329,8 +329,8 @@ def archive_session_on_disk(session_id: str) -> dict[str, Any]:
     """Archive a session on disk by setting archived=True in manifest and persisting."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().archive_session_on_disk(session_id)
+        from app.rpg.persistence.rpg_compat import archive_session_in_postgres
+        return archive_session_in_postgres(session_id)
     session = load_session_from_disk(session_id)
     if session is None:
         return {"ok": False, "error": "session_not_found"}

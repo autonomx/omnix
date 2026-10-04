@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "94b7d65f801de2eec7516def926ac5321fff44acba45c68df4076430a81ffc13",
+  "policy_digest": "04fc7ddca4e540999f2a39bebbcd66d99b431ee4cafa7a5fc73442f1094747d8",
   "rules": [
     "AL001",
     "AL002",
@@ -104,29 +104,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "default_asset_store:app.runtime_composition",
-      "lines": [
-        282
-      ],
-      "path": "src/app/assets/__init__.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.capability_dashboard",
       "lines": [
         13
       ],
       "path": "src/app/assistant_memory/initiative.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "MemoryService.__init__:app.runtime_composition",
-      "lines": [
-        73
-      ],
-      "path": "src/app/assistant_memory/service.py",
       "rule": "AL001"
     },
     {
@@ -143,24 +125,6 @@
       "fingerprint": "_default_tool_enabled:app.trading.providers.alpaca_iex",
       "lines": [
         152
-      ],
-      "path": "src/app/assistant_tools/config_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "load_assistant_tools_config:app.runtime_document_services",
-      "lines": [
-        102
-      ],
-      "path": "src/app/assistant_tools/config_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "save_assistant_tools_config:app.runtime_document_services",
-      "lines": [
-        120
       ],
       "path": "src/app/assistant_tools/config_store.py",
       "rule": "AL001"
@@ -293,15 +257,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "register_character_integration_routes.memory_repository_factory:app.runtime_composition",
-      "lines": [
-        107
-      ],
-      "path": "src/app/character_interactions/routes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_character_integration_routes:app.assistant_memory",
       "lines": [
         93
@@ -338,24 +293,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "CharacterAvatarService.__init__:app.runtime_composition",
-      "lines": [
-        30
-      ],
-      "path": "src/app/characters/avatar_service.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CharacterService.__init__:app.runtime_composition",
-      "lines": [
-        86
-      ],
-      "path": "src/app/characters/service.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.contracts",
       "lines": [
         10
@@ -370,42 +307,6 @@
         38
       ],
       "path": "src/app/chat/assist/modes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "add_pending:app.runtime_document_services",
-      "lines": [
-        47
-      ],
-      "path": "src/app/chat/assist/review.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "append_log:app.runtime_document_services",
-      "lines": [
-        57
-      ],
-      "path": "src/app/chat/assist/review.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "read_pending:app.runtime_document_services",
-      "lines": [
-        25
-      ],
-      "path": "src/app/chat/assist/review.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "write_pending:app.runtime_document_services",
-      "lines": [
-        39
-      ],
-      "path": "src/app/chat/assist/review.py",
       "rule": "AL001"
     },
     {
@@ -467,15 +368,6 @@
       "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
         18
-      ],
-      "path": "src/app/chat/compaction.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_summary_repository:app.runtime_composition",
-      "lines": [
-        242
       ],
       "path": "src/app/chat/compaction.py",
       "rule": "AL001"
@@ -749,177 +641,6 @@
         11
       ],
       "path": "src/app/desktop_companion/routes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "cleanup_unused_image_assets:app.runtime_document_services",
-      "lines": [
-        162
-      ],
-      "path": "src/app/image/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "delete_image_asset:app.runtime_document_services",
-      "lines": [
-        123
-      ],
-      "path": "src/app/image/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "get_image_asset_manifest:app.runtime_document_services",
-      "lines": [
-        114
-      ],
-      "path": "src/app/image/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_image_asset_file:app.runtime_document_services",
-      "lines": [
-        95
-      ],
-      "path": "src/app/image/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "save_image_asset_bytes:app.runtime_document_services",
-      "lines": [
-        67
-      ],
-      "path": "src/app/image/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_provider_model_refresh_store:app.runtime_composition",
-      "lines": [
-        175
-      ],
-      "path": "src/app/providers/cache_status.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_research_source_store:app.runtime_composition",
-      "lines": [
-        262
-      ],
-      "path": "src/app/research/source_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "load_npc_evolution_profiles_for_runtime:app.runtime_document_services",
-      "lines": [
-        308
-      ],
-      "path": "src/app/rpg/npc_evolution/profile_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "load_npc_profile:app.runtime_document_services",
-      "lines": [
-        73
-      ],
-      "path": "src/app/rpg/npc_evolution/profile_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "persist_npc_evolution_profiles:app.runtime_document_services",
-      "lines": [
-        158
-      ],
-      "path": "src/app/rpg/npc_evolution/profile_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_load_session_from_disk:app.runtime_document_services",
-      "lines": [
-        294
-      ],
-      "path": "src/app/rpg/session/durable_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_save_session_to_disk:app.runtime_document_services",
-      "lines": [
-        247
-      ],
-      "path": "src/app/rpg/session/durable_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "archive_session_on_disk:app.runtime_document_services",
-      "lines": [
-        332
-      ],
-      "path": "src/app/rpg/session/durable_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "list_sessions_from_disk:app.runtime_document_services",
-      "lines": [
-        308
-      ],
-      "path": "src/app/rpg/session/durable_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "append_interaction_event:app.runtime_document_services",
-      "lines": [
-        28
-      ],
-      "path": "src/app/rpg/session/interaction_event_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "compact_interaction_event_log:app.runtime_document_services",
-      "lines": [
-        135
-      ],
-      "path": "src/app/rpg/session/interaction_event_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "interaction_event_log_status:app.runtime_document_services",
-      "lines": [
-        149
-      ],
-      "path": "src/app/rpg/session/interaction_event_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "load_interaction_events:app.runtime_document_services",
-      "lines": [
-        58
-      ],
-      "path": "src/app/rpg/session/interaction_event_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "list_session_summaries_from_disk:app.runtime_document_services",
-      "lines": [
-        127
-      ],
-      "path": "src/app/rpg/session/list_summaries.py",
       "rule": "AL001"
     },
     {

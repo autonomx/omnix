@@ -56,3 +56,10 @@ __all__ = [
     "select_memory_records",
     "use_memory_runtime_settings",
 ]
+
+
+def owner_memory_repository():
+    """The owner-aware memory repository for the PostgreSQL runtime (public API)."""
+    from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
+
+    return production_owner_memory_repository()

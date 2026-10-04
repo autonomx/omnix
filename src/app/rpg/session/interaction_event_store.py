@@ -25,8 +25,8 @@ def interaction_event_log_path(session_id: str) -> Path:
 def append_interaction_event(session_id: str, event: dict[str, Any]) -> dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().append_interaction_event(session_id, event)
+        from app.rpg.persistence.rpg_compat import append_interaction_event_postgres
+        return append_interaction_event_postgres(session_id, event)
     path = interaction_event_log_path(session_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     canonical = _canonical_event_json(event)
@@ -55,8 +55,8 @@ def load_interaction_events(
 ) -> list[dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_interaction_events(session_id, after_sequence=after_sequence, limit=limit)
+        from app.rpg.persistence.rpg_compat import load_interaction_events_postgres
+        return load_interaction_events_postgres(session_id, after_sequence=after_sequence, limit=limit)
     path = interaction_event_log_path(session_id)
     if not path.exists():
         return []
@@ -132,8 +132,8 @@ def interaction_log_requires_compaction(session_id: str) -> bool:
 def compact_interaction_event_log(session_id: str, *, through_sequence: int) -> int:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().compact_interaction_event_log(session_id, through_sequence=through_sequence)
+        from app.rpg.persistence.rpg_compat import compact_interaction_events_postgres
+        return compact_interaction_events_postgres(session_id, through_sequence=through_sequence)
     path = interaction_event_log_path(session_id)
     if not path.exists():
         return 0
@@ -146,8 +146,8 @@ def compact_interaction_event_log(session_id: str, *, through_sequence: int) -> 
 def interaction_event_log_status(session_id: str) -> dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().interaction_event_log_status(session_id)
+        from app.rpg.persistence.rpg_compat import interaction_log_status_postgres
+        return interaction_log_status_postgres(session_id)
     path = interaction_event_log_path(session_id)
     return {
         "format_version": INTERACTION_EVENT_LOG_VERSION,

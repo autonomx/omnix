@@ -1,14 +1,12 @@
-"""Explicit production repository factories; no imported classes are replaced."""
+"""Explicit production factories that wire several features together.
+
+Each feature owns the factory for its own repositories (ADR-0016, PA-1.2);
+only cross-feature wiring and kernel stores composed with feature adapters
+remain here, and only composition imports this module.
+"""
 
 from app.caching.bounded_cache import bounded_lru_cache
-
-
-def _register_feature_repositories(feature_id: str) -> None:
-    from app.persistence.repository_registry import register_repository_specs
-    from app.runtime.feature_catalog import load_feature
-
-    feature = load_feature(feature_id)
-    register_repository_specs(tuple(feature.repositories))
+from app.persistence.repository_registry import register_feature_repositories
 
 
 def production_job_store(
@@ -41,14 +39,8 @@ def _default_production_job_store():
     return PostgresJobStoreAdapter()
 
 
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_asset_store():
-    from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
-    return PostgresSharedAssetStoreAdapter()
-
-
 def production_chat_store(*, job_service=None, live_agent_planner=None):
-    _register_feature_repositories("chat")
+    register_feature_repositories("chat")
     from app.chat.persistence.chat_runtime import (
         PostgresCharacterChatSessionStore,
         default_chat_store,
@@ -80,73 +72,10 @@ def production_model_residency_store():
     return PostgresModelResidencyStore()
 
 
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_provider_refresh_store():
-    from app.providers.persistence.model_refresh import PostgresProviderModelRefreshStore
-    return PostgresProviderModelRefreshStore()
-
-
-def production_character_repository():
-    _register_feature_repositories("characters")
-    from app.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
-    return PostgresCharacterRepositoryAdapter()
-
-
-def production_avatar_repository():
-    _register_feature_repositories("characters")
-    from app.characters.persistence.avatar_store import PostgresCharacterAvatarRepositoryAdapter
-    return PostgresCharacterAvatarRepositoryAdapter()
-
-
-def production_memory_repository():
-    _register_feature_repositories("assistant-memory")
-    from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
-    return PostgresMemoryRepositoryAdapter()
-
-
 def production_owner_memory_repository():
-    """Curated memory records follow the memory authority (v1, then Memory v2)."""
-    _register_feature_repositories("assistant-memory")
-    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
-    from app.assistant_memory_v2.memory_repository import MemoryAuthorityRoutedRepository
-    return MemoryAuthorityRoutedRepository(PostgresOwnerAwareMemoryRepository())
+    """Imported only when the memory service first needs a repository."""
+    from app.assistant_memory.persistence.owner_memory_store import (
+        production_owner_memory_repository as owner_memory_repository,
+    )
 
-
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_memory_settings_store():
-    from app.assistant_memory.persistence.settings_store import SettingsServiceAssistantMemorySettingsStore
-    from app.settings.access import current_settings_service
-    return SettingsServiceAssistantMemorySettingsStore(current_settings_service())
-
-
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_conversation_profile_store():
-    _register_feature_repositories("characters")
-    from app.characters.persistence.live_profile_store import PostgresLiveConversationProfileStore
-    return PostgresLiveConversationProfileStore()
-
-
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_evaluation_store():
-    _register_feature_repositories("chat")
-    from app.chat.persistence.evaluation_store import PostgresLiveChatEvaluationStore
-    return PostgresLiveChatEvaluationStore()
-
-
-@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
-def production_research_source_store():
-    _register_feature_repositories("research")
-    from app.research.persistence.source_store import PostgresResearchSourceStore
-    return PostgresResearchSourceStore()
-
-
-def production_summary_repository():
-    _register_feature_repositories("chat")
-    from app.chat.persistence.chat_runtime import PostgresConversationSummaryRepository
-    return PostgresConversationSummaryRepository()
-
-
-def production_narrative_store(*args, **kwargs):
-    _register_feature_repositories("rpg")
-    from app.rpg.persistence.rpg_feature_compat import PostgresNarrativeEventStore
-    return PostgresNarrativeEventStore(*args, **kwargs)
+    return owner_memory_repository()

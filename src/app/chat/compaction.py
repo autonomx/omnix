@@ -239,6 +239,6 @@ def process_compaction_job(
 def default_summary_repository():
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_summary_repository
+        from app.chat.persistence.chat_runtime import production_summary_repository
         return production_summary_repository()
     return InMemoryConversationSummaryRepository()

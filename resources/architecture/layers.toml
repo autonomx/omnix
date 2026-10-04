@@ -18,7 +18,7 @@ tier = "app"
 may_import = ["kernel", "shared_services"]
 
 [layers.composition]
-packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "app.runtime_document_services", "app.image_service_app", "app.image_service_runtime"]
+packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "app.image_service_app", "app.image_service_runtime"]
 may_import = ["*"]
 
 [modules]
