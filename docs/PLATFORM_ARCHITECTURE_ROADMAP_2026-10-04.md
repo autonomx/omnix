@@ -822,7 +822,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 
 | WP | Status | PRs | Date | Metric deltas | Notes |
 |---|---|---|---|---|---|
-| PA-0.1 | not started | — | — | — | ADR-0016 |
+| PA-0.1 | done | — | 2026-10-04 | — | [ADR-0016](architecture/ADR-0016-platform-tiers.md) accepted by the owner; linked from `ARCHITECTURE.md` and the FeatureModule guide |
 | PA-0.2 | not started | — | — | — | |
 | PA-0.3 | not started | — | — | — | |
 | PA-1.1 | not started | — | — | — | After PA-1.3 step 1 |

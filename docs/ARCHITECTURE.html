@@ -33,7 +33,7 @@
 <h2 id="hardened-runtime-composition">Hardened runtime composition</h2>
 <p>Production binds one immutable <a href="../src/app/runtime/config.py">RuntimeConfig</a>, derives <a href="../src/app/runtime/capabilities.py">process capabilities</a>, then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.</p>
 <p>PostgreSQL remains the only production structured-data authority. <a href="../src/app/runtime_composition.py">runtime_composition</a> selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register <code>FeatureLifecycle</code>; singleton services register <code>BackgroundWorker</code> with declared capabilities.</p>
-<p>Production routing belongs to <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">ingress</a>, using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See <a href="architecture/OMNIX_RUNTIME_INVARIANTS.html">runtime invariants</a>, <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a>, <a href="architecture/OMNIX_COMPATIBILITY_RETIREMENT.html">compatibility retirement</a> and ADRs 0010–0014 for the enforceable contracts.</p>
+<p>Production routing belongs to <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">ingress</a>, using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See <a href="architecture/OMNIX_RUNTIME_INVARIANTS.html">runtime invariants</a>, <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a>, <a href="architecture/OMNIX_COMPATIBILITY_RETIREMENT.html">compatibility retirement</a> and ADRs 0010–0016 for the enforceable contracts. <a href="architecture/ADR-0016-platform-tiers.html">ADR-0016</a> sets the platform tiers (kernel, shared services, platform capabilities, apps) and module boundaries; the <a href="PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.html">platform architecture roadmap</a> sequences the work.</p>
 <p>This document describes the architecture implemented by the current Omnix application and the invariants new work must preserve. <a href="../SPEC.html"><code>../SPEC.md</code></a> is the authority for platform-level design rules; this document connects those rules to the current source tree.</p>
 <h2 id="architecture-goals">Architecture goals</h2>
 <p>Omnix is a single local-first application platform, not a collection of unrelated demos. The architecture is designed around several constraints:</p>
@@ -184,12 +184,11 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/app/
 ├─ agent_runtime/       planning, routing, capabilities, Pi execution, evidence, review
 ├─ assets/              shared artifact metadata/storage
-├─ assist_core/         assistant core services
 ├─ assistant_context/   durable assistant context APIs/services
 ├─ assistant_memory/    assistant memory subsystem
 ├─ assistant_tools/     governed tool adapters, connections, credentials, policy projection
 ├─ characters/          character profiles/runtime support
-├─ chat/                chat sessions/messages/generation jobs
+├─ chat/                chat sessions/messages/generation jobs; assist mode in chat/assist/
 ├─ desktop_companion/   companion support subsystem
 ├─ gateway/             browser-facing FastAPI gateway
 ├─ image/               image provider/API domain
@@ -278,7 +277,7 @@ TTS service          : 5101
 STT service          : 5201
 Image service        : 5301 (when enabled)
 PostgreSQL           : 5432 by default</code></pre></div>
-<p>The exact environment paths in <code>start_all.bat</code> are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.</p>
+<p>Interpreter paths come from the launcher configuration (<code>RPG_*_PYTHON</code>, <code>resources/config/launcher.toml</code>, or the Conda environments) and are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.</p>
 <figure class="doc-diagram" aria-labelledby="diagram-service-topology-title"><figcaption id="diagram-service-topology-title"><strong>Local service topology</strong><span>The core loop is small; model-heavy and integration workloads can remain separate processes or environments.</span></figcaption>
 <div class="diagram diagram-service" aria-label="Browser and launcher connect to the gateway, which connects to PostgreSQL, workers, and providers">
   <div class="diagram-lane">
@@ -420,6 +419,7 @@ input/output schema</code></pre></div>
 <h2 id="architecture-invariants-for-new-work">Architecture invariants for new work</h2>
 <p>Before adding a new feature, verify that the change preserves these rules:</p>
 <ul>
+<li>Follow <a href="architecture/ADR-0016-platform-tiers.html">ADR-0016</a>: declare the module&#x27;s tier, import other modules only through their declared contracts in the <code>depends_on</code> direction, never import another app, and contribute tables, migrations, settings, retention, tools and web clients from the module instead of editing central lists.</li>
 <li>Add browser UI to the existing web app.</li>
 <li>Keep authoritative state in backend/domain services.</li>
 <li>Add typed API contracts instead of feature-specific transport hacks.</li>

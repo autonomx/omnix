@@ -382,23 +382,28 @@ HERMES_TIMEOUT_SECONDS=45</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">hermes setup
 hermes model</code></pre></div>
 <p>Only set <code>HERMES_ENABLED=true</code> after the sidecar is reachable. See <a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a> for the runtime boundary and skip-install options.</p>
-<h2 id="11-windows-launcher-dashboard">11. Windows launcher dashboard</h2>
-<p><code>start_all.bat</code> is the repository&#x27;s integrated Windows operator launcher. It:</p>
+<h2 id="11-launcher-dashboard">11. Launcher dashboard</h2>
+<p><code>python -m app.launcher start</code> starts Omnix on every platform; <code>start_all.bat</code> and <code>start_all.sh</code> are thin wrappers around it. The launcher:</p>
 <ul>
-<li>checks Docker and the <code>omnix-postgres</code> container;</li>
-<li>loads the protected PostgreSQL credential;</li>
-<li>verifies persistence connectivity;</li>
-<li>configures the launcher/gateway and worker URLs;</li>
-<li>configures live-agent/Hermes, Kasa, image-service, and diagnostic defaults;</li>
-<li>starts the launcher dashboard on port <code>5055</code>;</li>
-<li>asks the launcher to start the gateway and waits for gateway health;</li>
-<li>can open the application/launcher pages in a browser.</li>
+<li>refuses to start while another launcher answers on port <code>5055</code>;</li>
+<li>checks that the TTS and STT runtimes run Python 3.11 (a missing one is a</li>
+<p>warning: that voice service does not start);</p>
+<li>sets the service URLs and the live-agent/Hermes, Kasa, image-service and</li>
+<p>diagnostic defaults (a variable you set first wins);</p>
+<li>starts the existing PostgreSQL container named by <code>--postgres-container</code> and</li>
+<p>waits until it is healthy (the Windows wrapper passes <code>omnix-postgres</code>, or <code>OMNIX_POSTGRES_CONTAINER</code>);</p>
+<li>verifies database connectivity, then applies pending migrations;</li>
+<li>serves the launcher dashboard on port <code>5055</code>, asks it to start the gateway,</li>
+<p>and starts the web app once the gateway is healthy;</p>
+<li>opens the dashboard in a browser when <code>OMNIX_LAUNCHER_OPEN_BROWSER=1</code>.</li>
 </ul>
-<p>Run:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\start_all.bat</code></pre></div>
+<p>On Windows, <code>start_all.bat</code> first loads the protected PostgreSQL credential (section 3) and then calls the launcher:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\start_all.bat                                        # start Omnix
+.\start_all.bat --postgres-only                        # only start the PostgreSQL container
+.\start_all.bat --database-credential-injected-check   # check without starting services</code></pre></div>
 <h3 id="interpreters-and-posix">Interpreters and POSIX</h3>
 <p>Neither launcher contains workstation paths. Each interpreter resolves from its environment variable (<code>RPG_FLUX_PYTHON</code>, <code>RPG_TTS_PYTHON</code>, <code>RPG_STT_PYTHON</code>), then <code>resources/config/launcher.toml</code> (copy <code>launcher.example.toml</code>; the local file is ignored by git), then the <code>rpg-flux</code>, <code>rpg-tts</code> and <code>rpg-stt</code> Conda environments under <code>CONDA_ROOT</code> (default <code>~/miniconda3</code>).</p>
-<p>On Linux and macOS, <code>./start_all.sh</code> runs <code>python -m app.launcher start</code>: it checks PostgreSQL, applies migrations, serves the dashboard on port <code>5055</code>, starts the gateway and, once the gateway is healthy, the web app. A service whose interpreter or tool (for example <code>npm</code>) is missing shows as failed in the dashboard with the reason in its log.</p>
+<p>On Linux and macOS, <code>./start_all.sh</code> runs the same <code>python -m app.launcher start</code> (add <code>--postgres-container &lt;name&gt;</code> to have it start a Docker container). A service whose interpreter or tool (for example <code>npm</code>) is missing shows as failed in the dashboard with the reason in its log.</p>
 <p><code>setup.sh</code> installs the Linux GPU locks (<code>requirements/*.linux.lock.txt</code>). Both setup scripts start <code>docker-compose.postgres.yml</code> only when Docker is available and nothing already listens on <code>OMNIX_POSTGRES_PORT</code> (5432), so an existing database is never touched.</p>
 <p>For local HTTPS, <code>python src/generate_certs.py --host &lt;name&gt; --ip &lt;address&gt; --out &lt;dir&gt;</code> writes a self-signed <code>cert.pem</code> and <code>key.pem</code> for the names given.</p>
 <p>Useful launcher-related environment values include:</p>
@@ -408,9 +413,9 @@ OMNIX_LAUNCHER_AUTO_START
 OMNIX_LAUNCHER_OPEN_BROWSER
 OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS
 OMNIX_BLOB_ROOT</code></pre></div>
-<p><code>OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS</code> defaults to 420 seconds. The launcher uses it for gateway readiness checks, and the Windows startup watchdog retries the web service after gateway health succeeds. Increase it for unusually slow first boots that import or warm large local runtime dependencies.</p>
+<p><code>OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS</code> defaults to 420 seconds. The launcher waits that long for the gateway to become healthy and the web app to answer. Increase it for unusually slow first boots that import or warm large local runtime dependencies.</p>
 <h2 id="12-optional-kasa-tapo-smart-home-integration">12. Optional Kasa/Tapo smart-home integration</h2>
-<p>The Windows launcher defines local defaults for TP-Link Kasa discovery/control:</p>
+<p>The launcher defines local defaults for TP-Link Kasa discovery/control:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_KASA_ENABLED=1
 OMNIX_KASA_DISCOVERY_TARGET=255.255.255.255
 OMNIX_KASA_TIMEOUT_SECONDS=4

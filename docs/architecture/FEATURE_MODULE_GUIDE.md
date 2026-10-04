@@ -2,6 +2,8 @@
 
 A feature is an optional Omnix capability (audiobook, image, trading, …) that the gateway composes from a declaration. The catalog at `app.runtime.feature_catalog.FEATURE_CATALOG` is the only list of features. Audiobook (`src/app/audiobook/`) is the reference implementation: copy its structure, and use the checklist at the end to review a new feature.
 
+[ADR-0016](ADR-0016-platform-tiers.md) defines the tiers and boundaries every feature follows: a feature is a platform capability or an app, imports other features only through their contracts in the `depends_on` direction, and apps never import apps. The [platform architecture roadmap](../PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md) is migrating the codebase to it; this guide will become "Adding and retiring an app" (PA-4.4).
+
 ## Composition
 
 A feature package exposes `feature.py` with one `FEATURE = FeatureModule(...)` value and a catalog entry pointing at it (`"audiobook": "app.audiobook.feature:FEATURE"`). The declaration is all the gateway knows about the feature:

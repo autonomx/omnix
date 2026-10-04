@@ -214,7 +214,7 @@
 <li>Open http://localhost:5173/. The root route redirects to /chatbot.</li>
 </ol>
 <h3 id="windows-launcher-mode">Windows launcher mode</h3>
-<p>start_all.bat can coordinate PostgreSQL, the gateway, optional workers, Hermes, and the browser. Treat workstation-specific Python/Conda paths in that script as operator configuration. The portable contract is the service URLs and environment variables, not a particular absolute path.</p>
+<p><code>python -m app.launcher start</code> (wrapped by start_all.bat and start_all.sh) coordinates PostgreSQL, the gateway, optional workers, Hermes, and the browser. Interpreter paths come from <code>RPG_*_PYTHON</code>, <code>resources/config/launcher.toml</code> or the Conda environments, not from the scripts. The portable contract is the service URLs and environment variables, not a particular absolute path.</p>
 <p>Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.</p>
 <h2 id="logs-and-request-ids">Logs and request ids</h2>
 <p>The gateway (<code>src/main.py</code>, <code>src/launch.py</code>) and the worker process configure one structured log handler on stderr. <code>OMNIX_LOG_FORMAT=json</code> writes one JSON object per line (use it in containers); the default <code>text</code> appends the bound ids in brackets. <code>OMNIX_LOG_LEVEL</code> sets the root level and <code>OMNIX_LOG_LEVELS</code> per-logger levels, for example <code>uvicorn.access=WARNING,omnix.tts=DEBUG</code>.</p>
