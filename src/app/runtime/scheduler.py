@@ -22,6 +22,7 @@ from typing import Any
 
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .logging import runtime_transition
+from .ownership_fencing import claim_epoch, epoch_is_current
 from .statement_class import statement_class
 from .tenant_context import pop_tenant, push_tenant
 
@@ -265,6 +266,7 @@ class _SchedulerLockSession:
         self.connection_context: AbstractContextManager[Any] | None = None
         self.connection_lock = threading.Lock()
         self.lock_keys: set[int] = set()
+        self.epochs: dict[int, int] = {}
 
     def open(self) -> None:
         # Held for the process lifetime, so it must not occupy a pool slot (WP-5.10).
@@ -290,6 +292,8 @@ class _SchedulerLockSession:
                 self.connection.commit()
                 if acquired:
                     self.lock_keys.add(lock_key)
+                    self.epochs[lock_key] = claim_epoch(self.connection, lock_key)
+                    self.connection.commit()
                 return bool(acquired)
         except Exception:
             self.healthy = False
@@ -320,12 +324,14 @@ class _SchedulerLockSession:
                 if self.connection is None or self.connection.closed:
                     self.healthy = False
                     self.lock_keys.discard(lock_key)
+                    self.epochs.pop(lock_key, None)
                     return
                 self.connection.execute(
                     "SELECT pg_advisory_unlock(%s)", (lock_key,)
                 )
                 self.connection.commit()
                 self.lock_keys.discard(lock_key)
+                self.epochs.pop(lock_key, None)
         except Exception:
             self.healthy = False
 
@@ -344,6 +350,7 @@ class _SchedulerLockSession:
                         )
                         connection.commit()
                     self.lock_keys.clear()
+                    self.epochs.clear()
         except Exception:
             if connection is not None:
                 connection.close()
@@ -373,6 +380,19 @@ class _TaskOwner:
                 f"Scheduler ownership is unavailable for {self.task_id}"
             )
         self.lock_session.require_live(self.task_id)
+
+    def fence(self, connection: Any) -> None:
+        """Fail the caller's transaction unless this task still owns its lock (WP-8.3)."""
+        epoch = self.lock_session.epochs.get(self.lock_key)
+        if not self.healthy or epoch is None:
+            raise SchedulerOwnershipUnavailable(
+                f"Scheduler ownership is unavailable for {self.task_id}"
+            )
+        if not epoch_is_current(connection, self.lock_key, epoch):
+            self.healthy = False
+            raise SchedulerOwnershipUnavailable(
+                f"Scheduler ownership moved to another process for {self.task_id}"
+            )
 
     def release(self) -> None:
         if not self.healthy:

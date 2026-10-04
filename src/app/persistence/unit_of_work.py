@@ -6,6 +6,7 @@ import logging
 from types import TracebackType
 from typing import Any, Callable, Hashable, Literal
 
+from .background_authority import require_background_owner
 from .authority import (
     AuthorityOperation,
     require_authority_operation,
@@ -80,6 +81,8 @@ class PostgresUnitOfWork:
         self.connection = self._connection_context.__enter__()
         try:
             require_authority_operation(self.connection, self.authority_operation)
+            # The work's transaction holds its background owner's fencing epoch (WP-8.3).
+            require_background_owner(self.connection, hold=True)
             settings = getattr(self.database, "settings", None)
             if settings is not None:
                 apply_statement_class(self.connection, settings.statement_timeout_ms)

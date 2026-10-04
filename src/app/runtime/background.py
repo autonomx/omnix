@@ -17,6 +17,7 @@ from typing import Any, ContextManager
 from .config import RuntimeConfig, GatewayRole, get_runtime_config
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .logging import runtime_transition
+from .ownership_fencing import claim_epoch, epoch_is_current
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class GatewayBackgroundRuntime:
         ).digest()
         self.lock_key = int.from_bytes(digest[:8], "big", signed=True)
         self.healthy = False
+        self.epoch: int | None = None
         self.connection = None
         self._connection_context = None
         self._connection_lock = threading.Lock()
@@ -87,6 +89,8 @@ class GatewayBackgroundRuntime:
                 raise BackgroundOwnershipUnavailable(
                     "Another process owns background workers; use OMNIX_GATEWAY_BACKGROUND_ROLE=api for API replicas"
                 )
+            self.epoch = claim_epoch(connection, self.lock_key)
+            connection.commit()
             self.connection = connection
             self.healthy = True
             runtime_transition(logger, component='background_owner', role=self.role, transition='acquired')
@@ -111,6 +115,24 @@ class GatewayBackgroundRuntime:
             raise BackgroundOwnershipUnavailable(
                 "Background ownership connection was lost"
             ) from exc
+
+    def fence(self, connection) -> None:
+        """Fail the caller's transaction unless this process still owns the lock (WP-8.3).
+
+        Runs on the caller's own connection, so background transactions no
+        longer queue behind the ownership connection.
+        """
+        if self.config.runs_job_workers:
+            return
+        if not self.healthy or self.epoch is None:
+            raise BackgroundOwnershipUnavailable(
+                "This gateway does not own background execution"
+            )
+        if not epoch_is_current(connection, self.lock_key, self.epoch):
+            self.healthy = False
+            raise BackgroundOwnershipUnavailable(
+                "Background ownership moved to another process"
+            )
 
     def ready(self):
         if not self.config.owns_background_runtime:

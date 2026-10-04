@@ -177,9 +177,9 @@ class PostgresDatabase:
         from .background_authority import require_background_owner
         from .tenant_scope import apply_session_scope
 
-        require_background_owner()
         work = shared_work(self)
         if work is not None:
+            # The shared transaction was fenced when it checked out its connection.
             yield work.connection
             return
         self.open()
@@ -190,6 +190,9 @@ class PostgresDatabase:
                 try:
                     # Row-level security follows the tenant of this checkout (WP-4.4).
                     apply_session_scope(connection)
+                    # A background worker's transaction carries its owner's
+                    # fencing epoch (WP-8.3).
+                    require_background_owner(connection)
                     yield connection
                 finally:
                     record_db_connection_hold(current_statement_class(), perf_counter() - held)
@@ -220,9 +223,13 @@ class PostgresDatabase:
     def transaction(self) -> Iterator[Any]:
         from app.runtime.statement_class import apply_statement_class
 
+        from .background_authority import require_background_owner
+
         with self.connection() as connection:
             with connection.transaction():
                 apply_statement_class(connection, self.settings.statement_timeout_ms)
+                # The transaction holds its background owner's fencing epoch (WP-8.3).
+                require_background_owner(connection, hold=True)
                 with transaction_scope():
                     yield connection
 
