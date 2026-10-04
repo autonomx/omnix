@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import httpx
 
-from app.assistant_context.models import AssistantContextBuildResult, AssistantContextChatRequest
+from app.chat.assistant_context.models import AssistantContextBuildResult, AssistantContextChatRequest
 from app.conversation.contracts import AssistantContextItem
-from app.assistant_context.service import AssistantContextService
-from app.assistant_context.vision import (
+from app.chat.assistant_context.service import AssistantContextService
+from app.providers.desktop_vision import (
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,

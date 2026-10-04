@@ -4,16 +4,20 @@ from __future__ import annotations
 import time
 from typing import Callable
 
-from app.research.evidence import prepare_evidence_context_items
-from app.research.extraction import ReadablePageExtractor
-from app.research.policy import ResearchPolicy, research_policy_from_env
-from app.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
-from app.research.quick_search import QuickSearchService
-from app.research.web_search import WebSearchClient
+from app.research.contracts import (
+    normalize_provider_chain,
+    prepare_evidence_context_items,
+    ProviderFallbackSearchClient,
+    QuickSearchService,
+    ReadablePageExtractor,
+    research_policy_from_env,
+    ResearchPolicy,
+    WebSearchClient,
+)
 from app.conversation.contracts import AssistantContextItem
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest
-from .vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
+from app.providers.desktop_vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
 
 
 class AssistantContextService:

@@ -5,8 +5,8 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_context.models import AssistantContextBuildResult
-from app.assistant_context.routes import register_assistant_context_routes
+from app.chat.assistant_context.models import AssistantContextBuildResult
+from app.chat.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.research.compatibility import reset_research_compatibility_telemetry
 from app.research.policy import ResearchPolicy

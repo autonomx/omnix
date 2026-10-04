@@ -6,16 +6,17 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.conversation.contracts import AssistantContextItem
-from app.research import ResearchMode, normalize_research_mode
-from app.research.compatibility import (
+from app.providers.desktop_vision import DesktopCaptureMode
+from app.research.contracts import (
+    legacy_research_aliases_enabled,
     LEGACY_RESEARCH_FIELDS,
     LEGACY_RESEARCH_MODES,
-    legacy_research_aliases_enabled,
     legacy_research_warnings,
+    normalize_research_mode,
     record_legacy_research_aliases,
+    ResearchMode,
 )
 
-DesktopCaptureMode = Literal["single", "temporal"]
 LiveConversationRepairKind = Literal[
     "acknowledge_correction",
     "clarify_number",

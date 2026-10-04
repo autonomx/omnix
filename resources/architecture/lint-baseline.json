@@ -69,7 +69,7 @@
       "count": 1,
       "fingerprint": "_security_subject:app.trading.catalog",
       "lines": [
-        354
+        419
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -78,7 +78,7 @@
       "count": 1,
       "fingerprint": "_security_subject:app.trading.models",
       "lines": [
-        355
+        420
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -87,7 +87,7 @@
       "count": 1,
       "fingerprint": "validate_required_evidence_capabilities:app.assistant_tools.gate",
       "lines": [
-        1215
+        1304
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -315,24 +315,6 @@
         153
       ],
       "path": "src/app/chat/prompt_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.evidence",
-      "lines": [
-        6
-      ],
-      "path": "src/app/chat/research_citations.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research.release_policy",
-      "lines": [
-        4
-      ],
-      "path": "src/app/chat/research_release.py",
       "rule": "AL001"
     },
     {

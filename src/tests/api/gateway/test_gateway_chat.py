@@ -358,7 +358,7 @@ def test_context_completion_failure_removes_unvalidated_reply(tmp_path: Path, mo
 
     from app.chat import prompt_store
     from app.providers import service as provider_service
-    from app.assistant_context import routes
+    from app.chat.assistant_context import routes
     from app.conversation.contracts import AssistantContextItem
     from app.research.quick_search import QuickSearchExecution, QuickSearchService
 
@@ -424,7 +424,7 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
     from app.chat import prompt_store
     from app.providers import service as provider_service
     from app.conversation.contracts import AssistantContextItem
-    from app.assistant_context.vision import DesktopVisionClient
+    from app.providers.desktop_vision import DesktopVisionClient
 
     calls: list[dict[str, object]] = []
 

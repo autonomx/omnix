@@ -10,17 +10,18 @@ import httpx
 
 from app.conversation.contracts import AssistantContextItem
 
-from .models import DesktopCaptureMode
 from app.prompts import prompt_template
+
+DesktopCaptureMode = Literal["single", "temporal"]
 
 
 USER_PROMPT_TEMPLATE = prompt_template(
-    'assistant_context.vision.user_prompt', "1",
+    'providers.desktop_vision.user_prompt', "1",
     'Describe what is visible and relevant on this desktop.',
 )
 
 USER_PROMPT_2_TEMPLATE = prompt_template(
-    'assistant_context.vision.user_prompt_2', "1",
+    'providers.desktop_vision.user_prompt_2', "1",
     (
         '{prompt}\n'
         '\n'
@@ -31,7 +32,7 @@ USER_PROMPT_2_TEMPLATE = prompt_template(
 )
 
 USER_PROMPT_3_TEMPLATE = prompt_template(
-    'assistant_context.vision.user_prompt_3', "1",
+    'providers.desktop_vision.user_prompt_3', "1",
     (
         '{prompt}\n'
         '\n'

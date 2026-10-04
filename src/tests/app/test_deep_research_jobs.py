@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_context.routes import register_assistant_context_routes
+from app.chat.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.jobs import CancelJobRequest
 from tests.support.in_memory_jobs import InMemoryJobStore

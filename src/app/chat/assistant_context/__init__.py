@@ -2,8 +2,8 @@
 
 from app.conversation.contracts import AssistantContextItem
 
-from app.chat.assistant_context.models import AssistantContextChatRequest
-from app.chat.assistant_context.service import AssistantContextService, default_assistant_context_service
+from .models import AssistantContextChatRequest
+from .service import AssistantContextService, default_assistant_context_service
 
 
 __all__ = [

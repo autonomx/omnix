@@ -1,7 +1,8 @@
 """Canonical contracts for assistant web research modes and provenance."""
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from importlib import import_module
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -211,3 +212,108 @@ class ResearchMessageMetadata(BaseModel):
     research_job_id: str | None = None
     source_manifest_id: str | None = None
     warning: str | None = None
+
+
+# Research entry points for other features (WP-8.2). Chat builds enriched turns
+# and deep-research jobs through these names; the lint allows a feature to import
+# another feature only through its ``contracts`` module. They load on first use
+# because the modules that define them import this one.
+_ENTRY_POINTS = {
+    "LEGACY_RESEARCH_FIELDS": "compatibility",
+    "LEGACY_RESEARCH_MODES": "compatibility",
+    "legacy_research_aliases_enabled": "compatibility",
+    "legacy_research_warnings": "compatibility",
+    "record_legacy_research_aliases": "compatibility",
+    "citation_labels": "evidence",
+    "prepare_evidence_context_items": "evidence",
+    "render_answer_with_compatibility_fallback": "evidence",
+    "source_manifest_id": "evidence",
+    "ReadablePageExtractor": "extraction",
+    "DeepResearchJobInput": "jobs",
+    "create_deep_research_job_request": "jobs",
+    "start_research_job": "jobs",
+    "ResearchPlanner": "planner",
+    "ResearchPlanningBudget": "planner",
+    "ResearchPlanningRequest": "planner",
+    "ResearchPolicy": "policy",
+    "research_policy_from_env": "policy",
+    "ProviderFallbackSearchClient": "provider_chain",
+    "normalize_provider_chain": "provider_chain",
+    "QuickSearchService": "quick_search",
+    "ResearchReleaseDecision": "release_policy",
+    "ResearchReleasePolicy": "release_policy",
+    "research_release_availability": "release_policy",
+    "research_release_notice": "release_policy",
+    "research_release_policy_from_env": "release_policy",
+    "resolve_research_release": "release_policy",
+    "ResearchRuntimeSettings": "settings",
+    "load_research_runtime_settings": "settings",
+    "ResearchRuntimeStatus": "status",
+    "research_runtime_status": "status",
+    "WebSearchClient": "web_search",
+}
+
+if TYPE_CHECKING:
+    from .compatibility import (
+        LEGACY_RESEARCH_FIELDS as LEGACY_RESEARCH_FIELDS,
+        LEGACY_RESEARCH_MODES as LEGACY_RESEARCH_MODES,
+        legacy_research_aliases_enabled as legacy_research_aliases_enabled,
+        legacy_research_warnings as legacy_research_warnings,
+        record_legacy_research_aliases as record_legacy_research_aliases,
+    )
+    from .evidence import (
+        citation_labels as citation_labels,
+        prepare_evidence_context_items as prepare_evidence_context_items,
+        render_answer_with_compatibility_fallback as render_answer_with_compatibility_fallback,
+        source_manifest_id as source_manifest_id,
+    )
+    from .extraction import (
+        ReadablePageExtractor as ReadablePageExtractor,
+    )
+    from .jobs import (
+        DeepResearchJobInput as DeepResearchJobInput,
+        create_deep_research_job_request as create_deep_research_job_request,
+        start_research_job as start_research_job,
+    )
+    from .planner import (
+        ResearchPlanner as ResearchPlanner,
+        ResearchPlanningBudget as ResearchPlanningBudget,
+        ResearchPlanningRequest as ResearchPlanningRequest,
+    )
+    from .policy import (
+        ResearchPolicy as ResearchPolicy,
+        research_policy_from_env as research_policy_from_env,
+    )
+    from .provider_chain import (
+        ProviderFallbackSearchClient as ProviderFallbackSearchClient,
+        normalize_provider_chain as normalize_provider_chain,
+    )
+    from .quick_search import (
+        QuickSearchService as QuickSearchService,
+    )
+    from .release_policy import (
+        ResearchReleaseDecision as ResearchReleaseDecision,
+        ResearchReleasePolicy as ResearchReleasePolicy,
+        research_release_availability as research_release_availability,
+        research_release_notice as research_release_notice,
+        research_release_policy_from_env as research_release_policy_from_env,
+        resolve_research_release as resolve_research_release,
+    )
+    from .settings import (
+        ResearchRuntimeSettings as ResearchRuntimeSettings,
+        load_research_runtime_settings as load_research_runtime_settings,
+    )
+    from .status import (
+        ResearchRuntimeStatus as ResearchRuntimeStatus,
+        research_runtime_status as research_runtime_status,
+    )
+    from .web_search import (
+        WebSearchClient as WebSearchClient,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    module = _ENTRY_POINTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(f"{__package__}.{module}"), name)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.research.evidence import (
+from app.research.contracts import (
     citation_labels,
     render_answer_with_compatibility_fallback,
     source_manifest_id,

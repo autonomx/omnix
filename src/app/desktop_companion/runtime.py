@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_context.vision import (
+from app.providers.desktop_vision import (
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,

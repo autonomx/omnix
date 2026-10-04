@@ -7,7 +7,7 @@ from app.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
 
 def _chat_context_router(context):
     from app.persistence.runtime import uses_postgresql_runtime
-    from app.assistant_context.routes import register_assistant_context_routes
+    from app.chat.assistant_context.routes import register_assistant_context_routes
     from .live_call_prewarm import register_live_call_prewarm_routes
     from .live_chat_evaluation_routes import create_live_chat_evaluation_router
     from .live_chat_speculation import register_live_chat_speculation_routes

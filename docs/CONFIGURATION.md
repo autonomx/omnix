@@ -312,11 +312,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TTS_SYNTHESIS_WORKERS` | integer | `8` | tooling | Controls tts synthesis workers for tooling. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
 | `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |
-| `OMNIX_VISION_API_KEY` | string | — | assistant-context | Controls vision api key for assistant-context. |
-| `OMNIX_VISION_BASE_URL` | string | — | assistant-context | Controls vision base url for assistant-context. |
-| `OMNIX_VISION_MODEL` | string | — | assistant-context | Controls vision model for assistant-context. |
-| `OMNIX_VISION_PROVIDER` | string | — | assistant-context | Controls vision provider for assistant-context. |
-| `OMNIX_VISION_TIMEOUT_SECONDS` | string | `25.0` | assistant-context | Controls vision timeout seconds for assistant-context. |
+| `OMNIX_VISION_API_KEY` | string | — | providers | Controls vision api key for providers. |
+| `OMNIX_VISION_BASE_URL` | string | — | providers | Controls vision base url for providers. |
+| `OMNIX_VISION_MODEL` | string | — | providers | Controls vision model for providers. |
+| `OMNIX_VISION_PROVIDER` | string | — | providers | Controls vision provider for providers. |
+| `OMNIX_VISION_TIMEOUT_SECONDS` | string | `25.0` | providers | Controls vision timeout seconds for providers. |
 | `OMNIX_VISUAL_PROVIDER` | string | — | rpg | Controls visual provider for rpg. |
 | `OMNIX_VOICE_CLONES_DIR` | string | — | assets | Controls voice clones dir for assets. |
 | `OMNIX_VOICE_CLONES_FILE` | string | — | assets | Controls voice clones file for assets. |

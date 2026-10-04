@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.assistant_context.models import AssistantContextChatRequest
+from app.chat.assistant_context.models import AssistantContextChatRequest
 from app.research import normalize_research_mode, resolve_research_mode
 from app.research.compatibility import (
     record_legacy_research_aliases,

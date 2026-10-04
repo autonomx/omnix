@@ -2157,36 +2157,36 @@
   },
   {
     "default": null,
-    "description": "Controls vision api key for assistant-context.",
-    "feature": "assistant-context",
+    "description": "Controls vision api key for providers.",
+    "feature": "providers",
     "name": "OMNIX_VISION_API_KEY",
     "type": "string"
   },
   {
     "default": null,
-    "description": "Controls vision base url for assistant-context.",
-    "feature": "assistant-context",
+    "description": "Controls vision base url for providers.",
+    "feature": "providers",
     "name": "OMNIX_VISION_BASE_URL",
     "type": "string"
   },
   {
     "default": null,
-    "description": "Controls vision model for assistant-context.",
-    "feature": "assistant-context",
+    "description": "Controls vision model for providers.",
+    "feature": "providers",
     "name": "OMNIX_VISION_MODEL",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls vision provider for assistant-context.",
-    "feature": "assistant-context",
+    "description": "Controls vision provider for providers.",
+    "feature": "providers",
     "name": "OMNIX_VISION_PROVIDER",
     "type": "string"
   },
   {
     "default": "25.0",
-    "description": "Controls vision timeout seconds for assistant-context.",
-    "feature": "assistant-context",
+    "description": "Controls vision timeout seconds for providers.",
+    "feature": "providers",
     "name": "OMNIX_VISION_TIMEOUT_SECONDS",
     "type": "string"
   },

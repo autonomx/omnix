@@ -1,7 +1,10 @@
 """Persist visible research release and downgrade metadata on chat replies."""
 from __future__ import annotations
 
-from app.research.release_policy import ResearchReleaseDecision, research_release_notice
+from app.research.contracts import (
+    research_release_notice,
+    ResearchReleaseDecision,
+)
 
 from .concurrency import serialized_chat_mutation
 from .models import ChatSession

@@ -4,7 +4,7 @@ Browser-facing JSON routes have typed request and response contracts in OpenAPI.
 
 | Source | Method | Route path | Transport |
 |---|---|---|---|
-| `src/app/assistant_context/routes.py` | POST | `/api/assistant/context/chat/sessions/{session_id}/messages/stream` | Server-Sent Events |
+| `src/app/chat/assistant_context/routes.py` | POST | `/api/assistant/context/chat/sessions/{session_id}/messages/stream` | Server-Sent Events |
 | `src/app/agent_runtime/api.py` | GET | `/api/agent-runs/{run_id}/events/stream` | Server-Sent Events |
 | `src/app/agent_runtime/task_graph_api.py` | GET | `/api/task-graph-runs/{run_id}/events/stream` | Server-Sent Events |
 | `src/app/character_interactions/routes.py` | POST | `/api/chat/sessions/{session_id}/live-call/greeting/stream` | Server-Sent Events |
