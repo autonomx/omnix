@@ -15,8 +15,14 @@ READOUT_NAMES = {
     "get_house_status",
     "get_hermes_status",
     "get_hermes_diagnostics_schema",
-    "get_hermes_rpg_plan_summary",
 }
+
+
+def _contributed_readouts() -> dict[str, Any]:
+    from app.chat.contracts import ASSIST_READOUTS
+    from app.runtime.ports import implementations
+
+    return {readout.name: readout for readout in implementations(ASSIST_READOUTS)}
 
 
 def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -34,10 +40,9 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
         from app.chat.assist.diagnostics import hermes_diagnostics_schema
 
         return {"ok": True, "name": clean, "payload": hermes_diagnostics_schema()}
-    if clean == "get_hermes_rpg_plan_summary":
-        from app.rpg.contracts import hermes_rpg_plan_summary_payload
-
-        return {"ok": True, "name": clean, "payload": hermes_rpg_plan_summary_payload()}
+    contributed = _contributed_readouts().get(clean)
+    if contributed is not None:
+        return {"ok": True, "name": clean, "payload": contributed.payload(_)}
     return {"ok": False, "name": clean, "error": "unknown_readout"}
 
 
@@ -46,7 +51,7 @@ def apply_mode_result(result: AssistantResult, *, dry_run: bool) -> AssistantRes
         return result
     rows: list[ToolResult] = []
     for call in result.tool_calls:
-        if call.name in READOUT_NAMES:
+        if call.name in READOUT_NAMES or call.name in _contributed_readouts():
             row = readout_payload(call.name, call.args)
             rows.append(ToolResult(name=call.name, ok=bool(row.get("ok")), output=row, executed=False, error=str(row.get("error")) if row.get("error") else None))
             continue

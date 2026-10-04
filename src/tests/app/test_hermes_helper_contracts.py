@@ -74,7 +74,16 @@ def test_unknown_readout_is_rejected_without_payload() -> None:
 
 
 def test_plan_summary_readout_returns_dry_shape() -> None:
-    payload = readout_payload("get_hermes_rpg_plan_summary")
+    from app.chat.contracts import ASSIST_READOUTS
+    from app.rpg.hermes.feature import _PlanSummaryReadout
+    from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, reset_port_bindings_for_tests
+
+    # Composition binds the Hermes feature's readout (ADR-0016).
+    install_port_bindings(PortBindings.build([PortBinding(ASSIST_READOUTS, _PlanSummaryReadout(), owner="hermes")]))
+    try:
+        payload = readout_payload("get_hermes_rpg_plan_summary")
+    finally:
+        reset_port_bindings_for_tests()
 
     assert payload["ok"] is True
     assert payload["payload"]["writes_state"] is False
@@ -86,3 +95,10 @@ def test_hermes_schema_marks_diagnostics_as_dry_run_only() -> None:
 
     assert schema["test"]["dry_run_only"] is True
     assert schema["assistant_request_contract"]["dry_run"] is True
+
+
+def test_rpg_readout_is_unknown_without_the_hermes_feature() -> None:
+    from app.runtime.ports import reset_port_bindings_for_tests
+
+    reset_port_bindings_for_tests()
+    assert readout_payload("get_hermes_rpg_plan_summary")["error"] == "unknown_readout"

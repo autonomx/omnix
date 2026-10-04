@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 76,
+      "AL001": 75,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -815,7 +815,6 @@
       "app.rpg.combat.world_consequences",
       "app.rpg.compat",
       "app.rpg.compat.character_cards",
-      "app.rpg.contracts",
       "app.rpg.control",
       "app.rpg.control.controller",
       "app.rpg.control.framing",
@@ -2486,7 +2485,6 @@
         "app.agent_runtime<->app.assistant_tools",
         "app.agent_runtime<->app.chat",
         "app.assets<->app.persistence",
-        "app.chat<->app.rpg",
         "app.persistence<->app.security"
       ],
       "app_to_app_imports": [],
@@ -2509,7 +2507,6 @@
       ],
       "reverse_contract_imports": [
         "src/app/chat/assist/live_agent.py:10:app.assistant_tools.contracts",
-        "src/app/chat/assist/modes.py:38:app.rpg.contracts",
         "src/app/chat/assistant_context/models.py:10:app.research.contracts",
         "src/app/chat/assistant_context/routes.py:19:app.research.contracts",
         "src/app/chat/assistant_context/service.py:7:app.research.contracts",
@@ -6502,7 +6499,7 @@
     "any_scope_package_cycles": {
       "direction": "lower",
       "target": 0,
-      "value": 5
+      "value": 4
     },
     "app_to_app_imports": {
       "direction": "lower",
@@ -6607,7 +6604,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 76
+      "value": 75
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6667,7 +6664,7 @@
     "reverse_contract_imports": {
       "direction": "lower",
       "target": 0,
-      "value": 22
+      "value": 21
     },
     "rls_coverage_pct": {
       "direction": "higher",
@@ -6812,5 +6809,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "316a8e39625344f32b6284c80a2b87f487910d88ff2ac33beaf514ffee936918"
+  "source_digest": "79fca19a2dcb6ed864a78d4ab42e9be3c3a062caa8dae9505a007239fa0b8c6d"
 }

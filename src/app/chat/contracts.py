@@ -1,6 +1,10 @@
 """Stable Chat services and data types consumed by neighboring features."""
 from __future__ import annotations
 
+from typing import Any, Protocol
+
+from app.runtime.ports import Port
+
 from app.chat.compaction import build_deterministic_summary, compaction_enabled
 from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.chat.live_call_prewarm import live_call_provider_affinity
@@ -31,6 +35,18 @@ from app.conversation.contracts import estimate_tokens
 
 
 # Assist mode diagnostics for the Hermes routes; loaded on first use (WP-8.2).
+class AssistReadout(Protocol):
+    """A named, read-only payload assist mode can return (ADR-0016 port)."""
+
+    name: str
+
+    def payload(self, args: dict[str, Any]) -> dict[str, Any]: ...
+
+
+# Features that offer assist-mode readouts contribute them; chat never imports them.
+ASSIST_READOUTS: Port[AssistReadout] = Port("chat.assist_readouts", AssistReadout, "many")
+
+
 def hermes_assist_status_payload() -> dict:
     from app.chat.assist.diagnostics import hermes_diagnostics_status_payload
 
@@ -51,6 +67,8 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "ASSIST_READOUTS",
+    "AssistReadout",
     "ChatMessage",
     "ChatSession",
     "PromptAssembly",

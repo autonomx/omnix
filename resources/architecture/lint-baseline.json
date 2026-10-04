@@ -302,15 +302,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "readout_payload:app.rpg.contracts",
-      "lines": [
-        38
-      ],
-      "path": "src/app/chat/assist/modes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.research.contracts",
       "lines": [
         10
@@ -733,15 +724,6 @@
         1
       ],
       "path": "src/app/assets/",
-      "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat<->app.rpg",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
       "rule": "AL015"
     },
     {
