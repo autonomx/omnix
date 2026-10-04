@@ -1,0 +1,17 @@
+{
+  "format_version": "rpg_response_holdout_manifest_v1",
+  "description": "Content-free manifest for scenarios stored outside prompt and policy tuning fixtures.",
+  "scenario_hash_algorithm": "sha256",
+  "scenario_hashes": [
+    "19bbf1c0a0e905cb89af0c0ab4fe2adf2fc284f39f06b78dc862846fe08a7784",
+    "4f86092d24ad7d8264b7587fc12375b2a6833d54938b04139c3f8bb4c2520e40",
+    "83c5dc67d17c25150f198aa0613a8dbbc46ad7df735ec75cd366fa43be1afa1d",
+    "ca81f7420320d745fc20f2d58bf7d7c02b7d149531413a1be79e912e87084f2f"
+  ],
+  "policy": {
+    "contents_committed_to_repository": false,
+    "used_for_prompt_tuning": false,
+    "used_for_deterministic_policy_tuning": false,
+    "allowed_use": "release evaluation only"
+  }
+}

@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from app.rpg.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
+from app.rpg.jobs.turn_job_mirror import (
+    _apply_turn_with_job_mirror,
+)
+from app.rpg.jobs.last10_report_debug import build_turn_debug_payload
+from app.rpg.presentation.turn_response import build_turn_response_v2
+from tests.support.in_memory_jobs import InMemoryJobStore
+
+_FORBIDDEN_GRAPH_KEYS = {
+    "session",
+    "simulation_state",
+    "runtime_state",
+    "foreground_job",
+    "raw_turn_result",
+}
+
+
+def _turn_result(index: int = 1) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "turn_id": f"turn:{index}",
+        "interaction_id": f"interaction:{index}",
+        "tick": index,
+        "state_revision": index + 10,
+        "stateful": True,
+        "changed_domains": ["conversation", "inventory", "currency"],
+        "action_type": "trade",
+        "semantic_action_type": "trade",
+        "semantic_family": "trade",
+        "final_narration": "Bran counts the coins and slides the supplies across the bar.",
+        "npc": {
+            "speaker_id": "npc:bran",
+            "speaker": "Bran",
+            "line": "That settles it. Keep the supplies dry and they will see you through the old road.",
+        },
+        "session": {
+            "manifest": {"id": "session:record", "turn_count": index},
+            "simulation_state": {"large": "x" * 100_000},
+            "runtime_state": {"large": "y" * 100_000},
+        },
+        "simulation_state": {"large": "z" * 100_000},
+        "runtime_state": {"large": "w" * 100_000},
+    }
+
+
+def _contains_forbidden_graph_key(value: Any) -> bool:
+    if isinstance(value, dict):
+        if _FORBIDDEN_GRAPH_KEYS & set(value):
+            return True
+        return any(_contains_forbidden_graph_key(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_forbidden_graph_key(item) for item in value)
+    return False
+
+
+def test_foreground_job_stores_only_bounded_v2_record(monkeypatch: Any, tmp_path: Path) -> None:
+    store = InMemoryJobStore(tmp_path / "jobs")
+    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
+
+    result = _apply_turn_with_job_mirror(
+        lambda *_args, **_kwargs: _turn_result(),
+        "session:record",
+        "I buy road supplies from Bran.",
+        submission_id="submit:record",
+    )
+
+    jobs = store.list_jobs()
+    assert len(jobs) == 1
+    output = jobs[0].output_refs[0]
+    record = output["turn_response"]
+    encoded = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    report_debug = build_turn_debug_payload(jobs[0])
+
+    assert result["interaction_id"] == "interaction:1"
+    assert output["record_version"] == "rpg_foreground_turn_record_v1"
+    assert "raw_turn_result" not in output
+    assert len(encoded) <= FOREGROUND_TURN_RECORD_MAX_BYTES
+    assert _contains_forbidden_graph_key(record) is False
+    assert record["contract_version"] == "rpg_turn_response_v2"
+    assert record["simulation_tick"] == 1
+    assert record["state"]["revision"] == 11
+    assert record["state"]["changed_domains"] == ["conversation", "inventory", "currency"]
+    assert record["result"]["stateful"] is True
+    assert report_debug["turn_response_record"]["interaction_id"] == "interaction:1"
+    assert "raw_turn_result" not in report_debug
+
+
+def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -> None:
+    store = InMemoryJobStore(tmp_path / "jobs")
+    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
+    calls = 0
+
+    def apply_turn(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return _turn_result(4)
+
+    first = _apply_turn_with_job_mirror(
+        apply_turn,
+        "session:record",
+        "I buy road supplies from Bran.",
+        submission_id="submit:stable",
+    )
+    replay = _apply_turn_with_job_mirror(
+        apply_turn,
+        "session:record",
+        "I buy road supplies from Bran.",
+        submission_id="submit:stable",
+    )
+    projected = build_turn_response_v2(
+        replay,
+        session_id="session:record",
+        command="I buy road supplies from Bran.",
+    )
+
+    assert calls == 1
+    assert first["interaction_id"] == replay["interaction_id"] == "interaction:4"
+    assert replay["idempotent_replay"] is True
+    assert projected["simulation_tick"] == 4
+    assert projected["state"]["revision"] == 14
+    assert projected["state"]["changed_domains"] == ["conversation", "inventory", "currency"]
+    assert projected["result"]["stateful"] is True
+    assert "Bran" in projected["visible_response"]["plain_text"]

@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
+
+import app.rpg.worlds.generation_retry as generation_retry_module
+from app.rpg.api.feature_routes.rpg_world_library_routes import _raise_generation_error
+from app.persistence.config import DatabaseConfigurationError
+from app.persistence.database import DatabaseUnavailableError
+from app.rpg.worlds.generation_diagnostics import log_world_generation_event
+from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
+from app.rpg.worlds.generation_retry import (
+    continue_world_generation,
+)
+
+_APPROVED_PROFILE_HASH = "sha256:approved-profile"
+
+
+def test_world_generation_diagnostic_omits_prompts_and_generated_content(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OMNIX_RPG_DEBUG_LOGS", "1")
+    monkeypatch.setenv("OMNIX_RPG_LOG_DIR", str(tmp_path))
+
+    payload = log_world_generation_event(
+        "world_generation.job_attempt_failed",
+        level="error",
+        diagnostic_id="diag:test",
+        world_id="world:aurelia",
+        run_id="run:1",
+        topic_id="classes",
+        job_id="job:1",
+        fields={
+            "provider_route": "lmstudio",
+            "model": "local-model",
+            "prompt": "DO NOT WRITE THIS PROMPT",
+            "generated_content": {"full_text": "DO NOT WRITE GENERATED LORE"},
+            "input_payload": {"messages": ["DO NOT WRITE PROVIDER PAYLOAD"]},
+            "dependency_ids": ["hero_system", "institutions"],
+        },
+        error=RuntimeError("x" * 3_000),
+    )
+
+    path = next(tmp_path.glob("world-generation-*.jsonl"))
+    stored = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+
+    assert payload["diagnostic_id"] == "diag:test"
+    assert stored["fields"]["provider_route"] == "lmstudio"
+    assert stored["fields"]["prompt"] == "[omitted]"
+    assert stored["fields"]["generated_content"] == "[omitted]"
+    assert stored["fields"]["input_payload"] == "[omitted]"
+    assert "DO NOT WRITE" not in path.read_text(encoding="utf-8")
+    assert len(stored["error"]["message"]) <= 1_200
+
+
+def test_generation_internal_error_returns_diagnostic_id_and_log_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OMNIX_RPG_DEBUG_LOGS", "1")
+    monkeypatch.setenv("OMNIX_RPG_LOG_DIR", str(tmp_path))
+
+    with pytest.raises(HTTPException) as raised:
+        _raise_generation_error(
+            RuntimeError("database exploded"),
+            operation="retry_failed",
+            diagnostic_id="diag:500",
+            run_id="run:failed",
+        )
+
+    assert raised.value.status_code == 500
+    assert raised.value.detail["error"] == "world_generation_internal_error"
+    assert raised.value.detail["diagnostic_id"] == "diag:500"
+    assert "world-generation-" in raised.value.detail["diagnostic_log"]
+    stored = json.loads(
+        next(tmp_path.glob("world-generation-*.jsonl")).read_text(encoding="utf-8")
+    )
+    assert stored["run_id"] == "run:failed"
+    assert stored["error"]["message"] == "database exploded"
+
+
+def test_generation_database_error_is_retryable_service_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OMNIX_RPG_DEBUG_LOGS", "1")
+    monkeypatch.setenv("OMNIX_RPG_LOG_DIR", str(tmp_path))
+
+    with pytest.raises(HTTPException) as raised:
+        _raise_generation_error(
+            DatabaseUnavailableError("PostgreSQL operation failed"),
+            operation="retry_failed",
+            diagnostic_id="diag:database",
+            run_id="run:failed",
+        )
+
+    assert raised.value.status_code == 503
+    assert raised.value.headers == {"Retry-After": "5"}
+    assert raised.value.detail["error"] == "world_generation_database_unavailable"
+    assert raised.value.detail["retryable"] is True
+
+
+def test_generation_database_authentication_error_explains_that_postgres_is_reachable() -> None:
+    with pytest.raises(HTTPException) as raised:
+        _raise_generation_error(
+            DatabaseUnavailableError(
+                "PostgreSQL operation failed",
+                sqlstate="28P01",
+            ),
+            operation="retry_failed",
+            diagnostic_id="diag:database-authentication",
+            run_id="run:failed",
+        )
+
+    assert raised.value.status_code == 503
+    assert raised.value.detail["error"] == (
+        "world_generation_database_authentication_failed"
+    )
+    assert "PostgreSQL is reachable" in raised.value.detail["message"]
+
+
+def test_generation_database_configuration_error_is_retryable_service_unavailable() -> None:
+    with pytest.raises(HTTPException) as raised:
+        _raise_generation_error(
+            DatabaseConfigurationError("OMNIX_DATABASE_URL must be configured"),
+            operation="start",
+            diagnostic_id="diag:database-configuration",
+            world_id="world:aurelia",
+        )
+
+    assert raised.value.status_code == 503
+    assert raised.value.detail["error"] == "world_generation_database_unavailable"
+
+
+def _approved_world(world_id: str = "world:aurelia") -> dict[str, object]:
+    return {
+        "id": world_id,
+        "draft_revision": 4,
+        "metadata": {
+            "genre_profile_binding": {
+                "status": "ready",
+                "profile_hash": _APPROVED_PROFILE_HASH,
+                "approved_profile_hash": _APPROVED_PROFILE_HASH,
+                "profile": {
+                    "profile_id": "test-profile",
+                    "version": 1,
+                    "display_name": "Test Profile",
+                    "domains": [],
+                    "launch_requirements": {
+                        "required_domain_ids": [],
+                        "required_semantic_roles": [],
+                    },
+                },
+            }
+        },
+    }
+
+
+def _install_approval(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    approved_hash: str = _APPROVED_PROFILE_HASH,
+) -> None:
+    monkeypatch.setattr(
+        "app.rpg.worlds.generation_retry.require_approved_profile",
+        lambda world: {
+            "status": "approved",
+            "approved_profile_hash": approved_hash,
+        },
+    )
+
+
+def test_continue_resumes_an_existing_running_run_without_creating_a_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    running = {
+        "run_id": "run:running",
+        "world_id": "world:aurelia",
+        "status": "running",
+        "settings": WorldTopicGenerationSettings(
+            generator_version="world-generator-v1",
+            prompt_version="world-prompt-v1",
+            provider_route="lmstudio",
+            model="google/gemma-4-e4b",
+            seed=1,
+        ).as_dict(),
+        "plan": {"new_job_ids": ["job:history"]},
+        "progress": {
+            "generation_complete": False,
+            "active_topic_ids": ["history"],
+            "flagged_topic_ids": ["rules"],
+            "failed_topic_ids": [],
+            "blocked_topic_ids": [],
+            "stale_topic_ids": [],
+        },
+    }
+
+    class FakeWork:
+        world_generation = SimpleNamespace(
+            get=lambda context, run_id: running,
+        )
+
+        def rollback(self) -> None:
+            return None
+
+    class FakeUnitOfWork:
+        def __enter__(self):
+            return FakeWork()
+
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+    kicked: list[dict] = []
+    monkeypatch.setattr(
+        generation_retry_module,
+        "current_tenant",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "unit_of_work",
+        lambda database=None: FakeUnitOfWork(),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "reconcile_world_generation",
+        lambda run_id, database=None: running,
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "kick_world_generation_worker",
+        lambda **kwargs: kicked.append(kwargs) or True,
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "retry_failed_world_generation",
+        lambda *args, **kwargs: pytest.fail("must not create a child retry"),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "log_world_generation_event",
+        lambda *args, **kwargs: {},
+    )
+
+    result = continue_world_generation("run:running")
+
+    assert result["continue_of_run_id"] == "run:running"
+    assert result["worker_started"] is True
+    assert result["resolved_route"]["source"] == "existing_running_run"
+    assert kicked == [{"database": None, "provider_route": "lmstudio"}]
