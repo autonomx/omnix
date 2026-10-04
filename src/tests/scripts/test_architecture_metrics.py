@@ -115,6 +115,11 @@ CASES = [
                                     APP + "persistence/retention.py": "SQL = 'DELETE FROM omnix_rpg_turns'"}, 1),
     ("tables_without_owner", {APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_a (id int);\nCREATE TABLE omnix_b (id int);",
                               "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_a": {"owner": "kernel", "created_by": "0001_platform"}}}'}, 1),
+    ("app_migrations_in_kernel_dir", {APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);",
+                                      APP + "persistence/migrations/0002_more.sql": "CREATE TABLE omnix_jobs (id int);",
+                                      "resources/architecture/historical-table-owners.json":
+                                      '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}, '
+                                      '"omnix_jobs": {"owner": "kernel", "created_by": "0002_more"}}}'}, 1),
     ("historical_owner_map_additions", {"resources/architecture/historical-table-owners.json":
                                         '{"frozen_after": "0001_platform", "tables": {"omnix_a": {"owner": "kernel", "created_by": "0002_new"}}}'}, 1),
 ]

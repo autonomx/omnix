@@ -20,6 +20,7 @@ from architecture_analysis import (
 ROOT = Path(__file__).resolve().parents[1]
 RULES = tuple(f"AL{number:03}" for number in range(1, 17))
 MIGRATIONS = "src/app/persistence/migrations/"
+RETIRED_MIGRATIONS = "src/app/persistence/retired/"
 REGISTRY = "resources/architecture/migration-checksums.json"
 SCOPE = "tracked_nonvendor_production_python_and_migrations"
 
@@ -28,9 +29,29 @@ def checksum(source: str) -> str:
     return hashlib.sha256(source.replace("\r\n", "\n").encode("utf-8")).hexdigest()
 
 
+def is_schema_migration(path: str, files: set[str] | dict[str, str]) -> bool:
+    """One of the three places schema migrations live (PA-2.3): the kernel folder,
+    a migrations/ folder next to a feature.py, or a retired module's tombstone."""
+    posix = PurePosixPath(path)
+    if not path.endswith(".sql") or posix.parent.name != "migrations":
+        return False
+    if path.startswith(MIGRATIONS) and len(posix.parts) == 5:
+        return True
+    if path.startswith(RETIRED_MIGRATIONS) and len(posix.parts) == 7:
+        return True
+    return path.startswith("src/app/") and str(posix.parent.parent / "feature.py") in files
+
+
 def migration_sources(sources: dict[str, str]) -> dict[str, str]:
-    return {path: source for path, source in sources.items()
-            if path.startswith(MIGRATIONS) and path.endswith(".sql")}
+    return {path: source for path, source in sources.items() if is_schema_migration(path, sources)}
+
+
+def stray_migration_violations(sources: dict[str, str]) -> list[Violation]:
+    """A .sql file in any other migrations/ folder would silently become schema."""
+    return [Violation("AL014", path, "stray_schema_migration", 1)
+            for path in sorted(sources)
+            if path.startswith("src/") and path.endswith(".sql") and "migrations" in PurePosixPath(path).parts
+            and not is_schema_migration(path, sources)]
 
 
 def registry_checksums(registry: dict) -> dict[str, str]:
@@ -40,8 +61,9 @@ def registry_checksums(registry: dict) -> dict[str, str]:
     if not isinstance(entries, dict) or not entries:
         raise AnalysisError("migration checksum registry is empty or invalid")
     for path, digest in entries.items():
-        if (not isinstance(path, str) or not path.startswith(MIGRATIONS)
-                or len(PurePosixPath(path).parts) != 5 or ".." in PurePosixPath(path).parts or not path.endswith(".sql")
+        if (not isinstance(path, str) or not path.startswith("src/app/")
+                or PurePosixPath(path).parent.name != "migrations"
+                or ".." in PurePosixPath(path).parts or not path.endswith(".sql")
                 or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
             raise AnalysisError("migration checksum registry entry is invalid")
     return entries
@@ -53,11 +75,12 @@ def reference_migrations(root: Path, reference: str) -> dict[str, str] | None:
     if result.returncode:
         return None
     revision = result.stdout.decode("ascii").strip()
-    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "-z", revision, "--", MIGRATIONS],
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "-z", revision, "--", "src/app"],
                            cwd=root, capture_output=True, check=True)
+    listed = set(names.stdout.decode("utf-8").split("\0"))
     entries = {}
-    for path in names.stdout.decode("utf-8").split("\0"):
-        if path.endswith(".sql"):
+    for path in sorted(listed):
+        if is_schema_migration(path, listed):
             contents = subprocess.run(["git", "show", f"{revision}:{path}"], cwd=root,
                                       capture_output=True, check=True).stdout.decode("utf-8-sig")
             entries[path] = checksum(contents)
@@ -65,18 +88,24 @@ def reference_migrations(root: Path, reference: str) -> dict[str, str] | None:
 
 
 def migration_violations(sources: dict[str, str], protected: dict[str, str]) -> list[Violation]:
+    # A migration's identity is its version (file stem) and checksum, not its
+    # path: moving it into its owner's migrations/ folder is not a change (PA-2.3).
     current = migration_sources(sources)
-    violations = []
+    by_stem = {PurePosixPath(path).stem: path for path in current}
+    protected_stems = {PurePosixPath(path).stem: digest for path, digest in protected.items()}
+    violations = stray_migration_violations(sources)
     for path, digest in sorted(protected.items()):
-        if path not in current or checksum(current[path]) != digest:
+        stem = PurePosixPath(path).stem
+        moved = by_stem.get(stem)
+        if moved is None or checksum(current[moved]) != digest:
             violations.append(Violation("AL014", path, "existing_migration_changed_or_removed", 1))
     highest = max((PurePosixPath(path).name for path in protected), default="")
     prefixes: dict[int, set[str]] = {}
-    for path in set(current) | set(protected):
-        prefix = re.match(r"(\d+)", PurePosixPath(path).name)
+    for stem in set(by_stem) | set(protected_stems):
+        prefix = re.match(r"(\d+)", stem)
         if prefix:
-            prefixes.setdefault(int(prefix[1]), set()).add(path)
-    for path in sorted(set(current) - set(protected)):
+            prefixes.setdefault(int(prefix[1]), set()).add(stem)
+    for path in sorted(path for stem, path in by_stem.items() if stem not in protected_stems):
         name = PurePosixPath(path).name
         prefix = re.match(r"(\d+)", name)
         if not prefix:

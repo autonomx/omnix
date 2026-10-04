@@ -67,6 +67,8 @@ LOWER_TARGETS: dict[str, int | str] = {
     # PA-2.2: table ownership and AL016.
     "tables_without_owner": 0, "historical_owner_map_additions": 0,
     "kernel_named_module_tables": 0, "cross_module_sql": 0,
+    # PA-2.3: migrations live with their owning module.
+    "app_migrations_in_kernel_dir": 0,
 }
 HIGHER_TARGETS: dict[str, int | str] = {
     "rls_coverage_pct": 100, "retention_policies_executed_pct": 100,
@@ -1192,6 +1194,9 @@ def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str
     evidence["tables_without_owner"] = table_ownership.unowned_tables(
         analysis.sources, table_ownership.load_historical(analysis.sources),
         {"src/" + package.replace(".", "/"): sorted(unit.ids)[0] for package, unit in analysis.module_units().items()},
+    ) if historical_text else []
+    evidence["app_migrations_in_kernel_dir"] = sorted(
+        f"{path}:{owner}" for path, owner in table_ownership.single_owner_kernel_migrations(analysis.sources, owners).items()
     ) if historical_text else []
     values = {key: len(sites) for key, sites in evidence.items()}
     return values, evidence

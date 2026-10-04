@@ -529,3 +529,18 @@ def test_al016_checks_migrations_in_module_folders_and_allows_registration_rows(
                    "ALTER TABLE omnix_chat_sessions ADD COLUMN x int;\n"
                    "INSERT INTO omnix_retention_policies (record_type) VALUES ('rpg') ON CONFLICT DO NOTHING;\n")}
     assert _al016(sources) == {"<migration>:alter table:omnix_chat_sessions"}
+
+
+def test_a_migration_moved_into_its_modules_folder_is_not_a_change():
+    sql = "-- omnix-migration: phase=expand transactional=true\nSELECT 1;\n"
+    protected = {OLD: lint.checksum(sql)}
+    moved = {APP + "chat/migrations/0001_platform.sql": sql}
+    assert not [entry for entry in lint.measure({**DECLARED_FEATURES, **moved}, CONFIG, protected)["violations"]
+                if entry["rule"] == "AL014"]
+
+
+def test_a_sql_file_outside_the_three_migration_places_is_a_violation():
+    sources = {APP + "rpg/persistence/migrations/v8.sql": "SELECT 1;\n"}
+    assert {(entry["path"], entry["fingerprint"]) for entry in report(sources)["violations"] if entry["rule"] == "AL014"} == {
+        (APP + "rpg/persistence/migrations/v8.sql", "stray_schema_migration"),
+    }

@@ -86,6 +86,31 @@ def unowned_tables(sources: dict[str, str], historical: dict[str, dict], feature
     return sorted(set(created_tables(sources)) - set(owned))
 
 
+_TOUCH = re.compile(
+    r"\b(?:create\s+table\s+(?:if\s+not\s+exists\s+)?|alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?"
+    r"|drop\s+table\s+(?:if\s+exists\s+)?|on\s+(?:only\s+)?|insert\s+into\s+|update\s+(?:only\s+)?"
+    r"|delete\s+from\s+(?:only\s+)?)([a-z_][a-z0-9_]*)",
+    re.I,
+)
+
+
+def touched_owners(sql: str, owners: dict[str, str]) -> set[str]:
+    """Owners of the tables a migration creates or changes; foreign keys do not count."""
+    return {owners[name] for name in (match.group(1).lower() for match in _TOUCH.finditer(sql)) if name in owners}
+
+
+def single_owner_kernel_migrations(sources: dict[str, str], owners: dict[str, str]) -> dict[str, str]:
+    """Kernel-folder migrations that touch only one feature's tables: they belong in its folder."""
+    result = {}
+    for path, sql in migration_sources(sources).items():
+        if not path.startswith(KERNEL_MIGRATIONS):
+            continue
+        touched = touched_owners(sql, owners)
+        if len(touched) == 1 and not touched & {"kernel", "shared"}:
+            result[path] = next(iter(touched))
+    return result
+
+
 def load_historical(sources: dict[str, str]) -> dict[str, dict]:
     text = sources.get(HISTORICAL)
     return json.loads(text)["tables"] if text else {}

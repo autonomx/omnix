@@ -33,9 +33,6 @@ MAX_APPLIED_MIGRATIONS = 100_000
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0127_agent_approval_definition_hash"
-APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
-APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
 _CANONICAL_MIGRATION_CHECKSUMS = {
     "0083_trading_evidence_execution_v3": (
@@ -90,6 +87,28 @@ def migration_root() -> Path:
     return Path(__file__).with_name("migrations")
 
 
+def migration_roots() -> list[Path]:
+    """Every folder schema migrations are read from (ADR-0016, PA-2.3).
+
+    Exactly three places, found by convention so the kernel never reads the
+    feature catalog: the kernel folder, a ``migrations/`` folder that sits next
+    to a module's ``feature.py``, and retired modules' tombstone folders. Every
+    module's migrations are found whether or not the feature is enabled: the
+    schema is a release artifact, not a feature flag.
+    """
+    app_root = Path(__file__).resolve().parents[1]
+    roots = [migration_root()]
+    # Feature packages sit at app/<package> or, nested, app/<package>/<feature>.
+    roots += sorted(
+        folder for pattern in ("*/migrations", "*/*/migrations") for folder in app_root.glob(pattern)
+        if folder.is_dir() and (folder.parent / "feature.py").is_file()
+    )
+    retired = migration_root().parent / "retired"
+    if retired.is_dir():
+        roots += sorted(folder for folder in retired.glob("*/migrations") if folder.is_dir())
+    return roots
+
+
 def _metadata(sql: str) -> tuple[str, bool]:
     first = sql.splitlines()[0].strip() if sql.splitlines() else ""
     match = _MIGRATION_HEADER.match(first)
@@ -99,9 +118,14 @@ def _metadata(sql: str) -> tuple[str, bool]:
 
 
 def discover_migrations(root: Path | None = None) -> list[Migration]:
-    resolved = root or migration_root()
+    roots = [root] if root is not None else migration_roots()
+    paths = sorted((path for folder in roots for path in folder.glob("*.sql")), key=lambda path: path.stem)
+    stems = [path.stem for path in paths]
+    if len(stems) != len(set(stems)):
+        duplicates = sorted({stem for stem in stems if stems.count(stem) > 1})
+        raise MigrationError("migration versions must be unique across folders: " + ", ".join(duplicates))
     migrations: list[Migration] = []
-    for path in sorted(resolved.glob("*.sql")):
+    for path in paths:
         sql = path.read_text(encoding="utf-8")
         phase, transactional = _metadata(sql)
         migrations.append(
@@ -118,6 +142,12 @@ def discover_migrations(root: Path | None = None) -> list[Migration]:
     if versions != sorted(set(versions)):
         raise MigrationError("migration versions must be unique and lexically ordered")
     return migrations
+
+
+# The newest migration this application knows; derived, never hand-edited (PA-2.3).
+SCHEMA_KNOWN = discover_migrations()[-1].version
+APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
+APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
 
 def _has_metadata_columns(connection: Any) -> bool:

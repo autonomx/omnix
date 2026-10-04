@@ -482,6 +482,8 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
   - **`SCHEMA_KNOWN`** is computed as the highest discovered stem and is no longer hand-edited. `SCHEMA_MIN_CONTRACT` stays hand-set: it is a deliberate compatibility decision made only with contract migrations, and adding an app never changes it.
   - **Identity across moves.** AL014 and `migration-checksums.json` identify a migration by stem and checksum, not by path, so moving a file is not a change. `_CANONICAL_MIGRATION_CHECKSUMS` and `_LEGACY_MIGRATION_CHECKSUMS` stay keyed by stem.
   - **Tables stay where they are.** Existing tables stay in the `public` schema under their current names (see §6).
+- **New metrics:**
+  - `app_migrations_in_kernel_dir`
 - **Steps:**
   1. Land discovery, the computed `SCHEMA_KNOWN` and stem-based AL014. Tests cover a duplicate stem across directories, a moved but unchanged file, an unchanged computed `SCHEMA_KNOWN`, and a stray `.sql` file under a non-schema `migrations/` folder (a lint error).
   2. From then on, new migrations go into module directories.
@@ -832,7 +834,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-1.5 | in progress | — | 2026-10-04 | AL001 69 → 41; app_to_app_imports 0 | New `FeatureModule.uses` (optional contract dependency). Trading uses research, RPG uses image, desktop companion uses assistant-memory; character interactions, desktop companion, RPG and characters import platform services only through contracts (lazy exports). `replay` was folded into the RPG unit in PA-0.2. Remaining: memory imports (PA-3.2) |
 | PA-2.1 | not started | — | — | — | Needs a design first: the settings profile is one typed API document with every module's section and module-dispatched job defaults; assembling it from declared sections at composition must keep the OpenAPI document and persisted settings unchanged |
 | PA-2.2 | in progress | — | 2026-10-04 | tables_without_owner 0; historical_owner_map_additions 0; cross_module_sql 84 (AL016 baseline); kernel_named_module_tables 36 | Frozen historical owner map (248 tables) and generator; AL016 for Python SQL and module-folder migrations, with the retention registration exception. Remaining: drive the 84 references to zero (retention declarations, RPG repositories out of the kernel, module-record users) |
-| PA-2.3 | not started | — | — | — | |
+| PA-2.3 | in progress | — | 2026-10-04 | SCHEMA_KNOWN derived; app_migrations_in_kernel_dir 110 | Step 1 done: discovery in three places, derived `SCHEMA_KNOWN`, stem-based AL014, stray `.sql` lint. Remaining: step 3, the pure-move PR of the 110 single-owner migrations |
 | PA-2.4 | not started | — | — | — | |
 | PA-2.5 | not started | — | — | — | |
 | PA-3.1 | not started | — | — | — | |
