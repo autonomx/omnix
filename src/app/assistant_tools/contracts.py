@@ -8,11 +8,12 @@ from app.assistant_tools.kasa_plan import (
     kasa_request_from_tool_call,
 )
 from app.assistant_tools.live_agent_proposals import live_agent_planner_context, live_agent_tool_proposals
-from app.assistant_tools.models import AssistantToolRequest
+from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 
 __all__ = [
     "KASA_READ_TOOLS",
     "AssistantToolRequest",
+    "AssistantToolResult",
     "first_pending_kasa_write",
     "is_kasa_tool_name",
     "kasa_request_from_tool_call",

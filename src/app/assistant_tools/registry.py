@@ -1,6 +1,8 @@
 """Backend projection of the canonical Omnix capability registry."""
 from __future__ import annotations
 
+from app.capabilities.registry import declared_tools
+
 from collections import defaultdict
 
 from app.capabilities import Capability, default_capability_registry
@@ -93,6 +95,7 @@ def default_assistant_tools() -> list[AssistantToolSpec]:
     tools: list[AssistantToolSpec] = []
     for tool_id, capabilities in grouped.items():
         first = capabilities[0]
+        declared = next((tool for tool in declared_tools() if tool.tool_id == tool_id), None)
         actions = [
             tool_action(
                 tool_id=tool_id,
@@ -118,16 +121,14 @@ def default_assistant_tools() -> list[AssistantToolSpec]:
                     "contacts": "Google Contacts",
                     "github": "GitHub",
                     "kasa": "TP-Link Kasa",
-                    "trading": "Trading Market Data",
-                }.get(tool_id, tool_id.replace("_", " ").title()),
+                }.get(tool_id, declared.display_name if declared else tool_id.replace("_", " ").title()),
                 description={
                     "gmail": "Read, draft, send, and delete Gmail messages with approval controls.",
                     "calendar": "Read availability and manage calendar events.",
                     "contacts": "Resolve contacts for email and calendar workflows.",
                     "github": "Read repositories, manage pull requests, inspect CI, and perform governed repo actions.",
                     "kasa": "Discover, inspect, and control approved Kasa smart plugs on the local network.",
-                    "trading": "Read authoritative market data without order or broker mutation authority.",
-                }.get(tool_id, f"Governed {tool_id} capabilities."),
+                }.get(tool_id, declared.description if declared else f"Governed {tool_id} capabilities."),
                 category=first.category,
                 provider=first.provider,
                 actions=actions,

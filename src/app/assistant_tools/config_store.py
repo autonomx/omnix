@@ -130,9 +130,16 @@ def save_assistant_tools_config(
     return normalized
 
 
+def _declared_tool(tool_id: str):
+    from app.capabilities.registry import declared_tools
+
+    return next((tool for tool in declared_tools() if tool.tool_id == tool_id), None)
+
+
 def _default_tool_enabled(tool_id: str) -> bool:
-    if tool_id == "research":
-        return True
+    declared = _declared_tool(tool_id)
+    if declared is not None:
+        return declared.default_enabled()
     if tool_id == "browser":
         try:
             from .browser_adapter import browser_available
@@ -147,23 +154,13 @@ def _default_tool_enabled(tool_id: str) -> bool:
             return mcp_runtime_available()
         except Exception:
             return False
-    if tool_id == "trading":
-        try:
-            from app.trading.providers.alpaca_iex import alpaca_iex_configured
-            return alpaca_iex_configured()
-        except Exception:
-            return False
     if tool_id in {"kasa", "home"}:
         return _flag("OMNIX_KASA_ENABLED")
     return False
 
 
 def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
-    if tool_id == "research" and enabled:
-        return "connected"
-    if tool_id in {"browser", "mcp"}:
-        return "connected" if enabled else "not_configured"
-    if tool_id == "trading":
+    if tool_id in {"browser", "mcp"} or _declared_tool(tool_id) is not None:
         return "connected" if enabled else "not_configured"
     if tool_id in {"kasa", "home"} and enabled:
         return "connected"
@@ -171,14 +168,13 @@ def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
 
 
 def _default_account_label(tool_id: str) -> str | None:
-    if tool_id == "research":
-        return "Omnix Research"
+    declared = _declared_tool(tool_id)
+    if declared is not None:
+        return declared.account_label
     if tool_id == "browser":
         return "agent-browser"
     if tool_id == "mcp":
         return "MCPorter"
-    if tool_id == "trading":
-        return "Alpaca IEX"
     if tool_id not in {"kasa", "home"}:
         return None
     return (

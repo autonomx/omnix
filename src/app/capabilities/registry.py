@@ -7,11 +7,12 @@ of maintaining runtime-specific tool names.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.caching.bounded_cache import bounded_lru_cache
+from app.runtime.ports import Port, implementations, installed_port_bindings
 
 CapabilityExecutionZone = Literal["worker", "broker", "model", "context"]
 CapabilityEffect = Literal["read", "create", "mutate", "delete", "execute"]
@@ -181,9 +182,6 @@ _DEFAULT_CAPABILITIES = (
     _cap("calendar.delete_event", "Delete events", "Delete calendar events.", zone="broker", effect="delete", risk="high", network=True, credentials=True, connection=True, confirmation=True, destructive=True, provider="Google", category="productivity", assistant=True),
     _cap("contacts.search_contacts", "Search contacts", "Search Google Contacts.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="Google", category="productivity", assistant=True),
     _cap("contacts.resolve_recipient", "Resolve recipients", "Resolve saved contact details for another governed action.", zone="broker", effect="read", risk="medium", network=True, credentials=True, connection=True, provider="Google", category="productivity", assistant=True),
-    _cap("research.web_search", "Search the web", "Run bounded provider-neutral web research and return source-grounded results without side effects.", zone="broker", effect="read", network=True, provider="Omnix Research", category="research", assistant=True, hermes=True, input_schema={"query": "search query", "max_results": "integer 1..10", "max_extracts": "integer 0..4"}),
-    _cap("trading.market_quote", "Read market quote", "Read a current read-only US equity quote from the configured authoritative market-data provider. This capability cannot place or modify orders.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="Alpaca IEX", category="trading", assistant=True, hermes=True, input_schema={"ticker": "US equity ticker symbol"}),
-    _cap("market.status", "Read market status", "Read authoritative current market-session status when a market-status provider is configured.", zone="broker", effect="read", network=True, credentials=True, connection=True, enabled=False, provider="Market Status", category="trading", assistant=True, hermes=True),
     _cap("weather.current", "Read current weather", "Read authoritative current weather for an explicitly resolved location when a weather provider is configured.", zone="broker", effect="read", network=True, connection=True, enabled=False, provider="Weather", category="research", assistant=True, hermes=True, input_schema={"location": "canonical location"}),
     _cap("github.read_repo", "Read repositories", "Read repository metadata, files, pull requests, and checks.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="GitHub", category="development", assistant=True),
     _cap("github.create_branch", "Create branches", "Create GitHub branches for prepared changes.", zone="broker", effect="create", risk="medium", network=True, credentials=True, connection=True, provider="GitHub", category="development", assistant=True),
@@ -244,14 +242,45 @@ def browser_capability_ids() -> tuple[str, ...]:
     return tuple(capability.id for capability in _BROWSER_CAPABILITIES)
 
 
+class ToolDeclaration(Protocol):
+    """A module's assistant tool (ADR-0016): its catalog rows, display text,
+    default enablement and adapter. Declaring a tool makes it available; it
+    grants nothing. Grants, approvals and the tool policy still decide."""
+
+    tool_id: str
+    display_name: str
+    description: str
+    account_label: str | None
+
+    def capabilities(self) -> tuple[Capability, ...]: ...
+
+    def default_enabled(self) -> bool: ...
+
+    def run(self, request: Any) -> Any: ...
+
+
+TOOL_DECLARATIONS: Port[ToolDeclaration] = Port("capabilities.tools", ToolDeclaration, "many")
+
+
+def capability(capability_id: str, name: str, description: str, **options: Any) -> Capability:
+    """Build a catalog row with the kernel's defaults (approval policy by effect and risk)."""
+    return _cap(capability_id, name, description, **options)
+
+
+def declared_tools() -> tuple[ToolDeclaration, ...]:
+    return implementations(TOOL_DECLARATIONS)
+
+
 def default_capability_registry() -> CapabilityRegistry:
-    """The built-in capabilities plus the operator's MCP tools, rebuilt only
-    when the MCP policy file changes (WP-7.4)."""
+    """The built-in capabilities, the tools enabled features declare and the
+    operator's MCP tools; rebuilt when the MCP policy file or the composed
+    bindings change (WP-7.4)."""
     from .mcp_policy import mcp_policy_signature
 
-    return _capability_registry_for(mcp_policy_signature())
+    return _capability_registry_for(mcp_policy_signature(), installed_port_bindings())
 
 
 @bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
-def _capability_registry_for(_policy_signature: tuple[str, int, int] | None) -> CapabilityRegistry:
-    return CapabilityRegistry((*_DEFAULT_CAPABILITIES, *_configured_mcp_capabilities()))
+def _capability_registry_for(_policy_signature: tuple[str, int, int] | None, _bindings: object = None) -> CapabilityRegistry:
+    contributed = tuple(row for tool in declared_tools() for row in tool.capabilities())
+    return CapabilityRegistry((*_DEFAULT_CAPABILITIES, *contributed, *_configured_mcp_capabilities()))

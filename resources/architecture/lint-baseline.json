@@ -122,51 +122,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_default_tool_enabled:app.trading.providers.alpaca_iex",
-      "lines": [
-        152
-      ],
-      "path": "src/app/assistant_tools/config_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_research_tool_request:app.research.quick_search",
-      "lines": [
-        54
-      ],
-      "path": "src/app/assistant_tools/research_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_trading_tool_request:app.trading.catalog",
-      "lines": [
-        38
-      ],
-      "path": "src/app/assistant_tools/trading_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_trading_tool_request:app.trading.models",
-      "lines": [
-        39
-      ],
-      "path": "src/app/assistant_tools/trading_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_trading_tool_request:app.trading.providers.alpaca_iex",
-      "lines": [
-        40
-      ],
-      "path": "src/app/assistant_tools/trading_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_character_integration_routes.memory_repository_factory:app.assistant_memory.owner_repository",
       "lines": [
         102

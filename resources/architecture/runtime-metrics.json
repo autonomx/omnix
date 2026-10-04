@@ -200,10 +200,8 @@
         "app.assistant_tools.proposals",
         "app.assistant_tools.registry",
         "app.assistant_tools.repo_adapter",
-        "app.assistant_tools.research_adapter",
         "app.assistant_tools.result_context",
         "app.assistant_tools.routes",
-        "app.assistant_tools.trading_adapter",
         "app.assistant_tools.validation",
         "app.audiobook",
         "app.audiobook.audio_text",
@@ -543,6 +541,7 @@
         "app.replay.rpg_adapter",
         "app.research",
         "app.research.api",
+        "app.research.assistant_tool",
         "app.research.cache",
         "app.research.contracts",
         "app.research.deep_manifest",
@@ -1300,6 +1299,7 @@
         "app.trading.alerts_api",
         "app.trading.alerts_monitor",
         "app.trading.api",
+        "app.trading.assistant_tool",
         "app.trading.backtest",
         "app.trading.binding_authority",
         "app.trading.bounce_model",
@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-04T20:42:13.384764+00:00",
+  "measured_at": "2026-10-04T20:56:25.496530+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "3bdef1dccbe48b139eb5c08623660a5d31679e11d101111a8140cb9c27d0d28a"
+  "source_digest": "34bcb36be3f4523ac72aa7a6c3e8fc544b6b60d9d2f6afdcd79e1750dc523394"
 }

@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 41,
+      "AL001": 36,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -220,11 +220,9 @@
       "app.assistant_tools.proposals",
       "app.assistant_tools.registry",
       "app.assistant_tools.repo_adapter",
-      "app.assistant_tools.research_adapter",
       "app.assistant_tools.result_context",
       "app.assistant_tools.routes",
       "app.assistant_tools.step_flow",
-      "app.assistant_tools.trading_adapter",
       "app.assistant_tools.validation",
       "app.audiobook",
       "app.audiobook.analysis_repository",
@@ -644,6 +642,7 @@
       "app.research",
       "app.research.adversarial_gate",
       "app.research.api",
+      "app.research.assistant_tool",
       "app.research.cache",
       "app.research.contracts",
       "app.research.deep_manifest",
@@ -1883,6 +1882,7 @@
       "app.trading.alerts_api",
       "app.trading.alerts_monitor",
       "app.trading.api",
+      "app.trading.assistant_tool",
       "app.trading.backtest",
       "app.trading.binding_authority",
       "app.trading.bounce_model",
@@ -2488,11 +2488,7 @@
       ],
       "app_to_app_imports": [],
       "composition_imports_outside_composition": [],
-      "kernel_tools_naming_apps": [
-        "market.status",
-        "research.web_search",
-        "trading.market_quote"
-      ],
+      "kernel_tools_naming_apps": [],
       "module_repositories_in_kernel": [
         "src/app/persistence/rpg_narration_event_repository.py"
       ],
@@ -3050,11 +3046,11 @@
         "category": "cache",
         "invalidation": "_capability_registry_for.cache_clear",
         "kind": "function_cache",
-        "line": 256,
+        "line": 284,
         "max_entries": 8,
         "maxsize": 8,
         "path": "src/app/capabilities/registry.py",
-        "reason": "The immutable capability registry built from the built-in capabilities and one MCP policy file version (WP-7.4); rebuilt when the policy file changes.",
+        "reason": "The immutable capability registry built from the built-in capabilities, the tools enabled features declare, and one MCP policy file version (WP-7.4, ADR-0016); rebuilt when the policy file or the composed port bindings change.",
         "symbol": "_capability_registry_for.__cache__",
         "ttl_seconds": 3600.0
       },
@@ -6586,7 +6582,7 @@
     "kernel_tools_naming_apps": {
       "direction": "lower",
       "target": 0,
-      "value": 3
+      "value": 0
     },
     "largest_class_lines": {
       "direction": "lower",
@@ -6596,7 +6592,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 41
+      "value": 36
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6801,5 +6797,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "3bdef1dccbe48b139eb5c08623660a5d31679e11d101111a8140cb9c27d0d28a"
+  "source_digest": "34bcb36be3f4523ac72aa7a6c3e8fc544b6b60d9d2f6afdcd79e1750dc523394"
 }

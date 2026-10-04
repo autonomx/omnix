@@ -355,7 +355,7 @@
       "path": "src/app/capabilities/registry.py",
       "symbol": "_capability_registry_for.__cache__",
       "category": "cache",
-      "reason": "The immutable capability registry built from the built-in capabilities and one MCP policy file version (WP-7.4); rebuilt when the policy file changes.",
+      "reason": "The immutable capability registry built from the built-in capabilities, the tools enabled features declare, and one MCP policy file version (WP-7.4, ADR-0016); rebuilt when the policy file or the composed port bindings change.",
       "max_entries": 8,
       "ttl_seconds": 3600.0,
       "invalidation": "_capability_registry_for.cache_clear"

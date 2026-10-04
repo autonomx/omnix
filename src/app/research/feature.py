@@ -7,6 +7,7 @@ from app.research.persistence.report_repository import PostgresResearchReportRep
 from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
 from app.runtime.features import FeatureContext
+from app.capabilities.registry import TOOL_DECLARATIONS
 from app.chat.contracts import CHAT_RESEARCH
 from app.runtime.ports import ContributionSpec
 from .api import create_research_credential_router
@@ -32,6 +33,12 @@ def _research_router(context: FeatureContext):
     return router
 
 
+def _research_tool(_context: FeatureContext):
+    from .assistant_tool import ResearchTool
+
+    return ResearchTool()
+
+
 def _chat_research(_context: FeatureContext):
     from .api import ChatResearchAdapter
 
@@ -44,7 +51,12 @@ FEATURE = FeatureModule(
     # Deep research is asked for in chat and answers into chat sessions; research
     # implements chat's CHAT_RESEARCH port, so chat never imports research (ADR-0016).
     depends_on=("chat",),
-    contributions=(ContributionSpec(CHAT_RESEARCH, _chat_research),),
+    # Its web search tool is contributed only when assistant tools can run it.
+    uses=("assistant-tools",),
+    contributions=(
+        ContributionSpec(CHAT_RESEARCH, _chat_research),
+        ContributionSpec(TOOL_DECLARATIONS, _research_tool),
+    ),
     routers=(_research_router,),
     repositories=(
         RepositorySpec(PostgresResearchReportRepository, PostgresResearchReportRepository, "research_reports"),

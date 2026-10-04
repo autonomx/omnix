@@ -1,7 +1,8 @@
 """Read-only trading market-data adapter for governed Agent evidence."""
 from __future__ import annotations
 
-from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
+from app.capabilities.registry import Capability, capability
 
 
 def run_trading_tool_request(
@@ -84,3 +85,29 @@ def run_trading_tool_request(
         ),
         output=output,
     )
+
+
+class TradingMarketDataTool:
+    """Trading's read-only market-data tool. It has no order or broker mutation authority."""
+
+    tool_id = "trading"
+    display_name = "Trading Market Data"
+    description = "Read authoritative market data without order or broker mutation authority."
+    account_label = "Alpaca IEX"
+
+    def capabilities(self) -> tuple[Capability, ...]:
+        return (
+            capability("trading.market_quote", "Read market quote", "Read a current read-only US equity quote from the configured authoritative market-data provider. This capability cannot place or modify orders.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="Alpaca IEX", category="trading", assistant=True, hermes=True, input_schema={"ticker": "US equity ticker symbol"}),
+            capability("market.status", "Read market status", "Read authoritative current market-session status when a market-status provider is configured.", zone="broker", effect="read", network=True, credentials=True, connection=True, enabled=False, provider="Market Status", category="trading", assistant=True, hermes=True),
+        )
+
+    def default_enabled(self) -> bool:
+        try:
+            from app.trading.providers.alpaca_iex import alpaca_iex_configured
+
+            return alpaca_iex_configured()
+        except Exception:
+            return False
+
+    def run(self, request: AssistantToolRequest) -> AssistantToolResult:
+        return run_trading_tool_request(request)

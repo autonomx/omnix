@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import AssistantToolRequest, AssistantToolResult
+from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
+from app.capabilities.registry import Capability, capability
 
 
 def run_research_tool_request(
@@ -51,7 +52,7 @@ def run_research_tool_request(
         # Keep process initialization acyclic: Quick Search imports the
         # assistant-context package, whose initialization can reach chat and
         # live-agent hooks that depend on this Hermes bridge.
-        from app.research.quick_search import QuickSearchService
+        from .quick_search import QuickSearchService
 
         runtime = QuickSearchService(max_extracts=max_extracts)
     else:
@@ -112,3 +113,23 @@ def _result(
         output=output,
         error=error,
     )
+
+
+class ResearchTool:
+    """Research's read-only web search tool for agents and workflows."""
+
+    tool_id = "research"
+    display_name = "Research"
+    description = "Governed research capabilities."
+    account_label = "Omnix Research"
+
+    def capabilities(self) -> tuple[Capability, ...]:
+        return (
+            capability("research.web_search", "Search the web", "Run bounded provider-neutral web research and return source-grounded results without side effects.", zone="broker", effect="read", network=True, provider="Omnix Research", category="research", assistant=True, hermes=True, input_schema={"query": "search query", "max_results": "integer 1..10", "max_extracts": "integer 0..4"}),
+        )
+
+    def default_enabled(self) -> bool:
+        return True
+
+    def run(self, request: AssistantToolRequest) -> AssistantToolResult:
+        return run_research_tool_request(request)

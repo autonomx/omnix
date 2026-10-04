@@ -32,9 +32,7 @@ from .ledger import (
 from .mcp_adapter import run_mcp_tool_request
 from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 from .repo_adapter import run_repository_tool_request
-from .research_adapter import run_research_tool_request
 from .result_context import tool_result_to_chat_context
-from .trading_adapter import run_trading_tool_request
 
 CapabilityAdapter = Callable[[AssistantToolRequest], AssistantToolResult]
 
@@ -47,8 +45,6 @@ ADAPTERS: MappingProxyType[str, CapabilityAdapter] = MappingProxyType({
     "home": run_home_tool_request,
     "kasa": run_kasa_tool_request,
     "mcp": run_mcp_tool_request,
-    "research": run_research_tool_request,
-    "trading": run_trading_tool_request,
 })
 
 
@@ -71,7 +67,7 @@ def run_capability_adapter(
 
 
 def _dispatch(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> AssistantToolResult:
-    adapter = ADAPTERS.get(request.tool_id)
+    adapter = ADAPTERS.get(request.tool_id) or _declared_adapter(request.tool_id)
     if adapter is None:
         return AssistantToolResult(
             tool_id=request.tool_id,
@@ -85,6 +81,14 @@ def _dispatch(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> Assis
     result = adapter(request)
     result.risk_level = risk_level
     return result
+
+
+def _declared_adapter(tool_id: str) -> CapabilityAdapter | None:
+    """A tool an enabled feature declared (ADR-0016); built-in adapters win."""
+    from app.capabilities.registry import declared_tools
+
+    tool = next((tool for tool in declared_tools() if tool.tool_id == tool_id), None)
+    return tool.run if tool is not None else None
 
 
 def execute_with_grant(
