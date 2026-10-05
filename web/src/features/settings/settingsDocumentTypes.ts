@@ -13,6 +13,7 @@ export type ProviderConfigs = {
   openrouter: { apiKey: string; model: string; contextSize: number; thinkingBudget: number };
   cerebras: { apiKey: string; model: string };
   chatgptCodex: { model: string; reasoningEffort: string; fastMode: boolean; codexPath: string; transport: string };
+  claudeCli: { model: string; effort: string; claudePath: string };
   llamacpp: { baseUrl: string; model: string; downloadLocation: string; autoStart: boolean };
   fasterQwen3Tts: { modelName: string; modelDir: string; device: string; dtype: string; chunkSize: number; nonStreamingMode: boolean };
   parakeet: { baseUrl: string };

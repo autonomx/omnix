@@ -59,15 +59,19 @@ def global_system_prompt_cache_state() -> dict[str, Any]:
         return {"hit": _GLOBAL_PROMPT_CACHE_HIT, "mode": _GLOBAL_PROMPT_CACHE_MODE}
 
 
-def _chatgpt_codex_settings(settings: dict[str, Any]) -> dict[str, Any]:
+def _profile_provider_settings(settings: dict[str, Any], key: str) -> dict[str, Any]:
     profile = settings.get("settings_control_center", {})
     if not isinstance(profile, dict):
         return {}
     configs = profile.get("providerConfigs", {})
     if not isinstance(configs, dict):
         return {}
-    value = configs.get("chatgptCodex", {})
+    value = configs.get(key, {})
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _chatgpt_codex_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    return _profile_provider_settings(settings, "chatgptCodex")
 
 
 def _cache_key(name: str, config: ProviderConfig) -> str:
@@ -170,6 +174,16 @@ def _provider_config(
                 "fast_mode": bool(cfg.get("fastMode", False)),
                 "codex_path": str(cfg.get("codexPath") or "codex"),
                 "transport": str(cfg.get("transport") or "app_server"),
+            },
+        )
+    elif name == "claude_cli":
+        cfg = _profile_provider_settings(settings, "claudeCli")
+        config = ProviderConfig(
+            provider_type=name,
+            model=str(cfg.get("model") or "sonnet"),
+            extra_params={
+                "claude_path": str(cfg.get("claudePath") or "claude"),
+                "effort": str(cfg.get("effort") or ""),
             },
         )
     elif name == "llamacpp":

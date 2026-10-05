@@ -74,7 +74,7 @@ def _codex_profile_changed(patch: Any) -> bool:
     if not isinstance(patch, dict):
         return False
     configs = patch.get("providerConfigs")
-    return isinstance(configs, dict) and "chatgptCodex" in configs
+    return isinstance(configs, dict) and bool({"chatgptCodex", "claudeCli"} & set(configs))
 
 
 def _changed_values(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

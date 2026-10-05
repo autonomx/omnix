@@ -4,6 +4,11 @@ import { modelOptions, providerOptions } from './providerOptions';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
+const CLAUDE_EFFORT_OPTIONS = [
+  { id: '', label: 'CLI default' },
+  ...['low', 'medium', 'high', 'xhigh', 'max'].map((id) => ({ id, label: id })),
+];
+
 const defaultReasoningEffortOptions = [
   { id: 'none', label: 'Off (no reasoning)' },
   { id: 'low', label: 'low' },
@@ -223,6 +228,26 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
                 <small>Stored with Windows user-scoped encryption. CEREBRAS_API_KEY overrides this value.</small>
               </SettingsField>
               <SettingsField label="Model"><input value={configs.cerebras.model} onChange={updateString(dispatch, 'providerConfigs.cerebras.model')} /></SettingsField>
+            </div>
+          </div>
+        ) : null}
+        {providers.llm === 'claude_cli' ? (
+          <div className="provider-config-group">
+            <h4>Claude (Claude Code CLI)</h4>
+            <div className="settings-form-grid">
+              <SettingsField label="Model">
+                <input value={configs.claudeCli.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')} placeholder="sonnet" />
+                <small>An alias (sonnet, opus, haiku, fable) or a full model name.</small>
+              </SettingsField>
+              <SettingsField label="Effort">
+                <select value={configs.claudeCli.effort} onChange={updateString(dispatch, 'providerConfigs.claudeCli.effort')}>
+                  {CLAUDE_EFFORT_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </SettingsField>
+              <SettingsField label="Claude executable">
+                <input value={configs.claudeCli.claudePath} onChange={updateString(dispatch, 'providerConfigs.claudeCli.claudePath')} placeholder="claude" />
+                <small>Found on PATH or in the Claude Code install when left as claude. Sign in with the CLI itself; Omnix stores no Anthropic credentials.</small>
+              </SettingsField>
             </div>
           </div>
         ) : null}

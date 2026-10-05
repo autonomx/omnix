@@ -77,6 +77,7 @@ def _configured_provider_model(profile: SettingsProfile, provider_id: str) -> st
         "openrouter": profile.provider_configs.openrouter.model,
         "cerebras": profile.provider_configs.cerebras.model,
         "chatgpt_codex": profile.provider_configs.chatgpt_codex.model,
+        "claude_cli": profile.provider_configs.claude_cli.model,
         "llamacpp": profile.provider_configs.llamacpp.model,
     }
     return setting_text(config_by_provider.get(provider_key))

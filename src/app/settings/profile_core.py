@@ -69,6 +69,14 @@ class ChatGPTCodexProviderConfig(BaseModel):
     transport: str = "app_server"
 
 
+class ClaudeCliProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model: str = "sonnet"
+    effort: str = ""
+    claude_path: str = Field("claude", alias="claudePath")
+
+
 class LlamaCppProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -114,6 +122,7 @@ class ProviderConfigs(BaseModel):
     openrouter: OpenRouterProviderConfig = Field(default_factory=OpenRouterProviderConfig)
     cerebras: CerebrasProviderConfig = Field(default_factory=CerebrasProviderConfig)
     chatgpt_codex: ChatGPTCodexProviderConfig = Field(default_factory=ChatGPTCodexProviderConfig, alias="chatgptCodex")
+    claude_cli: ClaudeCliProviderConfig = Field(default_factory=ClaudeCliProviderConfig, alias="claudeCli")
     llamacpp: LlamaCppProviderConfig = Field(default_factory=LlamaCppProviderConfig)
     faster_qwen3_tts: FasterQwen3TtsProviderConfig = Field(default_factory=FasterQwen3TtsProviderConfig, alias="fasterQwen3Tts")
     parakeet: ParakeetProviderConfig = Field(default_factory=ParakeetProviderConfig)
