@@ -27,14 +27,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_BATCH_SIZE = 5_000
 MAX_BATCHES_PER_POLICY = 50
 
-# Agent run events kept for the life of the run: milestones and evidence.
-AGENT_EVENT_KEEP_PREFIXES = ("evidence.", "approval.", "acceptance.", "artifact.")
-AGENT_EVENT_KEEP_TYPES = (
-    "run.created", "run.started", "run.completed", "run.failed", "run.settled", "run.superseded",
-    "run.unsandboxed",
-    "task.revised", "quality.review_completed", "quality.self_review_completed", "quality.validation_recorded",
-)
-
 Handler = Callable[[Any, int, int], int]
 
 
@@ -47,12 +39,6 @@ def _outbox(record_type: str) -> Handler:
         )
 
     return delete
-
-
-def _rpg_narration(connection: Any, days: int, batch: int) -> int:
-    from .rpg_narration_event_repository import PostgresRpgNarrationEventRepository
-
-    return PostgresRpgNarrationEventRepository(connection).delete_retained(retention_days=days, batch_size=batch)
 
 
 def _sql(statement: str) -> Handler:
@@ -78,7 +64,6 @@ HANDLERS: MappingProxyType[str, Handler] = MappingProxyType({
     "outbox_events": _outbox("outbox_events"),
     "outbox_consumer_inbox": _outbox("outbox_consumer_inbox"),
     "outbox_dead_letters": _outbox("outbox_dead_letters"),
-    "rpg_narration_events": _rpg_narration,
     "runtime_failure_evidence": _sql(
         """DELETE FROM omnix_runtime_failure_evidence WHERE id IN (
                SELECT id FROM omnix_runtime_failure_evidence
@@ -100,24 +85,6 @@ HANDLERS: MappingProxyType[str, Handler] = MappingProxyType({
                 WHERE created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
                 LIMIT %s)"""
     ),
-    "agent_run_events": lambda connection, days, batch: int(connection.execute(
-        """DELETE FROM omnix_agent_run_events WHERE ctid IN (
-               SELECT events.ctid FROM omnix_agent_run_events AS events
-                 JOIN omnix_agent_runs AS runs
-                   ON runs.workspace_id = events.workspace_id AND runs.run_id = events.run_id
-                WHERE runs.status IN ('completed', 'failed', 'cancelled')
-                  AND COALESCE(runs.completed_at, runs.updated_at) < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                  AND NOT (events.event_type = ANY(%s))
-                  AND NOT (events.event_type LIKE ANY(%s))
-                LIMIT %s)""",
-        (days, list(AGENT_EVENT_KEEP_TYPES), [prefix + "%" for prefix in AGENT_EVENT_KEEP_PREFIXES], batch),
-    ).rowcount),
-    "trading_strategy_events": _sql(
-        """DELETE FROM omnix_trading_strategy_events WHERE ctid IN (
-               SELECT ctid FROM omnix_trading_strategy_events
-                WHERE observed_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                LIMIT %s)"""
-    ),
     "runtime_nodes": _sql(
         """DELETE FROM omnix_runtime_nodes WHERE ctid IN (
                SELECT ctid FROM omnix_runtime_nodes
@@ -135,6 +102,16 @@ HANDLERS: MappingProxyType[str, Handler] = MappingProxyType({
     ),
     "audit_events": _audit,
 })
+
+
+def handler_for(record_type: str) -> Handler | None:
+    """The kernel's handler for a record type, else the one a module declares (declarations.py, PA-2.2)."""
+    if record_type in HANDLERS:
+        return HANDLERS[record_type]
+    from .declarations import module_retention
+
+    declaration = module_retention().get(record_type)
+    return declaration.delete if declaration is not None else None
 
 
 @dataclass(frozen=True)
@@ -174,7 +151,7 @@ class RetentionWorker:
         report = RetentionReport(run_id=run_id)
         try:
             for policy in self.policies():
-                handler = HANDLERS.get(policy.record_type)
+                handler = handler_for(policy.record_type)
                 if handler is None or (policy.maintenance_only and not include_maintenance):
                     report.skipped.append(policy.record_type)
                     continue

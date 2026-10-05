@@ -2,9 +2,7 @@
   "schema_version": 1,
   "note": "Gaps catalog modules still have against the PA-4.1 conformance checks (scripts/module_conformance.py). It only shrinks: fixing a gap means deleting its entry here. tenant_isolation lists, per owner, tables that are neither isolated nor exempt; each needs row-level security or an owner-reviewed exemption.",
   "modules": {
-    "agent-runtime": [
-      "declarations"
-    ],
+    "agent-runtime": [],
     "assistant-memory": [
       "declarations"
     ],
@@ -50,16 +48,14 @@
       "declarations"
     ],
     "rpg": [
-      "contract",
-      "declarations"
+      "contract"
     ],
     "story": [
       "contract",
       "declarations"
     ],
     "trading": [
-      "contract",
-      "declarations"
+      "contract"
     ],
     "voice": [
       "contract",

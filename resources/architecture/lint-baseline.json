@@ -728,15 +728,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "PostgresLifecycleRepository.capacity_report:omnix_rpg_turns",
-      "lines": [
-        23
-      ],
-      "path": "src/app/persistence/lifecycle.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
       "fingerprint": "PostgresPromptRepository.create:omnix_prompt_templates",
       "lines": [
         400
@@ -796,83 +787,6 @@
         308
       ],
       "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 2,
-      "fingerprint": "<module>:omnix_agent_run_events",
-      "lines": [
-        104,
-        104
-      ],
-      "path": "src/app/persistence/retention.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:omnix_agent_runs",
-      "lines": [
-        104
-      ],
-      "path": "src/app/persistence/retention.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 2,
-      "fingerprint": "<module>:omnix_trading_strategy_events",
-      "lines": [
-        116,
-        116
-      ],
-      "path": "src/app/persistence/retention.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 3,
-      "fingerprint": "PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-      "lines": [
-        27,
-        36,
-        36
-      ],
-      "path": "src/app/persistence/rpg_narration_event_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresRpgNarrationEventRepository.count_events:omnix_rpg_narration_events",
-      "lines": [
-        101
-      ],
-      "path": "src/app/persistence/rpg_narration_event_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 2,
-      "fingerprint": "PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events",
-      "lines": [
-        85,
-        85
-      ],
-      "path": "src/app/persistence/rpg_narration_event_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresRpgNarrationEventRepository.latest_event_id:omnix_rpg_narration_events",
-      "lines": [
-        52
-      ],
-      "path": "src/app/persistence/rpg_narration_event_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresRpgNarrationEventRepository.list_after:omnix_rpg_narration_events",
-      "lines": [
-        70
-      ],
-      "path": "src/app/persistence/rpg_narration_event_repository.py",
       "rule": "AL016"
     },
     {

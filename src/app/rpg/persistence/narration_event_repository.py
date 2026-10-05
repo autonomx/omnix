@@ -79,25 +79,3 @@ class PostgresRpgNarrationEventRepository:
             (str(session_id or "").strip(), max(0, int(after_event_id)), resolved_limit),
         ).fetchall()
         return [(int(row[0]), dict(row[1])) for row in rows]
-
-    def delete_retained(self, *, retention_days: int, batch_size: int) -> int:
-        cursor = self.connection.execute(
-            """
-            DELETE FROM omnix_rpg_narration_events
-             WHERE event_id IN (
-                 SELECT event_id
-                   FROM omnix_rpg_narration_events
-                  WHERE created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                  ORDER BY created_at, event_id
-                  LIMIT %s
-             )
-            """,
-            (max(1, int(retention_days)), max(1, int(batch_size))),
-        )
-        return int(cursor.rowcount)
-
-    def count_events(self) -> int:
-        row = self.connection.execute(
-            "SELECT COUNT(*) FROM omnix_rpg_narration_events"
-        ).fetchone()
-        return int(row[0])

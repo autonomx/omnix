@@ -856,6 +856,8 @@ def _is_docstring(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
 def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
     graph = analysis.import_edges()
     roots = {name for name in graph if name in {"app.production", "app.worker", "launch", "main"} or analysis.modules[name].endswith("/__main__.py")}
+    # The kernel reads a module's declarations by convention, as it finds migrations (PA-2.2).
+    roots.update(name for name in graph if name.endswith(".declarations") and name.removesuffix(".declarations") + ".feature" in graph)
     # Scripts and registered literal module names are additional entry points.
     for path, tree in analysis.trees.items():
         if path.startswith("scripts/"):

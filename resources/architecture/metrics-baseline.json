@@ -28,6 +28,7 @@
       "app.agent_runtime.coding_quality_repository",
       "app.agent_runtime.coding_skills",
       "app.agent_runtime.contracts",
+      "app.agent_runtime.declarations",
       "app.agent_runtime.event_queries",
       "app.agent_runtime.evidence",
       "app.agent_runtime.exception_logging",
@@ -538,6 +539,7 @@
       "app.persistence.cutover",
       "app.persistence.cutover_state",
       "app.persistence.database",
+      "app.persistence.declarations",
       "app.persistence.device_permits",
       "app.persistence.document_schemas",
       "app.persistence.document_store",
@@ -557,7 +559,6 @@
       "app.persistence.outbox_repository",
       "app.persistence.repositories",
       "app.persistence.retention",
-      "app.persistence.rpg_narration_event_repository",
       "app.persistence.runtime",
       "app.persistence.runtime_coordination",
       "app.persistence.s3_blob_store",
@@ -868,6 +869,7 @@
       "app.rpg.debug.presenter",
       "app.rpg.debug.trace_builder",
       "app.rpg.debug_logging",
+      "app.rpg.declarations",
       "app.rpg.dialogue",
       "app.rpg.dialogue.acts",
       "app.rpg.dialogue.context_builder",
@@ -1197,6 +1199,7 @@
       "app.rpg.persistence.migrations.v4_to_v5",
       "app.rpg.persistence.migrations.v5_to_v6",
       "app.rpg.persistence.migrations.v6_to_v7",
+      "app.rpg.persistence.narration_event_repository",
       "app.rpg.persistence.package_builder",
       "app.rpg.persistence.package_loader",
       "app.rpg.persistence.package_validator",
@@ -1896,6 +1899,7 @@
       "app.trading.catalyst_evidence",
       "app.trading.catalyst_repository",
       "app.trading.catalyst_shadow",
+      "app.trading.declarations",
       "app.trading.evidence_import",
       "app.trading.evidence_storage",
       "app.trading.execution",
@@ -2549,7 +2553,6 @@
         "src/app/persistence/execution_repositories.py:969:PostgresForegroundSubmissionRepository.fail:omnix_rpg_foreground_submissions",
         "src/app/persistence/foreground_submissions.py:60:PostgresForegroundSubmissionStoreAdapter.get:omnix_rpg_foreground_submissions",
         "src/app/persistence/foreground_submissions.py:82:PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions",
-        "src/app/persistence/lifecycle.py:23:PostgresLifecycleRepository.capacity_report:omnix_rpg_turns",
         "src/app/persistence/module_repositories.py:263:PostgresProviderRepository.create:omnix_provider_configs",
         "src/app/persistence/module_repositories.py:285:PostgresProviderRepository.get:omnix_provider_configs",
         "src/app/persistence/module_repositories.py:308:PostgresProviderRepository.update:omnix_provider_configs",
@@ -2557,19 +2560,6 @@
         "src/app/persistence/module_repositories.py:400:PostgresPromptRepository.create:omnix_prompt_templates",
         "src/app/persistence/module_repositories.py:422:PostgresPromptRepository.get:omnix_prompt_templates",
         "src/app/persistence/module_repositories.py:442:PostgresPromptRepository.update:omnix_prompt_templates",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_run_events",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_run_events",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_runs",
-        "src/app/persistence/retention.py:116:<module>:omnix_trading_strategy_events",
-        "src/app/persistence/retention.py:116:<module>:omnix_trading_strategy_events",
-        "src/app/persistence/rpg_narration_event_repository.py:101:PostgresRpgNarrationEventRepository.count_events:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:27:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:36:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:36:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:52:PostgresRpgNarrationEventRepository.latest_event_id:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:70:PostgresRpgNarrationEventRepository.list_after:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:85:PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:85:PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events",
         "src/app/research/persistence/report_repository.py:84:PostgresResearchReportRepository.create_report:omnix_reports",
         "src/app/trading/repositories.py:139:TradingDocumentRepository.archive:omnix_module_records"
       ],
@@ -2596,26 +2586,10 @@
         "src/app/persistence/execution_repositories.py:939:PostgresForegroundSubmissionRepository.complete:omnix_rpg_foreground_submissions",
         "src/app/persistence/execution_repositories.py:969:PostgresForegroundSubmissionRepository.fail:omnix_rpg_foreground_submissions",
         "src/app/persistence/foreground_submissions.py:60:PostgresForegroundSubmissionStoreAdapter.get:omnix_rpg_foreground_submissions",
-        "src/app/persistence/foreground_submissions.py:82:PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions",
-        "src/app/persistence/lifecycle.py:23:PostgresLifecycleRepository.capacity_report:omnix_rpg_turns",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_run_events",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_run_events",
-        "src/app/persistence/retention.py:104:<module>:omnix_agent_runs",
-        "src/app/persistence/retention.py:116:<module>:omnix_trading_strategy_events",
-        "src/app/persistence/retention.py:116:<module>:omnix_trading_strategy_events",
-        "src/app/persistence/rpg_narration_event_repository.py:101:PostgresRpgNarrationEventRepository.count_events:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:27:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:36:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:36:PostgresRpgNarrationEventRepository.append:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:52:PostgresRpgNarrationEventRepository.latest_event_id:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:70:PostgresRpgNarrationEventRepository.list_after:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:85:PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events",
-        "src/app/persistence/rpg_narration_event_repository.py:85:PostgresRpgNarrationEventRepository.delete_retained:omnix_rpg_narration_events"
+        "src/app/persistence/foreground_submissions.py:82:PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions"
       ],
       "kernel_tools_naming_apps": [],
-      "module_repositories_in_kernel": [
-        "src/app/persistence/rpg_narration_event_repository.py"
-      ],
+      "module_repositories_in_kernel": [],
       "platform_feature_specific_files": [
         "src/app/platform/settings_profile_podcast.py",
         "src/app/platform/settings_profile_rpg.py",
@@ -6039,7 +6013,6 @@
       "/api/providers/chatgpt-codex/login",
       "/api/providers/refresh",
       "/api/replay/checkpoints",
-      "/api/replay/persistence/inventory",
       "/api/reports",
       "/api/rpg/maps/{}",
       "/api/rpg/new-game",
@@ -6226,46 +6199,6 @@
       "src/apps/web/src/theme-presets.css"
     ],
     "web_handwritten_api_type_exceptions": [
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgFeatureOptions"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgForegroundTurnResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgLaunchResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgLoadoutActionRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgLoadoutActionResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgNewGameRequest"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgPlayerOptions"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgPresetListResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgSessionListResponse"
-      ],
-      [
-        "src/apps/web/src/api/client.ts",
-        "RpgSessionMutationResponse"
-      ],
       [
         "src/apps/web/src/features/assistant/workspace/companion-initiative-arbiter.ts",
         "CompanionInitiativeRequest"
@@ -6459,6 +6392,46 @@
         "RpgMapOverlayResponse"
       ],
       [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgFeatureOptions"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgForegroundTurnResponse"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgLaunchResponse"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgLoadoutActionRequest"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgLoadoutActionResponse"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgNewGameRequest"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgPlayerOptions"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgPresetListResponse"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgSessionListResponse"
+      ],
+      [
+        "src/apps/web/src/features/rpg/api/rpgSessionClient.ts",
+        "RpgSessionMutationResponse"
+      ],
+      [
         "src/apps/web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
         "RpgAuthoringDossierPreviewResponse"
       ],
@@ -6646,7 +6619,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 84
+      "value": 70
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6706,7 +6679,7 @@
     "kernel_named_module_tables": {
       "direction": "lower",
       "target": 0,
-      "value": 36
+      "value": 22
     },
     "kernel_tools_naming_apps": {
       "direction": "lower",
@@ -6731,7 +6704,7 @@
     "module_repositories_in_kernel": {
       "direction": "lower",
       "target": 0,
-      "value": 1
+      "value": 0
     },
     "mypy_ignored_modules": {
       "direction": "lower",
@@ -6931,5 +6904,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "1f69d9b37b22c0aacd37a988e28de5766dba4b32f296166da755847d3739a40c"
+  "source_digest": "ba63ff78d9cdab23a2fffd66a0241620f92c7b5acf9b82f19d15a8124c8a5aeb"
 }

@@ -188,9 +188,7 @@ def publish_narration_event(session_id: str, event: dict[str, Any]) -> int:
     if not session_id:
         return 0
     from app.persistence.database import default_database
-    from app.persistence.rpg_narration_event_repository import (
-        PostgresRpgNarrationEventRepository,
-    )
+    from app.rpg.persistence.narration_event_repository import PostgresRpgNarrationEventRepository
 
     try:
         with default_database().transaction() as connection:

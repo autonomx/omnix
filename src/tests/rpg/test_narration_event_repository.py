@@ -7,7 +7,8 @@ import uuid
 
 import pytest
 
-from app.persistence.rpg_narration_event_repository import (
+from app.rpg.declarations import RETENTION
+from app.rpg.persistence.narration_event_repository import (
     MAX_RPG_NARRATION_EVENT_BYTES,
     MAX_RPG_NARRATION_EVENT_PAGE_SIZE,
     MAX_RPG_NARRATION_EVENTS_PER_SESSION,
@@ -80,9 +81,11 @@ def test_event_cursor_and_page_are_scoped_to_session_and_page_size_is_bounded():
 
 def test_retention_deletes_oldest_events_in_bounded_batches():
     connection = _Connection()
-    repository = PostgresRpgNarrationEventRepository(connection)
+    (declaration,) = RETENTION
 
-    assert repository.delete_retained(retention_days=1, batch_size=250) == 3
+    assert declaration.record_type == "rpg_narration_events" and declaration.capacity_cleanup
+    assert declaration.delete(connection, 1, 250) == 3
+    assert "ORDER BY created_at, event_id" in connection.calls[0][0]
     assert connection.calls[0][1] == (1, 250)
 
 
