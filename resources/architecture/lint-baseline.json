@@ -663,69 +663,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "PostgresPromptRepository.create:omnix_prompt_templates",
-      "lines": [
-        400
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresPromptRepository.get:omnix_prompt_templates",
-      "lines": [
-        422
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresPromptRepository.update:omnix_prompt_templates",
-      "lines": [
-        442
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresProviderRepository.create:omnix_provider_configs",
-      "lines": [
-        263
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresProviderRepository.get:omnix_provider_configs",
-      "lines": [
-        285
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresProviderRepository.put_status:omnix_provider_status_projections",
-      "lines": [
-        342
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresProviderRepository.update:omnix_provider_configs",
-      "lines": [
-        308
-      ],
-      "path": "src/app/persistence/module_repositories.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
       "fingerprint": "PostgresResearchReportRepository.create_report:omnix_reports",
       "lines": [
         84

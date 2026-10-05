@@ -66,6 +66,26 @@ def production_chat_store(*, job_service=None, live_agent_planner=None):
     )
 
 
+def shared_service_repository_specs():
+    """The shared services' always-on repositories (prompts, providers), built on first use (PA-2.2)."""
+    from app.persistence.repository_registry import RepositorySpec
+
+    def providers(connection):
+        from app.providers.persistence.provider_repository import PostgresProviderRepository
+
+        return PostgresProviderRepository(connection)
+
+    def prompts(connection):
+        from app.prompts.repository import PostgresPromptRepository
+
+        return PostgresPromptRepository(connection)
+
+    return (
+        RepositorySpec("shared.providers", providers, "providers"),
+        RepositorySpec("shared.prompts", prompts, "prompts"),
+    )
+
+
 def composition_port_bindings():
     """Ports only the composition root can bind (exactly-one; ADR-0016)."""
     from app.chat.character_store import CHAT_STORE_FACTORY

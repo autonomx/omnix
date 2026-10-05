@@ -591,6 +591,7 @@
       "app.prompts.models",
       "app.prompts.registry",
       "app.prompts.renderer",
+      "app.prompts.repository",
       "app.providers",
       "app.providers.audio_base",
       "app.providers.audio_plugins",
@@ -617,6 +618,7 @@
       "app.providers.openai_compatible_provider",
       "app.providers.openrouter_provider",
       "app.providers.persistence.model_refresh",
+      "app.providers.persistence.provider_repository",
       "app.providers.provider_trace",
       "app.providers.qwen_http_gateway",
       "app.providers.registry",
@@ -2545,13 +2547,6 @@
         "src/app/persistence/cutover.py:530:PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
         "src/app/persistence/cutover.py:552:PostgresLegacyImporter._dispatch:omnix_rpg_participants",
         "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions",
-        "src/app/persistence/module_repositories.py:263:PostgresProviderRepository.create:omnix_provider_configs",
-        "src/app/persistence/module_repositories.py:285:PostgresProviderRepository.get:omnix_provider_configs",
-        "src/app/persistence/module_repositories.py:308:PostgresProviderRepository.update:omnix_provider_configs",
-        "src/app/persistence/module_repositories.py:342:PostgresProviderRepository.put_status:omnix_provider_status_projections",
-        "src/app/persistence/module_repositories.py:400:PostgresPromptRepository.create:omnix_prompt_templates",
-        "src/app/persistence/module_repositories.py:422:PostgresPromptRepository.get:omnix_prompt_templates",
-        "src/app/persistence/module_repositories.py:442:PostgresPromptRepository.update:omnix_prompt_templates",
         "src/app/research/persistence/report_repository.py:84:PostgresResearchReportRepository.create_report:omnix_reports",
         "src/app/trading/repositories.py:139:TradingDocumentRepository.archive:omnix_module_records"
       ],
@@ -4503,7 +4498,7 @@
         "category": "cache",
         "invalidation": "production_model_residency_store.cache_clear",
         "kind": "function_cache",
-        "line": 78,
+        "line": 98,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/runtime_composition.py",
@@ -6602,7 +6597,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 61
+      "value": 54
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6887,5 +6882,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "8277ca46d2a215ea643cbb2ab7ce9dd19a1dd6d758c3ff20adda1dbc52dd3fd4"
+  "source_digest": "b1ad2c8b987576e39c074e3d3b0e2fc572dff165574d52237d71c67bc15130d1"
 }

@@ -16,6 +16,9 @@ def register_feature_repositories_for_rpg_tests():
 
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
+    from app.runtime_composition import shared_service_repository_specs
+
+    install_repository_specs(shared_service_repository_specs())
     for feature_id in enabled_feature_ids(RuntimeConfig()):
         install_repository_specs(tuple(load_feature(feature_id).repositories))
     yield
