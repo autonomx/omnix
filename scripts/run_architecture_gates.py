@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GATES = {
     'unit': (
         'src/tests/characterization',
-        'src/tests/app/test_audiobook_background_ownership.py',
+        'src/tests/audiobook/test_audiobook_background_ownership.py',
         'src/tests/unit/characters/test_management.py',
         'src/tests/app/test_character_management_api.py',
         'src/tests/app/test_runtime_config.py',
@@ -28,11 +28,11 @@ GATES = {
         'src/tests/scripts/test_legacy_import_does_not_migrate.py',
         'src/tests/app/test_gateway_route_policy.py',
         'src/tests/app/test_gateway_scaling_lifecycle.py',
-        'src/tests/app/test_live_voice_runtime_offload.py',
-        'src/tests/app/test_live_voice_execution_lane.py',
+        'src/tests/live_voice/test_live_voice_runtime_offload.py',
+        'src/tests/live_voice/test_live_voice_execution_lane.py',
         'src/tests/app/test_durable_feature_worker.py',
         'src/tests/app/test_qwen_http_gateway.py',
-        'src/tests/app/test_chat_execution_capacity.py',
+        'src/tests/chat/test_chat_execution_capacity.py',
         'src/tests/api/gateway/test_gateway_runtime_baseline.py',
         'src/tests/api/gateway/test_gateway_foundation.py',
         'src/tests/unit/test_import_isolation.py',

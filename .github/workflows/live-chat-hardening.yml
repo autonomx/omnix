@@ -121,26 +121,26 @@ jobs:
             src/parakeet_stt_runtime.py \
             src/parakeet_stt_server.py \
             src/tests/app/test_chat_response_metrics.py \
-            src/tests/app/test_desktop_companion_identity_api.py \
+            src/tests/desktop_companion/test_desktop_companion_identity_api.py \
             src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
             src/tests/app/test_live_chat_live_voice_profile.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
-            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/chat/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_full_duplex_acceptance.py \
             src/tests/app/test_live_material_context.py \
             src/tests/app/test_live_observation_generation.py \
-            src/tests/app/test_live_voice_runtime_offload.py \
-            src/tests/app/test_live_voice_release_gate.py \
-            src/tests/app/test_live_chat_release_gate.py \
-            src/tests/app/test_live_chat_release_completion.py \
-            src/tests/app/test_live_chat_evaluation_store.py \
+            src/tests/live_voice/test_live_voice_runtime_offload.py \
+            src/tests/live_voice/test_live_voice_release_gate.py \
+            src/tests/chat/test_live_chat_release_gate.py \
+            src/tests/chat/test_live_chat_release_completion.py \
+            src/tests/chat/test_live_chat_evaluation_store.py \
             src/tests/app/test_live_chat_authoritative_state_source.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
-            src/tests/app/test_memory_job_offload.py \
+            src/tests/assistant_memory/test_memory_job_offload.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
             src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
@@ -162,7 +162,7 @@ jobs:
       - name: Existing live voice release-gate regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/app/test_live_voice_release_gate.py -q --tb=short \
+          python -m pytest src/tests/live_voice/test_live_voice_release_gate.py -q --tb=short \
             2>&1 | tee live-voice-release-gate-output.txt
 
       - name: Live TTS response-onset regression
@@ -172,7 +172,7 @@ jobs:
             src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
-            src/tests/app/test_live_voice_runtime_offload.py \
+            src/tests/live_voice/test_live_voice_runtime_offload.py \
             src/tests/app/test_gateway_tts_live_call_websocket.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
@@ -196,7 +196,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_memory_job_offload.py \
+            src/tests/assistant_memory/test_memory_job_offload.py \
             src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
             src/tests/unit/assistant_memory/test_companion_context.py \
             src/tests/unit/assistant_memory/test_companion_controls.py \
@@ -214,7 +214,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_desktop_companion_identity_api.py \
+            src/tests/desktop_companion/test_desktop_companion_identity_api.py \
             src/tests/unit/chat/test_live_conversation_proactive_ambient.py \
             src/tests/unit/desktop_companion/test_context.py \
             src/tests/unit/desktop_companion/test_memory_bridge.py \
@@ -228,11 +228,11 @@ jobs:
             src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_live_chat_live_voice_profile.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
-            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/chat/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
-            src/tests/app/test_live_chat_release_gate.py \
-            src/tests/app/test_live_chat_release_completion.py \
+            src/tests/chat/test_live_chat_release_gate.py \
+            src/tests/chat/test_live_chat_release_completion.py \
             -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
 
       - name: Phase 11 authoritative-state source guard
@@ -244,7 +244,7 @@ jobs:
       - name: Phase 12 durable evaluation and policy regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/app/test_live_chat_evaluation_store.py -q --tb=short \
+          python -m pytest src/tests/chat/test_live_chat_evaluation_store.py -q --tb=short \
             2>&1 | tee live-chat-durable-evaluation-output.txt
 
       - name: Phase 5 server full-duplex acceptance

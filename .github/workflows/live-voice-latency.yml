@@ -84,10 +84,10 @@ jobs:
             src/nemotron_eou_stt_server.py \
             src/tests/app/test_runtime_launcher_services.py \
             src/tests/app/test_live_stt_contracts.py \
-            src/tests/app/test_live_voice_hardware_policy.py \
+            src/tests/live_voice/test_live_voice_hardware_policy.py \
             src/tests/app/test_live_chat_lmstudio_responses.py \
             src/tests/app/test_live_chat_speculation.py \
-            src/tests/app/test_live_voice_speculative_tts.py \
+            src/tests/live_voice/test_live_voice_speculative_tts.py \
             src/tests/app/test_live_voice_spoken_style.py \
             src/tests/app/test_lmstudio_loaded_model_resolution.py \
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
@@ -111,10 +111,10 @@ jobs:
           python -m pytest
           src/tests/app/test_runtime_launcher_services.py
           src/tests/app/test_live_stt_contracts.py
-          src/tests/app/test_live_voice_hardware_policy.py
+          src/tests/live_voice/test_live_voice_hardware_policy.py
           src/tests/app/test_live_chat_lmstudio_responses.py
           src/tests/app/test_live_chat_speculation.py
-          src/tests/app/test_live_voice_speculative_tts.py
+          src/tests/live_voice/test_live_voice_speculative_tts.py
           src/tests/app/test_live_voice_spoken_style.py
           src/tests/app/test_lmstudio_loaded_model_resolution.py
           src/tests/app/test_tts_live_call_startup_frame_policy.py

@@ -14,6 +14,9 @@ from app.live_voice.prompt import companion_context
 from app.providers import service as provider_service
 from tests.characterization.harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("live-voice",)
+
 
 class _ResolvedCharacterIdentity:
     interaction_mode = "character"

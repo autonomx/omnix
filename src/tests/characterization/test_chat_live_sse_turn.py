@@ -10,6 +10,9 @@ from fastapi.testclient import TestClient
 from tests.characterization.fakes import FakeLLMProvider, prompt_digest
 from tests.characterization.harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("chat",)
+
 
 class RecordingChatStore:
     """Explicitly record the public stream route's transcript-store calls."""

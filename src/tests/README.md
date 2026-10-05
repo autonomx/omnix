@@ -25,6 +25,17 @@ architecture and PostgreSQL CI jobs. Never point tests at an operator database.
 
 ## Test layout
 
+Each catalog module has a directory named after the last part of its Python
+package (`agent_runtime/`, `assistant_memory/`, `hermes/` for `app.rpg.hermes`).
+New tests for a module go there; existing tests move when that module's work
+touches them (PA-2.5). Run one module's tests, including the characterization
+scenarios that list it in their `MODULES` tuple, with:
+
+```powershell
+python scripts/test_module.py rpg -q
+python scripts/test_module.py rpg --list
+```
+
 - `agent_runtime/`, `app/`, `api/`, `persistence/`, and `unit/` contain focused
   contract, unit, and integration tests.
 - `functional/`, `regression/`, and `rpg/` cover end-to-end behavior and RPG

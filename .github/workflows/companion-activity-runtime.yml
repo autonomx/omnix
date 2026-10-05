@@ -18,9 +18,9 @@ on:
       - "src/tests/unit/companion_activity/**"
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
       - "src/tests/app/test_companion_activity_user_turn_integration.py"
-      - "src/tests/app/test_companion_proactive_initiative_gate.py"
+      - "src/tests/companion_activity/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
-      - "src/tests/app/test_live_conversation_proactive_api.py"
+      - "src/tests/character_interactions/test_live_conversation_proactive_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/tests/persistence/test_companion_initiative_authority.py"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -41,9 +41,9 @@ on:
       - "src/tests/unit/companion_activity/**"
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
       - "src/tests/app/test_companion_activity_user_turn_integration.py"
-      - "src/tests/app/test_companion_proactive_initiative_gate.py"
+      - "src/tests/companion_activity/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
-      - "src/tests/app/test_live_conversation_proactive_api.py"
+      - "src/tests/character_interactions/test_live_conversation_proactive_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/tests/persistence/test_companion_initiative_authority.py"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -102,9 +102,9 @@ jobs:
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_activity_user_turn_integration.py \
-            src/tests/app/test_companion_proactive_initiative_gate.py \
+            src/tests/companion_activity/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
-            src/tests/app/test_live_conversation_proactive_api.py \
+            src/tests/character_interactions/test_live_conversation_proactive_api.py \
             src/tests/persistence/test_companion_activity_checkpoint_store.py \
             src/tests/persistence/test_companion_initiative_authority.py
 
@@ -117,9 +117,9 @@ jobs:
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_activity_user_turn_integration.py \
-            src/tests/app/test_companion_proactive_initiative_gate.py \
+            src/tests/companion_activity/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
-            src/tests/app/test_live_conversation_proactive_api.py \
+            src/tests/character_interactions/test_live_conversation_proactive_api.py \
             -q --tb=short
 
       - name: Companion Activity PostgreSQL persistence acceptance

@@ -9,6 +9,9 @@ from src.tests.trading.test_trading_auto_paper_e2e_replay import (
 )
 from tests.characterization.harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("trading",)
+
 
 def _proposal_record(proposal: Any) -> dict[str, Any]:
     result = proposal.result

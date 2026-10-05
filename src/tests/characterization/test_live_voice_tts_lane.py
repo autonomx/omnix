@@ -7,6 +7,9 @@ from app.live_voice.speech.tts_lane import PriorityTtsScheduler, TtsLanePriority
 from tests.characterization.fakes import FakeTTS
 from tests.characterization.harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("live-voice",)
+
 
 class _FakeTtsProvider:
     provider_name = "characterization-fake-tts"

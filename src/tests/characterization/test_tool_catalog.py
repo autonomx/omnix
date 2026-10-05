@@ -13,6 +13,9 @@ from app.trading.assistant_tool import TradingMarketDataTool
 
 from .harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("assistant-tools",)
+
 
 def _catalog(*tools) -> list[dict]:
     install_port_bindings(PortBindings.build([

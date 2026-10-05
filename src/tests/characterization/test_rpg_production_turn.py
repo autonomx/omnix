@@ -18,6 +18,9 @@ import pytest
 
 from tests.characterization.harness import capture
 
+# The catalog modules this scenario characterizes (scripts/test_module.py).
+MODULES = ("rpg",)
+
 pytestmark = [
     pytest.mark.postgres,
     pytest.mark.skipif(
