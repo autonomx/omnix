@@ -5,6 +5,7 @@ from typing import Any
 
 from app.apps.rpg.session.item_action_summary import build_item_action_summary
 from app.apps.rpg.session.item_metrics import build_item_metrics_snapshot
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_report_section_v1"
 COVERAGE_LABELS = {
@@ -19,14 +20,6 @@ COVERAGE_LABELS = {
     "has_item_signals": "special_item_signals",
     "has_modifications": "modifications",
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _action_counts(item_actions: list[dict[str, Any]]) -> dict[str, int]:

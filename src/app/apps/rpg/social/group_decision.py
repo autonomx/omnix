@@ -7,10 +7,7 @@ collective stance toward a target (typically the player).
 from __future__ import annotations
 
 from typing import Any, Dict
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 
 class GroupDecisionEngine:

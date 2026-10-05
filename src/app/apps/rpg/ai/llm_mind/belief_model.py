@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 _BELIEF_KEYS = ("trust", "fear", "respect", "hostility")
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

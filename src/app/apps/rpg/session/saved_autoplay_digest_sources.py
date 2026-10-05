@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_saved_autoplay_digest_source_gate"
 
@@ -63,14 +64,6 @@ _DIGEST_PATHS: Dict[str, Tuple[Tuple[str, ...], ...]] = {
         ("expected_final_state", "state_digest"),
     ),
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _path_value(mapping: Dict[str, Any], path: Tuple[str, ...]) -> Any:

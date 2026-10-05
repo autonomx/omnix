@@ -5,20 +5,9 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.world.npc_history_state import recent_npc_history
 from app.apps.rpg.world.npc_knowledge_state import known_facts_for_npc
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 MAX_RECALLS_PER_RESPONSE = 2
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

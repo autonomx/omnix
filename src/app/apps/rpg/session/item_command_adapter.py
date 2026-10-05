@@ -10,6 +10,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.item_session_actions import apply_item_session_action, available_item_session_actions
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ITEM_COMMAND_ADAPTER_SOURCE = "engine_item_command_adapter_v1"
 
@@ -21,14 +22,6 @@ _BUY_PREFIXES = ("buy ", "purchase ")
 _ATTACK_PREFIXES = ("attack ", "strike ")
 _DISCOVERY_COMMANDS = {"discover recipes", "check recipes", "recipe discovery", "learn recipes"}
 _REPORT_COMMANDS = {"item report", "report items", "record item report", "item coverage"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

@@ -10,7 +10,8 @@ from app.apps.rpg.items.inventory_state import (
     unequip_inventory_slot,
 )
 from app.apps.rpg.items.world_items import drop_world_item, pickup_world_item
-from app.apps.rpg.session.state_normalization import _safe_dict, _safe_str
+from app.apps.rpg.session.state_normalization import _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:

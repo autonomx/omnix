@@ -7,14 +7,7 @@ from app.apps.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     repair_fast_combat_grounding_validation,
 )
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 
 def select_fast_combat_presentation(

@@ -45,6 +45,7 @@ from app.apps.rpg.presentation.provider_payload import (
 
 # Phase 8: player-facing encounter view
 from app.apps.rpg.player import build_encounter_view
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
 
@@ -225,18 +226,6 @@ def _attach_npc_mind_context(actor, simulation_state):
 
 
 _NARRATION_MAX_MARKDOWN = 300
-
-
-def _safe_str(value: Any) -> str:
-    return str(value) if value is not None else ""
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return list(value) if isinstance(value, list) else []
 
 
 def _title_case_token(value: Any) -> str:

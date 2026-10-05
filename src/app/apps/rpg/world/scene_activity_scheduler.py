@@ -15,22 +15,11 @@ from app.apps.rpg.world.npc_presence_runtime import (
 )
 from app.apps.rpg.world.scene_continuity_state import update_scene_continuity_from_activity
 from app.apps.rpg.world.world_event_log import add_world_event
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_SCHEDULED_ACTIVITIES = 8
 MAX_RECENT_ACTIVITIES = 24
 DEFAULT_ACTIVITY_COOLDOWN_TICKS = 3
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

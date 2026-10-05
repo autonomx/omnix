@@ -8,14 +8,7 @@ from app.apps.rpg.combat.lifecycle import evaluate_combat_exit
 from app.apps.rpg.combat.models import AttackIntent
 from app.apps.rpg.combat.resolver import resolve_attack
 from app.apps.rpg.combat.state import get_current_actor_id, normalize_combat_state
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _actor_lookup(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:

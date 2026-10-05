@@ -10,10 +10,7 @@ missing fields, and malformed companions from earlier saves.
 from typing import Any, Dict
 
 from app.apps.rpg.party.party_state import _normalize_companion
-
-
-def _safe_dict(v):
-    return v if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def migrate_v5_to_v6(package: Dict[str, Any]) -> Dict[str, Any]:

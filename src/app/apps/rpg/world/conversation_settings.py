@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def _safe_bool(value: Any, default: bool = False) -> bool:
@@ -23,10 +20,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {

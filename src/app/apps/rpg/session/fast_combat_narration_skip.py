@@ -5,6 +5,7 @@ import logging
 import contextvars
 from contextlib import contextmanager
 from typing import Any, Iterator
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +17,6 @@ _FAST_COMBAT_SKIP_CONTEXT: contextvars.ContextVar[bool] = contextvars.ContextVar
     "ce212_fast_combat_skip_context",
     default=False,
 )
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_bool(value: Any) -> bool:

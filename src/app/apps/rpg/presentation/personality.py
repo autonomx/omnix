@@ -7,16 +7,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.presentation_personality.build_personality_prompt_hints', "1", "Use concise, character-consistent phrasing grounded in current scene context.")
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:

@@ -6,17 +6,14 @@ from app.apps.rpg.economy.service_stock import apply_service_stock_purchase
 from app.apps.rpg.journal.journal_state import add_rumor_journal_entry, get_journal_state
 from app.apps.rpg.memory.service_memory import append_service_memory
 from app.apps.rpg.memory.service_social_effects import apply_service_social_effects
-from app.apps.rpg.session.state_normalization import _safe_dict, _safe_str
+from app.apps.rpg.session.state_normalization import _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 from app.apps.rpg.world.rumor_registry import select_rumor_for_service
 from app.apps.rpg.world.world_event_log import (
     add_rumor_world_event,
     add_service_world_event,
     get_world_event_state,
 )
-
-
-def _safe_list(value):
-    return value if isinstance(value, list) else []
 
 
 def _canonicalize_paid_info_rumor_state(

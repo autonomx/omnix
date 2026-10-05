@@ -24,31 +24,11 @@ from typing import Any
 
 # Phase 8: player-facing action summaries
 from app.apps.rpg.player import ensure_player_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    """Return *value* if it is already a dict, otherwise ``{}``."""
-    if isinstance(value, dict):
-        return value
-    return {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    """Return *value* if it is already a list, otherwise ``[]``."""
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _safe_str(value: Any) -> str:
-    """Return *value* as a string."""
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _cap(value: int, lo: int = 0, hi: int = 5) -> int:

@@ -10,6 +10,7 @@ from app.runtime.clock import utc_now
 from typing import Any, Dict, List
 
 from app.apps.rpg.social.conversation_presentation import build_conversation_payload
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ── Hard caps (Phase 0.3) ──────────────────────────────────────────────────
 _MAX_AMBIENT_QUEUE = 32
@@ -20,12 +21,6 @@ _MAX_RESUME_CATCHUP_TICKS = 12
 _MAX_AMBIENT_BATCH_PER_DELIVERY = 8
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 def _safe_str(value: Any) -> str:
     if value is None:

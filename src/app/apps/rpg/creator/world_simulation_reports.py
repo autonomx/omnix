@@ -5,14 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _faction_status(pressure: int) -> str:

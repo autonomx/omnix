@@ -12,10 +12,9 @@ from app.apps.rpg.npc_evolution.profile_store import (
     _bounded_extend_unique,
     _profile_arc_projection,
     _profile_projection_from_arc,
-    _safe_dict,
-    _safe_list,
     _safe_str,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 from app.persistence.document_store import PostgresDocumentStore
 from app.persistence.document_schemas import register_document_schema

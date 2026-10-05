@@ -1,18 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
+from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
 def inspect_npc_reasoning(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:

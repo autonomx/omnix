@@ -7,14 +7,7 @@ No randomness. All events are derived from structured before/after state.
 from __future__ import annotations
 
 from typing import Any
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _thread_event(thread_id: str, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:

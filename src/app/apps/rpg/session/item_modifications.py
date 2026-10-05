@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MODIFICATION_DEFINITIONS: dict[str, dict[str, Any]] = {
     "edge_damage_minor": {
@@ -31,14 +32,6 @@ MODIFICATION_DEFINITIONS: dict[str, dict[str, Any]] = {
 }
 
 SUPPORTED_MOD_EFFECTS = {"add_damage", "add_defense", "add_resistance"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

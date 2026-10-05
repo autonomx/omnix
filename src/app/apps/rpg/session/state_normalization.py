@@ -16,6 +16,7 @@ from app.apps.rpg.player.player_progression_state import ensure_player_progressi
 from app.apps.rpg.presentation.personality_state import ensure_personality_state
 from app.apps.rpg.presentation.visual_state import ensure_visual_state
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _DEFAULT_STORY_POLICY = {
     "save_load_stable": True,
@@ -41,14 +42,6 @@ DEFAULT_NPC_PROFILE_SETTINGS: dict[str, Any] = {
     "allow_manual_create": True,
     "draft_with_llm_on_create": False,
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

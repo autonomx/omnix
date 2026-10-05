@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.session.survival_persistence import normalize_survival_for_persistence
 from app.apps.rpg.validation.integrity import validate_package_integrity
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _PACKAGE_SCHEMA_VERSION = 1
 
@@ -15,14 +16,6 @@ def _safe_str(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:

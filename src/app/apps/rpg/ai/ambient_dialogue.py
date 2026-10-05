@@ -7,14 +7,7 @@ No uncontrolled randomness.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _safe_str(v: Any) -> str:

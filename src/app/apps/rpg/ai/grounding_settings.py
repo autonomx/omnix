@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 DEFAULT_GROUNDING_SETTINGS: Dict[str, Any] = {
     "enabled": True,
@@ -12,14 +13,6 @@ DEFAULT_GROUNDING_SETTINGS: Dict[str, Any] = {
     "background_soft_audit_can_update_state": False,
     "background_soft_audit_validate_correction": True,
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return str(value) if value is not None else ""
 
 
 def normalize_grounding_settings(value: Any) -> Dict[str, Any]:

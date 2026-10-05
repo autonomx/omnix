@@ -10,6 +10,7 @@ from copy import deepcopy
 from typing import Any, Dict, Mapping, Tuple
 
 from app.apps.rpg.survival import SURVIVAL_STATE_KEY, normalize_survival_state
+from app.apps.rpg.safe_values import mapping_copy as _safe_dict
 
 SURVIVAL_PERSISTENCE_SOURCE = "runtime_survival_persistence"
 
@@ -19,10 +20,6 @@ _LAST_TURN_KEYS: Tuple[str, str, str] = (
     "last_water_turn",
     "last_rest_turn",
 )
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _has_any_need(value: Mapping[str, Any]) -> bool:

@@ -5,7 +5,7 @@ speaker cards, companion interjections, and reactions.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.party import (
     build_companion_presence_summary,
@@ -16,14 +16,7 @@ from app.apps.rpg.party import (
 
 from .dialogue_fallbacks import build_deterministic_scene_fallback
 from .speaker_cards import build_speaker_cards
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list
 
 
 def build_scene_presentation_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:

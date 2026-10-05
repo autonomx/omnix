@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 SOURCE = "deterministic_phase4_time_day_hooks"
 MINUTES_PER_DAY = 24 * 60
@@ -9,14 +10,6 @@ DEFAULT_START_MINUTE_OF_DAY = 8 * 60
 DEFAULT_DAY_COUNT = 1
 DEFAULT_SEASON = "early_autumn"
 DEFAULT_WEATHER_ID = "weather:clear_mild"
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

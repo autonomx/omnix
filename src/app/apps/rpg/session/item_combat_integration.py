@@ -6,17 +6,10 @@ from typing import Any
 
 from app.apps.rpg.session.equipment import normalize_equipment
 from app.apps.rpg.session.item_combat import build_attack_profile_from_item, resolve_damage_against_defense
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 _RESOURCE_KEYS = ("health", "hp", "hit_points")
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

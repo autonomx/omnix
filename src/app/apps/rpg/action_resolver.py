@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 # ---------------------------------------------------------------------------
 # Action Profiles
@@ -64,10 +65,6 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return int(v)
     except Exception:
         return default
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
 
 
 def _get_stat(actor: Dict[str, Any], stat_name: str) -> int:

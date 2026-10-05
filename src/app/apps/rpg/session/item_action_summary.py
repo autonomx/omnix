@@ -8,14 +8,7 @@ from app.apps.rpg.session.crafting import CRAFTING_RECIPES, preview_craft
 from app.apps.rpg.session.equipment import resolve_equipment_slot
 from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity, is_protected_item, item_type, normalize_inventory_items
 from app.apps.rpg.session.item_materials import salvage_item
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _text(value: Any, fallback: str = "") -> str:

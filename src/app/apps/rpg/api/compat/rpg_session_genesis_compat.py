@@ -6,10 +6,7 @@ from typing import Any
 
 from app.apps.rpg.api.compat.rpg_session_compat import get_rpg_session_payload as _legacy_get_rpg_session_payload
 from app.apps.rpg.session.genesis.promoted_launch import create_promoted_new_game
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def _safe_str(value: Any) -> str:

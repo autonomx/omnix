@@ -10,14 +10,7 @@ from app.apps.rpg.world.conversation_threads import (
     has_pending_player_conversation_response,
     maybe_advance_conversation_thread,
 )
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def _conversation_blocking_reason(

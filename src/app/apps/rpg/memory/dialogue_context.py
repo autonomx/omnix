@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_CONTEXT_ITEMS = 5
 _MAX_LINE_LEN = 240
@@ -14,14 +15,6 @@ def _safe_str(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

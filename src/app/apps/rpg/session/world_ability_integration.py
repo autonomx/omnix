@@ -13,6 +13,7 @@ from typing import Any
 
 from app.apps.rpg.session.ability_system import DEFAULT_SKILL_XP_PER_ABILITY_USE, grant_skill_xp, tick_ability_state
 from app.apps.rpg.session.world_effects import WORLD_SCALE_EFFECT_OPS, apply_world_scale_ability_to_state, build_world_scale_ability_templates
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 WORLD_SCALE_TEMPLATE_VERSION = "world_scale_templates_v1"
 WORLD_SCALE_DEFAULT_LEVEL = 5
@@ -21,14 +22,6 @@ WORLD_SCALE_DEFAULT_COOLDOWN = 8
 
 def _utc_now() -> str:
     return utc_now().isoformat().replace("+00:00", "Z")
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

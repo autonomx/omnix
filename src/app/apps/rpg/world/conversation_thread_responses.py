@@ -19,10 +19,12 @@ from .conversation_thread_base import (
     MAX_BEATS_PER_THREAD,
     MAX_CONVERSATION_THREADS,
     _find_thread,
-    _safe_dict,
-    _safe_list,
-    _safe_str,
     get_conversation_thread_state,
+)
+from app.apps.rpg.safe_values import (
+    safe_dict as _safe_dict,
+    safe_list as _safe_list,
+    safe_str as _safe_str,
 )
 
 def _biography_grounded_npc_response(

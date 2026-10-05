@@ -7,18 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from .personality_state import get_actor_personality_profile
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
 def _compact_history(messages: List[Dict[str, Any]], limit: int = 12) -> List[Dict[str, Any]]:

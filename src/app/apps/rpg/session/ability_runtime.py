@@ -12,7 +12,15 @@ from app.apps.rpg.session.ability_models import (
     RpgProgressionResult,
 )
 from app.apps.rpg.session.ability_tree import validate_ability
-from app.apps.rpg.session.ability_utils import _append, _is_plain_int, _norm, _safe_dict, _safe_int, _safe_list, _text, _utc_now
+from app.apps.rpg.session.ability_utils import (
+    _append,
+    _is_plain_int,
+    _norm,
+    _safe_int,
+    _text,
+    _utc_now,
+)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _ability_index(tree: dict[str, Any]) -> dict[str, dict[str, Any]]:

@@ -11,8 +11,9 @@ Design invariants:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 import logging
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,6 @@ _MAX_SCENE_ILLUSTRATIONS = 24
 _MAX_IMAGE_REQUESTS = 24
 _MAX_VISUAL_ASSETS = 64
 _MAX_APPEARANCE_EVENTS = 32
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

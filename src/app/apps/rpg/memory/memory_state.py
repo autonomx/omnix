@@ -5,19 +5,12 @@ Memory is stateful but never grows unbounded.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_SHORT_TERM = 12
 _MAX_LONG_TERM = 24
 _MAX_WORLD_MEMORY = 32
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

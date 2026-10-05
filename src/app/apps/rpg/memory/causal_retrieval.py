@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List
 
 from app.apps.rpg.memory.causal_memory import normalize_npc_memory_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -17,10 +18,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except Exception:
         return default
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _safe_tags(value: Any) -> set[str]:

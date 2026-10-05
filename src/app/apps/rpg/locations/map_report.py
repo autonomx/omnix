@@ -2,27 +2,16 @@ from __future__ import annotations
 
 from copy import deepcopy
 from html import escape
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.locations.discovery import build_accessible_location_map_payload, ensure_discovery_state
 from app.apps.rpg.locations.events import build_location_history_model
 from app.apps.rpg.locations.graph import RUSTY_FLAGON, get_canonical_location
 from app.apps.rpg.locations.time import ensure_time_state
 from app.apps.rpg.locations.travel import ensure_travel_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase4_map_location_report"
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

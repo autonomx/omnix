@@ -5,6 +5,7 @@ from copy import deepcopy
 from hashlib import sha256
 from random import Random
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_reward_table_v1"
 
@@ -50,14 +51,6 @@ REWARD_TABLES: dict[str, dict[str, Any]] = {
         ],
     },
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

@@ -6,19 +6,12 @@ surfaces but does not silently mutate simulation truth outside explicit reducers
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_ACTOR_SHORT_TERM = 10
 _MAX_ACTOR_LONG_TERM = 20
 _MAX_ACTORS = 64
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

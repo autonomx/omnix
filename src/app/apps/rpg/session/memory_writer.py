@@ -8,19 +8,12 @@ context, reports, and grounding guards without changing the schema contract.
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MEMORY_SCHEMA_VERSION = "rpg_memory_v1"
 MAX_MEMORY_TEXT = 500
 DEFAULT_TURN_SALIENCE = 3
 DEFAULT_DIALOGUE_SALIENCE = 4
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _clean_text(value: Any, limit: int = MAX_MEMORY_TEXT) -> str:

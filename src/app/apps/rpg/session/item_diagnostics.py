@@ -16,18 +16,11 @@ from app.apps.rpg.session.item_objectives import build_item_objectives
 from app.apps.rpg.session.item_report_sections import build_item_report_section
 from app.apps.rpg.session.item_scenarios import build_item_scenario_plan
 from app.apps.rpg.session.item_state_maintenance import build_item_state_maintenance_plan
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_diagnostics_v1"
 TRACE_LIMIT = 20
 ITEM_TRACE_LIMIT = 50
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

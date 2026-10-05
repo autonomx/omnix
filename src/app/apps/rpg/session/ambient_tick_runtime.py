@@ -13,6 +13,7 @@ from app.apps.rpg.world.location_registry import current_location_id
 from app.apps.rpg.world.npc_presence_runtime import update_present_npcs_for_location
 from app.apps.rpg.world.scene_activity_scheduler import maybe_schedule_scene_activity
 from app.apps.rpg.world.scene_population_runtime import build_scene_population_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 AMBIENT_TICK_COMMANDS = {
     "__ambient_tick__",
@@ -28,14 +29,6 @@ AMBIENT_TICK_COMMANDS = {
 SCENE_ACTIVITY_TICK_COMMANDS = {
     "__scene_activity_tick__",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def is_ambient_tick_command(player_input: str) -> bool:

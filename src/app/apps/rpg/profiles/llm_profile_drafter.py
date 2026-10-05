@@ -4,16 +4,9 @@ import json
 from copy import deepcopy
 from typing import Any, Dict
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.profiles_llm_profile_drafter.build_profile_draft_prompt', "1", 'You are drafting editable NPC character-card text for a deterministic RPG engine.\nDo not invent world-changing secrets, quest outcomes, hidden knowledge, or facts that imply new simulation truth.\nYou may add flavor, personality texture, speech style, and plausible background consistent with the structured scaffold.\nReturn STRICT JSON only with keys: biography, history, personality.\n\nScaffold:\n{v0}\n\nRequired JSON shape:\n{{\n  "biography": {{\n    "short_summary": "...",\n    "full_biography": "...",\n    "public_reputation": "...",\n    "private_notes": "..."\n  }},\n  "history": {{\n    "background": "...",\n    "major_life_events": [],\n    "recent_events": []\n  }},\n  "personality": {{\n    "traits": [],\n    "temperament": "...",\n    "speech_style": "...",\n    "risk_tolerance": "...",\n    "conflict_style": "..."\n  }}\n}}\n')
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def build_profile_draft_prompt(profile: Dict[str, Any]) -> str:

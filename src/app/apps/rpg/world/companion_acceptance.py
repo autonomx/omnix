@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.party.companion_presence import current_player_location_id
 from app.apps.rpg.party.party_state import add_companion, ensure_party_state
 from app.apps.rpg.profiles.dynamic_npc_profiles import ensure_dynamic_npc_profile
 from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 ACCEPTANCE_MARKERS = {
     "yes",
@@ -37,18 +38,6 @@ REJECTION_MARKERS = {
 
 MAX_PENDING_OFFERS = 8
 MAX_ACCEPTANCE_HISTORY = 24
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _conversation_thread_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:

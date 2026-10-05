@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional
 
 from app.apps.rpg.survival import DEFAULT_SURVIVAL_TICK_RATES, tick_survival_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SURVIVAL_TICK_SOURCE = "runtime_survival_tick"
 SURVIVAL_TICK_HISTORY_LIMIT = 64
@@ -40,18 +41,6 @@ SURVIVAL_TICK_RATE_PROFILES: Dict[str, Dict[str, int]] = {
     "sleep": {"hunger": 2, "thirst": 2, "fatigue": 0},
     "survival_action": {"hunger": 0, "thirst": 0, "fatigue": 0},
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

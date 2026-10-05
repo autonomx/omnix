@@ -9,20 +9,13 @@ from app.apps.rpg.ai.survival_narration_grounding import (
     survival_narration_prompt_block,
     validate_survival_narration_text,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 _LEGACY_FALLBACK_TEXTS = {
     "the action resolves according to the current survival state.",
     "the action changes the scene, and the people nearby react according to what just happened.",
     "the survival action resolves.",
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _has_survival_evidence(narration_context: dict[str, Any]) -> bool:

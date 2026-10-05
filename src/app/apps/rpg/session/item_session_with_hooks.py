@@ -13,6 +13,7 @@ from typing import Any
 
 from app.apps.rpg.session import item_command_adapter, item_session_actions
 from app.apps.rpg.session.item_turn_hooks import run_item_turn_hooks
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_session_with_hooks_v1"
 ITEM_TRACE_LIMIT = 50
@@ -40,14 +41,6 @@ HOOKED_SESSION_ACTIONS = frozenset(
         "recipes",
     }
 )
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

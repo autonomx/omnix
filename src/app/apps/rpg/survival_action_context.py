@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping
 
 from app.apps.rpg.survival import survival_pressure, survival_state_snapshot
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SURVIVAL_CONTEXT_SOURCE = "runtime_survival_action_context"
 SURVIVAL_CONTEXT_VERSION = "survival_action_context_v1"
@@ -19,18 +20,6 @@ SURVIVAL_ACTION_SUGGESTION_THRESHOLD = 50
 SURVIVAL_ACTION_LIMIT = 3
 
 _NEED_ORDER = ("thirst", "hunger", "fatigue")
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

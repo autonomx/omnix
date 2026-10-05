@@ -10,23 +10,12 @@ from app.apps.rpg.party import build_companion_presence_summary
 
 from .personality import build_personality_style_tags
 from .personality_state import get_actor_personality_profile
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 _KIND_ORDER = {
     "player": 0,
     "companion": 1,
 }
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def build_speaker_cards(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> List[Dict[str, Any]]:

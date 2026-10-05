@@ -7,19 +7,12 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import display_item_name, item_type
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_signal_v1"
 SUPPORTED_SIGNAL_OPS = {"add_affordance", "add_scene_status", "set_world_flag", "restore_resource"}
 AFFORDANCE_BUCKETS = {"dialogue", "travel", "access", "evidence", "crafting", "combat", "social"}
 RESOURCES = {"hp", "mana", "stamina"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

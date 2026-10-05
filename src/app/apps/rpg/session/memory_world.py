@@ -15,10 +15,6 @@ DEFAULT_WORLD_MEMORY_SALIENCE = 4
 ALLOWED_WORLD_SCOPES = {"global", "location", "faction", "quest", "actor"}
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
 def _clean_text(value: Any, limit: int = MAX_MEMORY_TEXT) -> str:
     if not isinstance(value, str):
         return ""

@@ -12,6 +12,7 @@ from __future__ import annotations
 from app.runtime.clock import utc_now
 
 from typing import Any, Dict, List, Set
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ── Hard caps ─────────────────────────────────────────────────────────────
 MAX_WORLD_EVENTS_PER_TICK = 4
@@ -33,14 +34,6 @@ EVENT_TYPES = (
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
 
 
 def _safe_str(v: Any) -> str:

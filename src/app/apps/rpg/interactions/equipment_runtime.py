@@ -8,6 +8,7 @@ from app.apps.rpg.interactions.item_model import (
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 DEFAULT_STATS = {
     "damage_min": 0,
@@ -19,18 +20,6 @@ DEFAULT_STATS = {
     "stealth_penalty": 0,
     "encumbrance_penalty": 0,
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any):
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

@@ -8,20 +8,9 @@ from app.apps.rpg.profiles.dynamic_npc_profiles import (
     save_npc_profile,
 )
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.profiles_profile_portraits.prompt', "1", 'Medieval fantasy RPG character portrait of {v0}. {v1}. Bust portrait, expressive face, grounded realistic fantasy style, detailed clothing appropriate to their role, neutral background, no text, no watermark.')
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _join_traits(traits: List[Any]) -> str:

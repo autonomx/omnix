@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _MAX_GOALS = 5
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -17,18 +12,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except Exception:
         return default
-
-
-def _safe_list(value: Any) -> List[Any]:
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    return {}
 
 
 def _goal_sort_key(goal: Dict[str, Any]):

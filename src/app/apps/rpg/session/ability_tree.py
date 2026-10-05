@@ -18,7 +18,8 @@ from app.apps.rpg.session.ability_models import (
     RpgAbilityValidationResult,
     RpgCharacterIdentity,
 )
-from app.apps.rpg.session.ability_utils import _is_plain_int, _non_empty_strings, _norm, _safe_dict, _safe_list
+from app.apps.rpg.session.ability_utils import _is_plain_int, _non_empty_strings, _norm
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def normalize_genre(value: Any) -> str:

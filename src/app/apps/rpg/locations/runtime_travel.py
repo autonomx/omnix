@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route, validate_route_access
 from app.apps.rpg.locations.graph import OLD_MILL, RUSTY_FLAGON
 from app.apps.rpg.locations.travel import apply_travel, build_travel_narration_contract
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 SOURCE = "deterministic_phase4_runtime_travel_access"
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def apply_runtime_travel(

@@ -13,12 +13,9 @@ from .legacy_adapter import (
 )
 from .pipeline_adapter import create_new_game_session_from_compiled_genesis
 from .request_promoter import promote_new_game_request_to_genesis
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 _logger = logging.getLogger(__name__)
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
 
 
 def _elapsed_ms(started_at: float) -> int:

@@ -7,13 +7,8 @@ from app.apps.rpg.ai.world_scene_narrator import narrate_scene
 from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.memory.npc_memory_recall import recall_npc_memories
 from app.apps.rpg.memory.service_memory_recall import recall_service_memories_for_narration
-from app.apps.rpg.session.state_normalization import (
-    _safe_bool,
-    _safe_dict,
-    _safe_int,
-    _safe_list,
-    _safe_str,
-)
+from app.apps.rpg.session.state_normalization import _safe_bool, _safe_int, _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 import logging
 
 logger = logging.getLogger(__name__)

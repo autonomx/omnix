@@ -5,14 +5,7 @@ from typing import Any
 from app.apps.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
 from app.apps.rpg.hermes.context import hermes_rpg_context_payload
 from app.apps.rpg.hermes.mode_routing import omnix_mode_policy
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _safe_str(value: Any) -> str:

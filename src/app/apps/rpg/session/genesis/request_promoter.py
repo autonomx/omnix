@@ -5,10 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .contract import CampaignGenesisContract
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def _safe_list(value: Any) -> list[Any]:

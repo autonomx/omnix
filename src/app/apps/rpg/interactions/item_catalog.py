@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "def:rusty_key": {
@@ -360,10 +361,6 @@ NAME_TO_DEFINITION_ID = {
     "stolen ring": "def:stolen_ring",
     "ring": "def:stolen_ring",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _norm(value: Any) -> str:

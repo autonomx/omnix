@@ -21,17 +21,10 @@ All rules are fully deterministic and bounded.
 from __future__ import annotations
 
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MAX_INCIDENTS = 50
 MAX_POLICY_REACTIONS = 50
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def spawn_incidents_from_state_diff(

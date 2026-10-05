@@ -4,14 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.apps.rpg.world.npc_reputation_state import update_npc_reputation
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def classify_player_conversation_reputation_event(

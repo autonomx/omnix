@@ -8,16 +8,7 @@ from .npc_conversations import (
     list_recent_conversations,
 )
 from .player_interventions import build_intervention_options
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def _resolve_speaker_name(simulation_state: Dict[str, Any], line: Dict[str, Any]) -> str:

@@ -74,6 +74,7 @@ from .world_simulation_reports import (
     evaluate_world_expansion,  # noqa: F401 - re-exported for the historical API.
     summarize_simulation_step,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -271,18 +272,6 @@ def _load_social_state(current):
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _safe_list(value: Any) -> list[Any]:
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    return {}
 
 
 def _cap(value: int, lo: int = 0, hi: int = PRESSURE_CAP) -> int:

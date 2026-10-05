@@ -4,19 +4,12 @@ Read-only builder for a strong first 60 seconds player experience.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def _safe_str(v: Any, default: str = "") -> str:
     return str(v) if v is not None else default
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
 
 
 def _build_intro_by_genre(genre: str) -> Dict[str, Any]:

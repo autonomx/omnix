@@ -8,6 +8,7 @@ from app.apps.rpg.party.companion_presence import (
     player_input_mentions_active_companion,
     project_active_companions_into_presence,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 VALID_COMMANDS = {
     "follow",
@@ -30,18 +31,6 @@ REJECTED_INTENT_MARKERS = {
     "read their mind": "impossible_command",
     "control them": "impossible_command",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _normalize_text(value: Any) -> str:

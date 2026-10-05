@@ -9,10 +9,7 @@ from app.apps.rpg.combat.models import (
     FleeResolution,
 )
 from app.apps.rpg.combat.rolls import deterministic_d20, deterministic_damage_roll
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

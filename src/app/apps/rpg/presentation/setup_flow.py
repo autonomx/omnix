@@ -6,6 +6,7 @@ This module does not mutate simulation truth.
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 VALID_GENRES = {
     "fantasy",
@@ -33,14 +34,6 @@ VALID_RULE_KEYS = {
     "violence_level",
     "social_density",
 }
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
 
 
 def _safe_str(v: Any, default: str = "") -> str:

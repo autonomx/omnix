@@ -5,15 +5,8 @@ player choices, and pressure context for the UI to render.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
+from typing import Any, Dict
+from app.apps.rpg.safe_values import list_copy as _safe_list, safe_str as _safe_str
 
 
 def build_encounter_view(scene: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:

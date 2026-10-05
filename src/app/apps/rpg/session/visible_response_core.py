@@ -570,8 +570,5 @@ from app.apps.rpg.narration.combat_contract import (
     combat_contract_requires_llm,
 )
 from app.apps.rpg.narration.combat_service import generate_combat_narration_sync
-from app.apps.rpg.session.state_normalization import (
-    _safe_dict,
-    _safe_list,
-    _safe_str,
-)
+from app.apps.rpg.session.state_normalization import _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list

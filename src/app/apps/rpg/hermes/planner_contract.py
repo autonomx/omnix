@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 _ALLOWED_PREFIXES = (
     "ask",
@@ -33,10 +34,6 @@ _ALIAS_PREFIXES = {
 }
 _MUTATION_KEYS = {"state_patch", "state_changes", "mutation", "before", "after", "delta"}
 _MULTI_COMMAND_MARKERS = ("\n", ";", " and then ", " then ")
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _safe_str(value: Any) -> str:

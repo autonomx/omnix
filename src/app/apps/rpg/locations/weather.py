@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 SOURCE = "deterministic_phase4_season_weather_expansion"
 DEFAULT_WEATHER_ID = "weather:clear_mild"
@@ -64,14 +65,6 @@ SEASON_WEATHER_TABLE: Dict[str, List[str]] = {
     "spring": ["weather:light_rain", "weather:clear_mild", "weather:cool_breeze"],
     "summer": ["weather:clear_mild", "weather:dry_heat", "weather:cool_breeze"],
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

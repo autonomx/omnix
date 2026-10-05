@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.world.npc_evolution_state import apply_npc_evolution_event
 from app.apps.rpg.world.npc_reputation_state import get_npc_reputation
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 
 def evolve_npc_from_reputation_thresholds(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import Any
 
 from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
@@ -17,14 +17,8 @@ from .fast_combat_narration_skip import fast_combat_narration_scope
 from .session_runtime_store import load_runtime_session, save_runtime_session
 from .player_turn_execution import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
 from .turn_authoritative_guards import _canonicalize_publication, _persist_soft_truth
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.safe_values import mapping_copy as _safe_dict
 
 
 def build_apply_turn_response(

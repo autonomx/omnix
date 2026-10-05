@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.jobs.models import JobRecord
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 _DIAGNOSTIC_KEYS = (
     "raw_intent_diagnostics",
@@ -281,5 +282,3 @@ def _list_value(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)

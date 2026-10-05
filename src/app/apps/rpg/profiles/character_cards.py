@@ -9,18 +9,7 @@ from app.apps.rpg.profiles.dynamic_npc_profiles import (
 from app.apps.rpg.profiles.profile_drafts import (
     profile_draft_summary,
 )
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _known_npc_ids_from_simulation_state(simulation_state: Dict[str, Any]) -> List[str]:

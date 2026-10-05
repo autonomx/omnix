@@ -4,23 +4,12 @@ import html
 from typing import Any, Dict, List
 
 from .turn_readiness import build_100_turn_readiness_result
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_100_turn_readiness_report_gate"
 READINESS_SOURCE = "deterministic_phase7_100_turn_readiness_gate"
 SECTION_ID = "phase7-100-turn-readiness-report"
 PROGRESS_KEYS = ("travel", "quest", "economy", "combat", "journal")
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

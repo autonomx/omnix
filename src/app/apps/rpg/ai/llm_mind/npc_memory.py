@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 _MAX_MEMORIES = 50
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
+from app.apps.rpg.safe_values import mapping_copy as _safe_dict
 
 SURVIVAL_STATE_KEY = "survival"
 SURVIVAL_EVENT_LIMIT = 32
@@ -47,10 +48,6 @@ _LAST_TURN_BY_NEED = {
     "thirst": "last_water_turn",
     "fatigue": "last_rest_turn",
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _safe_bool(value: Any, default: bool = True) -> bool:

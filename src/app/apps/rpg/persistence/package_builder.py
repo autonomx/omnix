@@ -8,14 +8,11 @@ from .save_schema import (
     ENGINE_VERSION,
     PACKAGE_TYPE,
 )
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
 
 
 def build_save_package(setup_payload: Dict[str, Any], now: str | None = None) -> Dict[str, Any]:

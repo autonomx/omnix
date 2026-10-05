@@ -4,10 +4,7 @@ from typing import Any, Dict
 
 from app.apps.rpg.economy.currency import normalize_currency
 from app.apps.rpg.economy.pricing import resolve_registry_price
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _safe_str(value: Any) -> str:

@@ -4,14 +4,7 @@ import hashlib
 from typing import Any, Dict, List
 
 from app.apps.rpg.combat.state import normalize_combat_state
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

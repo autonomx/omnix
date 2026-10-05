@@ -4,22 +4,11 @@ import json
 from copy import deepcopy
 from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 NPC_PROFILE_DIR = REPO_ROOT / "resources" / "data" / "rpg" / "npcs"
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _validate_npc_profile(profile: Dict[str, Any], *, source_path: Path | None = None) -> Dict[str, Any]:

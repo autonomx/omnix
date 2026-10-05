@@ -14,6 +14,7 @@ from copy import deepcopy
 from typing import Any, Iterator
 
 from app.apps.rpg.session.item_turn_hooks import build_item_turn_hook_plan, run_item_turn_hooks
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_loadout_hooks_v1"
 TRACE_LIMIT = 20
@@ -41,14 +42,6 @@ def loadout_item_trace_order(*, preserve_action_traces: bool) -> Iterator[None]:
         yield
     finally:
         _PRESERVE_ACTION_TRACE_ORDER.reset(token)
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _utc_now() -> str:

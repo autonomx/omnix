@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 MERCHANTS: Dict[str, Dict[str, Any]] = {
     "npc:Elara": {
@@ -77,10 +78,6 @@ MERCHANTS: Dict[str, Dict[str, Any]] = {
         "source": "deterministic_merchant_catalog",
     },
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def get_default_merchant(merchant_id: str) -> Dict[str, Any]:

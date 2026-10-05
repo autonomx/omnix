@@ -9,18 +9,7 @@ from app.apps.rpg.interactions.objects import (
     set_world_object,
     world_objects_from_state,
 )
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def detect_interaction_intent(player_input: str) -> Dict[str, Any]:

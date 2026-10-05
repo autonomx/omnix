@@ -11,6 +11,7 @@ from typing import Any
 
 from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity
 from app.apps.rpg.session.item_system import build_item_catalog, normalize_item_instance
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 CURRENCY_VALUES = {"copper": 1, "silver": 10, "gold": 100}
 MERCHANT_STOCK: dict[str, tuple[str, ...]] = {
@@ -20,14 +21,6 @@ MERCHANT_STOCK: dict[str, tuple[str, ...]] = {
     "outfitter": ("travelers_cloak", "bedroll", "waterskin", "rope_coil", "arrow"),
 }
 DEFAULT_PROFILE = "general_store"
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

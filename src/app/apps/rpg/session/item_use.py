@@ -12,6 +12,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, inventory_quantity, item_type
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 SUPPORTED_ITEM_EFFECT_OPS = {
     "restore_resource",
@@ -27,14 +28,6 @@ RESOURCE_ALIASES = {
     "energy": "stamina",
 }
 AFFORDANCE_BUCKETS = {"dialogue", "travel", "access", "evidence", "crafting", "combat", "social"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

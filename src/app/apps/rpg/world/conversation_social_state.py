@@ -8,23 +8,12 @@ from app.apps.rpg.world.npc_goal_state import (
     record_goal_influence,
     response_style_from_goal,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_RECENT_PLAYER_REPLIES_PER_NPC = 8   # Bundle I cap
 MAX_RECENT_CONVERSATION_TOPICS_PER_NPC = 12
 MAX_NPC_CONVERSATION_MEMORIES = 20
 MAX_GLOBAL_PLAYER_REPLIES = 64
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

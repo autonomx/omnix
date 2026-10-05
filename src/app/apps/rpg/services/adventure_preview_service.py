@@ -13,6 +13,7 @@ from ..creator.validation import (
     validate_adventure_setup_payload,
     validate_adventure_setup_semantics,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ADVENTURE_PREVIEW_RESPONSE_VERSION = 1
 
@@ -20,20 +21,6 @@ ADVENTURE_PREVIEW_RESPONSE_VERSION = 1
 # ---------------------------------------------------------------------------
 # Preview response builder — stabilises the contract for the frontend
 # ---------------------------------------------------------------------------
-
-
-def _safe_list(value: Any) -> list[Any]:
-    """Return *value* if it is already a list, otherwise ``[]``."""
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    """Return *value* if it is already a dict, otherwise ``{}``."""
-    if isinstance(value, dict):
-        return value
-    return {}
 
 
 def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:

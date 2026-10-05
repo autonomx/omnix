@@ -4,17 +4,10 @@ from typing import Any
 
 from app.apps.rpg.compat.character_cards import import_external_character_card
 from app.apps.rpg.presentation.visual_state import ensure_visual_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_PACKS = 32
 _MAX_PACK_CHARACTERS = 64
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

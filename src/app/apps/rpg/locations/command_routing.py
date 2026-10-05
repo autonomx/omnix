@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.locations.encounter_runtime import apply_seeded_encounter_runtime
 from app.apps.rpg.locations.encounters import record_encounter, roll_seeded_encounter
 from app.apps.rpg.locations.graph import MARKET, OLD_MILL, OLD_ROAD, RUSTY_FLAGON, get_canonical_location
 from app.apps.rpg.locations.travel_resources import apply_runtime_travel_with_resource_consumption
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase4_runtime_travel_encounter_routing"
 
@@ -21,18 +22,6 @@ DESTINATION_ALIASES = {
 }
 
 TRAVEL_VERBS = ("go", "travel", "walk", "head", "move")
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from copy import deepcopy
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 SOURCE = "deterministic_phase4_location_graph"
 
@@ -120,10 +121,6 @@ CANONICAL_EDGES: List[Dict[str, Any]] = [
         "source": SOURCE,
     },
 ]
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _location_exists(location_id: str) -> bool:

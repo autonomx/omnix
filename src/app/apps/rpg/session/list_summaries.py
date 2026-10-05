@@ -17,12 +17,9 @@ from app.apps.rpg.session.durable_store import (
     ensure_session_dir,
 )
 from app.apps.rpg.session.migrations import migrate_session_payload
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _safe_str(value: Any) -> str:

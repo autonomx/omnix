@@ -11,22 +11,11 @@ Rules:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import list_copy as _safe_list
 
 
 _MAX_ITEMS = 12
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
 
 
 def summarize_tick_changes(before_state: Dict[str, Any], after_state: Dict[str, Any]) -> Dict[str, Any]:

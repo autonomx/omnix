@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity, item_type
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_metrics_v1"
 TRACE_KEYS = {
@@ -17,14 +18,6 @@ TRACE_KEYS = {
     "signaled": "signal_traces",
     "rewarded": "reward_traces",
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

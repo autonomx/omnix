@@ -2,14 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _text(value: Any, fallback: str = "") -> str:

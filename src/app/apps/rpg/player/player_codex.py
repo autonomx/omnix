@@ -12,16 +12,9 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .player_scene_state import ensure_player_state
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 _MAX_BUCKET = 200
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def _trim_bucket(bucket: Dict[str, Any]) -> Dict[str, Any]:

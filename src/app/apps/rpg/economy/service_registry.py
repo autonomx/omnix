@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_list as _safe_list, safe_str as _safe_str
 
 SERVICE_KIND_LODGING = "lodging"
 SERVICE_KIND_MEAL = "meal"
@@ -246,14 +247,6 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         },
     ],
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def get_service_provider(provider_id: str) -> Dict[str, Any]:

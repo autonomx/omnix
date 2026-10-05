@@ -12,6 +12,7 @@ from app.apps.rpg.interactions.item_model import (
 )
 from app.apps.rpg.interactions.merchant_runtime import apply_merchant_interaction
 from app.apps.rpg.survival import apply_survival_effect, ensure_survival_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _SURVIVAL_SOURCE = "runtime_action_resolver"
 _RUNTIME_SOURCE = "deterministic_survival_action_runtime"
@@ -32,18 +33,6 @@ _SERVICE_COSTS_COPPER = {
     "drink_from_well": 0,
     "drink_from_stream": 0,
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

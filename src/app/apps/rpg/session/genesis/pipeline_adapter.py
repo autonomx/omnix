@@ -16,6 +16,7 @@ from .materialization import (
 )
 from .world_forge_commit import certify_world_forge_commit
 from .world_forge_pipeline import CampaignWorldForgeResult, run_campaign_world_forge
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 class _TruthyZero(int):
@@ -26,10 +27,6 @@ class _TruthyZero(int):
 
     def __bool__(self) -> bool:
         return True
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
 
 
 def _preserve_seed_zero(request: Any) -> Any:

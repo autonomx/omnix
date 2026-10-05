@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 STACKABLE_ITEM_TYPES = {
     "ammo",
@@ -19,14 +20,6 @@ STACKABLE_ITEM_TYPES = {
 
 PROTECTED_ITEM_TYPES = {"quest", "quest_item"}
 PROTECTED_NAMES = {"journal", "quest journal"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

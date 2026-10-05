@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 _PROMPT_1 = prompt_template('rpg.npc_dialogue_intelligence.system', "1", (
     "You are an RPG NPC dialogue intelligence layer. "
@@ -13,14 +14,6 @@ _PROMPT_1 = prompt_template('rpg.npc_dialogue_intelligence.system', "1", (
         "Return JSON only."
 ))
 _PROMPT_2 = prompt_template('rpg.npc_dialogue_intelligence.user', "1", 'Generate one intelligent in-character NPC reply.\n\nRequirements:\n- Do not repeat recent_lines.\n- If the player asks a vague objective question, ask them to be specific or point to a grounded known lead.\n- If a known fact can help, reveal it in-character.\n- If the NPC would be afraid, cautious, evasive, or helpful, reflect that.\n- The line must be 1-3 sentences.\n\nCONTEXT_JSON:\n{v0}\n\nReturn exactly:\n{{\n  "intent": "...",\n  "known_fact_used": "...",\n  "line": "...",\n  "next_hook": "..."\n}}')
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:

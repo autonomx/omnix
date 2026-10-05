@@ -22,20 +22,13 @@ from __future__ import annotations
 
 from hashlib import sha1
 from typing import Any, Dict, List, Optional
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _safe_str(v: Any) -> str:
     if v is None:
         return ""
     return str(v) if not isinstance(v, str) else v
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:

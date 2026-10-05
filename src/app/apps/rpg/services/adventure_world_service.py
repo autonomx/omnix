@@ -9,7 +9,7 @@ from typing import Any
 
 from ..creator.defaults import apply_adventure_defaults
 from ..creator.world_player_actions import apply_player_action
-from .adventure_preview_service import _safe_dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def inspect_world(payload: dict[str, Any]) -> dict[str, Any]:

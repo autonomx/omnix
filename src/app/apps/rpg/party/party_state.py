@@ -12,21 +12,10 @@ Key guarantees:
     - VALID_SLOTS enforced for equipment
 """
 from typing import Any, Dict, List, Optional
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 # Valid equipment slots — centralised for UI/balance parity
 VALID_SLOTS = {"weapon", "armor", "consumable"}
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:

@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set
 
 from app.apps.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block', "1", "- You may say an NPC remembers, recalls, or refers to a prior event only when that fact appears in Relevant Memory or authoritative state.")
 _PROMPT_2 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block_2', "1", "- Do not invent remembered purchases, debts, promises, warnings, injuries, crimes, rumors, quest clues, or relationships.")
@@ -72,18 +73,6 @@ _TOKEN_STOPWORDS = {
     "you",
     "your",
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _clean_text(value: Any, limit: int = 260) -> str:

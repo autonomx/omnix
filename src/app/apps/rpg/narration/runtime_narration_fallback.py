@@ -13,13 +13,8 @@ from app.apps.rpg.npc_dialogue.intelligence import (
 )
 from app.providers.service import get_provider
 
-from .runtime_narration_common import (
-    NARRATION_FORMAT_VERSION,
-    _norm,
-    _safe_dict,
-    _safe_list,
-    _safe_str,
-)
+from .runtime_narration_common import NARRATION_FORMAT_VERSION, _norm, _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 

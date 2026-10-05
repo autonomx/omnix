@@ -38,11 +38,8 @@ from app.apps.rpg.runtime.dialogue_runtime_state import (
     _normalize_status,
     _normalize_stream_chunk,
     _normalize_turn,
-    _safe_dict,
     _safe_float,
     _safe_int,
-    _safe_list,
-    _safe_str,
     _sort_key_chunk,
     _sort_key_interruption_candidate,
     _sort_key_interrupt_log,
@@ -52,7 +49,14 @@ from app.apps.rpg.runtime.dialogue_runtime_state import (
     build_runtime_sequence_id,
     build_runtime_turn_id,
 )
-from app.apps.rpg.runtime.dialogue_runtime_state import _role_precedence as _role_precedence  # noqa: F401
+from app.apps.rpg.safe_values import (
+    dict_copy as _safe_dict,
+    list_copy as _safe_list,
+    safe_str as _safe_str,
+)
+from app.apps.rpg.runtime.dialogue_runtime_state import (
+    _role_precedence as _role_precedence  # noqa: F401,
+)
 
 
 

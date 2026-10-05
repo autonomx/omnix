@@ -3,7 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_replay_checkpoint_foundation"
 CHECKPOINT_SCHEMA_VERSION = 1
@@ -15,18 +16,6 @@ VOLATILE_RUNTIME_KEYS = {
     "narration_trace",
     "turn_perf_trace",
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _clean_json(value: Any) -> Any:

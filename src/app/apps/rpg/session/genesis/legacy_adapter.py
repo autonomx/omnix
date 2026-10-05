@@ -11,6 +11,7 @@ from .contract import (
     genesis_contract_hash,
 )
 from .source_info import wizard_source_payload
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 _ARCHETYPE_TO_BUILD = {
     "balanced_adventurer": "balanced_adventurer",
@@ -64,10 +65,6 @@ _GENESIS_CORE_STAT_MAP = {
     "perception": "wisdom",
 }
 _GENESIS_RPG_ONLY_STATS = ("archery", "survival")
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
 
 
 def _normal_key(value: object, fallback: str = "custom") -> str:

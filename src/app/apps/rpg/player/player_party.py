@@ -4,7 +4,7 @@ Provides helpers to build party views for the player-facing UI,
 including Phase 9.3 companion narrative presence summaries
 and Phase 10 presentation speaker cards.
 """
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.party import (
     build_companion_presence_summary,
@@ -12,14 +12,7 @@ from app.apps.rpg.party import (
     ensure_party_state,
 )
 from app.apps.rpg.presentation import build_party_speaker_cards
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list
 
 
 def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:

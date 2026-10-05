@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from .npc_conversations import list_active_conversations
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
@@ -27,18 +28,10 @@ _GROUP_PRIORITY = 60
 PIVOT_TURN_EXTENSION = 4   # additional turns granted after mode pivot
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
 def _safe_str(v: Any) -> str:
     if v is None:
         return ""
     return str(v) if not isinstance(v, str) else v
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
 
 
 def _safe_int(v: Any, default: int = 0) -> int:

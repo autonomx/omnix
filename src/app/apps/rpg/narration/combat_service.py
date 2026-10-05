@@ -8,16 +8,9 @@ from typing import Any, Callable, Dict
 from app.apps.rpg.narration.combat_contract import build_combat_narration_contract
 from app.apps.rpg.narration.combat_prompt import build_combat_narration_prompt
 from app.apps.rpg.narration.combat_validator import validate_combat_narration
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _parse_json_object(text: Any) -> Dict[str, Any]:

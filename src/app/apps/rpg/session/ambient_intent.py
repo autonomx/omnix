@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 
 AMBIENT_WAIT_MARKERS = (

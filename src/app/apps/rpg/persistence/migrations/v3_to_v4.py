@@ -5,10 +5,7 @@ Adds inventory_state to player_state for Phase 9.0 compatibility.
 from __future__ import annotations
 
 from typing import Any, Dict
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def migrate_v3_to_v4(package: Dict[str, Any]) -> Dict[str, Any]:

@@ -18,6 +18,7 @@ from app.apps.rpg.ai.grounding_patterns import (
     _UNSUPPORTED_DEBT_CLAIM_PATTERNS,
 )
 from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 
 @dataclass
@@ -54,20 +55,12 @@ class GroundingValidationResult:
         }
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
 def _safe_list(value: Any) -> List[Any]:
     if isinstance(value, list):
         return value
     if isinstance(value, tuple):
         return list(value)
     return []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value) if value is not None else ""
 
 
 def _extract_player_action_text(turn_contract: Mapping[str, Any]) -> str:

@@ -6,6 +6,7 @@ AI may assign difficulty_tier, quest_rank etc. but formulas are deterministic.
 from __future__ import annotations
 
 from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 _SKILL_XP_ACTION_ALLOWLIST = {
     "attack_melee",
@@ -28,10 +29,6 @@ _PLAYER_XP_LOOT_VALUE_THRESHOLD = 25
 _PLAYER_XP_GOLD_THRESHOLD = 25
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
 def _is_positive_outcome(outcome: str) -> bool:
     return outcome in {"success", "critical_success", "hit", "crit"}
 
@@ -41,10 +38,6 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return int(v)
     except Exception:
         return default
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int:

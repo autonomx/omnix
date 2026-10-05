@@ -7,12 +7,7 @@ from .goal_engine import GoalEngine
 from .npc_decision import NPCDecision
 from .npc_decision_validator import NPCDecisionValidator
 from .npc_memory import NPCMemory
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 
 class NPCMind:

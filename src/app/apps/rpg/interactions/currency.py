@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 COPPER_PER_SILVER = 100
 SILVER_PER_GOLD = 100
@@ -13,10 +14,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def normalize_currency(value: Any) -> Dict[str, int]:

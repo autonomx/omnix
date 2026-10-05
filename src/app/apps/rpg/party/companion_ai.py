@@ -14,18 +14,7 @@ from typing import Any, Dict, List
 from .party_state import (
     get_active_companions,
 )
-
-
-def _safe_dict(v):
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_list(v):
-    return v if isinstance(v, list) else []
-
-
-def _safe_str(v):
-    return "" if v is None else str(v)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _get_hostile_targets(encounter_state: Dict[str, Any]) -> List[Dict[str, Any]]:

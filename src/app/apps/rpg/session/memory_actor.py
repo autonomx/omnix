@@ -8,14 +8,11 @@ from .memory_writer import (
     MEMORY_SCHEMA_VERSION,
     memory_state_from_session,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 ACTOR_MEMORY_KIND = "actor"
 DEFAULT_ACTOR_MEMORY_LIMIT = 6
 DEFAULT_ACTOR_MEMORY_SALIENCE = 5
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _clean_text(value: Any, limit: int = MAX_MEMORY_TEXT) -> str:

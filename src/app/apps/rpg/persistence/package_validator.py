@@ -3,10 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from .save_schema import PACKAGE_TYPE
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def validate_save_package(package: Dict[str, Any]) -> List[Dict[str, str]]:

@@ -5,10 +5,7 @@ All item definitions are serialisable, no randomness or generated fields.
 from __future__ import annotations
 
 from typing import Any, Dict
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 # Deterministic static item registry.

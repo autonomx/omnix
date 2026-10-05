@@ -55,12 +55,14 @@ from .conversation_thread_base import (
     MAX_BEATS_PER_THREAD,
     _find_thread,
     _player_party_state,
-    _safe_dict,
     _safe_int,
-    _safe_list,
-    _safe_str,
     ensure_conversation_thread_state,
     get_conversation_thread_state,
+)
+from app.apps.rpg.safe_values import (
+    safe_dict as _safe_dict,
+    safe_list as _safe_list,
+    safe_str as _safe_str,
 )
 from .conversation_thread_responses import (
     _biography_grounded_npc_response,

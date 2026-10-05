@@ -27,10 +27,7 @@ from app.apps.rpg.validation.integrity import (
     validate_session_integrity,
 )
 from app.apps.rpg.performance_trace import rpg_pipeline_span_if_active
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:

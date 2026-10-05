@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
 _MAX_RUNTIME_TURNS = 20
@@ -47,18 +48,6 @@ _EMOTION_ORDER = {
     "stern": 5,
     "shaken": 6,
 }
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def _safe_int(v: Any, default: int = 0) -> int:

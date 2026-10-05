@@ -11,6 +11,7 @@ from app.apps.rpg.world.npc_presence_runtime import (
     update_present_npcs_for_location,
 )
 from app.apps.rpg.world.scene_continuity_state import scene_continuity_for_location
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 DEFAULT_LOCATION_NPCS = {
     # Conservative fallbacks only. Do not introduce authority/guest NPCs such
@@ -19,18 +20,6 @@ DEFAULT_LOCATION_NPCS = {
     "loc_tavern": ["npc:Bran", "npc:Mira"],
     "loc_market": ["npc:Merchant"],
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

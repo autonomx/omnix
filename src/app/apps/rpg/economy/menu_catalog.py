@@ -4,10 +4,7 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.economy.currency import normalize_currency
 from app.apps.rpg.economy.pricing import ITEM_PRICES, SERVICE_PRICES
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _safe_str(value: Any) -> str:
@@ -160,10 +157,6 @@ def build_available_transaction_menus(context_tags: List[Any] | None = None) -> 
         menus.append(build_service_menu("repair"))
 
     return menus
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _attach_provider_to_entry(entry: Dict[str, Any], provider: Dict[str, Any]) -> Dict[str, Any]:

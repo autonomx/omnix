@@ -13,10 +13,7 @@ from app.apps.rpg.party import (
 )
 
 from .speaker_cards import build_speaker_cards
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def build_dialogue_presentation_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:

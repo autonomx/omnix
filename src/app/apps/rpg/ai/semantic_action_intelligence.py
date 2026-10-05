@@ -6,6 +6,7 @@ from typing import Any
 from app.providers.structured.legacy import decode_legacy_json_object
 from app.apps.rpg.session.turn_grounding import build_turn_grounding_packet
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.ai_semantic_action_intelligence.instructions', "1", (
     "You are the RPG first-call semantic intent router.\n"
@@ -59,18 +60,6 @@ _SEMANTIC_PACKET_SCHEMA: dict[str, Any] = {
     ],
     "additionalProperties": False,
 }
-
-
-def _safe_dict(v: Any) -> dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> list[Any]:
-    return v if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return str(v) if v is not None else ""
 
 
 def _safe_bool(v: Any, default: bool = False) -> bool:

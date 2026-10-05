@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.apps.rpg.session.migrations import migrate_session_payload
-from app.apps.rpg.session.session_store import _normalize_session, _safe_dict
+from app.apps.rpg.session.session_store import _normalize_session
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 from app.runtime.paths import repo_root, rpg_sessions_root
 from app.apps.rpg.performance_trace import rpg_pipeline_span_if_active
 

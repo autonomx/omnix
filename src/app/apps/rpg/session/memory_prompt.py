@@ -7,20 +7,13 @@ from .memory_actor import get_actor_memory, get_relevant_actor_memory
 from .memory_retrieval import get_relevant_recent_memory
 from .memory_world import get_relevant_world_memory, get_world_memory
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _PROMPT_1 = prompt_template('rpg.session_memory_prompt.build_relevant_memory_prompt_block', "1", "Usage: continuity only; current runtime state and turn contract remain authoritative.")
 
 MEMORY_PROMPT_CONTEXT_VERSION = "rpg_relevant_memory_prompt_v1"
 DEFAULT_PROMPT_MEMORY_LIMIT = 4
 MAX_PROMPT_MEMORY_TEXT = 180
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _clean_text(value: Any, limit: int = MAX_PROMPT_MEMORY_TEXT) -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 Currency = Dict[str, int]
 
@@ -10,10 +11,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def normalize_currency(value: Any) -> Currency:

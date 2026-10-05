@@ -8,14 +8,7 @@ They remove or soften LLM claims that are not backed by the turn contract.
 
 import re
 from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 _COMBAT_CLAIM_RE = re.compile(

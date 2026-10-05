@@ -11,6 +11,7 @@ JSON serialization.
 from __future__ import annotations
 
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 # ---------------------------------------------------------------------------
 # Node / edge type constants
@@ -31,24 +32,6 @@ EDGE_TYPES = (
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _safe_list(value: Any) -> list[Any]:
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    return {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _thread_related_ids(thread: dict[str, Any]) -> dict[str, list[str]]:

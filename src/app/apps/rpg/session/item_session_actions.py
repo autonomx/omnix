@@ -15,16 +15,9 @@ from app.apps.rpg.session.item_market_session import apply_session_market_action
 from app.apps.rpg.session.item_pickup_session import apply_session_scene_item_pickup, available_scene_pickups_for_session
 from app.apps.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
 from app.apps.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 ITEM_SESSION_ACTIONS_SOURCE = "engine_item_session_actions_v1"
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

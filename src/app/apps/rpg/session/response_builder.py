@@ -11,7 +11,8 @@ from app.apps.rpg.presentation import (
     build_scene_presentation_payload,
 )
 from app.apps.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
-from app.apps.rpg.session.state_normalization import _safe_dict, _safe_list, _safe_str
+from app.apps.rpg.session.state_normalization import _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from app.apps.rpg.session.survival_runtime import attach_survival_runtime_payloads
 from app.apps.rpg.survival_action_context import attach_survival_action_context
 from app.apps.rpg.survival_tick_runtime import apply_survival_runtime_tick

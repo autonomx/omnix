@@ -21,6 +21,7 @@ from app.apps.rpg.session.inventory_items import (
 )
 from app.apps.rpg.session.item_descriptions import build_item_description_context
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _PROMPT_1 = prompt_template('rpg.session_item_detail.prompt', "1", (
     "Write a medium-detail lore description for this RPG inventory item in exactly three sentences, "
@@ -33,14 +34,6 @@ _PROMPT_1 = prompt_template('rpg.session_item_detail.prompt', "1", (
 
 ITEM_DETAIL_SOURCE = "rpg_item_detail_v1"
 GENERIC_GENRES = {"", "deterministic_rpg_campaign", "rpg_campaign", "default"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

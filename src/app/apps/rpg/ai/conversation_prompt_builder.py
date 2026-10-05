@@ -2,18 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.ai_conversation_prompt_builder.build_npc_conversation_line_prompt', "1", 'Write exactly one NPC conversation line as JSON.\nSchema: {{"speaker": "...", "text": "...", "kind": "statement|question|challenge|warning|agreement|interruption"}}\nConversation kind: {v0}\nTopic type: {v1}\nTopic summary: {v2}\nSpeaker: {v3}\nRecent lines:\n{v4}\nConstraints: one short line only, no narration, no markdown.')
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def build_npc_conversation_line_prompt(

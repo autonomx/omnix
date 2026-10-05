@@ -11,14 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.recipe_discovery import apply_recipe_discovery
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _turn(state: dict[str, Any]) -> int:

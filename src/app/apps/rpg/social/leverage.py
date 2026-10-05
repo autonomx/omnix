@@ -3,23 +3,16 @@ from __future__ import annotations
 import logging
 
 import hashlib
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.apps.rpg.social.state import (
     clamp_social_value,
     ensure_relationship,
     ensure_social_state,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _stable_leverage_id(npc_id: str, summary: str, kind: str) -> str:

@@ -15,6 +15,7 @@ from app.apps.rpg.session.item_session_with_hooks import (
     apply_item_command_with_hooks,
     apply_item_session_action_with_hooks,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 ITEM_ACTION_RESOLUTION_SOURCE = "engine_item_action_resolution_v1"
 
@@ -53,10 +54,6 @@ SUPPORTED_ITEM_ACTIONS = frozenset(
         "item_report",
     }
 )
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _text(value: Any) -> str:

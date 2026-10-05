@@ -10,9 +10,10 @@ Key guarantees:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from .player_progression_state import ensure_player_progression_state
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 _MAX_SCENE_HISTORY = 50
 
@@ -20,18 +21,6 @@ _MAX_SCENE_HISTORY = 50
 # ---------------------------------------------------------------------------
 # Safe-cast helpers
 # ---------------------------------------------------------------------------
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
 
 # ---------------------------------------------------------------------------
 # Public API

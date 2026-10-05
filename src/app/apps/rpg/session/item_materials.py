@@ -10,6 +10,7 @@ from copy import deepcopy
 from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MATERIAL_ROLES = (
     "metal",
@@ -230,14 +231,6 @@ class RpgSalvageResult(BaseModel):
     consumed_items: list[dict[str, Any]] = Field(default_factory=list)
     repairs: list[str] = Field(default_factory=list)
     trace: dict[str, Any] = Field(default_factory=dict)
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

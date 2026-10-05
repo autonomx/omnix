@@ -8,14 +8,7 @@ from typing import Any, Dict
 
 from .inventory_state import normalize_inventory_state, remove_inventory_item
 from .item_registry import get_item_definition
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 
 def _safe_int(v: Any, default: int = 0) -> int:

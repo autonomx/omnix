@@ -4,13 +4,8 @@ from typing import Any, Callable, Dict
 
 from app.apps.rpg.creator.defaults import apply_adventure_defaults
 from app.apps.rpg.creator.world_simulation import step_simulation_state
-from app.apps.rpg.session.state_normalization import (
-    _copy_dict,
-    _ensure_simulation_state,
-    _safe_dict,
-    _safe_list,
-    _safe_str,
-)
+from app.apps.rpg.session.state_normalization import _copy_dict, _ensure_simulation_state, _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:

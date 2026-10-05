@@ -20,14 +20,7 @@ from .party_state import (
     get_companion_by_id,
     update_companion_hp,
 )
-
-
-def _safe_dict(v):
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_str(v):
-    return "" if v is None else str(v)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def apply_party_item_to_companion(simulation_state: Dict[str, Any], npc_id: str, item_id: str) -> Dict[str, Any]:

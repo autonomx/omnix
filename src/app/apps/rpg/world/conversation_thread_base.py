@@ -20,22 +20,11 @@ from app.apps.rpg.world.npc_goal_state import (
     record_goal_influence,
     seed_default_npc_goals,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_CONVERSATION_THREADS = 32
 MAX_BEATS_PER_THREAD = 8
 MAX_WORLD_SIGNALS = 64
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

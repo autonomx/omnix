@@ -5,23 +5,12 @@ from typing import Any, Dict, List
 
 from .saved_autoplay_digest_sources import capture_saved_autoplay_digest_sources
 from .turn_certification import build_full_100_turn_certification_contract, build_full_100_turn_certification_result
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_real_autoplay_certification_artifact_gate"
 REPORT_DIAGNOSTICS_SOURCE = "deterministic_phase7_saved_certification_report_diagnostics_gate"
 CERTIFICATION_SECTION_MARKER = "<!-- rpg-phase7-real-autoplay-certification -->"
 DEFAULT_EXPECTED_TURNS = 100
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

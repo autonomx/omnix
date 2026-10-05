@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 from app.apps.rpg.economy.survival import FOOD_ITEM_IDS, WATER_ITEM_IDS, consume_food, consume_water
 from app.apps.rpg.items.inventory_state import normalize_inventory_state
@@ -9,20 +9,9 @@ from app.apps.rpg.locations.discovery import validate_route_access
 from app.apps.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON
 from app.apps.rpg.locations.runtime_travel import apply_runtime_travel
 from app.apps.rpg.locations.travel import apply_causal_travel_projection, calculate_route_travel_cost
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase4_travel_resource_consumption"
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

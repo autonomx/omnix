@@ -15,10 +15,7 @@ from app.apps.rpg.session.runtime_promotions import (
     build_climate_survival_runtime_payload,
     build_runtime_promotion_panel_payload,
 )
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def build_runtime_presentation_payload(

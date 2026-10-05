@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
@@ -9,6 +9,7 @@ from app.providers.structured.legacy import decode_legacy_json_object
 from app.apps.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.apps.rpg.session.turn_grounding import build_turn_grounding_packet
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.ai_action_intelligence.instructions', "1", (
     "You are the RPG first-call action-intent extraction layer.\n"
@@ -85,18 +86,6 @@ class ActionAdvisoryPayload(_StrictActionModel):
         if normalized and normalized not in _ALLOWED_SKILLS:
             raise ValueError("unsupported_skill_id")
         return normalized
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value) if value is not None else ""
 
 
 def _safe_bool(value: Any, default: bool = False) -> bool:

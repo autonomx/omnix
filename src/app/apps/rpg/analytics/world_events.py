@@ -12,6 +12,7 @@ Hard-capped per section.
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_LOCAL = 12
 _MAX_GLOBAL = 12
@@ -20,14 +21,6 @@ _MAX_RECENT = 12
 _MAX_PLAYER_WORLD_VIEW_ROWS = 8
 
 _SCOPE_ORDER = {"local": 0, "global": 1, "director": 2}
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
 
 
 def _safe_str(v: Any) -> str:

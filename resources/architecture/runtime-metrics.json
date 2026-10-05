@@ -419,6 +419,7 @@
         "app.apps.rpg.runtime",
         "app.apps.rpg.runtime.dialogue_runtime",
         "app.apps.rpg.runtime.dialogue_runtime_state",
+        "app.apps.rpg.safe_values",
         "app.apps.rpg.session",
         "app.apps.rpg.session.ability_catalog",
         "app.apps.rpg.session.ability_coverage",
@@ -2962,14 +2963,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T18:26:30.463275+00:00",
+  "measured_at": "2026-10-05T18:38:33.949673+00:00",
   "metrics": {
-    "boot_imported_modules": 2082,
+    "boot_imported_modules": 2083,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "e44383b7984ecc593fa6941cdd772ce44840bdd5b48d96fb8be252d4df2d1754"
+  "source_digest": "886ae77d00bc7f3d89c37cab449540b14e6c492912a4174c6d46b5afb726dc19"
 }

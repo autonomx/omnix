@@ -50,18 +50,9 @@ from .npc_conversations import (
     trim_conversation_state,
     upsert_conversation,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _player_location(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> str:

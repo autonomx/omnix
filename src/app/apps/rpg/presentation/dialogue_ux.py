@@ -4,7 +4,8 @@ Read-only builder for intent buttons, hybrid input aids, and layered dialogue ou
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list
 
 INTENT_BUTTONS = [
     {"intent_id": "ask", "label": "Ask"},
@@ -13,14 +14,6 @@ INTENT_BUTTONS = [
     {"intent_id": "observe", "label": "Observe"},
     {"intent_id": "leave", "label": "Leave"},
 ]
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
 
 
 def _safe_str(v: Any, default: str = "") -> str:

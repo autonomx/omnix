@@ -8,18 +8,7 @@ turn-by-turn state instead of report-only projection.
 """
 
 from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return list(value) if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

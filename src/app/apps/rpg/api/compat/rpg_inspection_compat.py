@@ -12,10 +12,7 @@ from app.apps.rpg.analytics import (
     inspect_npc_reasoning,
 )
 from app.apps.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _simulation_state_from_setup(setup_payload: dict[str, Any]) -> dict[str, Any]:

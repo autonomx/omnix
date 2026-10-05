@@ -12,6 +12,7 @@ from app.apps.rpg.session.inventory_items import (
     normalize_inventory_items,
     stack_key,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_state_audit_v1"
 TRACE_LIMIT = 20
@@ -29,14 +30,6 @@ TRACE_BUCKETS = {
     "item_command_traces",
     "item_scenario_traces",
 }
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

@@ -7,16 +7,7 @@ from .conversation_response_parser import (
     is_valid_conversation_line,
     parse_conversation_line_response,
 )
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def generate_recorded_conversation_line(

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_list as _safe_list, safe_str as _safe_str
 
 RECIPES: Dict[str, Dict[str, Any]] = {
     "recipe:torch": {
@@ -34,14 +35,6 @@ RECIPES: Dict[str, Dict[str, Any]] = {
         "source": "deterministic_recipe_catalog",
     },
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _norm(value: Any) -> str:

@@ -3,10 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.apps.rpg.spatial.serialization import normalize_spatial_graph
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def get_spatial_graph(simulation_state: Dict[str, Any]) -> Dict[str, Any]:

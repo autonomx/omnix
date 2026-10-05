@@ -12,6 +12,7 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping
 from app.prompts import prompt_template
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 _PROMPT_1 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block', "1", "- Simulation is authoritative for hunger, thirst, fatigue, inventory, purchases, meals, water, and rest.")
 _PROMPT_2 = prompt_template('rpg.ai_survival_narration_grounding.survival_narration_prompt_block_2', "1", "- Mention water/meals/rest/supplies only when backed by survival_result, service_result, merchant_result, effects, or inventory_delta.")
@@ -71,18 +72,6 @@ _ACTION_CATEGORY = {
     "inn_lodging": "rest",
     "buy_lodging": "rest",
 }
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.apps.rpg.safe_values import safe_str as _safe_str
 
 JOIN_REQUEST_MARKERS = {
     "join me",
@@ -14,14 +15,6 @@ JOIN_REQUEST_MARKERS = {
     "come along",
     "adventure with me",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def player_input_requests_join(player_input: Any) -> bool:

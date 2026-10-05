@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 INTERACTIVE_CLI_STATE_CHECKPOINT_VERSION = "interactive_cli_state_checkpoint_v1"
 INTERACTIVE_CLI_STATE_CHECKPOINT_PATCH = "phase_13_66_interactive_state_checkpoint_v1"
@@ -21,14 +22,6 @@ INTERACTIVE_CLI_STATE_CHECKPOINT_SOURCE = "interactive_cli_state_checkpoint"
 
 class InteractiveCliStateCheckpointError(ValueError):
     """Raised when an interactive CLI state checkpoint cannot be restored."""
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def _canonical_json(value: Mapping[str, Any]) -> str:

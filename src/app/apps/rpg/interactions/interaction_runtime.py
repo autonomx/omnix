@@ -31,14 +31,7 @@ from app.apps.rpg.interactions.target_resolver import (
     expected_target_types_for_action,
     resolve_target_ref,
 )
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def _build_unresolved_result(action: Dict[str, Any], reason: str) -> Dict[str, Any]:

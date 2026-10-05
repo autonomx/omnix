@@ -6,14 +6,7 @@ without breaking existing party data.
 from __future__ import annotations
 
 from typing import Any, Dict
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> list:
-    return list(v) if isinstance(v, list) else []
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list
 
 
 def _safe_str(v: Any, default: str = "") -> str:

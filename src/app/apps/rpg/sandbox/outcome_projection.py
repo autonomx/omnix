@@ -6,16 +6,9 @@ and encounters.
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import list_copy as _safe_list, safe_str as _safe_str
 
 _MAX_PROJECTED = 24
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def project_outcomes_from_state(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:

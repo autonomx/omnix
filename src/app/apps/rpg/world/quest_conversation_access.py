@@ -6,20 +6,9 @@ from typing import Any, Dict, List
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_knowledge_state import known_facts_for_npc
 from app.apps.rpg.world.npc_reputation_state import get_npc_reputation
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 ACCESS_LEVELS = {"none", "partial", "normal", "trusted"}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

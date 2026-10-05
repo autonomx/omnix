@@ -1,18 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 _MAX_LINE_LEN = 220
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
 
 
 def _truncate_line(text: str) -> str:

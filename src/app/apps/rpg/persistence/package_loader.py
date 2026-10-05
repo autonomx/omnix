@@ -4,10 +4,7 @@ from typing import Any, Dict
 
 from .migration_manager import migrate_package_to_current
 from .package_validator import validate_save_package
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def load_save_package(package: Dict[str, Any]) -> Dict[str, Any]:

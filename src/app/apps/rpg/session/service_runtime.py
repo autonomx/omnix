@@ -6,12 +6,8 @@ from typing import Any, Dict
 
 from app.apps.rpg.economy.service_effects import apply_service_purchase_result
 from app.apps.rpg.session.service_living_world import apply_service_living_world_effects
-from app.apps.rpg.session.state_normalization import (
-    _safe_dict,
-    _safe_int,
-    _safe_list,
-    _safe_str,
-)
+from app.apps.rpg.session.state_normalization import _safe_int, _safe_str
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from app.apps.rpg.session.pending_interactions import (
     close_pending_service_offer,
     record_service_offer,

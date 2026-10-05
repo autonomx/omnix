@@ -23,6 +23,7 @@ from app.apps.rpg.player import (
     update_codex_from_state,
     update_journal_from_state,
 )
+from app.apps.rpg.safe_values import safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,6 @@ _MAX_SCENES = 20
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _safe_list(v: Any) -> list[Any]:
-    """Return *v* if it is already a list, otherwise ``[]``."""
-    return v if isinstance(v, list) else []
 
 
 def _safe_str(v: Any, default: str = "") -> str:

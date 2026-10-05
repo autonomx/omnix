@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 SUPPORTED_ACTION_KINDS = {
     "inspect",
@@ -26,18 +27,6 @@ SUPPORTED_ACTION_KINDS = {
     "use_item",
     "unknown",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _normalize_text(value: Any) -> str:

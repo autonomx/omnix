@@ -3,18 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.apps.rpg.narration.quality import normalize_text
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def validate_narration_contradictions(

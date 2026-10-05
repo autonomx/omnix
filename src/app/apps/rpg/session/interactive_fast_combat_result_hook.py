@@ -8,10 +8,7 @@ from app.apps.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     repair_fast_combat_grounding_validation,
 )
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 
 def _combat_grounding_validation() -> dict[str, Any]:

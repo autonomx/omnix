@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 DERIVED_STAT_KEYS = {
     "initiative_modifier",
@@ -11,14 +12,6 @@ DERIVED_STAT_KEYS = {
 }
 SKILL_MODIFIER_KEYS = {"archery", "melee", "defense", "alchemy", "crafting", "survival", "lockpicking", "persuasion", "stealth"}
 MECHANICAL_EQUIPMENT_FIELDS = {"damage", "defense", "resistances", "stats", "modifiers", "capabilities", "rarity", "quality"}
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _text(value: Any, fallback: str = "") -> str:

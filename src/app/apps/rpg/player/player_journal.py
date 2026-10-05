@@ -12,16 +12,9 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from .player_scene_state import ensure_player_state
+from app.apps.rpg.safe_values import list_copy as _safe_list, safe_str as _safe_str
 
 _MAX_JOURNAL = 200
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 def update_journal_from_state(

@@ -5,15 +5,13 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set
 
 from app.apps.rpg.world.conversation_topics import conversation_topics_for_state
+from app.apps.rpg.safe_values import safe_dict as _safe_dict
 
 
 def _safe_str(v: Any) -> str:
     if v is None:
         return ""
     return str(v) if not isinstance(v, str) else v
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return v if isinstance(v, dict) else {}
 
 PIVOT_STOPWORDS = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "can", "could", "should", "may", "might", "must", "shall", "about", "tell", "me", "what", "know", "heard", "do", "you", "hidden", "there", "some", "any", "this", "that", "these", "those", "here", "there", "where", "when", "why", "how", "all", "some", "many", "much", "few", "little", "first", "last", "next", "new", "old", "good", "bad", "big", "small", "long", "short", "high", "low", "right", "wrong", "true", "false"}
 

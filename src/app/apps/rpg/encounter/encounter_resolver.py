@@ -11,26 +11,15 @@ Bounds:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from .encounter_actions import build_player_actions
+from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 # Phase 18.3A: Legacy dict resolver — damage resolution now routes through action_resolver.
 # This module is kept for backward compatibility.
 
 _MAX_LOG = 100
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
 
 
 class EncounterResolver:

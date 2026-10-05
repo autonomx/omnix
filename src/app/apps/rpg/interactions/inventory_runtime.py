@@ -13,6 +13,7 @@ from app.apps.rpg.interactions.item_model import (
     normalize_item_instance,
     recalculate_inventory_derived_fields,
 )
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 DEFAULT_EQUIPMENT_SLOTS = {
     "weapon": "main_hand",
@@ -22,18 +23,6 @@ DEFAULT_EQUIPMENT_SLOTS = {
     "ring": "ring",
     "tool": "tool",
 }
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _item_id(item: Dict[str, Any]) -> str:

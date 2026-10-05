@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List
+from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 DEATH_WORD_RE = re.compile(
     r"\b(dies|dead|killed|slain|lifeless|corpse|finished\s+him|finished\s+her|finished\s+them|death)\b",
@@ -12,14 +13,6 @@ META_RE = re.compile(
     r"\b(json|contract|simulation|validator|system|prompt|llm|language model)\b",
     re.I,
 )
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def validate_combat_narration(
