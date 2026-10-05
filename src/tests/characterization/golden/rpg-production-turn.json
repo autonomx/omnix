@@ -9,7 +9,6 @@
         "semantic_intent",
         "semantic_intent",
         "narration_candidates",
-        "narration_candidates",
         "canon_dossier"
       ],
       "narrative": {
@@ -137,7 +136,6 @@
         "semantic_intent",
         "semantic_intent",
         "narration_candidates",
-        "narration_candidates",
         "canon_dossier"
       ],
       "narrative": {
@@ -259,7 +257,6 @@
       "model_calls": [
         "semantic_intent",
         "semantic_intent",
-        "narration_candidates",
         "narration_candidates",
         "canon_dossier"
       ],

@@ -86,6 +86,7 @@ from app.apps.rpg.session.combat_action_reconciliation import (
     _reconcile_invalid_companion_command as _reconcile_invalid_companion_command,
 )
 from app.apps.rpg.session.deferred_narration_guard import (
+    runtime_narration_follows_context,
     suppress_provider_runtime_narration as suppress_provider_runtime_narration,
 )
 from app.apps.rpg.session.narration_trace import (
@@ -587,12 +588,18 @@ def apply_turn(
 
     _stage_started = __import__("time").perf_counter()
     record_turn_perf_trace_stack("runtime_core_before_apply_turn_authoritative")
-    authoritative_result = _apply_turn_authoritative(
-        session_id,
-        player_input,
-        action=action,
-        performance_override=performance_override,
+    # The runtime narration stage below calls the provider for this turn, so the
+    # authoritative chain need not narrate it too (WP-8.6: one narration call).
+    runtime_narration_will_follow = (
+        not suppress_provider_runtime_narration() and get_runtime_llm_provider() is not None
     )
+    with runtime_narration_follows_context(runtime_narration_will_follow):
+        authoritative_result = _apply_turn_authoritative(
+            session_id,
+            player_input,
+            action=action,
+            performance_override=performance_override,
+        )
     record_elapsed_turn_stage(
         "apply_turn_authoritative",
         _stage_started,

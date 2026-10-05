@@ -13,6 +13,8 @@ from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
 
+from app.apps.rpg.session.deferred_narration_guard import runtime_narration_follows
+
 from .travel_panel_response import _apply_visible_fallback_with_travel_panels as _PHASE8_PART31_BASE_APPLY_TURN_AUTHORITATIVE
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,8 @@ def _phase8_part31_narration_request(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _phase8_part31_should_sync_narration(payload: dict[str, Any]) -> bool:
     if _phase8_part31_existing_completed_narration(payload):
+        return False
+    if runtime_narration_follows():
         return False
     request = _phase8_part31_narration_request(payload)
     if not request:
