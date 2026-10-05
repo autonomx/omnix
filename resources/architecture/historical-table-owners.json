@@ -1,7 +1,7 @@
 {
   "frozen": true,
   "frozen_after": "0127_agent_approval_definition_hash",
-  "note": "Owners of tables created by the kernel-folder migrations (PA-2.2). Frozen: a new table is created by its module's own migrations/ folder and owned by that module.",
+  "note": "Owners of tables created by the kernel-folder migrations (PA-2.2). Frozen: a new table is created by its module's own migrations/ folder and owned by that module. A `tenant_exempt` reason marks a table without row-level security that holds no workspace data (PA-4.1); a new table states its exemption in an `omnix:tenant-exempt:` table comment instead.",
   "schema_version": 1,
   "tables": {
     "omnix_agent_approvals": {
@@ -218,7 +218,8 @@
     },
     "omnix_backup_generations": {
       "created_by": "0013_coordinated_recovery",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide backup bookkeeping"
     },
     "omnix_capability_approvals": {
       "created_by": "0098_capability_approvals",
@@ -226,7 +227,8 @@
     },
     "omnix_capacity_policy": {
       "created_by": "0016_data_lifecycle_capacity",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide capacity configuration"
     },
     "omnix_character_versions": {
       "created_by": "0004_characters_memory_chat",
@@ -258,7 +260,8 @@
     },
     "omnix_cutover_transitions": {
       "created_by": "0015_cutover_state_machine",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence cutover history"
     },
     "omnix_database_events": {
       "created_by": "0001_platform",
@@ -270,23 +273,28 @@
     },
     "omnix_device_capacity": {
       "created_by": "0103_device_permits",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
     },
     "omnix_device_model_owners": {
       "created_by": "0103_device_permits",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
     },
     "omnix_device_permit_requests": {
       "created_by": "0103_device_permits",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
     },
     "omnix_device_permits": {
       "created_by": "0103_device_permits",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
     },
     "omnix_external_identities": {
       "created_by": "0105_auth_sessions",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "identity precedes workspace membership"
     },
     "omnix_idempotency_keys": {
       "created_by": "0002_identity_tenancy",
@@ -298,7 +306,8 @@
     },
     "omnix_installation_metadata": {
       "created_by": "0001_platform",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide metadata"
     },
     "omnix_job_attempts": {
       "created_by": "0005_jobs_outbox_submissions",
@@ -318,15 +327,18 @@
     },
     "omnix_legacy_import_items": {
       "created_by": "0008_legacy_cutover",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "one-time legacy import bookkeeping (ids and hashes only)"
     },
     "omnix_legacy_import_runs": {
       "created_by": "0008_legacy_cutover",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "one-time legacy import bookkeeping"
     },
     "omnix_lifecycle_cleanup_runs": {
       "created_by": "0016_data_lifecycle_capacity",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "retention worker run log, written in system scope"
     },
     "omnix_memory_candidates": {
       "created_by": "0004_characters_memory_chat",
@@ -490,7 +502,8 @@
     },
     "omnix_oidc_login_states": {
       "created_by": "0105_auth_sessions",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "sign-in state precedes workspace membership"
     },
     "omnix_outbox_consumer_inbox": {
       "created_by": "0011_outbox_delivery_contract",
@@ -510,11 +523,13 @@
     },
     "omnix_ownership_epochs": {
       "created_by": "0122_ownership_epochs",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide lock epochs"
     },
     "omnix_persistence_cutover": {
       "created_by": "0008_legacy_cutover",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence cutover state"
     },
     "omnix_prompt_templates": {
       "created_by": "0007_remaining_modules",
@@ -538,7 +553,8 @@
     },
     "omnix_retention_policies": {
       "created_by": "0016_data_lifecycle_capacity",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide retention configuration"
     },
     "omnix_rpg_campaign_bible_revisions": {
       "created_by": "0017_rpg_campaign_bible",
@@ -706,11 +722,13 @@
     },
     "omnix_runtime_nodes": {
       "created_by": "0014_runtime_coordination",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "gateway and worker process registry"
     },
     "omnix_runtime_persistence_state": {
       "created_by": "0009_runtime_retirement",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence state"
     },
     "omnix_runtime_projections": {
       "created_by": "0007_remaining_modules",
@@ -722,7 +740,8 @@
     },
     "omnix_security_policy_state": {
       "created_by": "0012_tenant_integrity_security",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide security policy"
     },
     "omnix_settings": {
       "created_by": "0003_assets_configuration",
@@ -962,7 +981,8 @@
     },
     "omnix_users": {
       "created_by": "0002_identity_tenancy",
-      "owner": "kernel"
+      "owner": "kernel",
+      "tenant_exempt": "identity precedes workspace membership"
     },
     "omnix_workflow_definitions": {
       "created_by": "0050_agent_workflows",

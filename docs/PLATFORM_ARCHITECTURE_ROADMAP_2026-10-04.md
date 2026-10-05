@@ -841,7 +841,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-3.2 | blocked | — | — | — | Waits for the memory v2 live switch |
 | PA-3.3 | not started | — | — | — | |
 | PA-3.4 | not started | — | — | — | |
-| PA-4.1 | not started | — | — | — | |
+| PA-4.1 | done | — | 2026-10-05 | conformance baseline: 27 static gaps (9 modules without a contract, 18 without `declarations.py`); 49 tables neither isolated nor exempt (34 memory v2, 7 trading, 2 agent-runtime slots, 2 companion-activity, 1 RPG narration, 2 kernel) | `scripts/module_conformance.py` checks feature/tier, contract, migrations (own tables only, none left in the kernel folder), `declarations.py` (present, kernel-only imports), test directory and web `backendModules`; `src/tests/kernel/test_module_conformance.py` requires the gaps to equal `resources/architecture/module-conformance-baseline.json`, which only shrinks. The tenant check migrates a fresh PostgreSQL database and accepts forced row-level security with a `tenant_isolation` policy in either `0106` form (the `EXISTS` child form only through a declared foreign key to an isolated parent), or an exemption: 20 historical kernel tables carry a reviewed `tenant_exempt` reason in the frozen owner map. The retention-seed part of the declarations check lands with `declarations.py` (PA-2.1, PA-2.2) |
 | PA-4.2 | not started | — | — | — | |
 | PA-4.3 | not started | — | — | — | |
 | PA-4.4 | not started | — | — | — | |

@@ -126,15 +126,20 @@ def main(argv: list[str] | None = None) -> int:
 
     sources = tracked_sources(ROOT)
     if args.write_historical:
+        # Reviewed tenant exemptions (PA-4.1) survive a rewrite.
+        exempt = {table: entry["tenant_exempt"] for table, entry in load_historical(sources).items() if "tenant_exempt" in entry}
         tables = {
-            table: {"owner": historical_owner(table), "created_by": PurePosixPath(path).stem}
+            table: {"owner": historical_owner(table), "created_by": PurePosixPath(path).stem,
+                    **({"tenant_exempt": exempt[table]} if table in exempt else {})}
             for table, path in sorted(created_tables(sources).items()) if path.startswith(KERNEL_MIGRATIONS)
         }
         (ROOT / HISTORICAL).write_text(json.dumps({
             "schema_version": 1,
             "frozen": True,
             "note": "Owners of tables created by the kernel-folder migrations (PA-2.2). Frozen: a new table "
-                    "is created by its module's own migrations/ folder and owned by that module.",
+                    "is created by its module's own migrations/ folder and owned by that module. A `tenant_exempt` "
+                    "reason marks a table without row-level security that holds no workspace data (PA-4.1); a new "
+                    "table states its exemption in an `omnix:tenant-exempt:` table comment instead.",
             "tables": tables,
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
         print(f"wrote {len(tables)} historical owners")
