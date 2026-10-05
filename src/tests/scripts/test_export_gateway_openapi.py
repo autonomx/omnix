@@ -20,7 +20,7 @@ def test_config_schema_aliases_rewrite_request_and_response_references():
 
 
 def test_generated_gateway_schema_has_no_unresolved_local_references():
-    path = Path(__file__).resolve().parents[3] / "src/apps/web/src/api/generated/openapi.json"
+    path = Path(__file__).resolve().parents[3] / "web/src/api/generated/openapi.json"
     schema = json.loads(path.read_text(encoding="utf-8"))
 
     def check(value):

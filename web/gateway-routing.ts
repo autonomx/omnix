@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { resolve } from 'node:path';
 import type { Plugin, ProxyOptions, ViteDevServer } from 'vite';
-import routingPolicy from '../../../deploy/gateway-route-policy.json';
+import routingPolicy from '../deploy/gateway-route-policy.json';
 
 // Development proxy only. Production uses deploy/nginx/omnix.conf.
 const PREFIX = '/__omnix_gateway_replica_';

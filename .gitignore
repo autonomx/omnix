@@ -104,10 +104,10 @@ resources/data/
 htmlcov/
 node_modules/
 .tools/
-src/apps/web/.vite/
-src/apps/web/test-results/
-src/apps/web/playwright-report/
-src/apps/web/tsconfig.tsbuildinfo
+web/.vite/
+web/test-results/
+web/playwright-report/
+web/tsconfig.tsbuildinfo
 
 # Jupyter
 .ipynb_checkpoints/

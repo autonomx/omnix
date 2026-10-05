@@ -44,10 +44,10 @@ def test_project_dependencies_reuse_existing_repository_tree(tmp_path: Path, mon
 
 def test_workspace_local_node_dependency_is_ready_but_not_root_linkable(tmp_path: Path) -> None:
     root = tmp_path / "repository"
-    web = root / "src" / "apps" / "web"
+    web = root / "web"
     web.mkdir(parents=True)
     (root / "package.json").write_text(
-        '{"name":"root","workspaces":["src/apps/web"]}\n',
+        '{"name":"root","workspaces":["web"]}\n',
         encoding="utf-8",
     )
     (web / "package.json").write_text(

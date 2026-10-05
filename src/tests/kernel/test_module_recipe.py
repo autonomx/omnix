@@ -64,7 +64,7 @@ print(json.dumps({"created": created, "settings": settings, "job": str(store.get
 def _changed_outside_module(tree: Path) -> set[str]:
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=tree,
                             capture_output=True, text=True, check=True).stdout.splitlines()
-    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"src/apps/web/src/features/{MODULE_ID}/")
+    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/")
     return {line[3:] for line in status if not line[3:].startswith(module_paths)}
 
 
@@ -110,8 +110,8 @@ def test_a_scaffolded_app_is_two_registration_lines_and_passes_every_gate(worktr
 
     _run([sys.executable, "scripts/new_module.py", MODULE_ID, "--tier", "app", "--web"], worktree, env)
     changed = _changed_outside_module(worktree) - before
-    generated = {"src/apps/web/src/api/generated/openapi.json", "src/apps/web/src/api/generated/route-owners.json"}
-    assert changed - generated == {"src/app/runtime/feature_catalog.py", "src/apps/web/src/app/modulesManifest.ts"}
+    generated = {"web/src/api/generated/openapi.json", "web/src/api/generated/route-owners.json"}
+    assert changed - generated == {"src/app/runtime/feature_catalog.py", "web/src/app/modulesManifest.ts"}
 
     _run([sys.executable, "-m", "app.persistence", "migrate"], worktree, env)
     probe = json.loads(_run([sys.executable, "-c", _GATEWAY_PROBE, "enabled"], worktree, env).stdout.splitlines()[-1])

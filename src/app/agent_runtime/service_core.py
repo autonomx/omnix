@@ -54,7 +54,7 @@ ACCEPTANCE_RETRY_PROMPT_TEMPLATE = prompt_template(
         'correct the requested implementation or the relevant validation command as needed, and '
         'rerun the smallest task-relevant test/lint/typecheck until it exits successfully. For '
         'web UI work, the workspace command starts at the repository root, so use `npm --prefix '
-        'src/apps/web run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do '
+        'web run build` or `npm --prefix web run test -- <focused-test>`; do '
         'not use Set-Location or shell directory changes. UI Playwright validation must select '
         'exactly one test by relative spec path and source line; do not run a whole spec, suite, '
         'or grep filter. Do not substitute an unrelated passing test, unrelated diff, or '

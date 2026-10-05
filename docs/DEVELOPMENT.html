@@ -34,7 +34,7 @@
 <h2 id="development-principles">Development principles</h2>
 <p>Before implementation, treat these as hard platform rules:</p>
 <ol>
-<li>Add browser UI to <code>src/apps/web</code>; do not create another frontend stack.</li>
+<li>Add browser UI to <code>web</code>; do not create another frontend stack.</li>
 <li>Keep authoritative domain state in backend/domain services.</li>
 <li>Use typed API contracts between the browser and backend.</li>
 <li>Reuse shared providers/models, jobs/runs, assets, events, settings, and diagnostics.</li>
@@ -47,7 +47,7 @@
 </ol>
 <h2 id="repository-entry-points">Repository entry points</h2>
 <h3 id="frontend">Frontend</h3>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/apps/web/src/
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">web/src/
 ├─ api/          shared gateway client and generated contracts
 ├─ app/          routes, module catalog, application shell
 ├─ design/       shared UI primitives/tokens
@@ -68,11 +68,11 @@
 └─ trading/          trading data/research/replay/strategy systems</code></pre></div>
 <p>Python tests live primarily under <code>src/tests</code>. Frontend tests live next to features and under the web app test configuration.</p>
 <h2 id="adding-or-changing-a-browser-module">Adding or changing a browser module</h2>
-<p>Top-level routes are defined in <code>src/apps/web/src/app/modules.ts</code> and dispatched by the app router/workspace layer.</p>
+<p>Top-level routes are defined in <code>web/src/app/modules.ts</code> and dispatched by the app router/workspace layer.</p>
 <p>For a new routed workspace:</p>
 <ol>
 <li>Add a stable module ID, route, label, summary, and capability metadata to the module catalog.</li>
-<li>Add the React workspace under <code>src/apps/web/src/features/&lt;feature&gt;/</code>.</li>
+<li>Add the React workspace under <code>web/src/features/&lt;feature&gt;/</code>.</li>
 <li>Wire it through <code>ModuleWorkspace.tsx</code> or the router&#x27;s specialized path.</li>
 <li>Reuse <code>WorkspacePanel</code> and existing design primitives.</li>
 <li>Fetch backend-owned state through the shared API client/TanStack Query.</li>

@@ -1,6 +1,6 @@
 # Application legacy cleanup
 
-The React app in `src/apps/web` and `app.gateway.main:app` are the supported
+The React app in `web` and `app.gateway.main:app` are the supported
 browser stack. `src/main.py`, `src/launch.py`, and application factory callers
 now use that gateway.
 

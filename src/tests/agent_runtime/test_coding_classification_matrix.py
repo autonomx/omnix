@@ -31,7 +31,7 @@ CODING_AGENT_CASES = (
     # Explicit files, repository, codebase, and software targets.
     ("file_router_py", "update src/app/agent_runtime/router.py to handle this case"),
     ("file_chat_bridge_py", "edit src/app/agent_runtime/chat_bridge.py"),
-    ("file_component_tsx", "modify src/apps/web/src/components/Composer.tsx"),
+    ("file_component_tsx", "modify web/src/components/Composer.tsx"),
     ("file_store_ts", "change app/chat/store.ts"),
     ("repo_fix_tests", "fix the failing tests in the repo"),
     ("repo_update", "update the repository implementation"),

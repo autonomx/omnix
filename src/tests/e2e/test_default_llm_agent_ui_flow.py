@@ -36,22 +36,22 @@ _TRUE = {"1", "true", "yes", "on"}
 _PROMPT = (
     "in the attached workspace, change the system-mode settings button label "
     "from personality to profile in "
-    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
+    "web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _REVISED_PROMPT = (
     "now, in the attached workspace, change that system-mode settings button "
     "label from profile to personality in "
-    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
+    "web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _LATEST_PROMPT = (
     "now, in the attached workspace, change that system-mode settings button "
     "label from personality to profile in "
-    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
+    "web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 _RUN_ID_PATTERN = re.compile(r"\bAgent run ([A-Za-z0-9_-]+)")
 _TARGET_FILES = (
-    Path("src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"),
+    Path("web/src/features/assistant/chat/ChatIdentityModeControl.tsx"),
 )
 _SYSTEM_MODE_LABEL_PATTERN = re.compile(
     r"(?P<prefix>mode\s*===\s*['\"]character['\"]\s*\?\s*['\"][^'\"]+['\"]\s*:\s*['\"]+)"

@@ -19,7 +19,7 @@ metrics = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(metrics)
 config = metrics.load_layers(SCRIPTS.parent / "resources/architecture/layers.toml")
-WEB = "src/apps/web/src/"
+WEB = "web/src/"
 APP = "src/app/"
 
 
@@ -428,7 +428,7 @@ def test_web_api_coverage_skips_prefixes_and_reads_templates_queries_and_documen
 def test_documented_web_client_types_are_not_handwritten_api_types():
     inventory = (
         "| Web source | Type | What it describes |\n|---|---|---|\n"
-        "| `src/apps/web/src/features/worker.ts` | `Worker*` | Worker messages |\n"
+        "| `web/src/features/worker.ts` | `Worker*` | Worker messages |\n"
     )
     source = {
         WEB + "features/worker.ts": "type WorkerRequest = { id: string };\ntype WorkerResponse = { id: string };",
@@ -439,7 +439,7 @@ def test_documented_web_client_types_are_not_handwritten_api_types():
     assert result["metrics"]["web_handwritten_api_types"]["value"] == 1
     assert result["evidence"]["web_handwritten_api_types"] == [[WEB + "api/a.ts", "SaveRequest"]]
 
-    source["docs/architecture/api-transport-exceptions.md"] = inventory + "| `src/apps/web/src/features/gone.ts` | `*` | Removed |\n"
+    source["docs/architecture/api-transport-exceptions.md"] = inventory + "| `web/src/features/gone.ts` | `*` | Removed |\n"
     with pytest.raises(metrics.AnalysisError, match="matches no declaration"):
         observed(source)
 
@@ -633,7 +633,7 @@ def test_eslint_baseline_metric_includes_all_linted_web_files():
     sources = {
         WEB + "app/a.ts": "/* eslint-disable no-console -- baseline WP-9.x */\n",
         WEB + "features/a.test.ts": "/* eslint-disable no-restricted-imports -- baseline WP-9.x */\n",
-        "src/apps/web/tests/e2e/a.spec.ts": "/* eslint-disable prefer-const -- baseline WP-9.x */\n",
+        "web/tests/e2e/a.spec.ts": "/* eslint-disable prefer-const -- baseline WP-9.x */\n",
     }
     assert observed(sources)["metrics"]["eslint_baseline_disables"]["value"] == 3
 

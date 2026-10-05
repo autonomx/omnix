@@ -90,7 +90,7 @@ def _route_surface(schema: dict[str, Any]) -> dict[str, Any]:
 
 def test_generated_gateway_openapi_schema_is_current() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    generated_path = repo_root / "src" / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
+    generated_path = repo_root / "web" / "src" / "api" / "generated" / "openapi.json"
 
     generated_schema = _normalize_openapi(_route_surface(json.loads(generated_path.read_text(encoding="utf-8"))))
     app = create_gateway_app()
@@ -146,7 +146,7 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
 
 
 def test_generated_route_owners_are_current() -> None:
-    generated_dir = Path(__file__).resolve().parents[3] / "src" / "apps" / "web" / "src" / "api" / "generated"
+    generated_dir = Path(__file__).resolve().parents[3] / "web" / "src" / "api" / "generated"
     generated = json.loads((generated_dir / ROUTE_OWNERS_FILE).read_text(encoding="utf-8"))["operations"]
     app = create_gateway_app()
     current = route_owners(normalize_contract(app.openapi(), app), app.state.route_owners)

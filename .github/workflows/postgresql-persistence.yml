@@ -14,7 +14,7 @@ on:
       - "src/tests/api/gateway/**"
       - "src/tests/api/test_legacy_ui_retirement.py"
       - "src/tests/unit/test_shared_state_safety.py"
-      - "src/apps/web/src/features/audiobook/**"
+      - "web/src/features/audiobook/**"
       - ".github/workflows/postgresql-persistence.yml"
   push:
     branches: [main]
@@ -29,7 +29,7 @@ on:
       - "src/tests/api/gateway/**"
       - "src/tests/api/test_legacy_ui_retirement.py"
       - "src/tests/unit/test_shared_state_safety.py"
-      - "src/apps/web/src/features/audiobook/**"
+      - "web/src/features/audiobook/**"
       - ".github/workflows/postgresql-persistence.yml"
   workflow_dispatch:
 

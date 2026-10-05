@@ -71,7 +71,7 @@
 </tr>
 </tbody></table></div>
 <h2 id="application-map">Application map</h2>
-<p>The supported browser UI lives under <code>src/apps/web</code>. <code>/</code> redirects to <code>/chatbot</code>.</p>
+<p>The supported browser UI lives under <code>web</code>. <code>/</code> redirects to <code>/chatbot</code>.</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Route</th>
 <th>Workspace</th>
@@ -251,8 +251,8 @@ pytest</code></pre></div>
 npm --workspace @omnix/web run api:check</code></pre></div>
 <h2 id="source-of-truth-locations">Source-of-truth locations</h2>
 <ul>
-<li><code>src/apps/web/src/app/modules.ts</code> — routed application module catalog.</li>
-<li><code>src/apps/web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
+<li><code>web/src/app/modules.ts</code> — routed application module catalog.</li>
+<li><code>web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
 <li><code>src/app/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
 <li><code>src/app/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
 <li><code>src/app/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
@@ -267,7 +267,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <li><code>../SPEC.md</code> — platform architecture rules.</li>
 </ul>
 <h2 id="compatibility-boundary">Compatibility boundary</h2>
-<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. The old compatibility application server is also retired. Both <code>src/main.py</code> and <code>src/launch.py</code> start the shared gateway. Browser behavior belongs in <code>src/apps/web</code> and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.</p>
+<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. The old compatibility application server is also retired. Both <code>src/main.py</code> and <code>src/launch.py</code> start the shared gateway. Browser behavior belongs in <code>web</code> and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.</p>
       </article>
     </main>
     <footer class="guide-footer">

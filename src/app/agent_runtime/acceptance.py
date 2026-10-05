@@ -437,7 +437,7 @@ def _diff_hunk_replaces_label(diff_text: str, old_label: str, new_label: str) ->
 
 
 def _is_web_ui_path(path: str) -> bool:
-    return str(path).replace("\\", "/").casefold().startswith("src/apps/web/")
+    return str(path).replace("\\", "/").casefold().startswith("web/")
 
 
 def _is_web_ui_validation(command: str) -> bool:
@@ -456,7 +456,7 @@ def _is_web_ui_validation(command: str) -> bool:
         or ("npm --prefix" in normalized and " build" in normalized)
     ):
         return True
-    return "pytest" in normalized and "src/apps/web" in normalized
+    return "pytest" in normalized and "web" in normalized
 
 
 def _successful_exact_ui_validation(

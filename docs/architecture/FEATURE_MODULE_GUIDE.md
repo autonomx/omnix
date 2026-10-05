@@ -4,7 +4,7 @@ A module is an optional Omnix capability (audiobook, image, trading, …) that t
 
 - **Tiers.** A module is a platform capability, which other modules build on, or an app, which is a product no other module imports.
 - **Imports.** Modules import each other only through `contracts.py`, and only in the `depends_on` or `uses` direction.
-- **Two registration lines.** Outside its own folders, a module is registered by one line in `src/app/runtime/feature_catalog.py` and, if it has a web side, one line in `src/apps/web/src/app/modulesManifest.ts`.
+- **Two registration lines.** Outside its own folders, a module is registered by one line in `src/app/runtime/feature_catalog.py` and, if it has a web side, one line in `web/src/app/modulesManifest.ts`.
 
 Two scripts add and remove those lines and everything around them:
 
@@ -35,9 +35,9 @@ The script writes a small working module:
 | `routes.py` (with `--web`) | The HTTP API under `/api/field-notes`. |
 | `migrations/NNNN_field_notes_initial.sql` | A workspace-owned table under row-level security, a child table that follows its parent row, and the retention policy row. |
 | `src/tests/field_notes/` | The module's tests. `scripts/test_module.py` runs them. |
-| `src/apps/web/src/features/field-notes/` (with `--web`) | `module.ts` (the manifest: route, `backendModules`, `apiPrefixes`) and its test, `index.ts`, `api/gateway.ts` (the typed client) and the workspace component. |
+| `web/src/features/field-notes/` (with `--web`) | `module.ts` (the manifest: route, `backendModules`, `apiPrefixes`) and its test, `index.ts`, `api/gateway.ts` (the typed client) and the workspace component. |
 
-It also edits the two registration files and regenerates the API contract files: `openapi.json`, `route-owners.json`, the core types and each feature's `api/generated.ts`. If the web packages are not installed, it skips the web types and says so. Run `npm --prefix src/apps/web run api:types` once they are installed.
+It also edits the two registration files and regenerates the API contract files: `openapi.json`, `route-owners.json`, the core types and each feature's `api/generated.ts`. If the web packages are not installed, it skips the web types and says so. Run `npm --prefix web run api:types` once they are installed.
 
 ### 2. Migrate and run
 
@@ -103,14 +103,14 @@ Factories receive a `FeatureContext`: runtime configuration, capabilities, kerne
 **Web.** The feature imports only its own `api/gateway.ts` client and the kernel's shared code. Keep `backendModules` and `apiPrefixes` in `module.ts` in step with the routes. Rerun the generators after changing routes:
 
 ```sh
-python scripts/export_gateway_openapi.py src/apps/web/src/api/generated/openapi.json
-npm --prefix src/apps/web run api:types
+python scripts/export_gateway_openapi.py web/src/api/generated/openapi.json
+npm --prefix web run api:types
 ```
 
 ### 4. Check
 
 ```sh
-git add src/app/field_notes src/tests/field_notes src/apps/web/src/features/field-notes
+git add src/app/field_notes src/tests/field_notes web/src/features/field-notes
 python scripts/check_module.py field-notes
 ```
 
@@ -123,7 +123,7 @@ The architecture lint and conformance read only files git knows about, so stage 
 5. `scripts/test_module.py field-notes`, which runs the module's tests and its characterization scenarios;
 6. with a web side, the tests of each web feature that lists the module in `backendModules`, and the web typecheck.
 
-Use `--skip-web` while the web side is not yet ready. Before you open a pull request, also run the repository gates the module touches: `python scripts/architecture_lint.py --check`, `python scripts/architecture_metrics.py --check`, and `npm --prefix src/apps/web run build` for web changes.
+Use `--skip-web` while the web side is not yet ready. Before you open a pull request, also run the repository gates the module touches: `python scripts/architecture_lint.py --check`, `python scripts/architecture_metrics.py --check`, and `npm --prefix web run build` for web changes.
 
 ## Retiring an app
 

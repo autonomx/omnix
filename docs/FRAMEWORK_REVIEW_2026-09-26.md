@@ -225,11 +225,11 @@ with narrow test services and no unrelated workers.
 
 ### R8 — P2: Browser runtimes initialize without a matching route disposal boundary
 
-**Evidence:** [viewRuntime.ts](../src/apps/web/src/app/viewRuntime.ts) caches initialization
+**Evidence:** [viewRuntime.ts](../web/src/app/viewRuntime.ts) caches initialization
 promises and calls many initializers without retaining their cleanup functions.
-[router.tsx](../src/apps/web/src/app/router.tsx), line 82, initializes the active
+[router.tsx](../web/src/app/router.tsx), line 82, initializes the active
 module without a cleanup return. Some controllers, such as
-[desktop-companion-controls.ts](../src/apps/web/src/features/assistant-workspace/desktop-companion-controls.ts),
+[desktop-companion-controls.ts](../web/src/features/assistant-workspace/desktop-companion-controls.ts),
 already return cleanup functions that this path discards. Others globally wrap
 fetch, inject DOM, or install observers/timers. The browser API firewall compensates
 for cross-workspace requests after initialization.
@@ -323,7 +323,7 @@ tests verify behavior rather than internal wrapper names.
 ### R12 — P2: Typed API generation is incomplete for active browser contracts
 
 **Evidence:** Active image routes and several agent-runtime endpoints use
-`include_in_schema=False`. [api/client.ts](../src/apps/web/src/api/client.ts) contains
+`include_in_schema=False`. [api/client.ts](../web/src/api/client.ts) contains
 handwritten agent interfaces alongside generated types. The source scan found 291
 schema-exclusion occurrences, including internal and transport-specific routes.
 

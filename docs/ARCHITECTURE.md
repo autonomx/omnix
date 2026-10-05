@@ -74,7 +74,7 @@ Omnix is a single local-first application platform, not a collection of unrelate
 ```omnix-diagram architecture
 ```
 
-The supported browser app is `src/apps/web`.
+The supported browser app is `web`.
 
 ### Runtime and libraries
 
@@ -97,9 +97,9 @@ The current web package uses:
 
 ### Route/module ownership
 
-`src/apps/web/src/app/modules.ts` is the routed module catalog. `ModuleWorkspace.tsx` dispatches module definitions to specialized workspaces such as Chat, RPG, Storyteller, Podcast, Voice, STT, Image Generation, Trading, Settings, and platform views.
+`web/src/app/modules.ts` is the routed module catalog. `ModuleWorkspace.tsx` dispatches module definitions to specialized workspaces such as Chat, RPG, Storyteller, Podcast, Voice, STT, Image Generation, Trading, Settings, and platform views.
 
-Feature code belongs under `src/apps/web/src/features/<feature>`. A feature should not introduce a second React app, a Flask template UI, Streamlit, a standalone vanilla-JS shell, or another framework-specific frontend.
+Feature code belongs under `web/src/features/<feature>`. A feature should not introduce a second React app, a Flask template UI, Streamlit, a standalone vanilla-JS shell, or another framework-specific frontend.
 
 ### State ownership
 
@@ -128,8 +128,8 @@ Feature code must not manufacture authoritative domain truth in the browser simp
 
 ### View-scoped loading
 
-Workspace code is loaded and initialized on demand. `src/apps/web/src/features/ModuleWorkspace.tsx`
-uses lazy route components, while `src/apps/web/src/app/viewRuntime.ts` initializes
+Workspace code is loaded and initialized on demand. `web/src/features/ModuleWorkspace.tsx`
+uses lazy route components, while `web/src/app/viewRuntime.ts` initializes
 only the runtime controllers owned by the active module. The application shell and
 the API firewall remain global; feature API queries do not. For example, Chat
 loads chat sessions, providers, and the narrow voice-library endpoint only after
@@ -140,7 +140,7 @@ Chat history critical path when `/api/voice-library` is available.
 
 ## Typed API boundary
 
-The web app's transport and kernel client live under `src/apps/web/src/api`; each feature owns its gateway calls under `features/<name>/api/` (PA-2.4). `api:schema` exports the gateway OpenAPI document and `route-owners.json` (which feature mounted each operation). `api:types` (`scripts/generate-api-types.mjs`) writes `api/generated/core.ts` (kernel operations and schemas shared by several features) and, for each feature, `features/<name>/api/generated.ts` (the operations of the backend modules its manifest lists in `backendModules`, its own schemas, and every core schema re-exported). Feature code reads schemas only from its own `generated.ts` and calls its operations through `features/<name>/api/gateway.ts`:
+The web app's transport and kernel client live under `web/src/api`; each feature owns its gateway calls under `features/<name>/api/` (PA-2.4). `api:schema` exports the gateway OpenAPI document and `route-owners.json` (which feature mounted each operation). `api:types` (`scripts/generate-api-types.mjs`) writes `api/generated/core.ts` (kernel operations and schemas shared by several features) and, for each feature, `features/<name>/api/generated.ts` (the operations of the backend modules its manifest lists in `backendModules`, its own schemas, and every core schema re-exported). Feature code reads schemas only from its own `generated.ts` and calls its operations through `features/<name>/api/gateway.ts`:
 
 ```bash
 npm --workspace @omnix/web run api:schema

@@ -86,7 +86,7 @@ def _submission(*, inverted: bool) -> ImplementationPlanSubmission:
             PlanItem(
                 id="sidebar-layout",
                 intent=intent,
-                paths=["src/apps/web/src/features/assistant/chat/ChatSidebar.tsx"],
+                paths=["web/src/features/assistant/chat/ChatSidebar.tsx"],
                 requirement_ids=["R-sidebar-collapse"],
                 allowed_effects=["mutate"],
             )
@@ -291,9 +291,9 @@ def test_unavailable_reviewer_fails_closed_without_consuming_planner_reasoning(t
 @pytest.mark.parametrize(
     "path",
     [
-        "src/apps/web/src/features/assistant/chat/ChatSidebar.tsx",
-        "src/apps/web/tests/ChatSidebar.test.tsx",
-        "src/apps/web/src/features/assistant/chat/sidebar.css",
+        "web/src/features/assistant/chat/ChatSidebar.tsx",
+        "web/tests/ChatSidebar.test.tsx",
+        "web/src/features/assistant/chat/sidebar.css",
         "docs/chat-sidebar.md",
     ],
 )
@@ -319,8 +319,8 @@ def test_auto_mode_skips_ordinary_source_test_css_and_documentation_plans(
     ("path", "intent", "effects", "command_hints", "reason"),
     [
         ("src/app/persistence/migrations/099_add_index.sql", "Add the forward migration.", ["mutate"], [], "schema_or_migration"),
-        ("src/apps/web/package-lock.json", "Update the lockfile.", ["mutate"], [], "dependency_change"),
-        ("src/apps/web/src/api/generated/client.ts", "Regenerate the API client.", ["mutate"], [], "generated_contract"),
+        ("web/package-lock.json", "Update the lockfile.", ["mutate"], [], "dependency_change"),
+        ("web/src/api/generated/client.ts", "Regenerate the API client.", ["mutate"], [], "generated_contract"),
         ("tmp/cache", "Clean the temporary cache.", ["mutate"], ["Remove-Item tmp/cache -Recurse -Force"], "destructive_operation"),
         ("src/app/agent_runtime/authority.py", "Tighten issued capability checks.", ["mutate"], [], "security_sensitive"),
         ("src/app/trading/orders.py", "Correct order execution logic.", ["mutate"], [], "trading_logic"),

@@ -41,26 +41,26 @@ def test_read_and_validation_do_not_require_an_approved_plan() -> None:
 def test_npm_prefix_dependency_commands_are_mutations_not_validation() -> None:
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web install",
+        command="npm --prefix web install",
     ) == "mutate"
     assert classify_operation_effect(
         "powershell",
-        command="npm.cmd --prefix src/apps/web update react",
+        command="npm.cmd --prefix web update react",
     ) == "mutate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web uninstall react",
+        command="npm --prefix web uninstall react",
     ) == "mutate"
 
 
 def test_npm_prefix_known_checks_remain_validation_and_unknown_scripts_fail_closed() -> None:
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run test -- --runInBand",
+        command="npm --prefix web run test -- --runInBand",
     ) == "validate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run test:e2e -- --project chromium",
+        command="npm --prefix web run test:e2e -- --project chromium",
     ) == "validate"
     assert classify_operation_effect(
         "bash",
@@ -68,19 +68,19 @@ def test_npm_prefix_known_checks_remain_validation_and_unknown_scripts_fail_clos
     ) == "validate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run build:ci",
+        command="npm --prefix web run build:ci",
     ) == "validate"
     assert classify_operation_effect(
         "powershell",
-        command="npm.cmd --prefix src/apps/web run typecheck:strict",
+        command="npm.cmd --prefix web run typecheck:strict",
     ) == "validate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run generate-client",
+        command="npm --prefix web run generate-client",
     ) == "mutate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run custom-script",
+        command="npm --prefix web run custom-script",
     ) == "unknown"
 
 

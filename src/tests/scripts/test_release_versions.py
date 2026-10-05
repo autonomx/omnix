@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def test_the_package_versions_agree_and_are_semantic() -> None:
     python = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    web = json.loads((ROOT / "src" / "apps" / "web" / "package.json").read_text(encoding="utf-8"))["version"]
+    web = json.loads((ROOT / "web" / "package.json").read_text(encoding="utf-8"))["version"]
     root = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 

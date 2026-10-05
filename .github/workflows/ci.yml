@@ -257,7 +257,7 @@ jobs:
           npm ci
           python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Lint web application
-        run: npm --prefix src/apps/web run lint
+        run: npm --prefix web run lint
       - name: Run web unit tests
         run: npm run web:test
       - name: Build web application

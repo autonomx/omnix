@@ -19,11 +19,11 @@ ENV VITE_GIT_SHA=${VITE_GIT_SHA} \
     npm_config_audit=false
 WORKDIR /repo
 COPY package.json package-lock.json .node-version ./
-COPY src/apps/web/package.json src/apps/web/package.json
-RUN npm ci --workspace src/apps/web --include-workspace-root=false
+COPY web/package.json web/package.json
+RUN npm ci --workspace web --include-workspace-root=false
 COPY deploy/gateway-route-policy.json deploy/gateway-route-policy.json
-COPY src/apps/web src/apps/web
-RUN npm --prefix src/apps/web run build
+COPY web web
+RUN npm --prefix web run build
 
 FROM ${NGINX_IMAGE} AS runtime
 # Base tags lag distribution security fixes; take them at build time.
@@ -31,7 +31,7 @@ USER root
 RUN apk upgrade --no-cache
 USER 101
 COPY deploy/docker/nginx/omnix.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /repo/src/apps/web/dist /srv/omnix/web
+COPY --from=build /repo/web/dist /srv/omnix/web
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/index.html"]

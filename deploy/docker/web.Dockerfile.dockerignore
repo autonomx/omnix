@@ -5,10 +5,10 @@
 !.node-version
 !deploy/gateway-route-policy.json
 !deploy/docker/nginx/omnix.conf
-!src/apps/web/
-src/apps/web/node_modules/
-src/apps/web/dist/
-src/apps/web/test-results/
-src/apps/web/debug.log
-src/apps/web/tsconfig.tsbuildinfo
-src/apps/web/.pytest_cache/
+!web/
+web/node_modules/
+web/dist/
+web/test-results/
+web/debug.log
+web/tsconfig.tsbuildinfo
+web/.pytest_cache/

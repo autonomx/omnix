@@ -8,7 +8,7 @@ Omnix brings creative work, research, automation, and operational visibility int
 
 ## What Omnix includes
 
-- A shared React + TypeScript + Vite browser application under `src/apps/web`.
+- A shared React + TypeScript + Vite browser application under `web`.
 - A FastAPI gateway with typed Pydantic contracts, service boundaries, and compatibility handoffs.
 - PostgreSQL as the supported authoritative structured-data runtime.
 - Local or remote provider integrations for LLM, TTS, STT, image, market-data, and governed external capabilities.
@@ -335,7 +335,7 @@ Leave `HERMES_ENABLED=false` until the sidecar is reachable. Omnix retains capab
 6. Add forward PostgreSQL migrations for persistence changes.
 7. Inspect the complete diff and run validation after the final mutation.
 
-New browser UI belongs under `src/apps/web`. Reuse the typed API client, shared event client, provider/model registry, jobs/runs, assets/artifacts, settings, diagnostics, and capability policy. Do not add new behavior to the retired classic template/static browser UI.
+New browser UI belongs under `web`. Reuse the typed API client, shared event client, provider/model registry, jobs/runs, assets/artifacts, settings, diagnostics, and capability policy. Do not add new behavior to the retired classic template/static browser UI.
 
 ### Useful commands
 
@@ -414,7 +414,7 @@ Screenshots belong under `docs/images` and should be referenced with repository-
 ## Project map
 
 ```text
-src/apps/web/           React workspaces, routing, API clients, state, events, tests
+web/           React workspaces, routing, API clients, state, events, tests
 src/app/gateway/        FastAPI browser/API boundary
 src/app/providers/      Provider and model integration layer
 src/app/jobs/           Shared job/run contracts and stores

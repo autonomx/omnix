@@ -243,7 +243,7 @@ npm run web:build
 npm run web:preview
 ```
 
-The supported browser application is `src/apps/web`.
+The supported browser application is `web`.
 
 ## 6. Start the gateway
 
@@ -627,8 +627,8 @@ Legacy `OMNIX_TTS_HOST` and `OMNIX_GATEWAY_HOST` listener settings are replaced
 by `OMNIX_BIND_HOST`.
 
 For an explicitly exposed Vite listener, set `OMNIX_BIND_HOST=0.0.0.0` and
-`OMNIX_ALLOW_LAN=true` before running `npm --prefix src/apps/web run dev:lan`
-or `npm --prefix src/apps/web run preview:lan`. Add the browser's exact origin
+`OMNIX_ALLOW_LAN=true` before running `npm --prefix web run dev:lan`
+or `npm --prefix web run preview:lan`. Add the browser's exact origin
 to `OMNIX_ALLOWED_ORIGINS` and hostname to `OMNIX_ALLOWED_HOSTS`. Allowed CORS
 origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards
 are rejected. Configure an authenticated ingress before exposing a deployment.

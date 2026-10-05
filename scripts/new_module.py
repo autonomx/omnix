@@ -7,11 +7,11 @@ FeatureModule, a contract, a service and repository, an example durable job,
 ``declarations.py`` (settings section, retention, permissions) and a migration
 creating a tenant-isolated table and a child table that follows it, with the
 retention policy row. Also writes ``src/tests/<package>/`` and, with
-``--web``, the HTTP routes and ``src/apps/web/src/features/<module-id>/``.
+``--web``, the HTTP routes and ``web/src/features/<module-id>/``.
 
 Hand-edited outside the module: the catalog line in
 ``src/app/runtime/feature_catalog.py`` and, with ``--web``, the manifest line in
-``src/apps/web/src/app/modulesManifest.ts``. The generators then refresh the
+``web/src/app/modulesManifest.ts``. The generators then refresh the
 OpenAPI document, its route owners and the web types (skipped with
 ``--no-generate``, and the web types when the web packages are not installed).
 """
@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "src" / "app"
 CATALOG = APP / "runtime" / "feature_catalog.py"
-WEB = ROOT / "src" / "apps" / "web"
+WEB = ROOT / "web"
 WEB_MANIFESTS = WEB / "src" / "app" / "modulesManifest.ts"
 MODULE_ID = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 
@@ -501,13 +501,13 @@ def register(n: dict[str, str], *, web: bool) -> list[Path]:
 def generate(*, web: bool) -> list[str]:
     """Refresh the generated contract files; returns what it skipped."""
     skipped = []
-    subprocess.run([sys.executable, "scripts/export_gateway_openapi.py", "src/apps/web/src/api/generated/openapi.json"],
+    subprocess.run([sys.executable, "scripts/export_gateway_openapi.py", "web/src/api/generated/openapi.json"],
                    cwd=ROOT, check=True)
     node_ready = (ROOT / "node_modules" / "openapi-typescript").is_dir()
     if node_ready:
-        subprocess.run(["node", "src/apps/web/scripts/generate-api-types.mjs"], cwd=ROOT, check=True)
+        subprocess.run(["node", "web/scripts/generate-api-types.mjs"], cwd=ROOT, check=True)
     else:
-        skipped.append("web types (no node_modules; run `npm --prefix src/apps/web run api:types`)")
+        skipped.append("web types (no node_modules; run `npm --prefix web run api:types`)")
     return skipped
 
 
@@ -549,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
     for path in result["edited"]:
         print(f"  {relative(path)}")
     if not args.no_generate:
-        print("generated: src/apps/web/src/api/generated/ and features/*/api/generated.ts")
+        print("generated: web/src/api/generated/ and features/*/api/generated.ts")
     for item in skipped:
         print(f"skipped: {item}")
     return 0

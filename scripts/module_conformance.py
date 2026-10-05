@@ -107,14 +107,14 @@ def _tests_gap(package: str) -> bool:
 def web_backend_modules() -> set[str]:
     """Backend modules some web manifest lists in ``backendModules``."""
     listed: set[str] = set()
-    for manifest in (ROOT / "src" / "apps" / "web" / "src" / "features").glob("*/module.ts"):
+    for manifest in (ROOT / "web" / "src" / "features").glob("*/module.ts"):
         for match in re.finditer(r"\bbackendModules:\s*\[([^\]]*)\]", manifest.read_text(encoding="utf-8")):
             listed.update(re.findall(r"'([a-z0-9-]+)'", match.group(1)))
     return listed
 
 
 def operation_owners() -> set[str]:
-    path = ROOT / "src" / "apps" / "web" / "src" / "api" / "generated" / "route-owners.json"
+    path = ROOT / "web" / "src" / "api" / "generated" / "route-owners.json"
     return set(json.loads(path.read_text(encoding="utf-8"))["operations"].values()) - {KERNEL_OWNER}
 
 

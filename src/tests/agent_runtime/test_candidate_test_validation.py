@@ -54,40 +54,40 @@ def _completed(sequence: int, call_id: str, *, tool: str = "bash", exit_code: in
 def test_executable_candidate_test_paths_are_narrow_and_exclude_support_files() -> None:
     paths = executable_candidate_test_paths(
         [
-            "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
-            "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
+            "web/tests/e2e/chatbot-layout.spec.ts",
+            "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
             "tests/test_service.py",
             "pkg/engine_test.go",
-            "src/apps/web/tests/helpers.ts",
-            "src/apps/web/tests/fixtures/page.ts",
-            "src/apps/web/src/__snapshots__/ChatbotWorkspace.test.tsx.snap",
-            "src/apps/web/playwright.config.ts",
+            "web/tests/helpers.ts",
+            "web/tests/fixtures/page.ts",
+            "web/src/__snapshots__/ChatbotWorkspace.test.tsx.snap",
+            "web/playwright.config.ts",
             "tests/conftest.py",
         ]
     )
     assert paths == [
         "pkg/engine_test.go",
-        "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
-        "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
+        "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
+        "web/tests/e2e/chatbot-layout.spec.ts",
         "tests/test_service.py",
     ]
 
 
 def test_targeted_unit_test_does_not_cover_new_playwright_regression() -> None:
     subject = [
-        "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
-        "src/apps/web/tests/e2e/chatbot-layout.spec.ts",
+        "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
+        "web/tests/e2e/chatbot-layout.spec.ts",
     ]
     missing = missing_candidate_test_execution(
         subject,
-        [_validation("npm --prefix src/apps/web test -- ChatbotWorkspace.test.tsx")],
+        [_validation("npm --prefix web test -- ChatbotWorkspace.test.tsx")],
         workspace_state_id="state-final",
     )
-    assert missing == ["src/apps/web/tests/e2e/chatbot-layout.spec.ts"]
+    assert missing == ["web/tests/e2e/chatbot-layout.spec.ts"]
 
 
 def test_exact_targeted_playwright_validation_covers_run_owned_e2e_test() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     missing = missing_candidate_test_execution(
         [path],
         [_validation("npx playwright test tests/e2e/chatbot-layout.spec.ts")],
@@ -116,7 +116,7 @@ def test_stale_success_does_not_cover_final_candidate() -> None:
 
 
 def test_raw_playwright_success_after_last_mutation_is_accepted_for_legacy_classifier() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     events = [
         _started(1, "edit-1", "", tool="edit"),
         _completed(2, "edit-1", tool="edit"),
@@ -134,7 +134,7 @@ def test_raw_playwright_success_after_last_mutation_is_accepted_for_legacy_class
 
 
 def test_raw_playwright_success_before_later_edit_is_not_final_state_evidence() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     events = [
         _started(1, "pw-1", "npx playwright test tests/e2e/chatbot-layout.spec.ts"),
         _completed(2, "pw-1"),
@@ -150,7 +150,7 @@ def test_raw_playwright_success_before_later_edit_is_not_final_state_evidence() 
 
 
 def test_raw_playwright_success_reconciles_into_durable_validation_result() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     events = [
         _started(1, "edit-1", "", tool="edit"),
         _completed(2, "edit-1", tool="edit"),
@@ -179,7 +179,7 @@ def test_raw_playwright_success_reconciles_into_durable_validation_result() -> N
 
 
 def test_reconciliation_does_not_duplicate_existing_tool_call() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     existing = _validation("npx playwright test tests/e2e/chatbot-layout.spec.ts")
     existing = existing.model_copy(update={"metadata": {"tool_call_id": "pw-1"}})
     events = [
@@ -197,7 +197,7 @@ def test_reconciliation_does_not_duplicate_existing_tool_call() -> None:
 
 
 def test_candidate_validation_specs_are_deterministic_and_path_specific() -> None:
-    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    path = "web/tests/e2e/chatbot-layout.spec.ts"
     first = candidate_test_validation_specs([path])
     second = candidate_test_validation_specs([path])
     assert len(first) == 1

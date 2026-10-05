@@ -391,7 +391,7 @@ describe('OmnixRunCard', () => {
         payload: {
           tool_call_id: 'tool-2',
           tool: 'read',
-          args: { path: 'src/apps/web/src/features/assistant/chat/OmnixRunCard.tsx' },
+          args: { path: 'web/src/features/assistant/chat/OmnixRunCard.tsx' },
         },
         created_at: '2026-08-29T00:00:02Z',
       }),
@@ -503,7 +503,7 @@ describe('OmnixRunCard', () => {
         payload: {
           tool_call_id: 'tool-live-2',
           tool: 'read',
-          args: { path: 'src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx' },
+          args: { path: 'web/src/features/assistant/chat/OmnixRunCardCore.tsx' },
         },
         created_at: '2026-09-03T00:00:01Z',
       }),
@@ -547,7 +547,7 @@ describe('OmnixRunCard', () => {
     fireEvent.click(toolGroup.querySelector('summary')!);
     expect(toolGroup.open).toBe(true);
     expect(screen.getByText('git status --short --branch')).toBeTruthy();
-    expect(screen.getByText('src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx')).toBeTruthy();
+    expect(screen.getByText('web/src/features/assistant/chat/OmnixRunCardCore.tsx')).toBeTruthy();
     expect(screen.getAllByText(/Tool is still running/)).toHaveLength(2);
   });
 

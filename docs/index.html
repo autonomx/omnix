@@ -653,7 +653,7 @@ accept, independently review, recover, or stop</pre></div>
           </div>
           <div class="repo-map">
             <h3>Where to look in the repository</h3>
-            <div class="code-shell"><button class="copy-button" type="button" data-copy-target="repo-map-code">Copy</button><pre id="repo-map-code">src/apps/web/src/        React workspaces, routing, API clients, state, tests
+            <div class="code-shell"><button class="copy-button" type="button" data-copy-target="repo-map-code">Copy</button><pre id="repo-map-code">web/src/        React workspaces, routing, API clients, state, tests
 src/app/gateway/         FastAPI browser/API boundary and compatibility handoff
 src/app/agent_runtime/   Planning, grants, execution, evidence, review, recovery
 src/app/assistant_tools/  Governed capability adapters and policy projection
@@ -740,7 +740,7 @@ npm run web:dev</pre></div><p class="muted">Run the gateway in one terminal and 
           <h2>Development model</h2>
           <p class="section-intro">Start by identifying the layer that owns the behavior. Then add the smallest coherent change, update focused regression coverage, inspect the complete diff, and validate after the final mutation.</p>
           <div class="recipe-grid">
-            <article class="card" data-search-item><span class="label">UI</span><h3>Add a browser workspace</h3><p>Place feature code under <code>src/apps/web/src/features</code>, register the route centrally, reuse the design system, Query, event client, and typed API client.</p></article>
+            <article class="card" data-search-item><span class="label">UI</span><h3>Add a browser workspace</h3><p>Place feature code under <code>web/src/features</code>, register the route centrally, reuse the design system, Query, event client, and typed API client.</p></article>
             <article class="card" data-search-item><span class="label">API</span><h3>Add a backend contract</h3><p>Define the FastAPI/Pydantic boundary, keep resources coherent, regenerate OpenAPI-derived frontend types, and add contract/error tests.</p></article>
             <article class="card" data-search-item><span class="label purple">Async</span><h3>Add long-running work</h3><p>Use a shared job/run with semantic stages, progress, cancellation/retry behavior, a resource class, logs, events, and asset-backed outputs.</p></article>
             <article class="card" data-search-item><span class="label purple">Provider</span><h3>Add a provider or model</h3><p>Implement the shared provider layer, advertise capabilities, expose health/readiness, keep credentials out of UI/source, and route by capability.</p></article>
@@ -794,7 +794,7 @@ npm run web:dev</pre></div><p class="muted">Run the gateway in one terminal and 
           <details data-search-item><summary>Does the model control tools or external effects?</summary><div><p>No. The model can propose or request actions from capabilities that Omnix has issued. The registry, broker, scope, approval policy, credentials, confirmation rules, and audit boundary remain deterministic Omnix code.</p></div></details>
           <details data-search-item><summary>Can I use SQLite for production?</summary><div><p>PostgreSQL is the supported structured runtime. Legacy SQLite modes exist only for compatibility, tests, or controlled imports where explicitly enabled.</p></div></details>
           <details data-search-item><summary>Why is a service healthy but a feature unavailable?</summary><div><p>Service process health and feature readiness are separate. A provider may be reachable while a model is not downloaded, not loaded, missing a capability, blocked by policy, or waiting for a worker/resource lock.</p></div></details>
-          <details data-search-item><summary>Where should new browser behavior go?</summary><div><p>Use <code>src/apps/web</code> and the shared gateway/app infrastructure. The classic <code>src/templates</code>/<code>src/static</code> UI is a compatibility boundary and should not receive new browser features.</p></div></details>
+          <details data-search-item><summary>Where should new browser behavior go?</summary><div><p>Use <code>web</code> and the shared gateway/app infrastructure. The classic <code>src/templates</code>/<code>src/static</code> UI is a compatibility boundary and should not receive new browser features.</p></div></details>
           <details data-search-item><summary>How do I enable Hermes safely?</summary><div><p>Follow <a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a>, verify the sidecar endpoint, keep <code>HERMES_ENABLED=false</code> until reachability is confirmed, and remember that Omnix retains capability and application-state authority.</p></div></details>
         </section>
 

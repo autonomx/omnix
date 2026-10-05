@@ -35,7 +35,7 @@
 <p><a href="docs/index.html">Open the documentation portal</a> · <a href="docs/FEATURES.html">Browse the feature catalog</a> · <a href="docs/ARCHITECTURE.html">Read the architecture</a></p>
 <h2 id="what-omnix-includes">What Omnix includes</h2>
 <ul>
-<li>A shared React + TypeScript + Vite browser application under <code>src/apps/web</code>.</li>
+<li>A shared React + TypeScript + Vite browser application under <code>web</code>.</li>
 <li>A FastAPI gateway with typed Pydantic contracts, service boundaries, and compatibility handoffs.</li>
 <li>PostgreSQL as the supported authoritative structured-data runtime.</li>
 <li>Local or remote provider integrations for LLM, TTS, STT, image, market-data, and governed external capabilities.</li>
@@ -289,7 +289,7 @@ npm run web:dev</code></pre></div>
 <li>Add forward PostgreSQL migrations for persistence changes.</li>
 <li>Inspect the complete diff and run validation after the final mutation.</li>
 </ol>
-<p>New browser UI belongs under <code>src/apps/web</code>. Reuse the typed API client, shared event client, provider/model registry, jobs/runs, assets/artifacts, settings, diagnostics, and capability policy. Do not add new behavior to the retired classic template/static browser UI.</p>
+<p>New browser UI belongs under <code>web</code>. Reuse the typed API client, shared event client, provider/model registry, jobs/runs, assets/artifacts, settings, diagnostics, and capability policy. Do not add new behavior to the retired classic template/static browser UI.</p>
 <h3 id="useful-commands">Useful commands</h3>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
 npm run web:test
@@ -363,7 +363,7 @@ npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
 <li>Optional services may be unavailable without invalidating the core web shell.</li>
 </ul>
 <h2 id="project-map">Project map</h2>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/apps/web/           React workspaces, routing, API clients, state, events, tests
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">web/           React workspaces, routing, API clients, state, events, tests
 src/app/gateway/        FastAPI browser/API boundary
 src/app/providers/      Provider and model integration layer
 src/app/jobs/           Shared job/run contracts and stores

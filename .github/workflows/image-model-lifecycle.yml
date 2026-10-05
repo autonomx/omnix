@@ -14,8 +14,8 @@ on:
       - "src/app/settings/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
-      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
+      - "web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -23,7 +23,7 @@ on:
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
-      - "src/apps/web/src/features/image-generation/**"
+      - "web/src/features/image-generation/**"
       - "src/services/image/image.in"
       - "src/services/image/image.lock.txt"
       - "scripts/requirements/requirements-rpg-visual-flux.txt"
@@ -42,8 +42,8 @@ on:
       - "src/app/settings/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
-      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
+      - "web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -51,7 +51,7 @@ on:
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
-      - "src/apps/web/src/features/image-generation/**"
+      - "web/src/features/image-generation/**"
       - "src/services/image/image.in"
       - "src/services/image/image.lock.txt"
       - "scripts/requirements/requirements-rpg-visual-flux.txt"
@@ -100,7 +100,7 @@ jobs:
         run: npm ci
       - name: Typecheck image lifecycle modules
         run: |
-          cat > src/apps/web/tsconfig.image-lifecycle.json <<'JSON'
+          cat > web/tsconfig.image-lifecycle.json <<'JSON'
           {
             "extends": "./tsconfig.json",
             "compilerOptions": {
@@ -119,7 +119,7 @@ jobs:
             ]
           }
           JSON
-          cd src/apps/web
+          cd web
           npx tsc -p tsconfig.image-lifecycle.json
       - name: Run image generation and avatar-routing unit tests
         run: >-

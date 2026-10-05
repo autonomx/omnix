@@ -53,7 +53,7 @@ resources/models/
 # Node dependencies and web build output (the gateway image serves no SPA)
 node_modules/
 **/node_modules/
-src/apps/web/dist/
+web/dist/
 
 # Local scratch: worktrees, temporary analysis output, test artifacts
 .sc16-qualification-worktree/
@@ -72,7 +72,7 @@ nonfatal-endurance-warnings-summary.json/
 **/.mypy_cache
 **/.ruff_cache
 # The browser app is built and served separately (Nginx); not part of this image.
-src/apps/
+web/
 # Operator runtime data (logs, caches, trading history, run artifacts).
 # Compose deployments mount ./resources; the image needs none of it.
 resources/trading/

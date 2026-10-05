@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT / "src" / "apps" / "web"
+WEB = ROOT / "web"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import module_conformance  # noqa: E402
@@ -37,7 +37,7 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 def tracked_step(module_id: str, package: str) -> tuple[bool, str]:
     folders = [f"src/{package.replace('.', '/')}", f"src/tests/{package.replace('.', '_')}",
-               f"src/apps/web/src/features/{module_id}"]
+               f"web/src/features/{module_id}"]
     result = _run(["git", "ls-files", "--others", "--exclude-standard", "--", *folders])
     untracked = result.stdout.split()
     if untracked:
@@ -96,10 +96,10 @@ def web_steps(module_id: str) -> list[tuple[str, bool, str]]:
     npm = shutil.which("npm") or "npm"
     steps = []
     for feature in features:
-        result = _run([npm, "--prefix", "src/apps/web", "run", "test", "--", f"src/features/{feature}"])
+        result = _run([npm, "--prefix", "web", "run", "test", "--", f"src/features/{feature}"])
         summary = [line.strip() for line in result.stdout.splitlines() if line.strip().startswith("Tests")]
         steps.append((f"web tests ({feature})", result.returncode == 0, summary[-1] if summary else "see npm output"))
-    result = _run([npm, "--prefix", "src/apps/web", "run", "typecheck"])
+    result = _run([npm, "--prefix", "web", "run", "typecheck"])
     steps.append(("web typecheck", result.returncode == 0, "passed" if result.returncode == 0 else result.stdout.strip()[-2000:]))
     return steps
 

@@ -13,7 +13,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_ROOT = ROOT / "src/apps/web"
+WEB_ROOT = ROOT / "web"
 ESLINT_CLI = WEB_ROOT / "node_modules/eslint/bin/eslint.js"
 BASELINE_LABEL = "baseline WP-9.x"
 BASELINE_RULE = re.compile(

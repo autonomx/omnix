@@ -104,7 +104,7 @@
     <div class="diagram-node"><span class="diagram-kicker">OPTIONAL BOUNDARIES</span><strong>Providers and workers</strong><small>LLM, TTS, STT, image, Hermes, market data</small></div>
   </div>
 </div></figure>
-<p>The supported browser app is <code>src/apps/web</code>.</p>
+<p>The supported browser app is <code>web</code>.</p>
 <h3 id="runtime-and-libraries">Runtime and libraries</h3>
 <p>The current web package uses:</p>
 <ul>
@@ -124,8 +124,8 @@
 <li>OpenAPI-generated TypeScript types where practical.</li>
 </ul>
 <h3 id="route-module-ownership">Route/module ownership</h3>
-<p><code>src/apps/web/src/app/modules.ts</code> is the routed module catalog. <code>ModuleWorkspace.tsx</code> dispatches module definitions to specialized workspaces such as Chat, RPG, Storyteller, Podcast, Voice, STT, Image Generation, Trading, Settings, and platform views.</p>
-<p>Feature code belongs under <code>src/apps/web/src/features/&lt;feature&gt;</code>. A feature should not introduce a second React app, a Flask template UI, Streamlit, a standalone vanilla-JS shell, or another framework-specific frontend.</p>
+<p><code>web/src/app/modules.ts</code> is the routed module catalog. <code>ModuleWorkspace.tsx</code> dispatches module definitions to specialized workspaces such as Chat, RPG, Storyteller, Podcast, Voice, STT, Image Generation, Trading, Settings, and platform views.</p>
+<p>Feature code belongs under <code>web/src/features/&lt;feature&gt;</code>. A feature should not introduce a second React app, a Flask template UI, Streamlit, a standalone vanilla-JS shell, or another framework-specific frontend.</p>
 <h3 id="state-ownership">State ownership</h3>
 <p>Use server state for data whose truth lives in the backend:</p>
 <ul>
@@ -150,9 +150,9 @@
 </ul>
 <p>Feature code must not manufacture authoritative domain truth in the browser simply because the UI can calculate a plausible value.</p>
 <h3 id="view-scoped-loading">View-scoped loading</h3>
-<p>Workspace code is loaded and initialized on demand. <code>src/apps/web/src/features/ModuleWorkspace.tsx</code> uses lazy route components, while <code>src/apps/web/src/app/viewRuntime.ts</code> initializes only the runtime controllers owned by the active module. The application shell and the API firewall remain global; feature API queries do not. For example, Chat loads chat sessions, providers, and the narrow voice-library endpoint only after its session list is available, while Trading, Audiobook, Voice, and platform workspaces initialize their own API families when opened. A compatibility fallback may use the aggregate asset endpoint for older gateways, but it is never on the Chat history critical path when <code>/api/voice-library</code> is available.</p>
+<p>Workspace code is loaded and initialized on demand. <code>web/src/features/ModuleWorkspace.tsx</code> uses lazy route components, while <code>web/src/app/viewRuntime.ts</code> initializes only the runtime controllers owned by the active module. The application shell and the API firewall remain global; feature API queries do not. For example, Chat loads chat sessions, providers, and the narrow voice-library endpoint only after its session list is available, while Trading, Audiobook, Voice, and platform workspaces initialize their own API families when opened. A compatibility fallback may use the aggregate asset endpoint for older gateways, but it is never on the Chat history critical path when <code>/api/voice-library</code> is available.</p>
 <h2 id="typed-api-boundary">Typed API boundary</h2>
-<p>The web app uses a shared API client under <code>src/apps/web/src/api</code>. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:</p>
+<p>The web app uses a shared API client under <code>web/src/api</code>. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:schema
 npm --workspace @omnix/web run api:types
 npm --workspace @omnix/web run api:generate

@@ -160,7 +160,7 @@ CASES: tuple[CodingClassificationCase, ...] = (
     ),
     CodingClassificationCase(
         "ui_apply_file",
-        "apply the spacing fix in src/apps/web/src/features/assistant/workspace/assistant-context-controller.css",
+        "apply the spacing fix in web/src/features/assistant/workspace/assistant-context-controller.css",
         "agent",
         "agent",
         "coding",

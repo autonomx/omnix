@@ -34,8 +34,8 @@ def _fixture(tmp_path: Path):
     _git(tmp_path, "config", "user.email", "test@example.com")
     _git(tmp_path, "config", "user.name", "Test")
     files = {
-        "src/apps/web/ChatIdentityModeControl.tsx": 'export const label = "Character settings";\n',
-        "src/apps/web/ChatIdentityModeControl.test.tsx": 'expect(label).toBe("Character settings");\n',
+        "web/ChatIdentityModeControl.tsx": 'export const label = "Character settings";\n',
+        "web/ChatIdentityModeControl.test.tsx": 'expect(label).toBe("Character settings");\n',
         "src/tests/e2e/test_default_llm_agent_ui_flow.py": 'assert "Character settings" in source\n',
         "docs/history.md": 'Previously called "Character settings" in an old screenshot.\n',
     }
@@ -155,8 +155,8 @@ def test_inspection_promotes_source_tests_and_e2e_but_not_docs_to_high_impact(tm
     evidence, candidates, lenses = build_inspection_bundle(spec, revision, queries=["Character settings"])
 
     high_paths = {item.path for item in candidates if item.impact_likelihood == "high"}
-    assert "src/apps/web/ChatIdentityModeControl.tsx" in high_paths
-    assert "src/apps/web/ChatIdentityModeControl.test.tsx" in high_paths
+    assert "web/ChatIdentityModeControl.tsx" in high_paths
+    assert "web/ChatIdentityModeControl.test.tsx" in high_paths
     assert "src/tests/e2e/test_default_llm_agent_ui_flow.py" in high_paths
     assert "docs/history.md" not in high_paths
     assert lenses == []
@@ -168,14 +168,14 @@ def test_inspection_promotes_source_tests_and_e2e_but_not_docs_to_high_impact(tm
 
 def test_inspection_records_complete_zero_result_observation(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    component = tmp_path / "src/apps/web/ChatIdentityModeControl.tsx"
+    component = tmp_path / "web/ChatIdentityModeControl.tsx"
     component.write_text('export const label = "Character Settings";\n', encoding="utf-8")
 
     evidence, candidates, _ = build_inspection_bundle(
         spec,
         revision,
         queries=["Character settings"],
-        paths=["src/apps/web/ChatIdentityModeControl.tsx"],
+        paths=["web/ChatIdentityModeControl.tsx"],
     )
 
     observations = [item for item in evidence if item.kind == "search_observation"]
@@ -234,14 +234,14 @@ def test_operation_authorization_requires_plan_path_and_current_evidence(tmp_pat
         plan,
         revision,
         effect="mutate",
-        target_path="src/apps/web/ChatIdentityModeControl.tsx",
+        target_path="web/ChatIdentityModeControl.tsx",
         current_evidence_digest=inspection_evidence_digest(evidence),
     ) == []
     failures = operation_plan_failures(
         plan,
         revision,
         effect="mutate",
-        target_path="src/apps/web/Unplanned.tsx",
+        target_path="web/Unplanned.tsx",
         current_evidence_digest=inspection_evidence_digest(evidence),
     )
     assert failures == []
@@ -249,7 +249,7 @@ def test_operation_authorization_requires_plan_path_and_current_evidence(tmp_pat
         plan,
         revision,
         effect="mutate",
-        target_path="src/apps/web/ChatIdentityModeControl.tsx",
+        target_path="web/ChatIdentityModeControl.tsx",
         current_evidence_digest="new-evidence",
     )
     assert stale == []
@@ -267,14 +267,14 @@ def test_plan_conformance_catches_residual_reference_then_passes_after_complete_
     submission = _submission(revision, candidates)
     plan = _approved_plan(spec, revision, evidence, candidates, submission)
 
-    component = tmp_path / "src/apps/web/ChatIdentityModeControl.tsx"
+    component = tmp_path / "web/ChatIdentityModeControl.tsx"
     component.write_text('export const label = "Character Settings";\n', encoding="utf-8")
     failures = plan_conformance_failures(spec, plan, candidates)
     assert any(item.startswith("planned_impact_not_modified:") for item in failures)
     assert any("ChatIdentityModeControl.test.tsx" in item for item in failures)
 
     for relative in (
-        "src/apps/web/ChatIdentityModeControl.test.tsx",
+        "web/ChatIdentityModeControl.test.tsx",
         "src/tests/e2e/test_default_llm_agent_ui_flow.py",
     ):
         path = tmp_path / relative
@@ -289,7 +289,7 @@ def test_plan_conformance_catches_residual_reference_then_passes_after_complete_
 
 def test_plan_conformance_detects_changes_to_preexisting_dirty_paths(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    component = tmp_path / "src/apps/web/ChatIdentityModeControl.tsx"
+    component = tmp_path / "web/ChatIdentityModeControl.tsx"
     component.write_text(
         component.read_text(encoding="utf-8") + "// preexisting user edit\n",
         encoding="utf-8",
@@ -304,7 +304,7 @@ def test_plan_conformance_detects_changes_to_preexisting_dirty_paths(tmp_path: P
     )
     failures = plan_conformance_failures(spec, plan, candidates)
 
-    assert "preexisting_dirty_path_modified:src/apps/web/ChatIdentityModeControl.tsx" in failures
+    assert "preexisting_dirty_path_modified:web/ChatIdentityModeControl.tsx" in failures
 
 
 def test_operation_effect_classification_fails_unknown_closed_at_policy_layer():

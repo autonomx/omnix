@@ -40,7 +40,7 @@ regexes = ['''AutoTokenizer, Qwen3ForCausalLM''']
 description = "Browser localStorage identifiers, not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/apps/web/src/features/assistant/workspace/(live-conversation-evaluation-controller|live-voice-calibration)\.ts$''']
+paths = ['''(?:^|/)web/src/features/assistant/workspace/(live-conversation-evaluation-controller|live-voice-calibration)\.ts$''']
 regexTarget = "secret"
 regexes = ['''^omnix\.live(?:Conversation\.evaluation|Voice\.calibration)\.v1$''']
 
@@ -48,7 +48,7 @@ regexes = ['''^omnix\.live(?:Conversation\.evaluation|Voice\.calibration)\.v1$''
 description = "RFC 6455 example WebSocket nonce in routing tests"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/apps/web/src/test/gateway-routing\.test\.ts$''']
+paths = ['''(?:^|/)web/src/test/gateway-routing\.test\.ts$''']
 regexTarget = "match"
 regexes = ['''Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==''']
 

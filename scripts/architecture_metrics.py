@@ -202,7 +202,7 @@ def _web_type_exceptions(sources: dict[str, str]) -> list[tuple[str, str]]:
     return [
         (cells[0], cells[1])
         for cells in _inventory_rows(sources)
-        if len(cells) == 3 and cells[0].startswith("src/apps/web/")
+        if len(cells) == 3 and cells[0].startswith("web/")
     ]
 
 
@@ -891,7 +891,7 @@ def _reach(graph: dict[str, set[str]], roots: set[str]) -> set[str]:
 def _global_stylesheets(sources: dict[str, str]) -> list[str]:
     """Stylesheets the app shell loads before any feature: main.tsx's CSS
     imports, package ones included, and the stylesheets they @import."""
-    entry = "src/apps/web/src/main.tsx"
+    entry = "web/src/main.tsx"
     def resolve(base: str, specifier: str) -> str:
         if not specifier.startswith("."):
             return specifier
@@ -916,7 +916,7 @@ def _global_stylesheets(sources: dict[str, str]) -> list[str]:
 
 
 def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
-    graph = {path: set() for path in sources if path.startswith("src/apps/web/src/") and path.endswith((".ts", ".tsx", ".css")) and not is_test(path)}
+    graph = {path: set() for path in sources if path.startswith("web/src/") and path.endswith((".ts", ".tsx", ".css")) and not is_test(path)}
     for path in graph:
         code = mask_js(sources[path])
         imports = re.findall(r"(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)[\"']([^\"']+)[\"']", code)
@@ -926,7 +926,7 @@ def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
             # Vite import queries (`./x.worklet.ts?worker&url`) name the same module.
             specifier = specifier.split("?", 1)[0]
             if specifier.startswith("@/"):
-                base = PurePosixPath("src/apps/web/src") / specifier[2:]
+                base = PurePosixPath("web/src") / specifier[2:]
             elif specifier.startswith("."):
                 parts = list(PurePosixPath(path).parent.parts)
                 for part in specifier.split("/"):
@@ -986,13 +986,13 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     handwritten, route_count, boundaries = set(), 0, 0
     schema_names = set(openapi.get("components", {}).get("schemas", {}))
     for path, source in sources.items():
-        if path.startswith("src/apps/web/") and path.endswith(
+        if path.startswith("web/") and path.endswith(
             (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
         ):
             values["eslint_baseline_disables"] += len(
                 re.findall(r"eslint-disable(?:-next-line|-line)?[^\n]*", source)
             )
-        if not path.startswith("src/apps/web/src/") or is_test(path) or not path.endswith((".ts", ".tsx", ".css")):
+        if not path.startswith("web/src/") or is_test(path) or not path.endswith((".ts", ".tsx", ".css")):
             continue
         code = mask_js(source)
         css = path.endswith(".css")
@@ -1002,7 +1002,7 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
             # are established forms in this repository. Count distinct flag
             # identities, including their Window-interface declarations.
             flags.update(re.findall(r"\b(__omnix[\w]*)\b", code))
-            if not path.startswith("src/apps/web/src/api/"):
+            if not path.startswith("web/src/api/"):
                 calls = list(re.finditer(r"(?<![\w.])(?:window\.)?fetch\s*\(", code))
                 values["web_raw_fetch_outside_api"] += len(calls)
                 for call in calls:
@@ -1057,12 +1057,12 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     values["web_handwritten_api_types"] = len(handwritten - excepted)
     values["web_error_boundaries"] = boundaries
     graph = _web_graph(sources)
-    roots = {"src/apps/web/src/main.tsx", "src/apps/web/src/main.ts"} & graph.keys()
+    roots = {"web/src/main.tsx", "web/src/main.ts"} & graph.keys()
     reached = _reach(graph, roots)
     # A feature's index.ts is its declared public API (WP-9.7) and exists even
     # when no other feature imports it yet. It is not counted, and it is not a
     # root either: a module only an unused index re-exports still counts.
-    public_api = re.compile(r"src/apps/web/src/features/[^/]+/index\.tsx?")
+    public_api = re.compile(r"web/src/features/[^/]+/index\.tsx?")
     unreachable = sorted(
         path for path in graph
         if path.endswith((".ts", ".tsx")) and path not in reached and not path.endswith(".d.ts")
@@ -1139,7 +1139,7 @@ def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str
     layers = analysis.config.get("layers", {})
     kernel = tuple(layers.get("kernel", {}).get("packages", ()))
     web_features = {PurePosixPath(path).parts[5].replace("-", "") for path in analysis.sources
-                    if path.startswith("src/apps/web/src/features/") and len(PurePosixPath(path).parts) > 6}
+                    if path.startswith("web/src/features/") and len(PurePosixPath(path).parts) > 6}
     client_words = web_features | {word.replace("_", "") for word in words}
     evidence: dict[str, Any] = {key: sites for key, sites in boundaries.items()}
     evidence["any_scope_package_cycles"] = [f"{first}<->{second}" for first, second in analysis.reciprocal_dependencies()]
@@ -1164,7 +1164,7 @@ def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str
     )
     evidence["web_feature_clients_in_shared_api"] = sorted(
         path for path in analysis.sources
-        if PurePosixPath(path).parent == PurePosixPath("src/apps/web/src/api")
+        if PurePosixPath(path).parent == PurePosixPath("web/src/api")
         and path.endswith((".ts", ".tsx")) and not re.search(r"\.(test|spec)\.tsx?$", path)
         and any(PurePosixPath(path).stem.lower().startswith(word) for word in client_words)
     )
@@ -1294,9 +1294,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             return 0
         config = load_layers(root / "resources/architecture/layers.toml")
-        schema_path = root / "src/apps/web/src/api/generated/openapi.json"
+        schema_path = root / "web/src/api/generated/openapi.json"
         if args.revision:
-            schema = json.loads(subprocess.run(["git", "show", f"{args.revision}:src/apps/web/src/api/generated/openapi.json"], cwd=root, capture_output=True, check=True).stdout)
+            schema = json.loads(subprocess.run(["git", "show", f"{args.revision}:web/src/api/generated/openapi.json"], cwd=root, capture_output=True, check=True).stdout)
         else:
             schema = json.loads(schema_path.read_text(encoding="utf-8")) if schema_path.exists() else None
         report_path = root / args.runtime_report

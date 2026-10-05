@@ -14,7 +14,7 @@ def _revision() -> TaskRevision:
 
 def test_shell_diff_is_inspection_context_not_completion_authority() -> None:
     for command in (
-        "git diff --no-ext-diff", "git diff HEAD", "git diff -- src/apps/web/src/styles.css",
+        "git diff --no-ext-diff", "git diff HEAD", "git diff -- web/src/styles.css",
         "git diff --name-only", "git diff --stat",
     ):
         assert not diff_review_command_is_complete(command)

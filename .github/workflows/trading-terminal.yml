@@ -4,16 +4,16 @@ on:
   pull_request:
     branches: [main, "codingagent", "agent/generalized-agent-runtime"]
     paths:
-      - "src/apps/web/src/features/trading/**"
-      - "src/apps/web/src/api/generated/**"
-      - "src/apps/web/src/app/modules.ts"
-      - "src/apps/web/src/app/router.tsx"
-      - "src/apps/web/src/design/primitives.tsx"
-      - "src/apps/web/src/features/ModuleWorkspace.tsx"
-      - "src/apps/web/tests/e2e/trading-terminal.spec.ts"
-      - "src/apps/web/playwright.config.ts"
-      - "src/apps/web/package.json"
-      - "src/apps/web/tsconfig.trading.json"
+      - "web/src/features/trading/**"
+      - "web/src/api/generated/**"
+      - "web/src/app/modules.ts"
+      - "web/src/app/router.tsx"
+      - "web/src/design/primitives.tsx"
+      - "web/src/features/ModuleWorkspace.tsx"
+      - "web/tests/e2e/trading-terminal.spec.ts"
+      - "web/playwright.config.ts"
+      - "web/package.json"
+      - "web/tsconfig.trading.json"
       - "package-lock.json"
       - "scripts/export_gateway_openapi.py"
       - "src/app/trading/**"
@@ -94,8 +94,8 @@ jobs:
         with:
           name: trading-playwright-report
           path: |
-            src/apps/web/playwright-report
-            src/apps/web/test-results
+            web/playwright-report
+            web/test-results
           if-no-files-found: warn
           retention-days: 7
       - name: Generate shared gateway API contract
@@ -106,9 +106,9 @@ jobs:
         with:
           name: trading-generated-api
           path: |
-            src/apps/web/src/api/generated
-            src/apps/web/src/features/*/api/generated.ts
+            web/src/api/generated
+            web/src/features/*/api/generated.ts
           if-no-files-found: error
           retention-days: 7
       - name: Verify generated API contract is committed
-        run: git diff --exit-code -- src/apps/web/src/api/generated "src/apps/web/src/features/*/api/generated.ts"
+        run: git diff --exit-code -- web/src/api/generated "web/src/features/*/api/generated.ts"

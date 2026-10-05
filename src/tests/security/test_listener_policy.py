@@ -101,7 +101,7 @@ def test_no_public_bind_literals_in_production_sources():
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and "0.0.0.0" in node.value:
                 violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
-    scripts = json.loads((ROOT / "src/apps/web/package.json").read_text())["scripts"]
+    scripts = json.loads((ROOT / "web/package.json").read_text())["scripts"]
     violations.extend(f"package.json:{name}" for name, command in scripts.items() if "0.0.0.0" in command and not name.endswith(":lan"))
     assert not violations, violations
 

@@ -15,7 +15,7 @@ from app.assets import (
 )
 from app.providers.tts_service import voice_stem
 
-OPENAPI = Path(__file__).resolve().parents[3] / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
+OPENAPI = Path(__file__).resolve().parents[4] / "web" / "src" / "api" / "generated" / "openapi.json"
 
 
 def _record(path: Path, **changes) -> AssetRecord:

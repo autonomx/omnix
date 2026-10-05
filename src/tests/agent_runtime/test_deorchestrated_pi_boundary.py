@@ -34,11 +34,11 @@ def test_consequential_mutations_remain_hard_gated() -> None:
     for path in (
         "src/app/persistence/migrations/0066_change.sql",
         "package-lock.json",
-        "src/apps/web/src/api/generated/types.ts",
+        "web/src/api/generated/types.ts",
     ):
         assert planning_requirement_for_operation("mutate", target_path=path) == "hard"
         assert operation_plan_failures(None, revision, effect="mutate", target_path=path) == ["approved_plan_missing"]
-    assert planning_requirement_for_operation("mutate", command="npm --prefix src/apps/web install react") == "hard"
+    assert planning_requirement_for_operation("mutate", command="npm --prefix web install react") == "hard"
     assert planning_requirement_for_operation("unknown", command="custom-generator --output src/generated.py") == "hard"
 
 

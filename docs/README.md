@@ -19,7 +19,7 @@ This directory documents the application that is currently implemented on `main`
 
 ## Application map
 
-The supported browser UI lives under `src/apps/web`. `/` redirects to `/chatbot`.
+The supported browser UI lives under `web`. `/` redirects to `/chatbot`.
 
 | Route | Workspace | What it provides |
 | --- | --- | --- |
@@ -164,8 +164,8 @@ npm --workspace @omnix/web run api:check
 
 ## Source-of-truth locations
 
-- `src/apps/web/src/app/modules.ts` — routed application module catalog.
-- `src/apps/web/src/features/` — browser feature workspaces and shared assistant UI.
+- `web/src/app/modules.ts` — routed application module catalog.
+- `web/src/features/` — browser feature workspaces and shared assistant UI.
 - `src/app/gateway/` — browser-facing FastAPI gateway and compatibility handoff.
 - `src/app/agent_runtime/` — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.
 - `src/app/assistant_tools/` — governed assistant-tool adapters and policy projection.
@@ -181,4 +181,4 @@ npm --workspace @omnix/web run api:check
 
 ## Compatibility boundary
 
-The classic `src/templates` and `src/static` browser UI is retired. The old compatibility application server is also retired. Both `src/main.py` and `src/launch.py` start the shared gateway. Browser behavior belongs in `src/apps/web` and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.
+The classic `src/templates` and `src/static` browser UI is retired. The old compatibility application server is also retired. Both `src/main.py` and `src/launch.py` start the shared gateway. Browser behavior belongs in `web` and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.

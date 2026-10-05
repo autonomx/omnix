@@ -27,12 +27,12 @@ Do not install new developer tools merely to satisfy a generic checklist unless 
 
 ## React / TypeScript web app
 
-The main web package is under `src/apps/web`.
+The main web package is under `web`.
 
 From repository root, prefer package-scoped commands such as:
 
-- `npm --prefix src/apps/web run test -- <focused-test>`
-- `npm --prefix src/apps/web run build`
+- `npm --prefix web run test -- <focused-test>`
+- `npm --prefix web run build`
 - the package's existing typecheck command when applicable
 
 Keep UI behavior, CSS ownership, component tests, and generated API contracts in sync.

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "src/apps/web"
+    "web"
   ],
   "scripts": {
     "web:dev": "node scripts/web_toolchain.mjs dev",

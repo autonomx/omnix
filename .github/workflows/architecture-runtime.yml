@@ -6,7 +6,7 @@ on:
     paths:
       - "src/app/**"
       - "src/tests/**"
-      - "src/apps/web/**"
+      - "web/**"
       - "scripts/architecture_*.py"
       - "scripts/run_architecture_gates.py"
       - "scripts/export_gateway_openapi.py"
@@ -22,7 +22,7 @@ on:
     paths:
       - "src/app/**"
       - "src/tests/**"
-      - "src/apps/web/**"
+      - "web/**"
       - "scripts/architecture_*.py"
       - "scripts/run_architecture_gates.py"
       - "scripts/export_gateway_openapi.py"

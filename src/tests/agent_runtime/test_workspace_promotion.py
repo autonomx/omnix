@@ -41,7 +41,7 @@ def _change_set(authority: WorkspaceAuthority, patch: str) -> RunChangeSet:
 
 def test_promotion_rejects_unresolved_environment_path_even_without_trailing_slash() -> None:
     with pytest.raises(WorkspacePromotionError, match="unsafe patch path"):
-        _normalize_patch_path("src/apps/web/%SystemDrive%/ProgramData/cache.db")
+        _normalize_patch_path("web/%SystemDrive%/ProgramData/cache.db")
 
 
 def test_promote_change_set_applies_candidate_and_is_idempotent(tmp_path: Path) -> None:

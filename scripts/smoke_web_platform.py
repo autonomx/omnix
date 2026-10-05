@@ -84,7 +84,7 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
         }
     )
 
-    checked_in_schema = json.loads((root / "src/apps/web/src/api/generated/openapi.json").read_text(encoding="utf-8"))
+    checked_in_schema = json.loads((root / "web/src/api/generated/openapi.json").read_text(encoding="utf-8"))
     from export_gateway_openapi import export_schema
 
     # Compare with the exporter's normalized document, which is what is checked in.

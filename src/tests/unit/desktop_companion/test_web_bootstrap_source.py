@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_production_web_bootstrap_initializes_complete_desktop_companion_stack() -> None:
     src_root = Path(__file__).resolve().parents[3]
-    web_root = src_root / "apps" / "web" / "src"
+    web_root = src_root.parent / "web" / "src"
     # The assistant module's runtime (WP-9.7) starts the companion stack; its
     # controls and text surface are React components (WP-9.4).
     runtime = (web_root / "features" / "assistant" / "runtime.ts").read_text(encoding="utf-8")

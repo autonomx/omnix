@@ -26,8 +26,8 @@ def _validation(command: str, *, state: str = "state-final") -> ValidationResult
 
 
 def test_broad_playwright_does_not_claim_vitest_unit_test() -> None:
-    unit = "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
-    e2e = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    unit = "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
+    e2e = "web/tests/e2e/chatbot-layout.spec.ts"
     missing = missing_candidate_test_execution(
         [unit, e2e],
         [_validation("npx playwright test")],
@@ -37,11 +37,11 @@ def test_broad_playwright_does_not_claim_vitest_unit_test() -> None:
 
 
 def test_generic_npm_test_does_not_claim_separate_e2e_tree() -> None:
-    unit = "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
-    e2e = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    unit = "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
+    e2e = "web/tests/e2e/chatbot-layout.spec.ts"
     missing = missing_candidate_test_execution(
         [unit, e2e],
-        [_validation("npm --prefix src/apps/web test")],
+        [_validation("npm --prefix web test")],
         workspace_state_id="state-final",
     )
     assert missing == [e2e]

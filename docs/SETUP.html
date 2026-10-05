@@ -277,7 +277,7 @@ npm run web:test
 npm run web:test:e2e
 npm run web:build
 npm run web:preview</code></pre></div>
-<p>The supported browser application is <code>src/apps/web</code>.</p>
+<p>The supported browser application is <code>web</code>.</p>
 <h2 id="6-start-the-gateway">6. Start the gateway</h2>
 <p>Make sure the Python environment is active, <code>PYTHONPATH</code> includes <code>src</code>, the database is reachable, and required provider/service environment variables are set.</p>
 <p>Linux/macOS/WSL:</p>
@@ -507,7 +507,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <p>For the deeper component model, see <a href="ARCHITECTURE.html">ARCHITECTURE.html</a>.</p>
 <h2 id="listener-defaults">Listener defaults</h2>
 <p>Omnix-managed listeners bind to <code>127.0.0.1</code>. <code>OMNIX_BIND_HOST</code> selects the address; any non-loopback address also requires <code>OMNIX_ALLOW_LAN=true</code>. The launcher passes the validated address to gateway, web, STT, TTS and image services. Legacy <code>OMNIX_TTS_HOST</code> and <code>OMNIX_GATEWAY_HOST</code> listener settings are replaced by <code>OMNIX_BIND_HOST</code>.</p>
-<p>For an explicitly exposed Vite listener, set <code>OMNIX_BIND_HOST=0.0.0.0</code> and <code>OMNIX_ALLOW_LAN=true</code> before running <code>npm --prefix src/apps/web run dev:lan</code> or <code>npm --prefix src/apps/web run preview:lan</code>. Add the browser&#x27;s exact origin to <code>OMNIX_ALLOWED_ORIGINS</code> and hostname to <code>OMNIX_ALLOWED_HOSTS</code>. Allowed CORS origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards are rejected. Configure an authenticated ingress before exposing a deployment.</p>
+<p>For an explicitly exposed Vite listener, set <code>OMNIX_BIND_HOST=0.0.0.0</code> and <code>OMNIX_ALLOW_LAN=true</code> before running <code>npm --prefix web run dev:lan</code> or <code>npm --prefix web run preview:lan</code>. Add the browser&#x27;s exact origin to <code>OMNIX_ALLOWED_ORIGINS</code> and hostname to <code>OMNIX_ALLOWED_HOSTS</code>. Allowed CORS origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards are rejected. Configure an authenticated ingress before exposing a deployment.</p>
 <p>The gateway, launcher and model services validate <code>Host</code> for every request. <code>OMNIX_ALLOWED_HOSTS</code> extends the default localhost and loopback allow-list. Every POST, PUT, PATCH and DELETE requires <code>X-Omnix-Client</code> (for example <code>web</code>, <code>gateway</code> or <code>cli</code>); browser mutation and WebSocket origins must be explicitly allowed. The web client and launcher UI add the header automatically.</p>
       </article>
     </main>

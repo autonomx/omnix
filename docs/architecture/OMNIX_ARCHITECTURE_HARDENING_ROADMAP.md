@@ -91,7 +91,7 @@ API replicas are now prevented from accidentally instantiating local Qwen TTS wh
 - `scripts/gateway_cluster.py`
 - `scripts/deploy_gateway_rollout.py`
 - `scripts/validate_gateway_rollout.py`
-- `src/apps/web/gateway-routing.ts`
+- `web/gateway-routing.ts`
 
 The branch supports one worker/control gateway and additional API replicas.
 

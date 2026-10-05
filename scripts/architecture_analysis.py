@@ -39,7 +39,7 @@ class AnalysisError(ValueError):
 def is_generated_feature_api(path: str) -> bool:
     """A web feature's generated gateway types (PA-2.4), written by `api:types`."""
     parts = PurePosixPath(path).parts
-    return len(parts) == 8 and parts[:5] == ("src", "apps", "web", "src", "features") and parts[6:] == ("api", "generated.ts")
+    return len(parts) == 6 and parts[:3] == ("web", "src", "features") and parts[4:] == ("api", "generated.ts")
 
 
 def included_path(path: str) -> bool:
@@ -47,7 +47,7 @@ def included_path(path: str) -> bool:
     return not (
         normalized.is_absolute() or ".." in normalized.parts
         or EXCLUDED_PARTS.intersection(normalized.parts)
-        or path.startswith("src/apps/web/src/api/generated/")
+        or path.startswith("web/src/api/generated/")
         or is_generated_feature_api(path)
     )
 

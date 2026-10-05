@@ -6,7 +6,7 @@ This guide explains how to extend Omnix without creating parallel infrastructure
 
 Before implementation, treat these as hard platform rules:
 
-1. Add browser UI to `src/apps/web`; do not create another frontend stack.
+1. Add browser UI to `web`; do not create another frontend stack.
 2. Keep authoritative domain state in backend/domain services.
 3. Use typed API contracts between the browser and backend.
 4. Reuse shared providers/models, jobs/runs, assets, events, settings, and diagnostics.
@@ -22,7 +22,7 @@ Before implementation, treat these as hard platform rules:
 ### Frontend
 
 ```text
-src/apps/web/src/
+web/src/
 ├─ api/          shared gateway client and generated contracts
 ├─ app/          routes, module catalog, application shell
 ├─ design/       shared UI primitives/tokens
@@ -51,12 +51,12 @@ Python tests live primarily under `src/tests`. Frontend tests live next to featu
 
 ## Adding or changing a browser module
 
-Top-level routes are defined in `src/apps/web/src/app/modules.ts` and dispatched by the app router/workspace layer.
+Top-level routes are defined in `web/src/app/modules.ts` and dispatched by the app router/workspace layer.
 
 For a new routed workspace:
 
 1. Add a stable module ID, route, label, summary, and capability metadata to the module catalog.
-2. Add the React workspace under `src/apps/web/src/features/<feature>/`.
+2. Add the React workspace under `web/src/features/<feature>/`.
 3. Wire it through `ModuleWorkspace.tsx` or the router's specialized path.
 4. Reuse `WorkspacePanel` and existing design primitives.
 5. Fetch backend-owned state through the shared API client/TanStack Query.

@@ -11,7 +11,7 @@ from app.agent_runtime.planning_api import (
 from app.agent_runtime.planning_contracts import ImplementationPlanSubmission, PlanItem
 
 
-_DIRTY_TEST = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+_DIRTY_TEST = "web/tests/e2e/chatbot-layout.spec.ts"
 _BASELINE = {
     "head": "a" * 40,
     "dirty_paths": [
@@ -49,7 +49,7 @@ def test_plan_rejects_mutation_of_test_that_was_dirty_before_run() -> None:
 
 def test_plan_rejects_directory_pattern_covering_preexisting_dirty_path() -> None:
     failures = _preexisting_dirty_plan_failures(
-        _submission(path="src/apps/web/tests/e2e/**"),
+        _submission(path="web/tests/e2e/**"),
         _BASELINE,
     )
     assert failures == [
@@ -77,14 +77,14 @@ def test_operation_blocks_edit_before_preexisting_dirty_content_is_overwritten()
 def test_operation_allows_clean_target_and_validation_of_dirty_target() -> None:
     assert _preexisting_dirty_operation_failures(
         effect="mutate",
-        target_path="src/apps/web/src/features/assistant/chat/ChatbotWorkspaceSidePanelFix.css",
+        target_path="web/src/features/assistant/chat/ChatbotWorkspaceSidePanelFix.css",
         command="",
         baseline_provenance=_BASELINE,
     ) == []
     assert _preexisting_dirty_operation_failures(
         effect="validate",
         target_path=_DIRTY_TEST,
-        command="npm --prefix src/apps/web run test:e2e -- tests/e2e/chatbot-layout.spec.ts",
+        command="npm --prefix web run test:e2e -- tests/e2e/chatbot-layout.spec.ts",
         baseline_provenance=_BASELINE,
     ) == []
 

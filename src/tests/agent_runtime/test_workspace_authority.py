@@ -91,10 +91,10 @@ def test_workspace_quarantines_only_known_literal_systemdrive_cache(tmp_path: Pa
     assert authority.run_command(["git", "init"]).returncode == 0
     assert authority.run_command(["git", "config", "user.email", "test@example.com"]).returncode == 0
     assert authority.run_command(["git", "config", "user.name", "Test User"]).returncode == 0
-    web = repository / "src" / "apps" / "web"
+    web = repository / "web"
     web.mkdir(parents=True)
     (web / "package.json").write_text('{}\n', encoding="utf-8")
-    assert authority.run_command(["git", "add", "src/apps/web/package.json"]).returncode == 0
+    assert authority.run_command(["git", "add", "web/package.json"]).returncode == 0
     assert authority.run_command(["git", "commit", "-m", "base"]).returncode == 0
 
     contamination = web / "%SystemDrive%"
@@ -108,7 +108,7 @@ def test_workspace_quarantines_only_known_literal_systemdrive_cache(tmp_path: Pa
     records = authority.quarantine_generated_windows_cache_contamination()
 
     assert len(records) == 1
-    assert records[0]["path"] == "src/apps/web/%SystemDrive%/"
+    assert records[0]["path"] == "web/%SystemDrive%/"
     assert not contamination.exists()
     assert (Path(records[0]["quarantine_path"]) / "ProgramData" / "Microsoft" / "Windows" / "Caches" / "cversions.2.db").is_file()
     assert authority.git_status_paths() == []
@@ -119,10 +119,10 @@ def test_workspace_does_not_quarantine_ambiguous_literal_systemdrive_directory(t
     repository.mkdir()
     authority = WorkspaceAuthority(repository)
     assert authority.run_command(["git", "init"]).returncode == 0
-    web = repository / "src" / "apps" / "web"
+    web = repository / "web"
     web.mkdir(parents=True)
     (web / "package.json").write_text('{}\n', encoding="utf-8")
-    assert authority.run_command(["git", "add", "src/apps/web/package.json"]).returncode == 0
+    assert authority.run_command(["git", "add", "web/package.json"]).returncode == 0
     contamination = web / "%SystemDrive%"
     cache = contamination / "ProgramData" / "Microsoft" / "Windows" / "Caches"
     cache.mkdir(parents=True)

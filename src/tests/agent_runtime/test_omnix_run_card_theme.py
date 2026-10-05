@@ -10,7 +10,7 @@ def _repo_root() -> Path:
 def test_agent_run_card_uses_theme_tokens_instead_of_dark_only_surface() -> None:
     css = (
         _repo_root()
-        / "src/apps/web/src/features/assistant/chat/OmnixRunCard.css"
+        / "web/src/features/assistant/chat/OmnixRunCard.css"
     ).read_text(encoding="utf-8")
 
     assert "background: var(--omnix-panel-solid);" in css
@@ -23,7 +23,7 @@ def test_agent_run_card_uses_theme_tokens_instead_of_dark_only_surface() -> None
 def test_light_appearance_explicitly_covers_agent_run_card_nested_text() -> None:
     css = (
         _repo_root()
-        / "src/apps/web/src/appearance-overrides.css"
+        / "web/src/appearance-overrides.css"
     ).read_text(encoding="utf-8")
 
     assert ":root[data-omnix-appearance='light'] .assistant-runtime-card {" in css

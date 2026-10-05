@@ -3,15 +3,15 @@ name: New chat selection
 on:
   pull_request:
     paths:
-      - "src/apps/web/src/features/assistant/chat/newChatCoordinator.ts"
-      - "src/apps/web/src/features/assistant/chat/newChatCoordinator.test.ts"
-      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.ts"
-      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.test.ts"
-      - "src/apps/web/src/features/assistant/chat/chat-sidebar-manager.css"
-      - "src/apps/web/src/features/assistant/chat/sessionTools.ts"
-      - "src/apps/web/src/features/assistant/chat/sessionTools.test.ts"
-      - "src/apps/web/src/features/assistant/chat/live-chat-fullscreen-controller.ts"
-      - "src/apps/web/src/features/assistant/chat/live-chat-fullscreen-controller.test.ts"
+      - "web/src/features/assistant/chat/newChatCoordinator.ts"
+      - "web/src/features/assistant/chat/newChatCoordinator.test.ts"
+      - "web/src/features/assistant/chat/chat-sidebar-manager.ts"
+      - "web/src/features/assistant/chat/chat-sidebar-manager.test.ts"
+      - "web/src/features/assistant/chat/chat-sidebar-manager.css"
+      - "web/src/features/assistant/chat/sessionTools.ts"
+      - "web/src/features/assistant/chat/sessionTools.test.ts"
+      - "web/src/features/assistant/chat/live-chat-fullscreen-controller.ts"
+      - "web/src/features/assistant/chat/live-chat-fullscreen-controller.test.ts"
       - ".github/workflows/new-chat-selection.yml"
   workflow_dispatch:
 

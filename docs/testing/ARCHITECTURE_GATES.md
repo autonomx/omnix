@@ -32,9 +32,9 @@ python scripts/run_architecture_gates.py --group unit
 python scripts/run_architecture_gates.py --group postgresql
 python scripts/run_architecture_gates.py --group multiprocess
 python scripts/run_architecture_gates.py --group persistence-all
-npm --prefix src/apps/web run typecheck
-npm --prefix src/apps/web run api:check
-npm --prefix src/apps/web run test -- src/test/gateway-routing.test.ts src/features/assistant/chat src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
+npm --prefix web run typecheck
+npm --prefix web run api:check
+npm --prefix web run test -- src/test/gateway-routing.test.ts src/features/assistant/chat src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
 ```
 
 Set `OMNIX_TEST_DATABASE_URL` to a disposable database named `omnix_test`; the gate also sets the production database URL within the test subprocess. Under pytest-xdist (`-n 4`, `-n auto`) each worker copies that migrated database into `omnix_test_gw<N>` (through `OMNIX_TEST_ADMIN_DATABASE_URL`, which needs CREATEDB) and runs against its copy, so tests that reset tables or authority state cannot disturb each other; `OMNIX_TEST_DATABASE_PER_WORKER=0` turns this off. The suite also refuses document kinds without a registered shape (`OMNIX_DOCUMENT_SCHEMAS_STRICT=1`). `--local-disposable` selects only the documented local benchmark container at port 16432. Never point integration tests at an operator database. On Windows use `npm.cmd` if PowerShell blocks `npm.ps1`.

@@ -215,11 +215,11 @@ def test_a_retired_app_leaves_only_final_work_a_tombstone_and_two_edited_lines(w
 
     # Only the two registration lines change outside the module, plus the tombstone and generated contracts.
     changed = _status(worktree)
-    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"src/apps/web/src/features/{MODULE_ID}/",
+    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/",
                     f"src/app/persistence/retired/{PACKAGE}/")
-    generated = {"src/apps/web/src/api/generated/openapi.json", "src/apps/web/src/api/generated/route-owners.json"}
+    generated = {"web/src/api/generated/openapi.json", "web/src/api/generated/route-owners.json"}
     assert {path for path in changed if not path.startswith(module_paths)} - generated == {
-        "src/app/runtime/feature_catalog.py", "src/apps/web/src/app/modulesManifest.ts",
+        "src/app/runtime/feature_catalog.py", "web/src/app/modulesManifest.ts",
     }
     tombstone = worktree / "src" / "app" / "persistence" / "retired" / PACKAGE
     assert sorted(path.name for path in (tombstone / "migrations").iterdir())[0].endswith(f"_{PACKAGE}_initial.sql")

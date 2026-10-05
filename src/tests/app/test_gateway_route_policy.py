@@ -21,7 +21,7 @@ def test_generated_ingress_matches_policy():
     module = _renderer()
     for target, expected in module.rendered_files().items():
         assert target.read_text(encoding='utf-8') == expected, target
-    source = (ROOT / 'src/apps/web/gateway-routing.ts').read_text(encoding='utf-8')
+    source = (ROOT / 'web/gateway-routing.ts').read_text(encoding='utf-8')
     assert "import routingPolicy from '../../../deploy/gateway-route-policy.json'" in source
     assert 'proxy_next_upstream off;' in module.render(POLICY)
     assert 'proxy_buffering off;' in module.render(POLICY)

@@ -872,14 +872,14 @@ replace(
 
 # Web client supports durable clarification command.
 replace(
-    "src/apps/web/src/api/client.ts",
+    "web/src/api/client.ts",
     "commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',",
     "commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject' | 'clarify',",
 )
 
 # Run card: render RPC extension clarification as a first-class user interaction.
 replace(
-    "src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx",
+    "web/src/features/assistant/chat/OmnixRunCardCore.tsx",
     "import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';",
     "import { useState } from 'react';\nimport { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';",
 )
@@ -952,19 +952,19 @@ function ClarificationPrompt({
 }
 
 '''
-replace("src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx", insert_before, clarification_helpers + insert_before)
+replace("web/src/features/assistant/chat/OmnixRunCardCore.tsx", insert_before, clarification_helpers + insert_before)
 replace(
-    "src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx",
+    "web/src/features/assistant/chat/OmnixRunCardCore.tsx",
     "mutationFn: (input: { type: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; payload?: Record<string, unknown> }) =>",
     "mutationFn: (input: { type: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject' | 'clarify'; payload?: Record<string, unknown> }) =>",
 )
 replace(
-    "src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx",
+    "web/src/features/assistant/chat/OmnixRunCardCore.tsx",
     '  const runEvents = events.data ?? [];\n  const finalSummary =',
     '  const runEvents = events.data ?? [];\n  const clarification = pendingClarification(runEvents);\n  const finalSummary =',
 )
 replace(
-    "src/apps/web/src/features/assistant/chat/OmnixRunCardCore.tsx",
+    "web/src/features/assistant/chat/OmnixRunCardCore.tsx",
     '      <div className="assistant-runtime-actions">\n        {status === \'paused\'',
     '''      {clarification ? (
         <ClarificationPrompt

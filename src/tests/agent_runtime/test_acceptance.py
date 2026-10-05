@@ -170,7 +170,7 @@ def test_ui_task_accepts_web_diff_with_frontend_validation() -> None:
                 "tool_call_id": "test-1",
                 "tool": "powershell",
                 "args": {
-                    "command": "npx vitest run src/apps/web/src/features/assistant/chat/OmnixRunCard.test.tsx"
+                    "command": "npx vitest run web/src/features/assistant/chat/OmnixRunCard.test.tsx"
                 },
             },
         ),
@@ -187,8 +187,8 @@ def test_ui_task_accepts_web_diff_with_frontend_validation() -> None:
         metadata={
             "byte_size": 240,
             "modified_paths": [
-                "src/apps/web/src/features/assistant/chat/OmnixRunCard.css",
-                "src/apps/web/src/appearance-overrides.css",
+                "web/src/features/assistant/chat/OmnixRunCard.css",
+                "web/src/appearance-overrides.css",
             ],
             "baseline_conflicts": [],
         },
@@ -233,7 +233,7 @@ def test_ui_task_accepts_frontend_build_as_validation() -> None:
         name="workspace.diff",
         metadata={
             "byte_size": 120,
-            "modified_paths": ["src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"],
+            "modified_paths": ["web/src/features/assistant/chat/ChatIdentityModeControl.tsx"],
             "baseline_conflicts": [],
         },
     )
@@ -254,7 +254,7 @@ def _ui_rename_events(run_id: str, *, expected_label: str | None = None) -> list
                 "tool_call_id": "ui-test",
                 "tool": "powershell",
                 "args": {
-                    "command": "npx vitest run src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
+                    "command": "npx vitest run web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
                 },
             },
         ),
@@ -297,11 +297,11 @@ def test_exact_ui_label_request_rejects_wrong_text_change() -> None:
         name="workspace.diff",
         metadata={
             "byte_size": 180,
-            "modified_paths": ["src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx"],
+            "modified_paths": ["web/src/features/assistant/chat/ChatbotWorkspace.tsx"],
             "baseline_conflicts": [],
             "preview": (
-                "diff --git a/src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx "
-                "b/src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx\n"
+                "diff --git a/web/src/features/assistant/chat/ChatbotWorkspace.tsx "
+                "b/web/src/features/assistant/chat/ChatbotWorkspace.tsx\n"
                 "@@ -10,1 +10,1 @@\n"
                 "-<span>Omnix Assistant</span>\n"
                 "+<span>Personality</span>\n"
@@ -336,11 +336,11 @@ def test_exact_ui_label_request_accepts_requested_replacement() -> None:
         name="workspace.diff",
         metadata={
             "byte_size": 180,
-            "modified_paths": ["src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx"],
+            "modified_paths": ["web/src/features/assistant/chat/ChatbotWorkspace.tsx"],
             "baseline_conflicts": [],
             "preview": (
-                "diff --git a/src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx "
-                "b/src/apps/web/src/features/assistant/chat/ChatbotWorkspace.tsx\n"
+                "diff --git a/web/src/features/assistant/chat/ChatbotWorkspace.tsx "
+                "b/web/src/features/assistant/chat/ChatbotWorkspace.tsx\n"
                 "@@ -10,1 +10,1 @@\n"
                 "-<button>Profile</button>\n"
                 "+<button>Personality</button>\n"
@@ -377,11 +377,11 @@ def test_should_be_ui_label_request_rejects_case_inversion_and_accepts_target() 
             name="workspace.diff",
             metadata={
                 "byte_size": 180,
-                "modified_paths": ["src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"],
+                "modified_paths": ["web/src/features/assistant/chat/ChatIdentityModeControl.tsx"],
                 "baseline_conflicts": [],
                 "preview": (
-                    "diff --git a/src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx "
-                    "b/src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx\n"
+                    "diff --git a/web/src/features/assistant/chat/ChatIdentityModeControl.tsx "
+                    "b/web/src/features/assistant/chat/ChatIdentityModeControl.tsx\n"
                     "@@ -10,1 +10,1 @@\n"
                     f"-<span>{removed}</span>\n"
                     f"+<span>{added}</span>\n"
@@ -547,7 +547,7 @@ def test_ui_task_can_verify_an_already_satisfied_change_without_new_diff() -> No
                 "tool_call_id": "test-1",
                 "tool": "powershell",
                 "args": {
-                    "command": "npx vitest run src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
+                    "command": "npx vitest run web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
                 },
             },
         ),

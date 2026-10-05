@@ -3,7 +3,7 @@
 ## Versions
 
 Omnix uses semantic versioning. `pyproject.toml` holds the release version;
-`src/apps/web/package.json` and the root `package.json` carry the same number
+`web/package.json` and the root `package.json` carry the same number
 (a test checks they agree). A running process reports its build in `/ready`
 and `/api/diagnostics` as `build_revision`, from `OMNIX_SOFTWARE_REVISION`:
 set it to `<version>+<short commit>` (for example `0.2.0+3cff3630b`) when you
@@ -21,7 +21,7 @@ deploy.
 3. Migrations reviewed: each new one is `phase=expand` unless it is a planned
    contract step whose code change shipped in an earlier release; a
    non-transactional migration contains one statement.
-4. OpenAPI diff reviewed (`npm --prefix src/apps/web run api:check` shows the
+4. OpenAPI diff reviewed (`npm --prefix web run api:check` shows the
    intended changes only); clients that read removed fields are updated.
 5. Security scan green (dependency audit and secret scan in CI).
 6. Restore rehearsal green: the nightly `restore-rehearsal` job, and a manual

@@ -10,7 +10,7 @@ function resolveRepositoryRoot(): string {
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
   } catch {
-    return resolve(process.cwd(), '../../..');
+    return resolve(process.cwd(), '..');
   }
 }
 
@@ -31,19 +31,19 @@ const LIVE_VOICE_CRITICAL_PATHS = [
   'src/app/providers/nemotron_eou_streaming.py',
   'src/app/providers/vendor/faster_qwen3_tts/model.py',
   'src/app/providers/vendor/faster_qwen3_tts/streaming.py',
-  'src/apps/web/src/features/assistant/workspace/live-speculation-controller.ts',
-  'src/apps/web/src/features/assistant/workspace/live-tts-adaptive-buffer-controller.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-controller.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-turn-coordinator.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-pcm-session.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-pcm-worklet.ts',
-  'src/apps/web/src/features/assistant/workspace/worklets/live-voice-pcm-stream.worklet.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-natural-timing.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-performance-behavior.ts',
-  'src/apps/web/src/features/assistant/workspace/live-speech-delivery-plan.ts',
-  'src/apps/web/src/features/assistant/workspace/live-speech-synthesis-options.ts',
-  'src/apps/web/src/features/assistant/workspace/live-voice-cue-policy.ts',
+  'web/src/features/assistant/workspace/live-speculation-controller.ts',
+  'web/src/features/assistant/workspace/live-tts-adaptive-buffer-controller.ts',
+  'web/src/features/assistant/workspace/live-voice-controller.ts',
+  'web/src/features/assistant/workspace/live-voice-turn-coordinator.ts',
+  'web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts',
+  'web/src/features/assistant/workspace/live-voice-pcm-session.ts',
+  'web/src/features/assistant/workspace/live-voice-pcm-worklet.ts',
+  'web/src/features/assistant/workspace/worklets/live-voice-pcm-stream.worklet.ts',
+  'web/src/features/assistant/workspace/live-voice-natural-timing.ts',
+  'web/src/features/assistant/workspace/live-voice-performance-behavior.ts',
+  'web/src/features/assistant/workspace/live-speech-delivery-plan.ts',
+  'web/src/features/assistant/workspace/live-speech-synthesis-options.ts',
+  'web/src/features/assistant/workspace/live-voice-cue-policy.ts',
 ] as const;
 
 function reactDevtoolsStandalonePlugin(): PluginOption {

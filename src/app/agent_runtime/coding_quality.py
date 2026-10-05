@@ -312,7 +312,7 @@ def _add_requested_validations(objective_text, validation):
                 description="Run a frontend build or typecheck when the changed surface is web/UI code.",
                 covers=["user-objective", "derived-regression-safety"],
                 required=False,
-                command_hint="npm --prefix src/apps/web run build",
+                command_hint="npm --prefix web run build",
             )
         )
         validation.append(

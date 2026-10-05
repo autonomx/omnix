@@ -27,10 +27,10 @@ def test_phase0_decisions_and_evidence_contract_exist() -> None:
 def test_experimental_spike_is_not_production_routed() -> None:
     # The spike was deleted as unreachable (WP-9.10); trading routes only its workspace,
     # through its module manifest (WP-9.7).
-    manifest = (ROOT / "src/apps/web/src/features/trading/module.ts").read_text(encoding="utf-8")
-    registry = (ROOT / "src/apps/web/src/app/modulesManifest.ts").read_text(encoding="utf-8")
-    router = (ROOT / "src/apps/web/src/app/router.tsx").read_text(encoding="utf-8")
-    workspace = (ROOT / "src/apps/web/src/features/ModuleWorkspace.tsx").read_text(encoding="utf-8")
+    manifest = (ROOT / "web/src/features/trading/module.ts").read_text(encoding="utf-8")
+    registry = (ROOT / "web/src/app/modulesManifest.ts").read_text(encoding="utf-8")
+    router = (ROOT / "web/src/app/router.tsx").read_text(encoding="utf-8")
+    workspace = (ROOT / "web/src/features/ModuleWorkspace.tsx").read_text(encoding="utf-8")
     assert "id: 'trading'" in manifest
     assert "module.TradingWorkspace" in manifest
     assert "tradingModule" in registry
@@ -39,7 +39,7 @@ def test_experimental_spike_is_not_production_routed() -> None:
 
 
 def test_trading_sources_do_not_import_prototype_or_create_file_authority() -> None:
-    roots = (ROOT / "src/apps/web/src/features/trading", ROOT / "src/app/trading")
+    roots = (ROOT / "web/src/features/trading", ROOT / "src/app/trading")
     for trading_root in roots:
         for path in trading_root.rglob("*"):
             if not path.is_file():
