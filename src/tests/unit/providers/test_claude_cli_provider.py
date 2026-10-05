@@ -116,3 +116,20 @@ def test_the_provider_is_in_the_llm_catalog_and_needs_no_api_key() -> None:
     assert module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli")).requires_api_key() is False
     with pytest.raises(ValueError, match="effort"):
         module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli", extra_params={"effort": "turbo"}))
+
+
+def test_a_json_schema_goes_to_the_cli_and_its_structured_output_is_the_answer(provider) -> None:
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
+    _FakePopen.stdout_text = _events("Here is the JSON:", result={
+        "type": "result", "is_error": False, "result": '{"name": "Inn"}', "structured_output": {"name": "Inn"},
+        "stop_reason": "end_turn", "usage": {}})
+    response_format = {"type": "json_schema", "json_schema": {"name": "x", "schema": schema}}
+
+    response = provider.chat_completion([ChatMessage("user", "name it")], response_format=response_format)
+    streamed = list(provider.chat_completion([ChatMessage("user", "name it")], stream=True, response_format=response_format))
+
+    assert response.content == '{"name": "Inn"}'
+    assert [chunk.content for chunk in streamed] == ['{"name": "Inn"}']
+    command = _FakePopen.calls[0]["command"]
+    assert json.loads(command[command.index("--json-schema") + 1]) == schema
+    assert "JSON Schema" in _FakePopen.calls[0]["system"]

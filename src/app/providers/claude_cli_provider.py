@@ -6,7 +6,8 @@ login or its own configuration). Each call runs one ``claude -p`` process in an
 empty working directory, with every tool, setting source, MCP server, slash
 command and session file disabled, so the model answers as a plain LLM with the
 system prompt Omnix supplies. Output arrives as ``stream-json`` events, which
-serve both streaming and single responses.
+serve both streaming and single responses. A JSON Schema response format is
+passed to the CLI's own ``--json-schema`` validation as well as to the prompt.
 """
 from __future__ import annotations
 
@@ -43,6 +44,8 @@ DEFAULT_CLAUDE_PATH = "claude"
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 MODEL_ALIASES = ("sonnet", "opus", "haiku", "fable")
 _ROLE_LABELS = {"user": "USER", "assistant": "ASSISTANT", "tool": "TOOL"}
+# Windows limits a command line to 32,767 characters; a larger schema stays in the prompt only.
+_MAX_SCHEMA_ARGUMENT = 16_000
 
 
 class ClaudeCliTimeout(ProviderError):
@@ -85,6 +88,12 @@ def resolve_claude_executable(claude_path: str) -> str | None:
             if candidate.is_file():
                 return str(candidate.resolve())
     return None
+
+
+def _response_schema(response_format: Any) -> dict[str, Any] | None:
+    from .chatgpt_codex_provider import _schema_from_response_format
+
+    return _schema_from_response_format(response_format)
 
 
 def _structured_instruction(response_format: Any) -> str:
@@ -222,7 +231,8 @@ class ClaudeCliProvider(BaseProvider):
             provider=self.provider_name, method="chat_completion", model=selected_model,
             messages=list(messages), extra={"stream": bool(stream)},
         )
-        events = self._run(selected_model, system, prompt, timeout=timeout, owner=current_turn_owner())
+        schema = _response_schema(kwargs.get("response_format"))
+        events = self._run(selected_model, system, prompt, timeout=timeout, owner=current_turn_owner(), schema=schema)
         if stream:
             def traced() -> Iterator[ChatResponse]:
                 try:
@@ -253,7 +263,7 @@ class ClaudeCliProvider(BaseProvider):
         provider_call_exit(trace_row, ok=True)
         return response
 
-    def _command(self, executable: str, model: str, system_file: Path) -> list[str]:
+    def _command(self, executable: str, model: str, system_file: Path, schema: dict[str, Any] | None = None) -> list[str]:
         command = [
             executable, "-p",
             "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -267,10 +277,21 @@ class ClaudeCliProvider(BaseProvider):
         ]
         if self.effort:
             command += ["--effort", self.effort]
+        if schema is not None:
+            encoded = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+            if len(encoded) <= _MAX_SCHEMA_ARGUMENT:
+                command += ["--json-schema", encoded]
         return command
 
-    def _run(self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None) -> Iterator[ChatResponse]:
-        """Run one ``claude -p`` call; yield text deltas, then one final chunk with the result."""
+    def _run(
+        self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None,
+        schema: dict[str, Any] | None = None,
+    ) -> Iterator[ChatResponse]:
+        """Run one ``claude -p`` call; yield text deltas, then one final chunk with the result.
+
+        A schema-bound call yields only the final JSON: its text deltas may be
+        commentary around the structured output.
+        """
         executable = resolve_claude_executable(self.claude_path)
         if not executable:
             raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
@@ -286,7 +307,7 @@ class ClaudeCliProvider(BaseProvider):
             if os.name == "nt":
                 kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             try:
-                process = subprocess.Popen(self._command(executable, model, system_file), **kwargs)
+                process = subprocess.Popen(self._command(executable, model, system_file, schema), **kwargs)
             except OSError as exc:
                 raise ConnectionError(f"Claude CLI could not start: {exc}") from exc
             with self._processes_lock:
@@ -320,7 +341,7 @@ class ClaudeCliProvider(BaseProvider):
                         delta = inner.get("delta") if isinstance(inner.get("delta"), dict) else {}
                         if inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
                             text = str(delta.get("text") or "")
-                            if text:
+                            if text and schema is None:
                                 streamed = True
                                 yield ChatResponse(content=text, model=model)
                     elif event.get("type") == "system" and event.get("subtype") == "init":
@@ -339,8 +360,13 @@ class ClaudeCliProvider(BaseProvider):
             if result.get("is_error"):
                 raise ProviderError(f"Claude CLI error: {str(result.get('result') or result.get('subtype'))[:500]}")
             usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+            structured = result.get("structured_output")
+            if structured is not None:
+                text = json.dumps(structured, ensure_ascii=False)
+            else:
+                text = "" if streamed else str(result.get("result") or "")
             yield ChatResponse(
-                content="" if streamed else str(result.get("result") or ""),
+                content=text,
                 model=str(resolved),
                 usage={
                     "prompt_tokens": int(usage.get("input_tokens") or 0),

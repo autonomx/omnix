@@ -82,7 +82,7 @@ CATALOG: tuple[ProviderSpec, ...] = (
         "chatgpt_codex", "chatgpt_codex_provider", "ChatGPTCodexProvider",
         STREAMING, TOOLS, CONVERSATION_SESSIONS, CLOSED_OBJECT_SCHEMA, DESKTOP_VISION,
     ),
-    _llm("claude_cli", "claude_cli_provider", "ClaudeCliProvider", STREAMING, MODELS),
+    _llm("claude_cli", "claude_cli_provider", "ClaudeCliProvider", STREAMING, MODELS, NATIVE_JSON_SCHEMA),
     _llm("llamacpp", "llamacpp_provider", "LlamaCppProvider", STREAMING, MODELS, LOCAL_DEVICE),
     _llm(
         "lmstudio", "lmstudio_provider", "LMStudioProvider",
