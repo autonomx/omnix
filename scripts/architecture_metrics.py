@@ -854,6 +854,17 @@ def _is_docstring(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
 
 
 def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
+    return unreachable_python(analysis, "app.apps.rpg.")
+
+
+def unreachable_python(analysis: SourceAnalysis, prefix: str = "app.") -> list[str]:
+    """Production modules under ``prefix`` that no entry point reaches (WP-8.6 reachability).
+
+    Roots: the production app and worker, ``__main__`` modules, each module's
+    declarations (read by convention), every module a script imports, and every
+    ``module`` or ``module:attribute`` string in production code (the feature
+    catalog, ``import_module`` targets). Edges include lazy, relative and star imports.
+    """
     graph = analysis.import_edges()
     roots = {name for name in graph if name in {"app.composition.production", "app.composition.worker", "launch", "main"} or analysis.modules[name].endswith("/__main__.py")}
     # The kernel reads a module's declarations by convention, as it finds migrations (PA-2.2).
@@ -874,7 +885,7 @@ def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
                     if target_module in graph:
                         roots.add(target_module)
     reached = _reach(graph, roots)
-    return sorted(analysis.modules[name] for name in graph if name.startswith("app.apps.rpg.") and name not in reached and not is_test(analysis.modules[name]))
+    return sorted(analysis.modules[name] for name in graph if name.startswith(prefix) and name not in reached and not is_test(analysis.modules[name]))
 
 
 def _reach(graph: dict[str, set[str]], roots: set[str]) -> set[str]:

@@ -6,6 +6,17 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Mapping
 
+from .dialogue_quality_session import (
+    npc_profile_by_id as _npc_profile_by_id,
+    npc_profile_by_name as _npc_profile_by_name,
+    referenced_profiles_from_session as _referenced_profiles_from_session,
+    present_npc_ids as _present_npc_ids,
+    recent_interactions as _recent_interactions,
+    location_name as _location_name,
+    normalize as _normalize,
+    as_dict as _dict,
+    as_text as _text,
+)
 from .visible_response import build_visible_response
 
 DIALOGUE_QUALITY_VERSION = "rpg_dialogue_quality_v2"
@@ -950,97 +961,6 @@ def _grounding_packet(result: dict[str, Any]) -> dict[str, Any]:
     return _dict(diagnostics.get("turn_grounding_packet"))
 
 
-def _npc_profile_by_id(session: dict[str, Any], npc_id: str) -> dict[str, Any]:
-    simulation = _dict(session.get("simulation_state"))
-    runtime = _dict(session.get("runtime_state"))
-    for container in (
-        _dict(simulation.get("npc_index")),
-        _dict(simulation.get("npcs")),
-        _dict(runtime.get("npc_index")),
-        _dict(_dict(simulation.get("social_state")).get("profiles")),
-        _dict(_dict(runtime.get("social_state")).get("profiles")),
-    ):
-        profile = container.get(npc_id)
-        if isinstance(profile, dict):
-            return deepcopy(profile)
-    return {}
-
-
-def _npc_profile_by_name(session: dict[str, Any], name: str) -> dict[str, Any]:
-    normalized = _normalize(name)
-    if not normalized:
-        return {}
-    for profile in _all_npc_profiles(session):
-        if normalized in {
-            _normalize(profile.get("name")),
-            _normalize(profile.get("npc_id")),
-            _normalize(profile.get("id")),
-        }:
-            return profile
-    return {}
-
-
-def _referenced_profiles_from_session(
-    session: dict[str, Any],
-    player_input: str,
-) -> list[dict[str, Any]]:
-    normalized_input = _normalize(player_input)
-    present_ids = _present_npc_ids(session)
-    profiles = []
-    for profile in _all_npc_profiles(session):
-        npc_id = _text(profile.get("npc_id") or profile.get("id"))
-        name = _text(profile.get("name"))
-        if (
-            npc_id in present_ids
-            and name
-            and re.search(rf"\b{re.escape(_normalize(name))}\b", normalized_input)
-        ):
-            profiles.append(profile)
-    return profiles[:3]
-
-
-def _all_npc_profiles(session: dict[str, Any]) -> list[dict[str, Any]]:
-    simulation = _dict(session.get("simulation_state"))
-    runtime = _dict(session.get("runtime_state"))
-    profiles: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for container in (
-        _dict(simulation.get("npc_index")),
-        _dict(simulation.get("npcs")),
-        _dict(runtime.get("npc_index")),
-        _dict(_dict(simulation.get("social_state")).get("profiles")),
-        _dict(_dict(runtime.get("social_state")).get("profiles")),
-    ):
-        for key, value in container.items():
-            if not isinstance(value, dict):
-                continue
-            profile = {"id": key, **value}
-            npc_id = _text(profile.get("npc_id") or profile.get("id"))
-            if npc_id and npc_id not in seen:
-                seen.add(npc_id)
-                profiles.append(profile)
-    return profiles
-
-
-def _present_npc_ids(session: dict[str, Any]) -> set[str]:
-    simulation = _dict(session.get("simulation_state"))
-    runtime = _dict(session.get("runtime_state"))
-    scene = _dict(runtime.get("current_scene")) or _dict(runtime.get("scene")) or _dict(simulation.get("scene"))
-    player = _dict(simulation.get("player_state"))
-    values = [
-        *list(scene.get("present_npc_ids") or []),
-        *list(player.get("nearby_npc_ids") or []),
-        *list(runtime.get("present_npc_ids") or []),
-        *list(runtime.get("nearby_npc_ids") or []),
-    ]
-    for row in list(scene.get("nearby_npcs") or []) + list(scene.get("npcs") or []):
-        if isinstance(row, dict):
-            values.append(row.get("npc_id") or row.get("id"))
-        elif isinstance(row, str):
-            values.append(row)
-    return {_text(value) for value in values if _text(value)}
-
-
 def _is_nonstateful_direct_dialogue(result: dict[str, Any]) -> bool:
     sources = (result, _dict(result.get("result")), _dict(result.get("resolved_result")))
     stateful = _first_value(sources, "stateful")
@@ -1083,14 +1003,6 @@ def _addressed_profile(
         if target_ids & ids:
             return deepcopy(profile)
     return {"id": speaker_id, "npc_id": speaker_id, "name": speaker}
-
-
-def _recent_interactions(session: dict[str, Any]) -> list[dict[str, Any]]:
-    runtime = _dict(session.get("runtime_state"))
-    value = runtime.get("recent_interactions")
-    if not isinstance(value, list):
-        value = _dict(runtime.get("interaction_timeline")).get("events")
-    return [item for item in (value or []) if isinstance(item, dict)][-12:]
 
 
 def _private_leak_terms(profile: dict[str, Any], text: str) -> list[str]:
@@ -1175,13 +1087,6 @@ def _topic(text: str) -> str:
     return "general"
 
 
-def _location_name(session: dict[str, Any]) -> str:
-    state = _dict(session.get("state"))
-    simulation = _dict(session.get("simulation_state"))
-    scene = _dict(state.get("scene")) or _dict(simulation.get("scene"))
-    return _text(scene.get("location_name") or scene.get("location") or state.get("location"))
-
-
 def _public_profile_sentence(profile: dict[str, Any]) -> str:
     public = _text(_dict(profile.get("biography")).get("public"))
     return public.split(".")[0].strip() + "." if public else ""
@@ -1237,15 +1142,3 @@ def _is_player_restatement(line: str, player_input: str) -> bool:
 
 def _word_count(text: str) -> int:
     return len(re.findall(r"\b[\w'-]+\b", text))
-
-
-def _normalize(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", _text(value).casefold()).strip()
-
-
-def _dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""

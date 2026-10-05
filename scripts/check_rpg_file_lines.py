@@ -43,19 +43,9 @@ IGNORED_DIR_NAMES = {
     "node_modules",
 }
 
-# Existing RPG files above the shared budget may only shrink; new files receive
-# no exception. The repository-wide architecture metrics track this debt too.
-LINE_DEBT_LIMITS = {
-    "src/app/apps/rpg/ai/grounding_validator.py": 1017,
-    "src/app/apps/rpg/presentation/dialogue_quality.py": 1251,
-    "src/app/apps/rpg/response_generation/production_pipeline.py": 1182,
-    "src/app/apps/rpg/session/genesis/campaign_lore_store.py": 1093,
-    "src/app/apps/rpg/session/genesis/runtime_lore_materialization.py": 1049,
-    "src/app/apps/rpg/worlds/world_images.py": 1126,
-    # Single-pass generation landed as one safety-coherent cutover. Keep this
-    # ceiling tight so follow-up extraction can only reduce the coordinator.
-    "src/app/apps/rpg/worlds/generation_coordinator.py": 1259,
-}
+# Files above the shared budget that may only shrink. Empty since WP-8.6: every
+# RPG file is within 1,200 lines, and a new exception needs a DECISIONS entry.
+LINE_DEBT_LIMITS: dict[str, int] = {}
 
 
 @dataclass(frozen=True)

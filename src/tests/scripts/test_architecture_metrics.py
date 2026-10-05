@@ -730,3 +730,16 @@ def test_tracked_scope_excludes_untracked_vendor_generated_and_deleted_files(tmp
     (tmp_path / "src/app/untracked.py").write_text("print('untracked')")
     (tmp_path / "src/app/deleted.py").unlink()
     assert tracked_sources(tmp_path) == {"src/app/a.py": "print('tracked')", WEB + "features/trading/api/gateway.ts": "export {};"}
+
+
+def test_reachability_reports_any_package_from_the_same_roots():
+    # scripts/reachability_report.py (WP-8.6) reads this function for every package.
+    sources = {
+        APP + "composition/production.py": "import app.apps.story.live\nFEATURE = 'app.apps.trading.feature:FEATURE'",
+        APP + "apps/story/live.py": "", APP + "apps/story/dead.py": "",
+        APP + "apps/trading/feature.py": "from . import used", APP + "apps/trading/used.py": "",
+        APP + "apps/trading/unused.py": "",
+    }
+    analysis = metrics.SourceAnalysis(sources, config)
+    assert metrics.unreachable_python(analysis, "app.apps.") == [APP + "apps/story/dead.py", APP + "apps/trading/unused.py"]
+    assert metrics.unreachable_python(analysis, "app.apps.story.") == [APP + "apps/story/dead.py"]

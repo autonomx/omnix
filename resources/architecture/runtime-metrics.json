@@ -686,6 +686,7 @@
         "app.apps.rpg.worlds.generation_naming_portfolio",
         "app.apps.rpg.worlds.generation_network_constraints",
         "app.apps.rpg.worlds.generation_ordinary_life",
+        "app.apps.rpg.worlds.generation_payloads",
         "app.apps.rpg.worlds.generation_profile_dossiers",
         "app.apps.rpg.worlds.generation_profile_references",
         "app.apps.rpg.worlds.generation_profile_release_contracts",
@@ -2136,7 +2137,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8345,
+      "collected_tests": 8346,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2961,14 +2962,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T17:43:14.345498+00:00",
+  "measured_at": "2026-10-05T18:26:30.463275+00:00",
   "metrics": {
-    "boot_imported_modules": 2081,
+    "boot_imported_modules": 2082,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "fe214383886721dcb3fe473fa2d6c5fad10c7cc2b41525264636a658de35b8d4"
+  "source_digest": "e44383b7984ecc593fa6941cdd772ce44840bdd5b48d96fb8be252d4df2d1754"
 }
