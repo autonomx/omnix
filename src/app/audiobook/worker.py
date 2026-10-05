@@ -6,9 +6,10 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import LocalBlobStore
+from app.persistence.blob_store import default_blob_store
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -31,6 +32,7 @@ from .annotation import (
 from .classifier import local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 
 
 _LOG = logging.getLogger(__name__)
@@ -53,24 +55,25 @@ def _pause_analysis_if_requested(
         return False
     if not bool((current.get("metadata") or {}).get("pause_requested")):
         return False
-    row = work.connection.execute(
-        """UPDATE omnix_jobs
-              SET status = 'paused', lease_owner = NULL, lease_token = NULL,
-                  lease_expires_at = NULL,
-                  metadata = (metadata - 'pause_requested') || %s::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE workspace_id = %s AND id = %s
-              AND lease_owner = %s AND lease_token = %s
-              AND status IN ('leased', 'running')
-        RETURNING id""",
-        ('{"paused":true}', context.workspace_id, job_id, worker_id, lease_token),
-    ).fetchone()
-    if row is None:
+    updated = work.jobs.patch_job(
+        context,
+        job_id=job_id,
+        expected_statuses=("leased", "running"),
+        lease_owner=worker_id,
+        lease_token=lease_token,
+        status="paused",
+        metadata_set={"paused": True},
+        metadata_remove=("pause_requested",),
+        clear_lease=True,
+    )
+    if updated is None:
         return False
-    work.connection.execute(
-        """UPDATE omnix_job_attempts SET status = 'paused'
-            WHERE job_id = %s AND lease_token = %s AND status IN ('leased', 'running')""",
-        (job_id, lease_token),
+    work.jobs.update_attempt_status(
+        context,
+        job_id=job_id,
+        lease_token=lease_token,
+        expected_statuses=("leased", "running"),
+        status="paused",
     )
     return True
 
@@ -134,13 +137,13 @@ def _reuse_existing_dialogue_segmentation(
 
 
 def run_ingest_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.ingest"], lease_seconds=3600,
+            job_types=["audiobook.ingest"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -149,6 +152,15 @@ def run_ingest_once(
             context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _ingest_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _ingest_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id = job["id"]
     token = job["lease_token"]
     payload = job["input_payload"]
@@ -165,16 +177,11 @@ def run_ingest_once(
                 return True
             work.rollback()
         with unit_of_work(database) as work:
-            row = work.connection.execute(
-                """
-                SELECT storage_key, checksum_sha256 FROM omnix_assets
-                 WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'
-                """, (context.workspace_id, payload["source_asset_id"]),
-            ).fetchone()
+            row = work.assets.asset_fields(context, payload["source_asset_id"], active_only=True)
             work.rollback()
         if row is None:
             raise UnsupportedSource("source asset is missing")
-        content = blobs.read_bytes(str(row[0]), expected_checksum=str(row[1]))
+        content = blobs.read_bytes(str(row["storage_key"]), expected_checksum=str(row["checksum_sha256"]))
         revision = extract_source(
             project_id=payload["project_id"], content=content,
             source_format=payload["source_format"],
@@ -243,7 +250,7 @@ def run_ingest_once(
         with unit_of_work(database) as work:
             work.jobs.renew_lease(
                 context, job_id=job_id, worker_id=worker_id,
-                lease_token=token, lease_seconds=3600,
+                lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
             )
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested" or not PostgresAudiobookRepository(
@@ -299,7 +306,7 @@ def run_analyze_once(
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.analyze"], lease_seconds=3600,
+            job_types=["audiobook.analyze"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -308,6 +315,15 @@ def run_analyze_once(
             context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _analyze_claimed(database, context, job, worker_id=worker_id)
+
+
+def _analyze_claimed(
+    database: PostgresDatabase, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     force_reclassify = bool(payload.get("force_reclassify"))
@@ -445,7 +461,7 @@ def run_analyze_once(
                     raise _AnalysisPaused
                 renewal.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
-                    lease_token=token, lease_seconds=3600,
+                    lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                 )
                 window_number = context_payload.get("window_number")
                 window_count = context_payload.get("window_count")
@@ -538,7 +554,7 @@ def run_analyze_once(
                     completed_spans += int(span_count)
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     work.jobs.update_progress(
                         context, job_id=job_id, worker_id=worker_id, lease_token=token,
@@ -677,7 +693,7 @@ def run_analyze_once(
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
-                    lease_token=token, lease_seconds=3600,
+                    lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                 )
                 work.jobs.update_progress(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,
@@ -756,8 +772,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     database = default_database()
     ensure_postgresql_runtime_ready(database)
-    context = bootstrap_local_tenant(database)
-    blobs = LocalBlobStore()
+    context = current_tenant()
+    blobs = default_blob_store()
     worker_id = f"audiobook:ingest:{uuid4().hex}"
     while True:
         try:

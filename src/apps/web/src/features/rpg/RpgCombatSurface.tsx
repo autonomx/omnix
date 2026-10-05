@@ -17,7 +17,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
         <span className={combat.active ? 'rpg-combat-status rpg-combat-status-active' : 'rpg-combat-status'}>{combat.statusLabel}</span>
       </div>
 
-      <div className="rpg-combat-overview" aria-label="Combat round and active actor">
+      <div role="group" className="rpg-combat-overview" aria-label="Combat round and active actor">
         <article>
           <span>Round</span>
           <strong>{combat.roundLabel}</strong>
@@ -32,7 +32,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
         </article>
       </div>
 
-      <div className="rpg-initiative-strip" aria-label="Initiative queue">
+      <div role="group" className="rpg-initiative-strip" aria-label="Initiative queue">
         <strong>Initiative</strong>
         {combat.initiativeQueue.length ? (
           <ol>
@@ -45,7 +45,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
         )}
       </div>
 
-      <div className="rpg-combat-grid" aria-label="Combatants">
+      <div role="group" className="rpg-combat-grid" aria-label="Combatants">
         {combat.combatants.length ? (
           combat.combatants.map((combatant) => (
             <article className={`rpg-combatant-card rpg-combatant-${combatant.tone}`} key={`${combatant.tone}:${combatant.name}`}>
@@ -53,7 +53,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
                 <strong>{combatant.name}</strong>
                 <small>{combatant.role}</small>
               </div>
-              <span className="rpg-party-health" aria-label={`${combatant.name} health`}>
+              <span role="img" className="rpg-party-health" aria-label={`${combatant.name} health`}>
                 <span style={{ width: `${combatant.hpPercent}%` }} />
               </span>
               <small>
@@ -69,7 +69,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
         )}
       </div>
 
-      <div className="rpg-combat-actions" aria-label="Combat actions">
+      <div role="group" className="rpg-combat-actions" aria-label="Combat actions">
         {combat.actions.map((action) => (
           <button
             className="rpg-combat-action-button"
@@ -85,7 +85,7 @@ export function RpgCombatSurface({ combat, onSelectCommand }: RpgCombatSurfacePr
         ))}
       </div>
 
-      <div className="rpg-combat-deltas" aria-label="Combat result deltas">
+      <div role="group" className="rpg-combat-deltas" aria-label="Combat result deltas">
         <strong>Result deltas</strong>
         <ul>
           {combat.resultDeltas.map((delta) => (

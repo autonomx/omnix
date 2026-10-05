@@ -17,5 +17,3 @@ class StoryState:
     def add_event(self, event):
         self.major_events.append(event)
 
-    def shift_phase(self, new_phase):
-        self.phase = new_phase

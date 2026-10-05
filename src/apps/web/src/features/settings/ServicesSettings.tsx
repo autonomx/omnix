@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import { SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
-export type ServiceStatusPayload = {
-  ok?: boolean;
-  enabled?: boolean;
-  mode?: string;
-  source?: string;
-  error?: string;
-  [key: string]: unknown;
-};
+export type HermesStatus = components['schemas']['HermesStatusResponse'];
 
-export function summarizeServiceStatus(status: ServiceStatusPayload | undefined): string {
+export function summarizeServiceStatus(status: HermesStatus | undefined): string {
   if (!status) return 'Unavailable';
   if (status.error) return 'Error';
-  if (status.enabled === false) return 'Disabled';
-  if (status.ok === true) return 'Ready';
-  return typeof status.mode === 'string' && status.mode ? status.mode : 'Reported';
+  if (!status.enabled) return 'Disabled';
+  if (status.reachable) return 'Ready';
+  return status.state || 'Reported';
 }
 
 const ownershipRows = [
@@ -27,14 +23,14 @@ const ownershipRows = [
 
 export function ServicesSettings() {
   const [payload, setPayload] = useState<ProviderFacadePayload>();
-  const [service, setService] = useState<ServiceStatusPayload>();
+  const [service, setService] = useState<HermesStatus>();
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const refresh = useCallback(async () => {
     setLoading(true);
     const [providers, status] = await Promise.allSettled([
       omnixApiClient.listProviders(),
-      omnixApiClient.get<ServiceStatusPayload>('/api/hermes/status'),
+      unwrap(api.GET('/api/hermes/status')),
     ]);
     if (providers.status === 'fulfilled') setPayload(providers.value);
     if (status.status === 'fulfilled') setService(status.value);
@@ -54,8 +50,8 @@ export function ServicesSettings() {
         {connected.length ? <div className="settings-status-list">{connected.map((provider) => <SettingsStatusRow key={provider.id} label={provider.label} value={provider.status} tone="ready" />)}</div> : <div className="settings-planned-state"><strong>No configured services reported</strong><p>Use the owning provider module to configure a service.</p></div>}
       </SettingsSection>
       <SettingsSection title="Hermes diagnostics" description="Settings reads the existing diagnostics contract.">
-        <SettingsStatusRow label="Hermes" value={summarizeServiceStatus(service)} tone={service?.ok ? 'ready' : 'idle'} />
-        <dl className="settings-detail-grid"><div><dt>Mode</dt><dd>{String(service?.mode ?? 'Not reported')}</dd></div><div><dt>Source</dt><dd>{String(service?.source ?? 'Hermes diagnostics API')}</dd></div></dl>
+        <SettingsStatusRow label="Hermes" value={summarizeServiceStatus(service)} tone={service?.enabled && service.reachable ? 'ready' : 'idle'} />
+        <dl className="settings-detail-grid"><div><dt>State</dt><dd>{service?.message || service?.state || 'Not reported'}</dd></div><div><dt>Endpoint</dt><dd>{service?.base_url ?? 'Not reported'}</dd></div></dl>
         {message ? <p className="settings-inline-status" role="status">{message}</p> : null}
       </SettingsSection>
     </div>

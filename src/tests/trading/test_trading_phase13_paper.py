@@ -224,7 +224,7 @@ class FakePaperRepository:
             raise ValueError("paper_account_not_found")
         return self.current
 
-    def place_order(self, account_id, request):
+    def place_order(self, account_id, request, *, authority):
         value = PaperOrder(account_id=account_id, **request.model_dump())
         self.current = self.current.model_copy(
             update={"open_orders": [*self.current.open_orders, value]}
@@ -401,7 +401,7 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
 
 
 def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> None:
-    migration = Path("src/app/persistence/migrations/0023_trading_paper.sql").read_text()
+    migration = Path("src/app/trading/migrations/0023_trading_paper.sql").read_text()
     for table in (
         "omnix_trading_paper_accounts",
         "omnix_trading_paper_balances",
@@ -414,7 +414,7 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     assert "idempotency_key" in migration
 
     protection_migration = Path(
-        "src/app/persistence/migrations/0039_trading_paper_protections.sql"
+        "src/app/trading/migrations/0039_trading_paper_protections.sql"
     ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in protection_migration
 
@@ -434,6 +434,6 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     assert "paper-reference" not in monitor
     assert "server_authoritative_protection" in monitor
 
-    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    gateway = Path("src/app/trading/route_registration.py").read_text()
     assert "create_trading_paper_router" in gateway
-    assert "register_trading_paper_monitor" in gateway
+    assert "create_trading_paper_monitor_task" in gateway

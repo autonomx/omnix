@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type {
   TradingScannerDefinition,
+  TradingScannerDefinitionInput,
   TradingScannerMetric,
   TradingScannerOperator,
   TradingScannerResult,
   TradingScannerRun,
 } from './scannerTypes';
 import { tradingScannerApi } from './tradingScannerApi';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
 
@@ -20,7 +22,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   const [metric, setMetric] = useState<TradingScannerMetric>('percent_change');
   const [operator, setOperator] = useState<TradingScannerOperator>('gte');
   const [threshold, setThreshold] = useState('1');
-  const [interval, setInterval] = useState('1d');
+  const [interval, setScanInterval] = useState('1d');
   const [historyLimit, setHistoryLimit] = useState('100');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
 
@@ -45,8 +47,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   useEffect(() => { void refresh(); }, []);
   useEffect(() => {
     if (!runs.some((run) => !terminalStatuses.has(run.status))) return;
-    const timer = window.setInterval(() => void refresh(), 2_000);
-    return () => window.clearInterval(timer);
+    return startPolling(refresh, POLL_INTERVALS_MS.scanner);
   }, [runs]);
 
   const available = useMemo(() => instruments.slice(0, 200), [instruments]);
@@ -58,7 +59,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
       return;
     }
     const scannerId = `scanner-${Date.now()}`;
-    const definition: TradingScannerDefinition = {
+    const definition: TradingScannerDefinitionInput = {
       scanner_id: scannerId,
       name,
       instrument_ids: selectedIds,
@@ -109,7 +110,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
         <label>Metric<select value={metric} onChange={(event) => setMetric(event.target.value as TradingScannerMetric)}>{['close', 'percent_change', 'volume', 'sma', 'ema', 'rsi', 'atr'].map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>Operator<select value={operator} onChange={(event) => setOperator(event.target.value as TradingScannerOperator)}>{['gt', 'gte', 'lt', 'lte'].map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>Threshold<input inputMode="decimal" value={threshold} onChange={(event) => setThreshold(event.target.value)} /></label>
-        <label>Interval<select value={interval} onChange={(event) => setInterval(event.target.value)}>{['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label>Interval<select value={interval} onChange={(event) => setScanInterval(event.target.value)}>{['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>History bars<input inputMode="numeric" value={historyLimit} onChange={(event) => setHistoryLimit(event.target.value)} /></label>
       </div>
       <fieldset className="trading-scanner-universe">

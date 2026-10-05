@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.trading.gapper_dataset import GapperCandidate
 from app.trading.models import MarketBar
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import GapPullbackConfig
 from app.trading.strategy_monitor import _trade_attempt_id
 
@@ -106,7 +106,7 @@ def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> 
     arm = entry_block.index(
         "await asyncio.to_thread(strategy_repository.save_protection, protection)"
     )
-    submit = entry_block.index("paper_repository.place_order")
+    submit = entry_block.index("paper_repository.place_entry")
 
     assert arm < submit
     assert 'event_type="risk_decision"' in source
@@ -117,7 +117,7 @@ def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> 
 
 def test_trade_attempt_migration_versions_repeat_symbol_correlation_atomically() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0046_trading_trade_attempt_correlation.sql"
+        "src/app/trading/migrations/0046_trading_trade_attempt_correlation.sql"
     ).read_text()
     for token in (
         "trade_attempt_id",

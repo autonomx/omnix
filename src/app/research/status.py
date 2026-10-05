@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from .compatibility import ResearchCompatibilityStatus, research_compatibility_status
+from app.conversation.research_compatibility import ResearchCompatibilityStatus, research_compatibility_status
 from .policy import privacy_contract
 from .provider_chain import provider_credential_configured, provider_requires_credential
 from .quick_search import provider_coverage

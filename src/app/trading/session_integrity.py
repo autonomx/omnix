@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from zoneinfo import ZoneInfo
 
 from .models import MarketBar
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 def session_aware_gap_indices(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[int]:

@@ -562,27 +562,7 @@ class PostgresTaskGraphRepository:
         user_instruction: str,
         reusable_node_ids: set[str],
     ) -> TaskGraphRunSnapshot:
-        locked = self.connection.execute(
-            """
-            SELECT graph_revision, status
-              FROM omnix_task_graph_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (self.context.workspace_id, run_id),
-        ).fetchone()
-        if locked is None:
-            raise KeyError(run_id)
-        current_status = str(locked[1])
-        if current_status in {"completed", "failed", "cancelled"}:
-            raise TaskGraphConcurrencyError(
-                f"cannot revise terminal task graph:{current_status}"
-            )
-        expected = int(locked[0]) + 1
-        if graph.revision != expected:
-            raise TaskGraphConcurrencyError(
-                f"graph revision must advance exactly once: expected {expected}"
-            )
+        self._lock_revisable_run(run_id, graph)
 
         existing_rows = self.connection.execute(
             """
@@ -633,48 +613,7 @@ class PostgresTaskGraphRepository:
                 (self.context.workspace_id, run_id, list(removed)),
             )
 
-        for node in graph.nodes:
-            fingerprint = task_node_fingerprint(node)
-            row = self.connection.execute(
-                """
-                SELECT status, fingerprint
-                  FROM omnix_task_graph_node_runs
-                 WHERE workspace_id = %s AND run_id = %s AND node_id = %s
-                """,
-                (self.context.workspace_id, run_id, node.id),
-            ).fetchone()
-            if row is None:
-                self.connection.execute(
-                    """
-                    INSERT INTO omnix_task_graph_node_runs (
-                        workspace_id, run_id, node_id, status, fingerprint
-                    ) VALUES (%s, %s, %s, 'pending', %s)
-                    """,
-                    (self.context.workspace_id, run_id, node.id, fingerprint),
-                )
-                continue
-            if node.id in reusable_node_ids and str(row[1]) == fingerprint:
-                continue
-            self.connection.execute(
-                """
-                UPDATE omnix_task_graph_node_runs
-                   SET status = 'pending',
-                       attempts = 0,
-                       child_run_id = NULL,
-                       output = '{}'::jsonb,
-                       last_error = NULL,
-                       fingerprint = %s,
-                       started_at = NULL,
-                       completed_at = NULL
-                 WHERE workspace_id = %s AND run_id = %s AND node_id = %s
-                """,
-                (
-                    fingerprint,
-                    self.context.workspace_id,
-                    run_id,
-                    node.id,
-                ),
-            )
+        self._reset_revised_nodes(graph, run_id, reusable_node_ids)
 
         self.connection.execute(
             """
@@ -726,6 +665,75 @@ class PostgresTaskGraphRepository:
         current = self.get_run(run_id)
         assert current is not None
         return current
+
+    def _lock_revisable_run(self, run_id, graph):
+        """Lock the run; only a live graph may be revised, exactly one revision ahead."""
+        locked = self.connection.execute(
+            """
+            SELECT graph_revision, status
+              FROM omnix_task_graph_runs
+             WHERE workspace_id = %s AND run_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if locked is None:
+            raise KeyError(run_id)
+        current_status = str(locked[1])
+        if current_status in {"completed", "failed", "cancelled"}:
+            raise TaskGraphConcurrencyError(
+                f"cannot revise terminal task graph:{current_status}"
+            )
+        expected = int(locked[0]) + 1
+        if graph.revision != expected:
+            raise TaskGraphConcurrencyError(
+                f"graph revision must advance exactly once: expected {expected}"
+            )
+
+    def _reset_revised_nodes(self, graph, run_id, reusable_node_ids):
+        """Insert new nodes and reset changed ones to pending; a reusable node with an unchanged fingerprint keeps its result."""
+        for node in graph.nodes:
+            fingerprint = task_node_fingerprint(node)
+            row = self.connection.execute(
+                """
+                SELECT status, fingerprint
+                  FROM omnix_task_graph_node_runs
+                 WHERE workspace_id = %s AND run_id = %s AND node_id = %s
+                """,
+                (self.context.workspace_id, run_id, node.id),
+            ).fetchone()
+            if row is None:
+                self.connection.execute(
+                    """
+                    INSERT INTO omnix_task_graph_node_runs (
+                        workspace_id, run_id, node_id, status, fingerprint
+                    ) VALUES (%s, %s, %s, 'pending', %s)
+                    """,
+                    (self.context.workspace_id, run_id, node.id, fingerprint),
+                )
+                continue
+            if node.id in reusable_node_ids and str(row[1]) == fingerprint:
+                continue
+            self.connection.execute(
+                """
+                UPDATE omnix_task_graph_node_runs
+                   SET status = 'pending',
+                       attempts = 0,
+                       child_run_id = NULL,
+                       output = '{}'::jsonb,
+                       last_error = NULL,
+                       fingerprint = %s,
+                       started_at = NULL,
+                       completed_at = NULL
+                 WHERE workspace_id = %s AND run_id = %s AND node_id = %s
+                """,
+                (
+                    fingerprint,
+                    self.context.workspace_id,
+                    run_id,
+                    node.id,
+                ),
+            )
 
     def stream_events(
         self,

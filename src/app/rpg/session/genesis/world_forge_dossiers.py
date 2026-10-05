@@ -8,6 +8,15 @@ from __future__ import annotations
 
 import re
 from typing import Any, Mapping, Sequence
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract', "1", "Two or three sentences for catalogue cards and search results.")
+_PROMPT_2 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_2', "1", "Keep mechanics and reference fields outside editorial prose.")
+_PROMPT_3 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_3', "1", "Avoid repeating the same paragraph across sections.")
+_PROMPT_4 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_4', "1", "Use readable prose rather than field-label fragments.")
+_PROMPT_5 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_5', "1", "Use the supplied section titles; never substitute numbered labels such as 'Section 1'.")
+_PROMPT_6 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_6', "1", "Use only IDs present in dependencies or this topic.")
+_PROMPT_7 = prompt_template('rpg.session_genesis_world_forge_dossiers.dossier_prompt_contract_7', "1", "One to three substantial paragraphs grounded in canon.")
 
 DOSSIER_SCHEMA_VERSION = "rpg_world_entity_dossier_v1"
 
@@ -549,7 +558,7 @@ def dossier_prompt_contract(topic_id: str) -> dict[str, Any]:
     return {
         "schema_version": DOSSIER_SCHEMA_VERSION,
         "entity_fields": {
-            "short_summary": "Two or three sentences for catalogue cards and search results.",
+            "short_summary": _PROMPT_1.text,
             "dossier": {
                 "schema_version": DOSSIER_SCHEMA_VERSION,
                 "subtitle": "Optional evocative subtitle.",
@@ -559,11 +568,11 @@ def dossier_prompt_contract(topic_id: str) -> dict[str, Any]:
                     {
                         "id": section_id,
                         "title": title,
-                        "paragraphs": ["One to three substantial paragraphs grounded in canon."],
+                        "paragraphs": [_PROMPT_7.text],
                     }
                     for section_id, title, _fields in template
                 ],
-                "related_entity_ids": ["Use only IDs present in dependencies or this topic."],
+                "related_entity_ids": [_PROMPT_6.text],
             },
         },
         "content_targets": {
@@ -574,10 +583,10 @@ def dossier_prompt_contract(topic_id: str) -> dict[str, Any]:
             "paragraphs_per_substantive_section": "1-3",
         },
         "rules": [
-            "Keep mechanics and reference fields outside editorial prose.",
+            _PROMPT_2.text,
             "Do not change or invent unresolved canonical IDs.",
-            "Avoid repeating the same paragraph across sections.",
-            "Use readable prose rather than field-label fragments.",
-            "Use the supplied section titles; never substitute numbered labels such as 'Section 1'.",
+            _PROMPT_3.text,
+            _PROMPT_4.text,
+            _PROMPT_5.text,
         ],
     }

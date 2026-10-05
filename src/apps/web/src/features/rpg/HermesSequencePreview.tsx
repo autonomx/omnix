@@ -92,7 +92,7 @@ export function HermesSequencePreview({ sequence, onApprove, onReject, onUseFirs
           </article>
         ))}
       </div>
-      <div className="rpg-survival-actions" aria-label="Hermes sequence actions">
+      <div role="group" className="rpg-survival-actions" aria-label="Hermes sequence actions">
         <button className="rpg-secondary-button" disabled={!firstCommand || !onUseFirstItem} onClick={() => firstCommand && onUseFirstItem?.(firstCommand)} type="button">
           Use first item
         </button>

@@ -1,229 +1,45 @@
-import type { V2ProspectiveQualification } from './tradingStrategyTypes';
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
 export type AnalyticsNumeric = string | number;
 export type PaperAnalyticsMode = 'all' | 'shadow' | 'auto_paper';
 
-export interface PaperSimulationEpoch {
-  account_id: string;
-  epoch_id: string;
-  ordinal: number;
-  initial_cash: AnalyticsNumeric;
-  started_at: string;
-  ended_at?: string | null;
-  is_current: boolean;
-  end_reason?: string | null;
-}
+export type PaperSimulationEpoch = components['schemas']['PaperSimulationEpoch'];
 
-export interface PaperEquityPoint {
-  epoch_id: string;
-  observed_at: string;
-  cash: AnalyticsNumeric;
-  equity: AnalyticsNumeric;
-  realized_pnl: AnalyticsNumeric;
-  unrealized_pnl: AnalyticsNumeric;
-  gross_exposure: AnalyticsNumeric;
-  risk_at_stop: AnalyticsNumeric;
-}
+export type PaperEquityPoint = components['schemas']['PaperEquityPoint'];
 
-export interface PaperAnalyticsTrade {
-  trade_id: string;
-  source: 'auto_paper' | 'shadow_replay';
-  strategy_id: string;
-  strategy_version?: string | null;
-  profile_fingerprint?: string | null;
-  epoch_id?: string | null;
-  universe_id?: string | null;
-  instrument_id: string;
-  session_date: string;
-  entry_time: string;
-  exit_time: string;
-  exit_reason?: string | null;
-  quantity?: AnalyticsNumeric | null;
-  realized_pnl?: AnalyticsNumeric | null;
-  r_result: AnalyticsNumeric;
-  mae_r?: AnalyticsNumeric | null;
-  mfe_r?: AnalyticsNumeric | null;
-  signal_to_executable_bps?: AnalyticsNumeric | null;
-  fill_slippage_bps?: AnalyticsNumeric | null;
-  implementation_shortfall_bps?: AnalyticsNumeric | null;
-  initial_stop?: AnalyticsNumeric | null;
-  initial_target?: AnalyticsNumeric | null;
-  setup_features: Record<string, unknown>;
-}
+export type PaperAnalyticsTrade = components['schemas']['PaperAnalyticsTrade'];
 
-export interface PaperPerformanceSummary {
-  trade_count: number;
-  wins: number;
-  losses: number;
-  win_rate?: AnalyticsNumeric | null;
-  expectancy_r?: AnalyticsNumeric | null;
-  total_r: AnalyticsNumeric;
-  profit_factor?: AnalyticsNumeric | null;
-  average_mae_r?: AnalyticsNumeric | null;
-  average_mfe_r?: AnalyticsNumeric | null;
-  max_drawdown_r?: AnalyticsNumeric | null;
-}
+export type PaperPerformanceSummary = components['schemas']['PaperPerformanceSummary'];
 
-export interface PaperModeComparison {
-  shadow: PaperPerformanceSummary;
-  auto_paper: PaperPerformanceSummary;
-  expectancy_delta_r?: AnalyticsNumeric | null;
-}
+export type PaperModeComparison = components['schemas']['PaperModeComparison'];
 
-export interface PaperDailyR {
-  session_date: string;
-  r_result: AnalyticsNumeric;
-  trade_count: number;
-}
+export type PaperDailyR = components['schemas']['PaperDailyR'];
 
-export interface PaperDrawdownPoint {
-  observed_at: string;
-  drawdown: AnalyticsNumeric;
-  unit: 'R' | 'percent';
-}
+export type PaperDrawdownPoint = components['schemas']['PaperDrawdownPoint'];
 
-export interface PaperRollingExpectancyPoint {
-  observed_at: string;
-  sample_size: number;
-  expectancy_r: AnalyticsNumeric;
-  one_sided_90_lcb_r?: AnalyticsNumeric | null;
-}
+export type PaperRollingExpectancyPoint = components['schemas']['PaperRollingExpectancyPoint'];
 
-export interface PaperRDistributionBucket {
-  label: string;
-  minimum_r?: AnalyticsNumeric | null;
-  maximum_r?: AnalyticsNumeric | null;
-  count: number;
-}
+export type PaperRDistributionBucket = components['schemas']['PaperRDistributionBucket'];
 
-export interface PaperMaeMfePoint {
-  trade_id: string;
-  instrument_id: string;
-  session_date: string;
-  r_result: AnalyticsNumeric;
-  mae_r: AnalyticsNumeric;
-  mfe_r: AnalyticsNumeric;
-  risk_dollars?: AnalyticsNumeric | null;
-  exit_reason?: string | null;
-}
+export type PaperMaeMfePoint = components['schemas']['PaperMaeMfePoint'];
 
-export interface PaperFunnelStage {
-  stage: string;
-  count: number;
-  conversion_from_previous?: AnalyticsNumeric | null;
-  dominant_drop_reason?: string | null;
-  dominant_drop_count: number;
-}
+export type PaperFunnelStage = components['schemas']['PaperFunnelStage'];
 
-export interface PaperExecutionSummary {
-  trade_count: number;
-  average_signal_to_executable_bps?: AnalyticsNumeric | null;
-  average_fill_slippage_bps?: AnalyticsNumeric | null;
-  average_implementation_shortfall_bps?: AnalyticsNumeric | null;
-}
+export type PaperExecutionSummary = components['schemas']['PaperExecutionSummary'];
 
-export interface PaperFactorBucket {
-  label: string;
-  count: number;
-  expectancy_r: AnalyticsNumeric;
-  win_rate: AnalyticsNumeric;
-}
+export type PaperFactorBucket = components['schemas']['PaperFactorBucket'];
 
-export interface PaperFactorStudy {
-  factor: string;
-  buckets: PaperFactorBucket[];
-}
+export type PaperFactorStudy = components['schemas']['PaperFactorStudy'];
 
-export interface PaperTradeJournalEvent {
-  event_id: string;
-  run_id?: string | null;
-  event_type: string;
-  state: string;
-  reason_code?: string | null;
-  observed_at: string;
-}
+export type PaperTradeJournalEvent = components['schemas']['PaperTradeJournalEvent'];
 
-export interface PaperTradeJournalEntry {
-  trade_id: string;
-  account_id: string;
-  epoch_id: string;
-  strategy_id: string;
-  strategy_version?: string | null;
-  strategy_revision?: number | null;
-  strategy_run_id?: string | null;
-  profile_fingerprint?: string | null;
-  universe_id?: string | null;
-  instrument_id: string;
-  session_date: string;
-  entry_time: string;
-  exit_time: string;
-  holding_seconds: number;
-  entry_signal_event_id?: string | null;
-  entry_order_id: string;
-  exit_order_id: string;
-  entry_fill_ids: string[];
-  exit_fill_ids: string[];
-  session_id?: string | null;
-  setup_id?: string | null;
-  trade_intent_id?: string | null;
-  risk_decision_id?: string | null;
-  protection_id?: string | null;
-  lifecycle_state: string;
-  review_state: string;
-  average_entry_price: AnalyticsNumeric;
-  average_exit_price: AnalyticsNumeric;
-  quantity: AnalyticsNumeric;
-  initial_risk_dollars?: AnalyticsNumeric | null;
-  initial_stop?: AnalyticsNumeric | null;
-  initial_target?: AnalyticsNumeric | null;
-  realized_pnl: AnalyticsNumeric;
-  r_result?: AnalyticsNumeric | null;
-  mae_r?: AnalyticsNumeric | null;
-  mfe_r?: AnalyticsNumeric | null;
-  signal_to_executable_bps?: AnalyticsNumeric | null;
-  fill_slippage_bps?: AnalyticsNumeric | null;
-  implementation_shortfall_bps?: AnalyticsNumeric | null;
-  exit_reason?: string | null;
-  setup_features: Record<string, unknown>;
-  execution_features: Record<string, unknown>;
-  outcome: 'win' | 'loss' | 'flat';
-  automatic_observations: string[];
-  events: PaperTradeJournalEvent[];
-}
+export type PaperTradeJournalEntry = components['schemas']['PaperTradeJournalEntry'];
 
-export interface PaperTradeJournalResponse {
-  account_id: string;
-  strategy_id?: string | null;
-  epoch_id?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  entries: PaperTradeJournalEntry[];
-}
+export type PaperTradeJournalResponse = components['schemas']['PaperTradeJournalResponse'];
 
-export interface PaperAnalyticsOverview {
-  account_id: string;
-  strategy_id?: string | null;
-  epoch_id?: string | null;
-  mode: PaperAnalyticsMode;
-  start_date?: string | null;
-  end_date?: string | null;
-  rolling_window: number;
-  epochs: PaperSimulationEpoch[];
-  qualification?: V2ProspectiveQualification | null;
-  summary: PaperPerformanceSummary;
-  mode_comparison: PaperModeComparison;
-  equity: PaperEquityPoint[];
-  drawdown: PaperDrawdownPoint[];
-  daily_r: PaperDailyR[];
-  rolling_expectancy: PaperRollingExpectancyPoint[];
-  r_distribution: PaperRDistributionBucket[];
-  mae_mfe: PaperMaeMfePoint[];
-  funnel: PaperFunnelStage[];
-  execution: PaperExecutionSummary;
-  factors: PaperFactorStudy[];
-  recent_trades: PaperAnalyticsTrade[];
-  archived_strategy_count: number;
-}
+export type PaperAnalyticsOverview = components['schemas']['PaperAnalyticsOverview'];
 
 export interface PaperAnalyticsFilters {
   accountId: string;
@@ -244,48 +60,44 @@ export interface PaperJournalFilters {
   limit?: number;
 }
 
-async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { accept: 'application/json' } });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string'
-      ? payload.detail
-      : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Paper analytics request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
+const analytics = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Paper analytics');
 
-function query(filters: PaperAnalyticsFilters): string {
-  const params = new URLSearchParams({ account_id: filters.accountId });
-  if (filters.strategyId) params.set('strategy_id', filters.strategyId);
-  if (filters.epochId) params.set('epoch_id', filters.epochId);
-  if (filters.mode) params.set('mode', filters.mode);
-  if (filters.startDate) params.set('start_date', filters.startDate);
-  if (filters.endDate) params.set('end_date', filters.endDate);
-  if (filters.rollingWindow) params.set('rolling_window', String(filters.rollingWindow));
-  return params.toString();
-}
-
-function journalQuery(filters: PaperJournalFilters): string {
-  const params = new URLSearchParams({ account_id: filters.accountId });
-  if (filters.strategyId) params.set('strategy_id', filters.strategyId);
-  if (filters.epochId) params.set('epoch_id', filters.epochId);
-  if (filters.startDate) params.set('start_date', filters.startDate);
-  if (filters.endDate) params.set('end_date', filters.endDate);
-  if (filters.limit) params.set('limit', String(filters.limit));
-  return params.toString();
+function defined<T extends Record<string, unknown>>(values: T): Partial<T> {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== '')) as Partial<T>;
 }
 
 export const tradingPaperAnalyticsApi = {
-  epochs: async (accountId: string) => {
-    const payload = await requestJson<{ epochs?: PaperSimulationEpoch[] }>(
-      `/api/trading/paper-analytics/epochs?${new URLSearchParams({ account_id: accountId })}`,
-    );
-    return Array.isArray(payload.epochs) ? payload.epochs : [];
-  },
-  overview: (filters: PaperAnalyticsFilters) =>
-    requestJson<PaperAnalyticsOverview>(`/api/trading/paper-analytics/overview?${query(filters)}`),
-  journal: (filters: PaperJournalFilters) =>
-    requestJson<PaperTradeJournalResponse>(`/api/trading/paper-analytics/journal?${journalQuery(filters)}`),
+  epochs: async (accountId: string): Promise<PaperSimulationEpoch[]> =>
+    (await analytics(api.GET('/api/trading/paper-analytics/epochs', { params: { query: { account_id: accountId } } }))).epochs,
+  overview: (filters: PaperAnalyticsFilters): Promise<PaperAnalyticsOverview> =>
+    analytics(api.GET('/api/trading/paper-analytics/overview', {
+      params: {
+        query: {
+          account_id: filters.accountId,
+          ...defined({
+            strategy_id: filters.strategyId,
+            epoch_id: filters.epochId,
+            mode: filters.mode,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            rolling_window: filters.rollingWindow || undefined,
+          }),
+        },
+      },
+    })),
+  journal: (filters: PaperJournalFilters): Promise<PaperTradeJournalResponse> =>
+    analytics(api.GET('/api/trading/paper-analytics/journal', {
+      params: {
+        query: {
+          account_id: filters.accountId,
+          ...defined({
+            strategy_id: filters.strategyId,
+            epoch_id: filters.epochId,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            limit: filters.limit || undefined,
+          }),
+        },
+      },
+    })),
 };

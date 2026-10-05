@@ -136,13 +136,6 @@ def _sort_key_interrupt_log(item: Dict[str, Any]) -> Tuple[int, str, str]:
     )
 
 
-def _sort_key_emotion_entry(item: Dict[str, Any]) -> Tuple[int, str]:
-    return (
-        _EMOTION_ORDER.get(_normalize_emotion_name(item.get("emotion")), 999),
-        _safe_str(item.get("actor_id")),
-    )
-
-
 def _normalize_stream_chunk(chunk: Dict[str, Any]) -> Dict[str, Any]:
     chunk = _safe_dict(chunk)
     return {

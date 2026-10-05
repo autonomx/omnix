@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+from app.config.env import environment
+
 import math
 import os
 import signal
@@ -12,6 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from app.launcher.config import load_launcher_config
+from app.runtime.net import bind_host
+from app.security.service_credentials import initialize_service_token
+
+logger = logging.getLogger(__name__)
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
@@ -24,11 +33,11 @@ def _repo_root() -> Path:
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _gateway_ready_timeout_seconds() -> float:
-    raw_value = os.environ.get(GATEWAY_READY_TIMEOUT_ENV)
+    raw_value = environment().get(GATEWAY_READY_TIMEOUT_ENV)
     if raw_value is None:
         return DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
     try:
@@ -42,10 +51,6 @@ def _gateway_ready_timeout_seconds() -> float:
 
 def _s(value: Any) -> str:
     return "" if value is None else str(value)
-
-
-def _python_env(name: str, fallback: str) -> str:
-    return os.environ.get(name, fallback)
 
 
 def _npm_command() -> str:
@@ -133,8 +138,47 @@ class LauncherServiceManager:
         with service.lock:
             return list(service.logs)[-max(1, min(2000, int(limit or 300))):]
 
+    def _run_release_migrations(self) -> dict[str, Any]:
+        gateway = self._services.get("gateway")
+        if gateway is None:
+            return {"ok": True, "skipped": True}
+        python = gateway.spec.command[0]
+        env = environment().copy()
+        env.update(gateway.spec.env)
+        env["OMNIX_SERVICE_TOKEN"] = initialize_service_token()
+        self._append(gateway, "[launcher] applying PostgreSQL migrations")
+        result = subprocess.run(
+            [python, "-m", "app.persistence", "migrate"],
+            cwd=str(gateway.spec.cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+            check=False,
+        )
+        if result.stdout:
+            for line in result.stdout.splitlines():
+                self._append(gateway, "[migrate] " + line)
+        if result.stderr:
+            for line in result.stderr.splitlines():
+                self._append(gateway, "[migrate] " + line)
+        return {
+            "ok": result.returncode == 0,
+            "returncode": result.returncode,
+        }
+
     def start_auto_services(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
+        migration = self._run_release_migrations()
+        results["migrate"] = migration
+        if not migration.get("ok"):
+            return {
+                "format_version": LAUNCHER_MANAGER_VERSION,
+                "started": results,
+                "starting_in_background": [],
+            }
         automatic = [
             (service_id, service)
             for service_id, service in self._services.items()
@@ -226,8 +270,12 @@ class LauncherServiceManager:
                         "gateway": gateway_result,
                         "service": service.snapshot(),
                     }
-            env = os.environ.copy()
+            env = environment().copy()
             env.update(service.spec.env)
+            if service_id == "web":
+                env.pop("OMNIX_SERVICE_TOKEN", None)
+            else:
+                env["OMNIX_SERVICE_TOKEN"] = initialize_service_token()
             # Semantic v2 is the only typed-chat production router. Do not pass
             # the retired shadow/legacy-v1 switch to launcher-managed services,
             # even if it remains in a user's parent shell.
@@ -236,19 +284,25 @@ class LauncherServiceManager:
             self._clear_conflicting_ports(service)
             self._append(service, "[launcher] starting: " + " ".join(service.spec.command))
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-            process = subprocess.Popen(
-                service.spec.command,
-                cwd=str(service.spec.cwd),
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                creationflags=creationflags,
-            )
+            try:
+                process = subprocess.Popen(
+                    service.spec.command,
+                    cwd=str(service.spec.cwd),
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                    creationflags=creationflags,
+                )
+            except OSError as exc:
+                # A missing interpreter or tool (npm, a Conda environment) is a
+                # failed start the dashboard shows, not a launcher error.
+                self._append(service, f"[launcher] could not start {service.spec.command[0]}: {exc.strerror or exc}")
+                return {"ok": False, "error": "executable_unavailable", "service": service.snapshot()}
             service.process = process
             service.started_at = time.time()
             service.last_returncode = None
@@ -442,6 +496,7 @@ def _kill_processes_for_port(port: int) -> list[int]:
                 timeout=5,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "_kill_processes_for_port", exc_info=True)
             continue
         killed.append(pid)
     return killed
@@ -449,28 +504,31 @@ def _kill_processes_for_port(port: int) -> list[int]:
 
 def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     root = root or _repo_root()
-    app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
-    tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
-    stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
+    host = bind_host()
+    launcher = load_launcher_config(root)
+    app_python = launcher.python("app")
+    tts_python = launcher.python("tts")
+    stt_python = launcher.python("stt")
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
     hermes_auto_start = hermes_enabled and _env_flag("OMNIX_START_HERMES")
-    hermes_base_url = os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642")
-    trading_hermes_enabled = os.environ.get(
+    hermes_base_url = environment().get("HERMES_BASE_URL", "http://127.0.0.1:8642")
+    trading_hermes_enabled = environment().get(
         "OMNIX_TRADING_HERMES_RESEARCH_ENABLED",
         "1" if hermes_enabled else "0",
     )
     common = {
+        "OMNIX_BIND_HOST": host,
         "PYTHONPATH": str(root / "src"),
-        "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
-        "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
-        "OMNIX_IMAGE_ENABLED": os.environ.get("OMNIX_IMAGE_ENABLED", "0"),
+        "OMNIX_TTS_URL": environment().get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
+        "OMNIX_STT_URL": environment().get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
+        "OMNIX_IMAGE_ENABLED": environment().get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
-        "OMNIX_CHARACTER_MODE_ENABLED": os.environ.get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
+        "OMNIX_CHARACTER_MODE_ENABLED": environment().get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
         "OMNIX_LAUNCHER_KILL_PORT": "1",
     }
-    tts_model_dir = os.environ.get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
+    tts_model_dir = environment().get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
     return [
         ServiceSpec(
             service_id="stt",
@@ -501,7 +559,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 "--app",
                 "app.gateway.runtime_app:app",
                 "--host",
-                "127.0.0.1",
+                host,
                 "--port",
                 "8000",
             ],
@@ -511,7 +569,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 # The local launcher is rooted in this checkout, so its gateway
                 # has an operator-configured default coding workspace even when
                 # a Chat turn does not explicitly attach a Local folder.
-                "OMNIX_AGENT_DEFAULT_REPOSITORY": os.environ.get(
+                "OMNIX_AGENT_DEFAULT_REPOSITORY": environment().get(
                     "OMNIX_AGENT_DEFAULT_REPOSITORY",
                     str(root),
                 ),
@@ -520,24 +578,24 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 "HERMES_ENABLED": "1" if hermes_enabled else "0",
                 "HERMES_BASE_URL": hermes_base_url,
                 "OMNIX_TRADING_HERMES_RESEARCH_ENABLED": trading_hermes_enabled,
-                "OMNIX_AGENT_DEBUG_LOGS": os.environ.get(
+                "OMNIX_AGENT_DEBUG_LOGS": environment().get(
                     "OMNIX_AGENT_DEBUG_LOGS", "0"
                 ),
-                "OMNIX_AGENT_LOG_DIR": os.environ.get(
+                "OMNIX_AGENT_LOG_DIR": environment().get(
                     "OMNIX_AGENT_LOG_DIR",
                     str(root / "resources" / "logs" / "agent"),
                 ),
-                "OMNIX_AGENT_LOG_RETENTION_DAYS": os.environ.get(
+                "OMNIX_AGENT_LOG_RETENTION_DAYS": environment().get(
                     "OMNIX_AGENT_LOG_RETENTION_DAYS", "30"
                 ),
-                "OMNIX_AGENT_LOG_MAX_FIELD_CHARS": os.environ.get(
+                "OMNIX_AGENT_LOG_MAX_FIELD_CHARS": environment().get(
                     "OMNIX_AGENT_LOG_MAX_FIELD_CHARS", "12000"
                 ),
                 # The installed Windows agent-browser daemon currently loses
                 # its CDP response channel on this host. Keep the governed
                 # Playwright backend as the launcher default, with an explicit
                 # override available for environments using a healthy daemon.
-                "OMNIX_AGENT_BROWSER_BACKEND": os.environ.get(
+                "OMNIX_AGENT_BROWSER_BACKEND": environment().get(
                     "OMNIX_AGENT_BROWSER_BACKEND",
                     "playwright" if os.name == "nt" else "agent-browser",
                 ),
@@ -548,7 +606,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="web",
             label="Omnix Web App",
-            command=[_npm_command(), "run", "web:dev"],
+            command=[_npm_command(), "run", "web:dev", "--", "--host", host],
             cwd=root,
             env=dict(common),
             ports=(5173,),
@@ -572,14 +630,14 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="image",
             label="Image Service",
-            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", "127.0.0.1", "--port", "5301"],
+            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", host, "--port", "5301"],
             cwd=root,
             env={
                 **common,
                 "OMNIX_IMAGE_ENABLED": "1",
                 "OMNIX_IMAGE_SERVICE_MODE": "1",
-                "OMNIX_IMAGE_PRELOAD": os.environ.get("OMNIX_IMAGE_PRELOAD", "0"),
-                "OMNIX_IMAGE_WARMUP": os.environ.get("OMNIX_IMAGE_WARMUP", "0"),
+                "OMNIX_IMAGE_PRELOAD": environment().get("OMNIX_IMAGE_PRELOAD", "0"),
+                "OMNIX_IMAGE_WARMUP": environment().get("OMNIX_IMAGE_WARMUP", "0"),
                 "OMNIX_IMAGE_URL": "",
             },
             ports=(5301,),

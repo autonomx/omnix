@@ -6,6 +6,9 @@ for NPCs and companions based on their current state.
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.presentation_personality.build_personality_prompt_hints', "1", "Use concise, character-consistent phrasing grounded in current scene context.")
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -66,5 +69,5 @@ def build_personality_prompt_hints(actor: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "name": name,
         "style_tags": tags,
-        "speech_guidance": "Use concise, character-consistent phrasing grounded in current scene context.",
+        "speech_guidance": _PROMPT_1.text,
     }

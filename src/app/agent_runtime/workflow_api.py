@@ -1,6 +1,9 @@
 """HTTP surface for deterministic reusable workflows."""
 from __future__ import annotations
 
+from app.capabilities.approvals import require_approver
+from app.security import audit
+
 from typing import Literal, Any
 
 from fastapi import APIRouter, HTTPException
@@ -59,12 +62,15 @@ def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[s
         elif request.command == "cancel":
             runtime.cancel(run_id)
         elif request.command in {"approve", "reject"}:
+            approver = require_approver("agent:approve")
             if not request.step_id:
                 raise HTTPException(status_code=422, detail="step_id_required")
             if request.command == "approve":
-                runtime.approve(run_id, request.step_id)
+                runtime.approve(run_id, request.step_id, approved_by=approver)
             else:
                 runtime.reject(run_id, request.step_id)
+            audit.record("approval.decide", target_type="workflow_step", target_id=f"{run_id}/{request.step_id}",
+                         details={"decision": request.command})
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="workflow_run_not_found") from exc
     except WorkflowRuntimeError as exc:

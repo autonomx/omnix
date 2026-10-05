@@ -1,8 +1,8 @@
 """Approval-gated Google Calendar runtime adapter for assistant tools."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import json
-import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -174,7 +174,7 @@ _DEFAULT_CALENDAR_ADAPTER = default_fake_calendar_adapter()
 
 
 def get_calendar_runtime_adapter() -> CalendarRuntimeAdapter:
-    if os.environ.get("OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR", "").strip().lower() in {"1", "true", "yes", "on"}:
+    if _env_str("OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR", "").strip().lower() in {"1", "true", "yes", "on"}:
         return _DEFAULT_CALENDAR_ADAPTER
     return GoogleCalendarRuntimeAdapter()
 

@@ -77,7 +77,7 @@ def test_operation_blocks_edit_before_preexisting_dirty_content_is_overwritten()
 def test_operation_allows_clean_target_and_validation_of_dirty_target() -> None:
     assert _preexisting_dirty_operation_failures(
         effect="mutate",
-        target_path="src/apps/web/src/features/chatbot/ChatbotWorkspaceSidePanelFix.css",
+        target_path="src/apps/web/src/features/assistant/chat/ChatbotWorkspaceSidePanelFix.css",
         command="",
         baseline_provenance=_BASELINE,
     ) == []

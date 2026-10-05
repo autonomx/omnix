@@ -4,7 +4,8 @@ setlocal
 set "OMNIX_REPO_ROOT=%~dp0.."
 for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
 
-set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
+if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
+set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
 set "STT_SERVER=%OMNIX_REPO_ROOT%\src\parakeet_stt_server.py"
 
 if not exist "%RPG_STT_PYTHON%" (
@@ -30,12 +31,11 @@ echo WebSocket: ws://127.0.0.1:5201/ws/transcribe
 echo Chunk target: 160 ms
 echo.
 
-"%RPG_STT_PYTHON%" -c "import fastapi, uvicorn, websockets, nemo.collections.asr; import nemo; from packaging.version import Version; print('[STT] NeMo:', nemo.__version__); assert Version(nemo.__version__) >= Version('2.5.3'), 'NeMo 2.5.3+ required for Parakeet Realtime EOU'; print('[STT] dependencies OK')"
+"%RPG_STT_PYTHON%" -c "import sys, fastapi, uvicorn, websockets, nemo.collections.asr; import nemo; from packaging.version import Version; assert sys.version_info[:2] == (3, 11), sys.version; print('[STT] NeMo:', nemo.__version__); assert Version(nemo.__version__) >= Version('2.5.3'), 'NeMo 2.5.3+ required for Parakeet Realtime EOU'; print('[STT] dependencies OK')"
 if errorlevel 1 (
     echo.
     echo ERROR: The rpg-stt environment is missing a required dependency or has an old NeMo version.
-    echo Update the STT environment with:
-    echo   "%RPG_STT_PYTHON%" -m pip install --upgrade "nemo_toolkit[asr]>=2.5.3" "uvicorn[standard]" python-multipart
+    echo Run setup.bat to install the hash-locked STT runtime from requirements\stt.lock.txt.
     pause
     exit /b 1
 )

@@ -151,32 +151,6 @@ class PackMigrator:
     # Validation
     # ------------------------------------------------------------------
 
-    def validate_pack_structure(self, pack_payload: dict[str, Any]) -> list[str]:
-        """Return structured errors/warnings for the pack structure."""
-        issues: list[str] = []
-
-        if not isinstance(pack_payload, dict):
-            issues.append("error:pack_payload_not_dict")
-            return issues
-
-        meta = pack_payload.get("metadata")
-        if not isinstance(meta, dict):
-            issues.append("error:metadata_missing_or_invalid")
-        else:
-            if not meta.get("pack_id"):
-                issues.append("warning:metadata.pack_id_empty")
-            if not meta.get("title"):
-                issues.append("warning:metadata.title_empty")
-
-        if "content" not in pack_payload:
-            issues.append("warning:content_section_missing")
-
-        version = pack_payload.get("pack_format_version")
-        if version is None:
-            issues.append("warning:pack_format_version_absent")
-
-        return issues
-
     # ------------------------------------------------------------------
     # Migration
     # ------------------------------------------------------------------

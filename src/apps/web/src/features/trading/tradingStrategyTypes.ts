@@ -1,3 +1,4 @@
+import type { components } from './api/generated';
 export type StrategyMode = 'off' | 'shadow' | 'auto_paper';
 export type FloatPreferenceMode = 'ignore' | 'score' | 'require';
 export type StrategyBarInterval = '1m' | '5m';
@@ -83,6 +84,7 @@ export type StochRsi5mConfig = {
   float_preference_mode: FloatPreferenceMode;
   require_catalyst_evidence: boolean;
   reject_dilution_flags: string[];
+  trade_selection?: 'sequential' | 'early_single';
   oversold_threshold: string | number;
   recovery_threshold: string | number;
   overbought_threshold: string | number;
@@ -188,129 +190,19 @@ export type YahooGapperDiscoveryInput = {
 
 export type FinvizGapperDiscoveryInput = YahooGapperDiscoveryInput;
 
-export type StrategyEvent = {
-  strategy_id: string;
-  event_id: string;
-  run_id?: string | null;
-  instrument_id: string;
-  event_type: string;
-  state: string;
-  reason_code?: string | null;
-  observed_at: string;
-  idempotency_key: string;
-  payload: Record<string, unknown>;
-};
+export type StrategyEvent = components['schemas']['StrategyEvent'];
 
-export type StrategyProtection = {
-  strategy_id: string;
-  protection_id: string;
-  account_id: string;
-  instrument_id: string;
-  entry_order_id: string;
-  exit_order_id?: string | null;
-  stop_price: string | number;
-  target_price: string | number;
-  initial_stop_price?: string | number | null;
-  initial_target_price?: string | number | null;
-  mae_price?: string | number | null;
-  mfe_price?: string | number | null;
-  quantity: string | number;
-  status: 'pending_entry' | 'active' | 'exit_submitted' | 'closed' | 'cancelled';
-  trigger_reason?: string | null;
-  revision: number;
-};
+export type StrategyProtection = components['schemas']['StrategyProtection'];
 
-export type V2QualificationThresholds = {
-  prospective_start: string;
-  minimum_matched_trades: number;
-  minimum_distinct_sessions: number;
-  minimum_distinct_symbols: number;
-  minimum_execution_match_rate: string | number;
-  minimum_expectancy_r: string | number;
-  one_sided_confidence_level: string | number;
-  maximum_drawdown_r: string | number;
-  live_match_window_minutes: number;
-};
+export type V2QualificationThresholds = components['schemas']['V2QualificationThresholds'];
 
-export type V2ProspectiveQualification = {
-  strategy_id: string;
-  qualification_version: string;
-  prospective_start: string;
-  expected_profile_fingerprint: string;
-  current_profile_fingerprint: string;
-  profile_match: boolean;
-  replay_trade_count: number;
-  matched_eligible_trade_count: number;
-  distinct_sessions: number;
-  distinct_symbols: number;
-  execution_match_rate?: string | number | null;
-  expectancy_r?: string | number | null;
-  one_sided_90_lcb_r?: string | number | null;
-  max_drawdown_r?: string | number | null;
-  thresholds: V2QualificationThresholds;
-  evidence_fingerprint: string;
-  prospective_economic_reviewed: boolean;
-  qualified: boolean;
-  reviewed: boolean;
-  auto_paper_authorized: boolean;
-  reason_codes: string[];
-};
+export type V2ProspectiveQualification = components['schemas']['V2ProspectiveQualification'];
 
-export type ProspectiveEconomicMetrics = {
-  signal_count: number;
-  matched_signal_count: number;
-  matched_outcome_count: number;
-  distinct_sessions: number;
-  distinct_symbols: number;
-  execution_match_rate?: string | number | null;
-  win_count: number;
-  win_rate?: string | number | null;
-  expectancy_r?: string | number | null;
-  one_sided_90_lcb_r?: string | number | null;
-  max_drawdown_r?: string | number | null;
-};
+export type ProspectiveEconomicMetrics = components['schemas']['ProspectiveEconomicMetrics'];
 
-export type ProspectiveEconomicThresholds = {
-  prospective_start: string;
-  horizon_minutes: number;
-  minimum_matched_outcomes: number;
-  minimum_distinct_sessions: number;
-  minimum_distinct_symbols: number;
-  minimum_execution_match_rate: string | number;
-  minimum_win_rate: string | number;
-  minimum_expectancy_r: string | number;
-  one_sided_confidence_level: string | number;
-  maximum_drawdown_r: string | number;
-  holdout_start: string;
-  holdout_end: string;
-  soak_minimum_matched_outcomes: number;
-  soak_minimum_distinct_sessions: number;
-  soak_minimum_distinct_symbols: number;
-};
+export type ProspectiveEconomicThresholds = components['schemas']['ProspectiveEconomicThresholds'];
 
-export type ProspectiveEconomicStatus = {
-  strategy_id: string;
-  policy_version: string;
-  profile_fingerprint: string;
-  thresholds: ProspectiveEconomicThresholds;
-  metrics: ProspectiveEconomicMetrics;
-  evidence_fingerprint: string;
-  sample_ready: boolean;
-  quantitative_pass: boolean;
-  evaluation_recorded: boolean;
-  evaluation_passed: boolean;
-  evaluation_event_id?: string | null;
-  sealed_holdout_unlocked: boolean;
-  holdout_reviewed: boolean;
-  holdout_verdict: 'UNOPENED' | 'UNDERPOWERED' | 'FAIL' | 'ROBUST' | 'GOLD';
-  holdout_event_id?: string | null;
-  soak_metrics: ProspectiveEconomicMetrics;
-  soak_passed: boolean;
-  auto_paper_reviewed: boolean;
-  auto_paper_research_authorized: boolean;
-  pipeline_evidence_fingerprint: string;
-  reason_codes: string[];
-};
+export type ProspectiveEconomicStatus = components['schemas']['ProspectiveEconomicStatus'];
 
 export type ProspectiveEconomicHoldoutReviewInput = {
   trade_count: number;
@@ -322,89 +214,19 @@ export type ProspectiveEconomicHoldoutReviewInput = {
   review_note: string;
 };
 
-export type CatalystShadowClassification = {
-  classifier_id: string;
-  classifier_version: string;
-  catalyst_class: string;
-  directional_bias: 'positive' | 'negative' | 'mixed' | 'unknown';
-  novelty: 'new' | 'recycled' | 'unclear';
-  dilution_risk: 'none_seen' | 'possible' | 'explicit' | 'unknown';
-  confidence: number;
-  evidence_ids: string[];
-  rationale: string;
-  shadow_only: true;
-};
+export type CatalystShadowClassification = components['schemas']['CatalystShadowClassification'];
 
-export type StrategyResearchReview = {
-  instrument_id: string;
-  status: 'reviewed' | 'missing_evidence' | 'error';
-  classification?: CatalystShadowClassification | null;
-  detail?: string | null;
-};
+export type StrategyResearchReview = components['schemas']['StrategyResearchReview'];
 
-export type StrategyResearchReviewResponse = {
-  strategy_id: string;
-  universe_id: string;
-  shadow_only: true;
-  reviews: StrategyResearchReview[];
-};
+export type StrategyResearchReviewResponse = components['schemas']['StrategyResearchReviewResponse'];
 
-export type StrategyCatalystCaptureResponse = {
-  strategy: TradingStrategyConfig;
-  universe: GapperUniverse;
-  evidence_count: number;
-  candidates_with_evidence: number;
-  errors: Record<string, string>;
-};
+export type StrategyCatalystCaptureResponse = components['schemas']['StrategyCatalystCaptureResponse'];
 
-export type GapPullbackBacktestTrade = {
-  instrument_id: string;
-  discovery_rank?: number | null;
-  quality_score: number;
-  structure_interval: string;
-  execution_interval: string;
-  entry_time: string;
-  exit_time: string;
-  entry_price: string | number;
-  exit_price: string | number;
-  requested_quantity: string | number;
-  entry_fill_quantity: string | number;
-  stop_price: string | number;
-  target_price: string | number;
-  exit_reason: 'stop' | 'target' | 'rsi' | 'time' | 'eod';
-  pnl_per_share: string | number;
-  r_multiple: string | number;
-  mfe_r: string | number;
-  mae_r: string | number;
-  hold_minutes: string | number;
-};
+export type GapPullbackBacktestTrade = components['schemas']['GapPullbackBacktestTrade'];
 
-export type GapPullbackBacktestSummary = {
-  candidate_count: number;
-  trigger_count: number;
-  trade_count: number;
-  win_count: number;
-  loss_count: number;
-  win_rate: string | number;
-  expectancy_r: string | number;
-  profit_factor?: string | number | null;
-  average_mfe_r: string | number;
-  average_mae_r: string | number;
-  average_hold_minutes: string | number;
-  stop_count: number;
-  target_count: number;
-  indicator_exit_count: number;
-  risk_rejection_count: number;
-  risk_rejection_reasons: Record<string, number>;
-};
+export type GapPullbackBacktestSummary = components['schemas']['GapPullbackBacktestSummary'];
 
-export type GapPullbackBacktestResult = {
-  strategy_id: string;
-  strategy_version: string;
-  initial_cash: string | number;
-  trades: GapPullbackBacktestTrade[];
-  summary: GapPullbackBacktestSummary;
-};
+export type GapPullbackBacktestResult = components['schemas']['GapPullbackBacktestResult'];
 
 export type StrategyRangeBacktestInput = {
   start_date: string;
@@ -419,57 +241,9 @@ export type StrategyRangeBacktestInput = {
   max_sessions?: number;
 };
 
-export type StrategyRangeBacktestDay = {
-  session_date: string;
-  status: 'backtested' | 'no_candidates' | 'missing_universe' | 'data_unavailable' | 'error';
-  universe_id?: string | null;
-  universe_evaluation_time?: string | null;
-  universe_origin?: HistoricalUniverseOrigin | null;
-  fidelity?: string | null;
-  fidelity_warnings: string[];
-  strategy_fidelity_adjustments: string[];
-  candidate_count: number;
-  starting_cash: string | number;
-  ending_cash: string | number;
-  pnl: string | number;
-  trigger_count: number;
-  trade_count: number;
-  detail?: string | null;
-  result?: GapPullbackBacktestResult | null;
-};
+export type StrategyRangeBacktestDay = components['schemas']['StrategyRangeBacktestDay'];
 
-export type StrategyRangeBacktestResult = {
-  strategy_id: string;
-  strategy_kind: string;
-  strategy_version: string;
-  start_date: string;
-  end_date: string;
-  universe_scan_time_et: string;
-  universe_cutoff_et: string;
-  universe_mode: HistoricalUniverseMode;
-  initial_cash: string | number;
-  ending_cash: string | number;
-  pnl: string | number | null;
-  return_pct: string | number | null;
-  requested_trading_sessions: number;
-  covered_sessions: number;
-  exact_sessions: number;
-  reconstructed_sessions: number;
-  no_candidate_sessions: number;
-  missing_universe_sessions: number;
-  data_unavailable_sessions: number;
-  error_sessions: number;
-  candidate_count: number;
-  trigger_count: number;
-  trade_count: number;
-  win_count: number;
-  loss_count: number;
-  expectancy_r: string | number | null;
-  result_quality: BacktestResultQuality;
-  days: StrategyRangeBacktestDay[];
-  point_in_time_universes_required: true;
-  reconstruction_is_approximate: true;
-};
+export type StrategyRangeBacktestResult = components['schemas']['StrategyRangeBacktestResult'];
 
 export type StrategyRangeBacktestAccepted = {
   run_id: string;

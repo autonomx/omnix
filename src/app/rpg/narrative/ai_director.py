@@ -99,17 +99,6 @@ class AIDirector:
         # Track history
         self._tension_history.append(self.tension)
         
-    def get_tension_history(self, last_n: int = 10) -> List[float]:
-        """Get recent tension history.
-        
-        Args:
-            last_n: Number of recent ticks to return.
-            
-        Returns:
-            List of tension values for recent ticks.
-        """
-        return self._tension_history[-last_n:]
-    
     def filter_events(
         self, events: List[NarrativeEvent]
     ) -> List[NarrativeEvent]:
@@ -216,17 +205,6 @@ class AIDirector:
             reverse=True,
         )
         return events[:MID_TENSION_MAX_EVENTS]
-    
-    def set_tension(self, value: float) -> None:
-        """Manually set the tension level.
-        
-        Use this to override the automatic tension wave for
-        story-driven moments (e.g., sudden boss fight = high tension).
-        
-        Args:
-            value: Tension value between 0.0 and 1.0.
-        """
-        self.tension = max(TENSION_MIN, min(TENSION_MAX, value))
     
     def reset(self) -> None:
         """Reset the AI Director to initial state."""

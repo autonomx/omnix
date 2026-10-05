@@ -6,8 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.assistant_memory_v2.contracts import Sensitivity, TrustLevel
-from app.assistant_memory_v2.policy import strongest_sensitivity, weakest_trust
+from app.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
 
 from .contracts import EvidenceProposition, FrozenContract
 from .runtime import ActivityRuntimeResult

@@ -81,10 +81,3 @@ def test_shadow_attachment_is_diagnostic_only() -> None:
     assert attached is result
     assert attached["narrative_engine_shadow"]["source"] == "narrative_engine_shadow_v1"
     assert attached["resolved_result"]["response_mode"] == "dialogue"
-
-
-def test_foreground_pipeline_publishes_shadow_diagnostics_not_shadow_prose() -> None:
-    source = (REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(encoding="utf-8")
-    assert "attach_shadow_report" in source
-    assert 'payload["narrative_engine_shadow"]' in source
-    assert "canonical_text" not in source.replace('payload["narrative_engine_shadow"]', "")

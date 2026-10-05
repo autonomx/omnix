@@ -16,12 +16,21 @@ from app.trading.models import AdjustmentMode, MarketBar
 from app.trading.market_data_recovery import reconcile_recovery
 from app.trading.service import TradingMarketDataService
 from app.trading.strategy_monitor import TradingStrategyMonitor
+from app.trading.evidence_storage import MemoryEvidenceBackend
 from app.trading.yahoo_evidence import YahooEvidenceStore
 
 
 ET = ZoneInfo("America/New_York")
 INSTRUMENT = "equity:NASDAQ:TEST"
 
+
+
+_BACKENDS: dict[object, MemoryEvidenceBackend] = {}
+
+
+def _store(key) -> YahooEvidenceStore:
+    """A store on the memory backend shared by every store built for ``key`` (a restart)."""
+    return YahooEvidenceStore(_BACKENDS.setdefault(str(key), MemoryEvidenceBackend()))
 
 def _bar(session_date: date, minute: int, *, volume: str = "100", price: str = "10") -> MarketBar:
     start = datetime(
@@ -81,7 +90,7 @@ def _premarket_bar(session_date: date, minute: int, *, volume: str) -> MarketBar
 
 
 def test_yahoo_store_persists_and_reloads_finalized_one_minute_bars(tmp_path) -> None:
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     session_date = date(2026, 9, 17)
     bars = [_bar(session_date, 0), _bar(session_date, 1)]
 
@@ -98,7 +107,7 @@ def test_yahoo_store_persists_and_reloads_finalized_one_minute_bars(tmp_path) ->
 
 
 def test_yahoo_relative_rvol_uses_persistent_same_feed_baseline(tmp_path) -> None:
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     current = date(2026, 9, 17)
     historical_dates = [
         date(2026, 9, 16),
@@ -224,7 +233,7 @@ def test_service_repairs_exact_yahoo_gap_before_iex_fallback(tmp_path) -> None:
     registry = _RecoveryRegistry(session_date)
     service = TradingMarketDataService(
         registry=registry,
-        yahoo_evidence_store=YahooEvidenceStore(tmp_path),
+        yahoo_evidence_store=_store(tmp_path),
     )
     observed = datetime(2026, 9, 17, 9, 33, 10, tzinfo=ET)
 
@@ -289,7 +298,7 @@ def test_recovered_five_minute_yahoo_tape_is_derived_from_one_minute_authority(t
     registry = _CanonicalOneMinuteRegistry(session_date)
     service = TradingMarketDataService(
         registry=registry,
-        yahoo_evidence_store=YahooEvidenceStore(tmp_path),
+        yahoo_evidence_store=_store(tmp_path),
     )
 
     recovered = service.recovered_bars(
@@ -318,7 +327,7 @@ def test_strategy_monitor_exposes_evaluation_level_yahoo_recovery_metrics() -> N
 
 
 def test_causal_replay_excludes_bar_learned_after_decision_but_research_can_use_it(tmp_path) -> None:
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     session_date = date(2026, 9, 17)
     bar = _bar(session_date, 0).model_copy(
         update={
@@ -352,7 +361,7 @@ def test_causal_replay_excludes_bar_learned_after_decision_but_research_can_use_
 
 def test_yahoo_union_happens_before_five_minute_aggregation(tmp_path) -> None:
     session_date = date(2026, 9, 17)
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     store.persist_market_bars([_bar(session_date, 4)])
 
     class Registry(_CanonicalOneMinuteRegistry):
@@ -408,7 +417,7 @@ def test_confirmed_nontrading_interval_is_not_an_unresolved_gap() -> None:
 
 
 def test_rvol_rejects_incomplete_historical_baseline_session(tmp_path) -> None:
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     current = date(2026, 9, 17)
     for offset in range(1, 6):
         session_date = current - timedelta(days=offset)
@@ -442,7 +451,7 @@ def test_rvol_rejects_incomplete_historical_baseline_session(tmp_path) -> None:
 
 
 def test_yahoo_diagnostics_survive_store_restart(tmp_path) -> None:
-    first = YahooEvidenceStore(tmp_path)
+    first = _store(tmp_path)
     first.record_acquisition(
         attempted=3,
         succeeded=2,
@@ -459,7 +468,7 @@ def test_yahoo_diagnostics_survive_store_restart(tmp_path) -> None:
         unresolved=False,
     )
 
-    restarted = YahooEvidenceStore(tmp_path)
+    restarted = _store(tmp_path)
     diagnostics = restarted.diagnostics()
 
     assert diagnostics["acquisition_attempt_count"] == 3
@@ -470,11 +479,11 @@ def test_yahoo_diagnostics_survive_store_restart(tmp_path) -> None:
     assert diagnostics["repair_success_count"] == 1
     assert diagnostics["repaired_bar_count"] == 2
     assert diagnostics["evaluation_repaired_count"] == 1
-    assert diagnostics["metrics_persistent"] is True
+    assert diagnostics["storage"] == "memory"
 
 def test_yahoo_session_metrics_are_durable_and_distinguish_repaired_from_blocked(tmp_path) -> None:
     session_date = date(2026, 9, 18)
-    first = YahooEvidenceStore(tmp_path)
+    first = _store(tmp_path)
 
     first.record_evaluation_outcome(
         repaired=True,
@@ -494,7 +503,7 @@ def test_yahoo_session_metrics_are_durable_and_distinguish_repaired_from_blocked
         reason="ACTUAL_MISSING_BAR",
     )
 
-    restarted = YahooEvidenceStore(tmp_path)
+    restarted = _store(tmp_path)
     diagnostics = restarted.session_diagnostics(session_date)
 
     assert diagnostics["evaluation_count"] == 3
@@ -510,7 +519,7 @@ def test_yahoo_session_metrics_are_durable_and_distinguish_repaired_from_blocked
 
 
 def test_causal_replay_preserves_revision_known_at_historical_cutoff(tmp_path) -> None:
-    store = YahooEvidenceStore(tmp_path)
+    store = _store(tmp_path)
     session_date = date(2026, 9, 17)
     original = _bar(session_date, 0, price="10").model_copy(
         update={
@@ -559,13 +568,13 @@ def test_causal_replay_preserves_revision_known_at_historical_cutoff(tmp_path) -
 
 
 def test_global_metrics_merge_concurrent_process_deltas(tmp_path) -> None:
-    first = YahooEvidenceStore(tmp_path)
-    second = YahooEvidenceStore(tmp_path)
+    first = _store(tmp_path)
+    second = _store(tmp_path)
 
     first.record_acquisition(attempted=1, succeeded=1, symbols=1)
     second.record_acquisition(attempted=1, succeeded=1, symbols=1)
 
-    restarted = YahooEvidenceStore(tmp_path)
+    restarted = _store(tmp_path)
     diagnostics = restarted.diagnostics()
     assert diagnostics["acquisition_attempt_count"] == 2
     assert diagnostics["acquisition_success_count"] == 2

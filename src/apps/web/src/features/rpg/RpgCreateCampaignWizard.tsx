@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
+import { rpgSessionClient, type RpgLaunchResponse, type RpgNewGameRequest } from './api/rpgSessionClient';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
   type RpgScenarioSummary,
   type RpgWorldRelease,
   type RpgWorldSummary,
-} from '../../api/rpgWorldLibraryClient';
-import { loadSettingsProfile } from '../settings/settingsApi';
+} from './api/rpgWorldLibraryClient';
+import { loadSettingsProfile } from '../settings';
 import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
 import { RpgWorldCampaignCatalog } from './RpgWorldCampaignCatalog';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
@@ -193,7 +194,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
     setIsContinuing(true);
     setCatalogError(undefined);
     try {
-      const result = await omnixApiClient.continueRpgSession(campaignId);
+      const result = await rpgSessionClient.continueRpgSession(campaignId);
       if (!result.ok) throw new Error(result.error ?? 'The selected campaign could not be continued.');
       const sessionId = result.session_id ?? campaignId;
       storeSelectedSession(sessionId);
@@ -296,11 +297,11 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
       <section
         aria-label="Selected campaign world"
         style={{
-          border: '1px solid var(--border-subtle, rgba(255,255,255,.12))',
+          border: '1px solid var(--border-subtle, color-mix(in srgb, var(--c-neutral-1000) 12%, transparent))',
           borderRadius: 14,
           padding: 14,
           marginBottom: 14,
-          background: 'var(--surface-elevated, rgba(255,255,255,.035))',
+          background: 'var(--surface-elevated, color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent))',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>

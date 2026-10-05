@@ -135,45 +135,6 @@ def resolve_climate_profile(profile_id: str | None) -> ClimateProfileResolution:
     return {"profile_id": resolved_id, "profile": deepcopy(CLIMATE_PROFILES[resolved_id]), "metadata": metadata}
 
 
-def climate_profile_for_location(location_id: str | None) -> str:
-    """Resolve the configured profile id for a starting location."""
-
-    normalized = _normalize_profile_id(location_id)
-    return LOCATION_CLIMATE_PROFILE_IDS.get(normalized, DEFAULT_CLIMATE_PROFILE_ID)
-
-
-def validate_climate_profile(profile: ClimateProfile) -> list[str]:
-    """Return profile validation warnings without mutating the profile."""
-
-    warnings: list[str] = []
-    profile_id = str(profile.get("id") or "unknown")
-    for season_id in SEASON_IDS:
-        temperature_range = profile.get("temperature_ranges_c", {}).get(season_id)
-        if not _valid_temperature_range(temperature_range):
-            warnings.append(f"{profile_id}:missing_temperature_range:{season_id}")
-        if season_id not in profile.get("sunrise_minutes", {}):
-            warnings.append(f"{profile_id}:missing_sunrise:{season_id}")
-        if season_id not in profile.get("sunset_minutes", {}):
-            warnings.append(f"{profile_id}:missing_sunset:{season_id}")
-        weights = profile.get("weather_weights", {}).get(season_id)
-        if not isinstance(weights, dict) or not weights:
-            warnings.append(f"{profile_id}:missing_weather_weights:{season_id}")
-    if not profile.get("base_wind"):
-        warnings.append(f"{profile_id}:missing_base_wind")
-    if not isinstance(profile.get("hazard_weights"), dict):
-        warnings.append(f"{profile_id}:missing_hazard_weights")
-    if not isinstance(profile.get("resource_baselines"), dict):
-        warnings.append(f"{profile_id}:missing_resource_baselines")
-    return warnings
-
-
-def _valid_temperature_range(value: Any) -> bool:
-    if not isinstance(value, list | tuple) or len(value) != 2:
-        return False
-    low, high = value
-    return isinstance(low, int | float) and isinstance(high, int | float) and low <= high
-
-
 def _normalize_profile_id(value: str | None) -> str:
     text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     return text or DEFAULT_CLIMATE_PROFILE_ID

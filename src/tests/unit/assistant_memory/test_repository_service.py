@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 
 import pytest
 
@@ -8,13 +7,13 @@ from app.assistant_memory import (
     MemoryConflictError,
     MemoryPolicyError,
     MemoryService,
-    SQLiteMemoryRepository,
+    InMemoryMemoryRepository,
     resolve_chat_scope,
 )
 
 
 def service_at(path) -> MemoryService:
-    return MemoryService(SQLiteMemoryRepository(path))
+    return MemoryService(InMemoryMemoryRepository(path))
 
 
 def test_repository_is_restart_safe_and_enforces_optimistic_revisions(tmp_path):
@@ -170,13 +169,3 @@ def test_candidate_cannot_be_approved_from_an_unrelated_scope(tmp_path):
     assert service.repository.get_candidate(candidate.id).status == "pending"
 
 
-def test_schema_initialization_is_idempotent(tmp_path):
-    path = tmp_path / "memory.sqlite3"
-    SQLiteMemoryRepository(path)
-    SQLiteMemoryRepository(path)
-
-    with sqlite3.connect(path) as connection:
-        version = connection.execute(
-            "SELECT version FROM memory_schema_version LIMIT 1"
-        ).fetchone()[0]
-    assert version == 1

@@ -1,7 +1,7 @@
 """
 Pytest configuration and fixtures for Omnix Playwright tests.
 
-Provides page-object fixtures, API request context, Flask test client,
+Provides page-object fixtures, API request context, application test clients,
 console-error capture, and automatic screenshot-on-failure.
 """
 
@@ -11,20 +11,237 @@ import argparse
 import inspect
 import os
 import sys
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page
 
-_ORIGINAL_PATH_WRITE_TEXT = Path.write_text
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
+
+from tests.conftest_quarantine import apply_item_quarantine, collection_globs, should_ignore_collection
+
+collect_ignore_glob = collection_globs()
+
+
+@pytest.fixture
+def legacy_test_persistence(monkeypatch):
+    """Opt one test module into the explicitly isolated legacy test adapters."""
+
+    from app.persistence.runtime import reset_persistence_mode_cache
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
+    try:
+        yield
+    finally:
+        reset_persistence_mode_cache()
+
+
+@pytest.fixture
+def service_token(monkeypatch):
+    token = "test-service-token-" + ("a" * 43)
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
+    return token
+
+
+def pytest_configure(config) -> None:
+    # Before anything reads a database URL: each xdist worker gets its own database.
+    from tests.conftest_databases import configure_worker_database
+
+    configure_worker_database()
+
+
+def pytest_unconfigure(config) -> None:
+    from tests.conftest_databases import drop_worker_databases
+
+    drop_worker_databases()
+
+
+def pytest_ignore_collect(collection_path: Path, config) -> bool | None:
+    if should_ignore_collection(collection_path):
+        return True
+    return None
+
+@pytest.fixture(autouse=True)
+def isolated_operator_data_files(monkeypatch, tmp_path):
+    # Legacy-test persistence writes JSON stores under resources/data by default;
+    # keep every test (and every xdist worker) off the operator's files.
+    monkeypatch.setenv("OMNIX_ASSISTANT_TURN_STORE_PATH", str(tmp_path / "assistant_turns.json"))
+    # The provider key store is a DPAPI file in the user's profile; a test must
+    # never read the developer's real keys (their presence changed trading
+    # test outcomes on machines with Alpaca credentials).
+    monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-api-keys.dpapi"))
+    # A document kind written without a registered shape fails the test (WP-5.9).
+    monkeypatch.setenv("OMNIX_DOCUMENT_SCHEMAS_STRICT", "1")
+    # Prompt budgets never ask a real provider for its model list (WP-5.7).
+    monkeypatch.setattr("app.providers.model_catalog._default_provider", lambda _provider_id: None)
+
+
+@pytest.fixture(autouse=True)
+def isolated_secret_store():
+    # Never touch the developer's real DPAPI file or keychain (WP-4.9).
+    from app.security.secrets import install_secret_store
+    from tests.support.secrets import MemorySecretStore
+
+    store = MemorySecretStore()
+    install_secret_store(store)
+    try:
+        yield store
+    finally:
+        install_secret_store(None)
+
+
+@pytest.fixture(autouse=True)
+def capability_runtime_installed():
+    # Composition installs the assistant-tools runtime behind
+    # app.capabilities.executor (WP-4.5); tests that call capability paths
+    # without composing a gateway get the same runtime.
+    from app.assistant_tools.executor import execute_with_grant
+    from app.capabilities.executor import CAPABILITY_RUNTIME
+    from app.capabilities.registry import TOOL_DECLARATIONS
+    from app.chat.contracts import CHAT_RESEARCH
+    from app.research.assistant_tool import ResearchTool
+    from app.agent_runtime.chat_bridge import route_typed_chat_turn
+    from app.agent_runtime.contracts import SECURITY_INSTRUMENTS
+    from app.agent_runtime.feature import _RunWorkspaces
+    from app.assistant_tools.contracts import AGENT_RUN_WORKSPACES
+    from app.chat.contracts import TYPED_TURN_ROUTER
+    from app.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
+    from app.characters.interaction import CharacterChatResolver
+    from app.chat.contracts import CHARACTER_RESOLVER
+    from app.capabilities.executor import LIVE_AGENT_TOOLS
+    from app.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
+    from app.live_voice.prompt.cache import CharacterSnapshotCacheObserver
+    from app.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
+    from app.research.api import ChatResearchAdapter
+    from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
+    from app.runtime_composition import composition_port_bindings
+
+    # Every feature is enabled by default, so tests see the ports composition binds.
+    install_port_bindings(PortBindings.build([
+        PortBinding(CAPABILITY_RUNTIME, execute_with_grant, owner="assistant-tools"),
+        PortBinding(CHAT_RESEARCH, ChatResearchAdapter(), owner="research"),
+        PortBinding(TOOL_DECLARATIONS, ResearchTool(), owner="research"),
+        PortBinding(TOOL_DECLARATIONS, TradingMarketDataTool(), owner="trading"),
+        PortBinding(TYPED_TURN_ROUTER, route_typed_chat_turn, owner="agent-runtime"),
+        PortBinding(AGENT_RUN_WORKSPACES, _RunWorkspaces(), owner="agent-runtime"),
+        PortBinding(SECURITY_INSTRUMENTS, TradingSecurityInstruments(), owner="trading"),
+        PortBinding(CHARACTER_SNAPSHOT_OBSERVERS, CharacterSnapshotCacheObserver(), owner="live-voice"),
+        PortBinding(CHARACTER_RESOLVER, CharacterChatResolver(), owner="characters"),
+        PortBinding(LIVE_AGENT_TOOLS, AssistantLiveAgentTools(), owner="assistant-tools"),
+        *composition_port_bindings(),
+    ]))
+    yield
+
+
+@pytest.fixture(autouse=True)
+def postgres_local_identity(request):
+    # Persistence tests truncate shared tables (cascading to workspaces) and
+    # rebuild their own fixtures. Under xdist another PostgreSQL test can run
+    # in that window, so re-ensure the local identity before each one.
+    url = os.environ.get("OMNIX_TEST_DATABASE_URL")
+    if not url or request.node.get_closest_marker("postgres") is None:
+        yield
+        return
+    from app.persistence.authority import PostgresAuthorityError
+    from app.persistence.config import DatabaseSettings
+    from app.persistence.database import PostgresDatabase
+    from app.persistence.identity_service import ensure_local_identity
+
+    database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=1))
+    try:
+        ensure_local_identity(database)
+    except PostgresAuthorityError:
+        pass  # Runtime writes are closed (cutover tests own that state).
+    finally:
+        database.close()
+    yield
 
 
 @pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
     # Each test models a fresh process; production policy is immutable once bound.
-    from app import runtime_config
+    from copy import deepcopy
+
+    from app.runtime import config as runtime_config
+    from app.security import tenant_context as tenant_runtime
+    from app.persistence.runtime import reset_persistence_mode_cache
+    from app.settings import access as settings_access
+    from app.settings.registry import core_setting_specs
+    from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+
+    reset_persistence_mode_cache()
     monkeypatch.setattr(runtime_config, "_process_config", None)
+
+    class _TestSettingsService:
+        def __init__(self):
+            self.specs = {spec.key: spec for spec in core_setting_specs()}
+            self.values = {spec.key: deepcopy(spec.default) for spec in core_setting_specs()}
+            self.revisions = {spec.key: 0 for spec in core_setting_specs()}
+
+        def get(self, key):
+            if key not in self.specs:
+                return None
+            return {
+                "key": key,
+                "value": deepcopy(self.values[key]),
+                "revision": self.revisions[key],
+                "updated_by": None,
+                "updated_at": None,
+            }
+
+        def set(self, key, value, *, expected_revision=None):
+            if key not in self.specs:
+                raise KeyError(key)
+            current = self.revisions[key]
+            if expected_revision not in (None, current):
+                from app.settings.service import SettingRevisionConflict
+                raise SettingRevisionConflict(f"revision conflict for setting {key}")
+            self.values[key] = deepcopy(value)
+            self.revisions[key] = current + 1
+            return self.get(key)
+
+        def patch(self, patch):
+            return {
+                key: self.set(key, value, expected_revision=patch.revisions.get(key))
+                for key, value in patch.values.items()
+            }
+
+        def subscribe(self, key, callback):
+            return lambda: None
+
+        def register_specs(self, specs):
+            for spec in specs:
+                if spec.key in self.specs and self.specs[spec.key] != spec:
+                    raise ValueError(f"duplicate setting spec: {spec.key}")
+                self.specs[spec.key] = spec
+                self.values.setdefault(spec.key, deepcopy(spec.default))
+                self.revisions.setdefault(spec.key, 0)
+
+    tenant_runtime.reset_process_tenant_for_tests()
+    tenant_runtime.install_process_tenant(tenant_runtime.local_tenant_context())
+
+    test_service = _TestSettingsService()
+    test_service.register_specs((assistant_memory_setting_spec(),))
+    settings_access.reset_settings_service_for_tests()
+
+    def _install_test_settings_service(service):
+        # Production composition tests are allowed to replace the provider-free
+        # fake exactly as a fresh process would install its real service.
+        settings_access._SERVICE = service
+
+    monkeypatch.setattr(settings_access, "install_settings_service", _install_test_settings_service)
+    monkeypatch.setattr(settings_access, "_SERVICE", test_service)
+
+    try:
+        yield
+    finally:
+        reset_persistence_mode_cache()
+        tenant_runtime.reset_process_tenant_for_tests()
+        settings_access.reset_settings_service_for_tests()
 
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
@@ -50,18 +267,15 @@ from pages.voice_studio_page import VoiceStudioPage
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://localhost:5000")
+BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://127.0.0.1:8001")
 SCREENSHOTS_DIR = Path(__file__).parent / "reports" / "screenshots"
 RUN_RETIRED_LEGACY_UI_TESTS = os.environ.get("OMNIX_RUN_RETIRED_LEGACY_UI_TESTS") == "1"
 LEGACY_UI_STATIC_TEST_FILES = {
-    Path("src/tests/api/rpg/test_rpg_player_focus_assets.py"),
     Path("src/tests/e2e/test_js_variables.py"),
     Path("src/tests/functional/test_phase846_inspector_shell_smoke.py"),
     Path("src/tests/functional/test_phase847_inspector_polish_smoke.py"),
     Path("src/tests/regression/test_phase846_inspector_regression.py"),
     Path("src/tests/regression/test_phase847_inspector_polish_regression.py"),
-    Path("src/tests/unit/rpg/test_phase846_frontend_inspector_files.py"),
-    Path("src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py"),
     Path("src/tests/unit/test_js_variables.py"),
     Path("src/tests/unit/test_no_new_audio_per_chunk.py"),
 }
@@ -99,6 +313,7 @@ def pytest_addoption(parser):
 
 
 def pytest_collection_modifyitems(config, items):
+    apply_item_quarantine(items)
     if RUN_RETIRED_LEGACY_UI_TESTS:
         return
 
@@ -138,43 +353,12 @@ def isolate_historical_app_imports(request):
             yield
 
 
-@pytest.fixture(autouse=True)
-def isolate_path_write_hooks():
-    """Keep historical RPG report hooks from leaking into unrelated tests.
-
-    Several report fragments replace Path.write_text at import time. Each test
-    installs the hook it exercises; stacking hooks across tests can recursively
-    generate other reports and stall the complete suite.
-    """
-    Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
-    try:
-        yield
-    finally:
-        Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
-
 @pytest.fixture(scope="session")
 def base_url(request):
     """Resolved base URL."""
     return request.config.getoption("--base-url-omnix")
 
 
-@pytest.fixture(scope="session")
-def flask_app():
-    """Create a Flask test application (for API-only tests that don't need a browser)."""
-    try:
-        from app import create_app
-
-        flask_app = create_app()
-        flask_app.config["TESTING"] = True
-        yield flask_app
-    except ImportError:
-        pytest.skip("Flask app could not be imported – skipping API tests")
-
-
-@pytest.fixture(scope="session")
-def flask_client(flask_app):
-    """Flask test client."""
-    return flask_app.test_client()
 
 
 # ---------------------------------------------------------------------------

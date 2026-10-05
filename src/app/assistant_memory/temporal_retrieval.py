@@ -1,7 +1,7 @@
 """Time-aware deterministic retrieval for companion memory."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
 import time
@@ -12,9 +12,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.conversation.contracts import PromptMemoryItem
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
@@ -24,8 +24,9 @@ _PRELOAD_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="omnix-companion-preload",
 )
 _PRELOAD_LOCK = threading.RLock()
-_PRELOAD_CACHE: dict[str, tuple[MemoryRecord, ...]] = {}
+_PRELOAD_CACHE: dict[str, tuple[float, tuple[MemoryRecord, ...]]] = {}
 _MAX_CACHE_ENTRIES = 512
+_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_DEADLINE_MS = 50.0
 _DEFAULT_BUCKET_MINUTES = 15
 
@@ -88,7 +89,7 @@ class TemporalRetrievalResult(BaseModel):
 
 
 def resolve_companion_timezone(value: str | None = None) -> ZoneInfo:
-    configured = (value or os.environ.get("OMNIX_USER_TIMEZONE") or "UTC").strip()
+    configured = (value or _env_str("OMNIX_USER_TIMEZONE") or "UTC").strip()
     try:
         return ZoneInfo(configured)
     except ZoneInfoNotFoundError:
@@ -143,13 +144,32 @@ def invalidate_temporal_retrieval(
             _PRELOAD_CACHE.pop(key, None)
 
 
+def _preload_now() -> float:
+    return time.monotonic()
+
+
+def _prune_preload_cache_locked(now: float) -> None:
+    for key, (expires_at, _records) in list(_PRELOAD_CACHE.items()):
+        if expires_at <= now:
+            _PRELOAD_CACHE.pop(key, None)
+
+
 def _store_preload(key: str, records: list[MemoryRecord]) -> tuple[MemoryRecord, ...]:
     frozen = tuple(records)
     with _PRELOAD_LOCK:
+        _prune_preload_cache_locked(_preload_now())
         if len(_PRELOAD_CACHE) >= _MAX_CACHE_ENTRIES:
             _PRELOAD_CACHE.pop(next(iter(_PRELOAD_CACHE)))
-        _PRELOAD_CACHE[key] = frozen
+        _PRELOAD_CACHE[key] = (_preload_now() + _CACHE_TTL_SECONDS, frozen)
     return frozen
+
+
+def _get_cached_preload(key: str) -> tuple[MemoryRecord, ...] | None:
+    now = _preload_now()
+    with _PRELOAD_LOCK:
+        _prune_preload_cache_locked(now)
+        cached = _PRELOAD_CACHE.get(key)
+        return cached[1] if cached is not None else None
 
 
 def _load_records(
@@ -174,8 +194,7 @@ def preload_temporal_records(
     local_now = _aware_now(now, zone)
     key = _cache_key(context, local_now, bucket_minutes)
     started = time.perf_counter()
-    with _PRELOAD_LOCK:
-        cached = _PRELOAD_CACHE.get(key)
+    cached = _get_cached_preload(key)
     if cached is not None:
         return cached, True, False, (time.perf_counter() - started) * 1000.0, zone.key
 

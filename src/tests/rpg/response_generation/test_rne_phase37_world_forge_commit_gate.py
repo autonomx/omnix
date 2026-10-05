@@ -25,6 +25,7 @@ from app.rpg.session.genesis.world_forge_default import (
     ReferenceSafeWorldForgeGenerator,
 )
 from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -60,7 +61,7 @@ def _world_forge():
         contract,
         campaign_id="campaign:phase37",
         compiled_genesis=compile_campaign_genesis(contract),
-        generator=ReferenceSafeWorldForgeGenerator(),
+        generator=ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator()),
     )
 
 
@@ -165,30 +166,3 @@ def test_valid_materialization_records_commit_certification_everywhere() -> None
     assert session["state"]["campaign_bible"]["commit_certification"]["passed"] is True
     assert session["runtime_state"]["campaign_launch_gate"]["ready"] is True
     assert session["campaign_bible_projection"]["commit_certification"]["passed"] is True
-
-
-def test_pipeline_certifies_before_materialization_or_persistence() -> None:
-    pipeline = (
-        ROOT
-        / "src"
-        / "app"
-        / "rpg"
-        / "session"
-        / "genesis"
-        / "pipeline_adapter.py"
-    ).read_text(encoding="utf-8")
-    materialization = (
-        ROOT
-        / "src"
-        / "app"
-        / "rpg"
-        / "session"
-        / "genesis"
-        / "materialization.py"
-    ).read_text(encoding="utf-8")
-
-    certification = pipeline.index("certify_world_forge_commit(world_forge)")
-    assert certification < pipeline.index("materialize_world_forge_into_session(")
-    assert certification < pipeline.index("persist_campaign_genesis(")
-    assert materialization.count("require_world_forge_commit_ready(world_forge)") == 3
-    assert '"mode": "rejected_unapproved_canon"' in pipeline

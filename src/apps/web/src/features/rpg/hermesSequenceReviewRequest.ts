@@ -1,5 +1,5 @@
-import type { HermesRpgSequenceRequest } from '../../api/hermesRpgSequenceClient';
-import type { HermesRpgSuggestion } from '../../api/hermesClient';
+import type { HermesRpgSequenceRequest } from './api/hermesRpgSequenceClient';
+import type { HermesRpgSuggestion } from './api/hermesClient';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
 
 interface BuildHermesSequenceReviewRequestInput {

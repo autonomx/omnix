@@ -1,22 +1,9 @@
-import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgWorldRail } from './RpgWorldRail';
 import { npcRelationships, previewEncounter, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <QueryClientProvider client={queryClient}>
-        {element}
-      </QueryClientProvider>
-    </MantineProvider>
-  );
-}
 
 const baseProps = {
   autoplayRunning: false,
@@ -32,7 +19,7 @@ const baseProps = {
   onRefreshJobs: vi.fn(),
   onToggleAutoplay: vi.fn(),
   reportsHref: '/api/reports',
-  rpgAssets: [{ id: 'asset-1', module: 'rpg', storage_path: 'sessions/checkpoint-001.json', type: 'rpg_checkpoint' }],
+  rpgAssets: [{ id: 'asset-1', module: 'rpg', file_name: 'checkpoint-001.json', type: 'rpg_checkpoint' }],
   rpgJobCount: 0,
   rpgReportCount: 2,
   selectedSessionSummary: previewSessionSummary,
@@ -41,7 +28,7 @@ const baseProps = {
 
 describe('RpgWorldRail', () => {
   it('keeps world information without restoring the Autoplay & reports section', () => {
-    renderWithTheme(<RpgWorldRail {...baseProps} />);
+    renderWithProviders(<RpgWorldRail {...baseProps} />);
 
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
     expect(screen.getByLabelText('Glimmerdeep Pass travel map')).toBeInTheDocument();
@@ -62,7 +49,7 @@ describe('RpgWorldRail', () => {
     const onRefreshJobs = vi.fn();
     const onCreateCheckpoint = vi.fn();
     const onToggleAutoplay = vi.fn();
-    renderWithTheme(
+    renderWithProviders(
       <RpgWorldRail
         {...baseProps}
         onCreateCheckpoint={onCreateCheckpoint}
@@ -82,7 +69,7 @@ describe('RpgWorldRail', () => {
   });
 
   it('shows at most three RPG job cards and preserves failure details', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgWorldRail
         {...baseProps}
         jobCards={[

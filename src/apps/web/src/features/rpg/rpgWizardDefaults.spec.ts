@@ -1,5 +1,6 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS_DOCUMENT } from '../settings/settingsDefaults';
+import { DEFAULT_SETTINGS_DOCUMENT } from '../settings';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
 
 describe('RPG wizard defaults', () => {

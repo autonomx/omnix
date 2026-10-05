@@ -6,6 +6,14 @@ from typing import Any
 
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.item_detail import _session_genre, _setting_context
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_ability_detail.prompt', "1", (
+    "Write a lore-grounded tooltip description for this RPG ability in exactly two sentences, roughly 30 to 55 words. "
+        "Explain how the ability appears or feels in this campaign and its tactical purpose. Stay strictly within the supplied "
+        "ability facts: do not invent additional damage, statuses, targets, costs, cooldowns, powers, provenance, or mechanics. "
+        "Do not mention UI, hotbars, data fields, or game systems. Return immersive prose only."
+))
 
 ABILITY_DETAIL_SOURCE = "rpg_ability_detail_v1"
 
@@ -127,10 +135,7 @@ def generate_ability_detail(
         }
 
     prompt = (
-        "Write a lore-grounded tooltip description for this RPG ability in exactly two sentences, roughly 30 to 55 words. "
-        "Explain how the ability appears or feels in this campaign and its tactical purpose. Stay strictly within the supplied "
-        "ability facts: do not invent additional damage, statuses, targets, costs, cooldowns, powers, provenance, or mechanics. "
-        "Do not mention UI, hotbars, data fields, or game systems. Return immersive prose only."
+        _PROMPT_1.text
     )
     try:
         summary = _text(gateway.generate(prompt, context={"ability": facts, "setting": setting}, timeout_s=20.0))

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import pytest
 
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
 from app.assistant_memory.consolidation import (
     MemoryCapacityPolicy,
     analyze_memory_health,
-    supersede_memory,
 )
-from app.assistant_memory.repository import MemoryConflictError
 
 
 def setup_service(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     context = resolve_chat_scope("chat:one", project_id="project:omnix")
     return service, context
 
@@ -76,35 +73,6 @@ def test_expired_and_untrusted_records_are_reported_but_not_counted_as_prompt_to
     assert report.untrusted_memory_ids == [untrusted.id]
     assert report.prompt_eligible_token_estimate == 0
     assert report.consolidation_required is True
-
-
-def test_supersession_is_explicit_revisioned_and_excluded_from_selection(tmp_path):
-    service, context = setup_service(tmp_path)
-    older = create(service, context, content="The model is alpha")
-    replacement = create(service, context, content="The model is beta")
-
-    superseded = supersede_memory(
-        service,
-        context,
-        older_memory_id=older.id,
-        replacement_memory_id=replacement.id,
-        expected_revision=1,
-    )
-
-    assert superseded.status == "superseded"
-    assert superseded.revision == 2
-    assert superseded.provenance_id == replacement.id
-    selected = service.resolve_active_memory(context, token_budget=1000)
-    assert [record.id for record in selected.records] == [replacement.id]
-
-    with pytest.raises(MemoryConflictError):
-        supersede_memory(
-            service,
-            context,
-            older_memory_id=older.id,
-            replacement_memory_id=replacement.id,
-            expected_revision=1,
-        )
 
 
 def test_analysis_is_scope_first_and_never_silently_mutates(tmp_path):

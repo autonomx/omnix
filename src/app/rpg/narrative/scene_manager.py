@@ -161,26 +161,6 @@ class SceneManager:
         
         return completed
     
-    def force_new_scene(self, location: str) -> Scene:
-        """Force a scene transition regardless of events.
-        
-        Ends current scene and creates a new one at the specified location.
-        
-        Args:
-            location: New location for the scene.
-            
-        Returns:
-            New Scene instance.
-        """
-        self.end_scene()
-        self._scene_counter += 1
-        self.active_scene = Scene(
-            id=f"scene_{self._scene_counter}",
-            location=location,
-            tick_started=0,
-        )
-        return self.active_scene
-    
     def _create_new_scene(self, primary_event: Dict[str, Any]) -> None:
         """Create a new active scene from the first event.
         

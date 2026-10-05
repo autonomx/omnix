@@ -10,7 +10,8 @@ CSS_PATH = (
     / "web"
     / "src"
     / "features"
-    / "chatbot"
+    / "assistant"
+    / "chat"
     / "ChatbotWorkspaceAssistantNav.css"
 )
 

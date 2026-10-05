@@ -121,11 +121,13 @@ def test_monitor_wake_interrupts_active_timeout() -> None:
         active_interval_seconds=1,
     )
 
-    async def scenario() -> None:
-        monitor._wake_event = asyncio.Event()
-        waiter = asyncio.create_task(monitor._sleep_until_next_cycle())
-        await asyncio.sleep(0)
-        monitor.wake()
-        await asyncio.wait_for(waiter, timeout=0.1)
-
-    asyncio.run(scenario())
+    # The scheduler ticks at the active cadence; an idle monitor waits for its
+    # slow interval unless something wakes it.
+    assert monitor.tick_seconds() == 1
+    monitor.begin_cycle(100.0)
+    assert monitor.cycle_due(101.0) is False
+    assert monitor.cycle_due(130.0) is True
+    monitor.wake()
+    assert monitor.cycle_due(101.0) is True
+    monitor.begin_cycle(101.0)
+    assert monitor.cycle_due(102.0) is False

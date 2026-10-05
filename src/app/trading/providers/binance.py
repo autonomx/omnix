@@ -5,12 +5,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
-
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import BINANCE_POLICY, bindings_for_instrument, instrument_by_id, search_instruments
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -37,14 +36,21 @@ INTERVAL_SECONDS = {
 BINANCE_INTERVALS = {"1mo": "1M"}
 
 
-class BinanceMarketDataProvider:
+
+def _request_weight(path: str, params: dict[str, Any]) -> int:
+    """Binance's request weight for the spot endpoints this provider calls (WP-8.3)."""
+    if path == "/api/v3/ticker/24hr" and not (params.get("symbol") or params.get("symbols")):
+        return 80
+    return 2
+
+class BinanceMarketDataProvider(ProviderAdapter):
     provider_id = "binance"
     policy = BINANCE_POLICY
 
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
         base_url: str = "https://api.binance.com",
@@ -83,6 +89,7 @@ class BinanceMarketDataProvider:
             params=params,
             timeout=self.timeout_seconds,
             cancellation=cancellation,
+            weight=_request_weight(path, params),
         )
         try:
             return response.json()

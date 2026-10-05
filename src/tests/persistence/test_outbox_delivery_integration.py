@@ -6,16 +6,20 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.outbox_repository import OutboxDeliveryConflict
 from app.persistence.unit_of_work import unit_of_work
 
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
-    reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
-)
+pytestmark = [
+    # The outbox relay tests claim every pending event.
+    pytest.mark.xdist_group("outbox"),
+    pytest.mark.skipif(
+        not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+        reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
+    ),
+]
 
 
 def _database() -> PostgresDatabase:
@@ -40,13 +44,18 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_outbox_events, omnix_workspace_memberships, omnix_workspaces, "
             "omnix_users CASCADE"
         )
+        connection.execute(
+            "UPDATE omnix_persistence_cutover "
+            "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+            "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+        )
 
 
 def test_ordering_key_claims_one_unpublished_event_at_a_time() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             first_id = work.outbox.append(
                 context,
@@ -96,7 +105,7 @@ def test_consumer_inbox_deduplicates_completed_delivery_and_allows_replay() -> N
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             event_id = work.outbox.append(
                 context,
@@ -152,7 +161,7 @@ def test_consumer_poison_event_is_quarantined() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.outbox.append(
                 context,
@@ -192,7 +201,7 @@ def test_side_effect_receipt_reuses_result_and_rejects_key_mismatch() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             reserved = work.side_effects.reserve(
                 context,

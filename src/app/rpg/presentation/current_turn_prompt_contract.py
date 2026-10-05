@@ -1,4 +1,17 @@
 from __future__ import annotations
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract', "1", "resolve_short_followup_against_immediately_previous_topic")
+_PROMPT_2 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_2', "1", "resolve_short_followup_against_immediately_previous_topic")
+_PROMPT_3 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_3', "1", "answer_causal_why_or_state_unknown_cause_with_grounded_lead")
+_PROMPT_4 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_4', "1", "deterministic_code_only_vetoes_impossible_service_or_economy")
+_PROMPT_5 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_5', "1", "service_economy_categories_blocked_without_authoritative_contract_support")
+_PROMPT_6 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_6', "1", "do_not_repeat_old_investigation_threads_as_the_current_answer")
+_PROMPT_7 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_7', "1", "do_not_treat_profile_memory_as_new_current_turn_outcome")
+_PROMPT_8 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_8', "1", "do_not_offer_drinks_rooms_or_prices_unless_current_action_explicitly_buys_or_rents")
+_PROMPT_9 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_9', "1", "do_not_repeat_the_previous_npc_answer_when_the_current_player_action_asks_a_new_question")
+_PROMPT_10 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_10', "1", "answer_causal_why_or_state_unknown_cause_with_grounded_lead")
+_PROMPT_11 = prompt_template('rpg.presentation_current_turn_prompt_contract.build_runtime_current_turn_prompt_contract_11', "1", "document_evidence_without_explicit_service_request")
 
 """Runtime current-turn presentation prompt contract.
 
@@ -408,11 +421,11 @@ def build_runtime_current_turn_prompt_contract(
         turn_contract=turn_contract,
         service_result=service_result,
     )
-    if followup_reference and "resolve_short_followup_against_immediately_previous_topic" not in required_focus:
-        required_focus.append("resolve_short_followup_against_immediately_previous_topic")
+    if followup_reference and _PROMPT_1.text not in required_focus:
+        required_focus.append(_PROMPT_2.text)
     if followup_reference and _norm(current_question).startswith(("why", "but why", "do you know why", "but do you know why")):
-        if "answer_causal_why_or_state_unknown_cause_with_grounded_lead" not in required_focus:
-            required_focus.append("answer_causal_why_or_state_unknown_cause_with_grounded_lead")
+        if _PROMPT_3.text not in required_focus:
+            required_focus.append(_PROMPT_10.text)
     document_service_veto = is_document_evidence_without_explicit_service(action_text)
 
     return {
@@ -438,19 +451,19 @@ def build_runtime_current_turn_prompt_contract(
         "required_focus": required_focus,
         "classification_policy": {
             "llm_classifies_presentation_intent": True,
-            "deterministic_code_only_vetoes_impossible_service_or_economy": True,
-            "service_economy_categories_blocked_without_authoritative_contract_support": True,
+            _PROMPT_4.text: True,
+            _PROMPT_5.text: True,
             "veto_only_no_forced_positive_classification": True,
         },
         "forbidden_stale_topics": [
-            "do_not_repeat_old_investigation_threads_as_the_current_answer",
-            "do_not_treat_profile_memory_as_new_current_turn_outcome",
-            "do_not_offer_drinks_rooms_or_prices_unless_current_action_explicitly_buys_or_rents",
-            "do_not_repeat_the_previous_npc_answer_when_the_current_player_action_asks_a_new_question",
+            _PROMPT_6.text,
+            _PROMPT_7.text,
+            _PROMPT_8.text,
+            _PROMPT_9.text,
         ],
         "service_resolver_veto": {
             "service_false_positive_vetoed": bool(document_service_veto and _safe_dict(service_result).get("status") == "service_false_positive_vetoed"),
-            "reason": "document_evidence_without_explicit_service_request" if document_service_veto else "",
+            "reason": _PROMPT_11.text if document_service_veto else "",
             "veto_only": True,
             "forced_positive_classification": False,
         },

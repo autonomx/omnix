@@ -15,7 +15,7 @@ from app.audiobook.worker import run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -37,7 +37,7 @@ def pipeline(tmp_path, monkeypatch):
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         yield database, context, blobs, AudiobookService(database, blobs)
     finally:
@@ -65,6 +65,12 @@ def test_reclaimed_ingest_cannot_rewind_completed_newer_source(pipeline):
         assert work.jobs.get_job(context, newer["job_id"])["status"] == "completed"
         work.connection.execute(
             "UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = %s",
+            (older["job_id"],),
+        )
+        released = work.jobs.release_expired_leases(context, job_id=older["job_id"])
+        assert [row["id"] for row in released] == [older["job_id"]]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s",
             (older["job_id"],),
         )
         work.commit()

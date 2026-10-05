@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, timezone
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .strategy_universe_archiver import archive_daily_universe_if_due
 from .trade_logging import trade_log
@@ -18,44 +18,33 @@ _STATE_KEY = "_omnix_trading_strategy_universe_archive_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_universe_archive_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
 
 
-class TradingStrategyUniverseArchiveMonitor:
+class TradingStrategyUniverseArchiveMonitor(ScheduledTradingMonitor):
     """Evidence-only morning scanner archive; never changes execution authority."""
+
+    error_event = "daily_universe_archive_monitor_error"
 
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.archive_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def run_once(self, *, allow_late_recovery: bool = False) -> int:
         repository: TradingStrategyRepository = default_strategy_repository()
@@ -91,34 +80,12 @@ class TradingStrategyUniverseArchiveMonitor:
         self.last_run_at = datetime.now(timezone.utc)
         return archived
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "daily_universe_archive_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
-
-def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> TradingStrategyUniverseArchiveMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
-    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
-        return existing
-    monitor = TradingStrategyUniverseArchiveMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
+    async def prepare_for_scheduled_execution(self) -> None:
+        """Run startup-only late recovery before periodic archive passes."""
         if not strategy_universe_archive_monitor_enabled():
             return
         try:
-            recovered = await monitor.run_once(allow_late_recovery=True)
+            recovered = await self.run_once(allow_late_recovery=True)
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation",
@@ -129,7 +96,7 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
         except Exception as exc:
             # Reconciliation is best-effort. A provider/database problem at boot
             # must not prevent the normal periodic monitor from starting.
-            monitor.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
+            self.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation_error",
@@ -138,19 +105,20 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
                 detail=str(exc),
                 execution_authority=False,
             )
-        monitor.start()
 
-    async def shutdown() -> None:
-        await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+def create_trading_strategy_universe_archive_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
+    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
+        return None
+    monitor = TradingStrategyUniverseArchiveMonitor()
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_universe_archive_monitor_enabled)
 
 
 __all__ = [
     "TradingStrategyUniverseArchiveMonitor",
-    "register_trading_strategy_universe_archive_monitor",
+    "create_trading_strategy_universe_archive_monitor_task",
     "strategy_universe_archive_monitor_enabled",
 ]

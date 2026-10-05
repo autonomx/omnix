@@ -6,9 +6,11 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -16,6 +18,7 @@ from app.persistence.unit_of_work import unit_of_work
 from .assembly import PausePolicy
 from .assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from .hashing import canonical_json
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 from .render_cache import find_valid_render
 from .render_planner import load_chapter_units
 
@@ -28,13 +31,13 @@ class _AssemblyCancelled(Exception):
 
 
 def run_assemble_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.assemble-chapter"], lease_seconds=3600,
+            job_types=["audiobook.assemble-chapter"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -44,6 +47,15 @@ def run_assemble_once(
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _assemble_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _assemble_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     storage_key: str | None = None
@@ -78,17 +90,13 @@ def run_assemble_once(
                 render = find_valid_render(work.connection, context, blobs, key)
                 if render is None:
                     raise ValueError(f"render is missing or corrupt for span {unit.span_id}")
-                asset = work.connection.execute(
-                    """SELECT storage_key, byte_size FROM omnix_assets
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, render["audio_asset_id"]),
-                ).fetchone()
+                asset = work.assets.asset_fields(context, render["audio_asset_id"])
                 if asset is None:
                     raise ValueError("render asset disappeared")
-                input_audio_bytes += int(asset[1])
+                input_audio_bytes += int(asset["byte_size"])
                 spans.append(AudioFileSpan(
                     render["id"], key, unit.speaker_id,
-                    unit.speech_plan.source_text, str(asset[0]),
+                    unit.speech_plan.source_text, str(asset["storage_key"]),
                     render["audio_checksum"], unit.span_id,
                 ))
                 render_ids.append(render["id"])
@@ -96,15 +104,18 @@ def run_assemble_once(
         policy = PausePolicy()
         desired_key = assembly_key_for(spans, policy=policy)
         with unit_of_work(database) as work:
-            cached = work.connection.execute(
-                """SELECT ca.id, ca.audio_asset_id, ca.audio_checksum,
-                          a.storage_key, a.byte_size
-                     FROM omnix_audiobook_chapter_assemblies ca
-                     JOIN omnix_assets a ON a.id = ca.audio_asset_id AND a.workspace_id = ca.workspace_id
-                    WHERE ca.workspace_id = %s AND ca.chapter_id = %s AND ca.assembly_key = %s
-                    ORDER BY ca.created_at DESC""",
+            assemblies = work.connection.execute(
+                """SELECT id, audio_asset_id, audio_checksum
+                     FROM omnix_audiobook_chapter_assemblies
+                    WHERE workspace_id = %s AND chapter_id = %s AND assembly_key = %s
+                    ORDER BY created_at DESC""",
                 (context.workspace_id, payload["chapter_id"], desired_key),
             ).fetchall()
+            cached = []
+            for assembly in assemblies:
+                asset = work.assets.asset_fields(context, str(assembly[1]))
+                if asset is not None:
+                    cached.append((*assembly, asset["storage_key"], asset["byte_size"]))
             selected = None
             for row in cached:
                 try:
@@ -117,7 +128,7 @@ def run_assemble_once(
             work.rollback()
         if selected is None:
             with tempfile.NamedTemporaryFile(prefix="omnix-chapter-", suffix=".wav",
-                                             dir=blobs.root, delete=False) as output:
+                                             dir=blobs.scratch_dir(), delete=False) as output:
                 output_path = Path(output.name)
             last_renewal = time.monotonic()
 
@@ -137,7 +148,7 @@ def run_assemble_once(
                         raise _AssemblyCancelled()
                     renewal.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     renewal.commit()
                 last_renewal = now
@@ -200,28 +211,29 @@ def run_assemble_once(
                           "output_audio_bytes": selected[2],
                           "wall_seconds": round(time.perf_counter() - started_at, 3)},
             )
-            remaining = work.connection.execute(
-                """
-                SELECT count(*)
-                  FROM omnix_jobs AS render_job
-                 WHERE render_job.workspace_id = %s
-                   AND render_job.module = 'audiobook'
-                   AND render_job.job_type = 'audiobook.render-chapter'
-                   AND render_job.input_payload->>'render_run_id' = %s
-                   AND NOT EXISTS (
-                       SELECT 1
-                         FROM omnix_jobs AS assembly_job
-                        WHERE assembly_job.workspace_id = render_job.workspace_id
-                          AND assembly_job.module = 'audiobook'
-                          AND assembly_job.job_type = 'audiobook.assemble-chapter'
-                          AND assembly_job.input_payload->>'render_run_id' = %s
-                          AND assembly_job.input_payload->>'chapter_id'
-                              = render_job.input_payload->>'chapter_id'
-                          AND assembly_job.status = 'completed'
-                   )
-                """,
-                (context.workspace_id, payload["render_run_id"], payload["render_run_id"]),
-            ).fetchone()[0]
+            render_jobs = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.render-chapter",
+                input_fields=(("render_run_id", str(payload["render_run_id"])),),
+                limit=500,
+            )
+            completed_assemblies = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.assemble-chapter",
+                input_fields=(("render_run_id", str(payload["render_run_id"])),),
+                statuses=("completed",),
+                limit=500,
+            )
+            assembled_chapters = {
+                str((job["input_payload"] or {}).get("chapter_id") or "")
+                for job in completed_assemblies
+            }
+            remaining = sum(
+                1 for job in render_jobs
+                if str((job["input_payload"] or {}).get("chapter_id") or "") not in assembled_chapters
+            )
             if int(remaining) == 0:
                 work.connection.execute(
                     """UPDATE omnix_audiobook_projects SET state = 'ready_to_export',

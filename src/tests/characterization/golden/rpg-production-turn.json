@@ -1,0 +1,318 @@
+{
+  "status": "ready",
+  "turns": [
+    {
+      "command": "look around",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:1",
+      "model_calls": [
+        "semantic_intent",
+        "semantic_intent",
+        "narration_candidates",
+        "narration_candidates",
+        "canon_dossier"
+      ],
+      "narrative": {
+        "blocks": [
+          {
+            "kind": "action",
+            "purpose": "resolved_action",
+            "sequence": 1,
+            "speaker_id": null,
+            "text": "You take in your surroundings."
+          },
+          {
+            "kind": "choice",
+            "purpose": "offered_choice",
+            "sequence": 2,
+            "speaker_id": null,
+            "text": "Offered choice: You take in your surroundings."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [],
+        "llm_purpose": "canonical_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "narrative_engine_resolved_turn_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 1,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 2,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": 1,
+      "state": {
+        "changed": false,
+        "changed_domains": [],
+        "revision": 2
+      },
+      "turn_id": "turn:1",
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [],
+        "narration": "You take in your surroundings.",
+        "npc": {},
+        "plain_text": "You take in your surroundings."
+      }
+    },
+    {
+      "command": "talk to the bartender",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:2",
+      "model_calls": [
+        "turn_narration"
+      ],
+      "narrative": {
+        "blocks": [
+          {
+            "kind": "dialogue",
+            "purpose": "direct_answer",
+            "sequence": 0,
+            "speaker_id": "npc:the",
+            "text": "The moment passes quietly in the room."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [
+          "conversation"
+        ],
+        "llm_purpose": "compact_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "compact_dialogue_provider_canonical_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 2,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 4,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": 1,
+      "state": {
+        "changed": true,
+        "changed_domains": [
+          "conversation"
+        ],
+        "revision": 4
+      },
+      "turn_id": "turn:1",
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [
+          {
+            "kind": "npc_dialogue",
+            "speaker": "the",
+            "speaker_id": "npc:the",
+            "text": "The moment passes quietly in the room."
+          }
+        ],
+        "narration": "",
+        "npc": {
+          "line": "The moment passes quietly in the room.",
+          "speaker": "the",
+          "speaker_id": "npc:the"
+        },
+        "plain_text": "the: \"The moment passes quietly in the room.\""
+      }
+    },
+    {
+      "command": "buy a drink",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:3",
+      "model_calls": [
+        "semantic_intent",
+        "semantic_intent",
+        "narration_candidates",
+        "narration_candidates",
+        "canon_dossier"
+      ],
+      "narrative": {
+        "blocks": [
+          {
+            "kind": "action",
+            "purpose": "resolved_action",
+            "sequence": 1,
+            "speaker_id": null,
+            "text": "You take in your surroundings."
+          },
+          {
+            "kind": "choice",
+            "purpose": "offered_choice",
+            "sequence": 2,
+            "speaker_id": null,
+            "text": "Offered choice: You take in your surroundings."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [],
+        "llm_purpose": "canonical_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "narrative_engine_resolved_turn_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 3,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 6,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": 2,
+      "state": {
+        "changed": false,
+        "changed_domains": [],
+        "revision": 6
+      },
+      "turn_id": "turn:2",
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [],
+        "narration": "You take in your surroundings.",
+        "npc": {},
+        "plain_text": "You take in your surroundings."
+      }
+    },
+    {
+      "command": "go outside",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:4",
+      "model_calls": [
+        "semantic_intent",
+        "semantic_intent",
+        "narration_candidates",
+        "canon_dossier"
+      ],
+      "narrative": {
+        "blocks": [
+          {
+            "kind": "action",
+            "purpose": "resolved_action",
+            "sequence": 1,
+            "speaker_id": null,
+            "text": "You take in your surroundings."
+          },
+          {
+            "kind": "choice",
+            "purpose": "offered_choice",
+            "sequence": 2,
+            "speaker_id": null,
+            "text": "Offered choice: You take in your surroundings."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [],
+        "llm_purpose": "canonical_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "narrative_engine_resolved_turn_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 4,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 8,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": null,
+      "state": {
+        "changed": false,
+        "changed_domains": [],
+        "revision": 8
+      },
+      "turn_id": null,
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [],
+        "narration": "You take in your surroundings.",
+        "npc": {},
+        "plain_text": "You take in your surroundings."
+      }
+    },
+    {
+      "command": "wait",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:5",
+      "model_calls": [
+        "semantic_intent",
+        "semantic_intent",
+        "narration_candidates",
+        "narration_candidates",
+        "canon_dossier"
+      ],
+      "narrative": {
+        "blocks": [
+          {
+            "kind": "action",
+            "purpose": "resolved_action",
+            "sequence": 1,
+            "speaker_id": null,
+            "text": "You take in your surroundings."
+          },
+          {
+            "kind": "choice",
+            "purpose": "offered_choice",
+            "sequence": 2,
+            "speaker_id": null,
+            "text": "Offered choice: You take in your surroundings."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [],
+        "llm_purpose": "canonical_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "narrative_engine_resolved_turn_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 5,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 10,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": 3,
+      "state": {
+        "changed": false,
+        "changed_domains": [],
+        "revision": 10
+      },
+      "turn_id": "turn:3",
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [],
+        "narration": "You take in your surroundings.",
+        "npc": {},
+        "plain_text": "You take in your surroundings."
+      }
+    }
+  ]
+}

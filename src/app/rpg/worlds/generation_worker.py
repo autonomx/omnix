@@ -1,8 +1,8 @@
 """Lease-backed worker for reusable-world generation jobs."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -74,12 +74,12 @@ def _provider_key(value: Any) -> str:
 def _configured_world_forge_provider(
     environ: Mapping[str, str] | None = None,
 ) -> str:
-    env = environ or os.environ
+    env = environ or _environment()
     dedicated = _provider_key(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER"))
     if dedicated:
         return dedicated
     try:
-        from app.platform.effective_defaults import (
+        from app.settings.effective_defaults import (
             effective_llm_route,
             load_effective_profile,
         )
@@ -101,7 +101,7 @@ def world_generation_worker_limit(
 ) -> int:
     """Return a safe worker count for the provider that owns this durable run."""
 
-    env = environ or os.environ
+    env = environ or _environment()
     override = str(env.get("OMNIX_RPG_WORLD_GENERATION_WORKERS") or "").strip()
     if override:
         try:
@@ -174,69 +174,79 @@ def _release_interrupted_job(
         retryable = attempt_count < max_attempts
         next_max = max_attempts
         resume_policy = "profile_retry_budget"
-    work.connection.execute(
-        "UPDATE omnix_jobs SET status = %s, max_attempts = %s, "
-        "available_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE available_at END, "
-        "error = jsonb_build_object("
-        "'code', %s::text, 'resume_policy', %s::text"
-        "), "
-        "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
-        "completed_at = CASE WHEN %s THEN NULL ELSE CURRENT_TIMESTAMP END, "
-        "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s",
-        (
-            "retrying" if retryable else "failed",
-            next_max,
-            retryable,
-            error_code,
-            resume_policy,
-            retryable,
-            context.workspace_id,
-            job_id,
-        ),
+    return work.jobs.release_interrupted_job(
+        context,
+        job_id=job_id,
+        status="retrying" if retryable else "failed",
+        max_attempts=next_max,
+        error_code=error_code,
+        resume_policy=resume_policy,
     )
-    return retryable
 
 
 def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
     """Discard orphans and recover jobs from durable provider/spool phase evidence."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
-        discarded = work.connection.execute(
-            "DELETE FROM omnix_jobs AS job WHERE job.workspace_id = %s AND ("
-            "(job.job_type = %s AND ("
-            "NOT EXISTS (SELECT 1 FROM omnix_rpg_world_generation_runs AS run "
-            "WHERE run.workspace_id = job.workspace_id "
-            "AND run.run_id = job.metadata->>'run_id') "
-            "OR NOT EXISTS (SELECT 1 FROM omnix_rpg_worlds AS world "
-            "WHERE world.workspace_id = job.workspace_id "
-            "AND world.id = job.metadata->>'world_id'))) "
-            "OR (job.job_type = %s AND NOT EXISTS ("
-            "SELECT 1 FROM omnix_rpg_worlds AS world "
-            "WHERE world.workspace_id = job.workspace_id "
-            "AND world.id = job.metadata->>'world_id')))",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE),
-        ).rowcount
-        rows = work.connection.execute(
-            "SELECT id, job_type, attempt_count, max_attempts FROM omnix_jobs "
-            "WHERE workspace_id = %s AND job_type IN (%s, %s) "
-            "AND status IN ('leased', 'running', 'cancel_requested') "
-            "AND lease_owner LIKE 'rpg-world-generation:local:%%'",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE),
-        ).fetchall()
+        discarded = 0
+        cursor = None
+        while True:
+            batch = work.jobs.query_jobs(
+                context,
+                job_types=(WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE),
+                order_by="created_asc",
+                after_created=cursor,
+                limit=500,
+            )
+            if not batch:
+                break
+            orphan_ids = []
+            for job in batch:
+                metadata = job.get("metadata") or {}
+                world_id = str(metadata.get("world_id") or "")
+                run_id = str(metadata.get("run_id") or "")
+                world = work.world_scenarios.get_world(context, world_id) if world_id else None
+                run = (
+                    work.world_generation.get(context, run_id)
+                    if run_id and job["job_type"] == WORLD_TOPIC_JOB_TYPE
+                    else None
+                )
+                if world is None or (job["job_type"] == WORLD_TOPIC_JOB_TYPE and run is None):
+                    orphan_ids.append(job["id"])
+            discarded += work.jobs.delete_job_ids(context, job_ids=tuple(orphan_ids))
+            last = batch[-1]
+            cursor = (last["created_at"], last["id"])
+        rows = []
+        cursor = None
+        while True:
+            batch = work.jobs.query_jobs(
+                context,
+                job_types=(WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE),
+                statuses=("leased", "running", "cancel_requested"),
+                lease_owner_pattern="rpg-world-generation:local:%",
+                order_by="created_asc",
+                after_created=cursor,
+                limit=500,
+            )
+            if not batch:
+                break
+            rows.extend(batch)
+            last = batch[-1]
+            cursor = (last["created_at"], last["id"])
         requeued = 0
         for row in rows:
             if _release_interrupted_job(
                 work,
                 context,
                 job_id=str(row[0]),
-                job_type=str(row[1]),
-                attempt_count=int(row[2]),
-                max_attempts=int(row[3]),
+                job_type=str(row["job_type"]),
+                attempt_count=int(row["attempt_count"]),
+                max_attempts=int(row["max_attempts"]),
                 error_code="worker_interrupted",
             ):
                 requeued += 1
@@ -252,27 +262,27 @@ def _recover_worker_database_interruption(
     """Release leases and extend persistence replay without extending content calls."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
-        rows = work.connection.execute(
-            "SELECT id, job_type, attempt_count, max_attempts FROM omnix_jobs "
-            "WHERE workspace_id = %s AND job_type IN (%s, %s) "
-            "AND status IN ('leased', 'running', 'cancel_requested') "
-            "AND lease_owner = %s",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE, worker_id),
-        ).fetchall()
+        rows = work.jobs.query_jobs(
+            context,
+            job_types=(WORLD_TOPIC_JOB_TYPE, WORLD_PROFILE_JOB_TYPE),
+            statuses=("leased", "running", "cancel_requested"),
+            lease_owner=worker_id,
+            limit=500,
+        )
         recovered = 0
         for row in rows:
             if _release_interrupted_job(
                 work,
                 context,
                 job_id=str(row[0]),
-                job_type=str(row[1]),
-                attempt_count=int(row[2]),
-                max_attempts=int(row[3]),
+                job_type=str(row["job_type"]),
+                attempt_count=int(row["attempt_count"]),
+                max_attempts=int(row["max_attempts"]),
                 error_code="database_unavailable",
             ):
                 recovered += 1
@@ -364,10 +374,10 @@ def run_world_generation_worker_once(
     """Claim and execute one world profile or topic job."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         job = work.jobs.claim_next(
             context,
@@ -403,10 +413,11 @@ def run_world_generation_worker_once(
         else:
             discard_reason = ""
         if discard_reason:
-            work.connection.execute(
-                "DELETE FROM omnix_jobs WHERE id = %s AND workspace_id = %s "
-                "AND lease_owner = %s AND lease_token = %s",
-                (str(job["id"]), context.workspace_id, worker_id, str(job["lease_token"])),
+            work.jobs.delete_claimed_job(
+                context,
+                job_id=str(job["id"]),
+                lease_owner=worker_id,
+                lease_token=str(job["lease_token"]),
             )
             work.commit()
             log_world_generation_event(

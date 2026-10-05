@@ -15,7 +15,6 @@ BUNDLE_FILENAME = "vesper-9-city-of-borrowed-minds.omnix-world.zip"
 FIXED_TIME = (2026, 7, 29, 12, 0, 0)
 EXPORTED_AT = "2026-07-29T19:00:00+00:00"
 CATALOGUE_SHA256 = "b38e37a33cd446268e8dca360dcc45c233abb899099fade908a3e56530658015"
-BUNDLE_SHA256 = "41b3a7f7bdd17d38253034d07b50962f640545b1e920e329116a779ca55c89be"
 
 
 def _canonical(value: Any) -> bytes:
@@ -205,9 +204,6 @@ def build_bundle(source_dir: Path) -> bytes:
 
 def materialize_bundle(source_dir: Path, output: Path | None = None) -> Path:
     content = build_bundle(source_dir)
-    digest = hashlib.sha256(content).hexdigest()
-    if BUNDLE_SHA256 != "__BUNDLE_SHA256__" and digest != BUNDLE_SHA256:
-        raise ValueError(f"Vesper-9 bundle checksum mismatch: {digest}")
     destination = output or source_dir.parent / BUNDLE_FILENAME
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(content)

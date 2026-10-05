@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ReplayPrimitiveKind = Literal[
@@ -49,6 +49,15 @@ class CheckpointEnvelope(BaseModel):
     checksum: str
     payload: dict[str, Any]
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CheckpointBundleRequest(BaseModel):
+    """Extensible state bundle with explicit checkpoint control fields."""
+
+    model_config = ConfigDict(extra="allow")
+
+    turn_index: int | None = Field(default=None, ge=0)
+    state_versions: dict[str, Any] = Field(default_factory=dict)
 
 
 class PersistenceInventory(BaseModel):

@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const worldId = 'world:aurelia';
 
@@ -43,7 +44,7 @@ describe('RpgWorldVisualMapPanel', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('renders approved map artwork and regenerates it from the Map page', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     const regenerate = await screen.findByRole('button', { name: 'Regenerate Map Artwork' });
@@ -61,7 +62,7 @@ describe('RpgWorldVisualMapPanel', () => {
   });
 
   it('zooms the atlas and opens location information from an icon', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     const marker = await screen.findByRole('button', { name: 'Open Moon Market' });
@@ -133,7 +134,7 @@ describe('RpgWorldVisualMapPanel', () => {
       if (url.includes('/image-targets')) return response(currentCanonTargets);
       return response(currentCanonDetail);
     }));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     expect(await screen.findByRole('button', { name: 'Open OmniCorp Spire' })).toBeInTheDocument();
@@ -174,7 +175,7 @@ describe('RpgWorldVisualMapPanel', () => {
       if (url.includes('/image-targets')) return response(targetsWithDetailMap);
       return response(detail);
     }));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     expect(await screen.findByRole('button', { name: 'Regenerate All Detailed Maps (1)' })).toBeInTheDocument();
@@ -212,7 +213,7 @@ describe('RpgWorldVisualMapPanel', () => {
       if (url.includes('/image-targets')) return response(imageTargets);
       return response(detailWithCanonicalDescription);
     }));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market' }));
@@ -233,7 +234,7 @@ describe('RpgWorldVisualMapPanel', () => {
       if (url.includes('/image-targets')) return response(staleTargets);
       return response(detail);
     }));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     await screen.findByRole('button', { name: 'Regenerate Map Artwork' });
@@ -241,7 +242,7 @@ describe('RpgWorldVisualMapPanel', () => {
   });
 
   it('offers one bulk action for all generated areas missing blueprints', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = createTestQueryClient();
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Generate Area Blueprints (1)' }));

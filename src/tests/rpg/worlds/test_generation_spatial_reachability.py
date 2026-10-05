@@ -24,7 +24,6 @@ from app.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 from app.rpg.worlds.generation_spatial_reachability import (
-    SpatialReachabilityCompilationError,
     spatial_reachability_issues,
     spatial_reachability_report,
 )
@@ -404,33 +403,6 @@ def test_large_route_portfolio_requires_constraint_diversity() -> None:
         "route_blocker",
         "failure_condition",
     }
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(SpatialReachabilityCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(disconnected=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_spatial_report(

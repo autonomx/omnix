@@ -1,3 +1,4 @@
+import { writeStoryData } from './storySnapshotStore';
 export type StoryCharacterRole = 'narrator' | 'protagonist' | 'supporting' | 'minor';
 export type StoryCharacterSource = 'outline' | 'generation' | 'manual';
 
@@ -42,11 +43,7 @@ export function loadStoryCast(storyFingerprint: string): StoryCharacter[] {
 }
 
 export function saveStoryCast(storyFingerprint: string, cast: StoryCharacter[]): void {
-  try {
-    window.localStorage.setItem(storyCastStorageKey(storyFingerprint), JSON.stringify(normalizeCast(cast)));
-  } catch {
-    // Local cast persistence is best-effort until backend persistence lands.
-  }
+  writeStoryData(storyCastStorageKey(storyFingerprint), JSON.stringify(normalizeCast(cast)));
 }
 
 export function deriveStoryCast(text: string, existing: StoryCharacter[] = []): StoryCharacter[] {

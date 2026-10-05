@@ -4,13 +4,12 @@ import time
 
 import pytest
 
-from app.trading import ai_shadow_reliability
-from app.trading import strategy_runtime_reliability_fixes as runtime_fixes
+from app.trading import strategy_ai_shadow_provider as provider
 from app.trading.strategy_ai_shadow_v2 import AIShadowV2Analyzer
 
 
 def test_v2_terminal_transport_failure_trips_circuit_after_one_attempt(monkeypatch) -> None:
-    circuit = ai_shadow_reliability._CIRCUIT
+    circuit = provider._CIRCUIT
     circuit.success()
     calls = 0
 
@@ -19,11 +18,11 @@ def test_v2_terminal_transport_failure_trips_circuit_after_one_attempt(monkeypat
         calls += 1
         raise TimeoutError("Timed out waiting for Codex app-server")
 
-    monkeypatch.setattr(runtime_fixes, "_ORIGINAL_V2_ASSESS", fail_once)
+    monkeypatch.setattr(AIShadowV2Analyzer, "_assess_core", fail_once)
     analyzer = AIShadowV2Analyzer(provider_factory=lambda: None)
 
     try:
-        with pytest.raises(ai_shadow_reliability.AIShadowReliabilityError) as exc_info:
+        with pytest.raises(provider.AIShadowReliabilityError) as exc_info:
             analyzer.assess(
                 arm="full_session_control",
                 rows=[{"instrument_id": "equity:NASDAQ:ACVA"}],

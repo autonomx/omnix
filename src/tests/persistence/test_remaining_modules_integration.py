@@ -7,9 +7,15 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
+from app.persistence.document_schemas import register_document_schema
+
+# The generic repository is exercised with kinds made up for these tests; every
+# stored kind needs a registered shape (WP-5.9).
+for _module, _record_type in (("research", "cache-entry"), ("live-chat", "evaluation"), ("rpg", "npc-evolution-profile")):
+    register_document_schema(_module, _record_type, dict)
 
 
 pytestmark = pytest.mark.skipif(
@@ -56,7 +62,7 @@ def test_generic_module_records_are_revisioned_and_expiry_aware() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             created = work.module_records.put(
                 context,
@@ -117,7 +123,7 @@ def test_provider_configs_use_secret_references_and_expiring_status() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             secret = work.secret_references.register(
                 context,
@@ -177,7 +183,7 @@ def test_prompt_templates_are_tenant_scoped_and_revisioned() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             prompt = work.prompts.create(
                 context,
@@ -214,7 +220,7 @@ def test_research_reports_and_runtime_projections_are_durable_or_rebuildable() -
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             asset = work.assets.create(
                 context,
@@ -293,7 +299,7 @@ def test_remaining_module_writes_share_unit_of_work_rollback() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(RuntimeError, match="rollback modules"):
             with unit_of_work(database) as work:
                 work.module_records.put(
@@ -320,5 +326,43 @@ def test_remaining_module_writes_share_unit_of_work_rollback() -> None:
             ) is None
             assert work.prompts.get(context, "prompt:rollback") is None
             work.rollback()
+    finally:
+        database.close()
+
+
+def test_module_record_operations_run_inside_the_callers_transaction() -> None:
+    """The operations modules use instead of SQL on omnix_module_records (PA-2.2)."""
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        kind = {"module": "rpg", "record_type": "npc-evolution-profile"}
+        with unit_of_work(database) as work:
+            records = work.module_records
+            records.ensure(context, record_id="npc:a", payload={"trust": 1}, **kind)
+            records.ensure(context, record_id="npc:a", payload={"trust": 99}, **kind)
+            assert records.payload(context, record_id="npc:a", **kind) == {"trust": 1}
+            records.upsert(context, record_id="npc:a", payload={"trust": 2, "group": "x", "created_at": "1"}, **kind)
+            records.upsert(context, record_id="npc:b", payload={"trust": 3, "group": "x", "created_at": "2"}, **kind)
+            records.upsert(context, record_id="npc:c", payload={"trust": 4, "group": "y", "created_at": "3"}, **kind)
+            assert records.payload(context, record_id="npc:a", lock=True, **kind)["trust"] == 2
+            listed = records.payloads_where(context, field="group", value="x", newest_first_by="created_at", **kind)
+            assert [item["trust"] for item in listed] == [3, 2]
+            assert records.replace_payload_where(
+                context, record_id="npc:b", payload={"trust": 30, "group": "x"}, matching={"group": "x"}, **kind,
+            )
+            assert not records.replace_payload_where(
+                context, record_id="npc:b", payload={"trust": 31}, matching={"group": "y"}, **kind,
+            )
+            assert records.payload(context, record_id="npc:b", **kind)["trust"] == 30
+            current = records.get(context, record_id="npc:c", **kind)
+            assert records.archive(context, record_id="npc:c", expected_revision=current["revision"] + 5, **kind) is None
+            archived = records.archive(context, record_id="npc:c", expected_revision=current["revision"], **kind)
+            assert archived["status"] == "archived" and records.payload(context, record_id="npc:c", **kind) is None
+            assert records.delete(context, record_id="npc:a", **kind)
+            assert not records.delete(context, record_id="npc:a", **kind)
+            work.rollback()
+        with unit_of_work(database) as work:
+            assert work.module_records.payload(context, record_id="npc:b", **kind) is None
     finally:
         database.close()

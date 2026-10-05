@@ -5,13 +5,11 @@ import { tradingPaperApi } from './tradingPaperApi';
 import { placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
-import {
-  PAPER_POSITION_PROTECTION_EVENT,
-  readPaperPositionProtection,
-  writePaperPositionProtection,
-  type PaperPositionProtection,
-} from './paperPositionProtection';
+import { readPaperPositionProtection, writePaperPositionProtection, type PositionProtectionLevels } from './paperPositionProtection';
 import './TradingPositionOverlay.css';
+import { PAPER_POSITION_PROTECTION_CHANGED_EVENT } from '../../events/bus';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { chartPalette } from './chartPalette';
 
 type ProtectionLevel = 'takeProfit' | 'stopLoss';
 type DraftProtection = { level: ProtectionLevel; value: number | null; dragging: boolean };
@@ -52,7 +50,7 @@ export function TradingPositionOverlay({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<OverlayPosition | null>(null);
-  const [protection, setProtection] = useState<PaperPositionProtection>({ takeProfit: null, stopLoss: null });
+  const [protection, setProtection] = useState<PositionProtectionLevels>({ takeProfit: null, stopLoss: null });
   const [draft, setDraft] = useState<DraftProtection | null>(null);
   const [action, setAction] = useState<PositionAction | null>(null);
   const [actionStatus, setActionStatus] = useState<'idle' | 'saving'>('idle');
@@ -78,6 +76,7 @@ export function TradingPositionOverlay({
         quantity: workingOrder.quantity,
         average_cost: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? '',
         realized_pnl: '0',
+        reserved_quantity: '0',
         last_price: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? null,
         unrealized_pnl: '0',
         pending: true,
@@ -101,6 +100,7 @@ export function TradingPositionOverlay({
             quantity: workingOrder.quantity,
             average_cost: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? '',
             realized_pnl: '0',
+            reserved_quantity: '0',
             last_price: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? null,
             unrealized_pnl: '0',
             pending: true,
@@ -113,7 +113,7 @@ export function TradingPositionOverlay({
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 5_000);
+    const stopPolling = startPolling(refresh, POLL_INTERVALS_MS.paperAccount);
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ accountId?: string; instrumentId?: string }>).detail;
       if (detail?.accountId === accountId && detail.instrumentId === instrumentId) {
@@ -121,11 +121,11 @@ export function TradingPositionOverlay({
         void refresh();
       }
     };
-    window.addEventListener(PAPER_POSITION_PROTECTION_EVENT, changed);
+    window.addEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
-      window.removeEventListener(PAPER_POSITION_PROTECTION_EVENT, changed);
+      stopPolling();
+      window.removeEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     };
   }, [accountId, instrumentId, replayMode, replaySnapshot]);
 
@@ -157,7 +157,7 @@ export function TradingPositionOverlay({
 
   const entryPrice = position ? Number(position.average_cost) : null;
   const entryY = adapter && entryPrice !== null ? adapter.priceToCoordinate(entryPrice) : null;
-  const currentProtection = useMemo<PaperPositionProtection>(() => {
+  const currentProtection = useMemo<PositionProtectionLevels>(() => {
     if (!draft) return protection;
     return { ...protection, [draft.level]: draft.value };
   }, [draft, protection]);
@@ -346,11 +346,11 @@ export function TradingPositionOverlay({
   };
 
   return (
-    <div ref={rootRef} className={`trading-position-overlay${draft?.dragging ? ' is-dragging' : ''}`} aria-label={`${instrumentId} paper position`}>
-      {draft ? zone(takeProfitY, 'rgba(32, 201, 151, .18)') : null}
-      {draft ? zone(stopLossY, 'rgba(255, 159, 67, .18)') : null}
-      {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, '#20c997', 'TP')}
-      {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, '#ff9f43', 'SL')}
+    <div role="group" ref={rootRef} className={`trading-position-overlay${draft?.dragging ? ' is-dragging' : ''}`} aria-label={`${instrumentId} paper position`}>
+      {draft ? zone(takeProfitY, chartPalette.tealWash) : null}
+      {draft ? zone(stopLossY, chartPalette.amberWash) : null}
+      {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, chartPalette.teal, 'TP')}
+      {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, chartPalette.amber, 'SL')}
       <div className="trading-position-entry-line" style={{ top: entryY }}>
         <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
       </div>

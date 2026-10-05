@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
@@ -7,6 +8,7 @@ import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingObjectPanel.css';
+import { chartPalette } from './chartPalette';
 
 type ObjectPanelView = 'object-tree' | 'data-window';
 
@@ -32,7 +34,7 @@ const indicatorNames: Partial<Record<CoreIndicatorId, string>> = {
   vwap: 'Volume Weighted Average Price',
 };
 
-const indicatorColors = ['#4dabf7', '#ff922b', '#e64980', '#20c997', '#ffd43b', '#9775fa'];
+const indicatorColors = [chartPalette.blue, chartPalette.orange, chartPalette.pink, chartPalette.teal, chartPalette.yellow, chartPalette.violet];
 
 function displaySymbol(instrument: CanonicalInstrument | undefined, instrumentId: string): string {
   return instrument?.display_symbol ?? instrumentId.split(':').at(-1)?.replace('-', '') ?? instrumentId;
@@ -164,7 +166,7 @@ function TradingObjectTree({
 
   return (
     <div className="trading-object-tree" data-status={drawings.status}>
-      <div className="trading-object-toolbar" aria-label="Object tree actions">
+      <div role="group" className="trading-object-toolbar" aria-label="Object tree actions">
         <button type="button" aria-label="Delete all drawings" title="Delete all drawings" onClick={() => drawings.removeAll()}><TrashIcon /></button>
         <span>{drawings.state.drawings.length + enabledIndicators.length} objects</span>
         <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : ''}</span>
@@ -334,7 +336,7 @@ export function TradingObjectPanel({
   const [view, setView] = useState<ObjectPanelView>('object-tree');
   const instrument = instruments.find((item) => item.instrument_id === activeInstrumentId);
   return (
-    <div className="trading-object-panel" aria-label="Chart objects and data window">
+    <div role="group" className="trading-object-panel" aria-label="Chart objects and data window">
       <nav className="trading-object-panel-tabs" role="tablist" aria-label="Chart side views">
         <button type="button" role="tab" aria-selected={view === 'object-tree'} onClick={() => setView('object-tree')}>Object tree</button>
         <button type="button" role="tab" aria-selected={view === 'data-window'} onClick={() => setView('data-window')}>Data window</button>

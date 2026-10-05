@@ -54,13 +54,6 @@ def compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int:
     return 20 + tier * 15
 
 
-def compute_quest_xp(quest_state: Dict[str, Any]) -> int:
-    """Compute XP from quest completion based on quest_rank."""
-    quest = dict(quest_state or {})
-    rank = _safe_int(quest.get("quest_rank") or quest.get("rank"), 1)
-    return 50 + rank * 25
-
-
 def compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]:
     """Compute skill XP from an action result. Returns {skill_id: amount}.
 

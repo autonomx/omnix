@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_geometry_patch import (
@@ -21,7 +21,7 @@ def apply_campaign_geometry_patch(
     *,
     database: Any | None = None,
 ) -> tuple[MapGeometryPatchedEvent, CampaignMapInstanceSnapshot]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         instance = work.map_instances.get_instance(
             context,

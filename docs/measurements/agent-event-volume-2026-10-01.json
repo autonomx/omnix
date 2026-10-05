@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "measurement": "events persisted per agent turn (WP-7.4)",
+  "method": "the Pi stdout reader fed a synthetic turn: 2,000 text deltas at 50 tokens/s (simulated clock), counting events handed to the event sink",
+  "revision": "fc4e44026356008d3683503a47e7e11f5287f2ab",
+  "tokens": 2000,
+  "tokens_per_second": 50.0,
+  "events_before": 2003,
+  "events_after": 43,
+  "reduction_factor": 46.6
+}

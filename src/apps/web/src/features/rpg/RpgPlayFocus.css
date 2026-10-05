@@ -1,7 +1,9 @@
-:root.rpg-play-focus-mode .omnix-topbar {
-  display: none;
-}
+@layer features {
+  :root.rpg-play-focus-mode .omnix-topbar {
+    display: none;
+  }
 
-:root.rpg-play-focus-mode .rpg-workstation {
-  padding-top: 0.45rem;
+  :root.rpg-play-focus-mode .rpg-workstation {
+    padding-top: 0.45rem;
+  }
 }

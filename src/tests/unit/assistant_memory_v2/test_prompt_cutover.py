@@ -18,8 +18,12 @@ from app.assistant_memory_v2 import (
     RetrievalScore,
 )
 from app.chat import memory_prompt
+from app.memory_contracts import MemoryRecord
 from app.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
 from app.chat.prompt_rendering import _memory_section
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 NOW = datetime(2026, 9, 14, 3, 0, tzinfo=timezone.utc)
 
@@ -88,18 +92,55 @@ class _Runtime:
         return self.result
 
 
-def test_v2_authority_bypasses_legacy_snapshot_and_service(monkeypatch) -> None:
+TENANT = "workspace:tenant"
+
+
+def _record(
+    record_id: str,
+    content: str,
+    *,
+    pinned: bool = False,
+    scope: str = "global",
+    scope_id: str = "profile:alice",
+    category: str = "preference",
+    owner_type: str = "character",
+    owner_id: str = "sofia",
+) -> MemoryRecord:
+    return MemoryRecord(
+        id=record_id, owner_type=owner_type, owner_id=owner_id, scope=scope, scope_id=scope_id,
+        category=category, source="user_saved", content=content, normalized_content=content.lower(),
+        pinned=pinned, provenance_type="user_message",
+        created_at=NOW.isoformat(), updated_at=NOW.isoformat(),
+    )
+
+
+class _Service:
+    """The memory service under v2: records come from the v2 store."""
+
+    def __init__(self, *records: MemoryRecord) -> None:
+        self.records = records
+
+    def list_active(self, context):
+        return [
+            record for record in self.records
+            if (record.owner_type, record.owner_id) == (context.owner_type, context.owner_id)
+        ]
+
+
+@pytest.fixture(autouse=True)
+def _tenant_principal(monkeypatch):
+    monkeypatch.setattr(memory_prompt, "_memory_principal", lambda: TENANT)
+
+
+def test_v2_authority_bypasses_legacy_snapshot(monkeypatch) -> None:
     runtime = _Runtime(_result(_candidate()))
     monkeypatch.setattr(memory_prompt, "chat_memory_enabled", lambda: True)
     monkeypatch.setattr(memory_prompt, "resolve_shared_memory_categories", lambda _session: [])
 
-    def legacy_service_must_not_run():
-        raise AssertionError("v1 memory service must not be read after v2 cutover")
-
     items, diagnostics = memory_prompt.resolve_prompt_memory(
         _session(),
         query_text="What game do I like?",
-        memory_service_factory=legacy_service_must_not_run,
+        memory_service_factory=_Service,
         memory_v2_runtime_factory=lambda: runtime,
     )
 
@@ -109,11 +150,7 @@ def test_v2_authority_bypasses_legacy_snapshot_and_service(monkeypatch) -> None:
     assert [item.source for item in items] == ["memory_v2"]
     assert [item.memory_id for item in items] == ["assertion:favorite-game"]
     query = runtime.queries[0]
-    assert query.space == MemorySpaceKey(
-        principal_id="profile:alice",
-        owner_type="character",
-        owner_id="sofia",
-    )
+    assert query.space == MemorySpaceKey(principal_id=TENANT, owner_type="character", owner_id="sofia")
     assert query.text == "What game do I like?"
     assert {(scope.kind, scope.scope_id) for scope in query.visible_scopes} == {
         ("global", "profile:alice"),
@@ -137,6 +174,7 @@ def test_federated_candidate_is_labeled_read_only_shared_v2(monkeypatch) -> None
 
     items, diagnostics = memory_prompt.resolve_prompt_memory(
         _session(),
+        memory_service_factory=_Service,
         memory_v2_runtime_factory=lambda: runtime,
     )
 
@@ -146,16 +184,8 @@ def test_federated_candidate_is_labeled_read_only_shared_v2(monkeypatch) -> None
 
 
 def test_shared_only_v2_path_never_queries_target_local_memory(monkeypatch) -> None:
-    target = MemorySpaceKey(
-        principal_id="profile:alice",
-        owner_type="character",
-        owner_id="sofia",
-    )
-    source = MemorySpaceKey(
-        principal_id="profile:alice",
-        owner_type="system",
-        owner_id="system-assistant",
-    )
+    target = MemorySpaceKey(principal_id=TENANT, owner_type="character", owner_id="sofia")
+    source = MemorySpaceKey(principal_id=TENANT, owner_type="system", owner_id="system-assistant")
     grant = MemoryGrant(
         grant_id="grant:system",
         source_space=source,
@@ -201,12 +231,75 @@ def test_shared_only_v2_path_never_queries_target_local_memory(monkeypatch) -> N
 
     items, diagnostics = memory_prompt.resolve_prompt_memory(
         _session(read_memory=False),
+        memory_service_factory=_Service,
         memory_v2_runtime_factory=lambda: runtime,
     )
 
     assert [item.memory_id for item in items] == ["assertion:shared"]
     assert [item.source for item in items] == ["shared_memory_v2"]
     assert diagnostics["selected_memory_count"] == 1
+
+
+def test_pinned_memories_come_first_and_retrieval_adds_no_duplicate(monkeypatch) -> None:
+    duplicate = RetrievalCandidate(
+        ref_id="assertion:pinned-copy",
+        item_type="assertion",
+        domain="instruction",
+        content="Always answer in English",
+        scores=RetrievalScore(composite=1.0),
+        evidence_observation_ids=("obs:pinned",),
+    )
+    runtime = _Runtime(RetrievalResult(
+        query_id="q:v2",
+        candidates=(duplicate, _candidate()),
+        dynamic_context=(),
+        observation_watermark=4,
+        graph_revision=3,
+        index_graph_revision=3,
+        elapsed_ms=1.0,
+        deadline_ms=50.0,
+    ))
+    monkeypatch.setattr(memory_prompt, "chat_memory_enabled", lambda: True)
+    monkeypatch.setattr(memory_prompt, "resolve_shared_memory_categories", lambda _session: [])
+    service = _Service(
+        _record("memory:pinned", "Always answer in English", pinned=True, category="instruction"),
+        _record("memory:plain", "I like long walks"),
+    )
+
+    items, _diagnostics = memory_prompt.resolve_prompt_memory(
+        _session(),
+        memory_service_factory=lambda: service,
+        memory_v2_runtime_factory=lambda: runtime,
+    )
+
+    assert [item.memory_id for item in items] == ["memory:pinned", "assertion:favorite-game"]
+    assert items[0].source == "character"
+
+
+def test_shared_system_memory_follows_the_v1_category_rule_under_v2(monkeypatch) -> None:
+    runtime = _Runtime(_result(_candidate()))
+    monkeypatch.setattr(memory_prompt, "chat_memory_enabled", lambda: True)
+    monkeypatch.setattr(memory_prompt, "resolve_shared_memory_categories", lambda _session: ["fact"])
+    system = {"owner_type": "system", "owner_id": "system-assistant"}
+    service = _Service(
+        _record("memory:fact", "The office is in Vancouver", category="fact", **system),
+        _record("memory:pref", "The user prefers tea", category="preference", **system),
+        _record("memory:session", "Today we discuss taxes", category="fact", scope="session",
+                scope_id="session:v2-prompt", **system),
+    )
+
+    items, diagnostics = memory_prompt.resolve_prompt_memory(
+        _session(),
+        memory_service_factory=lambda: service,
+        memory_v2_runtime_factory=lambda: runtime,
+    )
+
+    shared = [item for item in items if item.source == "shared_system"]
+    assert [item.memory_id for item in shared] == ["memory:fact"]
+    assert diagnostics["shared_excluded_reason_counts"] == {
+        "category_not_allowed": 1,
+        "session_scope_blocked": 1,
+    }
 
 
 def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
@@ -241,9 +334,9 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
 
 def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
     import app.assistant_memory_v2.authority as authority_module
-    from app.persistence import runtime_install
+    from app.persistence import runtime
 
-    monkeypatch.setattr(runtime_install, "runtime_adapters_installed", lambda: True)
+    monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: True)
     monkeypatch.setattr(
         authority_module.PostgresMemoryV2AuthorityStore,
         "current",

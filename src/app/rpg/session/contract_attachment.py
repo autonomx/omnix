@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from functools import wraps
 from typing import Any
 
 _CONTRACT_KEYS = (
@@ -63,24 +62,6 @@ def add_contracts_to_interpretive_result(result: dict[str, Any]) -> dict[str, An
     )
 
 
-def install_contract_attachment() -> None:
-    """Install additive contract enrichment for interpretive adjudication results."""
-
-    from app.rpg.session import interpretive_adjudication as target
-
-    sentinel = "_omnix_contract_attachment_installed"
-    if getattr(target, sentinel, False):
-        return
-    original = target.build_interpretive_adjudication_result
-
-    @wraps(original)
-    def patched(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return add_contracts_to_interpretive_result(original(*args, **kwargs))
-
-    target.build_interpretive_adjudication_result = patched
-    setattr(target, sentinel, True)
-
-
 def attach_contracts_to_result(result: dict[str, Any], contracts: dict[str, Any]) -> dict[str, Any]:
     """Return a copy with contract dictionaries attached in standard locations."""
 
@@ -95,10 +76,6 @@ def attach_contracts_to_result(result: dict[str, Any], contracts: dict[str, Any]
                 container[key] = deepcopy(value)
             copied[container_key] = container
     return copied
-
-
-def contract_attachment_ready() -> bool:
-    return True
 
 
 def _d(value: Any) -> dict[str, Any]:

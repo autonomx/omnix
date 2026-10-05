@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.capabilities import browser_capability_ids
+from app.capabilities import browser_capability_ids
 from app.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,

@@ -1,13 +1,13 @@
 """Optional, review-first synchronization with Hermes memory files."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .settings import load_memory_runtime_settings
 from .service import MemoryService
 
@@ -43,7 +43,7 @@ def hermes_memory_sync_enabled() -> bool:
 
 
 def default_hermes_memory_dir() -> Path:
-    override = (os.environ.get("OMNIX_HERMES_MEMORY_DIR") or "").strip()
+    override = (_env_str("OMNIX_HERMES_MEMORY_DIR") or "").strip()
     return Path(override).expanduser() if override else Path.home() / ".hermes" / "memories"
 
 

@@ -1,7 +1,7 @@
 """Evidence partitioning and stricter release gates for Desktop Companion rollout."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
-import os
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -90,7 +90,7 @@ def build_partitioned_desktop_companion_speech_gate(
 
 
 def desktop_companion_speech_canary_enabled(environ: Mapping[str, str] | None = None) -> bool:
-    values = environ if environ is not None else os.environ
+    values = environ if environ is not None else _environment()
     return str(values.get("OMNIX_DESKTOP_COMPANION_SPEECH_CANARY") or "").strip().casefold() in {
         "1",
         "true",

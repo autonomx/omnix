@@ -11,9 +11,8 @@ import hashlib
 import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
 from enum import StrEnum
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -25,6 +24,7 @@ INTERDAY_SUBSTRATEGIES = (
     "ai-every-minute",
     "ai-event-driven",
     "stoch-rsi-5min",
+    "stoch-rsi-5min-early-single",
     "gap-pullback-v2-prospective-20260825",
 )
 
@@ -221,6 +221,27 @@ class OpportunityCharacterization(BaseModel):
         return _utc(value)
 
 
+class ExperimentCandidateState(BaseModel):
+    """Candidate lifecycle and scores tracked independently for one experiment arm."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    arm: DiscoveryExperimentArm
+    first_seen_at: datetime
+    last_observed_at: datetime
+    current_priority: float = Field(default=0.0, ge=0.0, le=100.0)
+    peak_priority: float = Field(default=0.0, ge=0.0, le=100.0)
+    lifecycle: CandidateLifecycleState = CandidateLifecycleState.ACTIVE
+    tier: EvaluationTier = EvaluationTier.WATCH
+    below_retention_since: datetime | None = None
+    expired_at: datetime | None = None
+
+    @field_validator("first_seen_at", "last_observed_at", "below_retention_since", "expired_at")
+    @classmethod
+    def normalize_times(cls, value: datetime | None) -> datetime | None:
+        return _utc(value) if value is not None else None
+
+
 class DynamicCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -235,7 +256,17 @@ class DynamicCandidate(BaseModel):
     trigger_types: tuple[DiscoveryTriggerType, ...] = ()
     experiment_arms: tuple[DiscoveryExperimentArm, ...] = ()
     attention_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    peak_attention_score: float = Field(default=0.0, ge=0.0, le=100.0)
     catalyst_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    peak_catalyst_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    catalyst_raw_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    catalyst_last_seen_at: datetime | None = None
+    catalyst_expected_attention_duration: str | None = None
+    catalyst_snapshot: dict[str, object] | None = None
+    latest_candidate_payload: dict[str, object] | None = None
+    below_retention_since: datetime | None = None
+    experiment_states: dict[str, ExperimentCandidateState] = Field(default_factory=dict)
+    selected_for_strategies: tuple[str, ...] = ()
     common_priority: float = Field(default=0.0, ge=0.0, le=100.0)
     strategy_ranks: dict[str, int] = Field(default_factory=dict)
     characterization: OpportunityCharacterization | None = None
@@ -244,7 +275,15 @@ class DynamicCandidate(BaseModel):
     shadow_only: bool = True
     execution_authority: bool = False
 
-    @field_validator("first_seen_at", "discovered_at", "last_observed_at", "cooling_since", "expired_at")
+    @field_validator(
+        "first_seen_at",
+        "discovered_at",
+        "last_observed_at",
+        "cooling_since",
+        "expired_at",
+        "catalyst_last_seen_at",
+        "below_retention_since",
+    )
     @classmethod
     def normalize_times(cls, value: datetime | None) -> datetime | None:
         return _utc(value) if value is not None else None
@@ -298,8 +337,15 @@ class TrendDurabilityOutcome(BaseModel):
     minutes_above_vwap: int | None = Field(default=None, ge=0)
     higher_high_low_persistence: float | None = Field(default=None, ge=0.0, le=1.0)
     hod_break_survived: bool | None = None
+    label_kind: str = "discovery_path"
+    discovery_at: datetime | None = None
+    tradeable_reference_at: datetime | None = None
+    tradeable_reference_price: float | None = None
+    reference_mode: str = "discovery_close"
+    normalized_stop_fraction: float = 0.05
+    same_bar_ambiguity_policy: str = "stop_first"
 
-    @field_validator("discovered_at")
+    @field_validator("discovered_at", "discovery_at", "tradeable_reference_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
         return _utc(value)
@@ -320,6 +366,35 @@ class ShadowQualificationEvidence(BaseModel):
     eligible_for_review: bool = False
     auto_paper_authorized: bool = False
     reasons: tuple[str, ...] = ()
+    execution_sample_count: int = Field(default=0, ge=0)
+    holdout_session_count: int = Field(default=0, ge=0)
+    expectancy_lcb_r: float | None = None
+    stressed_expectancy_r: float | None = None
+    holdout_expectancy_r: float | None = None
+    max_drawdown_limit_r: float = 5.0
+    evidence_complete: bool = False
+
+
+class DiscoveryScanViolation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument_id: str
+    source: str
+    observed_at: datetime
+    watermark: datetime
+    reason: str
+
+
+class DiscoveryScanResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_date: date
+    watermark: datetime
+    candidates: tuple[DynamicCandidate, ...]
+    events: tuple[DiscoveryEvent, ...]
+    violations: tuple[DiscoveryScanViolation, ...] = ()
+    latest_observations: dict[str, dict[str, object]] = Field(default_factory=dict)
+    experiment_cohorts: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 
 class ParentExposureProposal(BaseModel):
@@ -421,8 +496,10 @@ def market_discovery_event(
     )
 
 
-def _semantic_level(value: object) -> float:
-    text = str(value or "").strip().lower()
+def _semantic_level(value: object, *, unknown: float = 50.0) -> float:
+    if value is None:
+        return unknown
+    text = str(value).strip().lower()
     return {
         "none": 0.0,
         "very_low": 10.0,
@@ -440,7 +517,9 @@ def _semantic_level(value: object) -> float:
         "mixed": 50.0,
         "durable": 85.0,
         "persistent": 90.0,
-    }.get(text, _clip(_float(value)))
+        "unknown": unknown,
+        "unresolved": unknown,
+    }.get(text, _clip(_float(value)) if text else unknown)
 
 
 def catalyst_discovery_event(
@@ -470,6 +549,16 @@ def catalyst_discovery_event(
     observed = _utc(observed_at)
     trigger = DiscoveryTriggerType.CATALYST_DISCOVERY_EVENT
     evidence_ids = tuple(getattr(intelligence, "evidence_ids", ()) or ())
+    if hasattr(intelligence, "model_dump"):
+        snapshot = intelligence.model_dump(mode="json")
+    elif isinstance(intelligence, Mapping):
+        snapshot = dict(intelligence)
+    else:
+        snapshot = {
+            key: value
+            for key, value in vars(intelligence).items()
+            if not key.startswith("_")
+        }
     return DiscoveryEvent(
         event_id=_event_id(instrument_id, trigger, observed, source),
         session_date=session_date,
@@ -482,9 +571,14 @@ def catalyst_discovery_event(
         catalyst_score=catalyst_score,
         payload={
             "evidence_ids": list(evidence_ids),
-            "catalyst_type": getattr(intelligence, "catalyst_type", None),
-            "expected_attention_duration": getattr(intelligence, "expected_attention_duration", None),
-            "intraday_persistence_class": getattr(intelligence, "intraday_persistence_class", None),
+            "catalyst_type": snapshot.get("catalyst_type"),
+            "expected_attention_duration": snapshot.get(
+                "expected_attention_duration"
+            ),
+            "intraday_persistence_class": snapshot.get(
+                "intraday_persistence_class"
+            ),
+            "snapshot": snapshot,
         },
     )
 
@@ -510,32 +604,27 @@ def merge_discovery_event(
     current: DynamicCandidate | None,
     event: DiscoveryEvent,
 ) -> DynamicCandidate:
-    if current is not None and (
-        current.instrument_id != event.instrument_id or current.session_date != event.session_date
-    ):
-        raise ValueError("discovery_event_candidate_mismatch")
-    triggers = tuple(dict.fromkeys((*((current.trigger_types if current else ())), event.trigger_type)))
-    arms = tuple(dict.fromkeys((*((current.experiment_arms if current else ())), *event_experiment_arms(event))))
-    first_seen = min(current.first_seen_at, event.causal_as_of) if current else event.causal_as_of
-    discovered = min(current.discovered_at, event.discovered_at) if current else event.discovered_at
-    attention = max(current.attention_score if current else 0.0, event.attention_score)
-    catalyst = max(current.catalyst_score if current else 0.0, event.catalyst_score)
-    common = round(_clip(max(attention, catalyst, attention * 0.65 + catalyst * 0.55)), 4)
-    return DynamicCandidate(
-        session_date=event.session_date,
-        instrument_id=event.instrument_id,
-        first_seen_at=first_seen,
-        discovered_at=discovered,
-        last_observed_at=max(current.last_observed_at, event.discovered_at) if current else event.discovered_at,
-        lifecycle=CandidateLifecycleState.ACTIVE,
-        tier=current.tier if current and current.lifecycle != CandidateLifecycleState.EXPIRED else EvaluationTier.WATCH,
-        trigger_types=triggers,
-        experiment_arms=arms,
-        attention_score=attention,
-        catalyst_score=catalyst,
-        common_priority=common,
-        strategy_ranks=current.strategy_ranks if current else {},
-        characterization=current.characterization if current else None,
+    from .strategy_dynamic_discovery_runtime import _complete_merge_discovery_event
+
+    return _complete_merge_discovery_event(current, event)
+
+
+def apply_discovery_scan(
+    *,
+    previous_state: Mapping[str, DynamicCandidate],
+    observations: Sequence[object],
+    watermark: datetime,
+    session_date: date,
+    config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
+) -> DiscoveryScanResult:
+    from .strategy_dynamic_discovery_quality import _apply_scan_refined
+
+    return _apply_scan_refined(
+        previous_state=previous_state,
+        observations=observations,
+        watermark=watermark,
+        session_date=session_date,
+        config=config,
     )
 
 
@@ -580,18 +669,9 @@ def tier_candidates(
     *,
     config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
 ) -> tuple[DynamicCandidate, ...]:
-    live = [item for item in candidates if item.lifecycle != CandidateLifecycleState.EXPIRED]
-    live.sort(key=lambda item: (-item.common_priority, item.discovered_at, item.instrument_id))
-    result: list[DynamicCandidate] = []
-    for index, item in enumerate(live[: config.max_active_candidates]):
-        if index < config.tier_a_count:
-            tier = EvaluationTier.A
-        elif index < config.tier_a_count + config.tier_b_count:
-            tier = EvaluationTier.B
-        else:
-            tier = EvaluationTier.WATCH
-        result.append(item.model_copy(update={"tier": tier}))
-    return tuple(result)
+    from .strategy_dynamic_discovery_runtime import _tier_complete_candidates
+
+    return _tier_complete_candidates(candidates, config=config)
 
 
 def build_opportunity_characterization(
@@ -604,54 +684,16 @@ def build_opportunity_characterization(
     market_context: MarketContext | None = None,
     relationships: Sequence[RelationshipExposure] = (),
 ) -> OpportunityCharacterization:
-    confirmation = _clip(_float(getattr(market_structure, "confirmation_score", 0.0)) * (100.0 if _float(getattr(market_structure, "confirmation_score", 0.0)) <= 1 else 1.0))
-    catalyst_strength = _semantic_level(getattr(catalyst, "catalyst_strength", None))
-    persistence = max(
-        _semantic_level(getattr(catalyst, "expected_attention_duration", None)),
-        _semantic_level(getattr(catalyst, "intraday_persistence_class", None)),
-    )
-    materiality = max(
-        _semantic_level(getattr(catalyst, "fundamental_materiality", None)),
-        _semantic_level(getattr(catalyst, "materiality_to_company_size", None)),
-    )
-    certainty = _semantic_level(getattr(catalyst, "event_certainty", None))
-    supply = _semantic_level(getattr(catalyst, "supply_pressure", None))
-    promo = _semantic_level(getattr(catalyst, "promotional_risk", None))
-    context = 50.0
-    if market_context is not None:
-        components = [
-            _float(market_context.sector_return_pct),
-            _float(market_context.industry_return_pct),
-            _float(market_context.peer_median_return_pct),
-            _float(market_context.iwm_return_pct),
-        ]
-        context = _clip(50.0 + sum(components) * 1.5)
-    relation = max((item.relationship_strength * item.economic_exposure * 100.0 for item in relationships), default=0.0)
-    attention = candidate.attention_score
-    continuation = _clip(attention * 0.34 + persistence * 0.24 + confirmation * 0.30 + context * 0.12 - supply * 0.20)
-    failed_selloff = _clip(attention * 0.25 + confirmation * 0.45 + materiality * 0.20 - supply * 0.15 + execution_quality * 0.10)
-    reversal = _clip(attention * 0.20 + max(0.0, 60.0 - confirmation) * 0.35 + context * 0.15 + execution_quality * 0.10)
-    squeeze = _clip(attention * 0.55 + confirmation * 0.15 - execution_quality * 0.05)
-    gap_retention = _clip(materiality * 0.28 + certainty * 0.22 + persistence * 0.20 + confirmation * 0.20 - supply * 0.18)
-    return OpportunityCharacterization(
-        instrument_id=candidate.instrument_id,
+    from .strategy_dynamic_discovery_quality import _characterization_refined
+
+    return _characterization_refined(
+        candidate,
         observed_at=observed_at,
-        attention_intensity=attention,
-        catalyst_strength=catalyst_strength,
-        catalyst_persistence=persistence,
-        fundamental_materiality=materiality,
-        event_certainty=certainty,
-        supply_pressure=supply,
-        promotional_risk=promo,
-        continuation_prior=continuation,
-        failed_selloff_prior=failed_selloff,
-        reversal_prior=reversal,
-        squeeze_potential=squeeze,
-        gap_retention_prior=gap_retention,
-        market_confirmation=confirmation,
-        execution_quality=_clip(execution_quality),
-        market_context_confirmation=context,
-        relationship_exposure=_clip(relation),
+        catalyst=catalyst,
+        market_structure=market_structure,
+        execution_quality=execution_quality,
+        market_context=market_context,
+        relationships=relationships,
     )
 
 
@@ -676,26 +718,18 @@ def strategy_specific_score(arm: str, row: OpportunityCharacterization) -> float
         return _clip(row.attention_intensity * 0.25 + row.catalyst_strength * 0.20 + row.continuation_prior * 0.25 + row.market_confirmation * 0.20 + row.relationship_exposure * 0.10)
     if arm == "stoch-rsi-5min":
         return _clip(row.reversal_prior * 0.45 + row.market_confirmation * 0.30 + row.execution_quality * 0.25)
+    if arm == "stoch-rsi-5min-early-single":
+        # One trade per symbol: favor names whose single entry executes cleanly.
+        return _clip(row.reversal_prior * 0.45 + row.market_confirmation * 0.25 + row.execution_quality * 0.30)
     if arm == "gap-pullback-v2-prospective-20260825":
         return _clip(row.failed_selloff_prior * 0.50 + row.catalyst_persistence * 0.15 + row.market_confirmation * 0.25 + row.execution_quality * 0.10)
     raise ValueError(f"unknown_interday_substrategy:{arm}")
 
 
 def apply_strategy_rankings(candidates: Sequence[DynamicCandidate]) -> tuple[DynamicCandidate, ...]:
-    ranks: dict[str, dict[str, int]] = defaultdict(dict)
-    eligible = [item for item in candidates if item.characterization is not None and item.lifecycle != CandidateLifecycleState.EXPIRED]
-    for arm in INTERDAY_SUBSTRATEGIES:
-        ordered = sorted(
-            eligible,
-            key=lambda item: (
-                -strategy_specific_score(arm, item.characterization),
-                item.discovered_at,
-                item.instrument_id,
-            ),
-        )
-        for index, item in enumerate(ordered, start=1):
-            ranks[item.instrument_id][arm] = index
-    return tuple(item.model_copy(update={"strategy_ranks": ranks.get(item.instrument_id, {})}) for item in candidates)
+    from .strategy_dynamic_discovery_runtime import _complete_strategy_rankings
+
+    return _complete_strategy_rankings(candidates)
 
 
 def catalyst_decay_multiplier(
@@ -811,47 +845,9 @@ def trend_durability_from_prices(
 
 
 def evaluate_shadow_qualification(metrics: Mapping[str, object]) -> ShadowQualificationEvidence:
-    sessions = int(metrics.get("independent_sessions", 0) or 0)
-    opportunities = int(metrics.get("labeled_opportunities", 0) or 0)
-    recall = _float(metrics.get("discovery_recall"))
-    precision = _float(metrics.get("discovery_precision"))
-    latency = metrics.get("median_discovery_latency_minutes")
-    expectancy = metrics.get("execution_adjusted_expectancy_r")
-    drawdown = metrics.get("max_drawdown_r")
-    reliability = _float(metrics.get("data_reliability_fraction"))
-    violations = int(metrics.get("causality_violations", 0) or 0)
-    reasons: list[str] = []
-    if sessions < 20:
-        reasons.append("insufficient_independent_sessions")
-    if opportunities < 100:
-        reasons.append("insufficient_labeled_opportunities")
-    if recall < 0.70:
-        reasons.append("discovery_recall_below_gate")
-    if precision < 0.10:
-        reasons.append("discovery_precision_below_gate")
-    if expectancy is None or _float(expectancy) <= 0:
-        reasons.append("non_positive_execution_adjusted_expectancy")
-    if reliability < 0.95:
-        reasons.append("data_reliability_below_gate")
-    if violations:
-        reasons.append("causality_violations_present")
-    eligible = not reasons
-    return ShadowQualificationEvidence(
-        independent_sessions=sessions,
-        labeled_opportunities=opportunities,
-        discovery_recall=_clip(recall, 0.0, 1.0),
-        discovery_precision=_clip(precision, 0.0, 1.0),
-        median_discovery_latency_minutes=_float(latency) if latency is not None else None,
-        execution_adjusted_expectancy_r=_float(expectancy) if expectancy is not None else None,
-        max_drawdown_r=_float(drawdown) if drawdown is not None else None,
-        data_reliability_fraction=_clip(reliability, 0.0, 1.0),
-        causality_violations=violations,
-        eligible_for_review=eligible,
-        # Promotion remains an explicit reviewed action; evidence alone never
-        # grants order authority.
-        auto_paper_authorized=False,
-        reasons=tuple(reasons),
-    )
+    from .strategy_dynamic_discovery_quality import _qualification_refined
+
+    return _qualification_refined(metrics)
 
 
 def allocate_parent_exposure(

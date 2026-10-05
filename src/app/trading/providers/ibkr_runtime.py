@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
+logger = logging.getLogger(__name__)
+
 """Process-wide IBKR Gateway transport and runtime.
 
 The official IBKR Python client is intentionally optional. Omnix never stores an
@@ -8,7 +13,6 @@ Unit tests use FakeIbkrTransport so CI does not require Gateway or IBKR's local
 TWS API installation.
 """
 
-import os
 import threading
 import time as time_module
 from collections.abc import Callable
@@ -269,6 +273,7 @@ class OfficialIbapiTransport:
                     try:
                         parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
                     except Exception:
+                        logger.debug("suppressed error in %s", "OfficialIbapiTransport.__init__.Wrapper.tickString", exc_info=True)
                         return
                     owner._quote_values.setdefault(int(reqId), {})["last_trade_at"] = parsed
                     owner._emit_quote(int(reqId))
@@ -386,6 +391,7 @@ class OfficialIbapiTransport:
             listener(snapshot)
         except Exception:
             # A consumer failure must never kill the IBKR network thread.
+            logger.debug("suppressed error in %s", "OfficialIbapiTransport._emit_quote", exc_info=True)
             return
 
     def connect(self, host: str, port: int, client_id: int, timeout_seconds: float = 8.0) -> None:
@@ -523,7 +529,7 @@ class OfficialIbapiTransport:
                 try:
                     self._client.cancelHistoricalData(req_id)
                 except Exception:
-                    pass
+                    logger.debug("suppressed error in %s", "OfficialIbapiTransport.historical_bars", exc_info=True)
                 raise IbkrRuntimeError("ibkr_historical_data_timeout")
             return list(self._historical_rows.get(req_id, []))
         finally:
@@ -648,7 +654,7 @@ class FakeIbkrTransport:
 
 
 def _bool_env(name: str, default: str = "0") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class IbkrRuntime:
@@ -674,9 +680,9 @@ class IbkrRuntime:
             IbkrSettings(
                 enabled=_bool_env("OMNIX_IBKR_ENABLED", "0") if enabled is None else bool(enabled),
                 monitor_enabled=_bool_env("OMNIX_IBKR_MONITOR", "1"),
-                host=host or os.environ.get("OMNIX_IBKR_HOST", "127.0.0.1"),
-                port=int(port or os.environ.get("OMNIX_IBKR_PORT", "4002")),
-                client_id=int(client_id or os.environ.get("OMNIX_IBKR_CLIENT_ID", "71")),
+                host=host or _env_str("OMNIX_IBKR_HOST", "127.0.0.1"),
+                port=int(port or _env_str("OMNIX_IBKR_PORT", "4002")),
+                client_id=int(client_id or _env_str("OMNIX_IBKR_CLIENT_ID", "71")),
                 live_authority_enabled=_bool_env("OMNIX_IBKR_LIVE_AUTHORITY", "0"),
                 recovery_authority_enabled=_bool_env("OMNIX_IBKR_RECOVERY_AUTHORITY", "0"),
             ),
@@ -696,6 +702,8 @@ class IbkrRuntime:
         self._contract_cache: dict[str, IbkrContractIdentity] = {}
         self._quote_tokens: dict[str, int] = {}
         self._latest_quotes: dict[str, IbkrQuoteSnapshot] = {}
+        # Notified on every quote, so waiting for one does not poll.
+        self._quote_arrived = threading.Condition()
         self._quote_listeners: dict[str, list[Callable[[IbkrQuoteSnapshot], None]]] = {}
         self.connect_count = 0
         self.connect_failure_count = 0
@@ -774,7 +782,7 @@ class IbkrRuntime:
                 self.connect_failure_count += 1
                 backoff = max(
                     0.25,
-                    float(os.environ.get("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
+                    float(_env_str("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
                 )
                 self._next_connect_attempt_monotonic = time_module.monotonic() + backoff
                 self.last_error = f"{type(exc).__name__}: {exc}"
@@ -876,10 +884,13 @@ class IbkrRuntime:
             with self._lock:
                 self._latest_quotes[instrument_id] = snapshot
                 listeners = tuple(self._quote_listeners.get(instrument_id, ()))
+            with self._quote_arrived:
+                self._quote_arrived.notify_all()
             for callback in listeners:
                 try:
                     callback(snapshot)
                 except Exception:
+                    logger.debug("suppressed error in %s", "IbkrRuntime.subscribe_quote.on_quote", exc_info=True)
                     continue
 
         token = self.transport.subscribe_quote(contract, on_quote)
@@ -934,13 +945,17 @@ class IbkrRuntime:
             }
 
     def wait_for_quote(self, instrument_id: str, timeout_seconds: float = 3.0) -> IbkrQuoteSnapshot | None:
+        """The latest quote with a last price, waiting up to the timeout for one to arrive."""
         deadline = time_module.monotonic() + max(0.0, timeout_seconds)
-        while time_module.monotonic() <= deadline:
-            snapshot = self.latest_quote(instrument_id)
-            if snapshot is not None and snapshot.last is not None:
-                return snapshot
-            time_module.sleep(0.02)
-        return self.latest_quote(instrument_id)
+        with self._quote_arrived:
+            while True:
+                snapshot = self.latest_quote(instrument_id)
+                if snapshot is not None and snapshot.last is not None:
+                    return snapshot
+                remaining = deadline - time_module.monotonic()
+                if remaining <= 0:
+                    return snapshot
+                self._quote_arrived.wait(remaining)
 
     def historical_bars(
         self,
@@ -961,10 +976,10 @@ class IbkrRuntime:
         duration = int((end.astimezone(timezone.utc) - start.astimezone(timezone.utc)).total_seconds())
         min_interval = (
             0.0
-            if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
+            if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
             else max(
                 0.0,
-                float(os.environ.get("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")),
+                float(_env_str("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")),
             )
         )
         with self._historical_lock:

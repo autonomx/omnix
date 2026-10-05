@@ -77,5 +77,3 @@ class AmbiguityPolicy:
     def _should_request_clarification(self, confidence: float) -> bool:
         return confidence < self.clarify_threshold
 
-    def _should_narrate_uncertainty(self, confidence: float) -> bool:
-        return self.clarify_threshold <= confidence < self.auto_resolve_threshold

@@ -3,12 +3,36 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import page_limit
 
 from .annotation import narrator_id
 from .hashing import canonical_json
 from .integrity import validate_revision
 from .models import SourceRevision
+
+
+def cancel_render_run_jobs(jobs: Any, context: TenantContext, render_run_id: str) -> None:
+    cursor = None
+    while True:
+        rows = jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+            input_fields=(("render_run_id", render_run_id),),
+            statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+            after_created=cursor,
+            order_by="created_asc",
+            limit=100,
+            for_update=True,
+        )
+        for row in rows:
+            jobs.request_cancel(context, str(row["id"]))
+        if len(rows) < 100:
+            return
+        last = rows[-1]
+        cursor = (last["created_at"], str(last["id"]))
 
 
 class PostgresAudiobookRepository:
@@ -40,15 +64,17 @@ class PostgresAudiobookRepository:
         if project[0]:
             return str(project[0]) == job_id
         # Jobs created before request fencing was introduced have no pointer.
-        latest = self.connection.execute(
-            """SELECT id FROM omnix_jobs
-                WHERE workspace_id = %s AND module = 'audiobook'
-                  AND job_type = 'audiobook.ingest'
-                  AND input_payload->>'project_id' = %s
-                ORDER BY created_at DESC, id DESC LIMIT 1""",
-            (context.workspace_id, project_id),
-        ).fetchone()
-        return latest is not None and str(latest[0]) == job_id
+        from app.persistence.job_repository import PostgresJobRepository
+
+        latest = PostgresJobRepository(self.connection).query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.ingest",
+            input_fields=(("project_id", project_id),),
+            order_by="created_desc",
+            limit=1,
+        )
+        return bool(latest and str(latest[0]["id"]) == job_id)
 
     def create_project(
         self, context: TenantContext, *, project_id: str,
@@ -89,7 +115,7 @@ class PostgresAudiobookRepository:
              FROM omnix_audiobook_projects
              WHERE workspace_id = %s AND deleted_at IS NULL
              ORDER BY updated_at DESC, id LIMIT %s OFFSET %s
-            """, (context.workspace_id, max(1, min(limit, 500)), max(0, offset)),
+            """, (context.workspace_id, page_limit(limit, default=100), max(0, offset)),
         ).fetchall()
         return [self._project(row) for row in rows]
 
@@ -109,11 +135,8 @@ class PostgresAudiobookRepository:
         project = self.get_project(context, revision.project_id)
         if project is None:
             raise KeyError(revision.project_id)
-        asset = self.connection.execute(
-            "SELECT checksum_sha256 FROM omnix_assets WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'",
-            (context.workspace_id, original_asset_id),
-        ).fetchone()
-        if asset is None or str(asset[0]) != revision.original_asset_hash:
+        asset = PostgresAssetRepository(self.connection).asset_fields(context, original_asset_id, active_only=True)
+        if asset is None or str(asset["checksum_sha256"]) != revision.original_asset_hash:
             raise ValueError("original asset is missing or its checksum differs")
         existing = self.connection.execute(
             """SELECT original_asset_hash, source_format, extractor_version,
@@ -191,17 +214,7 @@ class PostgresAudiobookRepository:
             from app.persistence.job_repository import PostgresJobRepository
 
             jobs = PostgresJobRepository(self.connection)
-            rows = self.connection.execute(
-                """
-                SELECT id FROM omnix_jobs
-                 WHERE workspace_id = %s AND module = 'audiobook'
-                   AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                   AND input_payload->>'render_run_id' = %s
-                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
-                """, (context.workspace_id, str(active[0])),
-            ).fetchall()
-            for row in rows:
-                jobs.request_cancel(context, str(row[0]))
+            cancel_render_run_jobs(jobs, context, str(active[0]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects

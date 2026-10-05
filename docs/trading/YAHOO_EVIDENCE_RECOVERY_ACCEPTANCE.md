@@ -54,8 +54,8 @@ belongs to a separate prospective strategy experiment.
 
 ## Phase 11 soak evidence
 
-Session-scoped Yahoo repair/block metrics are durable under
-`resources/trading/yahoo_evidence/sessions/YYYY-MM-DD.json` and retrievable
+Session-scoped Yahoo repair/block metrics are durable in PostgreSQL
+(`omnix_trading_evidence_session_counters`) and retrievable
 through `GET /api/trading/market-data/yahoo-evidence/diagnostics/{session_date}`.
 The report distinguishes repaired evaluations, genuinely blocked evaluations,
 repairs that still remained blocked, passed evaluations, and block-reason

@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict, deque
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -302,77 +302,6 @@ class LearningSystem:
                     best_alternative = action
         
         return best_alternative
-    
-    def get_success_rate(
-        self,
-        character_id: str,
-        action_type: str,
-        window: Optional[int] = None,
-    ) -> float:
-        """Get success rate for a character's action type.
-        
-        Args:
-            character_id: Character to analyze.
-            action_type: Action type to evaluate.
-            window: Optional window size (defaults to failure_window).
-            
-        Returns:
-            Success rate 0.0-1.0, or -1.0 if no data.
-        """
-        window = window or self.failure_window
-        history = list(self.history.get(character_id, []))
-        
-        if not history:
-            return -1.0
-        
-        # Get recent actions of this type
-        recent = [
-            r for r in history[-window:]
-            if r["action"] == action_type
-        ]
-        
-        if not recent:
-            return -1.0
-        
-        successes = sum(1 for r in recent if r["success"])
-        return successes / len(recent)
-    
-    def get_action_history(
-        self,
-        character_id: str,
-        action_type: Optional[str] = None,
-        limit: int = 10,
-    ) -> List[Dict[str, Any]]:
-        """Get action history for a character.
-        
-        Args:
-            character_id: Character to query.
-            action_type: Optional filter by action type.
-            limit: Maximum records to return.
-            
-        Returns:
-            List of action records.
-        """
-        history = list(self.history.get(character_id, []))
-        
-        if action_type:
-            history = [r for r in history if r["action"] == action_type]
-        
-        return history[-limit:]
-    
-    def record_adaptation(
-        self,
-        character_id: str,
-        current_tick: int = 0,
-    ) -> None:
-        """Record that an adaptation was made (starts cooldown).
-        
-        Args:
-            character_id: Character that was adapted.
-            current_tick: Current simulation tick.
-        """
-        self.adaptation_cooldowns[character_id] = current_tick
-        self._stats["adaptations_triggered"] += 1
     
     def _count_recent_failures(
         self,

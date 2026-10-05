@@ -1,14 +1,13 @@
 """Automatic availability metadata for local cloned voice profiles."""
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.assets.content import AssetContentUnavailable, asset_checksum, asset_location
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 
 VoiceConsentStatus = Literal["unverified", "granted", "revoked"]
@@ -26,14 +25,11 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _file_sha256(path: Path) -> str | None:
-    if not path.is_file():
+def _content_sha256(asset: AssetRecord) -> str | None:
+    try:
+        return asset_checksum(asset)
+    except AssetContentUnavailable:
         return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 class VoiceProfileGovernance(BaseModel):
@@ -128,10 +124,7 @@ class VoiceProfileGovernanceService:
         store: SharedAssetStore | None = None,
     ) -> AssetRecord:
         resolved_store = store or self.asset_store_factory()
-        asset = next(
-            (item for item in resolved_store.list_assets().assets if item.id == asset_id),
-            None,
-        )
+        asset = resolved_store.get_asset(asset_id)
         if asset is None:
             raise VoiceConsentError(f"voice asset not found: {asset_id}")
         if asset.type != AssetType.VOICE_PROFILE:
@@ -146,7 +139,7 @@ def _automatic_governance(
     updated_at: str | None = None,
 ) -> VoiceProfileGovernance:
     values = dict(raw or {})
-    path_hash = _file_sha256(Path(asset.storage_path))
+    path_hash = _content_sha256(asset)
     raw_hash = values.get("source_sha256")
     source_hash = raw_hash if isinstance(raw_hash, str) and len(raw_hash) == 64 else path_hash
     owner = str(values.get("subject_owner") or asset.owner_id or asset.id)
@@ -158,7 +151,7 @@ def _automatic_governance(
     source_reference = str(
         values.get("source_reference")
         or asset.compat.get("legacy_manifest")
-        or asset.storage_path
+        or asset_location(asset)
     )
     return VoiceProfileGovernance(
         asset_id=asset.id,

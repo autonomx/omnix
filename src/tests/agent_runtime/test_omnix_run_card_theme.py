@@ -10,7 +10,7 @@ def _repo_root() -> Path:
 def test_agent_run_card_uses_theme_tokens_instead_of_dark_only_surface() -> None:
     css = (
         _repo_root()
-        / "src/apps/web/src/features/chatbot/OmnixRunCard.css"
+        / "src/apps/web/src/features/assistant/chat/OmnixRunCard.css"
     ).read_text(encoding="utf-8")
 
     assert "background: var(--omnix-panel-solid);" in css

@@ -1,5 +1,5 @@
-import type { HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
-import type { HermesRpgSuggestion } from '../../api/hermesClient';
+import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
+import type { HermesRpgSuggestion } from './api/hermesClient';
 import type {
   RpgGearPreview,
   RpgHeroSummaryPreview,
@@ -85,7 +85,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             <div className="rpg-stat-row" key={stat.label}>
               <span>{stat.label}</span>
               <strong>{stat.value}</strong>
-              <span className={`rpg-meter rpg-meter-${stat.tone}`} aria-label={`${stat.label} ${stat.value}`}>
+              <span className={`rpg-meter rpg-meter-${stat.tone}`} role="img" aria-label={`${stat.label} ${stat.value}`}>
                 <span style={{ width: `${stat.percent}%` }} />
               </span>
             </div>
@@ -93,7 +93,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
           <div className="rpg-stat-row">
             <span>XP</span>
             <strong>{heroSummary.xpLabel}</strong>
-            <span className="rpg-meter rpg-meter-xp" aria-label={`XP ${heroSummary.xpLabel}`}>
+            <span className="rpg-meter rpg-meter-xp" role="img" aria-label={`XP ${heroSummary.xpLabel}`}>
               <span style={{ width: `${heroSummary.xpPercent}%` }} />
             </span>
           </div>
@@ -122,6 +122,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
               <span>{need.label}</span>
               <strong>{need.value}</strong>
               <span
+                role="img"
                 aria-label={`${need.label} pressure ${need.value}`}
                 className={`rpg-survival-meter is-${need.severity}`}
               >
@@ -131,11 +132,11 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
           ))}
         </div>
         {survival.warnings.length ? (
-          <div className="rpg-survival-warnings" aria-label="Survival warnings">
+          <div role="group" className="rpg-survival-warnings" aria-label="Survival warnings">
             {survival.warnings.map((warning) => <span key={warning}>{warning}</span>)}
           </div>
         ) : null}
-        <div className="rpg-survival-actions" aria-label="Survival actions">
+        <div role="group" className="rpg-survival-actions" aria-label="Survival actions">
           {survival.actions.map((action) => (
             <button
               className="rpg-secondary-button"

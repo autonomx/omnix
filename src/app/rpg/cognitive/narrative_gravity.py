@@ -152,14 +152,6 @@ class StorylineState:
         """
         self.importance = max(0.0, min(1.0, new_importance))
     
-    def advance_progress(self, delta: float) -> None:
-        """Advance storyline progress.
-        
-        Args:
-            delta: Progress increment.
-        """
-        self.progress = max(0.0, min(1.0, self.progress + delta))
-    
     def to_dict(self) -> Dict[str, Any]:
         """Serialize storyline to dict.
         
@@ -350,14 +342,6 @@ class NarrativeGravity:
         
         return 0.0
     
-    def add_storyline(self, storyline: StorylineState) -> None:
-        """Add a new storyline to track.
-        
-        Args:
-            storyline: StorylineState to add.
-        """
-        self._storylines[storyline.id] = storyline
-    
     def update_storylines(
         self,
         current_tick: int = 0,
@@ -518,119 +502,6 @@ class NarrativeGravity:
             return f"Storyline '{storyline.id}' faded from attention"
         else:
             return f"Storyline '{storyline.id}' concluded due to age"
-    
-    def get_focused_events(
-        self,
-        events: List[Dict[str, Any]],
-        max_count: int = 5,
-    ) -> List[Dict[str, Any]]:
-        """Get top events for rendering/focus.
-        
-        Args:
-            events: List of event dicts with 'importance' field.
-            max_count: Maximum events to return.
-            
-        Returns:
-            List of top events sorted by importance.
-        """
-        sorted_events = sorted(
-            events,
-            key=lambda e: e.get("importance", 0),
-            reverse=True,
-        )
-        
-        return sorted_events[:max_count]
-    
-    def get_background_events(self) -> List[Dict[str, Any]]:
-        """Get background events for ambient narrative.
-        
-        Returns:
-            List of background event dicts.
-        """
-        return list(self._background_events)
-    
-    def add_background_event(self, event: Dict[str, Any]) -> None:
-        """Add event to background queue.
-        
-        Args:
-            event: Event data dict.
-        """
-        self._background_events.append(event)
-        
-        # Limit background queue
-        if len(self._background_events) > 20:
-            self._background_events = self._background_events[-20:]
-    
-    def get_storyline(self, storyline_id: str) -> Optional[StorylineState]:
-        """Get a storyline by ID.
-        
-        Args:
-            storyline_id: Storyline identifier.
-            
-        Returns:
-            StorylineState, or None if not found.
-        """
-        return self._storylines.get(storyline_id)
-    
-    def get_active_storylines(self) -> Dict[str, StorylineState]:
-        """Get all active storylines.
-        
-        Returns:
-            Dict of storyline_id -> StorylineState.
-        """
-        return dict(self._storylines)
-    
-    def get_concluded_storylines(self) -> List[Dict[str, Any]]:
-        """Get concluded storylines history.
-        
-        Returns:
-            List of concluded storyline data.
-        """
-        return list(self._concluded)
-    
-    def get_storyline_summary(
-        self,
-        storyline_id: str,
-    ) -> Dict[str, Any]:
-        """Get summary of a storyline.
-        
-        Args:
-            storyline_id: Storyline identifier.
-            
-        Returns:
-            Summary dict.
-        """
-        storyline = self._storylines.get(storyline_id)
-        if storyline:
-            return storyline.to_dict()
-        
-        # Check concluded
-        for concluded in self._concluded:
-            if concluded.get("id") == storyline_id:
-                return concluded
-        
-        return {}
-    
-    def advance_progress_for_participants(
-        self,
-        storyline_id: str,
-        participants: List[str],
-        delta: float = 0.1,
-    ) -> None:
-        """Advance progress for storylines involving specific participants.
-        
-        Args:
-            storyline_id: Storyline to advance.
-            participants: Participants in the event.
-            delta: Progress increment.
-        """
-        storyline = self._storylines.get(storyline_id)
-        if storyline:
-            storyline.advance_progress(delta)
-            storyline.last_active_tick = max(
-                storyline.last_active_tick,
-                storyline.start_tick,
-            )
     
     def get_stats(self) -> Dict[str, Any]:
         """Get narrative gravity statistics.

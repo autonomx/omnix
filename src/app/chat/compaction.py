@@ -5,8 +5,9 @@ summary repository defined here; no SQLite schema remains.
 """
 from __future__ import annotations
 
+from app.config.env import environment
+
 import hashlib
-import os
 import threading
 from copy import deepcopy
 from pathlib import Path
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory.settings import load_memory_runtime_settings
+from app.assistant_memory.contracts import load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, default_job_store
 
 from .models import MessageContentPurpose, project_message_content
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
 
 HISTORY_COMPACT_JOB_TYPE = "assistant.history.compact"
 DEFAULT_RECENT_MESSAGE_LIMIT = 24
+# The deterministic summary keeps the last this-many characters of its lines.
+SUMMARY_TEXT_CHARS = 12_000
 DEFAULT_COMPACTION_THRESHOLD = 40
 
 
@@ -58,7 +61,7 @@ def compaction_enabled() -> bool:
 
 def compaction_threshold() -> int:
     try:
-        return max(4, int(os.environ.get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
+        return max(4, int(environment().get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
     except ValueError:
         return DEFAULT_COMPACTION_THRESHOLD
 
@@ -108,6 +111,21 @@ def _estimate_tokens(text: str) -> int:
     return max(1, (len(text.encode("utf-8")) + 3) // 4) if text else 0
 
 
+def summary_line(message: Any) -> tuple[str, str] | None:
+    """A message's normalized content and its clipped summary text; None when it adds no line."""
+    projected = project_message_content(message, MessageContentPurpose.SUMMARY)
+    content = " ".join(projected.strip().split())
+    if not content:
+        return None
+    return content, content[:500] + ("…" if len(content) > 500 else "")
+
+
+def summary_line_length(message: Any) -> int:
+    """Characters the message adds to the deterministic summary text, including its newline."""
+    line = summary_line(message)
+    return 0 if line is None else len(f"{message.role}: {line[1]}") + 1
+
+
 def build_deterministic_summary(session: Any, *, recent_message_limit: int = DEFAULT_RECENT_MESSAGE_LIMIT) -> ConversationSummary | None:
     from datetime import datetime, timezone
 
@@ -121,11 +139,10 @@ def build_deterministic_summary(session: Any, *, recent_message_limit: int = DEF
     decisions: list[str] = []
     unresolved: list[str] = []
     for message in older:
-        projected = project_message_content(message, MessageContentPurpose.SUMMARY)
-        content = " ".join(projected.strip().split())
-        if not content:
+        line = summary_line(message)
+        if line is None:
             continue
-        clipped = content[:500] + ("…" if len(content) > 500 else "")
+        content, clipped = line
         lines.append(f"{message.role}: {clipped}")
         lowered = content.casefold()
         if message.role == "user" and any(marker in lowered for marker in ("use ", "always ", "decision", "source of truth")):
@@ -133,8 +150,8 @@ def build_deterministic_summary(session: Any, *, recent_message_limit: int = DEF
         if "todo" in lowered or "next" in lowered or "pending" in lowered or content.endswith("?"):
             unresolved.append(clipped)
     text = "\n".join(lines)
-    if len(text) > 12_000:
-        text = text[-12_000:]
+    if len(text) > SUMMARY_TEXT_CHARS:
+        text = text[-SUMMARY_TEXT_CHARS:]
     through = older[-1]
     summary_id = hashlib.sha256(f"{session.id}\n{through.id}".encode("utf-8")).hexdigest()
     return ConversationSummary(
@@ -158,7 +175,8 @@ def compaction_idempotency_key(session_id: str, through_message_id: str) -> str:
 def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> JobRecord | None:
     if not transcript_retention_allowed(session):
         return None
-    if not compaction_enabled() or len(session.messages) < compaction_threshold():
+    # A session loaded as a window counts every stored message (WP-5.7).
+    if not compaction_enabled() or max(len(session.messages), session.message_count) < compaction_threshold():
         return None
     messages = [message for message in session.messages if message.role in {"user", "assistant"}]
     if len(messages) <= DEFAULT_RECENT_MESSAGE_LIMIT:
@@ -166,7 +184,7 @@ def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> Job
     through = messages[-DEFAULT_RECENT_MESSAGE_LIMIT - 1]
     key = compaction_idempotency_key(session.id, through.id)
     store = job_store or default_job_store()
-    for job in store.list_jobs():
+    for job in store.iter_jobs(job_types=(HISTORY_COMPACT_JOB_TYPE,)):
         if job.type == HISTORY_COMPACT_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
     return store.create_job(
@@ -221,6 +239,6 @@ def process_compaction_job(
 def default_summary_repository():
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_summary_repository
+        from app.chat.persistence.chat_runtime import production_summary_repository
         return production_summary_repository()
     return InMemoryConversationSummaryRepository()

@@ -12,12 +12,6 @@ from app.rpg.world.conversation_threads import (
 )
 
 
-def _has_pending_player_response(simulation_state: Dict[str, Any]) -> bool:
-    thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
-    pending = _safe_dict(thread_state.get("pending_player_response"))
-    return bool(pending.get("thread_id") and pending.get("topic_id"))
-
-
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 

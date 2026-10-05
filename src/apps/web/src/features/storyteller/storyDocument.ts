@@ -1,4 +1,5 @@
 import { characterId, deriveStoryCast, type StoryCharacter } from './storyCast';
+import { writeStoryData } from './storySnapshotStore';
 
 export type StoryBlockKind = 'narration' | 'dialogue';
 export type StoryAudioScope = 'chapter' | 'selected_chapters' | 'full_story';
@@ -99,11 +100,7 @@ export function loadStoryDocument(storyId: string): StoryDocument | null {
 }
 
 export function saveStoryDocument(document: StoryDocument): void {
-  try {
-    window.localStorage.setItem(storyDocumentStorageKey(document.id), JSON.stringify(document));
-  } catch {
-    // Local persistence is best-effort until backend story metadata APIs exist.
-  }
+  writeStoryData(storyDocumentStorageKey(document.id), JSON.stringify(document));
 }
 
 export function buildStoryDocumentFromText({ title, premise = '', text, existing }: { title: string; premise?: string; text: string; existing?: StoryDocument | null }): StoryDocument {

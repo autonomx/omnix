@@ -46,6 +46,7 @@ INTENT_FAMILIES = {
     "social_probe": "social",
     "unsupported_mechanic_request": "unsupported_mechanic",
     "unsupported_but_diegetic_action": "diegetic_noop",
+    "hypothetical_counterfactual": "hypothetical",
 }
 
 
@@ -66,6 +67,14 @@ def classify_interpretive_intent(
         return ""
     if selection.get("reason") == "service_or_commerce_runtime_wins":
         return ""
+
+    from app.rpg.session.hypothetical_world_resolution import (
+        HYPOTHETICAL_INTENT,
+        looks_like_hypothetical_input,
+    )
+
+    if looks_like_hypothetical_input(player_input):
+        return HYPOTHETICAL_INTENT
 
     if re.search(r"\bowe[sd]? me\b", text) or re.search(r"\byou owe\b", text):
         return "unverified_debt_claim"
@@ -257,7 +266,7 @@ def build_interpretive_adjudication_result(
         "grounding_validation": deepcopy(grounding_validation),
         "source": _INTERPRETIVE_SOURCE,
     }
-    return {
+    result = {
         "consumed": True,
         "ok": True,
         "result": deepcopy(resolved_result),
@@ -284,52 +293,9 @@ def build_interpretive_adjudication_result(
         "player_input": _s(player_input),
         "source": _INTERPRETIVE_SOURCE,
     }
+    from app.rpg.session.contract_attachment import add_contracts_to_interpretive_result
 
-
-def install_interpretive_adjudication_hook() -> None:
-    """Install the adjudication path into the current interactive runtime."""
-
-    from functools import wraps
-
-    from app.rpg.session import interactive_first_call_runtime as runtime
-
-    sentinel = "_omnix_interpretive_adjudication_hook_installed"
-    if getattr(runtime, sentinel, False):
-        return
-
-    original_should = runtime._should_safe_fallback_nonstateful_dialogue
-    original_result = runtime._safe_dialogue_fallback_result
-
-    @wraps(original_should)
-    def patched_should(*args: Any, **kwargs: Any) -> bool:
-        if original_should(*args, **kwargs):
-            return True
-        action_advisory = _d(args[0] if len(args) > 0 else kwargs.get("action_advisory"))
-        semantic_advisory = _d(args[1] if len(args) > 1 else kwargs.get("semantic_advisory"))
-        selection = _d(args[2] if len(args) > 2 else kwargs.get("selection"))
-        player_input = _s(kwargs.get("player_input"))
-        return should_use_interpretive_adjudication(
-            player_input=player_input,
-            semantic_advisory=semantic_advisory or action_advisory,
-            selection=selection,
-        )
-
-    @wraps(original_result)
-    def patched_result(**kwargs: Any) -> dict[str, Any]:
-        player_input = _s(kwargs.get("player_input"))
-        semantic_advisory = _d(kwargs.get("semantic_advisory"))
-        selection = _d(kwargs.get("selection"))
-        if should_use_interpretive_adjudication(
-            player_input=player_input,
-            semantic_advisory=semantic_advisory,
-            selection=selection,
-        ):
-            return build_interpretive_adjudication_result(**kwargs)
-        return original_result(**kwargs)
-
-    runtime._should_safe_fallback_nonstateful_dialogue = patched_should
-    runtime._safe_dialogue_fallback_result = patched_result
-    setattr(runtime, sentinel, True)
+    return add_contracts_to_interpretive_result(result)
 
 
 def _looks_like_lore_conflict_claim(text: str) -> bool:
@@ -424,6 +390,11 @@ def _line_for_intent(*, intent: str, speaker: str, profile: dict[str, Any], play
             "That is not something this moment can honestly resolve as an accomplished action. "
             "I can react to the attempt or explain the obstacle, but I will not pretend the impossible simply worked."
         )
+    if intent == "hypothetical_counterfactual":
+        return (
+            "I can answer that as a possibility, not as a fact that has happened. "
+            "I will keep it separate from what is known here and now."
+        )
     return (
         "I can respond to that in-world, but I will not turn an unsupported request into a fact. "
         "Say what you want to accomplish, and I will answer from what is possible here."
@@ -445,6 +416,8 @@ def _narration_for_intent(*, intent: str, speaker: str, player_input: str) -> st
         return f"{speaker} answers cautiously, judging trust by evidence rather than words."
     if intent == "unsupported_mechanic_request":
         return f"{speaker} treats the request as a constraint to answer in-world, not a completed mechanic."
+    if intent == "hypothetical_counterfactual":
+        return f"{speaker} treats the question as a possibility, not a change to the world."
     return f"{speaker} keeps the answer grounded in what can be known here."
 
 

@@ -34,7 +34,7 @@ python -m app.persistence migrate
 python -m pytest src/tests/unit/companion_activity -q --tb=short
 python -m pytest src/tests/unit/desktop_companion/test_activity_bridge.py -q --tb=short
 python -m pytest src/tests/app/test_desktop_companion_activity_api.py -q --tb=short
-python -m pytest src/tests/app/test_companion_proactive_initiative_gate.py -q --tb=short
+python -m pytest src/tests/companion_activity/test_companion_proactive_initiative_gate.py -q --tb=short
 python -m pytest src/tests/persistence/test_companion_activity_checkpoint_store.py -q --tb=short
 python -m pytest src/tests/persistence/test_companion_initiative_authority.py -q --tb=short
 python -m app.persistence verify

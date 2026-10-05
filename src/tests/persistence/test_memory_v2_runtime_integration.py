@@ -71,12 +71,11 @@ def _database() -> PostgresDatabase:
 
 
 def _reset_authority(database: PostgresDatabase) -> None:
-    with database.transaction() as connection:
-        connection.execute(
-            "UPDATE omnix_memory_v2_authority_current SET current_epoch = 1, "
-            "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
-        )
-        connection.execute("DELETE FROM omnix_memory_v2_authority_epochs WHERE epoch > 1")
+    from tests.persistence.test_memory_v2_authority_cutover_integration import (
+        _reset_global_authority_to_v1,
+    )
+
+    _reset_global_authority_to_v1(database)
 
 
 @pytest.fixture(autouse=True)

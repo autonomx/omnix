@@ -1,57 +1,31 @@
+import { unwrapLabelled } from '../../api/http';
 import type {
   TradingScannerDefinition,
+  TradingScannerDefinitionInput,
   TradingScannerResult,
   TradingScannerRun,
 } from './scannerTypes';
+import { api } from './api/gateway';
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string' ? payload.detail : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Trading scanner request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
-
-function arrayField<T>(payload: unknown, field: string): T[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const value = (payload as Record<string, unknown>)[field];
-  return Array.isArray(value) ? value as T[] : [];
-}
+const scanner = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading scanner');
 
 export const tradingScannerApi = {
-  definitions: async () => {
-    const payload = await requestJson<unknown>('/api/trading/scanners');
-    return arrayField<TradingScannerDefinition>(payload, 'scanners');
-  },
-  create: (definition: TradingScannerDefinition) =>
-    requestJson<TradingScannerDefinition>('/api/trading/scanners', {
-      method: 'POST',
-      body: JSON.stringify(definition),
-    }),
-  update: (definition: TradingScannerDefinition) =>
-    requestJson<TradingScannerDefinition>(`/api/trading/scanners/${encodeURIComponent(definition.scanner_id)}`, {
-      method: 'PUT',
-      headers: { 'If-Match': String(definition.revision) },
-      body: JSON.stringify(definition),
-    }),
-  start: (scannerId: string) =>
-    requestJson<TradingScannerRun>(`/api/trading/scanners/${encodeURIComponent(scannerId)}/runs`, { method: 'POST' }),
-  cancel: (runId: string) =>
-    requestJson<{ ok: boolean; run_id: string; status: string }>(`/api/trading/scanners/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
-  runs: async (scannerId?: string) => {
-    const query = scannerId ? `?scanner_id=${encodeURIComponent(scannerId)}` : '';
-    const payload = await requestJson<unknown>(`/api/trading/scanners/runs${query}`);
-    return arrayField<TradingScannerRun>(payload, 'runs');
-  },
-  results: async (runId: string) => {
-    const payload = await requestJson<unknown>(
-      `/api/trading/scanners/runs/${encodeURIComponent(runId)}/results`,
-    );
-    return arrayField<TradingScannerResult>(payload, 'results');
-  },
+  definitions: async (): Promise<TradingScannerDefinition[]> =>
+    (await scanner(api.GET('/api/trading/scanners'))).scanners,
+  create: (definition: TradingScannerDefinitionInput): Promise<TradingScannerDefinition> =>
+    scanner(api.POST('/api/trading/scanners', { body: definition })),
+  update: (definition: TradingScannerDefinitionInput & { revision: number }): Promise<TradingScannerDefinition> =>
+    scanner(api.PUT('/api/trading/scanners/{scanner_id}', {
+      params: { path: { scanner_id: definition.scanner_id }, header: { 'If-Match': definition.revision } },
+      body: definition,
+    })),
+  // The run routes return untyped objects; these are the fields the scanner returns.
+  start: async (scannerId: string): Promise<TradingScannerRun> =>
+    (await scanner(api.POST('/api/trading/scanners/{scanner_id}/runs', { params: { path: { scanner_id: scannerId } } }))) as unknown as TradingScannerRun,
+  cancel: async (runId: string): Promise<{ ok: boolean; run_id: string; status: string }> =>
+    (await scanner(api.POST('/api/trading/scanners/runs/{run_id}/cancel', { params: { path: { run_id: runId } } }))) as unknown as { ok: boolean; run_id: string; status: string },
+  runs: async (scannerId?: string): Promise<TradingScannerRun[]> =>
+    (await scanner(api.GET('/api/trading/scanners/runs', { params: { query: scannerId ? { scanner_id: scannerId } : {} } }))).runs,
+  results: async (runId: string): Promise<TradingScannerResult[]> =>
+    (await scanner(api.GET('/api/trading/scanners/runs/{run_id}/results', { params: { path: { run_id: runId } } }))).results,
 };

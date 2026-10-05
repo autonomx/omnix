@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading import ai_shadow_circuit_persistence as persistence
+from app.trading import strategy_ai_shadow_provider as persistence
 from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from app.trading.strategy_repository import StrategyEvent
 

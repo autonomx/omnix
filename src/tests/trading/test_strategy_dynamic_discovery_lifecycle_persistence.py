@@ -12,19 +12,25 @@ from app.trading.strategy_discovery_replay import (
     replay_dynamic_discovery,
 )
 from app.trading.strategy_dynamic_discovery import (
+    AttributionEvent,
+    AttributionStage,
     CandidateLifecycleState,
+    DiscoveryExperimentArm,
     DynamicCandidate,
     EvaluationTier,
+    ExperimentCandidateState,
     MarketAnomalyFeatures,
     ShadowQualificationEvidence,
+    tier_candidates,
 )
-from app.trading.strategy_dynamic_discovery_monitor import (
-    _candidate_snapshot_state,
-    run_dynamic_discovery_once,
-)
+from app.trading.strategy_dynamic_discovery_monitor import run_dynamic_discovery_once
 from app.trading.strategy_dynamic_discovery_repository import (
     DynamicDiscoveryEventRepository,
+    EVENT_ATTRIBUTION,
 )
+from app.trading.strategy_interday_attribution import bridge_strategy_events
+from app.trading.strategy_interday_learning_monitor import run_interday_learning_once
+from app.trading.strategy_repository import StrategyEvent
 
 
 SESSION = date(2026, 9, 11)
@@ -84,19 +90,85 @@ class _ParentOnlyRepository:
         return SimpleNamespace(enabled=True, archived_at=None)
 
 
+class _MissingParentRepository:
+    def get_config(self, strategy_id):
+        raise ValueError("strategy_not_found")
+
+
+def test_attribution_owner_rejects_a_trade_that_skips_prior_stages() -> None:
+    ledger = _Ledger()
+    trade = StrategyEvent(
+        strategy_id="gap-pullback-arm",
+        event_id="trade-event-1",
+        instrument_id="equity:NASDAQ:TRADE",
+        event_type="entry_order_submitted",
+        state="entry_ready",
+        observed_at=T0,
+        idempotency_key="trade-event-1",
+        payload={},
+    )
+
+    bridged = bridge_strategy_events(
+        ledger,
+        session_date=SESSION,
+        events_by_strategy={"gap-pullback-arm": (trade,)},
+    )
+
+    assert bridged == 1
+    persisted = DynamicDiscoveryEventRepository(ledger).session_events(SESSION)
+    attribution = next(
+        AttributionEvent.model_validate(row.payload)
+        for row in persisted
+        if row.event_type == EVENT_ATTRIBUTION
+    )
+    assert attribution.stage == AttributionStage.TRADED
+    assert attribution.passed is False
+    assert attribution.reason == "ATTRIBUTION_PREDECESSOR_MISSING"
+
+
+def test_interday_learning_owner_delegates_to_core_before_post_close() -> None:
+    result = asyncio.run(
+        run_interday_learning_once(
+            now=T0,
+            repository=_MissingParentRepository(),
+        )
+    )
+
+    assert result == {
+        "bridged": 0,
+        "reported": False,
+        "labeled": 0,
+        "qualified": False,
+    }
+
+
 def test_candidates_beyond_evaluation_cap_are_durably_demoted_to_watch() -> None:
     current = {
-        _candidate(index).instrument_id: _candidate(index)
+        _candidate(index).instrument_id: _candidate_with_experiment_priority(index)
         for index in range(41)
     }
-    evaluated = tuple(list(current.values())[:40])
 
-    snapshots = _candidate_snapshot_state(current, evaluated)
+    snapshots = tier_candidates(tuple(current.values()))
     by_id = {row.instrument_id: row for row in snapshots}
 
     assert len(snapshots) == 41
+    assert by_id["equity:NASDAQ:T00"].tier == EvaluationTier.A
     assert by_id["equity:NASDAQ:T40"].tier == EvaluationTier.WATCH
     assert by_id["equity:NASDAQ:T40"].strategy_ranks == {}
+
+
+def _candidate_with_experiment_priority(index: int) -> DynamicCandidate:
+    candidate = _candidate(index)
+    state = ExperimentCandidateState(
+        arm=DiscoveryExperimentArm.COMBINED,
+        first_seen_at=candidate.first_seen_at,
+        last_observed_at=candidate.last_observed_at,
+        current_priority=100.0 - index,
+        peak_priority=100.0 - index,
+    )
+    return candidate.model_copy(
+        update={"experiment_states": {DiscoveryExperimentArm.COMBINED.value: state}}
+    )
 
 
 def test_expired_candidate_snapshot_orders_after_last_market_observation() -> None:
@@ -164,7 +236,8 @@ def test_candidate_compatibility_does_not_ignore_arbitrary_extra_fields() -> Non
         repository.latest_candidates(SESSION)
 
 
-def test_explicit_causal_watermark_rejects_future_discovery_observation() -> None:
+@pytest.mark.anyio
+async def test_explicit_causal_watermark_rejects_future_discovery_observation() -> None:
     observation_time = T0 + timedelta(seconds=1)
     observation = CausalMarketObservation(
         instrument_id="equity:NASDAQ:FUTR",
@@ -180,12 +253,10 @@ def test_explicit_causal_watermark_rejects_future_discovery_observation() -> Non
     )
 
     with pytest.raises(ValueError, match="future_dated"):
-        asyncio.run(
-            run_dynamic_discovery_once(
-                now=T0,
-                repository=_ParentOnlyRepository(),
-                observations=(observation,),
-            )
+        await run_dynamic_discovery_once(
+            now=T0,
+            repository=_ParentOnlyRepository(),
+            observations=(observation,),
         )
 
 

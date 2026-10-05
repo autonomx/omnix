@@ -104,29 +104,32 @@ def test_generation_progress_persists_fractional_unit_progress(monkeypatch) -> N
 
 
 def test_pause_request_releases_render_lease_at_a_unit_boundary() -> None:
+    calls = []
+
     class Jobs:
         def get_job(self, *_args, **_kwargs):
             return {"status": "running", "metadata": {"pause_requested": True}}
 
-    class Connection:
-        def __init__(self) -> None:
-            self.statements = []
+        def patch_job(self, _context, **kwargs):
+            calls.append(("patch_job", kwargs))
+            return {"id": kwargs["job_id"], "status": kwargs["status"]}
 
-        def execute(self, sql, params):
-            self.statements.append((sql, params))
-            return self
+        def update_attempt_status(self, _context, **kwargs):
+            calls.append(("update_attempt_status", kwargs))
 
-        def fetchone(self):
-            return ("render-job",)
-
-    connection = Connection()
-    work = SimpleNamespace(connection=connection, jobs=Jobs())
+    work = SimpleNamespace(jobs=Jobs())
 
     assert _pause_if_requested(
         work, local_tenant_context(), job_id="render-job", worker_id="worker", lease_token="lease",
     )
-    assert "SET status = 'paused'" in connection.statements[0][0]
-    assert "UPDATE omnix_job_attempts" in connection.statements[1][0]
+    (patch_name, patch), (attempt_name, attempt) = calls
+    assert patch_name == "patch_job"
+    # The pause is fenced by the caller's lease and releases it.
+    assert (patch["lease_owner"], patch["lease_token"]) == ("worker", "lease")
+    assert patch["status"] == "paused" and patch["clear_lease"] is True
+    assert patch["metadata_remove"] == ("pause_requested",)
+    assert attempt_name == "update_attempt_status"
+    assert attempt["lease_token"] == "lease" and attempt["status"] == "paused"
 
 
 def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) -> None:
@@ -311,7 +314,10 @@ def test_combined_preview_publication_honors_cancellation(tmp_path, monkeypatch,
     @contextmanager
     def work(database):
         yield SimpleNamespace(
-            connection=Connection(), assets=SimpleNamespace(create=lambda context, record: created.append(record)),
+            connection=Connection(), assets=SimpleNamespace(
+                create=lambda context, record: created.append(record),
+                asset_fields=lambda context, asset_id, **_kwargs: dict(zip(("storage_key", "checksum_sha256"), records[asset_id])),
+            ),
             jobs=SimpleNamespace(
                 get_job=lambda *args: {"status": "cancel_requested" if canceled else "running"},
                 acknowledge_cancel=lambda *args, **kwargs: acknowledged.append(kwargs["job_id"]),

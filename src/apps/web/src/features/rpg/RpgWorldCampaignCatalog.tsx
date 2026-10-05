@@ -3,7 +3,7 @@ import type {
   RpgScenarioSummary,
   RpgWorldCampaignSummary,
   RpgWorldSummary,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import { RpgWorldCard } from './RpgWorldCard';
 import './RpgWorldCampaignCatalog.css';
 

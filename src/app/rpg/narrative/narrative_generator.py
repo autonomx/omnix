@@ -24,7 +24,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
+from app.rpg.core.determinism import rng_for_current_turn
 from .narrative_event import NarrativeEvent
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narrative_narrative_generator.prompt', "1", "You are a cinematic RPG narrator.\n\nScene:\n- Location: {v0}\n- Participants: {v1}\n- Mood: {v2}\n\nEvents that occur:\n{v3}\n\nDialogue:\n{v4}\n\n{v5}\n\nRules:\n- Write a vivid, immersive narration of what happens\n- Include the dialogue naturally within the narrative\n- Focus on clarity, flow, and emotional impact\n- Do not contradict the events\n- Do not add events that aren't listed\n- Keep it under {v6} words\n- Use present tense\n- Second person ('you') if the player is involved\n\nNarrative:")
+_PROMPT_2 = prompt_template('rpg.narrative_narrative_generator.prompt_2', "1", "You are a cinematic RPG narrator.\n\nScene:\n- Location: {v0}\n- Participants: {v1}\n- Mood: {v2}\n\nEvents that occur:\n{v3}\n\n{v4}\n\nRules:\n- Write a vivid, immersive narration of what happens\n- Focus on clarity, flow, and emotional impact\n- Do not contradict the events\n- Do not add events that aren't listed\n- Keep it under {v5} words\n- Use present tense\n- Second person ('you') if the player is involved\n\nNarrative:")
 
 # Style prompts for different narrative moods
 STYLE_PROMPTS: Dict[str, str] = {
@@ -125,124 +130,6 @@ class NarrativeGenerator:
         else:
             return self._generate_with_templates(events)
     
-    def generate_with_dialogue(
-        self,
-        events: List[NarrativeEvent],
-        scene_context: Dict[str, Any],
-    ) -> str:
-        """Generate narrative with dialogue integration.
-        
-        If a DialogueEngine is available, generates dialogue lines for
-        'speak' events before generating the main narrative.
-        
-        Args:
-            events: List of NarrativeEvent objects to narrate.
-            scene_context: Dict with scene context (location, mood, etc).
-            
-        Returns:
-            Generated narrative text with dialogue.
-        """
-        if not events:
-            return ""
-        
-        dialogue_lines: List[str] = []
-        
-        if self.dialogue_engine:
-            for event in events:
-                if event.type == "speak" and event.actors:
-                    speaker = str(event.actors[0])
-                    target = str(event.actors[1]) if len(event.actors) > 1 else None
-                    line = self.dialogue_engine.generate_dialogue(speaker, target)
-                    dialogue_lines.append(line)
-        
-        if self.llm and self.style != "minimal":
-            return self._generate_with_llm_and_dialogue(
-                events, scene_context, dialogue_lines
-            )
-        else:
-            return self._generate_with_templates(events, dialogue_lines)
-    
-    def _generate_with_llm_and_dialogue(
-        self,
-        events: List[NarrativeEvent],
-        scene_context: Dict[str, Any],
-        dialogue_lines: List[str],
-    ) -> str:
-        """Generate narrative using LLM with dialogue integration.
-        
-        Args:
-            events: Narrative events to narrate.
-            scene_context: Scene context for atmosphere.
-            dialogue_lines: Pre-generated dialogue lines.
-            
-        Returns:
-            LLM-generated narrative text including dialogue.
-        """
-        event_descriptions = self._format_events(events)
-        location = scene_context.get("location", "unknown")
-        participants = ", ".join(
-            str(p) for p in scene_context.get("participants", [])
-        )
-        mood = scene_context.get("mood", "neutral")
-        
-        style_instruction = STYLE_PROMPTS.get(self.style, STYLE_PROMPTS["cinematic"])
-        
-        dialogue_text = "\n".join(dialogue_lines) if dialogue_lines else ""
-        
-        prompt = f"""You are a cinematic RPG narrator.
-
-Scene:
-- Location: {location}
-- Participants: {participants}
-- Mood: {mood}
-
-Events that occur:
-{event_descriptions}
-
-Dialogue:
-{dialogue_text}
-
-{style_instruction}
-
-Rules:
-- Write a vivid, immersive narration of what happens
-- Include the dialogue naturally within the narrative
-- Focus on clarity, flow, and emotional impact
-- Do not contradict the events
-- Do not add events that aren't listed
-- Keep it under {self.max_words} words
-- Use present tense
-- Second person ('you') if the player is involved
-
-Narrative:"""
-        
-        try:
-            result = self.llm(prompt)
-            return self._trim_to_max(result.strip())
-        except Exception:
-            return self._generate_with_templates(events, dialogue_lines)
-    
-    def generate_from_dicts(
-        self,
-        events: List[Dict[str, Any]],
-        scene_context: Dict[str, Any],
-    ) -> str:
-        """Generate narrative from raw event dicts (convenience wrapper).
-        
-        Converts raw dicts to NarrativeEvents and delegates to generate().
-        
-        Args:
-            events: List of raw event dicts.
-            scene_context: Dict with scene context.
-            
-        Returns:
-            Generated narrative text string.
-        """
-        narrative_events = [
-            NarrativeEvent.from_dict(e, raw_event=e) for e in events
-        ]
-        return self.generate(narrative_events, scene_context)
-    
     def _generate_with_llm(
         self,
         events: List[NarrativeEvent],
@@ -266,28 +153,7 @@ Narrative:"""
         
         style_instruction = STYLE_PROMPTS.get(self.style, STYLE_PROMPTS["cinematic"])
         
-        prompt = f"""You are a cinematic RPG narrator.
-
-Scene:
-- Location: {location}
-- Participants: {participants}
-- Mood: {mood}
-
-Events that occur:
-{event_descriptions}
-
-{style_instruction}
-
-Rules:
-- Write a vivid, immersive narration of what happens
-- Focus on clarity, flow, and emotional impact
-- Do not contradict the events
-- Do not add events that aren't listed
-- Keep it under {self.max_words} words
-- Use present tense
-- Second person ('you') if the player is involved
-
-Narrative:"""
+        prompt = _PROMPT_2.format(v0=(location), v1=(participants), v2=(mood), v3=(event_descriptions), v4=(style_instruction), v5=(self.max_words))
         
         try:
             result = self.llm(prompt)
@@ -404,15 +270,17 @@ Narrative:"""
         Returns:
             Joined paragraph with transitions.
         """
-        import random
         transitions = [" Then,", " Meanwhile,", " Suddenly,", " And yet,", ""]
         
         if len(sentences) <= 1:
             return " ".join(sentences)
         
         result = sentences[0]
-        for sentence in sentences[1:]:
-            transition = random.choice(transitions)
+        for index, sentence in enumerate(sentences[1:]):
+            transition = rng_for_current_turn(
+                "text:narrative_sentence_transition",
+                index,
+            ).choice(transitions)
             first_lower = sentence[0].lower() + sentence[1:]
             result += f"{transition}{first_lower}"
         

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules, type OmnixModuleId } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -50,14 +51,10 @@ class MockEventSource {
   }
 }
 
-function renderPlatform(moduleId: OmnixModuleId) {
+function renderPlatform(moduleId: OmnixModuleId, prepare?: (queryClient: QueryClient) => void) {
   vi.stubGlobal('EventSource', MockEventSource);
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
+  prepare?.(queryClient);
   const module = omnixModules.find((entry) => entry.id === moduleId);
 
   if (!module) {
@@ -74,7 +71,7 @@ function renderPlatform(moduleId: OmnixModuleId) {
 }
 
 function mockGateway(payloads: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => {
     const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
     const payload = payloads[path];
 
@@ -118,7 +115,7 @@ function assetPayload(includeAsset: boolean) {
             module: 'image-generation',
             type: 'image',
             mime_type: 'image/png',
-            storage_path: 'artifacts/image.png',
+            file_name: 'image.png',
             created_at: '2026-06-14T00:00:00Z',
             source_job_id: 'job-1',
           },
@@ -335,6 +332,40 @@ describe('PlatformModuleWorkspace', () => {
     });
   });
 
+  it('loads jobs one cursor page at a time', async () => {
+    const page = (id: string, extra: Record<string, unknown>) => ({
+      jobs: [{ ...jobPayload('completed', 'Done').jobs[0], id, type: `job.${id}` }],
+      ...extra,
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (url.pathname !== '/api/jobs') return new Response('not found', { status: 404 });
+      return Response.json(url.searchParams.get('cursor') === 'page-2'
+        ? page('second', { has_more: false, next_cursor: null })
+        : page('first', { has_more: true, next_cursor: 'page-2' }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('jobs');
+
+    expect(await screen.findByRole('heading', { name: 'job.first' })).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('limit=50');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }));
+
+    expect(await screen.findByRole('heading', { name: 'job.second' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'job.first' })).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[1][0])).toContain('cursor=page-2');
+    expect(screen.queryByRole('button', { name: 'Load more jobs' })).not.toBeInTheDocument();
+  });
+
+  it('pages assets apart from the plain asset list other workspaces cache', async () => {
+    mockGateway({ '/api/assets': assetPayload(true) });
+
+    renderPlatform('assets', (queryClient) => queryClient.setQueryData(['platform', 'assets'], { assets: [] }));
+
+    expect(await screen.findByRole('heading', { name: 'image / image-generation' })).toBeInTheDocument();
+  });
+
   it('refreshes jobs when shared job events arrive', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
@@ -475,6 +506,34 @@ describe('PlatformModuleWorkspace', () => {
     renderPlatform('diagnostics');
     expect(await screen.findByRole('heading', { name: 'Gateway status' })).toBeInTheDocument();
     expect(screen.getByText('mocked')).toBeInTheDocument();
+  });
+
+  it('saves provider defaults with the revisions it loaded', async () => {
+    const fetchMock = mockGateway({
+      '/api/settings': {
+        provider: 'lmstudio',
+        audio_provider_tts: 'faster-qwen3-tts',
+        audio_provider_stt: 'parakeet',
+        image_enabled: false,
+        rpg_visual_enabled: false,
+        worker_urls: {},
+        settings: {},
+        revisions: { provider: 4, audio_provider_tts: 0, audio_provider_stt: 2 },
+      },
+    });
+
+    renderPlatform('settings');
+    await screen.findByText('lmstudio');
+    fireEvent.click(screen.getByRole('button', { name: 'Save provider defaults' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+    });
+    const [, init] = fetchMock.mock.calls.find(([, call]) => call?.method === 'POST')!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      values: { provider: 'lmstudio', audio_provider_tts: 'faster-qwen3-tts', audio_provider_stt: 'parakeet' },
+      revisions: { provider: 4, audio_provider_tts: 0, audio_provider_stt: 2 },
+    });
   });
 
   it('renders core empty states when platform APIs return empty collections', async () => {

@@ -2,7 +2,7 @@ import type {
   RpgScenarioRevision,
   RpgWorldDetailResponse,
   RpgWorldRelease,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 
 export interface WorldLocationOption {
   id: string;

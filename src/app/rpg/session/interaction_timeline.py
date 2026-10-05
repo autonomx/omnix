@@ -1,8 +1,9 @@
 """Durable, bounded player/NPC interaction timeline."""
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
@@ -70,7 +71,7 @@ def commit_turn_interaction(
             "narration": _text(visible.get("narration")),
             "action_type": _first_text(sources, "action_type", "semantic_action_type"),
             "semantic_family": _first_text(sources, "semantic_family"),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": utc_now().isoformat(),
         }
     )
     events.append(event)
@@ -92,12 +93,6 @@ def commit_turn_interaction(
     _attach_interaction_result(result, event, persisted=False, replay=False)
     result["session"] = session
     return session, result, event
-
-
-def interaction_events(session: dict[str, Any]) -> list[dict[str, Any]]:
-    runtime = _dict(_dict(session).get("runtime_state"))
-    timeline = _dict(runtime.get("interaction_timeline"))
-    return [deepcopy(item) for item in _list(timeline.get("events")) if isinstance(item, dict)]
 
 
 def _attach_interaction_result(

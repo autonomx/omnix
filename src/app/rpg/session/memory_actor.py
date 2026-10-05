@@ -1,13 +1,11 @@
 """Pure actor-specific RPG memory writer and retrieval helpers."""
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, Iterable, List
 
 from .memory_writer import (
     MAX_MEMORY_TEXT,
     MEMORY_SCHEMA_VERSION,
-    make_memory_entry,
     memory_state_from_session,
 )
 
@@ -111,86 +109,6 @@ def _normalize_query_terms(query_terms: Iterable[Any] | str | None) -> List[str]
         if term and term not in terms:
             terms.append(term)
     return terms
-
-
-def build_actor_memory_entry(
-    memory: Dict[str, Any],
-    *,
-    actor_id: Any,
-    text: Any,
-    subject_id: Any = "player",
-    relationship: Any = None,
-    tick: Any = 0,
-    turn_id: Any = "",
-    location_id: Any = "",
-    visibility: Any = "private",
-    salience: Any = DEFAULT_ACTOR_MEMORY_SALIENCE,
-    tags: Iterable[Any] = (),
-    source: Any = "actor_memory_writer",
-) -> Dict[str, Any] | None:
-    """Build one canonical actor memory entry, or None for empty input."""
-    cleaned_actor_id = _clean_id(actor_id)
-    cleaned_subject_id = _clean_id(subject_id)
-    cleaned_text = _clean_text(text)
-    if not cleaned_actor_id or not cleaned_text:
-        return None
-    actor_tags = ["actor", cleaned_actor_id, cleaned_subject_id, *list(tags)]
-    entry = make_memory_entry(
-        memory,
-        kind=ACTOR_MEMORY_KIND,
-        text=cleaned_text,
-        tick=_clean_int(tick),
-        turn_id=_clean_id(turn_id),
-        actor_id=cleaned_actor_id,
-        subject_id=cleaned_subject_id,
-        location_id=_clean_id(location_id),
-        visibility=_clean_visibility(visibility),
-        salience=_clean_int(salience, DEFAULT_ACTOR_MEMORY_SALIENCE),
-        tags=_clean_tags(actor_tags),
-        source=_clean_id(source) or "actor_memory_writer",
-    )
-    relationship_metadata = _normalize_relationship(relationship, cleaned_subject_id)
-    if relationship_metadata:
-        entry["relationship"] = relationship_metadata
-    return entry
-
-
-def write_actor_memory(
-    session: Dict[str, Any],
-    *,
-    actor_id: Any,
-    text: Any,
-    subject_id: Any = "player",
-    relationship: Any = None,
-    tick: Any = 0,
-    turn_id: Any = "",
-    location_id: Any = "",
-    visibility: Any = "private",
-    salience: Any = DEFAULT_ACTOR_MEMORY_SALIENCE,
-    tags: Iterable[Any] = (),
-) -> Dict[str, Any]:
-    """Return a copied session with one actor memory entry appended when valid."""
-    updated = deepcopy(_safe_dict(session))
-    runtime = dict(_safe_dict(updated.get("runtime_state")))
-    memory = memory_state_from_session(updated)
-    entry = build_actor_memory_entry(
-        memory,
-        actor_id=actor_id,
-        text=text,
-        subject_id=subject_id,
-        relationship=relationship,
-        tick=tick,
-        turn_id=turn_id,
-        location_id=location_id,
-        visibility=visibility,
-        salience=salience,
-        tags=tags,
-    )
-    if entry is not None:
-        memory["entries"].append(entry)
-    runtime["memory"] = memory
-    updated["runtime_state"] = runtime
-    return updated
 
 
 def _compact_actor_entry(entry: Dict[str, Any]) -> Dict[str, Any] | None:

@@ -62,20 +62,6 @@ def ensure_conversation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     return simulation_state
 
 
-def build_conversation_topic(
-    topic_type: str,
-    anchor: str,
-    summary: str,
-    stance: str = "",
-) -> Dict[str, Any]:
-    return {
-        "type": _safe_str(topic_type),
-        "anchor": _safe_str(anchor),
-        "summary": _safe_str(summary),
-        "stance": _safe_str(stance),
-    }
-
-
 def build_conversation_state(
     *,
     kind: str,
@@ -174,20 +160,6 @@ def list_recent_conversations(simulation_state: Dict[str, Any], location_id: str
     if not location_id:
         return [dict(x) for x in rows if isinstance(x, dict)]
     return [dict(x) for x in rows if isinstance(x, dict) and _safe_str(x.get("location_id")) == _safe_str(location_id)]
-
-
-def get_conversation(simulation_state: Dict[str, Any], conversation_id: str) -> Optional[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    conversation_id = _safe_str(conversation_id)
-    rows = (
-        _safe_list(simulation_state["social_state"]["conversations"]["active"]) +
-        _safe_list(simulation_state["social_state"]["conversations"]["recent"])
-    )
-    for row in rows:
-        row = _safe_dict(row)
-        if _safe_str(row.get("conversation_id")) == conversation_id:
-            return dict(row)
-    return None
 
 
 def upsert_conversation(simulation_state: Dict[str, Any], conversation: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { Button, Group, Progress, Switch, Text, Title } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type {
   AssetListResponse,
@@ -13,12 +14,17 @@ import type {
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { omnixEventClient, type OmnixEventConnectionStatus } from '../../events/eventClient';
+import type { OmnixEventConnectionStatus } from '../../events/eventClient';
+import { useEventConnectionStatus, useJobEventRefresh } from '../../events/useJobEvents';
+import { jobProgressPercent } from '../../api/jobProgress';
 
-const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
 const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
 const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];
+// Platform lists load one cursor page at a time (WP-5.5) instead of every row.
+const JOB_PAGE_SIZE = 50;
+const ASSET_PAGE_SIZE = 60;
+
 const providerModelEventQueryKeys: QueryKey[] = [
   ['platform', 'providers'],
   ['platform', 'models'],
@@ -30,7 +36,7 @@ export { isPlatformModule } from '../../app/modules';
 
 export function PlatformModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   return (
-    <WorkspacePanel>
+    <WorkspacePanel labelledBy="module-title">
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Platform module</p>
@@ -167,10 +173,14 @@ function JobsView() {
   const queryClient = useQueryClient();
   const eventStatus = useEventConnectionStatus();
   useJobEventRefresh(jobsEventQueryKeys);
-  const query = useQuery({
-    queryKey: ['platform', 'jobs'],
-    queryFn: () => omnixApiClient.listJobs(),
+  const query = useInfiniteQuery({
+    // Other workspaces cache the plain jobs list under ['platform', 'jobs']; invalidating that prefix refreshes these pages too.
+    queryKey: ['platform', 'jobs', 'pages'],
+    queryFn: ({ pageParam }) => omnixApiClient.listJobs({ limit: JOB_PAGE_SIZE, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: nextCursor,
   });
+  const jobs = query.data?.pages.flatMap((page) => page.jobs) ?? [];
   const cancelMutation = useMutation({
     mutationFn: (jobId: string) => omnixApiClient.cancelJob(jobId, 'Canceled from Omnix web Jobs module'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
@@ -182,11 +192,11 @@ function JobsView() {
         <Title order={4}>Live updates</Title>
         <DetailList rows={eventStatusRows(eventStatus)} />
       </section>
-      <QueryState query={query} empty={!query.data?.jobs.length} emptyText="No jobs in the shared queue.">
-        {(data) => (
+      <QueryState query={query} empty={!jobs.length} emptyText="No jobs in the shared queue.">
+        {() => (
           <div className="platform-list">
-            {data.jobs.map((job) => {
-              const progressValue = progressPercent(job.progress);
+            {jobs.map((job) => {
+              const progressValue = jobProgressPercent(job.progress);
               const canCancel = ['queued', 'leased', 'running', 'waiting', 'retrying'].includes(job.status);
 
               return (
@@ -220,6 +230,7 @@ function JobsView() {
                 </section>
               );
             })}
+            <LoadMore query={query} label="jobs" />
           </div>
         )}
       </QueryState>
@@ -229,23 +240,30 @@ function JobsView() {
 
 function AssetsView() {
   useJobEventRefresh(artifactEventQueryKeys);
-  const query = useQuery({
-    queryKey: ['platform', 'assets'],
-    queryFn: () => omnixApiClient.listAssets(),
+  const query = useInfiniteQuery({
+    // Other workspaces cache the plain assets list under ['platform', 'assets']; invalidating that prefix refreshes these pages too.
+    queryKey: ['platform', 'assets', 'pages'],
+    queryFn: ({ pageParam }) => omnixApiClient.listAssetPage({ limit: ASSET_PAGE_SIZE, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: nextCursor,
   });
+  const assets = query.data?.pages.flatMap((page) => page.assets) ?? [];
 
   return (
-    <QueryState query={query} empty={!query.data?.assets.length} emptyText="No assets indexed in the shared library.">
-      {(data) => (
-        <div className="platform-grid">
-          {data.assets.map((asset) => (
-            <OmnixAssetCard
-              key={asset.id}
-              title={`${asset.type} / ${asset.module}`}
-              metadata={`${asset.mime_type} - ${asset.storage_path}`}
-            />
-          ))}
-        </div>
+    <QueryState query={query} empty={!assets.length} emptyText="No assets indexed in the shared library.">
+      {() => (
+        <>
+          <div className="platform-grid">
+            {assets.map((asset) => (
+              <OmnixAssetCard
+                key={asset.id}
+                title={`${asset.type} / ${asset.module}`}
+                metadata={`${asset.mime_type} - ${asset.file_name}`}
+              />
+            ))}
+          </div>
+          <LoadMore query={query} label="assets" />
+        </>
       )}
     </QueryState>
   );
@@ -294,12 +312,19 @@ function SettingsView() {
     queryFn: () => omnixApiClient.listProviders(),
   });
   const saveMutation = useMutation({
-    mutationFn: () =>
-      omnixApiClient.saveSettings({
+    mutationFn: () => {
+      const values = {
         provider: llmProvider,
         audio_provider_tts: ttsProvider,
         audio_provider_stt: sttProvider,
-      }),
+      };
+      // The gateway refuses a save whose revisions are stale (another tab or
+      // process changed the setting); the form then reloads.
+      const revisions = Object.fromEntries(
+        Object.keys(values).map((key) => [key, query.data?.revisions?.[key] ?? 0]),
+      );
+      return omnixApiClient.saveSettings({ values, revisions });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['platform', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] });
@@ -463,13 +488,32 @@ function DiagnosticsView() {
   );
 }
 
+type PagedQuery = {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
+};
+
+function nextCursor(page: { next_cursor?: string | null; has_more?: boolean }): string | undefined {
+  return page.has_more && page.next_cursor ? page.next_cursor : undefined;
+}
+
+function LoadMore({ query, label }: { query: PagedQuery; label: string }) {
+  if (!query.hasNextPage) return null;
+  return (
+    <Button variant="light" size="xs" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
+      {query.isFetchingNextPage ? `Loading more ${label}…` : `Load more ${label}`}
+    </Button>
+  );
+}
+
 function QueryState<T>({
   query,
   empty,
   emptyText,
   children,
 }: {
-  query: UseQueryResult<T, Error>;
+  query: { isLoading: boolean; isError: boolean; error: Error | null; data: T | undefined };
   empty: boolean;
   emptyText: string;
   children: (data: T) => ReactNode;
@@ -479,7 +523,7 @@ function QueryState<T>({
   }
 
   if (query.isError) {
-    return <EmptyState text={`Gateway request failed: ${query.error.message}`} />;
+    return <EmptyState text={`Gateway request failed: ${query.error?.message ?? 'unknown error'}`} />;
   }
 
   if (!query.data || empty) {
@@ -487,33 +531,6 @@ function QueryState<T>({
   }
 
   return <>{children(query.data)}</>;
-}
-
-function useEventConnectionStatus(): OmnixEventConnectionStatus {
-  const [status, setStatus] = useState(() => omnixEventClient.getStatus());
-
-  useEffect(() => omnixEventClient.subscribeStatus(setStatus), []);
-
-  return status;
-}
-
-function useJobEventRefresh(queryKeys: QueryKey[]) {
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const invalidate = () => {
-      for (const queryKey of queryKeys) {
-        queryClient.invalidateQueries({ queryKey });
-      }
-    };
-    const unsubscribes = jobEventNames.map((eventName) => omnixEventClient.subscribe(eventName, invalidate));
-
-    return () => {
-      for (const unsubscribe of unsubscribes) {
-        unsubscribe();
-      }
-    };
-  }, [queryClient, queryKeys]);
 }
 
 function DetailList({ rows }: { rows: Array<[string, string]> }) {
@@ -549,13 +566,6 @@ function eventStatusText(status: OmnixEventConnectionStatus): string {
   return status.lastError ? `${status.state} (${status.lastError})` : status.state;
 }
 
-function progressPercent(progress: JobRecord['progress']): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}
 
 function providerOptions(payload: ProviderFacadePayload | undefined, family: 'llm' | 'tts' | 'stt', fallbackIds: string[]) {
   const options = new Map<string, { id: string; label: string }>();

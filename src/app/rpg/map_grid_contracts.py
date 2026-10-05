@@ -38,21 +38,6 @@ class GridTransform(FrozenGridModel):
     display_offset_x: int = 1
     display_offset_y: int = 1
 
-    def visual_point(self, cell: GridPoint) -> GridPoint:
-        column, row = cell
-        return (
-            self.visual_origin_x + column * self.cell_width,
-            self.visual_origin_y + row * self.cell_height,
-        )
-
-    def display_point(self, cell: GridPoint) -> GridPoint:
-        column, row = cell
-        return (
-            column + self.display_offset_x,
-            row + self.display_offset_y,
-        )
-
-
 class TerrainRule(FrozenGridModel):
     code: str = Field(min_length=1, max_length=1)
     terrain_id: str = Field(min_length=1)

@@ -295,61 +295,6 @@ class ReputationEngine:
                     
         return changes
     
-    def get_top_factions(self, count: int = 3) -> List[Tuple[str, float]]:
-        """Get factions with highest reputation.
-        
-        Args:
-            count: Number of top factions to return.
-            
-        Returns:
-            List of (faction_id, reputation) tuples, sorted descending.
-        """
-        standings = [(fid, s.reputation) 
-                     for fid, s in self.reputation.items()
-                     if s.reputation != 0]
-        standings.sort(key=lambda x: x[1], reverse=True)
-        return standings[:count]
-    
-    def get_bottom_factions(self, count: int = 3) -> List[Tuple[str, float]]:
-        """Get factions with lowest reputation.
-        
-        Args:
-            count: Number of bottom factions to return.
-            
-        Returns:
-            List of (faction_id, reputation) tuples, sorted ascending.
-        """
-        standings = [(fid, s.reputation) 
-                     for fid, s in self.reputation.items()
-                     if s.reputation != 0]
-        standings.sort(key=lambda x: x[1])
-        return standings[:count]
-    
-    def get_attitude_summary(self) -> Dict[str, str]:
-        """Get attitude for all known factions.
-        
-        Returns:
-            Dict of {faction_id: attitude} for all factions with
-            non-zero reputation.
-        """
-        return {
-            fid: self.get_attitude(fid)
-            for fid, standing in self.reputation.items()
-            if standing.reputation != 0
-        }
-    
-    def has_interaction_with(self, faction_id: str) -> bool:
-        """Check if player has ever interacted with a faction.
-        
-        Args:
-            faction_id: Target faction.
-            
-        Returns:
-            True if any reputation changes have been recorded.
-        """
-        standing = self.reputation.get(faction_id)
-        return standing is not None and len(standing.history) > 0
-    
     def get_history(self, faction_id: str) -> List[Tuple[str, float, int]]:
         """Get reputation change history for a faction.
         

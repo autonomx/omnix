@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from app.rpg.session.runtime_part40 import apply_turn
+from app.rpg.session.turn_response_composition import apply_turn
 
 
 _CATEGORIES = (
@@ -149,9 +149,15 @@ def _base_turn_factory(state: dict[str, Any]) -> Callable[..., dict[str, Any]]:
         }
         session = {
             "session_id": session_id,
+            "manifest": {
+                "id": session_id,
+                "session_id": session_id,
+                "title": "Response endurance",
+            },
             "simulation_state": deepcopy(state),
             "runtime_state": {
                 "tick": turn,
+                "state_revision": turn,
                 "performance": {
                     "enable_live_narration_llm": False,
                     "enable_provider_runtime_narration": False,
@@ -254,6 +260,9 @@ def _run(turns: int, *, session_id: str) -> tuple[str, dict[str, Any]]:
 
 
 def main() -> int:
+    from app.persistence.startup import bootstrap_postgresql_runtime
+
+    bootstrap_postgresql_runtime()
     parser = argparse.ArgumentParser(
         description="Run canonical public apply_turn endurance and replay checks."
     )

@@ -18,7 +18,6 @@ from app.rpg.session.genesis.world_forge_profile_graph import (
 )
 from app.rpg.worlds import generation_compilation
 from app.rpg.worlds.generation_actor_portfolio import (
-    ActorPortfolioCompilationError,
     actor_portfolio_issues,
     actor_portfolio_report,
 )
@@ -293,33 +292,6 @@ def test_actor_without_non_spatial_relationship_is_blocking() -> None:
         and issue.actor_id == "ent:actor:1"
         for issue in issues
     )
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(ActorPortfolioCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(duplicate_signature=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_actor_portfolio_report(

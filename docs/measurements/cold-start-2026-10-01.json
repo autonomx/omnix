@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "measurement": "gateway cold start (WP-7.7)",
+  "method": "fresh Python process per run: import app.gateway.main and create_gateway_app(); no database (readiness and migrations are separate); median of 3",
+  "revision": "2034be47f734abf0a3bfde7a491008aa739b419a",
+  "python": "3.11.4",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "import_app_production_seconds": 0.177,
+  "all_features": {
+    "compose_seconds_median": 3.011,
+    "compose_seconds_runs": [
+      2.954,
+      3.011,
+      3.177
+    ],
+    "modules": 2263
+  },
+  "rpg_trading_hermes_disabled": {
+    "compose_seconds_median": 1.534,
+    "compose_seconds_runs": [
+      1.57,
+      1.518,
+      1.534
+    ],
+    "modules": 1244
+  },
+  "before_this_change_rpg_trading_hermes_disabled": {
+    "compose_seconds": 2.0,
+    "modules": 1838,
+    "rpg_modules": 591,
+    "note": "RPG debug middleware imported the RPG route package unconditionally"
+  },
+  "targets": {
+    "all_features_seconds": 8,
+    "rpg_and_trading_disabled_seconds": 4
+  }
+}

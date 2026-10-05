@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgItemPanel } from './RpgItemPanel';
 import type { RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const action: RpgItemUiAction = {
   id: 'use:field-kit',
@@ -26,11 +27,7 @@ const merchantEntry: RpgMerchantEntryPreview = {
 };
 
 function renderItemPanel(element: ReactElement) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
 }
 

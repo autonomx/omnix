@@ -32,10 +32,11 @@ Architecture:
 from __future__ import annotations
 
 import logging
-import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +379,10 @@ class NarrativeSurfacer:
     ) -> str:
         """Generate attention-grabbing headline."""
         templates = self._headline_templates.get(event_type, self._headline_templates["general"])
-        template = random.choice(templates)
+        template = rng_for_current_turn(
+            "text:player_experience_headline",
+            stable_sub_index(event),
+        ).choice(templates)
 
         # Substitute placeholders
         replacements = {
@@ -786,30 +790,6 @@ class EmotionalFeedbackLoop:
         })
 
         return emotional_feedback
-
-    def get_emotional_state_summary(self) -> str:
-        """Get summary of dominant emotional patterns."""
-        if not self._emotional_patterns:
-            return "Emotionally neutral"
-
-        dominant = self._emotional_patterns.most_common(1)[0][0]
-
-        summaries = {
-            "isolation": "You've been feeling increasingly cut off from others",
-            "validation": "There's a growing sense that you're on the right path",
-            "regret": "Unresolved consequences weigh on your mind",
-            "connection": "The bonds you've formed give you strength",
-            "vulnerability": "You sense your position growing precarious",
-            "empowerment": "You feel capable of shaping what comes next",
-            "anxiety": "Uncertainty about the future shadows your thoughts",
-            "security": "For now, the world feels stable and manageable",
-            "shock": "Recent betrayals have left you wary",
-            "conflict": "Competing demands pull at your sense of self",
-            "uncertainty": "The path forward remains unclear",
-        }
-
-        return summaries.get(dominant, "Emotions run in mixed currents")
-
 
 class MemoryEchoSystem:
     """Generates callbacks to past events for narrative continuity.

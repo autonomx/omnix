@@ -39,18 +39,6 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class WorldTopicDraft(FrozenContract):
-    topic_id: str = Field(min_length=1)
-    source: Literal["manual", "ai", "imported"] = "manual"
-    status: Literal["draft", "ready", "stale", "failed"] = "draft"
-    content: dict[str, Any] = Field(default_factory=dict)
-    directives: dict[str, Any] = Field(default_factory=dict)
-    dependency_hashes: dict[str, str] = Field(default_factory=dict)
-    input_hash: str = ""
-    content_hash: str = ""
-    provenance: dict[str, Any] = Field(default_factory=dict)
-
-
 class WorldProjectCreate(FrozenContract):
     contract_version: Literal["rpg_world_contract_v1"] = WORLD_CONTRACT_VERSION
     world_id: str | None = Field(default=None, min_length=1)
@@ -209,8 +197,3 @@ class CampaignLaunchContract(FrozenContract):
     runtime_features: dict[str, bool] = Field(default_factory=dict)
 
 
-class LegacyGenesisWorldLaunch(FrozenContract):
-    world: WorldProjectCreate
-    scenario: ScenarioProjectCreate
-    campaign: CampaignLaunchContract
-    legacy_payload_hash: str = Field(pattern=r"^sha256:")

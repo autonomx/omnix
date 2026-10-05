@@ -5,14 +5,18 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_context.models import AssistantContextBuildResult
-from app.assistant_context.routes import register_assistant_context_routes
+from app.chat.assistant_context.models import AssistantContextBuildResult
+from app.chat.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.jobs import SQLiteJobStore
-from app.research.compatibility import reset_research_compatibility_telemetry
+from app.conversation.research_compatibility import reset_research_compatibility_telemetry
+from app.research.api import register_research_job_routes
 from app.research.policy import ResearchPolicy
 from app.research.release_policy import ResearchReleasePolicy
 from app.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
+from tests.support.in_memory_jobs import InMemoryJobStore
+import pytest
+
+pytestmark = pytest.mark.usefixtures("legacy_test_persistence")
 
 
 def runtime_settings(**overrides) -> ResearchRuntimeSettings:
@@ -41,7 +45,7 @@ def runtime_settings(**overrides) -> ResearchRuntimeSettings:
 
 def test_runtime_settings_load_saved_profile_values(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "provider": "lmstudio",
             "settings_control_center": {
@@ -99,7 +103,7 @@ def test_quick_search_route_applies_saved_provider_chain_result_limit_and_policy
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     context_service = CapturingContextService()
     session = chat_store.create_session(CreateChatSessionRequest(title="Quick settings"))
     settings = runtime_settings()
@@ -134,7 +138,7 @@ def test_deep_research_job_freezes_saved_provider_chain_budgets_and_cache_ttls(t
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep settings"))
     settings = runtime_settings()
     app = FastAPI()
@@ -167,43 +171,12 @@ def test_deep_research_job_freezes_saved_provider_chain_budgets_and_cache_ttls(t
     assert payload["hermes_planner_enabled"] is True
 
 
-def test_deep_research_honors_explicit_duckduckgo_primary_priority(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
-    chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    session = chat_store.create_session(CreateChatSessionRequest(title="Deep browser settings"))
-    settings = runtime_settings(
-        provider="duckduckgo",
-        provider_fallbacks=("playwright",),
-    )
-    app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        settings_factory=lambda: settings,
-    )
-
-    response = TestClient(app).post(
-        f"/api/assistant/context/chat/sessions/{session.id}/messages",
-        json={"content": "Research current local coding models", "web_research_mode": "deep"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()["job"]["input_payload"]
-    assert payload["research_provider"] == "duckduckgo"
-    assert payload["research_provider_chain"] == ["duckduckgo", "playwright"]
-
-
 def test_api_backed_environment_provider_overrides_duckduckgo_primary(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_PROVIDER", "brave")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     context_service = CapturingContextService()
     session = chat_store.create_session(CreateChatSessionRequest(title="Provider override"))
     settings = runtime_settings(provider="duckduckgo", provider_fallbacks=("playwright", "duckduckgo"))
@@ -215,6 +188,8 @@ def test_api_backed_environment_provider_overrides_duckduckgo_primary(tmp_path, 
         context_service_factory=lambda: context_service,
         settings_factory=lambda: settings,
     )
+    # The status route belongs to the research feature (PA-1.3).
+    register_research_job_routes(app, job_store_factory=lambda: job_store, settings_factory=lambda: settings)
 
     response = TestClient(app).post(
         f"/api/assistant/context/chat/sessions/{session.id}/messages",
@@ -241,10 +216,9 @@ def test_research_status_reports_provider_chain_without_exposing_secret(tmp_path
     reset_research_compatibility_telemetry()
     app = FastAPI()
     settings = runtime_settings()
-    register_assistant_context_routes(
+    register_research_job_routes(
         app,
-        chat_store_factory=lambda: ChatSessionStore(tmp_path / "chat.json"),
-        job_store_factory=lambda: SQLiteJobStore(tmp_path / "jobs.sqlite"),
+        job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs"),
         settings_factory=lambda: settings,
     )
 

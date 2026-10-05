@@ -19,7 +19,6 @@ from app.rpg.session.genesis.world_forge_profile_graph import (
 )
 from app.rpg.worlds import generation_compilation
 from app.rpg.worlds.generation_network_constraints import (
-    NetworkConstraintCompilationError,
     network_constraint_issues,
     network_constraint_report,
 )
@@ -391,33 +390,6 @@ def test_network_portfolio_requires_distinct_blind_spots_and_failures() -> None:
         if issue.code == "network_constraint_portfolio_too_uniform"
     }
     assert components == {"blind_spot", "failure_mode"}
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(NetworkConstraintCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(unbounded_blind_spot=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_network_report(

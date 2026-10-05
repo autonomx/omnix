@@ -1,14 +1,14 @@
 """Production adapters for durable canonical narrative delivery."""
 from __future__ import annotations
 
-import os
-from functools import lru_cache
+from app.config.env import environment
+
+from app.caching.bounded_cache import bounded_lru_cache
 from threading import RLock
 from typing import Any, Callable, Mapping
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.tenant import TenantContext
+from app.runtime.tenant_context import TenantContext, current_tenant_for
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.narrative_engine.authority import DeliveryMode
 from app.rpg.narrative_engine.delivery import (
@@ -29,7 +29,7 @@ class PostgresNarrativeDeliveryRepositoryAdapter:
         self,
         database: PostgresDatabase | None = None,
         *,
-        context_provider: Callable[[PostgresDatabase], TenantContext] = bootstrap_local_tenant,
+        context_provider: Callable[[PostgresDatabase], TenantContext] = current_tenant_for,
         unit_of_work_factory: Callable[..., Any] = unit_of_work,
     ) -> None:
         self.database = database or default_database()
@@ -105,16 +105,15 @@ class PostgresNarrativeDeliveryRepositoryAdapter:
 
 
 def _runtime_postgresql_active() -> bool:
+    from app.persistence.runtime import uses_postgresql_runtime
     try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-
-        return runtime_adapters_installed()
+        return uses_postgresql_runtime()
     except Exception:
         return False
 
 
 def _delivery_repository_mode(environ: Mapping[str, str] | None = None) -> str:
-    env = os.environ if environ is None else environ
+    env = environment() if environ is None else environ
     explicit = str(
         env.get("OMNIX_RPG_NARRATIVE_DELIVERY_REPOSITORY")
         or env.get("OMNIX_RPG_NARRATIVE_REPOSITORY")
@@ -128,7 +127,7 @@ def _delivery_repository_mode(environ: Mapping[str, str] | None = None) -> str:
     return "in_memory"
 
 
-@lru_cache(maxsize=4)
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _cached_delivery_repository(mode: str) -> NarrativeDeliveryRepository:
     if mode in {"postgres", "postgresql", "production_authoritative"}:
         return PostgresNarrativeDeliveryRepositoryAdapter()
@@ -142,10 +141,6 @@ def build_production_narrative_delivery_repository(
     environ: Mapping[str, str] | None = None,
 ) -> NarrativeDeliveryRepository:
     return _cached_delivery_repository(_delivery_repository_mode(environ))
-
-
-def reset_narrative_delivery_repository_cache() -> None:
-    _cached_delivery_repository.cache_clear()
 
 
 def prepare_canonical_result_delivery(

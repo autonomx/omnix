@@ -280,15 +280,6 @@ class RecoveryManager:
     # Generic helpers
     # ------------------------------------------------------------------
 
-    def build_safe_scene(self, coherence_summary: dict, reason: str) -> dict:
-        """Build a generic safe scene for any unclassified failure."""
-        anchor = self._state.last_good_scene_anchor
-        if anchor:
-            return self.fallback_builder.build_from_last_good_anchor(
-                anchor, coherence_summary
-            )
-        return self.fallback_builder.build_from_coherence_summary(coherence_summary)
-
     def record_recovery(self, result: RecoveryResult) -> None:
         """Update internal recovery state from a result."""
         if result.record is not None:

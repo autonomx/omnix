@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.unit_of_work import unit_of_work
 
+from .profiles import profile_produces_diff
 from .budget import AgentBudgetError
 from .coding_quality_repository import PostgresCodingQualityRepository
 from .planning import (
@@ -69,7 +70,7 @@ def _load(service, run_id: str):
     snapshot = service.get(run_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
-    if snapshot.spec.profile != "coding" or "diff" not in snapshot.spec.expected_artifacts:
+    if not profile_produces_diff(snapshot.spec.profile) or "diff" not in snapshot.spec.expected_artifacts:
         raise HTTPException(status_code=409, detail="agent_planning_not_applicable")
     return snapshot
 
@@ -374,18 +375,6 @@ def _inspection_response(mode, revision, evidence, candidates, lenses, state):
     }
 
 
-def _lock_planning_state(work, workspace_id: str, run_id: str) -> None:
-    work.connection.execute(
-        """
-        SELECT run_id
-          FROM omnix_agent_planning_state
-         WHERE workspace_id = %s AND run_id = %s
-         FOR UPDATE
-        """,
-        (workspace_id, run_id),
-    ).fetchone()
-
-
 def _unknown_command_is_explicitly_planned(plan, command: str) -> bool:
     if plan is None or not command.strip():
         return False
@@ -409,47 +398,6 @@ def _candidate_review_signature(candidates) -> tuple[tuple[object, ...], ...]:
         )
         for item in candidates
     )
-
-
-def _completed_semantic_review_rejections(
-    work,
-    workspace_id: str,
-    run_id: str,
-    task_revision_id: str,
-) -> int:
-    """Count completed blocking reviews in the current consensus cycle.
-
-    A successful approved plan ends a cycle. Structural rejections and reviewer
-    transport failures do not consume semantic consensus rounds.
-    """
-
-    row = work.connection.execute(
-        """
-        WITH last_approved AS (
-            SELECT COALESCE(MAX(sequence), 0) AS sequence
-              FROM omnix_agent_plan_revisions
-             WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
-               AND status = 'approved'
-        )
-        SELECT COUNT(*)
-          FROM omnix_agent_plan_revisions, last_approved
-         WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
-           AND omnix_agent_plan_revisions.sequence > last_approved.sequence
-           AND status = 'rejected'
-           AND payload ? 'semantic_review'
-           AND payload -> 'semantic_review' IS NOT NULL
-           AND payload -> 'semantic_review' ->> 'status' = 'completed'
-        """,
-        (
-            workspace_id,
-            run_id,
-            task_revision_id,
-            workspace_id,
-            run_id,
-            task_revision_id,
-        ),
-    ).fetchone()
-    return int(row[0] or 0)
 
 
 def _plan_next_action(
@@ -598,26 +546,11 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
 
         # Serialize lineage while producing the immutable review snapshot. The
         # lock is deliberately released before the model review call below.
-        _lock_planning_state(work, service.context.workspace_id, run_id)
+        planning.lock_state(run_id)
         state = planning.get_state(run_id) or state
         active_id = str(state.get("active_plan_revision_id") or "") or None
 
-        previous = None
-        previous_id = request.plan.previous_plan_revision_id
-        if amend:
-            if not active_id:
-                raise HTTPException(status_code=409, detail="agent_plan_amend_requires_active_revision")
-            if previous_id and previous_id != active_id:
-                raise HTTPException(status_code=409, detail="agent_plan_amend_must_extend_active_revision")
-            previous_id = active_id
-            previous = planning.get_plan(run_id, previous_id)
-            if previous is None or previous.task_revision_id != revision.revision_id:
-                raise HTTPException(status_code=409, detail="agent_plan_previous_revision_stale")
-        else:
-            if previous_id:
-                raise HTTPException(status_code=422, detail="agent_plan_submit_must_not_set_previous_revision")
-            if active_id:
-                raise HTTPException(status_code=409, detail="agent_plan_submit_requires_amend")
+        previous, previous_id = _previous_plan_revision(request, amend, active_id, planning, run_id, revision)
 
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
@@ -651,135 +584,9 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
         failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
         failures.extend(_preexisting_dirty_plan_failures(submission, baseline))
 
-        if not failures and review_required:
-            completed_rejections = _completed_semantic_review_rejections(
-                work,
-                service.context.workspace_id,
-                run_id,
-                revision.revision_id,
-            )
-            if completed_rejections >= max_review_rounds:
-                failures.append("plan_semantic_review_consensus_exhausted")
-            else:
-                review_round = completed_rejections + 1
-                expected_revision_id = revision.revision_id
-                expected_active_id = active_id
-                expected_baseline_id = baseline_id
-                expected_evidence_digest = authority.inspection_evidence_digest
-                expected_contract_digest = authority.engineering_contract_digest
-                expected_guidance_digest = authority.repository_guidance_digest
-                expected_candidates = _candidate_review_signature(candidates)
+        active_id, failures, review_round, revision, semantic_review = _semantic_plan_review(failures, review_required, work, service, run_id, revision, max_review_rounds, active_id, baseline_id, authority, candidates, snapshot, submission, evidence, runs, planning, paths, baseline, review_round, semantic_review)
 
-                # Release the database/lineage lock before calling the model.
-                # The second phase revalidates every authority-bearing identity.
-                work.commit()
-                reviewer = default_plan_semantic_reviewer(snapshot.spec, submission)
-                try:
-                    semantic_review = review_plan_semantics_safely(
-                        reviewer,
-                        spec=snapshot.spec,
-                        revision=revision,
-                        submission=submission,
-                        authority=authority,
-                        evidence=evidence,
-                        candidates=candidates,
-                        review_round=review_round,
-                        final_round=review_round == max_review_rounds,
-                    )
-                except AgentBudgetError as exc:
-                    raise _planning_budget_http_exception(exc) from exc
-
-                _lock_planning_state(work, service.context.workspace_id, run_id)
-                refreshed_revision = _current_revision(service, runs, run_id)
-                refreshed_state = planning.get_state(run_id)
-                refreshed_active_id = (
-                    str(refreshed_state.get("active_plan_revision_id") or "") or None
-                    if refreshed_state is not None
-                    else None
-                )
-                refreshed_evidence = planning.list_inspection_evidence(
-                    run_id,
-                    task_revision_id=refreshed_revision.revision_id,
-                )
-                refreshed_candidates = planning.list_impact_candidates(
-                    run_id,
-                    task_revision_id=refreshed_revision.revision_id,
-                )
-                _, refreshed_guidance_digest = compile_repository_guidance(
-                    snapshot.spec.workspace,
-                    objective=refreshed_revision.effective_objective,
-                    relevant_paths=paths,
-                )
-                current_baseline_id, _ = capture_planning_baseline(snapshot.spec)
-                review_context_stale = (
-                    refreshed_revision.revision_id != expected_revision_id
-                    or refreshed_state is None
-                    or refreshed_active_id != expected_active_id
-                    or current_baseline_id != expected_baseline_id
-                    or engineering_contract_digest(refreshed_revision) != expected_contract_digest
-                    or inspection_evidence_digest(refreshed_evidence) != expected_evidence_digest
-                    or refreshed_guidance_digest != expected_guidance_digest
-                    or _candidate_review_signature(refreshed_candidates) != expected_candidates
-                )
-                if review_context_stale:
-                    raise HTTPException(status_code=409, detail="agent_plan_review_context_stale")
-
-                revision = refreshed_revision
-                state = refreshed_state
-                evidence = refreshed_evidence
-                candidates = refreshed_candidates
-                active_id = refreshed_active_id
-                failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
-                failures.extend(_preexisting_dirty_plan_failures(submission, baseline))
-                failures.extend(
-                    plan_semantic_review_gate_failures(
-                        semantic_review,
-                        required=True,
-                    )
-                )
-
-        failures = list(dict.fromkeys(failures))
-        status = "approved" if not failures else "rejected"
-        stage = quality.get_stage(run_id) or {}
-        source = (
-            "repair"
-            if str(stage.get("stage") or "") == "repairing"
-            else "delta" if amend else "initial"
-        )
-        plan = ImplementationPlanRevision(
-            run_id=run_id,
-            task_revision_id=revision.revision_id,
-            sequence=planning.next_plan_sequence(run_id, revision.revision_id),
-            previous_plan_revision_id=previous_id if amend else None,
-            source=source,
-            status=status,
-            mode=mode,
-            authority=authority,
-            baseline_provenance=baseline,
-            planning_lenses=submission.planning_lenses,
-            requirement_coverage=submission.requirement_coverage,
-            impacts=submission.impacts,
-            changes=submission.changes,
-            validations=submission.validations,
-            assumptions=submission.assumptions,
-            blockers=submission.blockers,
-            causal_hypotheses=submission.causal_hypotheses,
-            semantic_review=semantic_review,
-            gate_failures=failures,
-        )
-        planning.add_plan(plan)
-        active_id = plan.plan_revision_id if status == "approved" else active_id
-        state_status = _planning_state_status_after_submission(status, active_id)
-        new_state = planning.set_state(
-            run_id,
-            mode=mode,
-            task_revision_id=revision.revision_id,
-            status=state_status,
-            latest_plan_revision_id=plan.plan_revision_id,
-            active_plan_revision_id=active_id,
-            planning_baseline_id=baseline_id,
-            baseline_provenance=baseline,
-        )
+        failures, new_state, plan, status = _record_plan_revision(failures, quality, run_id, amend, revision, planning, previous_id, mode, authority, baseline, submission, semantic_review, active_id, baseline_id)
         work.commit()
     return {
         "mode": mode,
@@ -794,6 +601,159 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
         "planning_state": new_state,
         "next_action": _plan_next_action(status, failures, review_required=review_required),
     }
+
+
+def _previous_plan_revision(request, amend, active_id, planning, run_id, revision):
+    """The active revision an amendment extends; a first submission must not name one."""
+    previous = None
+    previous_id = request.plan.previous_plan_revision_id
+    if amend:
+        if not active_id:
+            raise HTTPException(status_code=409, detail="agent_plan_amend_requires_active_revision")
+        if previous_id and previous_id != active_id:
+            raise HTTPException(status_code=409, detail="agent_plan_amend_must_extend_active_revision")
+        previous_id = active_id
+        previous = planning.get_plan(run_id, previous_id)
+        if previous is None or previous.task_revision_id != revision.revision_id:
+            raise HTTPException(status_code=409, detail="agent_plan_previous_revision_stale")
+    else:
+        if previous_id:
+            raise HTTPException(status_code=422, detail="agent_plan_submit_must_not_set_previous_revision")
+        if active_id:
+            raise HTTPException(status_code=409, detail="agent_plan_submit_requires_amend")
+    return previous, previous_id
+
+
+def _semantic_plan_review(failures, review_required, work, service, run_id, revision, max_review_rounds, active_id, baseline_id, authority, candidates, snapshot, submission, evidence, runs, planning, paths, baseline, review_round, semantic_review):
+    """Model review of the plan outside the lineage lock; every authority-bearing input is revalidated after it."""
+    if not failures and review_required:
+        completed_rejections = planning.completed_semantic_review_rejections(run_id, revision.revision_id)
+        if completed_rejections >= max_review_rounds:
+            failures.append("plan_semantic_review_consensus_exhausted")
+        else:
+            review_round = completed_rejections + 1
+            expected_revision_id = revision.revision_id
+            expected_active_id = active_id
+            expected_baseline_id = baseline_id
+            expected_evidence_digest = authority.inspection_evidence_digest
+            expected_contract_digest = authority.engineering_contract_digest
+            expected_guidance_digest = authority.repository_guidance_digest
+            expected_candidates = _candidate_review_signature(candidates)
+
+            # Release the database/lineage lock before calling the model.
+            # The second phase revalidates every authority-bearing identity.
+            work.commit()
+            reviewer = default_plan_semantic_reviewer(snapshot.spec, submission)
+            try:
+                semantic_review = review_plan_semantics_safely(
+                    reviewer,
+                    spec=snapshot.spec,
+                    revision=revision,
+                    submission=submission,
+                    authority=authority,
+                    evidence=evidence,
+                    candidates=candidates,
+                    review_round=review_round,
+                    final_round=review_round == max_review_rounds,
+                )
+            except AgentBudgetError as exc:
+                raise _planning_budget_http_exception(exc) from exc
+
+            planning.lock_state(run_id)
+            refreshed_revision = _current_revision(service, runs, run_id)
+            refreshed_state = planning.get_state(run_id)
+            refreshed_active_id = (
+                str(refreshed_state.get("active_plan_revision_id") or "") or None
+                if refreshed_state is not None
+                else None
+            )
+            refreshed_evidence = planning.list_inspection_evidence(
+                run_id,
+                task_revision_id=refreshed_revision.revision_id,
+            )
+            refreshed_candidates = planning.list_impact_candidates(
+                run_id,
+                task_revision_id=refreshed_revision.revision_id,
+            )
+            _, refreshed_guidance_digest = compile_repository_guidance(
+                snapshot.spec.workspace,
+                objective=refreshed_revision.effective_objective,
+                relevant_paths=paths,
+            )
+            current_baseline_id, _ = capture_planning_baseline(snapshot.spec)
+            review_context_stale = (
+                refreshed_revision.revision_id != expected_revision_id
+                or refreshed_state is None
+                or refreshed_active_id != expected_active_id
+                or current_baseline_id != expected_baseline_id
+                or engineering_contract_digest(refreshed_revision) != expected_contract_digest
+                or inspection_evidence_digest(refreshed_evidence) != expected_evidence_digest
+                or refreshed_guidance_digest != expected_guidance_digest
+                or _candidate_review_signature(refreshed_candidates) != expected_candidates
+            )
+            if review_context_stale:
+                raise HTTPException(status_code=409, detail="agent_plan_review_context_stale")
+
+            revision = refreshed_revision
+            evidence = refreshed_evidence
+            candidates = refreshed_candidates
+            active_id = refreshed_active_id
+            failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
+            failures.extend(_preexisting_dirty_plan_failures(submission, baseline))
+            failures.extend(
+                plan_semantic_review_gate_failures(
+                    semantic_review,
+                    required=True,
+                )
+            )
+    return active_id, failures, review_round, revision, semantic_review
+
+
+def _record_plan_revision(failures, quality, run_id, amend, revision, planning, previous_id, mode, authority, baseline, submission, semantic_review, active_id, baseline_id):
+    """Store the gated plan revision and advance the planning state."""
+    failures = list(dict.fromkeys(failures))
+    status = "approved" if not failures else "rejected"
+    stage = quality.get_stage(run_id) or {}
+    source = (
+        "repair"
+        if str(stage.get("stage") or "") == "repairing"
+        else "delta" if amend else "initial"
+    )
+    plan = ImplementationPlanRevision(
+        run_id=run_id,
+        task_revision_id=revision.revision_id,
+        sequence=planning.next_plan_sequence(run_id, revision.revision_id),
+        previous_plan_revision_id=previous_id if amend else None,
+        source=source,
+        status=status,
+        mode=mode,
+        authority=authority,
+        baseline_provenance=baseline,
+        planning_lenses=submission.planning_lenses,
+        requirement_coverage=submission.requirement_coverage,
+        impacts=submission.impacts,
+        changes=submission.changes,
+        validations=submission.validations,
+        assumptions=submission.assumptions,
+        blockers=submission.blockers,
+        causal_hypotheses=submission.causal_hypotheses,
+        semantic_review=semantic_review,
+        gate_failures=failures,
+    )
+    planning.add_plan(plan)
+    active_id = plan.plan_revision_id if status == "approved" else active_id
+    state_status = _planning_state_status_after_submission(status, active_id)
+    new_state = planning.set_state(
+        run_id,
+        mode=mode,
+        task_revision_id=revision.revision_id,
+        status=state_status,
+        latest_plan_revision_id=plan.plan_revision_id,
+        active_plan_revision_id=active_id,
+        planning_baseline_id=baseline_id,
+        baseline_provenance=baseline,
+    )
+    return failures, new_state, plan, status
 
 
 @router.post("/{run_id}/planning/submit")

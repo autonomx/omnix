@@ -1,8 +1,8 @@
 """Production provider adapter for typed RPG narrative generation."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from time import monotonic, perf_counter
@@ -26,6 +26,16 @@ from app.rpg.narrative_engine.writer import (
     parse_structured_blocks,
     writer_payload,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narrative_provider.system_prompt', "1", (
+    "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
+        "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
+        "Return exactly one block per beat and include a claims array for every factual assertion. "
+        "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
+        "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
+        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
+))
 
 
 class NarrativeClaimPayload(BaseModel):
@@ -104,7 +114,7 @@ class NarrativeProviderConfig:
         cls,
         environ: Mapping[str, str] | None = None,
     ) -> "NarrativeProviderConfig":
-        env = environ or os.environ
+        env = environ or _environment()
         return cls(
             mode=str(env.get("OMNIX_RPG_NARRATIVE_WRITER_MODE") or "auto")
             .strip()
@@ -153,12 +163,7 @@ class NarrativeProviderConfig:
 
 def _system_prompt() -> str:
     return (
-        "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
-        "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
-        "Return exactly one block per beat and include a claims array for every factual assertion. "
-        "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
-        "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
-        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
+        _PROMPT_1.text
     )
 
 

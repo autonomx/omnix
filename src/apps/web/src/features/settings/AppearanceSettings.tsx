@@ -7,7 +7,7 @@ import {
   MIN_OMNIX_TEXT_SCALE,
   OMNIX_TEXT_SCALE_STEP,
   normalizeTextScale,
-} from './appearanceEffects';
+} from '../../design/appearanceEffects';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 import './AppearanceTextScale.css';

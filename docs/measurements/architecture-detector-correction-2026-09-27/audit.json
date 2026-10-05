@@ -1,0 +1,56 @@
+{
+  "changed_metrics": {
+    "foreign_attribute_assignments": {
+      "before": 496,
+      "corrected": 499
+    },
+    "install_hook_functions": {
+      "before": 135,
+      "corrected": 136
+    }
+  },
+  "corrected_counts": {
+    "AL001": 304,
+    "AL002": 126,
+    "AL003": 503,
+    "AL004": 136,
+    "AL005": 264,
+    "AL006": 93,
+    "AL007": 526,
+    "AL008": 198,
+    "AL009": 276,
+    "AL010": 246,
+    "AL011": 12,
+    "AL012": 152,
+    "AL013": 43
+  },
+  "current_vs_corrected_original_failures": [],
+  "original_counts": {
+    "AL001": 304,
+    "AL002": 126,
+    "AL003": 500,
+    "AL004": 135,
+    "AL005": 264,
+    "AL006": 93,
+    "AL007": 526,
+    "AL008": 198,
+    "AL009": 276,
+    "AL010": 246,
+    "AL011": 12,
+    "AL012": 152,
+    "AL013": 43
+  },
+  "original_source_digest": "f48a22949b74b8561a1fdc62ea380f4204241b453014c334087de01dfb8f025b",
+  "production_files_verified_unchanged": 2781,
+  "production_identity_note": "Production identity was verified at audit start, before the subsequent STT undefined-name fix.",
+  "production_manifest_sha256": "5f706e5e8fe417afce118bd8f5ce2b02d08e9fd0c53d6e72c3f46b2c7e6095b5",
+  "purpose": "Correct initial detector definitions on preserved original inputs; not acceptance of additional production violations.",
+  "report_sha256": {
+    "corrected-lint": "c870da4ea149f06ade96515b5902856a40ceb5a9d874036229787219e099715f",
+    "corrected-metrics": "7bd903c0dcd409ef036e427f4c0d49d72bee16e8e43d95a99c28bd6a72d0430d",
+    "original-lint": "6a327dc3c838c6b33636992fbea7692f68e36732e4c58c161ea05789a7a91334",
+    "original-metrics": "25ce8c0d7cc0bbb3b323188a0bf86e9b0c43d3db95239f432922108bdf8080c6"
+  },
+  "schema_input_note": "Generated OpenAPI is outside the preserved source snapshot; the current document was used and every web metric equals the captured original baseline.",
+  "schema_version": 1
+}

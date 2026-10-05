@@ -7,7 +7,7 @@ multi-stage quest arcs from templates based on detected events.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from .quest_models import Quest, QuestObjective, QuestStage
 from .quest_templates import QUEST_ARCS
@@ -75,49 +75,6 @@ class QuestArcBuilder:
 
         return quest
 
-    def build_custom_arc(
-        self,
-        event: Dict[str, Any],
-        arc_type: str,
-        custom_stages: List[Dict[str, Any]],
-    ) -> Quest:
-        """Build a quest arc from custom stage definitions.
-
-        Args:
-            event: Event dict that triggered this quest.
-            arc_type: Type identifier for this quest.
-            custom_stages: List of custom stage dicts.
-
-        Returns:
-            Fully constructed Quest with custom stages.
-        """
-        quest = Quest(
-            id=str(uuid.uuid4()),
-            title=self._generate_title(arc_type, event),
-            type=arc_type,
-        )
-
-        stages = []
-        for stage_def in custom_stages:
-            objectives = [
-                QuestObjective(
-                    description=obj_desc,
-                )
-                for obj_desc in stage_def.get("objectives", [])
-            ]
-
-            stage = QuestStage(
-                name=stage_def.get("name", "unnamed"),
-                description=stage_def.get("description", ""),
-                objectives=objectives,
-                completion_trigger={"type": event.get("type", arc_type)},
-                world_effects=stage_def.get("world_effects", {}),
-            )
-            stages.append(stage)
-
-        quest.stages = stages
-        return quest
-
     def _generate_title(self, arc_type: str, event: Dict[str, Any]) -> str:
         """Generate a quest title from arc type and event context.
 
@@ -140,15 +97,3 @@ class QuestArcBuilder:
 
         return titles.get(arc_type, f"The {event_type.title()} Quest")
 
-    def get_stage_count(self, arc_type: str) -> int:
-        """Get the number of stages for an arc type.
-
-        Args:
-            arc_type: Type of quest arc.
-
-        Returns:
-            Number of stages in the arc.
-        """
-        if arc_type in QUEST_ARCS:
-            return len(QUEST_ARCS[arc_type])
-        return 0

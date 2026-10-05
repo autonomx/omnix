@@ -1,18 +1,23 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
+
+from app.providers import service as provider_service
 
 import logging
-import os
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from app.assistant_memory import MemoryService, default_memory_service
-from app.assistant_memory.jobs import (
-    enqueue_memory_suggestion_job,
-    process_memory_suggestion_job,
+from app.assistant_memory.contracts import (
+    MemoryService,
+    default_memory_service,
+)
+from app.conversation.contracts import (
+    AcceptedChatActivityRecorder,
+    LiveVoiceChatPort,
 )
 
 from .compaction import (
@@ -33,7 +38,9 @@ from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessag
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
+from .prompt_window import build_prompt_assembly_with_window
 from .store import (
     ChatSessionStore as JsonChatSessionStore,
     _model_key,
@@ -75,17 +82,14 @@ def _persist_routing_metadata(
             metadata=patch,
         )
         return
-    sessions = store._load_sessions()
-    for index, stored_session in enumerate(sessions):
-        if stored_session.id != session.id:
-            continue
-        for message in stored_session.messages:
-            if message.id == user_message.id:
-                message.metadata.update(patch)
-                break
-        sessions[index] = stored_session
-        store._save_sessions(sessions)
+    stored_session = store.get_session(session.id)
+    if stored_session is None:
         return
+    for message in stored_session.messages:
+        if message.id == user_message.id:
+            message.metadata.update(patch)
+            store._save_session(stored_session)
+            return
 
 
 def _generalized_stream_events(content: str, metadata: dict[str, Any]):
@@ -145,7 +149,7 @@ def route_typed_stream_boundary(
 
     already_routed = bool(user_message.metadata.get("omnix_chat_routed"))
     if not already_routed:
-        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         routing_deadline_at = provider_turn_deadline(
             provider_id,
@@ -222,6 +226,18 @@ def _memory_suggestions_allowed(session: ChatSession) -> bool:
     return session.interaction_mode != "character" or session.write_memory
 
 
+def turn_completed_event(session: ChatSession, user_message_id: str, *, user_id: str) -> Any:
+    """The ``ChatTurnCompleted`` event a completed turn publishes (PA-3.4)."""
+    from .turn_events import ChatTurnCompleted
+
+    return ChatTurnCompleted(
+        session_id=session.id,
+        user_message_id=user_message_id,
+        user_id=user_id,
+        memory_writes_allowed=_memory_suggestions_allowed(session),
+    )
+
+
 class ChatSessionStore(JsonChatSessionStore):
     """Compatibility store with one provider prompt path for every generation mode."""
 
@@ -232,11 +248,23 @@ class ChatSessionStore(JsonChatSessionStore):
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
+        job_service: Any | None = None,
+        live_voice_chat_port: LiveVoiceChatPort | None = None,
+        live_agent_planner: Any | None = None,
+        accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self.job_service = job_service
+        self.live_voice_chat_port = live_voice_chat_port
+        if live_agent_planner is None:
+            from .live_agent_store import default_live_agent_planner
+
+            live_agent_planner = default_live_agent_planner()
+        self.live_agent_planner = live_agent_planner
+        self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._initialize_prompt_context_cache()
 
     def _initialize_prompt_context_cache(self) -> None:
@@ -252,8 +280,6 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
     ) -> PromptAssembly:
         """Build the canonical Chat context once for provider or Agent routing."""
-
-        from app import shared
 
         approved_memory, memory_diagnostics = resolve_prompt_memory(
             session,
@@ -273,9 +299,10 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             history_service = self.history_search_factory()
             search_sessions = getattr(history_service, "search_sessions", None)
-            if callable(search_sessions):
+            history_sessions = self._sessions_for_history_search()
+            if callable(search_sessions) and history_sessions is not None:
                 history_result = search_sessions(
-                    list(self._load_sessions()),
+                    history_sessions,
                     history_query,
                     profile_id=session.profile_id,
                     workspace_id=session.workspace_id,
@@ -299,10 +326,11 @@ class ChatSessionStore(JsonChatSessionStore):
             if summary_record is not None
             else None
         )
-        assembly = build_prompt_assembly(
+        assembly = build_prompt_assembly_with_window(
+            build_prompt_assembly,
             session,
             user_message,
-            global_system_prompt=shared.get_global_system_prompt(),
+            global_system_prompt=provider_service.get_global_system_prompt(),
             context_items=context_items or [],
             approved_memory=approved_memory,
             retrieved_history=history_result.items if history_result is not None else [],
@@ -335,6 +363,10 @@ class ChatSessionStore(JsonChatSessionStore):
             else {"enabled": False, "retrieved_count": 0}
         )
         return assembly
+
+    def _sessions_for_history_search(self) -> list[ChatSession] | None:
+        """Return transcripts only for local search backends that require them."""
+        return list(self._load_sessions())
 
     def _cache_prompt_context(
         self,
@@ -385,11 +417,23 @@ class ChatSessionStore(JsonChatSessionStore):
         user_message: ChatMessage,
         context_items: list[dict[str, Any]] | None = None,
     ) -> tuple[PromptAssembly, RenderedPrompt]:
-        assembly = (
-            self._pop_cached_prompt_context(session, user_message)
-            or self.build_prompt_context(session, user_message, context_items)
-        )
-        return assembly, render_prompt_assembly(assembly)
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is not None and live_voice.is_live_voice_message(user_message):
+            prompt = live_voice.build_live_voice_prompt(
+                self,
+                session,
+                user_message,
+                context_items,
+            )
+        else:
+            assembly = (
+                self._pop_cached_prompt_context(session, user_message)
+                or self.build_prompt_context(session, user_message, context_items)
+            )
+            prompt = assembly, render_prompt_assembly(assembly)
+        if live_voice is not None:
+            live_voice.record_rendered_prompt(*prompt)
+        return prompt
 
     def _provider_messages(
         self,
@@ -439,41 +483,32 @@ class ChatSessionStore(JsonChatSessionStore):
         }
 
     def _mark_memory_command(self, session_id: str, message_id: str, command: dict[str, Any]) -> None:
-        sessions = self._load_sessions()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            for message in session.messages:
-                if message.id == message_id:
-                    message.metadata["memory_command"] = command
-                    break
-            sessions[index] = session
-            self._save_sessions(sessions)
+        session = self.get_session(session_id)
+        if session is None:
             return
+        for message in session.messages:
+            if message.id == message_id:
+                message.metadata["memory_command"] = command
+                self._save_session(session)
+                return
 
-    def _enqueue_memory_suggestion_job(self, session_id: str, user_message_id: str) -> None:
-        job = enqueue_memory_suggestion_job(session_id, user_message_id)
-        if job is None:
-            return
-        try:
-            process_memory_suggestion_job(
-                job,
-                chat_store=self,
-                memory_service=self.memory_service_factory(),
-            )
-        except Exception:
-            logger.exception("Memory suggestion processing failed: %s", job.id)
+    def _publish_turn_completed(self, session: ChatSession, user_message_id: str) -> None:
+        """Tell other modules a turn completed (PA-3.4).
+
+        The PostgreSQL store appends the event to the outbox, which delivers
+        it to its consumers (assistant memory suggests memories from it); a
+        store without the outbox has no consumers to reach.
+        """
 
     def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
-        """Run optional memory maintenance without changing chat delivery success."""
-        if _memory_suggestions_allowed(session):
-            try:
-                self._enqueue_memory_suggestion_job(session.id, user_message_id)
-            except Exception:
-                logger.warning(
-                    "memory suggestion maintenance unavailable after completed chat turn",
-                    exc_info=True,
-                )
+        """Publish the completed turn and run chat's own maintenance, without changing delivery success."""
+        try:
+            self._publish_turn_completed(session, user_message_id)
+        except Exception:
+            logger.warning(
+                "turn completed event unavailable after completed chat turn",
+                exc_info=True,
+            )
         try:
             enqueue_compaction_job(session)
         except Exception:
@@ -490,11 +525,41 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        appended = super().begin_user_message(
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            return super().begin_user_message(
+                session_id,
+                request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
+
+        def persist(
+            routed_request: SendChatMessageRequest,
+            route_metadata: dict[str, Any] | None,
+        ):
+            appended = super(ChatSessionStore, self).begin_user_message(
+                session_id,
+                routed_request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
+            if appended is None:
+                return None
+            routed_session, user_message = appended
+            route_key = live_voice.route_metadata_key
+            if route_metadata is not None and route_key not in user_message.metadata:
+                user_message.metadata[route_key] = route_metadata
+                routed_session.provider_id = route_metadata["provider_id"]
+                routed_session.model_id = route_metadata["model_id"]
+                self._save_session(routed_session)
+            return appended
+
+        appended = live_voice.begin_routed_user_message(
+            self,
             session_id,
             request,
-            context_items=context_items,
-            context_diagnostics=context_diagnostics,
+            persist=persist,
         )
         if appended is None:
             return None
@@ -505,6 +570,47 @@ class ChatSessionStore(JsonChatSessionStore):
             message.metadata["memory_command"] = payload
             self._mark_memory_command(session.id, message.id, payload)
         return session, message
+
+    def _generate_reply(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: SendChatMessageRequest,
+        context_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            return super(ChatSessionStore, self)._generate_reply(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                request=request,
+                context_items=context_items,
+            )
+
+        route = live_voice.resolve_generation_route(
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            request=request,
+        )
+        live_voice.log_provider_route(
+            requested_provider_id=request.provider_id or provider_id,
+            route=route,
+            stream=False,
+        )
+        return super(ChatSessionStore, self)._generate_reply(
+            session,
+            user_message,
+            provider_id=route.provider_id,
+            model_id=route.model_id,
+            request=request,
+            context_items=context_items,
+        )
 
     def append_user_message(
         self,
@@ -592,15 +698,56 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             return agent_provider_boundary_reply(user_message)
 
-        from app import shared
-
-        provider = shared.get_provider(_provider_key(provider_id))
+        provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            assembly = self.build_prompt_context(session, user_message, context_items)
+            rendered = render_prompt_assembly(assembly)
+            self._cache_prompt_context(session, user_message, assembly)
+            try:
+                reply = super(ChatSessionStore, self)._generate_provider_reply(
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                    routing_deadline_at=routing_deadline_at,
+                )
+            finally:
+                self.discard_prompt_context(session, user_message)
+            metadata = reply.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            return {
+                **reply,
+                "metadata": {
+                    **metadata,
+                    **self._active_memory_metadata(assembly, rendered),
+                    **self._active_history_metadata(assembly),
+                },
+            }
+
+        if live_voice.is_lmstudio_provider(provider):
+            return live_voice.generate_lmstudio_reply(
+                self,
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                provider=provider,
+                routing_deadline_at=routing_deadline_at,
+            )
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        completion_kwargs = (
+            {"conversation_id": session.id}
+            if provider_supports(provider_id, CONVERSATION_SESSIONS)
+            else {}
+        )
         from app.providers.structured.errors import ProviderTimeout
 
         remaining = remaining_turn_seconds(
@@ -650,6 +797,87 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         routing_deadline_at: float | None = None,
     ):
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            assembly = self.build_prompt_context(session, user_message, context_items)
+            rendered = render_prompt_assembly(assembly)
+            self._cache_prompt_context(session, user_message, assembly)
+            try:
+                for event in self._stream_provider_reply_chunks_once(
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                    routing_deadline_at=routing_deadline_at,
+                ):
+                    if isinstance(event, dict) and event.get("type") == "complete":
+                        event_metadata = event.get("metadata")
+                        if not isinstance(event_metadata, dict):
+                            event_metadata = {}
+                        event = {
+                            **event,
+                            "metadata": {
+                                **event_metadata,
+                                **self._active_memory_metadata(assembly, rendered),
+                                **self._active_history_metadata(assembly),
+                            },
+                        }
+                    yield event
+            finally:
+                self.discard_prompt_context(session, user_message)
+            return
+
+        route = live_voice.resolve_stream_route(
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
+        live_voice.log_provider_route(
+            requested_provider_id=provider_id,
+            route=route,
+            stream=True,
+        )
+        routed_provider_id = route.provider_id
+        routed_model_id = route.model_id
+
+        def stream_factory():
+            return self._stream_provider_reply_chunks_once(
+                session,
+                user_message,
+                provider_id=routed_provider_id,
+                model_id=routed_model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
+
+        def fallback_factory() -> dict[str, Any]:
+            return self._generate_provider_reply(
+                session,
+                user_message,
+                provider_id=routed_provider_id,
+                model_id=routed_model_id,
+                context_items=context_items or [],
+                routing_deadline_at=routing_deadline_at,
+            )
+
+        yield from live_voice.stream_with_retry(
+            stream_factory,
+            fallback_factory,
+            provider_id=routed_provider_id,
+            model_id=routed_model_id,
+        )
+
+    def _stream_provider_reply_chunks_once(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
+    ):
         command = parse_memory_command(user_message.content)
         if command is not None:
             result = execute_memory_command(
@@ -686,68 +914,42 @@ class ChatSessionStore(JsonChatSessionStore):
             yield from boundary_events
             return
 
-        routing_deadline_at = provider_turn_deadline(
-            provider_id,
-            session_provider_id=getattr(session, "provider_id", None),
-            existing_deadline_at=routing_deadline_at,
-        )
-
-        from app import shared
-
-        provider = shared.get_provider(_provider_key(provider_id))
+        provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
-        assembly, rendered = self.build_provider_prompt(
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            yield from super(ChatSessionStore, self).stream_provider_reply_chunks(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
+            return
+
+        stream_args = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+            "provider": provider,
+            "routing_deadline_at": routing_deadline_at,
+        }
+        if live_voice.is_lmstudio_provider(provider):
+            yield from live_voice.stream_lmstudio_reply(
+                self,
+                session,
+                user_message,
+                **stream_args,
+            )
+            return
+        yield from live_voice.stream_low_latency_reply(
+            self,
             session,
             user_message,
-            context_items or [],
+            **stream_args,
         )
-        messages = self._provider_messages_from_rendered(session, user_message, rendered)
-        model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
-        from app.providers.structured.errors import ProviderTimeout
-
-        remaining = remaining_turn_seconds(routing_deadline_at)
-        if remaining is not None:
-            if remaining <= 0:
-                raise ProviderTimeout("chat turn deadline has expired")
-            completion_kwargs["request_timeout_seconds"] = remaining
-        response = provider.chat_completion(
-            messages=messages,
-            model=model_name,
-            stream=True,
-            **completion_kwargs,
-        )
-        pending = ""
-        full_text = ""
-        resolved_model = model_name
-        usage = None
-        for chunk in response:
-            text = getattr(chunk, "content", "") or ""
-            if not text:
-                continue
-            resolved_model = getattr(chunk, "model", None) or resolved_model
-            usage = getattr(chunk, "usage", None) or usage
-            full_text += text
-            pending += text
-            ready, pending = _pop_ready_sentences(pending)
-            for sentence in ready:
-                yield {"type": "text_chunk", "text": sentence}
-        if pending.strip():
-            yield {"type": "text_chunk", "text": pending.strip()}
-        yield {
-            "type": "complete",
-            "content": full_text.strip(),
-            "metadata": {
-                "generation_status": "completed",
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "resolved_model": resolved_model,
-                **self._active_memory_metadata(assembly, rendered),
-                **self._active_history_metadata(assembly),
-                **({"usage": usage} if usage else {}),
-            },
-        }
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:
@@ -772,21 +974,9 @@ class ChatSessionStore(JsonChatSessionStore):
 
 
 def chat_sqlite_store_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_SQLITE_STORE_ENABLED") or "").strip().lower() in {
+    return (_env_str("OMNIX_CHAT_SQLITE_STORE_ENABLED") or "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
-
-
-def default_chat_store() -> ChatSessionStore:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_composition import production_chat_store
-        return production_chat_store()
-    if chat_sqlite_store_enabled():
-        from .sqlite_store import InMemoryChatSessionStore
-
-        return InMemoryChatSessionStore()
-    return ChatSessionStore()

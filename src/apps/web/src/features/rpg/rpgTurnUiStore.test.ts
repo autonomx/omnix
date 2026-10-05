@@ -15,6 +15,7 @@ import {
   resetRpgTurnUiStoreForTests,
   storyMessageIdentity,
 } from './rpgTurnUiStore';
+import { pipelineFetch } from '../../api/fetchPipeline';
 
 afterEach(() => {
   resetRpgTurnUiStoreForTests();
@@ -134,7 +135,7 @@ describe('rpgTurnUiStore', () => {
     });
     installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
 
-    await fetch('/api/rpg/sessions/session%3Abran/turn', {
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: 'How is the road?' }),
@@ -168,7 +169,7 @@ describe('rpgTurnUiStore', () => {
     const fetchImpl = vi.fn(async () => new Response('not found', { status: 404 }));
     installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
 
-    const response = await fetch('/api/rpg/sessions/session%3Abran/turn', {
+    const response = await pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: 'How is business?' }),
@@ -185,9 +186,9 @@ describe('rpgTurnUiStore', () => {
     expect(refreshPathsForChangedDomains('session:bran', [])).toEqual([
       '/api/rpg/sessions/session%3Abran',
     ]);
+    // Inventory lives in the session payload; no separate route is cached.
     expect(refreshPathsForChangedDomains('session:bran', ['conversation', 'inventory', 'currency'])).toEqual([
       '/api/rpg/sessions/session%3Abran',
-      '/api/replay/inventory',
     ]);
     expect(refreshPathsForChangedDomains('session:bran', ['location', 'world'])).toEqual([
       '/api/rpg/sessions/session%3Abran',

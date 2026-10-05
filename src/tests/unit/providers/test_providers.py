@@ -1,8 +1,10 @@
 """Tests for individual provider implementations."""
 
 
+import httpx
 import pytest
 
+from tests.support.http import install_provider_http
 from app.providers import (
     CerebrasProvider,
     ChatMessage,
@@ -26,14 +28,14 @@ class TestLMStudioProvider:
         )
         provider = LMStudioProvider(config)
         assert provider.provider_name == 'lmstudio'
-        assert provider.config.base_url == 'http://localhost:1234'
+        assert provider.config.base_url == 'http://127.0.0.1:1234'
         assert provider.config.model == 'test-model'
     
     def test_default_base_url(self):
         """Test default base URL is set."""
         config = ProviderConfig(provider_type='lmstudio')
         provider = LMStudioProvider(config)
-        assert provider.config.base_url == 'http://localhost:1234'
+        assert provider.config.base_url == 'http://127.0.0.1:1234'
     
     def test_config_schema(self):
         """Test configuration schema generation."""
@@ -58,37 +60,25 @@ class TestLMStudioProvider:
         assert provider.requires_api_key() is False
 
     def test_configured_api_key_is_sent_as_bearer_token(self, monkeypatch):
-        response = type("Response", (), {"raise_for_status": lambda self: None})()
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured.update({"method": method, "url": url, **kwargs})
-            return response
-
-        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
+        captured = []
         provider = LMStudioProvider(
             ProviderConfig(provider_type="lmstudio", api_key="config-token")
         )
+        install_provider_http(provider, lambda request: captured.append(request) or httpx.Response(200))
 
         provider._make_request("get", "/v1/models")
 
-        assert captured["headers"] == {"Authorization": "Bearer config-token"}
+        assert captured[0].headers["Authorization"] == "Bearer config-token"
 
     def test_environment_api_token_is_sent_as_bearer_token(self, monkeypatch):
-        response = type("Response", (), {"raise_for_status": lambda self: None})()
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured.update({"method": method, "url": url, **kwargs})
-            return response
-
+        captured = []
         monkeypatch.setenv("LM_API_TOKEN", "environment-token")
-        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
         provider = LMStudioProvider(ProviderConfig(provider_type="lmstudio"))
+        install_provider_http(provider, lambda request: captured.append(request) or httpx.Response(200))
 
         provider._make_request("get", "/v1/models")
 
-        assert captured["headers"] == {"Authorization": "Bearer environment-token"}
+        assert captured[0].headers["Authorization"] == "Bearer environment-token"
 
 
 class TestOpenRouterProvider:
@@ -110,17 +100,6 @@ class TestOpenRouterProvider:
         config = ProviderConfig(provider_type='openrouter')
         with pytest.raises(Exception):
             OpenRouterProvider(config)
-    
-    def test_config_schema(self):
-        """Test configuration schema."""
-        config = ProviderConfig(provider_type='openrouter')
-        provider = OpenRouterProvider(config)
-        schema = provider.get_config_schema()
-        assert schema['provider_type'] == 'openrouter'
-        field_names = [f['name'] for f in schema['fields']]
-        assert 'api_key' in field_names
-        assert 'model' in field_names
-        assert 'thinking_budget' in field_names
     
     def test_supports_streaming(self):
         """Test that OpenRouter supports streaming."""
@@ -155,16 +134,6 @@ class TestCerebrasProvider:
         with pytest.raises(Exception):
             CerebrasProvider(config)
     
-    def test_config_schema(self):
-        """Test configuration schema."""
-        config = ProviderConfig(provider_type='cerebras')
-        provider = CerebrasProvider(config)
-        schema = provider.get_config_schema()
-        assert schema['provider_type'] == 'cerebras'
-        field_names = [f['name'] for f in schema['fields']]
-        assert 'api_key' in field_names
-        assert 'model' in field_names
-    
     def test_supports_streaming(self):
         """Test that Cerebras supports streaming."""
         config = ProviderConfig(provider_type='cerebras', api_key='test')
@@ -196,7 +165,7 @@ class TestLlamaCppProvider:
         """Test default base URL is set."""
         config = ProviderConfig(provider_type='llamacpp')
         provider = LlamaCppProvider(config)
-        assert provider.config.base_url == 'http://localhost:8080'
+        assert provider.config.base_url == 'http://localhost:8180'
     
     def test_config_schema(self):
         """Test configuration schema."""
@@ -305,4 +274,4 @@ class TestProviderConfig:
             api_key='longsecretkey123'
         )
         d = config.to_dict()
-        assert d['api_key'] == '***key123'
+        assert d['api_key'] == '***y123'

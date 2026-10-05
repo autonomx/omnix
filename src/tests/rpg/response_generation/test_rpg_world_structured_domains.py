@@ -7,6 +7,7 @@ from app.rpg.session.genesis.world_forge_contract import (
     build_campaign_topic_graph,
 )
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_domains import (
     DOMAIN_SPECS,
     normalize_structured_domain,
@@ -59,7 +60,7 @@ def test_deterministic_generator_produces_valid_structured_domain_entities() -> 
         starting_location="rusty_flagon_tavern",
         background_expansion=False,
     )
-    generator = ReferenceSafeWorldForgeGenerator()
+    generator = ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
     generated = {}
 
     for node in graph.topological_order():

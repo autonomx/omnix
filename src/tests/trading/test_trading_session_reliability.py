@@ -9,15 +9,18 @@ import pytest
 
 from app.trading.models import MarketBar
 from app.trading.providers.errors import ProviderContractError
-from app.trading.strategy_deep_recovery import DeepRecoveryShadowEvaluation
+from app.trading.strategy_deep_recovery import (
+    DeepRecoveryShadowEvaluation,
+    apply_deep_recovery_risk_policy,
+)
 from app.trading.strategy_evaluability import assess_bar_coverage
-from app.trading.trading_session_reliability import (
+from app.trading.providers.alpaca_iex import _parse_timestamp as parse_alpaca_timestamp
+from app.trading.strategy_intraday_llm import _IntradaySchemaProviderProxy
+from app.trading.strategy_session_evidence import (
     FULL_SESSION_1M_LIMIT,
     _FullSessionMarketServiceProxy,
-    _IntradaySchemaProviderProxy,
-    _apply_deep_recovery_risk_overlay,
+    _trend_events_for_session,
     evaluate_trend_continuation_shadow,
-    parse_alpaca_timestamp,
 )
 
 
@@ -273,7 +276,7 @@ def test_deep_recovery_overlay_rejects_ipdn_style_wide_risk():
         hard_gate_features={},
     )
 
-    hardened = _apply_deep_recovery_risk_overlay(evaluation)
+    hardened = apply_deep_recovery_risk_policy(evaluation)
 
     assert hardened.signal_ready is False
     assert hardened.reason_code == "DEEP_RECOVERY_RISK_TOO_WIDE"
@@ -290,7 +293,7 @@ def test_deep_recovery_overlay_rejects_chase_even_with_acceptable_stop():
         hard_gate_features={},
     )
 
-    hardened = _apply_deep_recovery_risk_overlay(evaluation)
+    hardened = apply_deep_recovery_risk_policy(evaluation)
 
     assert hardened.signal_ready is False
     assert hardened.reason_code == "DEEP_RECOVERY_EXTENSION_TOO_HIGH"
@@ -305,7 +308,7 @@ def test_deep_recovery_overlay_preserves_clean_signal_and_records_policy():
         hard_gate_features={},
     )
 
-    hardened = _apply_deep_recovery_risk_overlay(evaluation)
+    hardened = apply_deep_recovery_risk_policy(evaluation)
 
     assert hardened.signal_ready is True
     assert hardened.reason_code == evaluation.reason_code
@@ -342,3 +345,27 @@ def test_trend_continuation_rejects_late_chase_extension():
     assert result.signal_ready is False
     assert result.state == "too_extended"
     assert result.reason_code == "TREND_CONTINUATION_EMA_EXTENSION_TOO_HIGH"
+
+
+def test_trend_signal_uses_bounded_event_api_when_recent_events_is_absent() -> None:
+    session_date = datetime(2026, 9, 10, tzinfo=_ET).date()
+
+    class Repository:
+        def __init__(self):
+            self.request = None
+
+        def events_by_types_between(self, strategy_id, *, event_types, start_time, end_time, limit):
+            self.request = (strategy_id, event_types, start_time, end_time, limit)
+            return [SimpleNamespace(event_type="trend_continuation_shadow")]
+
+    repository = Repository()
+    events = _trend_events_for_session(repository, "strategy", session_date)
+
+    assert len(events) == 1
+    assert repository.request == (
+        "strategy",
+        ("trend_continuation_shadow",),
+        datetime(2026, 9, 10, 4, 0, tzinfo=UTC),
+        datetime(2026, 9, 11, 4, 0, tzinfo=UTC),
+        10_000,
+    )

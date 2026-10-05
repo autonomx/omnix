@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-
-_ET = ZoneInfo("America/New_York")
+# The one Eastern-time definition for trading (WP-8.3): import EASTERN from here
+# instead of building another ZoneInfo.
+EASTERN_TIMEZONE = "America/New_York"
+EASTERN = ZoneInfo(EASTERN_TIMEZONE)
+_ET = EASTERN
 
 
 def _observed(day: date) -> date:
@@ -70,6 +73,12 @@ def regular_holidays(year: int) -> set[date]:
 
 def early_close_time(session_date: date) -> time | None:
     """Return the standard 13:00 ET early close when rule-based and scheduled."""
+    month, day = session_date.month, session_date.day
+    # Early closes fall only on July 3, the Friday after Thanksgiving (23-29
+    # November) and December 24. Bar loops ask about every bar, so other dates
+    # answer before the year's holidays are computed.
+    if not ((month == 7 and day <= 3) or (month == 11 and day >= 23) or (month == 12 and day == 24)):
+        return None
     if session_date.weekday() >= 5 or session_date in regular_holidays(session_date.year):
         return None
     thanksgiving = _nth_weekday(session_date.year, 11, 3, 4)
@@ -91,6 +100,21 @@ def early_close_time(session_date: date) -> time | None:
     return None
 
 
+REGULAR_OPEN = time(9, 30)
+REGULAR_CLOSE = time(16, 0)
+
+
+def regular_close_time(session_date: date) -> time:
+    """The regular session's close: 13:00 ET on a scheduled early close, else 16:00."""
+    return early_close_time(session_date) or REGULAR_CLOSE
+
+
+def after_regular_close(moment: datetime) -> bool:
+    """Whether an aware timestamp is at or after its day's regular close (ET)."""
+    local = moment.astimezone(_ET)
+    return local.time() >= regular_close_time(local.date())
+
+
 def us_equity_session(source_time: datetime) -> str:
     """Classify the standard U.S. listed-equity session from an aware timestamp.
 
@@ -106,7 +130,7 @@ def us_equity_session(source_time: datetime) -> str:
         return "closed"
     clock = local.timetz().replace(tzinfo=None)
     early_close = early_close_time(session_date)
-    regular_close = early_close or time(16, 0)
+    regular_close = early_close or REGULAR_CLOSE
     # Nasdaq extended trading ends at 17:00 ET on standard 13:00 early-close
     # sessions rather than the normal 20:00 ET. Keep this explicit so a fresh
     # quote after that cutoff cannot be mislabeled as executable extended-post.

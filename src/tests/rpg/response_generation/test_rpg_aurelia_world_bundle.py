@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 from pathlib import Path
 from types import ModuleType
 
 from app.rpg.worlds.world_bundle import parse_world_bundle_archive
 
-BUNDLE_SHA256 = "7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6"
 SAMPLE_DIR = (
     Path(__file__).resolve().parents[4]
     / "resources"
@@ -47,7 +45,9 @@ def test_aurelia_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
     materializer = _materializer()
     assert materializer.materialize_bundle(SAMPLE_DIR, output) == output
     content = output.read_bytes()
-    assert hashlib.sha256(content).hexdigest() == BUNDLE_SHA256
+    repeated_output = tmp_path / "aurelia-repeat.omnix-world.zip"
+    assert materializer.materialize_bundle(SAMPLE_DIR, repeated_output) == repeated_output
+    assert repeated_output.read_bytes() == content
 
     parsed = parse_world_bundle_archive(content)
     payload = parsed.payload

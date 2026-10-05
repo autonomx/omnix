@@ -1,12 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs";
 import path from "node:path";
+import { runAuthorization, runTokenState } from "./pi_run_token.ts";
 
 const workspace = path.resolve(process.env.OMNIX_AGENT_WORKSPACE || process.cwd());
 const realWorkspace = fs.realpathSync(workspace);
 const runId = process.env.OMNIX_AGENT_RUN_ID || "";
 const brokerUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
+// Take the run token out of the environment before any tool runs (WP-4.6).
+runTokenState();
 const approvalPolicy = process.env.OMNIX_AGENT_APPROVAL_POLICY || "ask_sensitive";
+// Set only inside the Docker sandbox (WP-4.7). Safe validation commands are
+// approved automatically there; outside it every command asks.
+const sandboxed = process.env.OMNIX_AGENT_SANDBOXED === "1";
 
 function stringList(name: string, fallback: string[]): string[] {
   try {
@@ -343,7 +349,7 @@ async function currentApprovedPlanRevisionId(): Promise<string | null | undefine
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/check`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
     });
     let payload: any = {};
     try {
@@ -480,7 +486,7 @@ async function authorizePlanningOperation(
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/authorize`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({
         tool_name: toolName,
         input,
@@ -526,7 +532,7 @@ async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<s
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/command-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({
         command,
         cwd: typeof cwd === "string" ? cwd : workspace,
@@ -541,7 +547,7 @@ async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<s
     }
     if (response.ok && payload?.allowed === true) return null;
     if (response.ok && payload?.approval_required === true) {
-      return `Omnix approval required for this exact workspace command (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same command.`;
+      return "Omnix approval required for this exact workspace command. Ask the user to approve it in Omnix, then retry the same command.";
     }
     const detail = typeof payload?.detail === "string"
       ? payload.detail
@@ -557,7 +563,7 @@ async function authorizeWorkspaceTool(toolName: string, input: Record<string, un
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/workspace-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({ tool_name: toolName, input, workspace_root: workspace }),
     });
     let payload: any = {};
@@ -568,7 +574,7 @@ async function authorizeWorkspaceTool(toolName: string, input: Record<string, un
     }
     if (response.ok && payload?.allowed === true) return null;
     if (response.ok && payload?.approval_required === true) {
-      return `Omnix approval required for this exact workspace ${toolName} action (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same action.`;
+      return `Omnix approval required for this exact workspace ${toolName} action. Ask the user to approve it in Omnix, then retry the same action.`;
     }
     const detail = typeof payload?.detail === "string"
       ? payload.detail
@@ -584,7 +590,7 @@ async function authorizeTool(toolName: string): Promise<string | null> {
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/budget/tool`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({ tool_name: toolName }),
     });
     if (response.ok) return null;
@@ -673,7 +679,7 @@ export default function (pi: ExtensionAPI) {
 
       const commandNeedsApproval = localCapabilities.has("workspace.command")
         && approvalPolicy !== "allow_automatic"
-        && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability);
+        && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability || !sandboxed);
       if (commandNeedsApproval) {
         const permissionRejection = await authorizeBlockedCommand(input.command as string, input.cwd);
         if (permissionRejection) return { block: true, reason: permissionRejection };
@@ -687,8 +693,11 @@ export default function (pi: ExtensionAPI) {
     const progressRejection = await postPlanProgressRejection(event.toolName, input);
     if (progressRejection) return { block: true, reason: progressRejection };
 
-    const budgetError = await authorizeTool(event.toolName);
-    if (budgetError) return { block: true, reason: budgetError };
+    // The broker charges omnix_capability when it executes the call.
+    if (event.toolName !== "omnix_capability") {
+      const budgetError = await authorizeTool(event.toolName);
+      if (budgetError) return { block: true, reason: budgetError };
+    }
     if (pendingSearchContext) searchPathContexts.set(event.toolCallId, pendingSearchContext);
   });
 

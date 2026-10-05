@@ -1,4 +1,4 @@
-import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringDocumentBlock } from './api/rpgWorldAuthoringClient';
 import { formatAuthoringValue } from './RpgWorldEntityCard';
 import './RpgWorldTimeline.css';
 

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from app.trading.gapper_dataset import GapperCandidate
 from app.trading.models import MarketBar
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import GapPullbackConfig
 
 

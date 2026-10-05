@@ -37,10 +37,19 @@ from typing import Any, Dict, List, Optional
 
 # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
 from .clock import DeterministicClock
-from .determinism import DeterminismConfig, compute_deterministic_event_id
+from app.runtime.clock import current_turn_context
+
+from .determinism import (
+    DeterminismConfig,
+    compute_deterministic_event_id,
+    deterministic_turn_uuid,
+)
 
 # PHASE 3 — TIMELINE GRAPH
 from .timeline_graph import TimelineGraph
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Allowed layers for cross-system enforcement (Fix #3)
 ALLOWED_LAYERS = {
@@ -61,7 +70,6 @@ ALLOWED_LAYERS = {
     "app.rpg.systems",
     "app.rpg.events",
     "app.rpg.narration",
-    "app.rpg.tools",
     "tests",
 }
 
@@ -326,15 +334,24 @@ class EventBus:
             # Deterministic identity is execution-path based:
             # seed + canonical event content + causal parent + tick + seq.
             # It is versioned in determinism.py via IDENTITY_VERSION.
-            event_id = compute_deterministic_event_id(
-                seed=self._determinism.seed,
-                event_type=event.type,
-                payload=identity_payload,
-                source=event.source,
-                parent_id=event.parent_id,
-                tick=event_tick,
-                seq=original_seq,
-            )
+            turn_context = current_turn_context()
+            if turn_context is not None and turn_context.session_id:
+                event_id = deterministic_turn_uuid(
+                    turn_context.session_id,
+                    turn_context.turn_index or 0,
+                    event.type,
+                    original_seq,
+                )
+            else:
+                event_id = compute_deterministic_event_id(
+                    seed=self._determinism.seed,
+                    event_type=event.type,
+                    payload=identity_payload,
+                    source=event.source,
+                    parent_id=event.parent_id,
+                    tick=event_tick,
+                    seq=original_seq,
+                )
 
         # Check for duplicate events BEFORE cloning
         if event_id in self._seen_event_ids_set:
@@ -373,7 +390,7 @@ class EventBus:
         event = cloned
 
         if self._debug:
-            print(f"[EVENT] {event.type} -> {event.payload}")
+            logger.debug('[EVENT] %s -> %s', event.type, event.payload)
 
         if self._log is not None:
             self._log.append(event)
@@ -573,20 +590,6 @@ class EventBus:
         raise RuntimeError(
             "Illegal call path detected. Systems must communicate via EventBus."
         )
-
-    def current_head(self) -> Optional[str]:
-        """Get the current head event ID for parent linking.
-
-        Addresses rpg-design.txt Issue #8: GameLoop Pointer Is Weak.
-        Instead of using history[-1].event_id, use this method for
-        the true current head of the event stream.
-
-        Returns:
-            The event_id of the most recently emitted event, or None.
-        """
-        if self._history:
-            return self._history[-1].event_id
-        return None
 
     def set_replay_mode(self, enabled: bool = True) -> None:
         """Set replay mode to influence deterministic behavior.

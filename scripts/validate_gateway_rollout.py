@@ -111,8 +111,9 @@ def voice(base):
         audio.writeframes(pcm)
     started = time.perf_counter()
     with httpx.Client(timeout=120) as client:
-        transcript = request(client, 'POST', 'http://127.0.0.1:5201/transcribe',
-                             files={'file': ('rollout-validation.wav', wav.getvalue(), 'audio/wav')})
+        transcript = request(client, 'POST', base + '/api/stt/transcribe',
+                             files={'file': ('rollout-validation.wav', wav.getvalue(), 'audio/wav')},
+                             headers={'X-Omnix-Client': 'rollout-validation'})
         health = request(client, 'GET', 'http://127.0.0.1:5101/health')
     assert transcript.get('success') and transcript.get('text', '').strip(), 'STT returned no transcript'
     return {'ok': True, 'gateway_route': gateway_route, 'tts_provider': health.get('provider', health.get('provider_class')),

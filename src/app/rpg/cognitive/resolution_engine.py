@@ -50,9 +50,14 @@ Design Rules:
 from __future__ import annotations
 
 import logging
-import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.cognitive_resolution_engine.prompt', "1", 'You are a narrative resolution engine. Generate a satisfying resolution for this storyline.\n\nStoryline Type: {v0}\nParticipants: {v1}\nResolution Type: {v2}\nProgress: {v3:.0%}\n\nEvent History:\n{v4}\n\nCharacter States:\n{v5}\n\nGenerate a resolution that:\n1. Is exactly 1-2 sentences long\n2. Reflects the consequences of the storyline events\n3. Matches the resolution type: {v6}\n4. Feels emotionally meaningful, not mechanical\n5. Updates relationships based on the outcome\n\nResolution:')
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +150,13 @@ class ResolutionResult:
     
     resolution_type: str = "victory"
     text: str = ""
-    emotional_impact: Dict[str, float] = field(default_factory=dict)
-    relationship_updates: Dict[str, float] = field(default_factory=dict)
-    consequences: List[str] = field(default_factory=list)
+    emotional_impact: dict[str, float] = field(default_factory=dict)
+    relationship_updates: dict[str, float] = field(default_factory=dict)
+    consequences: list[str] = field(default_factory=list)
     satisfies_player: bool = False
     importance: float = 0.5
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize resolution result to dict."""
         return {
             "type": self.resolution_type,
@@ -179,12 +184,12 @@ class ResolutionEngine:
             llm_client: Optional LLM client for advanced resolution generation.
             use_llm: Whether to use LLM for resolution (default: template-only).
         """
-        self.llm_client = llm_client
+        self.llm_client = adapt_base_provider(llm_client)
         self.use_llm = use_llm
         
         # Tier 14 Fix: Resolution Entropy Injection
         # Track recent resolutions to prevent predictability over long runs
-        self._recent_resolutions: List[str] = []
+        self._recent_resolutions: list[str] = []
         
         self._stats = {
             "resolutions_generated": 0,
@@ -195,9 +200,9 @@ class ResolutionEngine:
     
     def generate(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
     ) -> ResolutionResult:
         """Generate a satisfying resolution for the given storyline.
         
@@ -265,9 +270,9 @@ class ResolutionEngine:
     
     def _determine_resolution_type(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
     ) -> str:
         """Determine the most satisfying resolution type.
         
@@ -328,7 +333,7 @@ class ResolutionEngine:
         # Tier 14 Fix: Use _select_resolution_type with entropy injection
         return self._select_resolution_type(candidate_types)
     
-    def _select_resolution_type(self, candidates: List[str]) -> str:
+    def _select_resolution_type(self, candidates: list[str]) -> str:
         """Select a resolution type with entropy to prevent predictability.
         
         Tier 14 Fix: Prevents resolution patterns from becoming predictable
@@ -352,13 +357,25 @@ class ResolutionEngine:
             # Pick from candidates not in recent history
             non_recent = [c for c in candidates if c not in self._recent_resolutions[-3:]]
             if non_recent:
-                base = random.choice(non_recent)
+                base = rng_for_current_turn(
+                    "text:resolution_avoid_recent_alternative",
+                    stable_sub_index(candidates),
+                ).choice(non_recent)
             else:
-                base = random.choice(candidates)
+                base = rng_for_current_turn(
+                    "text:resolution_avoid_recent_fallback",
+                    stable_sub_index(candidates),
+                ).choice(candidates)
         
         # Inject entropy: 20% chance of completely random choice
-        if random.random() < 0.2:
-            base = random.choice(candidates)
+        if rng_for_current_turn(
+            "text:resolution_entropy_gate",
+            stable_sub_index(candidates),
+        ).random() < 0.2:
+            base = rng_for_current_turn(
+                "text:resolution_entropy_alternative",
+                stable_sub_index(candidates),
+            ).choice(candidates)
         
         # Track this resolution
         self._recent_resolutions.append(base)
@@ -370,7 +387,7 @@ class ResolutionEngine:
         return base
     
     @staticmethod
-    def _weighted_choice(candidates: List[str]) -> str:
+    def _weighted_choice(candidates: list[str]) -> str:
         """Simple weighted choice from candidates.
         
         Args:
@@ -381,13 +398,16 @@ class ResolutionEngine:
         """
         if len(candidates) == 1:
             return candidates[0]
-        return random.choice(candidates)
+        return rng_for_current_turn(
+            "text:resolution_weighted_choice",
+            stable_sub_index(candidates),
+        ).choice(candidates)
     
     def _generate_template_resolution(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Generate resolution text from templates.
@@ -427,7 +447,10 @@ class ResolutionEngine:
             type_templates = ["The storyline concluded with lasting consequences for all involved."]
         
         # Pick a template
-        template = random.choice(type_templates)
+        template = rng_for_current_turn(
+            "text:resolution_template",
+            stable_sub_index({"story_type": story_type, "type": resolution_type}),
+        ).choice(type_templates)
         
         # Substitute placeholders
         text = template
@@ -479,9 +502,9 @@ class ResolutionEngine:
     
     def _generate_llm_resolution(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Generate resolution using LLM for high-importance storylines.
@@ -525,9 +548,9 @@ class ResolutionEngine:
     
     def _build_llm_prompt(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Build the LLM prompt for resolution generation.
@@ -562,35 +585,15 @@ class ResolutionEngine:
             event_desc = f"- {event.get('type', 'unknown')}: {event.get('description', '')}"
             event_history.append(event_desc)
         
-        prompt = f"""You are a narrative resolution engine. Generate a satisfying resolution for this storyline.
-
-Storyline Type: {story_type}
-Participants: {', '.join(str(p) for p in participants)}
-Resolution Type: {resolution_type}
-Progress: {progress:.0%}
-
-Event History:
-{chr(10).join(event_history)}
-
-Character States:
-{chr(10).join(char_summaries)}
-
-Generate a resolution that:
-1. Is exactly 1-2 sentences long
-2. Reflects the consequences of the storyline events
-3. Matches the resolution type: {resolution_type}
-4. Feels emotionally meaningful, not mechanical
-5. Updates relationships based on the outcome
-
-Resolution:"""
+        prompt = _PROMPT_1.format(v0=(story_type), v1=(', '.join(str(p) for p in participants)), v2=(resolution_type), v3=(progress), v4=(chr(10).join(event_history)), v5=(chr(10).join(char_summaries)), v6=(resolution_type))
         return prompt
     
     def _calculate_emotional_impact(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate emotional impact of resolution on participants.
         
         Args:
@@ -624,10 +627,10 @@ Resolution:"""
     
     def _calculate_relationship_updates(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate relationship value updates from resolution.
         
         Args:
@@ -666,10 +669,10 @@ Resolution:"""
     
     def _determine_consequences(
         self,
-        storyline: Dict[str, Any],
-        world_state: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        world_state: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Determine narrative consequences of resolution.
         
         Args:
@@ -707,7 +710,14 @@ Resolution:"""
         pool = consequence_pool.get(story_type, consequence_pool.get("general", []))
         num_consequences = min(2, len(pool)) if importance > 0.5 else 1
         
-        consequences = random.sample(pool, num_consequences) if pool else ["Events will unfold"]
+        consequences = (
+            rng_for_current_turn(
+                "text:resolution_consequence_sample",
+                stable_sub_index(pool),
+            ).sample(pool, num_consequences)
+            if pool
+            else ["Events will unfold"]
+        )
         
         # High importance adds extra consequence
         if importance > 0.7:
@@ -717,8 +727,8 @@ Resolution:"""
     
     def _check_player_satisfaction(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
     ) -> bool:
         """Check if resolution feels satisfying to the player.
@@ -762,7 +772,7 @@ Resolution:"""
         
         return False
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get resolution engine statistics.
         
         Returns:

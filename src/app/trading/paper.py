@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
@@ -99,6 +100,32 @@ class PaperOrderRequest(BaseModel):
         if self.order_type != "market" and self.reference_price is not None:
             raise ValueError("reference_price is only valid for market orders")
         return self
+
+
+OrderAuthorityKind = Literal["reduce_only", "manual_risk", "strategy_entry"]
+
+
+@dataclass(frozen=True, slots=True)
+class OrderAuthority:
+    """Why an order may open or add exposure (WP-8.3).
+
+    ``reduce_only`` orders may only sell an unreserved long position.
+    ``manual_risk`` orders passed the server's risk preview. ``strategy_entry``
+    orders carry the strategy and trade attempt whose authorization the order
+    gateway proved before placing them.
+    """
+
+    kind: OrderAuthorityKind
+    strategy_id: str | None = None
+    trade_attempt_id: str | None = None
+    # Entries stop for the rest of the Eastern trading day once the account's
+    # realized loss reaches this share of its equity, checked in the order's
+    # own transaction.
+    max_daily_loss_pct: Decimal | None = None
+
+    @property
+    def may_add_exposure(self) -> bool:
+        return self.kind != "reduce_only"
 
 
 class PaperOrder(BaseModel):

@@ -81,9 +81,9 @@ describe('OmnixEventClient', () => {
     expect(statuses).toEqual(['idle', 'connecting']);
 
     sources[0].emitOpen();
-    sources[0].emitMessage('job.updated', '{"id":"job-1","progress":0.5}');
+    sources[0].emitMessage('job.updated', '{"id":1,"job_id":"job-1","event_type":"job.updated","payload":{"progress":0.5}}');
 
-    expect(handler).toHaveBeenCalledWith({ id: 'job-1', progress: 0.5 });
+    expect(handler).toHaveBeenCalledWith({ id: 1, job_id: 'job-1', event_type: 'job.updated', payload: { progress: 0.5 } });
     expect(client.getStatus().state).toBe('open');
 
     unsubscribe();
@@ -104,11 +104,11 @@ describe('OmnixEventClient', () => {
     expect(sources[0].listenerCount('job.updated')).toBe(1);
     expect(sources[0].listenerCount('job.completed')).toBe(1);
 
-    sources[0].emitMessage('job.updated', '{"id":"job-2"}');
-    sources[0].emitMessage('job.completed', '{"id":"job-2","status":"completed"}');
+    sources[0].emitMessage('job.updated', '{"id":2,"job_id":"job-2"}');
+    sources[0].emitMessage('job.completed', '{"id":3,"job_id":"job-2","payload":{"status":"completed"}}');
 
-    expect(updatedHandler).toHaveBeenCalledWith({ id: 'job-2' });
-    expect(completedHandler).toHaveBeenCalledWith({ id: 'job-2', status: 'completed' });
+    expect(updatedHandler).toHaveBeenCalledWith({ id: 2, job_id: 'job-2' });
+    expect(completedHandler).toHaveBeenCalledWith({ id: 3, job_id: 'job-2', payload: { status: 'completed' } });
   });
 
   it('supports multiple listeners for one named event', () => {
@@ -144,6 +144,18 @@ describe('OmnixEventClient', () => {
         data: '{not-json',
       }),
     );
+  });
+
+  it('reports job events without a job id as malformed', () => {
+    const malformedHandler = vi.fn();
+    const { client, sources } = createClient({ onMalformedEvent: malformedHandler });
+    const handler = vi.fn();
+
+    client.subscribe('job.updated', handler);
+    sources[0].emitMessage('job.updated', '{"id":"job-1","progress":0.5}');
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(malformedHandler).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'job.updated' }));
   });
 
   it('still resumes after malformed JSON events with SSE ids', () => {
@@ -188,11 +200,11 @@ describe('OmnixEventClient', () => {
     expect(client.getStatus().state).toBe('connecting');
 
     sources[1].emitOpen();
-    sources[1].emitMessage('job.updated', '{"id":"job-3"}');
+    sources[1].emitMessage('job.updated', '{"id":4,"job_id":"job-3"}');
 
     expect(client.getStatus()).toEqual({ state: 'open', reconnectAttempt: 0 });
     expect(sources[1].listenerCount('job.updated')).toBe(1);
-    expect(handler).toHaveBeenCalledWith({ id: 'job-3' });
+    expect(handler).toHaveBeenCalledWith({ id: 4, job_id: 'job-3' });
   });
 
   it('resumes reconnects from the last delivered SSE id', () => {
@@ -202,7 +214,7 @@ describe('OmnixEventClient', () => {
 
     client.subscribe('job.completed', vi.fn());
     sources[0].emitOpen();
-    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitMessage('job.completed', '{"id":42,"job_id":"job-7"}', '42');
     sources[0].emitError();
 
     vi.runOnlyPendingTimers();
@@ -217,7 +229,7 @@ describe('OmnixEventClient', () => {
     const { client, sources } = createClient({ endpoint: '/events?stream=jobs' });
 
     client.subscribe('job.completed', vi.fn());
-    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitMessage('job.completed', '{"id":42,"job_id":"job-7"}', '42');
     sources[0].emitError();
 
     vi.runOnlyPendingTimers();
@@ -231,7 +243,7 @@ describe('OmnixEventClient', () => {
     const { client, sources } = createClient({ endpoint: '/events?after_id=5&stream=jobs' });
 
     client.subscribe('job.completed', vi.fn());
-    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitMessage('job.completed', '{"id":42,"job_id":"job-7"}', '42');
     sources[0].emitError();
 
     vi.runOnlyPendingTimers();
@@ -239,11 +251,28 @@ describe('OmnixEventClient', () => {
     expect(sources[1].endpoint).toBe('/events?after_id=42&stream=jobs');
   });
 
+  it('reconnects at the live tail and notifies subscribers after a resync', () => {
+    vi.useFakeTimers();
+
+    const { client, sources } = createClient();
+    const resync = vi.fn();
+    client.subscribe('job.updated', vi.fn());
+    client.subscribe('resync', resync);
+    sources[0].emitMessage('job.updated', '{"id":42,"job_id":"job-7"}', '7:42');
+    sources[0].emitMessage('resync', '{}', '7:42');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(resync).toHaveBeenCalledOnce();
+    expect(sources[1].endpoint).toBe('/events');
+  });
+
   it('clears the resume cursor when explicitly closed', () => {
     const { client, sources } = createClient();
 
     client.subscribe('job.completed', vi.fn());
-    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitMessage('job.completed', '{"id":42,"job_id":"job-7"}', '42');
     client.close();
     client.connect();
 

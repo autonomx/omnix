@@ -39,15 +39,6 @@ def _score_memory(item: Dict[str, Any]) -> tuple:
     return (-strength, updated_at, text)
 
 
-def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
-    simulation_state = _safe_dict(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
-    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
-    entries.sort(key=_score_memory)
-    return entries[: max(0, int(limit))]
-
-
 def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))

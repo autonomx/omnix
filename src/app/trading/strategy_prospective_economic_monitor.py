@@ -10,19 +10,19 @@ It has no paper repository and can never create or authorize an order.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
 import hashlib
-import os
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
@@ -41,9 +41,11 @@ from .strategy_repository import (
 )
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_prospective_economic_monitor"
 _SOURCE_STATE_EVENT_TYPE = "deep_recovery_state"
 _SOURCE_EVENT_TYPE = "deep_recovery_shadow"
@@ -53,18 +55,18 @@ _OUTCOME_EVENT_TYPE = "prospective_economic_outcome"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_prospective_economic_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(10.0, value)
@@ -80,6 +82,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -157,7 +160,9 @@ def _clip_r(value: Decimal) -> Decimal:
     return max(Decimal("-1"), min(Decimal("1"), value))
 
 
-class TradingStrategyProspectiveEconomicMonitor:
+class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
+    error_event = "prospective_economic_shadow_monitor_error"
+
     def __init__(
         self,
         *,
@@ -170,25 +175,12 @@ class TradingStrategyProspectiveEconomicMonitor:
         self.market_service_factory = market_service_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.candidate_capture_count = 0
         self.signal_capture_count = 0
         self.outcome_capture_count = 0
         self.incomplete_outcome_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def _events(
         self,
@@ -621,25 +613,10 @@ class TradingStrategyProspectiveEconomicMonitor:
         self.last_run_at = now
         return captured
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "prospective_economic_shadow_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": strategy_prospective_economic_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -652,30 +629,18 @@ class TradingStrategyProspectiveEconomicMonitor:
         }
 
 
-def register_trading_strategy_prospective_economic_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyProspectiveEconomicMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_prospective_economic_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyProspectiveEconomicMonitor):
-        return existing
+        return None
     monitor = TradingStrategyProspectiveEconomicMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if strategy_prospective_economic_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_prospective_economic_monitor_enabled)
 
 
 __all__ = [
     "TradingStrategyProspectiveEconomicMonitor",
-    "register_trading_strategy_prospective_economic_monitor",
+    "create_trading_strategy_prospective_economic_monitor_task",
     "strategy_prospective_economic_monitor_enabled",
 ]

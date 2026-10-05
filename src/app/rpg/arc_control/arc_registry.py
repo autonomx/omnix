@@ -23,29 +23,6 @@ class ArcRegistry:
         """Return all arcs currently registered."""
         return list(state.values())
 
-    def get_arc(
-        self, state: dict[str, NarrativeArc], arc_id: str
-    ) -> NarrativeArc | None:
-        """Return a single arc by ID, or ``None``."""
-        return state.get(arc_id)
-
-    def upsert_arc(
-        self, state: dict[str, NarrativeArc], arc: NarrativeArc
-    ) -> None:
-        """Insert or replace an arc in the registry."""
-        state[arc.arc_id] = arc
-
-    def set_status(
-        self,
-        state: dict[str, NarrativeArc],
-        arc_id: str,
-        status: str,
-    ) -> None:
-        """Update the status of an existing arc (no-op if missing)."""
-        arc = state.get(arc_id)
-        if arc is not None:
-            arc.status = status
-
     # ------------------------------------------------------------------
     # Coherence → arc derivation
     # ------------------------------------------------------------------

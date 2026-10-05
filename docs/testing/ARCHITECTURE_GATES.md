@@ -12,6 +12,7 @@
 | Ownership loss and handoff | `test_background_backend_loss_stops_workers_and_allows_successor`, `test_worker_process_crash_releases_singleton_authority`, `test_background_database_mutations_fail_closed_after_ownership_loss` |
 | Actual PostgreSQL restart | `certify_postgresql_restart.py`: liveness during database loss, readiness drop, old authority latched, fresh worker/API readiness after restart |
 | Stale attempt fencing | `test_expired_job_attempt_is_fenced_after_another_worker_claims`, `test_expiry_after_reply_write_rolls_back_transcript_and_completion` |
+| Foreground and internal worker boundary | `persistence/test_internal_job_protocol_integration.py`: service credential, original worker lease, reserved browser admission, exact foreground claim scope, no lease bypass and no generic claim of audit records; `test_foreground_turn_transaction_integration.py`: rejected claims/leases roll back turns and mirrored execution replays once |
 | Cancellation terminates after loss | `test_expired_cancel_requested_job_becomes_terminal_canceled`, chat ownership cancellation regression |
 | Chat process crash and one recovery | `test_killed_chat_owner_recovers_once_without_duplicate_assistant_output`, `test_recovery_rechecks_liveness_and_emits_one_event_under_racing_gateways` |
 | Atomic durable chat and memory | `persistence/test_chat_atomic_scaling_integration.py`, `persistence/test_memory_job_execution_integration.py` |
@@ -33,10 +34,33 @@ python scripts/run_architecture_gates.py --group multiprocess
 python scripts/run_architecture_gates.py --group persistence-all
 npm --prefix src/apps/web run typecheck
 npm --prefix src/apps/web run api:check
-npm --prefix src/apps/web run test -- src/test/gateway-routing.test.ts src/features/chatbot src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
+npm --prefix src/apps/web run test -- src/test/gateway-routing.test.ts src/features/assistant/chat src/features/audiobook/AudiobookWorkspace.test.tsx src/features/trading
 ```
 
-Set `OMNIX_TEST_DATABASE_URL` to a disposable database named `omnix_test`; the gate also sets the production database URL within the test subprocess. `--local-disposable` selects only the documented local benchmark container at port 16432. Never point integration tests at an operator database. On Windows use `npm.cmd` if PowerShell blocks `npm.ps1`.
+Set `OMNIX_TEST_DATABASE_URL` to a disposable database named `omnix_test`; the gate also sets the production database URL within the test subprocess. Under pytest-xdist (`-n 4`, `-n auto`) each worker copies that migrated database into `omnix_test_gw<N>` (through `OMNIX_TEST_ADMIN_DATABASE_URL`, which needs CREATEDB) and runs against its copy, so tests that reset tables or authority state cannot disturb each other; `OMNIX_TEST_DATABASE_PER_WORKER=0` turns this off. The suite also refuses document kinds without a registered shape (`OMNIX_DOCUMENT_SCHEMAS_STRICT=1`). `--local-disposable` selects only the documented local benchmark container at port 16432. Never point integration tests at an operator database. On Windows use `npm.cmd` if PowerShell blocks `npm.ps1`.
+
+## No runtime patching policy
+
+[ADR 0015](../architecture/ADR-0015-no-runtime-patching.md) requires explicit
+extension points and changes in the owning module. Run
+`python scripts/architecture_lint.py --check` from the repository root. The gate
+checks tracked production Python, including lazy imports, and migration history;
+it imports no application code and executes no provider or database work.
+Browser patch enforcement belongs to the ESLint gate.
+
+`resources/architecture/lint-baseline.json` records existing violations by rule,
+path and fingerprint, with occurrence counts. A new violation fails; a fixed or
+reduced violation also fails until the baseline is shrunk with
+`python scripts/architecture_lint.py --update-baseline`. That command refuses
+increases or changed policy. Adding blank lines cannot alter an exception.
+Migration violations cannot be baseline exceptions. Historical checksums come
+from the base branch and `resources/architecture/migration-checksums.json` when
+the ref is unavailable. CI explicitly supplies the PR base or previous push
+commit, so a push cannot use its own new migrations as its comparison base.
+
+The baseline is transitional evidence of remaining work, not permission to add
+patches or widen runtime authority. Its initial local measurement and CI wiring
+remain subject to the roadmap's canonical environment verification.
 
 For the local disposable profile, create a retained container (restart certification rejects `--rm`):
 

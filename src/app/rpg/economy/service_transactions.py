@@ -41,10 +41,6 @@ def _ensure_transaction_state(simulation_state: Dict[str, Any]) -> List[Dict[str
     return transactions
 
 
-def get_transaction_history(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return deepcopy(_safe_list(_safe_dict(simulation_state).get("transaction_history")))
-
-
 def build_service_transaction_record(
     *,
     service_result: Dict[str, Any],

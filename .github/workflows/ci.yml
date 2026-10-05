@@ -1,0 +1,375 @@
+name: Omnix CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omnix-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: src
+
+jobs:
+  lint:
+    name: lint
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMNIX_LINT_MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked development tools
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Prepare diagnostics
+        run: mkdir -p artifacts
+      - name: Generate the repo-wide Ruff report
+        run: ruff check . --output-format json --output-file artifacts/ruff.json --exit-zero
+      - name: Check F821 and the shrinking Ruff baseline
+        run: python scripts/check_ruff_baseline.py --report artifacts/ruff.json
+      - name: Check gateway ingress output
+        run: python scripts/render_gateway_ingress.py --check
+      - name: Check the JSONB inventory
+        run: python scripts/jsonb_inventory.py --check
+      - name: Verify architecture lint detectors
+        run: python -m pytest src/tests/scripts/test_architecture_lint.py -q --tb=short
+      - name: Check architecture and migration invariants
+        run: python scripts/architecture_lint.py --check --migration-base "$OMNIX_LINT_MIGRATION_BASE" --output artifacts/architecture-lint.json
+      - name: Scan the current source tree with Gitleaks
+        uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.0
+        with:
+          args: dir /github/workspace --config /github/workspace/.gitleaks.toml --redact --verbose
+      - name: Upload lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-lint-diagnostics
+          path: artifacts/*.json
+          if-no-files-found: ignore
+
+  metrics:
+    name: architecture-metrics
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix_test
+          POSTGRES_PASSWORD: architecture-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix_test -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix_test:architecture-test-only@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix_test:architecture-test-only@127.0.0.1:5432/omnix_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: mkdir -p artifacts
+      - name: Install the locked production profile
+        run: python -m pip install --require-hashes -r requirements/gateway.lock.txt
+      - name: Apply migrations to the disposable database
+        run: python -m app.persistence migrate
+      - name: Run one retention pass (WP-5.2 retention_policies_executed)
+        run: python -m app.persistence retention
+      - name: Measure production boot imports before test dependencies
+        run: python scripts/architecture_runtime_metrics.py --boot-only --timeout 600 --output artifacts/architecture-boot-runtime.json
+      - name: Install locked development and test dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Verify architecture metric detectors and probe guards
+        run: python -m pytest src/tests/scripts/test_architecture_metrics.py src/tests/scripts/test_architecture_runtime_metrics.py -q --tb=short
+      - name: Measure disposable database and collection probes
+        run: python scripts/architecture_runtime_metrics.py --reuse-boot-report artifacts/architecture-boot-runtime.json --timeout 600 --output artifacts/architecture-runtime.json
+      - name: Check the architecture scorecard ratchet
+        run: python scripts/architecture_metrics.py --check --runtime-report artifacts/architecture-runtime.json --output artifacts/architecture-metrics.json
+      - name: Upload architecture measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-architecture-metrics
+          path: artifacts/architecture-*.json
+          if-no-files-found: error
+
+  typecheck:
+    name: typecheck
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked Python tools
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Check Python application types
+        run: mypy
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked web dependencies
+        run: npm ci
+      - name: Check web application types
+        run: npm run web:typecheck
+
+  test-unit:
+    name: test-unit
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked test dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Run architecture unit gate
+        run: python scripts/run_architecture_gates.py --group unit
+      - name: Run non-service Python tests
+        run: python -m pytest -m "not postgres and not multiprocess and not gpu and not live_provider and not playwright and not live_codex" -n auto
+      - name: Build the agent sandbox image (WP-4.7)
+        run: python -m app.agent_runtime.sandbox build
+        env:
+          PYTHONPATH: src
+      - name: Check the agent sandbox network and preview isolation
+        run: python -m pytest src/tests/agent_runtime/test_agent_sandbox_docker.py -q --tb=short
+
+  test-postgres:
+    name: test-postgres
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # The application connects as a restricted runtime role (DML only, no
+      # BYPASSRLS), so row-level security applies (WP-4.4). The superuser is
+      # the migrator and the admin for test setup that needs DDL.
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix_app:omnix_app@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix_app:omnix_app@127.0.0.1:5432/omnix_test
+      OMNIX_MIGRATION_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_TEST_ADMIN_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      OMNIX_LIVE_CALL_MEASUREMENT_PATH: artifacts/live-call-capacity.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked test dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Create the restricted runtime role
+        run: >-
+          psql "$OMNIX_MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "CREATE ROLE omnix_app LOGIN PASSWORD 'omnix_app' NOSUPERUSER NOBYPASSRLS"
+      - name: Apply migrations to the disposable database
+        run: python -m app.persistence migrate
+      - name: Let the runtime role reset test data
+        # Tests truncate tables between cases; production grants only DML.
+        run: >-
+          psql "$OMNIX_MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "GRANT TRUNCATE ON ALL TABLES IN SCHEMA public TO omnix_app"
+          -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT TRUNCATE ON TABLES TO omnix_app"
+      - name: Initialize disposable PostgreSQL runtime authority
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Prepare measurement artifact directory
+        run: mkdir -p artifacts
+      - name: Run marked PostgreSQL and multiprocess tests
+        run: python -m pytest -m "postgres or multiprocess" -n 2 --dist loadgroup
+      - name: Upload live TTS capacity measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-live-call-capacity-measurement
+          path: artifacts/live-call-capacity.json
+          if-no-files-found: ignore
+      - name: Run PostgreSQL architecture gate
+        # Migration contracts and persistence fixtures that create tables run
+        # as the migrator; everything else in this job runs as omnix_app.
+        env:
+          OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+        run: python scripts/run_architecture_gates.py --group postgresql
+      - name: Run multiprocess architecture gate
+        run: python scripts/run_architecture_gates.py --group multiprocess
+
+  web:
+    name: web
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Lint web application
+        run: npm --prefix src/apps/web run lint
+      - name: Run web unit tests
+        run: npm run web:test
+      - name: Build web application
+        run: npm run web:build
+      - name: Verify generated OpenAPI client
+        run: npm --workspace @omnix/web run api:check
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+      # Every workspace against a mocked gateway: open, primary action, error state,
+      # accessibility (WP-9.10). The live companion test skips itself without a gateway.
+      - name: Run mocked browser tests
+        run: npm --workspace @omnix/web run test:e2e -- --project=chromium
+
+  docs:
+    name: docs
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Render documentation
+        run: python docs/render_docs.py
+      - name: Verify rendered HTML is current
+        run: git diff --exit-code -- '*.html'
+
+  security:
+    name: security
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked audit tools and web dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
+          npm ci
+      - name: Run the security test suite
+        # Auth matrix, CSRF/Origin/Host, WebSocket auth, permissions, approvals,
+        # run tokens, audit, secrets, hardening and log canaries (WP-4.11), and
+        # the agent sandbox policy: mutating runs sandboxed or refused, the
+        # locked-down container, no user home, audited override, and the guard
+        # auto-approving only inside the sandbox. Row-level security runs in
+        # test-postgres as the restricted role; the sandbox's network egress
+        # runs on Docker in test-unit, which builds the image.
+        env:
+          OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+          PYTHONPATH: src
+        run: >-
+          python -m pytest src/tests/security
+          src/tests/agent_runtime/test_isolation.py
+          src/tests/agent_runtime/test_pi_guard_sandbox_approval.py
+          -q --tb=short
+      - name: Audit production Python dependencies
+        run: pip-audit -r requirements/gateway.lock.txt
+      - name: Audit production web dependencies
+        run: npm audit --omit=dev --audit-level=high --workspace=@omnix/web
+
+  full-python-suite:
+    name: full-python-suite (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked full-suite dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Apply migrations to the disposable database
+        run: python -m app.persistence migrate
+      - name: Initialize disposable PostgreSQL runtime authority
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Prepare test reports
+        run: mkdir -p artifacts
+      - name: Run complete non-hardware Python suite
+        run: python -m pytest -n auto -m "not gpu and not live_provider and not playwright and not live_codex" --junitxml artifacts/full-python-suite.xml
+      - name: Upload full-suite triage input
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-python-suite-triage
+          path: artifacts/full-python-suite.xml
+          if-no-files-found: error

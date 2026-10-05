@@ -14,6 +14,22 @@ class PostgresAudiobookReviewRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
 
+    def _cancel_render_jobs(self, context: TenantContext, render_run_id: str) -> None:
+        from app.persistence.job_repository import PostgresJobRepository
+
+        jobs = PostgresJobRepository(self.connection).query_jobs(
+            context,
+            module="audiobook",
+            job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+            input_fields=(("render_run_id", render_run_id),),
+            statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+            limit=500,
+            for_update=True,
+        )
+        repository = PostgresJobRepository(self.connection)
+        for job in jobs:
+            repository.request_cancel(context, str(job["id"]))
+
     def _promote_proposed_speaker(
         self, context: TenantContext, *, project_id: str, speaker_id: str,
     ) -> dict[str, Any]:
@@ -102,22 +118,7 @@ class PostgresAudiobookReviewRepository:
                 (context.workspace_id, project_id),
             ).fetchone()
             if active and active[0]:
-                rows = self.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter',
-                                           'audiobook.assemble-chapter')
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying',
-                                         'leased', 'running', 'paused',
-                                         'cancel_requested')""",
-                    (context.workspace_id, str(active[0])),
-                ).fetchall()
-                from app.persistence.job_repository import PostgresJobRepository
-
-                jobs = PostgresJobRepository(self.connection)
-                for (job_id,) in rows:
-                    jobs.request_cancel(context, str(job_id))
+                self._cancel_render_jobs(context, str(active[0]))
 
         remaining = int(self.connection.execute(
             """
@@ -548,22 +549,7 @@ class PostgresAudiobookReviewRepository:
                 (context.workspace_id, project_id),
             ).fetchone()
             if active and active[0]:
-                rows = self.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter',
-                                           'audiobook.assemble-chapter')
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying',
-                                         'leased', 'running', 'paused',
-                                         'cancel_requested')""",
-                    (context.workspace_id, str(active[0])),
-                ).fetchall()
-                from app.persistence.job_repository import PostgresJobRepository
-
-                jobs = PostgresJobRepository(self.connection)
-                for (job_id,) in rows:
-                    jobs.request_cancel(context, str(job_id))
+                self._cancel_render_jobs(context, str(active[0]))
             remaining = int(self.connection.execute(
                 """SELECT count(*)
                      FROM omnix_audiobook_review_issues AS i
@@ -645,20 +631,7 @@ class PostgresAudiobookReviewRepository:
             """, (context.workspace_id, project_id),
         ).fetchone()
         if active_runs and active_runs[1] in {"rendering", "mastering"} and active_runs[0]:
-            rows = self.connection.execute(
-                """
-                SELECT id FROM omnix_jobs
-                 WHERE workspace_id = %s AND module = 'audiobook'
-                   AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                   AND input_payload->>'render_run_id' = %s
-                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
-                """, (context.workspace_id, str(active_runs[0])),
-            ).fetchall()
-            from app.persistence.job_repository import PostgresJobRepository
-
-            jobs = PostgresJobRepository(self.connection)
-            for row in rows:
-                jobs.request_cancel(context, str(row[0]))
+            self._cancel_render_jobs(context, str(active_runs[0]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects
@@ -833,19 +806,7 @@ class PostgresAudiobookReviewRepository:
              canonical_json({"mode": "user_decision", "user_id": context.user_id})),
         )
         if project[0]:
-            jobs = self.connection.execute(
-                """SELECT id FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                      AND input_payload->>'render_run_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
-                (context.workspace_id, project[0]),
-            ).fetchall()
-            from app.persistence.job_repository import PostgresJobRepository
-
-            job_repository = PostgresJobRepository(self.connection)
-            for (job_id,) in jobs:
-                job_repository.request_cancel(context, str(job_id))
+            self._cancel_render_jobs(context, str(project[0]))
         self.connection.execute(
             """UPDATE omnix_audiobook_projects
                   SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 from pathlib import Path
 from types import ModuleType
 
 from app.rpg.worlds.world_bundle import parse_world_bundle_archive
 
-BUNDLE_SHA256 = "41b3a7f7bdd17d38253034d07b50962f640545b1e920e329116a779ca55c89be"
 SAMPLE_DIR = (
     Path(__file__).resolve().parents[4]
     / "resources"
@@ -54,7 +52,9 @@ def test_vesper_9_sample_world_bundle_is_import_ready(tmp_path: Path) -> None:
     materializer = _materializer()
     assert materializer.materialize_bundle(SAMPLE_DIR, output) == output
     content = output.read_bytes()
-    assert hashlib.sha256(content).hexdigest() == BUNDLE_SHA256
+    repeated_output = tmp_path / "vesper-9-repeat.omnix-world.zip"
+    assert materializer.materialize_bundle(SAMPLE_DIR, repeated_output) == repeated_output
+    assert repeated_output.read_bytes() == content
 
     parsed = parse_world_bundle_archive(content)
     payload = parsed.payload

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.jobs.rpg_foreground_submission_store import RpgForegroundSubmissionStore
+from app.rpg.jobs.foreground_submission_store import RpgForegroundSubmissionStore
 
 
 def test_submission_claim_is_unique_across_store_instances(tmp_path: Path) -> None:

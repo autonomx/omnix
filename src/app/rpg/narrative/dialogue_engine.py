@@ -456,18 +456,3 @@ class DialogueEngine:
         
         return "neutral"
     
-    def inject_beliefs(self, beliefs: Dict[str, Any]) -> None:
-        """Manually inject beliefs for standalone operation (no memory manager).
-        
-        Args:
-            beliefs: Dict mapping "speaker:target" to belief value
-                     or dict with belief data.
-        """
-        # Create ad-hoc memory if needed
-        if self.memory is None:
-            self._injected_beliefs = beliefs
-            self.memory = type(
-                "AdHocMemory",
-                (),
-                {"retrieve": lambda self, **kw: [], "beliefs": beliefs},
-            )()

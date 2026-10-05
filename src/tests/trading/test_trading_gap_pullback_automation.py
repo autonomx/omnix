@@ -23,7 +23,7 @@ from app.trading.paper import (
     PaperPosition,
 )
 from app.trading.replay import FrozenBar, dataset_gaps
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback, session_vwap
+from app.trading.strategies import evaluate_gap_pullback, session_vwap
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
 from app.trading.strategy_risk import size_strategy_entry
@@ -481,7 +481,7 @@ def test_two_r_label_is_pessimistic_when_stop_and_target_hit_same_bar() -> None:
 def test_strategy_surface_remains_paper_only_and_ai_shadow_only() -> None:
     monitor = Path("src/app/trading/strategy_monitor.py").read_text()
     catalyst = Path("src/app/trading/catalyst_evidence.py").read_text().lower()
-    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    gateway = Path("src/app/trading/route_registration.py").read_text()
     strategy_api = Path("src/app/trading/strategy_api.py").read_text()
 
     assert '"live_broker_enabled": False' in monitor

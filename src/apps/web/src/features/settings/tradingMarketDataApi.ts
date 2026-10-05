@@ -1,11 +1,7 @@
-export type CoinMarketCapCredentialStatus = {
-  provider: 'coinmarketcap';
-  configured: boolean;
-  api_key_masked: string;
-  api_key_source: 'environment' | 'os_protected_store' | 'missing';
-  api_key_editable: boolean;
-  storage: string;
-};
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
+export type CoinMarketCapCredentialStatus = components['schemas']['CoinMarketCapCredentialStatus'];
 
 export type IbkrSettings = {
   enabled: boolean;
@@ -17,45 +13,17 @@ export type IbkrSettings = {
   recovery_authority_enabled: boolean;
 };
 
-export type IbkrSettingsStatus = {
-  provider: 'ibkr';
-  settings: IbkrSettings;
-  settings_source: 'defaults' | 'environment' | 'omnix_settings' | 'runtime_arguments';
-  connection_status: 'disabled' | 'client_unavailable' | 'connected' | 'disconnected';
-  official_ibapi_available: boolean;
-  connected: boolean;
-  last_error: string | null;
-  diagnostics: Record<string, unknown>;
-};
+export type IbkrSettingsStatus = components['schemas']['IbkrSettingsStatus'];
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string'
-      ? payload.detail
-      : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Trading market-data request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
+const COINMARKETCAP_CREDENTIALS = '/api/trading/market-data/providers/coinmarketcap/credentials';
+const IBKR_SETTINGS = '/api/trading/market-data/providers/ibkr/settings';
+const marketData = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading market-data');
 
 export const tradingMarketDataApi = {
-  coinmarketcapCredentials: () => requestJson<CoinMarketCapCredentialStatus>(
-    '/api/trading/market-data/providers/coinmarketcap/credentials',
-  ),
-  saveCoinMarketCapCredentials: (input: { api_key?: string; clear_api_key?: boolean }) => requestJson<CoinMarketCapCredentialStatus>(
-    '/api/trading/market-data/providers/coinmarketcap/credentials',
-    { method: 'PUT', body: JSON.stringify(input) },
-  ),
-  ibkrSettings: () => requestJson<IbkrSettingsStatus>(
-    '/api/trading/market-data/providers/ibkr/settings',
-  ),
-  saveIbkrSettings: (input: Partial<IbkrSettings>) => requestJson<IbkrSettingsStatus>(
-    '/api/trading/market-data/providers/ibkr/settings',
-    { method: 'PUT', body: JSON.stringify(input) },
-  ),
+  coinmarketcapCredentials: (): Promise<CoinMarketCapCredentialStatus> => marketData(api.GET(COINMARKETCAP_CREDENTIALS)),
+  saveCoinMarketCapCredentials: (input: components['schemas']['CoinMarketCapCredentialUpdate']): Promise<CoinMarketCapCredentialStatus> =>
+    marketData(api.PUT(COINMARKETCAP_CREDENTIALS, { body: input })),
+  ibkrSettings: (): Promise<IbkrSettingsStatus> => marketData(api.GET(IBKR_SETTINGS)),
+  saveIbkrSettings: (input: Partial<IbkrSettings>): Promise<IbkrSettingsStatus> =>
+    marketData(api.PUT(IBKR_SETTINGS, { body: input })),
 };

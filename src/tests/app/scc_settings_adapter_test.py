@@ -1,187 +1,80 @@
 from __future__ import annotations
 
-import json
-from copy import deepcopy
-
-from app.persistence.runtime import LegacyPersistenceRetired
-from app.platform.settings_control import get_settings_payload, save_settings_payload
+from app.persistence.document_store import PostgresDocumentStore
+from app.gateway import settings_control
+from tests.support.settings_runtime import install_settings_test_runtime
 
 
-def test_settings_adapter_persists_profile(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+def test_settings_adapter_persists_profile_to_typed_settings_service(monkeypatch) -> None:
+    service, _secrets = install_settings_test_runtime(monkeypatch)
 
-    settings_file = tmp_path / "settings.json"
-    secrets_file = tmp_path / "secrets.json"
-    settings_file.write_text(json.dumps({"provider": "lmstudio"}), encoding="utf-8")
-    secrets_file.write_text(json.dumps({"api_keys": {}}), encoding="utf-8")
-    monkeypatch.setattr(shared, "SETTINGS_FILE", str(settings_file))
-    monkeypatch.setattr(shared, "SECRETS_FILE", str(secrets_file))
+    def reject_document_write(*_args, **_kwargs):
+        raise AssertionError("settings must not be written as a document")
 
-    profile = get_settings_payload().settings["settings_control_center"]
-    result = save_settings_payload({"base_revision": profile["revision"], "settings_profile_patch": {"global": {"providers": {"llm": "cerebras"}}}})
-
-    saved = json.loads(settings_file.read_text(encoding="utf-8"))
-    assert result.success is True
-    assert saved["provider"] == "cerebras"
-    assert saved["settings_control_center"]["global"]["providers"]["llm"] == "cerebras"
-
-
-def test_settings_adapter_persists_provider_config_and_masks_secret(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
-
-    settings_file = tmp_path / "settings.json"
-    secrets_file = tmp_path / "secrets.json"
-    settings_file.write_text(json.dumps({"provider": "lmstudio"}), encoding="utf-8")
-    secrets_file.write_text(json.dumps({"api_keys": {}}), encoding="utf-8")
-    monkeypatch.setattr(shared, "SETTINGS_FILE", str(settings_file))
-    monkeypatch.setattr(shared, "SECRETS_FILE", str(secrets_file))
-
-    profile = get_settings_payload().settings["settings_control_center"]
-    result = save_settings_payload(
+    monkeypatch.setattr(PostgresDocumentStore, "write", reject_document_write)
+    profile = settings_control.get_settings_payload().settings["settings_control_center"]
+    result = settings_control.save_settings_payload(
         {
             "base_revision": profile["revision"],
-            "provider": "openrouter",
-            "openrouter": {"api_key": "sk-test-secret", "model": "openai/gpt-4o-mini"},
             "settings_profile_patch": {
-                "global": {"providers": {"llm": "openrouter"}},
-                "providerConfigs": {"openrouter": {"model": "openai/gpt-4o-mini"}},
+                "global": {"providers": {"llm": "cerebras"}},
             },
         }
     )
 
-    saved = json.loads(settings_file.read_text(encoding="utf-8"))
-    secrets = json.loads(secrets_file.read_text(encoding="utf-8"))
-    loaded_profile = get_settings_payload().settings["settings_control_center"]
     assert result.success is True
-    assert saved["provider"] == "openrouter"
-    assert saved["openrouter"]["model"] == "openai/gpt-4o-mini"
-    assert "api_key" not in saved["openrouter"]
-    assert secrets["api_keys"]["openrouter"] == "sk-test-secret"
-    assert loaded_profile["providerConfigs"]["openrouter"]["apiKey"] == "***cret"
+    assert service.values["provider"] == "cerebras"
+    assert service.values["settings_control_center"]["global"]["providers"]["llm"] == "cerebras"
+    assert len(service.writes) == 1
 
 
-def test_postgresql_provider_change_commits_once_without_secret_write() -> None:
-    import app.shared as shared
+def test_provider_config_and_secret_use_settings_and_secret_owners(monkeypatch) -> None:
+    service, secret_store = install_settings_test_runtime(monkeypatch)
+    profile = settings_control.get_settings_payload().settings["settings_control_center"]
 
-    state = {"settings": {"provider": "lmstudio"}, "settings_writes": 0, "secret_writes": 0}
-
-    def save_settings_callback(payload):
-        state["settings"] = deepcopy(payload)
-        state["settings_writes"] += 1
-
-    def reject_secret_write(payload):
-        del payload
-        state["secret_writes"] += 1
-        raise LegacyPersistenceRetired("environment-owned secrets")
-
-    shared.install_postgresql_document_callbacks(
-        load_settings_callback=lambda: deepcopy(state["settings"]),
-        save_settings_callback=save_settings_callback,
-        load_sessions_callback=lambda: {},
-        save_sessions_callback=lambda payload: None,
-        load_secrets_callback=lambda: {"api_keys": {}},
-        save_secrets_callback=reject_secret_write,
-    )
-    try:
-        profile = get_settings_payload().settings["settings_control_center"]
-        result = save_settings_payload(
-            {
-                "base_revision": profile["revision"],
-                "provider": "cerebras",
-                "audio_provider_tts": "faster-qwen3-tts",
-                "audio_provider_stt": "parakeet",
-                "settings_profile_patch": {
-                    "global": {"providers": {"llm": "cerebras"}},
+    result = settings_control.save_settings_payload(
+        {
+            "base_revision": profile["revision"],
+            "provider": "openrouter",
+            "openrouter": {
+                "api_key": "sk-test-secret",
+                "model": "openai/gpt-4.1-mini",
+            },
+            "settings_profile_patch": {
+                "global": {"providers": {"llm": "openrouter"}},
+                "providerConfigs": {
+                    "openrouter": {"model": "openai/gpt-4.1-mini"},
                 },
-            }
-        )
-    finally:
-        shared.clear_postgresql_document_callbacks()
+            },
+        }
+    )
 
     assert result.success is True
-    assert state["settings_writes"] == 1
-    assert state["secret_writes"] == 0
-    assert state["settings"]["provider"] == "cerebras"
-    assert state["settings"]["settings_control_center"]["global"]["providers"]["llm"] == "cerebras"
+    assert service.values["provider"] == "openrouter"
+    assert service.values["openrouter"]["model"] == "openai/gpt-4.1-mini"
+    assert secret_store["api_keys"]["openrouter"] == "sk-test-secret"
+    assert service.values["openrouter"].get("api_key") is None
+    displayed = settings_control.get_settings_payload().settings["openrouter"]["api_key"]
+    assert displayed == "***cret"
 
 
-def test_postgresql_provider_change_uses_authoritative_revision_with_masked_secret() -> None:
-    import app.shared as shared
+def test_secret_write_failure_does_not_commit_settings(monkeypatch) -> None:
+    service, _secrets = install_settings_test_runtime(monkeypatch)
+    profile = settings_control.get_settings_payload().settings["settings_control_center"]
 
-    state = {"settings": {"provider": "cerebras"}, "settings_writes": 0}
+    def reject_secret_write(_payload):
+        raise PermissionError("secret store unavailable")
 
-    def save_settings_callback(payload):
-        state["settings"] = deepcopy(payload)
-        state["settings_writes"] += 1
-
-    shared.install_postgresql_document_callbacks(
-        load_settings_callback=lambda: deepcopy(state["settings"]),
-        save_settings_callback=save_settings_callback,
-        load_sessions_callback=lambda: {},
-        save_sessions_callback=lambda payload: None,
-        load_secrets_callback=lambda: {"api_keys": {"cerebras": "csk-installed-secret"}},
-        save_secrets_callback=lambda payload: None,
+    monkeypatch.setattr(settings_control, "save_secrets", reject_secret_write)
+    result = settings_control.save_settings_payload(
+        {
+            "base_revision": profile["revision"],
+            "openrouter": {"api_key": "sk-new-secret", "model": "openai/gpt-4o-mini"},
+            "settings_profile_patch": {
+                "global": {"providers": {"llm": "openrouter"}},
+            },
+        }
     )
-    try:
-        profile = get_settings_payload().settings["settings_control_center"]
-        result = save_settings_payload(
-            {
-                "base_revision": profile["revision"],
-                "provider": "lmstudio",
-                "settings_profile_patch": {
-                    "global": {"providers": {"llm": "lmstudio"}},
-                },
-            }
-        )
-    finally:
-        shared.clear_postgresql_document_callbacks()
-
-    assert profile["providerConfigs"]["cerebras"]["apiKey"] == "***cret"
-    assert result.success is True
-    assert state["settings_writes"] == 1
-    assert state["settings"]["provider"] == "lmstudio"
-    assert state["settings"]["settings_control_center"]["global"]["providers"]["llm"] == "lmstudio"
-
-
-def test_postgresql_secret_edit_fails_before_settings_commit() -> None:
-    import app.shared as shared
-
-    original = {"provider": "lmstudio"}
-    state = {"settings": deepcopy(original), "settings_writes": 0, "secret_writes": 0}
-
-    def save_settings_callback(payload):
-        state["settings"] = deepcopy(payload)
-        state["settings_writes"] += 1
-
-    def reject_secret_write(payload):
-        del payload
-        state["secret_writes"] += 1
-        raise LegacyPersistenceRetired("environment-owned secrets")
-
-    shared.install_postgresql_document_callbacks(
-        load_settings_callback=lambda: deepcopy(state["settings"]),
-        save_settings_callback=save_settings_callback,
-        load_sessions_callback=lambda: {},
-        save_sessions_callback=lambda payload: None,
-        load_secrets_callback=lambda: {"api_keys": {}},
-        save_secrets_callback=reject_secret_write,
-    )
-    try:
-        profile = get_settings_payload().settings["settings_control_center"]
-        result = save_settings_payload(
-            {
-                "base_revision": profile["revision"],
-                "provider": "openrouter",
-                "openrouter": {"api_key": "sk-new-secret", "model": "openai/gpt-4o-mini"},
-                "settings_profile_patch": {
-                    "global": {"providers": {"llm": "openrouter"}},
-                },
-            }
-        )
-    finally:
-        shared.clear_postgresql_document_callbacks()
 
     assert result.success is False
-    assert state["secret_writes"] == 1
-    assert state["settings_writes"] == 0
-    assert state["settings"] == original
+    assert service.writes == []

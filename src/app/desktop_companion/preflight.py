@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_context.vision import (
+from app.providers.desktop_vision import (
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,

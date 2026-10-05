@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 import { createRpgWorkspaceState, progressPercent, safeSessionId } from './rpgUiState';
+import { fixture } from '../../test/fixture';
 
 describe('rpg UI state', () => {
   it('keeps preview data until live RPG sessions are available', () => {
@@ -48,8 +49,8 @@ describe('rpg UI state', () => {
     } as JobListResponse;
     const assets = {
       assets: [
-        { id: 'asset:rpg', module: 'rpg', type: 'rpg_checkpoint', mime_type: 'application/json', storage_path: 'checkpoints/session.json', created_at: '2026-06-16T00:00:00Z' },
-        { id: 'asset:chat', module: 'chat', type: 'chat_transcript', mime_type: 'application/json', storage_path: 'chat/session.json', created_at: '2026-06-16T00:00:00Z' },
+        { id: 'asset:rpg', module: 'rpg', type: 'rpg_checkpoint', mime_type: 'application/json', file_name: 'session.json', created_at: '2026-06-16T00:00:00Z' },
+        { id: 'asset:chat', module: 'chat', type: 'chat_transcript', mime_type: 'application/json', file_name: 'session.json', created_at: '2026-06-16T00:00:00Z' },
       ],
     } as AssetListResponse;
     const reports = {
@@ -64,7 +65,7 @@ describe('rpg UI state', () => {
     expect(state.sessions).toHaveLength(2);
     expect(state.sessionSummaries[0]).toMatchObject({ id: 'session:live', title: 'Live campaign', location: 'Rusty Flagon Tavern', turnLabel: 'Turn 12', updatedAt: '2026-06-16 00:00 UTC' });
     expect(state.worldStateRows[0]).toMatchObject({ label: 'Calendar / Season', value: 'Not tracked yet' });
-    expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'checkpoints/session.json' });
+    expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
     expect(state.rpgReports).toHaveLength(1);
@@ -307,7 +308,7 @@ describe('rpg UI state', () => {
           },
         ],
       },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
       selectedSessionId: 'created-live',
       selectedSession: {
         manifest: { session_id: 'created-live', title: 'Elara - Rusty Flagon' },
@@ -359,7 +360,7 @@ describe('rpg UI state', () => {
       inventory: {
         sessions: [{ manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' } }],
       },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
       selectedSessionId: 'purchase-live',
       selectedSession: {
         manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' },
@@ -396,7 +397,7 @@ describe('rpg UI state', () => {
   it('projects registered service offers from the latest turn contract', () => {
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'service-live', title: 'Tavern' }] },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
       selectedSessionId: 'service-live',
       selectedSession: {
         manifest: { session_id: 'service-live' },
@@ -424,7 +425,8 @@ describe('rpg UI state', () => {
       inventory: {
         sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
       },
-      jobs: {
+      jobs: fixture<JobListResponse>({
+        has_more: false,
         jobs: [
           {
             id: 'job:turn-live',
@@ -479,7 +481,7 @@ describe('rpg UI state', () => {
             completed_at: '2026-06-22T01:17:01Z',
           },
         ],
-      } as JobListResponse,
+      }),
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
@@ -551,7 +553,7 @@ describe('rpg UI state', () => {
           ],
         },
       },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
     });
 
     expect(state.storyMessages.filter((message) => message.tone === 'player').map((message) => message.text)).toEqual([
@@ -583,7 +585,7 @@ describe('rpg UI state', () => {
           player_state: { currency: { gold: 0, silver: 8, copper: 5 } },
         },
       },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
     });
 
     expect(state.heroSummary.name).toBe('Alyndra');
@@ -596,7 +598,8 @@ describe('rpg UI state', () => {
       inventory: {
         sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
       },
-      jobs: {
+      jobs: fixture<JobListResponse>({
+        has_more: false,
         jobs: [
           {
             id: 'job:empty-response',
@@ -614,7 +617,7 @@ describe('rpg UI state', () => {
             completed_at: '2026-06-22T01:19:39Z',
           },
         ],
-      } as JobListResponse,
+      }),
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
@@ -631,7 +634,8 @@ describe('rpg UI state', () => {
   it('projects foreground-record turn jobs while the durable session refreshes', () => {
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
-      jobs: {
+      jobs: fixture<JobListResponse>({
+        has_more: false,
         jobs: [{
           id: 'job:foreground-turn',
           module: 'rpg',
@@ -647,7 +651,7 @@ describe('rpg UI state', () => {
           updated_at: '2026-06-22T01:19:39Z',
           completed_at: '2026-06-22T01:19:39Z',
         }],
-      } as JobListResponse,
+      }),
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
@@ -674,7 +678,7 @@ describe('rpg UI state', () => {
     }));
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
-      jobs: { jobs: [] },
+      jobs: fixture({ jobs: [], has_more: false }),
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
@@ -699,7 +703,8 @@ describe('rpg UI state', () => {
           },
         ],
       },
-      jobs: {
+      jobs: fixture<JobListResponse>({
+        has_more: false,
         jobs: [
           {
             id: 'job:old-turn',
@@ -717,7 +722,7 @@ describe('rpg UI state', () => {
             completed_at: '2026-06-22T01:00:01Z',
           },
         ],
-      } as JobListResponse,
+      }),
       selectedSessionId: 'session-new',
     });
 

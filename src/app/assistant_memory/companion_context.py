@@ -1,8 +1,8 @@
 """Deterministic, bounded companion context for low-latency live generation."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 import re
 import threading
 import time
@@ -10,12 +10,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
+from collections.abc import Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.context_budget import estimate_tokens
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.conversation.contracts import PromptMemoryItem, estimate_tokens
 
 CompanionSection = Literal[
     "stable_profile",
@@ -131,11 +131,23 @@ class CompanionContextPacket(BaseModel):
 class _CachedBaseline:
     items: tuple[CompanionContextItem, ...]
     candidate_count: int
+    expires_at: float
 
 
 _cache_lock = threading.RLock()
 _baseline_cache: dict[str, _CachedBaseline] = {}
 _MAX_CACHE_ENTRIES = 512
+_BASELINE_CACHE_TTL_SECONDS = 300.0
+
+
+def _baseline_cache_now() -> float:
+    return time.monotonic()
+
+
+def _prune_baseline_cache_locked(now: float) -> None:
+    for key, baseline in list(_baseline_cache.items()):
+        if baseline.expires_at <= now:
+            _baseline_cache.pop(key, None)
 
 
 def invalidate_companion_context(session_id: str | None = None) -> None:
@@ -220,18 +232,20 @@ def _cache_key(
     timezone_name: str | None,
     now: datetime | None,
     time_bucket_minutes: int,
+    category_section_overrides: Mapping[str, CompanionSection] | None,
+    category_score_overrides: Mapping[str, int] | None,
 ) -> str:
     session_id, owner_type, owner_id = _session_identity(session)
     snapshot_id, snapshot_revision = _snapshot_identity(session)
     configured_timezone = (
         timezone_name
         or getattr(session, "timezone", None)
-        or os.environ.get("OMNIX_USER_TIMEZONE")
+        or _env_str("OMNIX_USER_TIMEZONE")
     )
     configured_locale = (
         locale
         or getattr(session, "locale", None)
-        or os.environ.get("OMNIX_USER_LOCALE")
+        or _env_str("OMNIX_USER_LOCALE")
     )
     resolved_timezone, time_bucket = _time_bucket(
         now,
@@ -246,6 +260,18 @@ def _cache_key(
             )
         ).encode("utf-8")
     ).hexdigest()[:20]
+    category_signature = "|".join(
+        [
+            *(
+                f"section:{key}:{value}"
+                for key, value in sorted((category_section_overrides or {}).items())
+            ),
+            *(
+                f"score:{key}:{value}"
+                for key, value in sorted((category_score_overrides or {}).items())
+            ),
+        ]
+    )
     return "\x1f".join(
         [
             session_id,
@@ -262,6 +288,7 @@ def _cache_key(
             resolved_timezone,
             time_bucket,
             signature,
+            category_signature,
         ]
     )
 
@@ -270,14 +297,28 @@ def _terms(value: str) -> frozenset[str]:
     return frozenset(term.casefold() for term in _TERM_PATTERN.findall(value))
 
 
-def _section(item: PromptMemoryItem) -> CompanionSection:
-    return _CATEGORY_SECTION.get(item.category, "stable_profile")
+def _section(
+    item: PromptMemoryItem,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+) -> CompanionSection:
+    return (category_section_overrides or {}).get(
+        item.category,
+        _CATEGORY_SECTION.get(item.category, "stable_profile"),
+    )
 
 
-def _baseline_item(item: PromptMemoryItem) -> CompanionContextItem:
-    section = _section(item)
+def _baseline_item(
+    item: PromptMemoryItem,
+    *,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+    category_score_overrides: Mapping[str, int] | None = None,
+) -> CompanionContextItem:
+    section = _section(item, category_section_overrides)
     score = (
-        _CATEGORY_BASE.get(item.category, 250)
+        (category_score_overrides or {}).get(
+            item.category,
+            _CATEGORY_BASE.get(item.category, 250),
+        )
         + _SCOPE_BASE.get(item.scope, 0)
         + (10 if item.source == "character" else 5 if item.source == "shared_system" else 0)
     )
@@ -301,6 +342,8 @@ def _baseline(
     timezone_name: str | None,
     now: datetime | None,
     time_bucket_minutes: int,
+    category_section_overrides: Mapping[str, CompanionSection] | None,
+    category_score_overrides: Mapping[str, int] | None,
 ) -> tuple[_CachedBaseline, bool]:
     key = _cache_key(
         session,
@@ -310,14 +353,24 @@ def _baseline(
         timezone_name=timezone_name,
         now=now,
         time_bucket_minutes=time_bucket_minutes,
+        category_section_overrides=category_section_overrides,
+        category_score_overrides=category_score_overrides,
     )
     with _cache_lock:
+        _prune_baseline_cache_locked(_baseline_cache_now())
         cached = _baseline_cache.get(key)
         if cached is not None:
             return cached, True
     values = tuple(
         sorted(
-            (_baseline_item(item) for item in approved_memory),
+            (
+                _baseline_item(
+                    item,
+                    category_section_overrides=category_section_overrides,
+                    category_score_overrides=category_score_overrides,
+                )
+                for item in approved_memory
+            ),
             key=lambda item: (
                 -item.activation_score,
                 item.section,
@@ -325,8 +378,13 @@ def _baseline(
             ),
         )
     )
-    baseline = _CachedBaseline(items=values, candidate_count=len(approved_memory))
+    baseline = _CachedBaseline(
+        items=values,
+        candidate_count=len(approved_memory),
+        expires_at=_baseline_cache_now() + _BASELINE_CACHE_TTL_SECONDS,
+    )
     with _cache_lock:
+        _prune_baseline_cache_locked(_baseline_cache_now())
         if len(_baseline_cache) >= _MAX_CACHE_ENTRIES:
             _baseline_cache.pop(next(iter(_baseline_cache)))
         _baseline_cache[key] = baseline
@@ -353,6 +411,8 @@ def build_companion_context_packet(
     timezone_name: str | None = None,
     now: datetime | None = None,
     time_bucket_minutes: int = _DEFAULT_BUCKET_MINUTES,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+    category_score_overrides: Mapping[str, int] | None = None,
 ) -> CompanionContextPacket:
     """Select a bounded packet without transcript or history scans."""
 
@@ -366,6 +426,8 @@ def build_companion_context_packet(
         timezone_name=timezone_name,
         now=now,
         time_bucket_minutes=time_bucket_minutes,
+        category_section_overrides=category_section_overrides,
+        category_score_overrides=category_score_overrides,
     )
     query_terms = _terms(str(getattr(user_message, "content", "") or ""))
     scored: list[CompanionContextItem] = []

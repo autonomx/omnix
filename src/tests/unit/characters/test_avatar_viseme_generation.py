@@ -14,7 +14,7 @@ from app.characters.avatar_viseme_generation import (
 )
 from app.characters.service import CharacterService
 from app.jobs import CompleteJobRequest, FailJobRequest
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _complete_image_job(
@@ -60,7 +60,6 @@ def _complete_image_job(
 
 
 def _build_viseme_service(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     database = tmp_path / "characters.sqlite3"
     assets = SharedAssetStore(tmp_path / "assets.json")
     closed_path = tmp_path / "maya-closed.png"

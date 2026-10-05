@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_information_locality import (
     deterministic_information_locality_signature,
     information_locality_components,
-)
-from app.rpg.session.genesis.world_forge_profile_deterministic import (
-    generate_deterministic_profile_topic,
 )
 from app.rpg.session.genesis.world_forge_profile_generation import default_profile_registry
 from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
@@ -131,64 +127,6 @@ def test_profile_graph_injects_information_locality_fields() -> None:
         "update_cadence",
         "confidence_decay",
     ]
-
-
-def test_deterministic_groups_build_route_consistent_information_locality() -> None:
-    profile = default_profile_registry().resolve("fantasy")
-    assert profile is not None
-    graph = build_profile_topic_graph(
-        profile,
-        campaign_template="classic_fantasy",
-        depth="epic",
-    )
-    group_node = graph.node_map()["groups"]
-    place_count = max(group_node.target_count + 2, 12)
-    places = []
-    for index in range(place_count):
-        anchor = f"ent:place:{index + 1}"
-        endpoint = f"ent:place:{((index + 1) % place_count) + 1}"
-        places.append(
-            {
-                "id": anchor,
-                "connected_place_ids": [endpoint],
-                "route_effects": {
-                    endpoint: deterministic_route_effect_signature(index)
-                },
-            }
-        )
-    dependencies = {
-        domain_id: GeneratedTopic(
-            topic_id=domain_id,
-            entities=(
-                tuple(places)
-                if domain_id == "places"
-                else tuple(
-                    {"id": f"ent:{domain_id}:{index}"}
-                    for index in range(1, 20)
-                )
-            ),
-        )
-        for domain_id in group_node.dependencies
-    }
-    groups = generate_deterministic_profile_topic(
-        group_node,
-        campaign_context={"world_brief": {"title": "Cinder March"}},
-        dependency_topics=dependencies,
-    )
-    rows = [
-        _topic("places", places),
-        {"topic_id": "groups", "candidate": groups.as_dict()},
-    ]
-
-    report = information_locality_report(rows, graph.as_dict())
-
-    assert report["passed"] is True
-    assert report["checks"]["group_count"] == len(groups.entities)
-    assert all(
-        entity["information_anchor_place_id"]
-        in entity["information_place_ids"]
-        for entity in groups.entities
-    )
 
 
 def test_missing_unknown_and_universal_information_reach_are_blocking() -> None:

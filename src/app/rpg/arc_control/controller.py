@@ -113,17 +113,6 @@ class ArcControlController:
     # Control-output bias
     # ------------------------------------------------------------------
 
-    def build_control_bias(self, control_output: dict) -> dict:
-        """Return a modified control payload annotated with bias metadata."""
-        plan = self._pacing_plan_controller.get_active_plan(self.pacing_plans)
-        bias = self._scene_bias_controller.get_active_bias(self.scene_biases)
-
-        output = self._pacing_plan_controller.apply_to_control_output(
-            plan, control_output
-        )
-        output = self._scene_bias_controller.apply_to_choice_set(bias, output)
-        return output
-
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
@@ -167,85 +156,9 @@ class ArcControlController:
     # Phase 7.9 — Pack seed integration
     # ------------------------------------------------------------------
 
-    def load_arc_seed(self, payload: dict) -> None:
-        """Upsert arcs, reveals, pacing plans, and biases from a pack seed.
-
-        This is an explicit seed-application path. It does not bypass
-        coherence — it populates arc control state for subsequent
-        director context building.
-        """
-        from .models import NarrativeArc, PacingPlanState, RevealDirectiveState
-
-        for arc_data in payload.get("arcs", []):
-            if not isinstance(arc_data, dict):
-                continue
-            arc_id = arc_data.get("arc_id", "")
-            if arc_id:
-                arc = NarrativeArc.from_dict(arc_data)
-                if arc_id in self.arcs:
-                    existing = self.arcs[arc_id]
-                    existing.title = arc.title or existing.title
-                    existing.related_thread_ids = (
-                        arc.related_thread_ids or existing.related_thread_ids
-                    )
-                else:
-                    self.arcs[arc_id] = arc
-
-        for reveal_data in payload.get("reveal_seeds", []):
-            if not isinstance(reveal_data, dict):
-                continue
-            reveal_id = reveal_data.get("reveal_id", "")
-            if reveal_id:
-                self.reveals[reveal_id] = RevealDirectiveState.from_dict(reveal_data)
-
-        for pacing_data in payload.get("pacing_presets", []):
-            if not isinstance(pacing_data, dict):
-                continue
-            plan_id = pacing_data.get("plan_id", "")
-            if plan_id:
-                self.pacing_plans[plan_id] = PacingPlanState.from_dict(pacing_data)
-
     # ------------------------------------------------------------------
     # Phase 8.2 — Encounter guidance (read-only)
     # ------------------------------------------------------------------
-
-    def build_encounter_guidance(
-        self, encounter_mode: str | None = None
-    ) -> dict:
-        """Return deterministic encounter-level guidance from arc state.
-
-        This is read-only and does not mutate arc state. The guidance
-        can bias encounter resolution, e.g. whether diplomacy cracks
-        quickly or investigation yields a breakthrough.
-        """
-        plan = self._pacing_plan_controller.get_active_plan(self.pacing_plans)
-        bias = self._scene_bias_controller.get_active_bias(self.scene_biases)
-
-        guidance: dict = {
-            "preferred_pressure": "medium",
-            "should_escalate": False,
-            "should_delay_resolution": False,
-            "stakes_bias": "standard",
-            "mode_bias": encounter_mode,
-        }
-
-        if plan is not None:
-            guidance["preferred_pressure"] = plan.metadata.get(
-                "preferred_pressure", "medium"
-            )
-            guidance["should_escalate"] = plan.metadata.get(
-                "should_escalate", False
-            )
-            guidance["should_delay_resolution"] = plan.metadata.get(
-                "should_delay_resolution", False
-            )
-
-        if bias is not None:
-            guidance["stakes_bias"] = bias.metadata.get(
-                "stakes_bias", "standard"
-            )
-
-        return guidance
 
     # ------------------------------------------------------------------
     # Phase 8.3 — World simulation guidance (read-only)

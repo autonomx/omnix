@@ -1,6 +1,8 @@
 """Structured local audit logging for automated trading and backtests."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import json
 import logging
 import os
@@ -10,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Literal
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
 
 
 TradeLogChannel = Literal["auto_trading", "backtest"]
@@ -33,7 +35,7 @@ _DEFAULT_BACKUP_COUNT = 20
 def trade_log_dir() -> Path:
     """Return the writable directory for local trade audit logs."""
 
-    override = os.environ.get("OMNIX_TRADE_LOG_DIR", "").strip()
+    override = environment().get("OMNIX_TRADE_LOG_DIR", "").strip()
     if override:
         return Path(override)
     return resources_root() / "logs" / "trade"
@@ -47,15 +49,23 @@ def trade_log_path(channel: TradeLogChannel) -> Path:
         if channel == "auto_trading"
         else "OMNIX_TRADE_BACKTEST_LOG_PATH"
     )
-    override = os.environ.get(override_name, "").strip()
+    override = environment().get(override_name, "").strip()
     if override:
         return Path(override)
-    filename = "auto_trading.jsonl" if channel == "auto_trading" else "backtest.jsonl"
-    return trade_log_dir() / filename
+    # One file per process: the gateway and worker processes each rotate their
+    # own file, so a rotation never renames a file another process writes.
+    return trade_log_dir() / f"{channel}.{trade_log_process_name()}.jsonl"
+
+
+def trade_log_process_name() -> str:
+    """``OMNIX_INSTANCE_NAME`` when set (one per replica), else the process role."""
+    from app.observability.logging import process_log_name
+
+    return process_log_name()
 
 
 def trade_audit_logging_enabled() -> bool:
-    return os.environ.get("OMNIX_TRADE_AUDIT_LOGGING", "1").strip().lower() in {
+    return environment().get("OMNIX_TRADE_AUDIT_LOGGING", "1").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -154,4 +164,5 @@ __all__ = [
     "trade_log",
     "trade_log_dir",
     "trade_log_path",
+    "trade_log_process_name",
 ]

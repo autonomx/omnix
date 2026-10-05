@@ -1,18 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { VoiceWorkspace } from './VoiceWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderVoice() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'voice');
   if (!module) throw new Error('Voice module is missing');
   return render(
@@ -38,7 +34,7 @@ describe('VoiceWorkspace library recovery', () => {
     let assetRequests = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
-      if (path === '/api/settings') return Response.json({
+      if (path === '/api/settings/profile') return Response.json({
         success: true,
         provider: 'lmstudio',
         audio_provider_tts: 'faster-qwen3-tts',
@@ -62,7 +58,7 @@ assets: [{
   module: 'voice-cloning',
   type: 'voice_profile',
   mime_type: 'audio/webm',
-  storage_path: 'resources/voice_clones/maya.webm',
+  file_name: 'maya.webm',
   metadata: { profile_name: 'Maya Recovery', voice_id: 'maya' },
   created_at: '2026-07-30T22:00:00Z',
 }],

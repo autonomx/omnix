@@ -1,4 +1,3 @@
-from fastapi.testclient import TestClient
 
 from app.assistant_tools import AssistantToolRequest, review_assistant_tool_request
 from app.assistant_tools.config_store import (
@@ -6,9 +5,7 @@ from app.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
-    save_assistant_tools_config,
 )
-from app.gateway.main import create_gateway_app
 
 
 def _connected_config(tool_id: str, *, enabled_actions: dict[str, bool] | None = None) -> AssistantToolsConfigPayload:
@@ -53,8 +50,9 @@ def test_gmail_send_requires_approval_before_execution():
         config=_connected_config("gmail"),
     )
     approved = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", approved=True),
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email"),
         config=_connected_config("gmail"),
+        approved=True,
     )
 
     assert pending.allowed is True
@@ -67,8 +65,9 @@ def test_gmail_send_requires_approval_before_execution():
 
 def test_gmail_delete_is_blocked_by_safe_default_action_config():
     decision = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.delete_email", approved=True),
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.delete_email"),
         config=_connected_config("gmail"),
+        approved=True,
     )
 
     assert decision.allowed is False
@@ -82,8 +81,9 @@ def test_calendar_create_requires_approval_and_delete_is_blocked_by_default():
         config=_connected_config("calendar"),
     )
     delete_decision = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="calendar", action_id="calendar.delete_event", approved=True),
+        AssistantToolRequest(tool_id="calendar", action_id="calendar.delete_event"),
         config=_connected_config("calendar"),
+        approved=True,
     )
 
     assert create_decision.allowed is True
@@ -120,19 +120,3 @@ def test_missing_connection_blocks_even_enabled_read_action():
     assert decision.reason == "missing_connection"
 
 
-def test_review_route_uses_persisted_config(monkeypatch, tmp_path):
-    path = tmp_path / "assistant_tools_config.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
-    save_assistant_tools_config(_connected_config("contacts"), path)
-    client = TestClient(create_gateway_app())
-
-    response = client.post(
-        "/api/assistant/tools/review",
-        json={"tool_id": "contacts", "action_id": "contacts.search_contacts", "session_id": "chat:1", "input": {"q": "Ada"}},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["allowed"] is True
-    assert payload["executable"] is True
-    assert payload["approval_required"] is False

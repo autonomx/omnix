@@ -11,7 +11,7 @@ from typing import Callable
 import httpx
 from pydantic import BaseModel, Field
 
-from app.assistant_context.models import AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
 
 from .contracts import ResearchEvidence, ResearchSource, ResearchSourceSnapshot
 from .evidence import (

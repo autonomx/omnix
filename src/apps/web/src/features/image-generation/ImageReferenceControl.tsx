@@ -2,14 +2,14 @@ import { Button, Text } from '@mantine/core';
 import { useRef, useState } from 'react';
 import './ImageReferenceControl.css';
 import { imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
+import type { components } from './api/generated';
+import { ApiError } from '../../api/errors';
+import { uploadBinary } from '../../api/transport';
 
 export const IMAGE_REFERENCES_QUERY_KEY = ['image-generation', 'references'] as const;
 const MAX_REFERENCE_IMAGES = 2;
 
-interface ImageReferenceUploadResponse {
-  ok: boolean;
-  asset: ImageAsset;
-}
+type ImageReferenceUploadResponse = components['schemas']['ImageReferenceUploadResponse'];
 
 interface ImageReferenceControlProps {
   selectedAssetIds: string[];
@@ -17,19 +17,14 @@ interface ImageReferenceControlProps {
 }
 
 async function uploadImageReference(file: File): Promise<ImageReferenceUploadResponse> {
-  const response = await fetch(
-    `/api/image-generation/references?filename=${encodeURIComponent(file.name || 'reference-image')}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file,
-    },
-  );
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Reference upload failed with status ${response.status}`);
+  try {
+    return await uploadBinary<ImageReferenceUploadResponse>('/api/image-generation/references', file, {
+      query: { filename: file.name || 'reference-image' },
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw new Error(error.body || `Reference upload failed with status ${error.status}`);
+    throw error;
   }
-  return response.json() as Promise<ImageReferenceUploadResponse>;
 }
 
 export function ImageReferenceControl({ selectedAssetIds, onChange }: ImageReferenceControlProps) {
@@ -134,7 +129,7 @@ export function ImageReferenceControl({ selectedAssetIds, onChange }: ImageRefer
       {limitMessage ? <Text c="yellow" size="xs" role="status">{limitMessage}</Text> : null}
 
       {selectedAssets.length ? (
-        <div className="image-reference-grid" aria-label="Attached reference images">
+        <div role="group" className="image-reference-grid" aria-label="Attached reference images">
           {selectedAssets.map((asset) => (
             <article key={asset.id} className="image-reference-card">
               <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />

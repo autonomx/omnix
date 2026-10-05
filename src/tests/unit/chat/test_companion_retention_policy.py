@@ -13,7 +13,7 @@ from app.chat.retention_policy import (
     automatic_memory_derivation_allowed,
     transcript_retention_allowed,
 )
-from app.jobs import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _message(index: int, role: str = "user") -> ChatMessage:

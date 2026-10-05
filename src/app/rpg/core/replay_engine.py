@@ -354,26 +354,6 @@ class ReplayEngine:
             if hasattr(loop, "story_director") and hasattr(loop.story_director, "handle_event"):
                 loop.story_director.handle_event(event)
 
-    def get_tick_range(self, events: List[Event]) -> tuple:
-        """Get the tick range covered by events.
-
-        Args:
-            events: List of events to analyze.
-
-        Returns:
-            Tuple of (min_tick, max_tick) or (None, None) if no ticks found.
-        """
-        ticks = [
-            e.payload.get("tick")
-            for e in events
-            if e.payload.get("tick") is not None
-        ]
-
-        if not ticks:
-            return (None, None)
-
-        return (min(ticks), max(ticks))
-
     def _get_branch_from_events(
         self, leaf_event_id: str, event_map: Dict[str, Event]
     ) -> List[str]:

@@ -1,8 +1,9 @@
 """Session bridge for deterministic item effects."""
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item
@@ -33,7 +34,7 @@ def _turn(state: dict[str, Any]) -> int:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _mechanics(state: dict[str, Any]) -> dict[str, Any]:

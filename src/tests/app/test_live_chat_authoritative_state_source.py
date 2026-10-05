@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.gateway.content_free_diagnostics import sanitize_content_free_details
+from app.observability.content_free_diagnostics import sanitize_content_free_details
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -11,15 +11,33 @@ def _source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+WORKSPACE = "src/apps/web/src/features/assistant/workspace"
+# The live voice capture controller and the modules WP-9.5 split it into.
+LIVE_VOICE_CAPTURE_MODULES = (
+    "live-voice-controller.ts",
+    "live-voice-controller-state.ts",
+    "live-voice-preview.ts",
+    "live-voice-session-lifecycle.ts",
+    "live-voice-finalization.ts",
+    "live-voice-endpointing.ts",
+    "live-voice-final-routing.ts",
+    "live-voice-call-telemetry.ts",
+)
+
+
+def _live_voice_capture_source() -> str:
+    return "\n".join(_source(f"{WORKSPACE}/{name}") for name in LIVE_VOICE_CAPTURE_MODULES)
+
+
 def test_live_chat_component_has_no_state_polling_or_dom_observer() -> None:
-    source = _source("src/apps/web/src/features/chatbot/LiveChatPanel.tsx")
+    source = _source("src/apps/web/src/features/assistant/chat/LiveChatPanel.tsx")
     assert "setInterval(" not in source
     assert "new MutationObserver" not in source
     assert "useLiveConversationState" in source
 
 
 def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-voice-duplex-gate.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-voice-duplex-gate.ts")
     assert "new MutationObserver" not in source
     assert "refreshDuplexGate" not in source
     assert ".assistant-voice-orb" not in source
@@ -32,8 +50,10 @@ def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
 
 
 def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-voice-controller.ts")
-    policy = source[source.index("function processAudioFrame"):source.index("function updateVoiceVisualizer")]
+    source = _live_voice_capture_source()
+    finalization = _source(f"{WORKSPACE}/live-voice-finalization.ts")
+    start = finalization.index("function processAudioFrame")
+    policy = finalization[start:finalization.index("export function", start + 1)]
     assert "if (session.finalRequested) return" not in source
     assert "FinalizationAudioBuffer" in source
     assert "segmentedProtocolActive" in policy
@@ -47,7 +67,7 @@ def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -
 
 
 def test_segmented_stt_has_acknowledged_bounded_provider_owned_protocol() -> None:
-    browser = _source("src/apps/web/src/features/assistant-workspace/live-voice-websocket.ts")
+    browser = _source("src/apps/web/src/features/assistant/workspace/live-voice-websocket.ts")
     server = _source("src/app/providers/stt_live_websocket.py")
     scheduler = _source("src/app/providers/stt_segment_scheduler.py")
 
@@ -70,7 +90,7 @@ def test_segmented_stt_has_acknowledged_bounded_provider_owned_protocol() -> Non
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-conversation-initiative-controller.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-conversation-initiative-controller.ts")
     assert "dataset.liveVoiceStatus" not in source
     assert "dataset.voiceMode" not in source
     assert "new MutationObserver" not in source
@@ -80,7 +100,7 @@ def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
 
 
 def test_listener_backchannel_policy_is_store_derived_not_dom_derived() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-voice-backchannel.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-voice-backchannel.ts")
     assert ".assistant-live-draft" not in source
     assert ".assistant-voice-transcript" not in source
     assert ".assistant-voice-orb" not in source
@@ -89,20 +109,21 @@ def test_listener_backchannel_policy_is_store_derived_not_dom_derived() -> None:
 
 
 def test_avatar_state_is_store_derived_not_dom_derived() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-avatar-presence.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-avatar-presence.ts")
     assert ".assistant-live-state" not in source
     assert "data-live-voice-status" not in source
     assert "projectLegacyLiveVoiceState" not in source
-    assert "liveConversationStore.getState" in source
+    # The avatar reads the conversation store through its React hook (WP-9.4).
+    assert "useLiveConversationState()" in source
 
 
 def test_evaluation_uses_content_free_assistant_summaries() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-conversation-evaluation-controller.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-conversation-evaluation-controller.ts")
     assert "new MutationObserver" not in source
     assert "assistant-voice-transcript" not in source
     assert "assistant-live-draft" not in source
     assert "currentTranscriptText" not in source
-    assert "LIVE_ASSISTANT_TURN_SUMMARY_EVENT" in source
+    assert "LIVE_CONVERSATION_ASSISTANT_SUMMARY_EVENT" in source
     assert "topicFingerprint" in source
     assert "questionCount" in source
     assert "redactPersistedEvent" in source
@@ -110,7 +131,7 @@ def test_evaluation_uses_content_free_assistant_summaries() -> None:
 
 
 def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-call-diagnostics-client.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-call-diagnostics-client.ts")
     assert "observeAssistantDiagnostic(traceId, event, details)" in source
     assert "sanitizeDiagnosticDetails(details" in source
     assert source.index("observeAssistantDiagnostic(traceId, event, details)") < source.index(
@@ -120,8 +141,8 @@ def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
 
 
 def test_server_diagnostics_enforce_content_free_boundary() -> None:
-    tts = _source("src/app/gateway/tts_stream_diagnostics.py")
-    browser_route = _source("src/app/gateway/live_voice_diagnostics_routes.py")
+    tts = _source("src/app/observability/tts_stream_diagnostics.py")
+    browser_route = _source("src/app/live_voice/transport/diagnostics_routes.py")
     assert "sanitize_content_free_details(details)" in tts
     assert "sanitize_content_free_details(item.details)" in browser_route
     assert "**item.details" not in browser_route
@@ -147,7 +168,7 @@ def test_server_diagnostics_enforce_content_free_boundary() -> None:
 
 def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
     source = _source(
-        "src/apps/web/src/features/assistant-workspace/live-conversation-durable-evaluation-controller.ts"
+        "src/apps/web/src/features/assistant/workspace/live-conversation-durable-evaluation-controller.ts"
     )
     assert "snapshot().events" not in source
     assert "quality_metrics" in source
@@ -162,9 +183,9 @@ def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
 
 
 def test_release_gate_aggregates_durable_system_and_character_evidence() -> None:
-    source = _source("src/app/gateway/live_chat_release_gate.py")
-    aggregation = _source("src/app/gateway/live_chat_release_aggregation.py")
-    routes = _source("src/app/gateway/live_chat_evaluation_routes.py")
+    source = _source("src/app/chat/live_chat_release_gate.py")
+    aggregation = _source("src/app/chat/live_chat_release_aggregation.py")
+    routes = _source("src/app/chat/live_chat_evaluation_routes.py")
     assert "evaluate_live_chat_release_gate_bundles" in source
     assert "metadata_records" in source
     assert "character_id" in source
@@ -173,10 +194,9 @@ def test_release_gate_aggregates_durable_system_and_character_evidence() -> None
 
 
 def test_fullscreen_shell_reuses_existing_runtime_owners() -> None:
-    shell = _source("src/apps/web/src/features/chatbot/LiveChatFullscreenShell.tsx")
-    adapters = _source("src/apps/web/src/features/chatbot/live-chat-runtime-adapters.ts")
-    controller = _source("src/apps/web/src/features/chatbot/live-chat-fullscreen-controller.ts")
-    combined = "\n".join((shell, adapters, controller))
+    shell = _source("src/apps/web/src/features/assistant/chat/LiveChatFullscreenShell.tsx")
+    controller = _source("src/apps/web/src/features/assistant/chat/live-chat-fullscreen-controller.ts")
+    combined = "\n".join((shell, controller))
     forbidden_runtime_owners = (
         "getUserMedia(",
         "new WebSocket",
@@ -189,40 +209,37 @@ def test_fullscreen_shell_reuses_existing_runtime_owners() -> None:
     for forbidden in forbidden_runtime_owners:
         assert forbidden not in combined
     assert "useLiveConversationState" in shell
-    assert "invokeExistingLiveCallControl" in shell
-    assert "submitLiveChatMessageThroughExistingComposer" in shell
+    # Chat passes its own send and call controls in (WP-9.4); the shell owns neither.
+    assert "onSendMessage: (text: string) => boolean" in shell
+    assert "onToggleCall: () => void" in shell
     assert "createPortal" in shell
-    assert ".assistant-composer textarea" in adapters
-    assert ".assistant-live-character-avatar" in adapters
     assert "requestFullscreen" in controller
     assert "exitFullscreen" in controller
 
 
 def test_live_voice_final_routing_has_no_composer_dependency() -> None:
-    controller = _source("src/apps/web/src/features/assistant-workspace/live-voice-controller.ts")
-    coordinator = _source("src/apps/web/src/features/assistant-workspace/live-session-coordinator.ts")
-    interceptor = _source("src/apps/web/src/features/assistant-workspace/live-segment-submit-interceptor.ts")
+    controller = _live_voice_capture_source()
+    coordinator = _source(f"{WORKSPACE}/live-session-coordinator.ts")
     assert "requestSubmit" not in controller
     assert ".assistant-composer" not in controller
     assert "populateComposer" not in controller
     assert "querySelector" not in coordinator
     assert "requestSubmit" not in coordinator
-    assert "document.addEventListener('submit'" not in interceptor
     assert "onAcceptedFinal" in controller
     assert "routeAcceptedFinal" in controller
-    assert "direct_final_routing: true" in _source("src/apps/web/src/features/assistant-workspace/live-runtime-provenance.ts")
+    assert "direct_final_routing: true" in _source("src/apps/web/src/features/assistant/workspace/live-runtime-provenance.ts")
 
 
 
 def test_stt_final_does_not_preempt_audio_before_coordination() -> None:
-    source = _source("src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx")
+    source = _source("src/apps/web/src/features/assistant/chat/useVoiceTurnDiagnostics.ts")
     marker = "if (detail.stage !== 'stt_final_received') return;"
-    handler = source[source.index(marker):source.index("window.addEventListener(LIVE_VOICE_PERF_EVENT", source.index(marker))]
+    handler = source[source.index(marker):source.index("window.addEventListener(ASSISTANT_VOICE_PERF_EVENT", source.index(marker))]
     assert "stopAssistantResponseAudio" not in handler
 
 
 def test_live_response_audio_is_call_scoped_and_owned() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts")
+    source = _source("src/apps/web/src/features/assistant/workspace/live-voice-unified-audio-controller.ts")
     assert "sessionScoped: true" in source
     assert "enqueueOutputPhrase" in source
     assert "waitForOutputItem" in source
@@ -231,7 +248,7 @@ def test_live_response_audio_is_call_scoped_and_owned() -> None:
 
 
 def test_capture_owner_persists_direct_routing_provenance() -> None:
-    source = _source("src/apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    source = _live_voice_capture_source()
     assert "live_runtime_provenance" in source
     assert "live_task_contract_acknowledged" in source
     assert "coordination_started" in source

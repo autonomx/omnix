@@ -7,7 +7,7 @@ import hashlib
 import json
 from typing import Any, Mapping
 
-from app.rpg.map_contracts import MapDefinition, MapOverlay
+from app.rpg.map_contracts import MapDefinition
 
 
 def canonical_map_json(value: object) -> str:
@@ -38,30 +38,6 @@ def definition_revision(definition: MapDefinition) -> str:
 
 def with_definition_revision(definition: MapDefinition) -> MapDefinition:
     return replace(definition, definition_revision=definition_revision(definition))
-
-
-def overlay_content_revision(overlay: MapOverlay) -> str:
-    """Expose a content hash useful for replay assertions and cache diagnostics."""
-
-    return map_content_revision(overlay)
-
-
-def resource_envelope_payload(
-    definition: MapDefinition,
-    overlay: MapOverlay,
-    *,
-    known_definition_revision: str | None = None,
-) -> dict[str, object]:
-    revision = definition.definition_revision or definition_revision(definition)
-    include_definition = known_definition_revision != revision
-    return {
-        "map_id": definition.map_id,
-        "definition_revision": revision,
-        "overlay_revision": overlay.overlay_revision,
-        "session_turn_index": overlay.session_turn_index,
-        "definition": _canonical_value(definition) if include_definition else None,
-        "overlay": _canonical_value(overlay),
-    }
 
 
 def _canonical_value(value: object) -> Any:

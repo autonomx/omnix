@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { rpgWorldBundleClient } from '../../api/rpgWorldBundleClient';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
+import { rpgWorldBundleClient } from './api/rpgWorldBundleClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
 import './RpgWorldBundleTransfer.css';
+import { downloadBlob } from '../../shared/download';
 
 interface RpgWorldBundleTransferProps {
   initialWorldId?: string;
@@ -65,14 +66,7 @@ export function RpgWorldBundleTransfer({
     setExporting(true);
     try {
       const download = await rpgWorldBundleClient.exportWorld(worldId);
-      const url = URL.createObjectURL(download.blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = download.filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(download.blob, download.filename);
       setFeedback(`World bundle exported: ${download.filename}`);
       setError(undefined);
     } catch (cause) {

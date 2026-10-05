@@ -1,29 +1,34 @@
 """FastAPI route registration for live speech."""
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket
 
 from .compat import compatibility_payload
 from .events import error_event
 from .protocol import dispatch_client_event
 from .realtime import LiveSpeechRealtimeService
 from .status import live_speech_status_payload
+from .api_models import LiveSpeechProtocolResponse, LiveSpeechStatusResponse
 
 
 def create_live_speech_router() -> APIRouter:
     router = APIRouter(tags=["live-speech"])
 
-    @router.get("/api/live-speech/protocol", include_in_schema=False)
-    async def protocol() -> dict:
-        return {"ok": True, **compatibility_payload()}
+    @router.get(
+        "/api/live-speech/protocol",
+        response_model=LiveSpeechProtocolResponse,
+    )
+    def protocol() -> LiveSpeechProtocolResponse:
+        return LiveSpeechProtocolResponse(ok=True, **compatibility_payload())
 
-    @router.get("/api/live-speech/status", include_in_schema=False)
-    async def status() -> dict:
-        return live_speech_status_payload()
+    @router.get(
+        "/api/live-speech/status",
+        response_model=LiveSpeechStatusResponse,
+    )
+    def status() -> LiveSpeechStatusResponse:
+        return LiveSpeechStatusResponse.model_validate(live_speech_status_payload())
 
-    async def realtime_endpoint(channel: Any) -> None:
+    async def realtime_endpoint(channel: WebSocket) -> None:
         await channel.accept()
         service = LiveSpeechRealtimeService()
         await channel.send_json(service.session_created().wire())

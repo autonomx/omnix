@@ -7,6 +7,8 @@ for stability.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from .models import (
@@ -16,6 +18,8 @@ from .models import (
     OptionConstraint,
     PacingState,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OptionEngine:
@@ -146,7 +150,7 @@ class OptionEngine:
                         )
                     )
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "OptionEngine._build_npc_options", exc_info=True)
 
         # --- Try fact-based (roleplay5 style)
         try:
@@ -169,7 +173,7 @@ class OptionEngine:
                         )
                     )
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "OptionEngine._build_npc_options", exc_info=True)
 
         return options
 
@@ -195,7 +199,7 @@ class OptionEngine:
                     )
                 )
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "OptionEngine._build_location_options", exc_info=True)
 
         return options
 

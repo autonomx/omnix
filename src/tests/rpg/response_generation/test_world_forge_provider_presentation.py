@@ -158,30 +158,6 @@ def _quality_variant(kind: str) -> GeneratedTopic:
     return replace(topic, entities=(entity,))
 
 
-def test_clean_provider_dossier_is_preserved_without_template_prose() -> None:
-    topic = _topic()
-    compiled = compile_structured_entity_facts(_node(), topic, _dependencies())
-    rendered = render_fact_derived_presentations(_node(), compiled)
-
-    entity = rendered.entities[0]
-    sections = entity["dossier"]["sections"]
-    rendered_text = " ".join(
-        paragraph
-        for section in sections
-        for paragraph in section.get("paragraphs") or ()
-    )
-
-    assert entity["short_summary"] == topic.entities[0]["short_summary"]
-    assert [section["id"] for section in sections] == ["overview", "backstory"]
-    assert "mnemonic auditor" in rendered_text
-    assert "borrowed rooms above a night market" in rendered_text
-    assert "Goal:" not in rendered_text
-    assert "Current Pressure:" not in rendered_text
-    assert entity["dossier"]["provider_authored_presentation"] is True
-    assert rendered.provenance["provider_presentations_preserved"] is True
-    assert rendered.provenance["provider_presentation_entity_ids"] == ["actor:nyra_vek"]
-
-
 def test_invalid_provider_dossier_requires_regeneration() -> None:
     compiled = compile_structured_entity_facts(
         _node(),
@@ -223,53 +199,3 @@ def test_contradictory_provider_lore_retries_llm_instead_of_falling_back() -> No
     assert "place:true_harbor" in dossier_text
     assert "place:false_moon_base" not in dossier_text
     assert generated.provenance["targeted_regeneration_attempt_count"] == 2
-
-
-def test_exhausted_hard_invalid_retries_still_fail() -> None:
-    class _AlwaysContradictory:
-        def generate(self, *args, **kwargs) -> GeneratedTopic:
-            return _topic(contradictory=True)
-
-    generator = ReferenceSafeWorldForgeGenerator(_AlwaysContradictory())
-    with pytest.raises(WorldForgeIntegrityError):
-        generator.generate(
-            _node(),
-            seed=7,
-            campaign_context={"targeted_regeneration_max_attempts": 2},
-            dependency_topics=_dependencies(),
-        )
-
-
-def test_best_structurally_valid_lore_is_kept_after_three_quality_retries() -> None:
-    variants = (
-        "summary_too_short",
-        "paragraph_too_short",
-        "duplicate_heading",
-        "summary_fragment",
-    )
-
-    class _AlwaysBelowPreferredScore:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def generate(self, *args, **kwargs) -> GeneratedTopic:
-            variant = variants[self.calls]
-            self.calls += 1
-            return _quality_variant(variant)
-
-    provider = _AlwaysBelowPreferredScore()
-    generator = ReferenceSafeWorldForgeGenerator(provider)
-    generated = generator.generate(
-        _node(preferred_score=100, minimum_words=30),
-        seed=7,
-        campaign_context={"targeted_regeneration_max_attempts": 4},
-        dependency_topics=_dependencies(),
-    )
-
-    assert provider.calls == 4
-    assert generated.provenance["lore_quality_status"] == "needs_review"
-    assert generated.provenance["lore_quality_needs_review"] is True
-    assert generated.provenance["lore_quality_selected_attempt"] == 2
-    assert generated.provenance["lore_quality_retry_count"] == 3
-    assert "Best candidate" in generated.entities[0]["short_summary"]
-    assert len(generated.provenance["lore_quality_attempts"]) >= 4

@@ -1,22 +1,51 @@
 """Deterministic proactive-memory and tool-enrichment policy for live companion turns."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_tools.capability_dashboard import (
+from app.assistant_tools.contracts import (
     AssistantCapabilityDashboard,
     build_assistant_capability_dashboard,
 )
-from app.characters.live_conversation_profile import LiveConversationProfile
+from app.conversation.live_profile import LiveConversationProfile
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .temporal_retrieval import TemporalRetrievalItem, TemporalRetrievalResult
+from app.prompts import prompt_template
+
+
+PROMPT_DIRECTIVE_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive', "1",
+    'Companion initiative policy permits one gentle proactive reference this turn.',
+)
+
+PROMPT_DIRECTIVE_2_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_2', "1",
+    'Mention it naturally at most once and do not imply the user asked about it.',
+)
+
+PROMPT_DIRECTIVE_3_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_3', "1",
+    'A trusted {requested_tool} lookup is eligible, but no tool result is present yet.',
+)
+
+PROMPT_DIRECTIVE_4_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_4', "1",
+    'Do not invent current external data; ask permission or state that a lookup is needed.',
+)
+
+PROMPT_DIRECTIVE_5_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_5', "1",
+    'The {requested_tool} capability is unavailable; use an honest natural fallback.',
+)
+
 
 InitiativeAction = Literal[
     "suppress",
@@ -39,7 +68,9 @@ _GREETING_TERMS = {
 }
 _TOOL_ENV = "OMNIX_COMPANION_TRUSTED_CAPABILITIES"
 _SURFACE_LOCK = threading.RLock()
-_LAST_SURFACED: dict[tuple[str, str, str], datetime] = {}
+_LAST_SURFACED_TTL_SECONDS = 30 * 24 * 60 * 60
+_MAX_LAST_SURFACED_ENTRIES = 4096
+_LAST_SURFACED: dict[tuple[str, str, str], tuple[datetime, float]] = {}
 
 
 class TrustedCapabilityManifest(BaseModel):
@@ -114,7 +145,7 @@ def build_trusted_capability_manifest(
             available.add("messages")
     configured = {
         item.strip().casefold()
-        for item in (os.environ.get(_TOOL_ENV) or "").split(",")
+        for item in (_env_str(_TOOL_ENV) or "").split(",")
         if item.strip()
     }
     available.update(
@@ -142,7 +173,22 @@ def record_initiative_surface(
     if at.tzinfo is None:
         at = at.replace(tzinfo=timezone.utc)
     with _SURFACE_LOCK:
-        _LAST_SURFACED[_surface_key(context, memory_id)] = at.astimezone(timezone.utc)
+        now = time.monotonic()
+        _prune_surface_history_locked(now)
+        key = _surface_key(context, memory_id)
+        if key not in _LAST_SURFACED and len(_LAST_SURFACED) >= _MAX_LAST_SURFACED_ENTRIES:
+            oldest_key = min(_LAST_SURFACED, key=lambda item: _LAST_SURFACED[item][1])
+            _LAST_SURFACED.pop(oldest_key, None)
+        _LAST_SURFACED[key] = (
+            at.astimezone(timezone.utc),
+            now + _LAST_SURFACED_TTL_SECONDS,
+        )
+
+
+def _prune_surface_history_locked(now: float) -> None:
+    for key, (_surfaced_at, expires_at) in list(_LAST_SURFACED.items()):
+        if expires_at <= now:
+            _LAST_SURFACED.pop(key, None)
 
 
 def _last_surfaced(context: MemoryScopeContext, record: MemoryRecord) -> datetime | None:
@@ -156,7 +202,9 @@ def _last_surfaced(context: MemoryScopeContext, record: MemoryRecord) -> datetim
         except ValueError:
             payload_time = None
     with _SURFACE_LOCK:
-        runtime_time = _LAST_SURFACED.get(_surface_key(context, record.id))
+        _prune_surface_history_locked(time.monotonic())
+        runtime_entry = _LAST_SURFACED.get(_surface_key(context, record.id))
+        runtime_time = runtime_entry[0] if runtime_entry is not None else None
     values = [value.astimezone(timezone.utc) for value in (payload_time, runtime_time) if value]
     return max(values) if values else None
 
@@ -338,20 +386,20 @@ def initiative_prompt_directive(
     if item is None:
         return None
     lines = [
-        "Companion initiative policy permits one gentle proactive reference this turn.",
+        PROMPT_DIRECTIVE_TEMPLATE.text,
         f"Relevant approved context: {item.record.content}",
-        "Mention it naturally at most once and do not imply the user asked about it.",
+        PROMPT_DIRECTIVE_2_TEMPLATE.text,
     ]
     if decision.action == "surface_with_tool" and decision.requested_tool:
         lines.extend(
             [
-                f"A trusted {decision.requested_tool} lookup is eligible, but no tool result is present yet.",
-                "Do not invent current external data; ask permission or state that a lookup is needed.",
+                PROMPT_DIRECTIVE_3_TEMPLATE.format(requested_tool=decision.requested_tool),
+                PROMPT_DIRECTIVE_4_TEMPLATE.text,
             ]
         )
     elif decision.action == "surface_without_tool" and decision.requested_tool:
         lines.append(
-            f"The {decision.requested_tool} capability is unavailable; use an honest natural fallback."
+            PROMPT_DIRECTIVE_5_TEMPLATE.format(requested_tool=decision.requested_tool)
         )
     return "\n".join(lines)
 

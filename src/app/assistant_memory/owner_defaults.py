@@ -18,26 +18,38 @@ RepositoryFactory = Callable[[], Any]
 
 _lock = RLock()
 _installed_repository_factory: RepositoryFactory | None = None
+_installed_routes_by_authority = False
 _default_service: OwnerAwareMemoryService | None = None
 
 
-def install_default_memory_repository_factory(factory: RepositoryFactory) -> None:
-    """Install the production repository factory and discard any cached service."""
+def install_default_memory_repository_factory(
+    factory: RepositoryFactory,
+    *,
+    routes_by_authority: bool = False,
+) -> None:
+    """Install the production repository factory and discard any cached service.
+
+    ``routes_by_authority`` marks a repository that sends record writes to
+    Memory v2 once v2 is authoritative; the v1 read-only guard then stays off,
+    since writes no longer go to v1.
+    """
 
     if not callable(factory):
         raise TypeError("memory repository factory must be callable")
-    global _installed_repository_factory, _default_service
+    global _installed_repository_factory, _installed_routes_by_authority, _default_service
     with _lock:
         _installed_repository_factory = factory
+        _installed_routes_by_authority = routes_by_authority
         _default_service = None
 
 
 def clear_default_memory_repository_factory() -> None:
     """Return to provider-free behavior for isolated tests."""
 
-    global _installed_repository_factory, _default_service
+    global _installed_repository_factory, _installed_routes_by_authority, _default_service
     with _lock:
         _installed_repository_factory = None
+        _installed_routes_by_authority = False
         _default_service = None
 
 
@@ -52,13 +64,10 @@ def reset_default_memory_service() -> None:
 def _runtime_repository_factory() -> RepositoryFactory | None:
     """Resolve PostgreSQL lazily only after the runtime adapter boundary is active."""
 
-    try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-    except ImportError:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if not uses_postgresql_runtime():
         return None
-    if not runtime_adapters_installed():
-        return None
-    from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
     return PostgresOwnerAwareMemoryRepository
 
@@ -89,9 +98,10 @@ def default_memory_service() -> OwnerAwareMemoryService:
         if factory is None:
             return OwnerAwareMemoryService(OwnerAwareInMemoryMemoryRepository())
         if _default_service is None:
+            routed = _installed_repository_factory is not None and _installed_routes_by_authority
             _default_service = OwnerAwareMemoryService(
                 factory(),
-                write_guard=_legacy_memory_write_guard,
+                write_guard=None if routed else _legacy_memory_write_guard,
             )
         return _default_service
 

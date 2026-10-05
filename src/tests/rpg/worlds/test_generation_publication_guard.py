@@ -43,8 +43,11 @@ class _Work:
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, results: list[dict], topics: list[dict]) -> None:
-    monkeypatch.setattr(guard, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(guard, "current_tenant", lambda *args, **kwargs: object())
     monkeypatch.setattr(guard, "unit_of_work", lambda database: _Work(results, topics))
+    # These cases cover review status and promoted hashes; signed authorship has
+    # its own tests (test_signed_world_authorship*), so every topic passes it here.
+    monkeypatch.setattr(guard, "_authorship_reports", lambda nodes, *, authoring: [])
 
 
 def test_publication_report_rejects_flagged_topic(monkeypatch: pytest.MonkeyPatch) -> None:

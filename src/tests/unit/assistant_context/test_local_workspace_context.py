@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.assistant_context.models import AssistantContextChatRequest
-from app.assistant_context.routes import _send_request
+from app.chat.assistant_context.models import AssistantContextChatRequest
+from app.chat.assistant_context.routes import _send_request
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_assistant_context_request_carries_workspace_root() -> None:

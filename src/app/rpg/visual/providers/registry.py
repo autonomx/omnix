@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import os
+from app.config.env import environment
+
 from typing import Any, Callable, Dict, List, Tuple
 
 from .base import BaseImageProvider
@@ -63,7 +64,7 @@ def _normalize_provider_key(provider_key: str | None) -> str:
 def resolve_visual_provider_key(config: Dict[str, Any] | None = None) -> str:
     cfg = dict(config or {})
 
-    env_key = os.environ.get("OMNIX_VISUAL_PROVIDER", "").strip()
+    env_key = environment().get("OMNIX_VISUAL_PROVIDER", "").strip()
     if env_key:
         key = _normalize_provider_key(env_key)
         if has_visual_provider(key):

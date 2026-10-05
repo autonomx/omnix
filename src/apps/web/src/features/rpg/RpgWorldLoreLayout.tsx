@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { RpgAuthoringDocumentBlock } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringDocumentBlock } from './api/rpgWorldAuthoringClient';
 import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import './RpgWorldLoreLayout.css';
 

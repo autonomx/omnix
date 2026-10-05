@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgMapSurface } from './RpgMapSurface';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const polygon = { kind: 'polygon' as const, points: [[-110, -90], [110, -90], [110, 20], [-110, 20]] as [number, number][] };
 const definition = {
@@ -48,7 +49,7 @@ function overlay(availability: 'ready' | 'unavailable' = 'ready') {
 }
 
 function renderMap() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return render(<QueryClientProvider client={client}><RpgMapSurface mapId={definition.map_id} sessionId="session:test" /></QueryClientProvider>);
 }
 

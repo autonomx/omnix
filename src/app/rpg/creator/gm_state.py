@@ -131,17 +131,6 @@ class GMDirectiveState:
     def __init__(self) -> None:
         self.directives: dict[str, GMDirective] = {}
 
-    def add_directive(self, directive: GMDirective) -> None:
-        self.directives[directive.directive_id] = directive
-
-    def remove_directive(self, directive_id: str) -> None:
-        self.directives.pop(directive_id, None)
-
-    def clear_scene_scoped_directives(self) -> None:
-        self.directives = {
-            k: v for k, v in self.directives.items() if v.scope != "scene"
-        }
-
     def list_directives(self) -> list[GMDirective]:
         return list(self.directives.values())
 
@@ -237,41 +226,6 @@ class GMDirectiveState:
             elif isinstance(d, RevealDirective) and d.target_id == npc_id:
                 results.append(d)
         return results
-
-    def find_directives_for_faction(self, faction_id: str) -> list[GMDirective]:
-        """Return all active directives that target a specific faction."""
-        results: list[GMDirective] = []
-        for d in self.get_active_directives():
-            if isinstance(d, TargetFactionDirective) and d.faction_id == faction_id:
-                results.append(d)
-            elif isinstance(d, RevealDirective) and d.target_id == faction_id:
-                results.append(d)
-        return results
-
-    def find_directives_for_location(self, location_id: str) -> list[GMDirective]:
-        """Return all active directives that target a specific location."""
-        results: list[GMDirective] = []
-        for d in self.get_active_directives():
-            if isinstance(d, TargetLocationDirective) and d.location_id == location_id:
-                results.append(d)
-            elif isinstance(d, RevealDirective) and d.target_id == location_id:
-                results.append(d)
-        return results
-
-    def build_ui_summary(self) -> dict:
-        """Return a UI-friendly summary of the current directive state."""
-        active = self.get_active_directives()
-        by_type: dict[str, list[dict]] = {}
-        for d in active:
-            dtype = d.directive_type
-            if dtype not in by_type:
-                by_type[dtype] = []
-            by_type[dtype].append(self._directive_to_dict(d))
-        return {
-            "total_directives": len(self.directives),
-            "active_directives": len(active),
-            "by_type": by_type,
-        }
 
     # ------------------------------------------------------------------
     # Gameplay-control query helpers (Phase 7.2)

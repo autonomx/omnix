@@ -131,31 +131,6 @@ class Coalition:
             self.trust_levels[member_id] = self.trust_levels.get(member_id, {})
             self.trust_levels[member_id][existing] = initial_trust
     
-    def remove_member(self, member_id: str) -> bool:
-        """Remove a member from the coalition.
-        
-        Args:
-            member_id: Member to remove.
-            
-        Returns:
-            True if member was removed.
-        """
-        if member_id not in self.members:
-            return False
-        
-        self.members.discard(member_id)
-        self.trust_levels.pop(member_id, None)
-        
-        # Remove trust from other members
-        for existing_trust in self.trust_levels.values():
-            existing_trust.pop(member_id, None)
-        
-        # If leader left, assign new leader
-        if self.leader == member_id and self.members:
-            self.leader = next(iter(self.members))
-        
-        return True
-    
     def update_trust(
         self,
         member_a: str,
@@ -658,26 +633,6 @@ class CoalitionSystem:
         
         return True
     
-    def record_coalition_outcome(
-        self,
-        coalition_id: str,
-        success: bool,
-    ) -> None:
-        """Record outcome of coalition action.
-        
-        Args:
-            coalition_id: Coalition that acted.
-            success: Whether action succeeded.
-        """
-        coalition = self.coalitions.get(coalition_id)
-        if coalition is None:
-            return
-        
-        if success:
-            coalition.record_success()
-        else:
-            coalition.record_failure()
-    
     def _get_faction_coalition(self, faction_id: str) -> Optional[Coalition]:
         """Get coalition containing a faction.
         
@@ -716,28 +671,6 @@ class CoalitionSystem:
             logger.info(
                 f"Coalition dissolved: {coalition_id} (reason: {reason})"
             )
-    
-    def get_all_coalitions(self) -> Dict[str, Coalition]:
-        """Get all active coalitions.
-        
-        Returns:
-            Dict of coalition_id -> Coalition.
-        """
-        return dict(self.coalitions)
-    
-    def get_coalition_summary(self, coalition_id: str) -> Dict[str, Any]:
-        """Get summary of a coalition.
-        
-        Args:
-            coalition_id: Coalition identifier.
-            
-        Returns:
-            Summary dict, or empty dict if not found.
-        """
-        coalition = self.coalitions.get(coalition_id)
-        if coalition:
-            return coalition.to_dict()
-        return {}
     
     def get_stats(self) -> Dict[str, Any]:
         """Get system statistics.

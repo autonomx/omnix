@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
@@ -9,6 +11,8 @@ import './TradingTerminalDock.css';
 import './TradingTerminalDockMinimize.css';
 import './TradingTerminalDockLight.css';
 import './TradingTerminalDockData.css';
+import { downloadBlob } from '../../shared/download';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
@@ -190,6 +194,7 @@ export function TradingTerminalDock({
         quantity: order.quantity,
         average_cost: order.reference_price ?? order.limit_price ?? order.stop_price ?? '',
         realized_pnl: '0',
+        reserved_quantity: '0',
         last_price: order.reference_price ?? null,
         unrealized_pnl: '0',
         pending: true,
@@ -290,8 +295,7 @@ export function TradingTerminalDock({
   useEffect(() => { void refresh(preferredAccountId ?? undefined); }, [preferredAccountId]);
   useEffect(() => {
     if (!accountId) return;
-    const timer = window.setInterval(() => void refresh(accountId), 5_000);
-    return () => window.clearInterval(timer);
+    return startPolling(() => refresh(accountId), POLL_INTERVALS_MS.paperAccount);
   }, [accountId]);
   useEffect(() => {
     if (!modal) return;
@@ -356,8 +360,7 @@ export function TradingTerminalDock({
     const header = ['Symbol', 'Side', 'Type', 'Quantity', 'Limit price', 'Stop price', 'Fill price', 'Status', 'Commission', 'Placing time', 'Closing time', 'Order ID'];
     const rows = orderHistory.map((order) => [symbol(order.instrument_id), order.side, order.order_type, order.quantity, order.limit_price ?? '', order.stop_price ?? '', order.average_fill_price ?? '', order.status, commissionByOrder.get(order.order_id) ?? '', order.created_at ?? '', order.updated_at ?? '', order.order_id]);
     const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a');
-    link.href = url; link.download = 'paper-order-history.csv'; link.click(); URL.revokeObjectURL(url);
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'paper-order-history.csv');
   };
 
   const renderLeverageField = (label: string, key: keyof Leverage) => (
@@ -400,7 +403,7 @@ export function TradingTerminalDock({
         </header>
 
         {!minimized ? <>
-          {tab !== 'dashboard' ? <div className="trading-dock-summary" aria-label="Paper trading account summary">
+          {tab !== 'dashboard' ? <div role="group" className="trading-dock-summary" aria-label="Paper trading account summary">
             {[['Account balance', accountBalance, activeAccount?.base_currency], ['Equity', equity, activeAccount?.base_currency], ['Realized PnL', realizedPnl, activeAccount?.base_currency], ['Unrealized PnL', unrealizedPnl, activeAccount?.base_currency], ['Account margin', accountMargin, activeAccount?.base_currency], ['Available funds', Number(baseBalance?.available ?? 0), activeAccount?.base_currency], ['Orders margin', ordersMargin, activeAccount?.base_currency], ['Margin buffer', marginBuffer, '%']].map(([label, value, suffix]) => <div key={String(label)} className="trading-dock-summary-item"><span>{label}</span><strong className={label === 'Realized PnL' || label === 'Unrealized PnL' ? signedClass(value as number) : undefined}>{displayedSnapshot ? number(value as number) : '—'}{displayedSnapshot && suffix ? <small> {suffix}</small> : null}</strong></div>)}
           </div> : null}
           <nav className="trading-dock-tabs" role="tablist" aria-label="Paper trading activity">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); if (item.id === 'history' && !historyFilters.some((filter) => filter.id === orderFilter)) setOrderFilter('all'); }}>{item.id === 'positions' && displayedPositions.length > 0 ? `${item.label} ${displayedPositions.length}` : item.label}</button>)}</nav>

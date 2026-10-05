@@ -1,96 +1,109 @@
-"""Explicit production repository factories; no imported classes are replaced."""
+"""Explicit production factories that wire several features together.
 
-from functools import lru_cache
+Each feature owns the factory for its own repositories (ADR-0016, PA-1.2);
+only cross-feature wiring and kernel stores composed with feature adapters
+remain here, and only composition imports this module.
+"""
+
+from app.caching.bounded_cache import bounded_lru_cache
+from app.persistence.repository_registry import register_feature_repositories
 
 
-@lru_cache(maxsize=1)
-def production_job_store():
-    from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
-    from app.jobs.rpg_turn_job_guard import install_rpg_turn_job_guard
-    from app.jobs.rpg_debug_job_hook import install_rpg_debug_job_hook
+def production_job_store(
+    *,
+    database=None,
+    context=None,
+    chat_execution_owner=None,
+    chat_dispatcher=None,
+):
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
 
-    # Production feature work is claimed by the leased durable feature worker.
-    # Keep only the non-execution RPG compatibility guards until those callers
-    # migrate to explicit repository services.
-    install_rpg_turn_job_guard(PostgresJobStoreAdapter)
-    install_rpg_debug_job_hook(PostgresJobStoreAdapter)
+    if all(
+        value is None
+        for value in (database, context, chat_execution_owner, chat_dispatcher)
+    ):
+        return _default_production_job_store()
+    # Feature execution and submission policy are registry-owned.
+    return PostgresJobStoreAdapter(
+        database=database,
+        context=context,
+        chat_execution_owner=chat_execution_owner,
+        chat_dispatcher=chat_dispatcher,
+    )
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
+def _default_production_job_store():
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+
     return PostgresJobStoreAdapter()
 
 
-@lru_cache(maxsize=1)
-def production_asset_store():
-    from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
-    return PostgresSharedAssetStoreAdapter()
+def production_chat_store(*, job_service=None, live_agent_planner=None):
+    register_feature_repositories("chat")
+    from app.chat.persistence.chat_runtime import (
+        PostgresCharacterChatSessionStore,
+        default_chat_store,
+    )
+    from app.chat.live_agent_store import default_live_agent_planner
+    from app.assistant_memory import default_memory_service
+    from app.assistant_memory.settings import load_memory_runtime_settings
+    from app.desktop_companion.chat_activity import record_accepted_chat_activity
+    from app.live_voice.chat_integration import create_live_voice_chat_port
+
+    if job_service is None:
+        job_service = production_job_store()
+    if live_agent_planner is None:
+        live_agent_planner = default_live_agent_planner()
+    return default_chat_store(
+        store_class=PostgresCharacterChatSessionStore,
+        memory_service_factory=default_memory_service,
+        memory_settings_factory=load_memory_runtime_settings,
+        job_service=job_service,
+        live_voice_chat_port=create_live_voice_chat_port(),
+        live_agent_planner=live_agent_planner,
+        accepted_chat_activity_recorder=record_accepted_chat_activity,
+    )
 
 
-def production_chat_store():
-    from app.persistence.chat_runtime_compat import default_chat_store, PostgresCharacterChatSessionStore
-    from app.chat.live_agent_store import install_live_agent_store_hooks
-    install_live_agent_store_hooks(PostgresCharacterChatSessionStore, PostgresCharacterChatSessionStore)
-    return default_chat_store()
+def shared_service_repository_specs():
+    """The shared services' always-on repositories (prompts, providers), built on first use (PA-2.2)."""
+    from app.persistence.repository_registry import RepositorySpec
+
+    def providers(connection):
+        from app.providers.persistence.provider_repository import PostgresProviderRepository
+
+        return PostgresProviderRepository(connection)
+
+    def prompts(connection):
+        from app.prompts.repository import PostgresPromptRepository
+
+        return PostgresPromptRepository(connection)
+
+    return (
+        RepositorySpec("shared.providers", providers, "providers"),
+        RepositorySpec("shared.prompts", prompts, "prompts"),
+    )
 
 
-@lru_cache(maxsize=1)
+def composition_port_bindings():
+    """Ports only the composition root can bind (exactly-one; ADR-0016)."""
+    from app.chat.character_store import CHAT_STORE_FACTORY
+    from app.runtime.ports import PortBinding
+
+    return [PortBinding(CHAT_STORE_FACTORY, production_chat_store)]
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_model_residency_store():
-    from app.persistence.execution_feature_compat import PostgresModelResidencyStore
+    from app.persistence.model_residency import PostgresModelResidencyStore
     return PostgresModelResidencyStore()
 
 
-@lru_cache(maxsize=1)
-def production_provider_refresh_store():
-    from app.persistence.execution_feature_compat import PostgresProviderModelRefreshStore
-    return PostgresProviderModelRefreshStore()
-
-
-def production_character_repository():
-    from app.persistence.character_compat import PostgresCharacterRepositoryAdapter
-    return PostgresCharacterRepositoryAdapter()
-
-
-def production_avatar_repository():
-    from app.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
-    return PostgresCharacterAvatarRepositoryAdapter()
-
-
-def production_memory_repository():
-    from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
-    return PostgresMemoryRepositoryAdapter()
-
-
 def production_owner_memory_repository():
-    from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
-    return PostgresOwnerAwareMemoryRepository()
+    """Imported only when the memory service first needs a repository."""
+    from app.assistant_memory.persistence.owner_memory_store import (
+        production_owner_memory_repository as owner_memory_repository,
+    )
 
-
-@lru_cache(maxsize=1)
-def production_memory_settings_store():
-    from app.persistence.runtime_document_compat import postgres_assistant_memory_settings_store_class
-    return postgres_assistant_memory_settings_store_class()()
-
-
-@lru_cache(maxsize=1)
-def production_conversation_profile_store():
-    from app.persistence.runtime_document_compat import default_postgres_live_conversation_profile_store
-    return default_postgres_live_conversation_profile_store()
-
-
-@lru_cache(maxsize=1)
-def production_evaluation_store():
-    from app.persistence.document_feature_compat import PostgresLiveChatEvaluationStore
-    return PostgresLiveChatEvaluationStore()
-
-
-@lru_cache(maxsize=1)
-def production_research_source_store():
-    from app.persistence.document_feature_compat import PostgresResearchSourceStore
-    return PostgresResearchSourceStore()
-
-
-def production_summary_repository():
-    from app.persistence.chat_runtime_compat import PostgresConversationSummaryRepository
-    return PostgresConversationSummaryRepository()
-
-
-def production_narrative_store(*args, **kwargs):
-    from app.persistence.rpg_feature_compat import PostgresNarrativeEventStore
-    return PostgresNarrativeEventStore(*args, **kwargs)
+    return owner_memory_repository()

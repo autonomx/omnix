@@ -1,14 +1,15 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_world_routes import register_rpg_world_routes
+from app.rpg.api.feature_routes.rpg_world_routes import register_rpg_world_routes
 
 
 def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.gateway.rpg_world_library_routes.read_world_library",
+        "app.rpg.api.feature_routes.rpg_world_library_routes.read_world_library",
         lambda **_kwargs: {
             "ok": True,
             "worlds": [{"id": "world:test", "title": "Test World"}],
@@ -18,7 +19,7 @@ def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -
         },
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_library_routes.read_world_detail",
+        "app.rpg.api.feature_routes.rpg_world_library_routes.read_world_detail",
         lambda world_id, **_kwargs: {
             "ok": True,
             "world": {"id": world_id, "title": "Test World"},
@@ -31,7 +32,7 @@ def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -
         },
     )
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
 
     library = client.get("/api/rpg/world-library")
@@ -41,8 +42,8 @@ def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -
     assert library.json()["worlds"][0]["id"] == "world:test"
     assert detail.status_code == 200
     assert detail.json()["world"]["id"] == "world:test"
-    assert "/api/rpg/world-library" not in app.openapi()["paths"]
-    assert "/api/rpg/worlds/{world_id}/library" not in app.openapi()["paths"]
+    assert "/api/rpg/world-library" in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/library" in app.openapi()["paths"]
 
 
 def test_world_and_scenario_create_routes_allow_backend_generated_ids(monkeypatch) -> None:
@@ -60,10 +61,10 @@ def test_world_and_scenario_create_routes_allow_backend_generated_ids(monkeypatc
             "title": contract.title,
         }
 
-    monkeypatch.setattr("app.gateway.rpg_world_routes.create_world_project", fake_world)
-    monkeypatch.setattr("app.gateway.rpg_world_routes.create_scenario_project", fake_scenario)
+    monkeypatch.setattr("app.rpg.api.feature_routes.rpg_world_routes.create_world_project", fake_world)
+    monkeypatch.setattr("app.rpg.api.feature_routes.rpg_world_routes.create_scenario_project", fake_scenario)
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
 
     world = client.post(
@@ -96,11 +97,11 @@ def test_published_scenario_launch_route_preserves_fast_launch_contract(monkeypa
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_library_routes.launch_published_scenario",
+        "app.rpg.api.feature_routes.rpg_world_library_routes.launch_published_scenario",
         fake_launch,
     )
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
 
     response = client.post(
@@ -128,11 +129,11 @@ def test_duplicate_scenario_create_returns_conflict_instead_of_500(monkeypatch) 
         raise ValueError("scenario_already_exists:scenario:opening")
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_routes.create_scenario_project",
+        "app.rpg.api.feature_routes.rpg_world_routes.create_scenario_project",
         duplicate_scenario,
     )
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
 
     response = client.post(
@@ -162,11 +163,11 @@ def test_repair_world_for_launch_route_passes_scenario_and_location(monkeypatch)
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_library_routes.repair_world_for_launch",
+        "app.rpg.api.feature_routes.rpg_world_library_routes.repair_world_for_launch",
         fake_repair,
     )
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
 
     response = client.post(

@@ -46,7 +46,7 @@ class TestProviderRegistry:
         assert provider is not None
         assert isinstance(provider, BaseProvider)
         assert provider.provider_name == 'lmstudio'
-        assert provider.config.base_url == 'http://localhost:1234'
+        assert provider.config.base_url == 'http://127.0.0.1:1234'
     
     def test_create_provider_with_dict(self):
         """Test creating a provider using a dictionary config."""
@@ -57,7 +57,7 @@ class TestProviderRegistry:
         }
         provider = registry.create_provider('lmstudio', config=config_dict)
         assert provider is not None
-        assert provider.config.base_url == 'http://localhost:1234'
+        assert provider.config.base_url == 'http://127.0.0.1:1234'
         assert provider.config.model == 'test-model'
     
     def test_create_nonexistent_provider(self):

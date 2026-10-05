@@ -41,6 +41,7 @@ from app.assistant_memory_v2.search_index import PostgresMemoryV2SearchIndex
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
+from app.persistence.tenant_scope import system_scope
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -66,8 +67,30 @@ def _database() -> PostgresDatabase:
 
 
 def _reset_global_authority_to_v1(database: PostgresDatabase) -> None:
-    """Isolate tests that mutate the singleton Memory v2 authority epoch."""
+    """Isolate tests that mutate the singleton Memory v2 authority epoch.
 
+    Activation checks the whole migration (every v1 record imported, every
+    imported space ready), so other tests' leftovers in this disposable
+    database are cleared: v1 records are deleted and imported observations
+    revoked.
+    """
+
+    with system_scope("operator.cli"), database.transaction() as connection:
+        connection.execute("DELETE FROM omnix_memory_records")
+        connection.execute(
+            """
+            INSERT INTO omnix_memory_v2_observation_dispositions (
+                observation_id, principal_id, owner_type, owner_id,
+                authority_sequence, state, changed_at, reason, actor_id, revision
+            )
+            SELECT o.observation_id, o.principal_id, o.owner_type, o.owner_id,
+                   o.authority_sequence, 'revoked', CURRENT_TIMESTAMP,
+                   'test isolation', 'test:reset', 1
+              FROM omnix_memory_v2_observations o
+             WHERE o.event_type = 'imported_legacy_memory'
+            ON CONFLICT (observation_id) DO UPDATE SET state = 'revoked'
+            """
+        )
     with database.transaction() as connection:
         connection.execute(
             """

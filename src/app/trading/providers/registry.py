@@ -25,9 +25,10 @@ from .aggregation import (
     aggregation_plan,
 )
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
+from .base import MarketDataProvider
 from .binance import BinanceMarketDataProvider
-from .ibkr import IbkrEquityProvider, ibkr_configured
-from .coinmarketcap import CoinMarketCapProvider, coinmarketcap_configured
+from .ibkr import IbkrEquityProvider
+from .coinmarketcap import CoinMarketCapProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
@@ -497,65 +498,15 @@ class ProviderRegistry:
     def descriptors(self) -> list[dict[str, object]]:
         descriptors: list[dict[str, object]] = []
         for provider_id, policy in POLICIES.items():
-            provider = self.provider(provider_id)
-            runtime = getattr(provider, "runtime", None)
-            snapshot_method = getattr(runtime, "snapshot", None)
-            snapshot = snapshot_method() if callable(snapshot_method) else None
-            if provider_id == "ibkr" and runtime is not None:
-                runtime_payload = dict(runtime.diagnostics())
-            else:
-                runtime_payload = (
-                    {
-                        "request_count": snapshot.request_count,
-                        "success_count": snapshot.success_count,
-                        "failure_count": snapshot.failure_count,
-                        "consecutive_failures": snapshot.consecutive_failures,
-                        "rate_limit_count": snapshot.rate_limit_count,
-                        "in_flight": snapshot.in_flight,
-                        "max_concurrency": snapshot.max_concurrency,
-                        "circuit_open_count": getattr(snapshot, "circuit_open_count", 0),
-                        "circuit_suppression_count": getattr(snapshot, "circuit_suppression_count", 0),
-                        "circuit_open_until": getattr(snapshot, "circuit_open_until", None),
-                        "last_success_at": snapshot.last_success_at,
-                        "last_failure_at": snapshot.last_failure_at,
-                        "last_error": snapshot.last_error,
-                    }
-                    if snapshot is not None
-                    else {}
-                )
-            configured = (
-                alpaca_iex_configured()
-                if provider_id == "alpaca_iex"
-                else ibkr_configured(runtime)
-                if provider_id == "ibkr"
-                else coinmarketcap_configured()
-                if provider_id == "coinmarketcap"
-                else True
-            )
+            provider: MarketDataProvider = self.provider(provider_id)
+            status, runtime_payload = provider.runtime_status()
+            configured = provider.configured()
             descriptors.append(
                 {
                     "provider": provider_id,
-                    "display_name": (
-                        "Alpaca IEX"
-                        if provider_id == "alpaca_iex"
-                        else "IBKR Gateway"
-                        if provider_id == "ibkr"
-                        else "CoinMarketCap"
-                        if provider_id == "coinmarketcap"
-                        else provider_id.title()
-                    ),
+                    "display_name": provider.display_name,
                     "enabled": configured,
-                    "status": (
-                        (
-                            ("ready" if runtime_payload.get("connected") else "unavailable")
-                            if provider_id == "ibkr"
-                            else snapshot.status
-                        )
-                        if configured and (snapshot is not None or provider_id == "ibkr")
-                        else "unconfigured"
-                        if not configured
-                        else "ready"
-                    ),
+                    "status": status if configured else "unconfigured",
                     "policy": policy,
                     "bindings": [
                         binding for binding in all_bindings() if binding.provider == provider_id

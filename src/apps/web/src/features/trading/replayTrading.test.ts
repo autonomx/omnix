@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaperAccountSnapshot } from './paperTypes';
 import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
 import type { MarketBar } from './tradingTypes';
+import { fixture } from '../../test/fixture';
 
 const replayApi = vi.hoisted(() => ({
   advanceExecution: vi.fn(),
@@ -31,18 +32,18 @@ const bar = (close: string, high = close, low = close): MarketBar => ({
 });
 
 const snapshot = (): PaperAccountSnapshot => ({
-  account: {
+  account: fixture({
     account_id: 'paper-1', name: 'Paper', base_currency: 'USD', commission_bps: '0',
     enabled: true, revision: 1,
-  },
+  }),
   balances: [{ currency: 'USD', available: '1000', reserved: '25' }],
   positions: [],
   open_orders: [],
-  order_history: [{
+  order_history: [fixture({
     account_id: 'paper-1', order_id: 'actual-order', instrument_id: 'equity:NYSE:TEST',
     side: 'buy', order_type: 'market', quantity: '1', status: 'filled', filled_quantity: '1',
     idempotency_key: 'actual-order',
-  }],
+  })],
   recent_fills: [],
   recent_ledger: [],
 });

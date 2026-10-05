@@ -5,7 +5,7 @@ import pytest
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg_world_forge_provider import ProviderWorldForgeTopicGenerator
+from app.rpg.worlds.providers.world_forge import ProviderWorldForgeTopicGenerator
 from app.rpg.worlds import generation_routing
 
 
@@ -101,11 +101,11 @@ def test_explicit_route_is_not_replaced_by_current_settings(monkeypatch) -> None
 
 
 def test_job_generator_uses_stored_provider_and_model(monkeypatch) -> None:
-    from app import shared
+    from app.providers import service
 
     provider = _Provider()
     monkeypatch.setattr(
-        shared,
+        service,
         "get_provider",
         lambda provider_name=None: provider if provider_name == "lmstudio" else None,
     )

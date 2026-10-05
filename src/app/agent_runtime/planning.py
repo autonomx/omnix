@@ -1,5 +1,6 @@
 """Evidence-backed durable planning policy and deterministic plan gates."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 from collections import defaultdict
 import fnmatch
@@ -61,7 +62,7 @@ _NPM_VALIDATE = re.compile(
 
 
 def planning_mode(environment: dict[str, str] | None = None) -> PlanningMode:
-    source = os.environ if environment is None else environment
+    source = _environment() if environment is None else environment
     value = str(source.get("OMNIX_AGENT_PLANNING_MODE", "enforce") or "enforce").strip().casefold()
     return value if value in {"off", "shadow", "enforce"} else "enforce"  # type: ignore[return-value]
 

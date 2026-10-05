@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import queue
 import threading
 import time
 from typing import Any
@@ -17,8 +16,10 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.observability.tracing import set_span_attributes
 from app.providers.base import ChatMessage, ChatResponse
-from app.shared import get_provider
+from app.providers.catalog import CONVERSATION_SESSIONS, provider_supports
+from app.providers.service import get_provider
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .service import default_agent_run_service
@@ -28,6 +29,11 @@ router = APIRouter(prefix="/api/agent-model/v1", tags=["agent-model"])
 _STREAM_END = object()
 _STREAM_ITEM = object()
 _STREAM_ERROR = object()
+_STREAM_BUFFER = 32
+
+
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
 
 
 def normalize_llm_provider_id(provider_id: str) -> str:
@@ -63,18 +69,26 @@ async def _stream_responses(iterator: Any):
     yields. Dispatching each ``next()`` independently through the shared
     asyncio worker pool can resume the generator on a different thread and
     make its context manager release a lock that thread did not acquire.
+
+    The thread hands items to the event loop directly (WP-7.1): waiting for
+    the next chunk parks no executor thread. ``capacity`` bounds the items in
+    flight, so a slow client applies backpressure to the provider.
     """
 
-    bridge: queue.Queue[tuple[object, Any]] = queue.Queue(maxsize=32)
+    loop = asyncio.get_running_loop()
+    bridge: asyncio.Queue[tuple[object, Any]] = asyncio.Queue()
+    capacity = threading.Semaphore(_STREAM_BUFFER)
     stopped = threading.Event()
 
     def publish(kind: object, value: Any) -> bool:
         while not stopped.is_set():
-            try:
-                bridge.put((kind, value), timeout=0.1)
-                return True
-            except queue.Full:
+            if not capacity.acquire(timeout=0.1):
                 continue
+            try:
+                loop.call_soon_threadsafe(bridge.put_nowait, (kind, value))
+            except RuntimeError:  # the event loop has closed
+                return False
+            return True
         return False
 
     def consume() -> None:
@@ -94,7 +108,8 @@ async def _stream_responses(iterator: Any):
     ).start()
     try:
         while True:
-            kind, value = await asyncio.to_thread(bridge.get)
+            kind, value = await bridge.get()
+            capacity.release()
             if kind is _STREAM_END:
                 return
             if kind is _STREAM_ERROR:
@@ -366,6 +381,10 @@ async def agent_chat_completion(
         x_omnix_agent_run_id,
         request.model,
     )
+    # Agent step for traces (WP-10.4): the server span names the run and model.
+    set_span_attributes(
+        agent_run_id=x_omnix_agent_run_id, agent_step="model", provider_id=provider_id, model_id=model_id,
+    )
     snapshot = default_agent_run_service().get(x_omnix_agent_run_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
@@ -387,7 +406,7 @@ async def agent_chat_completion(
         raise HTTPException(status_code=503, detail=f"agent_provider_unavailable:{provider_id}")
     messages = [_authoritative_run_context(snapshot.spec), *_messages(request.messages)]
     kwargs = _kwargs(request, default_effort)
-    if provider_id == "chatgpt_codex":
+    if provider_supports(provider_id, CONVERSATION_SESSIONS):
         kwargs["conversation_id"] = agent_conversation_id(
             x_omnix_agent_run_id,
             x_omnix_agent_session_id,
@@ -408,6 +427,23 @@ async def agent_chat_completion(
     completion_id = f"chatcmpl-omnix-{x_omnix_agent_run_id[:16]}"
     created = int(time.time())
 
+    outcome = await _complete_without_streaming(request, provider, messages, model_id, kwargs, budget, x_omnix_agent_run_id, provider_id, completion_id, created)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    iterator = await asyncio.to_thread(
+        provider.chat_completion,
+        messages,
+        model=model_id,
+        stream=True,
+        **kwargs,
+    )
+
+    return _stream_completion(iterator, completion_id, created, request, budget, x_omnix_agent_run_id, provider_id)
+
+
+async def _complete_without_streaming(request, provider, messages, model_id, kwargs, budget, x_omnix_agent_run_id, provider_id, completion_id, created):
+    """One provider call, metered against the run budget, as a chat.completion body."""
     if not request.stream:
         response = await asyncio.to_thread(
             provider.chat_completion,
@@ -441,6 +477,7 @@ async def agent_chat_completion(
                     x_omnix_agent_run_id,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    provider_id=provider_id,
                 )
             except AgentBudgetError as exc:
                 raise _budget_http_exception(str(exc)) from exc
@@ -452,15 +489,11 @@ async def agent_chat_completion(
             "choices": [_choice(response, delta=False)],
             "usage": response.usage or {},
         }
+    return _CONTINUE
 
-    iterator = await asyncio.to_thread(
-        provider.chat_completion,
-        messages,
-        model=model_id,
-        stream=True,
-        **kwargs,
-    )
 
+def _stream_completion(iterator, completion_id, created, request, budget, x_omnix_agent_run_id, provider_id):
+    """Stream the provider's chunks as SSE, then meter tokens; budget and provider errors end the stream with an error event."""
     async def generate():
         observed_input_tokens: int | None = None
         observed_output_tokens: int | None = None
@@ -526,6 +559,7 @@ async def agent_chat_completion(
                         x_omnix_agent_run_id,
                         input_tokens=observed_input_tokens,
                         output_tokens=observed_output_tokens,
+                        provider_id=provider_id,
                     )
                 except AgentBudgetError as exc:
                     payload = _budget_stream_error(str(exc))

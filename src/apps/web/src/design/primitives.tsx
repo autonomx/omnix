@@ -1,6 +1,5 @@
 import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { OmnixModuleId } from '../app/modules';
 import { getOmnixThemePreset, OMNIX_THEME_PRESETS, type OmnixThemeId } from './appearanceThemes';
 
 export function OmnixShellLayout({ children, isSidebarVisible = true, sidebar, topbar }: { children: ReactNode; isSidebarVisible?: boolean; sidebar: ReactNode; topbar: ReactNode }) {
@@ -21,17 +20,11 @@ export function OmnixSidebar({ children, hidden = false }: { children: ReactNode
 }
 
 export function OmnixBrand() {
-  return <div className="omnix-brand" aria-label="Omnix"><span className="omnix-brand-mark" aria-hidden="true" /><span className="omnix-brand-copy"><h1>Omnix</h1><small>Local AI workstation</small></span></div>;
+  return <div role="group" className="omnix-brand" aria-label="Omnix"><span className="omnix-brand-mark" aria-hidden="true" /><span className="omnix-brand-copy"><h1>Omnix</h1><small>Local AI workstation</small></span></div>;
 }
 
-const moduleMonograms: Record<OmnixModuleId, string> = {
-  audiobook: 'AB',
-  chatbot: '▣', rpg: '✦', storyteller: '✍', podcast: '◉', voice: '◍', 'voice-cloning': '◎', stt: '⌁',
-  'image-generation': '▧', trading: '⌁', providers: '◇', models: '✧', jobs: '↻', assets: '▤', reports: '☷', settings: '⚙', diagnostics: '⌕',
-};
-
-export function OmnixNavItem({ active, moduleId, children }: { active: boolean; moduleId: OmnixModuleId; children: ReactNode }) {
-  return <span className={active ? 'omnix-nav-item active' : 'omnix-nav-item'}><span className="omnix-nav-icon" aria-hidden="true">{moduleMonograms[moduleId]}</span><span className="omnix-nav-label">{children}</span></span>;
+export function OmnixNavItem({ active, icon, children }: { active: boolean; icon: string; children: ReactNode }) {
+  return <span className={active ? 'omnix-nav-item active' : 'omnix-nav-item'}><span className="omnix-nav-icon" aria-hidden="true">{icon}</span><span className="omnix-nav-label">{children}</span></span>;
 }
 
 function OmnixThemePicker({ themeId, onThemeChange }: { themeId: OmnixThemeId; onThemeChange?: (themeId: OmnixThemeId) => void }) {
@@ -59,15 +52,16 @@ export function OmnixTopBar({ isSidebarVisible = true, onToggleSidebar, onToggle
   return (
     <header className="omnix-topbar">
       <button className="omnix-shell-toggle" type="button" aria-controls="omnix-sidebar" aria-expanded={isSidebarVisible} aria-label={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'} title={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'} onClick={onToggleSidebar}><span aria-hidden="true" data-direction={isSidebarVisible ? 'left' : 'right'}>{isSidebarVisible ? '‹' : '›'}</span></button>
-      <div className="omnix-topbar-brand" aria-label="Omnix"><strong>Omnix</strong><small>Local AI workstation</small></div>
-      {children ? <div className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
-      <div className="omnix-topbar-actions"><OmnixThemePicker themeId={themeId} onThemeChange={onThemeChange} /><button className="omnix-theme-toggle" type="button" aria-label={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} aria-pressed={themeMode === 'light'} title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} onClick={onToggleTheme}><span className="omnix-theme-toggle-glyph" aria-hidden="true" /></button><div className="omnix-topbar-status" aria-label={`${title}, ${status}`}><span>Assistant</span><b>{title}</b><b>{status}</b></div></div>
+      <div role="group" className="omnix-topbar-brand" aria-label="Omnix"><strong>Omnix</strong><small>Local AI workstation</small></div>
+      {children ? <div role="group" className="omnix-mode-tabs" aria-label="Workspace modes">{children}</div> : null}
+      <div className="omnix-topbar-actions"><OmnixThemePicker themeId={themeId} onThemeChange={onThemeChange} /><button className="omnix-theme-toggle" type="button" aria-label={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} aria-pressed={themeMode === 'light'} title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} onClick={onToggleTheme}><span className="omnix-theme-toggle-glyph" aria-hidden="true" /></button><div role="group" className="omnix-topbar-status" aria-label={`${title}, ${status}`}><span>Assistant</span><b>{title}</b><b>{status}</b></div></div>
     </header>
   );
 }
 
 export function OmnixStatusPill({ children }: { children: ReactNode }) { return <Badge className="status-pill" component="span" variant="light">{children}</Badge>; }
-export function WorkspacePanel({ children, className }: { children: ReactNode; className?: string }) { const panelClassName = className ? `workspace-card ${className}` : 'workspace-card'; return <Paper className={panelClassName} component="section" aria-labelledby="module-title"><h3 className="visually-hidden">Episode request</h3>{children}</Paper>; }
+/** A workspace's outer panel; name it by its heading's id (`labelledBy`) or, without a visible heading, by `label`. */
+export function WorkspacePanel({ children, className, labelledBy, label }: { children: ReactNode; className?: string; labelledBy?: string; label?: string }) { const panelClassName = className ? `workspace-card ${className}` : 'workspace-card'; return <Paper className={panelClassName} component="section" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}>{children}</Paper>; }
 export function OmnixProgressLog({ value, logs }: { value: number; logs: Array<{ level: string; message: string }> }) { return <Stack gap="xs"><Progress value={value} aria-label="Progress" /><Stack className="omnix-log-viewer" gap={4}>{logs.map((log, index) => <Text key={`${log.level}-${index}`} size="sm"><strong>{log.level}</strong> {log.message}</Text>)}</Stack></Stack>; }
 export function OmnixTranscriptView({ messages }: { messages: Array<{ role: string; content: string }> }) { return <Stack className="omnix-transcript" gap="xs">{messages.map((message, index) => <Paper key={`${message.role}-${index}`} className="omnix-message" component="article"><Text size="xs" tt="uppercase">{message.role}</Text><Text>{message.content}</Text></Paper>)}</Stack>; }
 export function OmnixAudioControls({ label }: { label: string }) { return <Group className="omnix-audio-controls" gap="sm"><button type="button" aria-label={`Play ${label}`}>Play</button><button type="button" aria-label={`Stop ${label}`}>Stop</button><Text size="sm">{label}</Text></Group>; }

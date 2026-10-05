@@ -6,7 +6,7 @@ narrative descriptions for quests based on their current stage.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 class QuestDirector:
@@ -72,63 +72,3 @@ Objectives:
             "description": self.generate_description(quest),
         }
 
-    def generate_all_quests_description(
-        self,
-        active_quests: List[Any],
-        completed_quests: Optional[List[Any]] = None,
-    ) -> str:
-        """Generate descriptions for multiple quests.
-
-        Args:
-            active_quests: List of active quest objects.
-            completed_quests: Optional list of completed quests.
-
-        Returns:
-            Formatted string with all quest descriptions.
-        """
-        output = "=== ACTIVE QUESTS ===\n\n"
-
-        if not active_quests:
-            output += "No active quests.\n"
-        else:
-            for i, quest in enumerate(active_quests, 1):
-                output += f"Quest {i}: {self.generate_description(quest)}\n\n"
-
-        if completed_quests:
-            output += "=== COMPLETED QUESTS ===\n\n"
-            for quest in completed_quests:
-                output += f"✓ {quest.title}\n"
-
-        return output
-
-    def generate_quest_briefing(self, quest: Any) -> str:
-        """Generate a detailed quest briefing with full history.
-
-        Args:
-            quest: Quest object to brief.
-
-        Returns:
-            Detailed quest briefing string.
-        """
-        briefing = f"=== QUEST BRIEFING: {quest.title.upper()} ===\n\n"
-        briefing += f"Type: {quest.type}\n"
-        briefing += f"Status: {quest.status}\n"
-        briefing += f"Progress: {quest.arc_progress:.0%}\n"
-        briefing += f"Current Stage: {quest.arc_stage}\n\n"
-
-        briefing += "--- STAGE PROGRESS ---\n"
-        for i, stage in enumerate(quest.stages):
-            marker = "✓" if i < quest.current_stage_index else ">" if i == quest.current_stage_index else "o"
-            briefing += f"  {marker} {stage.name}: {stage.description}\n"
-
-        if quest.history:
-            briefing += "\n--- HISTORY ---\n"
-            for entry in quest.history:
-                briefing += f"  - {entry.get('stage', 'unknown')}: {'completed' if entry.get('completed') else 'failed'}\n"
-
-        briefing += "\n--- CURRENT OBJECTIVES ---\n"
-        for obj in quest.active_objectives:
-            progress_bar = "█" * int(obj.progress * 10) + "░" * (10 - int(obj.progress * 10))
-            briefing += f"  [{progress_bar}] {obj.description}\n"
-
-        return briefing

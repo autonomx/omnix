@@ -1,6 +1,8 @@
 """Built-in profiles compiled into immutable RunSpec authority."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import re
 
 from pydantic import BaseModel, ConfigDict
@@ -15,6 +17,16 @@ class AgentProfile(BaseModel):
     optional_external_capabilities: tuple[str, ...] = ()
     context_sources: tuple[str, ...] = ()
     requires_workspace: bool = False
+    approval_policy: str = "ask_sensitive"
+    allowed_paths: tuple[str, ...] = ("**",)
+    isolation_policy: str = "supervised_worktree"
+    # Runs that mutate the workspace deliver a diff and go through the
+    # coding-quality pipeline: planning, validation, review and acceptance.
+    produces_diff: bool = False
+    # The Pi prompt carries compiled repository guidance and trusted skills.
+    repository_guidance: bool = False
+    # The operator's MCP tools (resources MCP policy) join the external ceiling.
+    operator_mcp_tools: bool = False
 
 
 _READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff", "workspace.run_change_set")
@@ -54,12 +66,18 @@ _PROFILES = {
             *_BROWSER,
         ),
         requires_workspace=True,
+        isolation_policy="docker_strong",
+        produces_diff=True,
+        repository_guidance=True,
+        operator_mcp_tools=True,
     ),
     "coding-reviewer": AgentProfile(
         id="coding-reviewer",
         description="Read-only independent review of an immutable coding snapshot.",
         capabilities=_READ,
         requires_workspace=True,
+        isolation_policy="immutable_review_snapshot",
+        repository_guidance=True,
     ),
     "house": AgentProfile(id="house", description="Semantic smart-home inspection and governed control.", external_capabilities=("home.list_devices", "home.get_state", "home.set_state", "home.get_energy", "home.apply_scene")),
     "research": AgentProfile(
@@ -71,7 +89,7 @@ _PROFILES = {
         requires_workspace=False,
     ),
     "personal-assistant": AgentProfile(id="personal-assistant", description="Governed email, calendar, and contacts.", external_capabilities=("gmail.read_email", "gmail.create_draft", "gmail.send_email", "calendar.read_availability", "calendar.create_event", "contacts.search_contacts", "contacts.resolve_recipient"), context_sources=("assistant_memory",)),
-    "ops": AgentProfile(id="ops", description="Workspace-scoped diagnostics and controlled commands.", capabilities=(*_READ, "workspace.command", "workspace.test"), requires_workspace=True),
+    "ops": AgentProfile(id="ops", description="Workspace-scoped diagnostics and controlled commands.", capabilities=(*_READ, "workspace.command", "workspace.test"), requires_workspace=True, isolation_policy="docker_strong"),
     "trading-research": AgentProfile(
         id="trading-research",
         description="Read-only market investigation using governed research services; broker/order mutation authority is intentionally absent.",
@@ -95,22 +113,40 @@ def list_agent_profiles() -> list[AgentProfile]:
     return list(_PROFILES.values())
 
 
+def _declared(profile_id: object) -> AgentProfile | None:
+    # No default profile here: an unknown or missing id has no attributes.
+    return _PROFILES.get(str(profile_id or "").strip().casefold())
+
+
+def profile_produces_diff(profile_id: object) -> bool:
+    """Whether runs of this profile deliver a diff through the quality pipeline."""
+    profile = _declared(profile_id)
+    return profile is not None and profile.produces_diff
+
+
+def profile_repository_guidance(profile_id: object) -> bool:
+    profile = _declared(profile_id)
+    return profile is not None and profile.repository_guidance
+
+
 def profile_external_ceiling(profile: AgentProfile) -> set[str]:
     """Maximum external authority a task compiled for this profile may receive.
 
-    Dynamic MCP authority is added only to the coding profile and only for tools
-    explicitly present in the operator-owned MCP policy.  Reviewer and all other
+    Dynamic MCP authority is added only to profiles that declare
+    ``operator_mcp_tools`` and only for tools explicitly present in the
+    operator-owned MCP policy.  Reviewer and all other
     profiles therefore remain unable to acquire MCP/browser authority by prompt.
     """
 
     ceiling = set(profile.external_capabilities) | set(profile.optional_external_capabilities)
-    if profile.id == "coding":
+    if profile.operator_mcp_tools:
         try:
-            from .mcp_policy import configured_mcp_capability_ids
+            from app.capabilities.mcp_policy import configured_mcp_capability_ids
 
             ceiling.update(configured_mcp_capability_ids())
-        except Exception:
+        except Exception as exc:
             # Invalid/unreadable MCP policy fails closed.
+            log_recovered_exception("MCP capability policy load", exc)
             pass
     return ceiling
 

@@ -1,3 +1,5 @@
+import { jobEventSchema } from '../api/schemas/streams';
+
 export type OmnixEventHandler<TPayload = unknown> = (payload: TPayload) => void;
 
 export type OmnixEventConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
@@ -39,9 +41,17 @@ const DEFAULT_INITIAL_RECONNECT_DELAY_MS = 500;
 const DEFAULT_MAX_RECONNECT_DELAY_MS = 15_000;
 const DEFAULT_RECONNECT_JITTER_RATIO = 0.25;
 
+/**
+ * Sent by the server before it closes a stream that fell too far behind.
+ * The client drops its cursor, reconnects at the live tail, and subscribers
+ * to this event refetch their state.
+ */
+export const RESYNC_EVENT = 'resync';
+
 export class OmnixEventClient {
   private readonly endpoint: string;
   private readonly eventSourceFactory: (endpoint: string) => OmnixEventSource;
+  private readonly hasCustomEventSource: boolean;
   private readonly initialReconnectDelayMs: number;
   private readonly maxReconnectDelayMs: number;
   private readonly reconnectJitterRatio: number;
@@ -72,6 +82,10 @@ export class OmnixEventClient {
     });
   };
 
+  private readonly handleResync: EventListener = () => {
+    this.lastEventId = null;
+  };
+
   private readonly handleError: EventListener = (event) => {
     this.closeSource();
 
@@ -91,6 +105,7 @@ export class OmnixEventClient {
   constructor(options: OmnixEventClientOptions = {}) {
     this.endpoint = options.endpoint ?? '/events';
     this.eventSourceFactory = options.eventSourceFactory ?? ((endpoint) => new EventSource(endpoint));
+    this.hasCustomEventSource = Boolean(options.eventSourceFactory);
     this.initialReconnectDelayMs = options.initialReconnectDelayMs ?? DEFAULT_INITIAL_RECONNECT_DELAY_MS;
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS;
     this.reconnectJitterRatio = options.reconnectJitterRatio ?? DEFAULT_RECONNECT_JITTER_RATIO;
@@ -135,7 +150,7 @@ export class OmnixEventClient {
 
     handlersForEvent.add(handler as OmnixEventHandler<unknown>);
 
-    if (!this.source && !this.reconnectTimer) {
+    if (!this.source && !this.reconnectTimer && this.canConnect()) {
       this.openConnection('connecting');
     }
 
@@ -180,12 +195,18 @@ export class OmnixEventClient {
     }
   }
 
+  /** False where the browser has no EventSource (tests, old runtimes); subscribers then see no events. */
+  private canConnect(): boolean {
+    return this.hasCustomEventSource || typeof EventSource !== 'undefined';
+  }
+
   private openConnection(state: OmnixEventConnectionState) {
     this.cancelReconnect();
     this.closeSource();
     this.source = this.eventSourceFactory(this.connectionEndpoint());
     this.source.addEventListener('open', this.handleOpen);
     this.source.addEventListener('error', this.handleError);
+    this.source.addEventListener(RESYNC_EVENT, this.handleResync);
 
     for (const eventName of this.handlers.keys()) {
       this.bindEventName(eventName);
@@ -241,7 +262,9 @@ export class OmnixEventClient {
       const message = event as MessageEvent<string>;
       let payload: unknown;
 
-      this.rememberEventId(message.lastEventId);
+      if (eventName !== RESYNC_EVENT) {
+        this.rememberEventId(message.lastEventId);
+      }
 
       try {
         payload = JSON.parse(message.data);
@@ -252,6 +275,13 @@ export class OmnixEventClient {
           error,
         });
         return;
+      }
+      if (eventName.startsWith('job.')) {
+        const checked = jobEventSchema.safeParse(payload);
+        if (!checked.success) {
+          this.onMalformedEvent?.({ eventName, data: message.data, error: checked.error });
+          return;
+        }
       }
 
       const handlersForEvent = this.handlers.get(eventName);
@@ -328,6 +358,7 @@ export class OmnixEventClient {
 
     this.source.removeEventListener('open', this.handleOpen);
     this.source.removeEventListener('error', this.handleError);
+    this.source.removeEventListener(RESYNC_EVENT, this.handleResync);
 
     for (const [eventName, listener] of this.sourceEventListeners) {
       this.source.removeEventListener(eventName, listener);

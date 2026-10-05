@@ -4,12 +4,12 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from app import shared
-from app.gateway.live_chat_low_latency_stream import (
+from app.live_voice.llm.stream import (
     LowLatencyTextChunker,
-    _stream_low_latency_reply,
+    stream_low_latency_reply,
 )
 from app.providers import ChatResponse
+from app.providers import service as provider_service
 
 
 def test_low_latency_chunker_keeps_split_words_intact() -> None:
@@ -58,10 +58,10 @@ def test_typed_chat_emits_its_first_provider_fragment_and_retains_usage(monkeypa
                 ]
             )
 
-    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda name: FakeProvider())
 
     events = list(
-        _stream_low_latency_reply(
+        stream_low_latency_reply(
             _store(),
             SimpleNamespace(id="chat:test"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),
@@ -90,10 +90,10 @@ def test_codex_low_latency_path_reuses_exact_omnix_session(monkeypatch) -> None:
             calls.append(kwargs)
             return iter([ChatResponse(content="Hello from Plus.", model="gpt-5.6-sol")])
 
-    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda name: FakeProvider())
 
     events = list(
-        _stream_low_latency_reply(
+        stream_low_latency_reply(
             _store(),
             SimpleNamespace(id="chat:exact-low-latency-session"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),
@@ -118,10 +118,10 @@ def test_non_codex_low_latency_path_does_not_receive_conversation_id(monkeypatch
             calls.append(kwargs)
             return iter([ChatResponse(content="Hello.", model="fast-model")])
 
-    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda name: FakeProvider())
 
     list(
-        _stream_low_latency_reply(
+        stream_low_latency_reply(
             _store(),
             SimpleNamespace(id="chat:ordinary-provider"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),
@@ -157,10 +157,10 @@ def test_provider_usage_model_is_normalized_before_terminal_sse_serialization(mo
                 ]
             )
 
-    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda name: FakeProvider())
 
     events = list(
-        _stream_low_latency_reply(
+        stream_low_latency_reply(
             _store(),
             SimpleNamespace(id="chat:test"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),

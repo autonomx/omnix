@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_profile_generation import (
     ProfileResolution,
@@ -71,31 +71,27 @@ def read_world_library(
     database: Any | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         worlds = work.world_scenarios.list_worlds(context, limit=limit)
         scenarios = work.world_library.list_scenarios(context, limit=limit * 2)
         campaigns = work.world_library.list_campaign_bindings(context, limit=limit * 2)
         runs = work.world_library.list_generation_runs(context, limit=limit * 2)
+        # Per-world figures come from the database, not from the pages above,
+        # so a world outside the newest pages still shows its own (WP-5.5).
+        world_ids = [str(world["id"]) for world in worlds]
+        scenario_counts = work.world_library.published_scenario_counts(context, world_ids)
+        latest_runs = work.world_library.latest_generation_runs(context, world_ids)
         work.rollback()
 
-    scenarios_by_world: dict[str, list[dict[str, Any]]] = {}
-    for scenario in scenarios:
-        if str(scenario.get("status") or "").lower() == "published":
-            scenarios_by_world.setdefault(str(scenario["world_id"]), []).append(scenario)
-    runs_by_world: dict[str, list[dict[str, Any]]] = {}
-    for run in runs:
-        runs_by_world.setdefault(str(run["world_id"]), []).append(run)
     summaries = []
     for world in worlds:
         world_id = str(world["id"])
-        world_runs = runs_by_world.get(world_id, [])
-        latest_run = world_runs[0] if world_runs else None
         summaries.append(
             {
                 **world,
-                "scenario_count": len(scenarios_by_world.get(world_id, [])),
-                "generation": latest_run,
+                "scenario_count": scenario_counts.get(world_id, 0),
+                "generation": latest_runs.get(world_id),
             }
         )
     return {
@@ -112,7 +108,7 @@ def read_world_detail(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -121,8 +117,8 @@ def read_world_detail(
         topics = work.world_library.list_topics(context, world_id)
         revisions = work.world_library.list_world_revisions(context, world_id)
         releases = work.world_library.list_world_releases(context, world_id)
-        scenarios = work.world_library.list_scenarios(context, world_id=world_id)
-        runs = work.world_library.list_generation_runs(context, world_id=world_id)
+        scenarios = list(work.world_library.iter_scenarios(context, world_id=world_id))
+        runs = list(work.world_library.iter_generation_runs(context, world_id=world_id))
         generation_topic_results = {
             str(run["run_id"]): work.world_generation.list_topic_results(
                 context,
@@ -165,7 +161,7 @@ def save_world_topic(
     status: str = "ready",
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         payload = dict(content)
@@ -236,7 +232,7 @@ def start_world_library_generation(
 ) -> dict[str, Any]:
     if strategy not in {"reuse_unchanged", "force"}:
         raise ValueError(f"invalid_generation_strategy:{strategy}")
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         topics = work.world_library.list_topics(context, world_id)
@@ -342,7 +338,7 @@ def read_world_generation(
     if reconcile:
         run = reconcile_world_generation(run_id, database=database)
     else:
-        context = bootstrap_local_tenant(_database(database))
+        context = current_tenant()
         with unit_of_work(database) as work:
             run = work.world_generation.get(context, run_id)
             work.rollback()
@@ -354,7 +350,7 @@ def read_world_generation(
             database=database,
             provider_route=str(settings.get("provider_route") or ""),
         )
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         topic_results = work.world_generation.list_topic_results(
             context,
@@ -369,7 +365,7 @@ def publish_world_library_generation(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:

@@ -23,7 +23,6 @@ from app.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 from app.rpg.worlds.generation_resource_dependencies import (
-    ResourceDependencyCompilationError,
     resource_dependency_issues,
     resource_dependency_report,
 )
@@ -481,44 +480,6 @@ def test_resource_portfolio_requires_chokepoints_and_substitutes() -> None:
         issue.code == "resource_portfolio_missing_substitute"
         for issue in no_substitute
     )
-
-
-def test_resource_portfolio_requires_multiple_endpoints() -> None:
-    issues = resource_dependency_issues(
-        _portfolio_rows(narrow_endpoints=True),
-        _graph(),
-    )
-
-    codes = {issue.code for issue in issues}
-    assert "resource_provider_portfolio_too_narrow" in codes
-    assert "resource_consumer_portfolio_too_narrow" in codes
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(ResourceDependencyCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(unbounded_supply=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_resource_report(

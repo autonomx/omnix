@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import json
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
@@ -167,7 +167,7 @@ def read_world_profile_review(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -202,7 +202,7 @@ def update_world_profile_review(
     """Validate and save an edited profile, invalidating prior approval."""
 
     validated = genre_profile_from_dict(profile).require_valid()
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         current = profile_review_from_world(world)
@@ -260,7 +260,7 @@ def approve_world_profile_review(
 ) -> dict[str, Any]:
     """Approve exactly one validated profile revision and hash."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         current = profile_review_from_world(world)

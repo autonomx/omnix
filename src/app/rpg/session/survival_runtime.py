@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 import copy
 from typing import Any, Dict, Iterable, List, Tuple
 
 from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
+
+logger = logging.getLogger(__name__)
 
 SURVIVAL_NEEDS: Tuple[str, str, str] = ("hunger", "thirst", "fatigue")
 SURVIVAL_WARNING_THRESHOLD = 70
@@ -471,6 +475,7 @@ def _persist_session_best_effort(session: Dict[str, Any]) -> None:
         # The caller still returns the enriched session. Manual smoke tests also
         # write their own artifacts, so persistence failure should surface there
         # rather than crashing ordinary gameplay response shaping.
+        logger.debug("suppressed error in %s", "_persist_session_best_effort", exc_info=True)
         return
 
 

@@ -59,7 +59,7 @@ class _BuiltinFakeProvider(BaseProvider):
 
 
 def test_default_parser_accepts_normalized_builtin_provider_id(monkeypatch) -> None:
-    import app.shared as shared
+    import app.agent_runtime.semantic_task_parser as semantic_task_parser
 
     provider = _BuiltinFakeProvider()
     requested: list[str] = []
@@ -69,7 +69,7 @@ def test_default_parser_accepts_normalized_builtin_provider_id(monkeypatch) -> N
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE", "off")
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "invalid")
     monkeypatch.setattr(
-        shared,
+        semantic_task_parser,
         "get_provider",
         lambda name: requested.append(name) or provider,
     )
@@ -91,7 +91,7 @@ def test_default_parser_accepts_normalized_builtin_provider_id(monkeypatch) -> N
 
 
 def test_default_parser_accepts_any_registered_base_provider(monkeypatch) -> None:
-    import app.shared as shared
+    import app.agent_runtime.semantic_task_parser as semantic_task_parser
 
     class _OpenAICompatibleFakeProvider(_BuiltinFakeProvider):
         provider_name = "openai_compatible"
@@ -101,7 +101,7 @@ def test_default_parser_accepts_any_registered_base_provider(monkeypatch) -> Non
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
     monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
     monkeypatch.setattr(
-        shared,
+        semantic_task_parser,
         "get_provider",
         lambda name: requested.append(name) or provider,
     )
@@ -117,12 +117,12 @@ def test_default_parser_accepts_any_registered_base_provider(monkeypatch) -> Non
 
 
 def test_default_parser_rejects_non_provider_registry_values(monkeypatch) -> None:
-    import app.shared as shared
+    import app.agent_runtime.semantic_task_parser as semantic_task_parser
 
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
     monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
     monkeypatch.setattr(
-        shared,
+        semantic_task_parser,
         "get_provider",
         lambda _name: SimpleNamespace(provider_name="not-a-provider"),
     )

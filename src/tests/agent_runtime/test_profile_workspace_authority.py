@@ -23,7 +23,8 @@ def test_non_workspace_profile_keeps_workspace_unset() -> None:
         workspace=None,
     )
 
-    issued = AgentRunService._prepare_workspace(spec)
+    service = AgentRunService(object(), blob_store=object())
+    issued = service._prepare_workspace(spec)
 
     assert issued.workspace is None
 

@@ -7,8 +7,8 @@ import type {
   TradingAlertTriggerPolicy,
   TradingAlertUpdateInput,
 } from './tradingTypes';
+import { emitOmnixEvent, TRADING_ALERTS_CHANGED_EVENT } from '../../events/bus';
 
-export const TRADING_ALERTS_CHANGED_EVENT = 'omnix:trading-alerts-changed';
 export const TRADING_ALERT_TRIGGER_HIGHLIGHT_MS = 15_000;
 
 export type TradingChartAlertState = 'active' | 'triggered' | 'disabled' | 'expired';
@@ -16,7 +16,7 @@ export type TradingAlertExpiration = 'never' | '1h' | '1d' | '1w';
 export type { TradingAlertNotificationChannel, TradingAlertTriggerPolicy };
 
 export function notifyTradingAlertsChanged(): void {
-  window.dispatchEvent(new CustomEvent(TRADING_ALERTS_CHANGED_EVENT));
+  emitOmnixEvent(TRADING_ALERTS_CHANGED_EVENT);
 }
 
 export function alertVisualState(alert: TradingAlert, now = Date.now()): TradingChartAlertState {
@@ -56,7 +56,7 @@ export function formatAlertThreshold(value: number | string): string {
 
 export function cooldownForTriggerPolicy(
   policy: TradingAlertTriggerPolicy,
-  interval: string,
+  interval: string | undefined,
 ): number {
   if (policy === 'once') return 31_536_000;
   if (policy === 'every_time') return 0;
@@ -77,7 +77,7 @@ export function cooldownForTriggerPolicy(
     '1w': 604_800,
     '1mo': 2_592_000,
   };
-  return intervalSeconds[interval] ?? 60;
+  return (interval && intervalSeconds[interval]) || 60;
 }
 
 export function chartAlertCreateInput(input: {

@@ -81,9 +81,11 @@ The runtime serializes connection attempts, applies reconnect backoff, tracks Ga
 
 ## Prospective acceptance
 
-Do not enable either authority flag merely because a socket connects. Keep trading parameters frozen and observe multiple live sessions. Durable session records are written under:
-
-`resources/trading/ibkr_evidence/sessions/YYYY-MM-DD.json`
+Do not enable either authority flag merely because a socket connects. Keep trading parameters frozen and observe multiple live sessions. Durable session records are kept in PostgreSQL
+(`omnix_trading_ibkr_session_evidence`, one row per session). Quote callbacks
+queue their updates and the queue is written in one transaction every 50
+events or 2 seconds, and before any read. Session files from before WP-8.3 are
+imported with `python -m app.trading.evidence_import ibkr`.
 
 Acceptance review should include:
 

@@ -1,12 +1,10 @@
-import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { FormEvent, ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgActionComposer } from './RpgActionComposer';
 import { previewSessionSummary, quickActions } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
 function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {
   return {
@@ -17,22 +15,6 @@ function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFo
   };
 }
 
-function renderWithTheme(element: ReactElement) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-        {element}
-      </MantineProvider>
-    </QueryClientProvider>
-  );
-}
 
 describe('RpgActionComposer', () => {
   afterEach(() => {
@@ -43,7 +25,7 @@ describe('RpgActionComposer', () => {
     const onQuickAction = vi.fn();
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
 
-    renderWithTheme(
+    renderWithProviders(
       <RpgActionComposer
         canSaveGame={false}
         commandRegistration={registration('command')}
@@ -71,7 +53,7 @@ describe('RpgActionComposer', () => {
   });
 
   it('renders pending and invalid states for queued turn submission', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgActionComposer
         canSaveGame={false}
         commandRegistration={registration('command')}
@@ -93,7 +75,7 @@ describe('RpgActionComposer', () => {
   });
 
   it('routes New Campaign from the launcher into the full campaign wizard', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgActionComposer
         canSaveGame={false}
         commandRegistration={registration('command')}
@@ -120,7 +102,7 @@ describe('RpgActionComposer', () => {
 
   it('saves the selected campaign from the Campaign Menu', async () => {
     const onSaveGame = vi.fn().mockResolvedValue('checkpoint:manual-save');
-    renderWithTheme(
+    renderWithProviders(
       <RpgActionComposer
         canSaveGame
         commandRegistration={registration('command')}

@@ -1,4 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
+import { api } from './api/gateway';
 
 interface LoreDocumentSummary {
   document_id: string;
@@ -169,31 +171,24 @@ function normalizedCategory(value: string): string {
   return LORE_CATEGORY_ORDER.includes(label as typeof LORE_CATEGORY_ORDER[number]) ? label : 'World Lore';
 }
 
-async function readJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) {
-    throw new Error(`Lore request failed (${response.status})`);
-  }
-  return response.json() as Promise<T>;
+type GatewayCall = Promise<{ data?: unknown; error?: unknown; response: Response }>;
+
+// The lore routes return untyped objects; T is the shape this panel reads.
+async function readLore<T>(call: GatewayCall): Promise<T> {
+  const { data, response } = await call;
+  if (!response.ok) throw new Error(`Lore request failed (${response.status})`);
+  return data as T;
 }
 
 type RuntimeLoreKind = 'creature' | 'location';
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    body: JSON.stringify(body),
-    cache: 'no-store',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    method: 'POST',
-  });
-  const payload = await response.json().catch(() => null) as { detail?: { message?: string } } | null;
+async function generateLore<T>(call: GatewayCall): Promise<T> {
+  const { data, error, response } = await call;
   if (!response.ok) {
-    throw new Error(payload?.detail?.message || `Lore generation failed (${response.status})`);
+    const detail = (error as { detail?: { message?: string } } | undefined)?.detail;
+    throw new Error(detail?.message || `Lore generation failed (${response.status})`);
   }
-  return payload as T;
+  return data as T;
 }
 
 export function RpgLorePanel({
@@ -220,7 +215,7 @@ export function RpgLorePanel({
     setSelectedId('overview');
     setError('');
     if (!sessionId) return () => { active = false; };
-    readJson<LoreResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore`)
+    readLore<LoreResponse>(api.GET('/api/rpg/sessions/{session_id}/lore', { params: { path: { session_id: sessionId } }, cache: 'no-store' }))
       .then((payload) => {
         if (!active) return;
         setLore(payload);
@@ -285,9 +280,10 @@ export function RpgLorePanel({
     setDirection('');
     setError('');
     if (!sessionId || !selectedDocumentId) return () => { active = false; };
-    readJson<{ document: LoreDocumentDetail }>(
-      `/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/document?document_id=${encodeURIComponent(selectedDocumentId)}`,
-    )
+    readLore<{ document: LoreDocumentDetail }>(api.GET('/api/rpg/sessions/{session_id}/lore/document', {
+      params: { path: { session_id: sessionId }, query: { document_id: selectedDocumentId } },
+      cache: 'no-store',
+    }))
       .then((payload) => {
         if (active) setDetail(payload.document);
       })
@@ -302,13 +298,14 @@ export function RpgLorePanel({
     setIsRegenerating(true);
     setError('');
     try {
-      const payload = await postJson<{
+      const payload = await generateLore<{
         document: LoreDocumentDetail;
         lore: LoreResponse;
-      }>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/regenerate`, {
-        document_id: selectedDocumentId,
-        direction: direction.trim(),
-      });
+      }>(api.POST('/api/rpg/sessions/{session_id}/lore/regenerate', {
+        params: { path: { session_id: sessionId } },
+        body: { document_id: selectedDocumentId, direction: direction.trim() },
+        cache: 'no-store',
+      }));
       setLore(payload.lore);
       setDetail(payload.document);
     } catch (reason: unknown) {
@@ -328,15 +325,14 @@ export function RpgLorePanel({
     setIsMaterializing(true);
     setError('');
     try {
-      const payload = await postJson<{
+      const payload = await generateLore<{
         document: LoreDocumentDetail;
         lore: LoreResponse;
-      }>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/lore/materialize`, {
-        kind,
-        name: name.trim(),
-        direction: materializationDirection.trim(),
-        document_id: documentId,
-      });
+      }>(api.POST('/api/rpg/sessions/{session_id}/lore/materialize', {
+        params: { path: { session_id: sessionId } },
+        body: { kind, name: name.trim(), direction: materializationDirection.trim(), document_id: documentId },
+        cache: 'no-store',
+      }));
       setLore(payload.lore);
       setDetail(payload.document);
       setSelectedId(payload.document.document_id);
@@ -379,7 +375,7 @@ export function RpgLorePanel({
 
   return (
     <div aria-labelledby={labelledById} className="rpg-journal-grid" id={panelId} role={role}>
-      <div className="rpg-journal-list" aria-label="Campaign Bible navigation">
+      <div role="group" className="rpg-journal-list" aria-label="Campaign Bible navigation">
         <article
           aria-pressed={selectedId === 'overview'}
           className={selectedId === 'overview' ? 'active' : undefined}

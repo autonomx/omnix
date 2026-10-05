@@ -1,12 +1,19 @@
 """Bounded local LLM classification over immutable source span IDs."""
 from __future__ import annotations
 
+import logging
+
 import json
 from collections.abc import Callable
 from typing import Any
 
 from app.providers import ChatMessage
-from app.shared import get_provider, load_settings
+from app.providers.service import get_provider
+from app.settings.access import load_settings
+
+from .structured_call import json_object_call
+
+logger = logging.getLogger(__name__)
 
 
 _SYSTEM = (
@@ -98,7 +105,7 @@ def with_classification_rules(
     return classify
 
 
-def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]] | None:
+def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict[str, Any]] | None:
     """Build a classifier from the configured Omnix chat provider.
 
     The function name is retained for compatibility with existing worker hooks,
@@ -110,6 +117,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     try:
         provider = get_provider()
     except Exception:
+        logger.debug("suppressed error in %s", "local_classifier", exc_info=True)
         return None
     if provider is None:
         return None
@@ -128,7 +136,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
         "model": configured_model, "version": "audiobook-classifier-v8",
         "reasoning_effort": reasoning_effort or None,
     }
-    def classify(context: dict[str, Any]) -> str:
+    def classify(context: dict[str, Any]) -> dict[str, Any]:
         system_prompt = (
             _STYLE_SYSTEM if context.get("task") == "discover_dialogue_style"
             else _SYSTEM
@@ -136,25 +144,22 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
         messages = [ChatMessage(role="system", content=system_prompt),
                     ChatMessage(role="user", content=json.dumps(
                         context, ensure_ascii=False, sort_keys=True))]
-        request_kwargs: dict[str, Any] = {
-            "messages": messages,
-            "stream": False,
-            "request_timeout_seconds": _CLASSIFIER_REQUEST_TIMEOUT_SECONDS,
-        }
+        options: dict[str, Any] = {}
         if context.get("task") == "discover_dialogue_style":
             # Punctuation/style discovery is a bounded structural task. Keep it
             # cheap and independent from the xhigh semantic speaker pass.
-            request_kwargs["reasoning_effort"] = "low"
+            options["reasoning_effort"] = "low"
         elif reasoning_effort:
-            request_kwargs["reasoning_effort"] = reasoning_effort
-        try:
-            response = provider.chat_completion(**request_kwargs)
-        except Exception:
-            raise
-        details["model"] = getattr(response, "model", None) or configured_model
-        content = getattr(response, "content", "")
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("classifier returned an empty response")
-        return content
+            options["reasoning_effort"] = reasoning_effort
+        value, served_model = json_object_call(
+            provider,
+            messages,
+            contract_id="audiobook.story_classification",
+            request_timeout_seconds=_CLASSIFIER_REQUEST_TIMEOUT_SECONDS,
+            options=options,
+        )
+        if served_model:
+            details["model"] = served_model
+        return value
 
     return classify, details

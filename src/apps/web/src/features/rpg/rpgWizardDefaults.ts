@@ -1,6 +1,6 @@
-import { DEFAULT_SETTINGS_DOCUMENT } from '../settings/settingsDefaults';
-import { rpgCampaignDefaults } from '../settings/moduleDefaults';
-import type { SettingsDocument } from '../settings/settingsDocumentTypes';
+import { DEFAULT_SETTINGS_DOCUMENT } from '../settings';
+import { rpgCampaignDefaults } from '../settings';
+import type { SettingsDocument } from '../settings';
 
 export type RpgWizardSystemDefaults = {
   autosave: boolean;

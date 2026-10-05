@@ -41,7 +41,7 @@ Design Rules:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 # Field name mappings: raw_field -> canonical_field
 _FIELD_MAPPINGS: Dict[str, Dict[str, str]] = {
@@ -173,91 +173,3 @@ def normalize_event(raw_event: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def normalize_batch(
-    raw_events: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """Normalize a batch of events.
-    
-    Args:
-        raw_events: List of raw event dicts.
-        
-    Returns:
-        List of normalized event dicts.
-    """
-    return [normalize_event(e) for e in raw_events]
-
-
-def enrich_event(
-    event: Dict[str, Any],
-    extras: Optional[Dict[str, Any]] = None,
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """Enrich a normalized event with additional data.
-    
-    This is useful for adding context that wasn't available at the
-    time the raw event was created.
-    
-    Args:
-        event: Normalized event dict.
-        extras: Dict of additional fields to merge.
-        **kwargs: Additional fields to set directly.
-        
-    Returns:
-        Enriched event dict (new dict, original not modified).
-    """
-    result = dict(event)
-    if extras:
-        result.update(extras)
-    result.update(kwargs)
-    return result
-
-
-def is_valid_event(event: Dict[str, Any]) -> bool:
-    """Check if an event dict meets minimum validity requirements.
-    
-    Args:
-        event: Event dict to validate.
-        
-    Returns:
-        True if event has required fields with valid types.
-    """
-    if not isinstance(event, dict):
-        return False
-    
-    # Must have a type
-    if not isinstance(event.get("type"), str):
-        return False
-    
-    # Type must not be empty
-    if not event["type"].strip():
-        return False
-    
-    # Intensity must be a number if present
-    intensity = event.get("intensity")
-    if intensity is not None and not isinstance(intensity, (int, float)):
-        return False
-    
-    # Emotions must be a dict if present
-    emotions = event.get("emotions")
-    if emotions is not None and not isinstance(emotions, dict):
-        return False
-    
-    return True
-
-
-def get_event_signature(event: Dict[str, Any]) -> str:
-    """Get a unique signature string for an event.
-    
-    Useful for de-duplication and tracking.
-    
-    Args:
-        event: Event dict.
-        
-    Returns:
-        Signature string in format "type:actor->target".
-    """
-    event_type = event.get("type", "unknown")
-    actor = str(event.get("actor", "?"))
-    target = str(event.get("target", "?"))
-    
-    return f"{event_type}:{actor}->{target}"

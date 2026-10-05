@@ -141,14 +141,6 @@ class Scene:
             self.completed = True
         return self.completed
         
-    def update_participants(self, participants: Set[str]) -> None:
-        """Update scene participants.
-        
-        Args:
-            participants: New set of participant entity IDs.
-        """
-        self.participants = participants
-        
     def add_participant(self, entity_id: str) -> None:
         """Add a participant to the scene.
         
@@ -157,88 +149,10 @@ class Scene:
         """
         self.participants.add(entity_id)
         
-    def remove_participant(self, entity_id: str) -> None:
-        """Remove a participant from the scene.
-        
-        Args:
-            entity_id: Entity ID to remove.
-        """
-        self.participants.discard(entity_id)
-        
     # =========================================================
     # PATCH 6: SCENE CONSTRAINTS (actions limited by scene context)
     # =========================================================
     
-    def get_allowed_actions(self) -> List[str]:
-        """Get list of action types allowed in this scene.
-        
-        Scenes constrain what actions are available based on their
-        goal and context. This prevents inappropriate actions
-        from being taken in certain contexts.
-        
-        Returns:
-            List of allowed action type strings.
-        """
-        # Default: all actions allowed
-        allowed = ["attack", "defend", "move", "speak", "wander", 
-                   "observe", "flee", "heal"]
-                   
-        # Stealth scenes restrict violent actions
-        if "stealth" in self.tags or "stealth" in self.goal.lower():
-            allowed = ["move", "hide", "observe", "speak"]
-            
-        # Combat scenes restrict non-combat actions
-        elif "combat" in self.tags or "combat" in self.goal.lower():
-            allowed = ["attack", "defend", "flee", "heal"]
-            
-        # Social scenes restrict aggressive actions
-        elif "social" in self.tags or "dialogue" in self.goal.lower():
-            allowed = ["speak", "observe", "persuade"]
-            
-        # Exploration scenes restrict combat
-        elif "explore" in self.tags or "explore" in self.goal.lower():
-            allowed = ["move", "observe", "pick_up"]
-            
-        return allowed
-        
-    def is_action_allowed(self, action_type: str) -> bool:
-        """Check if a specific action is allowed in this scene.
-        
-        Args:
-            action_type: Action type to check.
-            
-        Returns:
-            True if action is allowed.
-        """
-        allowed = self.get_allowed_actions()
-        
-        # Wildcard allows everything
-        if "*" in allowed:
-            return True
-            
-        return action_type in allowed
-        
-    def filter_actions(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter a list of actions to only include allowed ones.
-        
-        Args:
-            actions: List of action dicts.
-            
-        Returns:
-            Filtered list of only allowed actions.
-        """
-        if not actions:
-            return []
-            
-        allowed = self.get_allowed_actions()
-        if "*" in allowed:
-            return actions
-            
-        return [
-            action for action in actions
-            if action.get("action") in allowed
-        ]
-        
     def to_dict(self) -> Dict[str, Any]:
         """Serialize scene to dict.
         
@@ -341,85 +255,6 @@ class SceneManager:
         
         return self.current_scene
         
-    def new_scene_from_events(
-        self,
-        events: List[Dict[str, Any]],
-        default_participants: Optional[Set[str]] = None,
-    ) -> Optional[Scene]:
-        """Create a scene inferred from recent events.
-        
-        Analyzes events to determine a natural scene goal
-        and participants.
-        
-        Args:
-            events: Recent events to analyze.
-            default_participants: Fallback participants.
-            
-        Returns:
-            New Scene, or None if no scene can be inferred.
-        """
-        if not events:
-            return None
-            
-        # Extract participants from events
-        participants: Set[str] = default_participants or set()
-        for event in events:
-            for key in ("source", "target", "actor", "speaker", "entity"):
-                val = event.get(key, "")
-                if val and isinstance(val, str):
-                    participants.add(val)
-                    
-        # Determine scene goal from event patterns
-        goal = self._infer_goal_from_events(events)
-        
-        # Determine tags
-        tags = self._extract_event_types(events)
-        
-        return self.new_scene(
-            goal=goal,
-            participants=participants,
-            tags=tags,
-        )
-        
-    def _infer_goal_from_events(self, events: List[Dict[str, Any]]) -> str:
-        """Infer a scene goal from event patterns.
-        
-        Args:
-            events: Events to analyze.
-            
-        Returns:
-            Inferred goal string.
-        """
-        event_types = set(e.get("type", "") for e in events)
-        
-        if "death" in event_types or "damage" in event_types:
-            return "Survive the encounter"
-        elif "speak" in event_types:
-            return "Navigate the conversation"
-        elif "move" in event_types:
-            return "Reach the destination"
-        elif "story_event" in event_types:
-            summaries = [e.get("summary", "") for e in events if e.get("type") == "story_event"]
-            if summaries:
-                return summaries[-1][:100]  # Use last story event summary
-        return "Progress the story"
-        
-    def _extract_event_types(self, events: List[Dict[str, Any]]) -> List[str]:
-        """Extract unique event types from events list.
-        
-        Args:
-            events: Events to analyze.
-            
-        Returns:
-            List of event type strings.
-        """
-        types = set()
-        for event in events:
-            etype = event.get("type", "")
-            if etype:
-                types.add(etype)
-        return list(types)
-        
     def update_scene(self, events: List[Dict[str, Any]]) -> None:
         """Feed events to current scene for progress tracking.
         
@@ -439,16 +274,6 @@ class SceneManager:
                 if val:
                     self.current_scene.add_participant(val)
                     
-    def is_scene_complete(self) -> bool:
-        """Check if current scene has completed.
-        
-        Returns:
-            True if scene should transition.
-        """
-        if not self.current_scene:
-            return False
-        return self.current_scene.is_complete()
-        
     def advance_scene(
         self,
         new_goal: str = "",
@@ -516,59 +341,6 @@ class SceneManager:
             "tags": tags or [],
             "max_progress": max_progress,
         }
-        
-    def create_from_template(
-        self,
-        name: str,
-        participants: Optional[Set[str]] = None,
-    ) -> Optional[Scene]:
-        """Create a scene from a registered template.
-        
-        Args:
-            name: Template name.
-            participants: Scene participants.
-            
-        Returns:
-            New Scene, or None if template not found.
-        """
-        template = self.scene_templates.get(name)
-        if not template:
-            return None
-            
-        return self.new_scene(
-            goal=template["goal"],
-            participants=participants,
-            tags=template["tags"],
-            max_progress=template["max_progress"],
-        )
-        
-    def get_completed_scenes(self) -> List[Scene]:
-        """Get all completed scenes from history.
-        
-        Returns:
-            List of completed Scene objects.
-        """
-        completed = []
-        for scene in self.scene_history:
-            if scene.completed:
-                completed.append(scene)
-        if self.current_scene and self.current_scene.completed:
-            completed.append(self.current_scene)
-        return completed
-        
-    def get_recent_scenes(self, count: int = 5) -> List[Scene]:
-        """Get most recent scenes (including current).
-        
-        Args:
-            count: Number of scenes to return.
-            
-        Returns:
-            List of recent Scene objects.
-        """
-        scenes = list(self.scene_history[-count:])
-        if self.current_scene:
-            scenes.append(self.current_scene)
-        return scenes[-count:]
         
     def get_scene_summary(self) -> str:
         """Get human-readable scene status summary.

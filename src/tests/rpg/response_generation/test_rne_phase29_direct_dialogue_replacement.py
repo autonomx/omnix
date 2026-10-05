@@ -425,20 +425,3 @@ def test_group_dialogue_plans_one_provider_authored_block_per_speaker(
     ]
     assert result["dialogue_quality"]["repaired"] is False
     assert "speaking plainly" not in result["visible_response"]["plain_text"].casefold()
-
-
-def test_production_sources_no_longer_use_dialogue_monkey_patch_or_legacy_line_writer() -> None:
-    gateway = (
-        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
-    ).read_text(encoding="utf-8")
-    bridge = (
-        ROOT / "src" / "app" / "rpg" / "session" / "narrative_engine_bridge.py"
-    ).read_text(encoding="utf-8")
-    first_call = (
-        ROOT / "src" / "app" / "rpg" / "session" / "first_call_dialogue.py"
-    ).read_text(encoding="utf-8")
-    assert "install_interactive_direct_dialogue_cutover" not in gateway
-    assert "_GroundedDialogueWriter" not in bridge
-    assert "narrative_engine_grounded_dialogue" not in bridge
-    assert "canonicalize_direct_dialogue_result" in first_call
-    assert "legacy_visible_response_ignored" in first_call

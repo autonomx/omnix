@@ -43,6 +43,9 @@ from .runtime_narration_provider import (
     _safe_child_objects as _safe_child_objects,
     _try_provider_call as _try_provider_call,
 )
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narration_runtime_narration_legacy.prompt', "1", '\nProduce structured RPG narration for a completed deterministic turn.\n\nAuthoritative compact turn contract:\n{v0}\n\nCompact state snapshot:\n{v1}\n\nOnly use the compact turn contract and compact state snapshot as authoritative truth.\nIf something is omitted, do not invent it.\n\nDo not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.\n\nHIGH-RISK GROUNDING RULES:\n- The simulation/turn_contract is the only source of truth.\n- You are presentation only. You cannot grant rewards, create combat results, move the player, complete quests, or reveal hidden facts.\n- Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.\n- Travel/location rule: You may say the player arrives at, travels to, enters, or leaves a location only when the authoritative turn contract contains state_delta.location_changed=true or result.travel_result.ok=true. Use result.travel_result.from_location_name and to_location_name for travel narration. If travel_result.ok=false, explain that the route is unavailable and mention available_routes only if present. Do not invent roads, locations, shortcuts, travel time, danger, or arrival unless present in the contract.\n- If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.\n- The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.\n\nUNSUPPORTED DEBT CLAIM SPECIAL CASE:\nIf the player says the NPC owes them money and the compact turn contract does not explicitly authorize a payment/debt/currency_delta/reward:\n- primary.npc.line must clearly refuse.\n- safe_fallback.npc.line must clearly refuse.\n- safe_fallback must not ask a question.\n- safe_fallback must not be ambiguous.\n- safe_fallback should say: "No. I do not owe you coin."\n\nThis is intentionally redundant. The fake-debt case is important enough to over-specify.\n\nRepair context, if any:\n{v2}\n\n{v3}\n')
 
 RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
 RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
@@ -607,43 +610,7 @@ def build_provider_narration_payload(
             limit=1200,
         )
 
-    prompt = f"""
-Produce structured RPG narration for a completed deterministic turn.
-
-Authoritative compact turn contract:
-{turn_contract_json}
-
-Compact state snapshot:
-{simulation_state_json}
-
-Only use the compact turn contract and compact state snapshot as authoritative truth.
-If something is omitted, do not invent it.
-
-Do not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.
-
-HIGH-RISK GROUNDING RULES:
-- The simulation/turn_contract is the only source of truth.
-- You are presentation only. You cannot grant rewards, create combat results, move the player, complete quests, or reveal hidden facts.
-- Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.
-- Travel/location rule: You may say the player arrives at, travels to, enters, or leaves a location only when the authoritative turn contract contains state_delta.location_changed=true or result.travel_result.ok=true. Use result.travel_result.from_location_name and to_location_name for travel narration. If travel_result.ok=false, explain that the route is unavailable and mention available_routes only if present. Do not invent roads, locations, shortcuts, travel time, danger, or arrival unless present in the contract.
-- If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.
-- The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.
-
-UNSUPPORTED DEBT CLAIM SPECIAL CASE:
-If the player says the NPC owes them money and the compact turn contract does not explicitly authorize a payment/debt/currency_delta/reward:
-- primary.npc.line must clearly refuse.
-- safe_fallback.npc.line must clearly refuse.
-- safe_fallback must not ask a question.
-- safe_fallback must not be ambiguous.
-- safe_fallback should say: "No. I do not owe you coin."
-
-This is intentionally redundant. The fake-debt case is important enough to over-specify.
-
-Repair context, if any:
-{repair_context_json}
-
-{_runtime_narration_candidate_schema_text()}
-"""
+    prompt = _PROMPT_1.format(v0=(turn_contract_json), v1=(simulation_state_json), v2=(repair_context_json), v3=(_runtime_narration_candidate_schema_text()))
     call_result = _call_provider_text_with_diagnostics(
         provider,
         json.dumps(prompt, ensure_ascii=False),

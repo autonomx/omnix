@@ -1,52 +1,38 @@
 import { Button, PasswordInput, Progress, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
+import type { components } from './api/generated';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { api } from './api/gateway';
 
-export interface ImageLocalModelStatus {
-  ok?: boolean;
-  exists?: boolean;
-  complete?: boolean;
-  missing?: string[];
-  local_dir?: string;
-  repo_id?: string;
-  gated?: boolean;
-  license?: string;
-}
+export type ImageLocalModelStatus = components['schemas']['ImageModelLocalStatus'];
+export type ImageDownloadProgress = components['schemas']['ImageModelDownloadProgress'];
+type ImageModelEntry = components['schemas']['ImageModelEntry'];
+type ImageModelStatusResponse = components['schemas']['ImageModelStatusResponse'];
+type ModelIdentity = { provider: string; model: string; loaded: boolean; state: string };
 
-export interface ImageDownloadProgress {
-  status: string;
-  bytes_downloaded: number;
-  bytes_total: number;
-  percent?: number | null;
-  indeterminate?: boolean;
-}
+/** A model as the selector shows it; the status routes drop unset fields, so identity and state are filled in. */
+// An intersection, not Omit: the models allow extra fields, and Omit over their index signature drops every named field.
+export type ImageModelRecord = ImageModelEntry & ModelIdentity;
 
-export interface ImageModelRecord {
-  key?: string;
-  provider: string;
-  label?: string;
-  model: string;
-  loaded: boolean;
-  state: 'loaded' | 'unloaded' | 'downloading' | 'loading' | 'unloading' | string;
-  downloaded?: boolean;
-  supports_download?: boolean;
-  supports_image_to_image?: boolean;
-  repo_id?: string;
-  gated?: boolean;
-  license?: string;
-  minimum_diffusers?: string;
-  minimum_torch?: string;
-  local_model?: ImageLocalModelStatus;
-  download_progress?: ImageDownloadProgress;
-}
-
-export interface ImageModelStatusPayload extends ImageModelRecord {
-  ok: boolean;
-  service: string;
-  enabled: boolean;
-  explicit_load_required?: boolean;
+/** The image service status as the selector shows it. */
+export type ImageModelStatusView = ImageModelStatusResponse & ModelIdentity & {
   models?: ImageModelRecord[];
-  error?: string;
+};
+
+export function toImageModelRecord(entry: ImageModelEntry): ImageModelRecord {
+  const provider = entry.provider ?? entry.key ?? '';
+  return {
+    ...entry,
+    provider,
+    model: entry.model ?? entry.label ?? provider,
+    loaded: entry.loaded === true,
+    state: entry.state ?? (entry.loaded ? 'loaded' : 'unloaded'),
+  };
+}
+
+export function toImageModelStatusView(status: ImageModelStatusResponse): ImageModelStatusView {
+  return { ...status, ...toImageModelRecord(status), models: status.models?.map(toImageModelRecord) };
 }
 
 export type ImageModelAction = {
@@ -55,7 +41,7 @@ export type ImageModelAction = {
 } | null;
 
 interface ImageModelControlProps {
-  status?: ImageModelStatusPayload;
+  status?: ImageModelStatusView;
   selectedProvider: string;
   statusLoading: boolean;
   action: ImageModelAction;
@@ -74,16 +60,17 @@ const FALLBACK_MODELS: ImageModelRecord[] = [
 ];
 
 export function selectedImageModel(
-  status: ImageModelStatusPayload | undefined,
+  status: ImageModelStatusView | undefined,
   selectedProvider: string,
 ): ImageModelRecord | undefined {
   if (status?.provider === selectedProvider) return status;
-  return status?.models?.find((model) => model.provider === selectedProvider || model.key === selectedProvider);
+  const models: ImageModelRecord[] = status?.models ?? [];
+  return models.find((model) => model.provider === selectedProvider || model.key === selectedProvider);
 }
 
-function imageModelOptions(status: ImageModelStatusPayload | undefined): ImageModelRecord[] {
-  if (status?.models?.length) return status.models;
-  return FALLBACK_MODELS;
+function imageModelOptions(status: ImageModelStatusView | undefined): ImageModelRecord[] {
+  const models: ImageModelRecord[] = status?.models ?? [];
+  return models.length ? models : FALLBACK_MODELS;
 }
 
 async function responseError(response: Response): Promise<string> {
@@ -112,10 +99,10 @@ function formatBytes(value: number): string {
 }
 
 function progressFromPayload(
-  payload: ImageModelStatusPayload,
+  payload: ImageModelStatusView,
   provider: string,
 ): ImageDownloadProgress | undefined {
-  return selectedImageModel(payload, provider)?.download_progress ?? payload.download_progress;
+  return selectedImageModel(payload, provider)?.download_progress ?? payload.download_progress ?? undefined;
 }
 
 export function ImageModelControl({
@@ -140,7 +127,7 @@ export function ImageModelControl({
   const selectedAction = action?.provider === selectedProvider ? action.type : null;
   const serviceUnavailable = Boolean(status && (status.error || status.state === 'unavailable'));
   const serviceReady = Boolean(status && status.enabled && !serviceUnavailable);
-  const downloadProgress = polledDownloadProgress ?? selected?.download_progress ?? status?.download_progress;
+  const downloadProgress = polledDownloadProgress ?? selected?.download_progress ?? status?.download_progress ?? undefined;
   const downloading = selectedAction === 'download' || selected?.state === 'downloading';
   const state = serviceStarting
     ? 'starting service'
@@ -185,12 +172,9 @@ export function ImageModelControl({
     let disposed = false;
     const poll = async () => {
       try {
-        const response = await fetch(
-          `/api/image-generation/model/status?provider=${encodeURIComponent(selectedProvider)}`,
-        );
-        if (!response.ok) return;
-        const payload = await response.json() as ImageModelStatusPayload;
-        const progress = progressFromPayload(payload, selectedProvider);
+        const { data, response } = await api.GET('/api/image-generation/model/status', { params: { query: { provider: selectedProvider } } });
+        if (!response.ok || !data) return;
+        const progress = progressFromPayload(toImageModelStatusView(data), selectedProvider);
         if (!disposed && progress) setPolledDownloadProgress(progress);
       } catch {
         // Keep the last known progress while a transient status poll fails.
@@ -198,10 +182,10 @@ export function ImageModelControl({
     };
 
     void poll();
-    const timer = window.setInterval(() => void poll(), 750);
+    const stopPolling = startPolling(poll, POLL_INTERVALS_MS.imageModelLoad);
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [selectedAction, selectedProvider]);
 
@@ -209,11 +193,7 @@ export function ImageModelControl({
     setServiceStarting(true);
     setServiceStartError('');
     try {
-      const response = await fetch('/api/image-generation/service/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: selectedProvider }),
-      });
+      const { response } = await api.POST('/api/image-generation/service/start', { body: { provider: selectedProvider } });
       if (!response.ok) throw new Error(await responseError(response));
       return true;
     } catch (startError) {
@@ -263,7 +243,7 @@ export function ImageModelControl({
                 onChange={(event) => onSelect(event.currentTarget.value)}
               >
                 {imageModelOptions(status).map((model) => (
-                  <option key={model.provider || model.key} value={model.provider || model.key}>
+                  <option key={model.provider} value={model.provider}>
                     {model.model || model.label || model.provider}
                   </option>
                 ))}
@@ -284,7 +264,7 @@ export function ImageModelControl({
           <OmnixStatusPill>{state}</OmnixStatusPill>
         </div>
         {downloading ? (
-          <div aria-label="Model download progress">
+          <div role="group" aria-label="Model download progress">
             <Progress
               animated
               aria-label="Model download progress bar"
@@ -362,7 +342,7 @@ export function ImageModelControl({
 }
 
 export function imageModelGenerationBlockReason(
-  status: ImageModelStatusPayload | undefined,
+  status: ImageModelStatusView | undefined,
   selectedProvider: string,
   statusLoading: boolean,
   statusError: boolean,

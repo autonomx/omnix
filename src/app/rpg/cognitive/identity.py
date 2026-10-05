@@ -261,17 +261,6 @@ class IdentitySystem:
         
         return self.identities[character_id]
     
-    def get_identity(self, character_id: str) -> Optional[CharacterIdentity]:
-        """Get an identity by character ID.
-        
-        Args:
-            character_id: Character identifier.
-            
-        Returns:
-            CharacterIdentity, or None if not found.
-        """
-        return self.identities.get(character_id)
-    
     def set_fame(self, character_id: str, fame: float) -> None:
         """Set a character's fame level.
         
@@ -479,28 +468,6 @@ class IdentitySystem:
         identity.relationships[other_id] = new_value
         return new_value
     
-    def get_reputation_summary(
-        self,
-        character_id: str,
-    ) -> Dict[str, Any]:
-        """Get summary of character's social standing.
-        
-        Args:
-            character_id: Character identifier.
-            
-        Returns:
-            Summary dict with reputation, fame, rumors.
-        """
-        identity = self.identities.get(character_id)
-        if identity is None:
-            return {"fame": 0.0, "reputation": {}, "rumors": []}
-        
-        return {
-            "fame": identity.fame,
-            "reputation": dict(identity.reputation),
-            "rumors": self.get_rumors_for(character_id),
-        }
-    
     def tick_update(self) -> Dict[str, int]:
         """Perform periodic identity updates (call each tick).
         
@@ -523,17 +490,6 @@ class IdentitySystem:
                 updates["fame_decayed"] += 1
         
         return updates
-    
-    def remove_identity(self, character_id: str) -> Optional[CharacterIdentity]:
-        """Remove a character's identity.
-        
-        Args:
-            character_id: Character identifier.
-            
-        Returns:
-            Removed identity, or None if not found.
-        """
-        return self.identities.pop(character_id, None)
     
     def get_stats(self) -> Dict[str, Any]:
         """Get system statistics.

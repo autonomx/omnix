@@ -12,15 +12,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .models import MemoryCandidate, MemoryRecord, MemorySnapshot
-
-
-class MemoryConflictError(RuntimeError):
-    """Raised when an optimistic revision or pending-state check fails."""
-
-
-class MemoryNotFoundError(KeyError):
-    """Raised when a requested memory entity does not exist."""
+from app.memory_contracts import (
+    MemoryCandidate,
+    MemoryConflictError,
+    MemoryNotFoundError,
+    MemoryRecord,
+    MemorySnapshot,
+)
+from app.runtime.pagination import bounded_count
 
 
 def default_memory_db_path() -> Path:
@@ -88,7 +87,7 @@ class InMemoryMemoryRepository:
             ]
             values.sort(key=lambda item: (not item.pinned, item.updated_at, item.id))
             start = max(0, int(offset))
-            return deepcopy(values[start : start + max(0, min(int(limit), 500))])
+            return deepcopy(values[start : start + bounded_count(limit, maximum=10_000)])
 
     def update_record(self, record: MemoryRecord, *, expected_revision: int) -> MemoryRecord:
         with self._state.lock:
@@ -148,11 +147,12 @@ class InMemoryMemoryRepository:
             value = self._state.candidates.get(candidate_id)
             return deepcopy(value) if value is not None else None
 
-    def list_candidates(self, *, status: str = "pending", limit: int = 100) -> list[MemoryCandidate]:
+    def list_candidates(self, *, status: str = "pending", limit: int = 100, offset: int = 0) -> list[MemoryCandidate]:
         with self._state.lock:
             values = [item for item in self._state.candidates.values() if item.status == status]
             values.sort(key=lambda item: (item.created_at, item.id))
-            return deepcopy(values[: max(0, min(int(limit), 500))])
+            start = max(0, int(offset))
+            return deepcopy(values[start : start + bounded_count(limit, maximum=10_000)])
 
     def reject_candidate(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
         return self._resolve_candidate(candidate_id, "rejected", resolved_at)
@@ -199,6 +199,19 @@ class InMemoryMemoryRepository:
                 "revision": record.revision,
             })
             return deepcopy(record)
+
+    def mark_candidate_accepted(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
+        """Accept a pending candidate whose record was stored elsewhere (Memory v2)."""
+        return self._resolve_candidate(candidate_id, "accepted", resolved_at)
+
+    def delete_snapshot_items_for_record(self, record_id: str) -> int:
+        with self._state.lock:
+            removed = 0
+            for key, snapshot in list(self._state.snapshots.items()):
+                kept = [item for item in snapshot.items if item.memory_record_id != record_id]
+                removed += len(snapshot.items) - len(kept)
+                self._state.snapshots[key] = snapshot.model_copy(update={"items": kept})
+            return removed
 
     def create_snapshot(self, snapshot: MemorySnapshot) -> MemorySnapshot:
         with self._state.lock:

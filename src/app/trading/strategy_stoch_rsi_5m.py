@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
@@ -30,11 +29,11 @@ from .market_data_recovery import detect_session_gaps, latest_clean_bars
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 _SOURCE_INTERVAL_MINUTES = {"1m": 1, "5m": 5}
 _EMA_PERIOD = 5
 _STOCH_RSI_MIDLINE_EXIT_THRESHOLD = Decimal("80")
@@ -137,7 +136,7 @@ def _regular_bars(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketB
             and bar.session == "regular"
             and _REGULAR_OPEN
             <= bar.start_time.astimezone(_ET).time()
-            < _REGULAR_CLOSE
+            < regular_close_time(bar.start_time.astimezone(_ET).date())
         ),
         key=lambda bar: bar.start_time,
     )

@@ -17,7 +17,6 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Literal, Mapping, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,8 +25,8 @@ from .strategy_leader_momentum_diagnostics import (
     LeaderMomentumCohortObservation,
     LeaderMomentumDiagnosticTrace,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 ControlUniverseScope = Literal["observable_scanner", "discovered_candidates"]
 
 

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fixture } from '../../test/fixture';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tradingApi } from './tradingApi';
 import type { BarsResponse, CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
@@ -60,7 +61,7 @@ describe('TradingWatchlist add symbol', () => {
     } as TradingDocument;
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([persisted]);
     const update = vi.spyOn(tradingApi, 'updateDocument');
-    vi.spyOn(tradingApi, 'quote').mockResolvedValue({ price: '100' });
+    vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '100' }));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [],
       binding: { supported_intervals: ['1m'] },
@@ -82,7 +83,7 @@ describe('TradingWatchlist add symbol', () => {
 
   it('keeps the toolbar plus enabled when the active symbol is already listed and opens the symbol picker', async () => {
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([record]);
-    vi.spyOn(tradingApi, 'quote').mockResolvedValue({ price: '100' });
+    vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '100' }));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [],
       binding: { supported_intervals: ['1m'] },
@@ -115,7 +116,7 @@ describe('TradingWatchlist add symbol', () => {
       },
     } as TradingDocument;
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([otcRecord]);
-    const quote = vi.spyOn(tradingApi, 'quote').mockResolvedValue({ price: '0.008' });
+    const quote = vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '0.008' }));
     const bars = vi.spyOn(tradingApi, 'bars');
 
     render(
@@ -144,8 +145,8 @@ describe('TradingWatchlist add symbol', () => {
     });
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([record]);
     vi.spyOn(tradingApi, 'quote')
-      .mockResolvedValueOnce({ price: '100' })
-      .mockImplementationOnce(() => refreshQuote);
+      .mockResolvedValueOnce(fixture({ price: '100' }))
+      .mockImplementationOnce(() => refreshQuote.then((quote) => fixture(quote)));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [{ open: '100', close: '100', start_time: '2026-01-01T00:00:00Z' }],
       binding: { supported_intervals: ['1m', '5m'] },
@@ -186,7 +187,7 @@ describe('TradingWatchlist add symbol', () => {
       },
     } as TradingDocument;
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([orderedRecord]);
-    vi.spyOn(tradingApi, 'quote').mockResolvedValue({ price: '100' });
+    vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '100' }));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [],
       binding: { supported_intervals: ['1m'] },
@@ -230,9 +231,9 @@ describe('TradingWatchlist add symbol', () => {
       },
     } as TradingDocument;
     vi.spyOn(tradingApi, 'documents').mockResolvedValue([sortableRecord]);
-    vi.spyOn(tradingApi, 'quote').mockImplementation(async (instrumentId) => ({
+    vi.spyOn(tradingApi, 'quote').mockImplementation(async (instrumentId) => fixture(({
       price: instrumentId === gameStop.instrument_id ? '90' : '110',
-    }));
+    })));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [{ open: '100', close: '100', start_time: '2026-01-01T00:00:00Z' }],
       binding: { supported_intervals: ['1m'] },
@@ -280,7 +281,7 @@ describe('TradingWatchlist add symbol', () => {
       .mockResolvedValueOnce([twoSymbolRecord])
       .mockResolvedValueOnce([twoSymbolRecord])
       .mockResolvedValueOnce([twoSymbolRecord]);
-    vi.spyOn(tradingApi, 'quote').mockResolvedValue({ price: '100' });
+    vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '100' }));
     vi.spyOn(tradingApi, 'bars').mockResolvedValue({
       bars: [],
       binding: { supported_intervals: ['1m'] },

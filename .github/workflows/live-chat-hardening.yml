@@ -3,8 +3,30 @@ name: Live Chat hardening gates
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "src/app/chat/**"
+      - "src/app/live_voice/**"
+      - "src/app/assistant_memory/**"
+      - "src/app/agent_runtime/**"
+      - "src/tests/app/test_live_chat_*.py"
+      - "src/tests/app/test_live_voice_*.py"
+      - "src/tests/agent_runtime/**"
+      - "src/tests/e2e/test_live_voice_api.py"
+      - "src/apps/web/src/features/assistant/workspace/**"
+      - ".github/workflows/live-chat-hardening.yml"
   push:
     branches: [main]
+    paths:
+      - "src/app/chat/**"
+      - "src/app/live_voice/**"
+      - "src/app/assistant_memory/**"
+      - "src/app/agent_runtime/**"
+      - "src/tests/app/test_live_chat_*.py"
+      - "src/tests/app/test_live_voice_*.py"
+      - "src/tests/agent_runtime/**"
+      - "src/tests/e2e/test_live_voice_api.py"
+      - "src/apps/web/src/features/assistant/workspace/**"
+      - ".github/workflows/live-chat-hardening.yml"
   workflow_dispatch:
 
 permissions:
@@ -17,6 +39,8 @@ jobs:
     timeout-minutes: 20
     env:
       PYTHONPATH: src
+      OMNIX_ALLOWED_HOSTS: testserver
+      OMNIX_ALLOWED_ORIGINS: http://testserver
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -24,7 +48,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
 
       - name: Set up Node
@@ -34,11 +58,9 @@ jobs:
 
       - name: Install Python test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx numpy pydantic requests python-multipart playwright
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
 
       - name: Ruff Live Chat hardening modules
         run: |
@@ -67,32 +89,30 @@ jobs:
             src/app/desktop_companion/context.py \
             src/app/desktop_companion/memory_bridge.py \
             src/app/desktop_companion/routes.py \
-            src/app/gateway/blocking_route_offload.py \
-            src/app/gateway/content_free_diagnostics.py \
+            src/app/observability/content_free_diagnostics.py \
             src/app/gateway/event_loop_lag_monitor.py \
-            src/app/gateway/live_chat_companion_context.py \
-            src/app/gateway/live_chat_live_voice_profile.py \
-            src/app/gateway/live_chat_low_latency_stream.py \
-            src/app/gateway/live_chat_postgres_fast_path.py \
-            src/app/gateway/live_chat_provider_metrics.py \
-            src/app/gateway/live_chat_provider_routing.py \
-            src/app/gateway/live_chat_stream_retry.py \
-            src/app/gateway/live_material_context.py \
-            src/app/gateway/live_observation_generation.py \
-            src/app/gateway/live_voice_cue_asset_routes.py \
-            src/app/gateway/live_voice_runtime_offload.py \
-            src/app/gateway/live_voice_release_gate.py \
-            src/app/gateway/live_chat_release_gate.py \
-            src/app/gateway/live_chat_release_aggregation.py \
-            src/app/gateway/live_chat_evaluation_store.py \
-            src/app/gateway/live_chat_evaluation_routes.py \
-            src/app/gateway/live_voice_diagnostics_routes.py \
-            src/app/gateway/memory_job_offload.py \
-            src/app/gateway/tts_live_call_websocket.py \
-            src/app/gateway/tts_stream_contract.py \
-            src/app/gateway/tts_stream_diagnostics.py \
-            src/app/persistence/chat_compat.py \
-            src/app/persistence/chat_runtime_compat.py \
+            src/app/live_voice/prompt/companion_context.py \
+            src/app/live_voice/prompt/profile.py \
+            src/app/live_voice/llm/stream.py \
+            src/app/live_voice/llm/metrics.py \
+            src/app/live_voice/llm/routing.py \
+            src/app/live_voice/llm/retry.py \
+            src/app/chat/live_material_context.py \
+            src/app/chat/live_observation_generation.py \
+            src/app/live_voice/transport/cue_asset_routes.py \
+            src/app/live_voice/speech/runtime_offload.py \
+            src/app/live_voice/release_gate.py \
+            src/app/chat/live_chat_release_gate.py \
+            src/app/chat/live_chat_release_aggregation.py \
+            src/app/chat/evaluation_store.py \
+            src/app/chat/live_chat_evaluation_routes.py \
+            src/app/live_voice/transport/diagnostics_routes.py \
+            src/app/assistant_memory/jobs.py \
+            src/app/live_voice/transport/websocket.py \
+            src/app/conversation/tts_stream_contract.py \
+            src/app/observability/tts_stream_diagnostics.py \
+            src/app/chat/persistence/chat_store.py \
+            src/app/chat/persistence/chat_runtime.py \
             src/app/providers/lmstudio_provider.py \
             src/app/providers/stt_live_runtime_support.py \
             src/app/providers/stt_live_websocket.py \
@@ -101,26 +121,26 @@ jobs:
             src/parakeet_stt_runtime.py \
             src/parakeet_stt_server.py \
             src/tests/app/test_chat_response_metrics.py \
-            src/tests/app/test_desktop_companion_identity_api.py \
-            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/desktop_companion/test_desktop_companion_identity_api.py \
+            src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
             src/tests/app/test_live_chat_live_voice_profile.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
-            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/chat/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
             src/tests/app/test_live_full_duplex_acceptance.py \
             src/tests/app/test_live_material_context.py \
             src/tests/app/test_live_observation_generation.py \
-            src/tests/app/test_live_voice_runtime_offload.py \
-            src/tests/app/test_live_voice_release_gate.py \
-            src/tests/app/test_live_chat_release_gate.py \
-            src/tests/app/test_live_chat_release_completion.py \
-            src/tests/app/test_live_chat_evaluation_store.py \
+            src/tests/live_voice/test_live_voice_runtime_offload.py \
+            src/tests/live_voice/test_live_voice_release_gate.py \
+            src/tests/chat/test_live_chat_release_gate.py \
+            src/tests/chat/test_live_chat_release_completion.py \
+            src/tests/chat/test_live_chat_evaluation_store.py \
             src/tests/app/test_live_chat_authoritative_state_source.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
-            src/tests/app/test_memory_job_offload.py \
+            src/tests/assistant_memory/test_memory_job_offload.py \
             src/tests/app/test_tts_stream_contract_performance.py \
             src/tests/app/test_stt_streaming_audio.py \
             src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
@@ -142,17 +162,17 @@ jobs:
       - name: Existing live voice release-gate regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/app/test_live_voice_release_gate.py -q --tb=short \
+          python -m pytest src/tests/live_voice/test_live_voice_release_gate.py -q --tb=short \
             2>&1 | tee live-voice-release-gate-output.txt
 
       - name: Live TTS response-onset regression
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
-            src/tests/app/test_live_voice_runtime_offload.py \
+            src/tests/live_voice/test_live_voice_runtime_offload.py \
             src/tests/app/test_gateway_tts_live_call_websocket.py \
             src/tests/app/test_gateway_tts_live_call_latency.py \
             src/tests/app/test_tts_stream_contract_performance.py \
@@ -176,7 +196,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_memory_job_offload.py \
+            src/tests/assistant_memory/test_memory_job_offload.py \
             src/tests/unit/assistant_memory/test_companion_completion_acceptance.py \
             src/tests/unit/assistant_memory/test_companion_context.py \
             src/tests/unit/assistant_memory/test_companion_controls.py \
@@ -194,7 +214,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_desktop_companion_identity_api.py \
+            src/tests/desktop_companion/test_desktop_companion_identity_api.py \
             src/tests/unit/chat/test_live_conversation_proactive_ambient.py \
             src/tests/unit/desktop_companion/test_context.py \
             src/tests/unit/desktop_companion/test_memory_bridge.py \
@@ -208,11 +228,11 @@ jobs:
             src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_live_chat_live_voice_profile.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
-            src/tests/app/test_live_chat_postgres_fast_path.py \
+            src/tests/chat/test_live_chat_postgres_fast_path.py \
             src/tests/app/test_live_chat_provider_routing.py \
             src/tests/app/test_live_chat_stream_retry.py \
-            src/tests/app/test_live_chat_release_gate.py \
-            src/tests/app/test_live_chat_release_completion.py \
+            src/tests/chat/test_live_chat_release_gate.py \
+            src/tests/chat/test_live_chat_release_completion.py \
             -q --tb=short 2>&1 | tee live-chat-release-gate-output.txt
 
       - name: Phase 11 authoritative-state source guard
@@ -224,7 +244,7 @@ jobs:
       - name: Phase 12 durable evaluation and policy regression
         run: |
           set -o pipefail
-          python -m pytest src/tests/app/test_live_chat_evaluation_store.py -q --tb=short \
+          python -m pytest src/tests/chat/test_live_chat_evaluation_store.py -q --tb=short \
             2>&1 | tee live-chat-durable-evaluation-output.txt
 
       - name: Phase 5 server full-duplex acceptance
@@ -237,7 +257,7 @@ jobs:
         run: |
           set -o pipefail
           npm --workspace @omnix/web run test -- --run \
-            src/features/assistant-workspace/live-full-duplex-evaluation.test.ts \
+            src/features/assistant/workspace/live-full-duplex-evaluation.test.ts \
             2>&1 | tee live-full-duplex-evaluation-output.txt
           python - <<'PY'
           import json
@@ -309,7 +329,7 @@ jobs:
           path: |
             web-typecheck-output.txt
             web-unit-test-output.txt
-            src/apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
-            src/apps/web/src/features/assistant-workspace/live-output-coordinator.ts
-            src/apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
-            src/apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts
+            src/apps/web/src/features/assistant/workspace/live-voice-pcm-session.ts
+            src/apps/web/src/features/assistant/workspace/live-output-coordinator.ts
+            src/apps/web/src/features/assistant/workspace/live-output-coordinator.test.ts
+            src/apps/web/src/features/assistant/workspace/live-full-duplex-evaluation.test.ts

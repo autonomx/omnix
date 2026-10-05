@@ -2,7 +2,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading.execution import ExecutionObservation
-from app.trading.execution_observation_plane import ExecutionObservationPlane
+from app.trading.execution_observation_plane import (
+    ExecutionObservationPlane,
+    clear_default_execution_observation_plane,
+    default_execution_observation_plane,
+)
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -65,3 +69,50 @@ def test_no_postdecision_quote_means_no_causal_fill_candidate():
         INSTRUMENT,
         decision_completed_at=decision,
     ) is None
+
+
+def test_instrument_index_has_a_hard_capacity_bound():
+    plane = ExecutionObservationPlane(max_instruments=2)
+    recorded = datetime(2026, 9, 17, 14, 2, tzinfo=timezone.utc)
+    for instrument in ("equity:NASDAQ:A", "equity:NASDAQ:B", "equity:NASDAQ:C"):
+        observation = _observation(recorded, received_at=recorded, price="1.88").model_copy(
+            update={"instrument_id": instrument}
+        )
+        assert plane.record(observation, recorded_at=recorded)
+
+    assert len(plane._rows) == 2
+    assert plane.observations("equity:NASDAQ:A") == ()
+    assert plane.observations("equity:NASDAQ:B")
+    assert plane.observations("equity:NASDAQ:C")
+
+
+def test_instrument_index_expires_after_its_idle_ttl():
+    clock = {"now": 10.0}
+    plane = ExecutionObservationPlane(
+        retention_seconds=5,
+        clock=lambda: clock["now"],
+    )
+    recorded = datetime(2026, 9, 17, 14, 2, tzinfo=timezone.utc)
+    observation = _observation(recorded, received_at=recorded, price="1.88")
+    plane.record(observation, recorded_at=recorded)
+
+    clock["now"] = 16.0
+
+    assert plane.observations(INSTRUMENT) == ()
+    assert not plane._rows
+    assert not plane._seen
+
+
+def test_default_instrument_cache_has_an_invalidation_path():
+    clear_default_execution_observation_plane()
+    plane = default_execution_observation_plane()
+    recorded = datetime(2026, 9, 17, 14, 2, tzinfo=timezone.utc)
+    assert plane.record(
+        _observation(recorded, received_at=recorded, price="1.88"),
+        recorded_at=recorded,
+    )
+    assert plane.observations(INSTRUMENT)
+
+    clear_default_execution_observation_plane()
+
+    assert plane.observations(INSTRUMENT) == ()

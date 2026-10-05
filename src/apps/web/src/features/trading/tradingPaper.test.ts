@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PaperAccount } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { fixture } from '../../test/fixture';
 
-const account: PaperAccount = {
+const account: PaperAccount = fixture({
   account_id: 'paper-1',
   name: 'Paper Account',
   base_currency: 'USD',
   commission_bps: '0',
   enabled: true,
   revision: 4,
-};
+});
 
 const snapshot = {
   account,

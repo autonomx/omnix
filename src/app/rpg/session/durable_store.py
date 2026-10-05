@@ -5,17 +5,20 @@ Never trusts raw disk payloads; normalizes input on load.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 import json
 import logging
 import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
-from app.runtime_paths import repo_root, rpg_sessions_root
+from app.runtime.paths import repo_root, rpg_sessions_root
+from app.rpg.performance_trace import rpg_pipeline_span_if_active
 
 logger = logging.getLogger(__name__)
 _SESSION_DIR = rpg_sessions_root()
@@ -52,10 +55,11 @@ _migrate_legacy_sessions()
 _SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def ensure_session_dir() -> Path:
+def ensure_session_dir(session_dir: Path | None = None) -> Path:
     """Create session directory if it doesn't exist."""
-    _SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    return _SESSION_DIR
+    directory = Path(session_dir) if session_dir is not None else _SESSION_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 class SessionStoreError(RuntimeError):
@@ -72,11 +76,11 @@ class CorruptSessionPayloadError(SessionStoreError):
         super().__init__(self.reason)
 
 
-def _session_path(session_id: str) -> Path:
+def _session_path(session_id: str, *, session_dir: Path | None = None) -> Path:
     """Get the file path for a session."""
     safe_id = "".join(ch for ch in str(session_id) if ch.isalnum() or ch in {"-", "_", ":"})
     safe_id = safe_id.replace(":", "_")  # Windows does not allow colons in filenames
-    return ensure_session_dir() / f"{safe_id}.json"
+    return ensure_session_dir(session_dir) / f"{safe_id}.json"
 
 
 def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_delay_s: float = 0.02) -> None:
@@ -103,13 +107,13 @@ def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_de
         path.write_text(text, encoding="utf-8")
         return
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_replace_with_retry", exc_info=True)
     raise last_exc
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
     """Write text atomically to avoid truncated/empty session files."""
-    ensure_session_dir()
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_name = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -163,7 +167,7 @@ def _read_text_with_retry(path: Path, *, attempts: int = 8, base_delay_s: float 
 
 def _quarantine_corrupt_session_file(path: Path) -> Path:
     """Move a corrupt session aside so repeated resume attempts do not crash forever."""
-    quarantine_path = path.with_name(f"{path.stem}.corrupt.{int(time.time() * 1000)}{path.suffix}")
+    quarantine_path = path.with_name(f"{path.stem}.corrupt.{int(utc_now().timestamp() * 1000)}{path.suffix}")
     try:
         os.replace(path, quarantine_path)
     except OSError:
@@ -177,7 +181,7 @@ def _quarantine_corrupt_session_file(path: Path) -> Path:
     return quarantine_path
 
 
-def _read_payload_json(path: Path, session_id: str) -> Dict[str, Any]:
+def _read_payload_json(path: Path, session_id: str) -> dict[str, Any]:
     """Read raw JSON payload with corruption detection + quarantine."""
     try:
         text = _read_text_with_retry(path)
@@ -199,12 +203,49 @@ def _read_payload_json(path: Path, session_id: str) -> Dict[str, Any]:
     return _safe_dict(payload)
 
 
-def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+def save_session_to_disk(
+    session: dict[str, Any],
+    *,
+    compact: bool = False,
+    session_dir: Path | None = None,
+) -> dict[str, Any]:
+    manifest = _safe_dict(_safe_dict(session).get("manifest"))
+    session_id = str(
+        manifest.get("session_id")
+        or manifest.get("id")
+        or _safe_dict(session).get("session_id")
+        or _safe_dict(session).get("id")
+        or ""
+    )
+    with rpg_pipeline_span_if_active(
+        "session.serialize_write",
+        fields={"session_id": session_id, "compact": compact},
+    ) as span:
+        saved = _save_session_to_disk(session, compact=compact, session_dir=session_dir)
+        if span is not None:
+            saved_manifest = _safe_dict(saved.get("manifest"))
+            runtime_state = _safe_dict(saved.get("runtime_state"))
+            span["session_id"] = str(
+                saved_manifest.get("session_id")
+                or saved_manifest.get("id")
+                or session_id
+            )
+            span["interaction_seq"] = runtime_state.get("interaction_seq")
+            span["state_revision"] = runtime_state.get("state_revision")
+        return saved
+
+
+def _save_session_to_disk(
+    session: dict[str, Any],
+    *,
+    compact: bool = False,
+    session_dir: Path | None = None,
+) -> dict[str, Any]:
     """Normalize, migrate, and persist session to disk-backed JSON."""
     from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_session_to_disk(session, compact=compact)
+    if uses_postgresql_runtime() and session_dir is None:
+        from app.rpg.persistence.rpg_compat import save_session_to_postgres
+        return save_session_to_postgres(session, compact=compact)
     session = _normalize_session(session)
     session = migrate_session_payload(session)
     manifest = _safe_dict(session.get("manifest"))
@@ -212,7 +253,10 @@ def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> D
         "save_version": _SAVE_VERSION,
         "session": session,
     }
-    path = _session_path(manifest.get("session_id") or manifest.get("id") or "session")
+    path = _session_path(
+        manifest.get("session_id") or manifest.get("id") or "session",
+        session_dir=session_dir,
+    )
     if compact:
         text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     else:
@@ -221,13 +265,35 @@ def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> D
     return session
 
 
-def load_session_from_disk(session_id: str) -> Optional[Dict[str, Any]]:
+def load_session_from_disk(
+    session_id: str,
+    *,
+    session_dir: Path | None = None,
+) -> Optional[dict[str, Any]]:
+    with rpg_pipeline_span_if_active(
+        "session.file_read_decode_migrate",
+        fields={"session_id": session_id},
+    ) as span:
+        session = _load_session_from_disk(session_id, session_dir=session_dir)
+        if span is not None:
+            runtime_state = _safe_dict(_safe_dict(session).get("runtime_state"))
+            span["result_present"] = session is not None
+            span["interaction_seq"] = runtime_state.get("interaction_seq")
+            span["state_revision"] = runtime_state.get("state_revision")
+        return session
+
+
+def _load_session_from_disk(
+    session_id: str,
+    *,
+    session_dir: Path | None = None,
+) -> Optional[dict[str, Any]]:
     """Load and normalize a session from disk with migration. Returns None if not found."""
     from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_session_from_disk(session_id)
-    path = _session_path(session_id)
+    if uses_postgresql_runtime() and session_dir is None:
+        from app.rpg.persistence.rpg_compat import load_session_from_postgres
+        return load_session_from_postgres(session_id)
+    path = _session_path(session_id, session_dir=session_dir)
     if not path.exists():
         return None
     raw_payload = _read_payload_json(path, session_id)
@@ -235,14 +301,14 @@ def load_session_from_disk(session_id: str) -> Optional[Dict[str, Any]]:
     return _normalize_session(_safe_dict(migrated.get("session")))
 
 
-def list_sessions_from_disk() -> List[Dict[str, Any]]:
+def list_sessions_from_disk() -> list[dict[str, Any]]:
     """List all persisted sessions from disk with migration, normalized and sorted."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().list_sessions_from_disk()
+        from app.rpg.persistence.rpg_compat import list_sessions_from_postgres
+        return list_sessions_from_postgres()
     ensure_session_dir()
-    sessions: List[Dict[str, Any]] = []
+    sessions: list[dict[str, Any]] = []
     for path in sorted(_SESSION_DIR.glob("*.json")):
         try:
             session_id = path.stem
@@ -259,12 +325,12 @@ def list_sessions_from_disk() -> List[Dict[str, Any]]:
     return sessions
 
 
-def archive_session_on_disk(session_id: str) -> Dict[str, Any]:
+def archive_session_on_disk(session_id: str) -> dict[str, Any]:
     """Archive a session on disk by setting archived=True in manifest and persisting."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().archive_session_on_disk(session_id)
+        from app.rpg.persistence.rpg_compat import archive_session_in_postgres
+        return archive_session_in_postgres(session_id)
     session = load_session_from_disk(session_id)
     if session is None:
         return {"ok": False, "error": "session_not_found"}

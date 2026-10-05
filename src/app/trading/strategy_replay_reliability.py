@@ -14,9 +14,8 @@ signals, qualification thresholds, risk, or execution authority.
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
-import requests
 from pydantic import BaseModel, ConfigDict, Field
 
 from .providers.errors import (
@@ -136,7 +135,7 @@ _FAILURE_FIELDS: dict[ReplayAvailability, str] = {
 def historical_replay_http_runtime(
     provider_id: str,
     *,
-    session: requests.Session | None = None,
+    session: Any | None = None,
 ) -> ProviderHttpRuntime:
     """Return a conservative provider runtime for bulk historical research.
 

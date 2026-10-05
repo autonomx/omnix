@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.testclient import WebSocketDenialResponse
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_stream_contract import estimate_chat_stream_max_new_tokens
-from app.live_speech.performance_contract import SpeechPerformancePlan
+from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
+from app.conversation.performance_contract import SpeechPerformancePlan
+from app.live_voice.capacity import LiveCallCapacity
+from app.providers.qwen_http_gateway import TtsServiceSaturated
 
 
 class FakeTtsProvider:
@@ -135,10 +139,9 @@ def _assert_start_control(
 
 
 def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
-    from app.gateway import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(
         tts_live_call_websocket,
         "diagnostics_log_path",
@@ -162,7 +165,17 @@ def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
         lambda stream_id, **details: 0,
     )
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    return TestClient(app), logged_events
+    provider_resolver = app.state.live_voice_tts_provider_resolver
+    monkeypatch.setattr(
+        provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    ), logged_events
 
 
 def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypatch) -> None:
@@ -280,3 +293,52 @@ def test_live_call_websocket_applies_only_declared_provider_controls(monkeypatch
         "speaking_rate",
     ]
     assert provider_events[0]["performance_controls_ignored"] == ["emphasis"]
+
+
+def test_live_call_websocket_denies_connections_above_configured_capacity(monkeypatch) -> None:
+    from app.live_voice.transport import websocket as tts_live_call_websocket
+
+    capacity = LiveCallCapacity(1)
+    monkeypatch.setattr(tts_live_call_websocket, "live_call_capacity", lambda: capacity)
+    client, _ = _configure_gateway(monkeypatch, FakeTtsProvider())
+
+    with client.websocket_connect("/api/tts/live-call/websocket"):
+        with pytest.raises(WebSocketDenialResponse) as captured:
+            with client.websocket_connect("/api/tts/live-call/websocket"):
+                pass
+
+    assert captured.value.status_code == 429
+    assert captured.value.headers["retry-after"] == "1"
+    assert capacity.snapshot() == {
+        "maximum": 1,
+        "active": 0,
+        "available": 1,
+        "saturated": False,
+    }
+
+
+def test_live_call_capacity_rejection_keeps_websocket_usable_for_later_phrases(monkeypatch) -> None:
+    class SaturatingProvider(FakeTtsProvider):
+        def generate_audio_stream(self, **kwargs: Any):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                raise TtsServiceSaturated("1")
+            yield [0.25, -0.25] * 100, 24_000, {"chunk_index": 0}
+
+    client, _ = _configure_gateway(monkeypatch, SaturatingProvider())
+
+    with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
+        websocket.send_json(_request("First phrase.", 0))
+        rejected = websocket.receive_json()
+        websocket.send_json(_request("Second phrase.", 1))
+        started = websocket.receive_json()
+        audio = websocket.receive_bytes()
+        completed = websocket.receive_json()
+        websocket.send_json({"type": "close", "reason": "finished"})
+
+    assert rejected["type"] == "error"
+    assert rejected["capacity_saturated"] is True
+    assert rejected["retry_after"] == "1"
+    assert started["type"] == "start"
+    assert len(audio) > 0
+    assert completed["type"] == "done"

@@ -9,18 +9,18 @@ IBKR LIVE_DATA gate is explicitly enabled.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import assess_execution_observation, execution_observation_from_quote
 from .execution_observation_plane import (
     ExecutionObservationPlane,
@@ -36,27 +36,28 @@ from .strategy_shadow_universe import (
     resolve_v2_runtime_archive,
 )
 from .streaming.manager import StreamingQuoteUpdate
-from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ibkr_market_data_monitor"
-_ET = ZoneInfo("America/New_York")
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ibkr_market_data_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_IBKR_MONITOR_IN_TESTS", "0")
     return load_ibkr_settings()[0].monitor_enabled
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
+        value = float(_env_str("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
     except ValueError:
         value = 5.0
     return max(1.0, value)
@@ -66,13 +67,15 @@ def _market_data_line_budget() -> int:
     """Conservative default leaves headroom under a typical 100-line allowance."""
 
     try:
-        value = int(os.environ.get("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
+        value = int(_env_str("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
     except ValueError:
         value = 80
     return max(1, value)
 
 
-class TradingIbkrMarketDataMonitor:
+class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
+    error_event = "ibkr_market_data_monitor_error"
+
     def __init__(
         self,
         *,
@@ -94,7 +97,6 @@ class TradingIbkrMarketDataMonitor:
             1,
             int(market_data_line_budget or _market_data_line_budget()),
         )
-        self._task: asyncio.Task[None] | None = None
         self._keys: dict[str, str] = {}
         self._callbacks: dict[str, Callable] = {}
         self.last_run_at: datetime | None = None
@@ -166,6 +168,7 @@ class TradingIbkrMarketDataMonitor:
             self.evidence_store.record_missing_quote(
                 session_date,
                 "IBKR_LAST_MISSING",
+                defer=True,
             )
             return
         freshness = "live" if update.market_data_type == "LIVE" else "delayed"
@@ -241,6 +244,8 @@ class TradingIbkrMarketDataMonitor:
             spread_bps=observation.spread_bps,
             last_price_diff_bps=last_diff_bps,
             spread_diff_bps=spread_diff_bps,
+            # On the IBKR network thread: queue only; the scheduled cycle writes.
+            defer=True,
         )
         if update.market_data_type == "LIVE" and update.live_entitled is True:
             self.live_event_count += 1
@@ -342,7 +347,7 @@ class TradingIbkrMarketDataMonitor:
             try:
                 provider.unsubscribe_quote(instrument_id, listener=callback)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_subscription", exc_info=True)
         self.subscription_remove_count += 1
 
     def _run_once_blocking(self) -> int:
@@ -386,6 +391,8 @@ class TradingIbkrMarketDataMonitor:
             )
 
         self.last_run_at = now
+        # Write the quote evidence queued by the network thread since the last cycle.
+        self.evidence_store.flush()
         return self.recorded_observation_count - before
 
     async def run_once(self) -> int:
@@ -398,7 +405,7 @@ class TradingIbkrMarketDataMonitor:
         settings = load_ibkr_settings()[0]
         return {
             "enabled": settings.monitor_enabled,
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -416,33 +423,9 @@ class TradingIbkrMarketDataMonitor:
             "order_execution_authority": False,
         }
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "ibkr_market_data_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+    async def close(self) -> None:
         await asyncio.to_thread(self._remove_all_subscriptions)
+        await asyncio.to_thread(self.evidence_store.flush)
 
     def _remove_all_subscriptions(self) -> None:
         try:
@@ -451,33 +434,23 @@ class TradingIbkrMarketDataMonitor:
             for instrument_id in list(self._keys):
                 self._remove_subscription(market_service, provider, instrument_id)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_all_subscriptions", exc_info=True)
 
 
-def register_trading_ibkr_market_data_monitor(
-    gateway: FastAPI,
-) -> TradingIbkrMarketDataMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ibkr_market_data_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingIbkrMarketDataMonitor):
-        return existing
+        return None
     monitor = TradingIbkrMarketDataMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if ibkr_market_data_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(
+        name=__name__, monitor=monitor, enabled=ibkr_market_data_monitor_enabled, shutdown=(monitor.close,),
+    )
 
 
 __all__ = [
     "TradingIbkrMarketDataMonitor",
     "ibkr_market_data_monitor_enabled",
-    "register_trading_ibkr_market_data_monitor",
+    "create_trading_ibkr_market_data_monitor_task",
 ]

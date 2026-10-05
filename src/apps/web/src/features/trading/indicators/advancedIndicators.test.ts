@@ -8,6 +8,7 @@ import {
   movingAverageConvergenceDivergence,
 } from './coreIndicators';
 import type { MarketBar } from '../tradingTypes';
+import { fixture as partial } from '../../../test/fixture';
 
 function close(actual: number[], expected: number[]) {
   expect(actual).toHaveLength(expected.length);
@@ -15,13 +16,13 @@ function close(actual: number[], expected: number[]) {
 }
 
 function bars(): MarketBar[] {
-  return fixture.closes.map((close, index) => ({
+  return fixture.closes.map((close, index) => (partial({
     instrument_id: 'fixture', interval: '1d',
     start_time: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
     end_time: new Date(Date.UTC(2026, 0, index + 2)).toISOString(),
     open: String(close), high: String(fixture.highs[index]), low: String(fixture.lows[index]), close: String(close), volume: String(fixture.volumes[index]),
     is_final: true, adjustment_mode: 'raw', session: 'regular', provider: 'fixture', ingestion_revision: 1, received_at: new Date().toISOString(),
-  }));
+  })));
 }
 
 describe('advanced indicator parity', () => {

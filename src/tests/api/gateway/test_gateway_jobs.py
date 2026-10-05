@@ -9,19 +9,47 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 SRC_DIR = Path(__file__).resolve().parents[3]
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
-def _client(db_path: Path) -> TestClient:
+def _client(db_path: Path, *, service_token: str | None = None) -> TestClient:
     from app.gateway.main import create_gateway_app
-    from app.jobs import SQLiteJobStore
 
+    headers = {"X-Omnix-Client": "web"}
+    if service_token is not None:
+        headers["X-Omnix-Service-Token"] = service_token
     return TestClient(
-        create_gateway_app(job_store_factory=lambda: SQLiteJobStore(db_path)),
+        create_gateway_app(job_store_factory=lambda: InMemoryJobStore(db_path)),
+        base_url="http://127.0.0.1",
+        headers=headers,
         raise_server_exceptions=False,
+    )
+
+
+def _claim_job(client: TestClient, worker_id: str, resource_class: str, *, service_token: str) -> dict:
+    response = client.post(
+        "/internal/jobs/claim",
+        json={"worker_id": worker_id, "resource_classes": [resource_class]},
+    )
+    assert response.status_code == 200
+    job = response.json()["job"]
+    assert job is not None
+    return job
+
+
+def _complete_job(client: TestClient, job: dict, *, service_token: str, output_refs: list[dict] | None = None):
+    lease = job["lease"]
+    return client.post(
+        f"/internal/jobs/{job['id']}/complete",
+        json={
+            "worker_id": lease["worker_id"],
+            "lease_token": lease["token"],
+            "output_refs": output_refs or [],
+        },
     )
 
 
@@ -47,8 +75,8 @@ def _create_job(
     return response.json()
 
 
-def test_gateway_jobs_are_durable_across_clients(tmp_path: Path) -> None:
-    db_path = tmp_path / "jobs.sqlite"
+def test_gateway_jobs_are_visible_across_store_instances(tmp_path: Path) -> None:
+    db_path = tmp_path / "jobs"
     client = _client(db_path)
 
     created = _create_job(client, priority=3)
@@ -64,8 +92,8 @@ def test_gateway_jobs_are_durable_across_clients(tmp_path: Path) -> None:
     assert payload["stages"][0]["id"] == "run"
 
 
-def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path) -> None:
-    client = _client(tmp_path / "jobs.sqlite")
+def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path, service_token: str) -> None:
+    client = _client(tmp_path / "jobs.sqlite", service_token=service_token)
     audio = "data:audio/wav;base64," + ("A" * 8_000)
     first = client.post(
         "/api/jobs",
@@ -77,9 +105,13 @@ def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path) ->
         },
     ).json()
     second = _create_job(client, module="diagnostics", job_type="diagnostics.echo", resource_class="cpu")
-    completed = client.post(
-        f"/api/jobs/{first['id']}/complete",
-        json={"output_refs": [{"data_url": audio, "oversized_note": "N" * 8_000}]},
+    claimed = _claim_job(client, "worker:tts", "gpu:tts", service_token=service_token)
+    assert claimed["id"] == first["id"]
+    completed = _complete_job(
+        client,
+        claimed,
+        service_token=service_token,
+        output_refs=[{"data_url": audio, "oversized_note": "N" * 8_000}],
     )
     assert completed.status_code == 200
 
@@ -104,10 +136,10 @@ def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path) ->
     assert full_by_id[first["id"]]["output_refs"][0]["data_url"] == audio
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkeypatch, tmp_path: Path) -> None:
     from app.gateway import main as gateway_main
-    from app.jobs import SQLiteJobStore
+    from app.rpg.api import compat_router
 
     started = threading.Event()
     release = threading.Event()
@@ -117,13 +149,18 @@ async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkey
         release.wait(timeout=2)
         return {"ok": True}
 
-    monkeypatch.setattr(gateway_main, "get_rpg_session_payload", slow_rpg_request)
-    app = gateway_main.create_gateway_app(job_store_factory=lambda: SQLiteJobStore(tmp_path / "jobs.sqlite"))
+    monkeypatch.setattr(compat_router, "get_rpg_session_payload", slow_rpg_request)
+    app = gateway_main.create_gateway_app(job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs"))
     transport = httpx.ASGITransport(app=app)
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "web"},
+    ) as client:
         slow_request = asyncio.create_task(client.post("/api/rpg/session/get", json={"session_id": "rpg-test"}))
-        assert await asyncio.to_thread(started.wait, 1)
+        # Cold gateway startup under xdist can take seconds on CI runners.
+        assert await asyncio.to_thread(started.wait, 15)
         try:
             response = await asyncio.wait_for(
                 client.post(
@@ -145,8 +182,8 @@ async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkey
         assert (await slow_request).status_code == 200
 
 
-def test_scheduler_enforces_single_gpu_lock_and_network_bypass(tmp_path: Path) -> None:
-    client = _client(tmp_path / "jobs.sqlite")
+def test_scheduler_enforces_single_gpu_lock_and_network_bypass(tmp_path: Path, service_token: str) -> None:
+    client = _client(tmp_path / "jobs.sqlite", service_token=service_token)
     gpu_image = _create_job(client, resource_class="gpu:image", priority=10)
     gpu_tts = _create_job(
         client,
@@ -157,21 +194,18 @@ def test_scheduler_enforces_single_gpu_lock_and_network_bypass(tmp_path: Path) -
     )
     network = _create_job(client, module="chatbot", job_type="chat.remote", resource_class="network", priority=8)
 
-    first = client.post("/api/jobs/claim", json={"worker_id": "worker:gpu"})
-    assert first.status_code == 200
-    assert first.json()["job"]["id"] == gpu_image["id"]
+    first = _claim_job(client, "worker:gpu", "gpu:image", service_token=service_token)
+    assert first["id"] == gpu_image["id"]
 
-    second = client.post("/api/jobs/claim", json={"worker_id": "worker:network"})
-    assert second.status_code == 200
-    assert second.json()["job"]["id"] == network["id"]
+    second = _claim_job(client, "worker:network", "network", service_token=service_token)
+    assert second["id"] == network["id"]
 
-    completed = client.post(f"/api/jobs/{gpu_image['id']}/complete", json={})
+    completed = _complete_job(client, first, service_token=service_token)
     assert completed.status_code == 200
     assert completed.json()["status"] == "completed"
 
-    third = client.post("/api/jobs/claim", json={"worker_id": "worker:gpu"})
-    assert third.status_code == 200
-    assert third.json()["job"]["id"] == gpu_tts["id"]
+    third = _claim_job(client, "worker:gpu", "gpu:tts", service_token=service_token)
+    assert third["id"] == gpu_tts["id"]
 
 
 def test_cancel_pending_job_is_terminal(tmp_path: Path) -> None:
@@ -187,13 +221,12 @@ def test_cancel_pending_job_is_terminal(tmp_path: Path) -> None:
     assert payload["cancel"]["acknowledged_at"]
 
 
-def test_cancel_running_job_is_observable_without_orphaning_lease(tmp_path: Path) -> None:
-    client = _client(tmp_path / "jobs.sqlite")
+def test_cancel_running_job_is_observable_without_orphaning_lease(tmp_path: Path, service_token: str) -> None:
+    client = _client(tmp_path / "jobs.sqlite", service_token=service_token)
     created = _create_job(client)
 
-    claim = client.post("/api/jobs/claim", json={"worker_id": "worker:gpu"})
-    assert claim.status_code == 200
-    assert claim.json()["job"]["id"] == created["id"]
+    claim = _claim_job(client, "worker:gpu", "gpu:image", service_token=service_token)
+    assert claim["id"] == created["id"]
 
     canceled = client.post(f"/api/jobs/{created['id']}/cancel", json={"reason": "release_readiness"})
     assert canceled.status_code == 200
@@ -210,13 +243,17 @@ def test_cancel_running_job_is_observable_without_orphaning_lease(tmp_path: Path
     assert "release_readiness" in events.text
 
 
-def test_failed_job_surfaces_diagnostics_and_terminal_event(tmp_path: Path) -> None:
-    client = _client(tmp_path / "jobs.sqlite")
+def test_failed_job_surfaces_diagnostics_and_terminal_event(tmp_path: Path, service_token: str) -> None:
+    client = _client(tmp_path / "jobs.sqlite", service_token=service_token)
     created = _create_job(client, module="diagnostics", job_type="diagnostics.fail", resource_class="cpu")
+    claimed = _claim_job(client, "worker:cpu", "cpu", service_token=service_token)
+    assert claimed["id"] == created["id"]
 
     response = client.post(
-        f"/api/jobs/{created['id']}/fail",
+        f"/internal/jobs/{created['id']}/fail",
         json={
+            "worker_id": claimed["lease"]["worker_id"],
+            "lease_token": claimed["lease"]["token"],
             "code": "provider_timeout",
             "message": "Provider timed out during release-readiness smoke test.",
             "retryable": True,
@@ -254,16 +291,25 @@ def test_job_events_are_named_sse_events(tmp_path: Path) -> None:
     assert created["id"] in response.text
 
 
-def test_job_event_history_supports_bounded_resume_reads(tmp_path: Path) -> None:
-    client = _client(tmp_path / "jobs.sqlite")
+def test_job_event_history_supports_bounded_resume_reads(tmp_path: Path, service_token: str) -> None:
+    client = _client(tmp_path / "jobs.sqlite", service_token=service_token)
     created = [_create_job(client, module="diagnostics", job_type="diagnostics.echo", resource_class="cpu") for _ in range(12)]
     for job in created[:6]:
-        response = client.post(f"/api/jobs/{job['id']}/complete", json={})
+        claimed = _claim_job(client, f"worker:{job['id']}", "cpu", service_token=service_token)
+        assert claimed["id"] == job["id"]
+        response = _complete_job(client, claimed, service_token=service_token)
         assert response.status_code == 200
     for job in created[6:]:
+        claimed = _claim_job(client, f"worker:{job['id']}", "cpu", service_token=service_token)
+        assert claimed["id"] == job["id"]
         response = client.post(
-            f"/api/jobs/{job['id']}/fail",
-            json={"code": "smoke_failure", "message": "endurance smoke failure"},
+            f"/internal/jobs/{job['id']}/fail",
+            json={
+                "worker_id": claimed["lease"]["worker_id"],
+                "lease_token": claimed["lease"]["token"],
+                "code": "smoke_failure",
+                "message": "endurance smoke failure",
+            },
         )
         assert response.status_code == 200
 
@@ -294,10 +340,9 @@ def test_residency_aware_claim_skips_gpu_job_that_needs_eviction(tmp_path: Path)
         ModelResidencyRecord,
         ModelResidencyStatus,
         ResourceClass,
-        SQLiteJobStore,
     )
 
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     store.create_job(
         CreateJobRequest(
             module="image",
@@ -342,10 +387,9 @@ def test_residency_aware_claim_allows_explicit_compatible_gpu_co_residency(tmp_p
         ModelResidencyRecord,
         ModelResidencyStatus,
         ResourceClass,
-        SQLiteJobStore,
     )
 
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     first = store.create_job(
         CreateJobRequest(
             module="chatbot",
@@ -402,16 +446,15 @@ def test_residency_aware_claim_allows_explicit_compatible_gpu_co_residency(tmp_p
     assert second_claim.job.id == second.id
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_local_executor_completes_registered_handler(tmp_path: Path) -> None:
     from app.jobs import (
         CreateJobRequest,
         LocalJobExecutor,
         ResourceClass,
-        SQLiteJobStore,
     )
 
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     created = store.create_job(
         CreateJobRequest(
             module="diagnostics",
@@ -434,3 +477,27 @@ async def test_local_executor_completes_registered_handler(tmp_path: Path) -> No
     assert result.status == "completed"
     assert result.output_refs == [{"kind": "diagnostic", "id": "echo"}]
     assert result.logs == [{"level": "info", "message": "ok"}]
+
+
+def test_gateway_job_list_pages_with_cursor_and_filters(tmp_path: Path) -> None:
+    client = _client(tmp_path / "jobs.sqlite")
+    voice = [
+        _create_job(client, module="voice", job_type="tts.synthesize", resource_class="gpu:tts")["id"]
+        for _ in range(3)
+    ]
+    other = _create_job(client, module="diagnostics", job_type="diagnostics.echo", resource_class="cpu")["id"]
+
+    seen: list[str] = []
+    cursor = None
+    while True:
+        params = {"limit": 2, "module": "voice", **({"cursor": cursor} if cursor else {})}
+        page = client.get("/api/jobs", params=params).json()
+        seen.extend(job["id"] for job in page["jobs"])
+        if not page["has_more"]:
+            break
+        cursor = page["next_cursor"]
+
+    assert sorted(seen) == sorted(voice) and len(seen) == len(set(seen))
+    assert [job["id"] for job in client.get("/api/jobs", params={"type": "diagnostics.echo"}).json()["jobs"]] == [other]
+    assert client.get("/api/jobs", params={"limit": 201}).status_code == 422
+    assert client.get("/api/jobs", params={"cursor": "bad"}).status_code == 400

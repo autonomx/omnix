@@ -9,7 +9,6 @@ baseline trade; this module changes only post-entry management.
 from datetime import datetime, time
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,9 +26,9 @@ from .strategy_adaptive_exit_research import (
 from .strategy_backtest import GapPullbackBacktestTrade, _adverse_sell_slippage_bps
 from .strategy_timeframes import resample_final_bars
 from .strategy_v2_management import v2_active_stop_for_prior_high
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _FORCE_FLAT_ET = time(15, 55)
 _PARTIAL_FRACTION = Decimal("0.50")
 _PARTIAL_TARGET_R = Decimal("1.0")

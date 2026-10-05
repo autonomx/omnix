@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -9,12 +12,13 @@ from typing import Any, Callable, Protocol
 from pydantic import ValidationError
 
 from app.trading.trade_logging import trade_log
+from app.trading.providers.request_budget import in_provider_lane
 
 from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter
 from .adapters.sec_edgar import SecEdgarAdapter
 from .contracts import IssuerIdentity, ResearchActionProposal, ResearchActionRecord, TradingResearchRequest, fingerprint
-from .hermes_contract import TradingHermesContext, TradingHermesNextActionDecision, evidence_summary
+from .hermes_contract import TradingHermesContext, TradingHermesNextActionDecision, evidence_summary, trading_next_action_payload
 from .repository import TradingResearchRepository
 
 
@@ -27,14 +31,39 @@ class HermesPlanner:
     backend = "hermes"
     def __init__(self, client=None) -> None:
         if client is None:
-            from app.assist_core.hermes_client import HermesSidecarClient
-            from app.assist_core.hermes_status import hermes_runtime_config
+            from app.providers.hermes_client import HermesSidecarClient
+            from app.providers.hermes_status import hermes_runtime_config
             config = hermes_runtime_config()
-            client = HermesSidecarClient(base_url=config.base_url, api_key=os.environ.get("HERMES_API_KEY") or None, timeout=config.timeout_seconds)
+            client = HermesSidecarClient(base_url=config.base_url, api_key=environment().get("HERMES_API_KEY") or None, timeout=config.timeout_seconds)
         self.client = client
 
     def next_action(self, request: TradingResearchRequest, context: TradingHermesContext) -> Any:
-        return self.client.plan_trading_research_next(request, context)
+        """Return exactly one proposal-only semantic trading research action."""
+        from app.providers import ChatMessage
+
+        validated_request = TradingResearchRequest.model_validate(request)
+        validated_context = TradingHermesContext.model_validate(context)
+        return self.client.structured(
+            [
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "You are a non-executing trading research next-action planner. Return exactly one JSON action matching the supplied schema. "
+                        "Never execute anything. Never propose orders, position sizing, broker actions, strategy mutation, shell, files, GitHub, or unlisted operations. "
+                        "Use the evidence summary to decide the single highest-value unresolved follow-up, or stop."
+                    ),
+                ),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps(trading_next_action_payload(validated_request, validated_context), sort_keys=True, default=str),
+                ),
+            ],
+            output_model=TradingHermesNextActionDecision,
+            contract_id="hermes.trading_next_action",
+            json_mode=True,
+            timeout=self.client.timeout,
+            error="Hermes did not return a valid trading next-action proposal",
+        )
 
 
 class SafeStopPlanner:
@@ -46,14 +75,14 @@ class SafeStopPlanner:
 
 def hermes_trading_research_enabled() -> bool:
     def flag(name: str) -> bool:
-        return os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+        return environment().get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
 
     if not flag("HERMES_ENABLED"):
         return False
     # Trading research is read-only. Reuse the same Hermes switch as chat when
     # no trading-specific override was supplied; an explicit false still
     # provides a safe opt-out for deployments that want Hermes chat only.
-    if "OMNIX_TRADING_HERMES_RESEARCH_ENABLED" in os.environ:
+    if "OMNIX_TRADING_HERMES_RESEARCH_ENABLED" in environment():
         return flag("OMNIX_TRADING_HERMES_RESEARCH_ENABLED")
     return True
 
@@ -134,6 +163,7 @@ def _execute(proposal: ResearchActionProposal, identity: IssuerIdentity, *, sec:
     raise ValueError("trading_research_operation_not_allowlisted")
 
 
+@in_provider_lane("research")
 def run_iterative_research(
     request: TradingResearchRequest,
     identity: IssuerIdentity,

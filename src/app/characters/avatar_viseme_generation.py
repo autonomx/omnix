@@ -21,6 +21,32 @@ from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .repository import default_character_db_path
 from .service import CharacterService, default_character_service
+from app.prompts import prompt_template
+
+
+VISEME_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_viseme_generation.viseme_prompt', "1",
+    (
+        'A previous attempt was rejected for excessive mouth or teeth movement. Make this '
+        'attempt substantially subtler and closer to the closed-mouth portrait. '
+    ),
+)
+
+VISEME_PROMPT_2_TEMPLATE = prompt_template(
+    'characters.avatar_viseme_generation.viseme_prompt_2', "1",
+    (
+        'Using the supplied canonical portrait of {display_name}, preserve the exact identity, '
+        'crop, head position, jawline, chin, cheeks, nose, eyes, hair, clothing, lighting, and '
+        'background. {retry_direction}Change only the lips and a minimal amount of inner mouth '
+        'to a neutral {articulation_percent}% articulation toward {description}. This is '
+        'ordinary quiet conversational speech, not an emotional expression. Keep the jaw almost '
+        'fixed, keep the lip corners close to their original position, expose little or no '
+        'teeth, and never create a smile, grin, laugh, shout, scream, or dramatic open mouth. '
+        'All pixels outside the immediate lip area should remain visually unchanged. No text or '
+        'watermark.'
+    ),
+)
+
 
 VisemeGenerationStatus = Literal["generating", "completed", "failed"]
 
@@ -173,7 +199,19 @@ class CharacterVisemeGenerationService:
         avatar_service: CharacterAvatarService | None = None,
         job_store: Any | None = None,
     ) -> None:
-        self.repository = repository or CharacterVisemeGenerationRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+
+            if uses_postgresql_runtime():
+                # Feature-owned adapter; the composition root is not imported here.
+                from app.characters.persistence.avatar_generation_repository import (
+                    PostgresCharacterVisemeGenerationRepositoryAdapter,
+                )
+
+                repository = PostgresCharacterVisemeGenerationRepositoryAdapter()
+            else:
+                repository = CharacterVisemeGenerationRepository()
+        self.repository = repository
         self.character_service = character_service or default_character_service()
         self.avatar_service = avatar_service or default_character_avatar_service()
         self.job_store = job_store or default_job_store()
@@ -466,18 +504,15 @@ def _viseme_prompt(
     retry_direction = ""
     if attempt > 1:
         retry_direction = (
-            "A previous attempt was rejected for excessive mouth or teeth movement. "
-            "Make this attempt substantially subtler and closer to the closed-mouth portrait. "
+            VISEME_PROMPT_TEMPLATE.text
         )
     return (
-        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, "
-        "crop, head position, jawline, chin, cheeks, nose, eyes, hair, clothing, lighting, and "
-        f"background. {retry_direction}Change only the lips and a minimal amount of inner mouth "
-        f"to a neutral {articulation_percent}% articulation toward {description}. This is ordinary "
-        "quiet conversational speech, not an emotional expression. Keep the jaw almost fixed, "
-        "keep the lip corners close to their original position, expose little or no teeth, and "
-        "never create a smile, grin, laugh, shout, scream, or dramatic open mouth. All pixels "
-        "outside the immediate lip area should remain visually unchanged. No text or watermark."
+        VISEME_PROMPT_2_TEMPLATE.format(
+            display_name=display_name,
+            retry_direction=retry_direction,
+            articulation_percent=articulation_percent,
+            description=description,
+        )
     )
 
 

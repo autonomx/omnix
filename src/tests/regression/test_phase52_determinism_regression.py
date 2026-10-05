@@ -342,20 +342,14 @@ class TestIntegrationRegression(unittest.TestCase):
         self.assertEqual([p.type for p in peeked], [c.type for c in collected])
 
     def test_debug_logging_still_works(self):
-        """Debug mode should still log events."""
-        import io
-        from contextlib import redirect_stdout
-        
+        """Debug mode should still log events (as debug records, WP-10.1)."""
         bus = EventBus(debug=True)
-        
-        # Capture stdout
-        f = io.StringIO()
-        with redirect_stdout(f):
+
+        with self.assertLogs("app.rpg.core.event_bus", level="DEBUG") as captured:
             e = Event(type="debug_test", payload={"x": 1}, source="test")
             bus.emit(e)
-        
-        output = f.getvalue()
-        self.assertIn("debug_test", output)
+
+        self.assertIn("debug_test", " ".join(captured.output))
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
+import { fixture } from '../../../test/fixture';
 
-const bar: MarketBar = {
+const bar: MarketBar = fixture({
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
   interval: '1m',
   start_time: '2026-08-05T12:00:00+00:00',
@@ -18,7 +19,7 @@ const bar: MarketBar = {
   provider: 'binance',
   ingestion_revision: 1,
   received_at: '2026-08-05T12:01:00+00:00',
-};
+});
 const secondBar: MarketBar = {
   ...bar,
   start_time: '2026-08-05T12:01:00+00:00',

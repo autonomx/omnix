@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
@@ -80,9 +81,7 @@ describe('RpgWorldAuthoringWorkspace', () => {
       });
     }));
 
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
         <RpgWorldAuthoringWorkspace onBack={vi.fn()} onSessionLaunched={vi.fn()} />

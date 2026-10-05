@@ -40,9 +40,10 @@ Design Rules:
 from __future__ import annotations
 
 import logging
-import random
 from collections import deque
 from typing import Any, Dict, List, Optional
+
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -354,14 +355,24 @@ class NarrativeSurfaceEngine:
         Returns:
             Selected headline with placeholders substituted.
         """
-        for _ in range(max_attempts):
-            template = random.choice(templates)
+        event_index = stable_sub_index(event)
+        for attempt in range(max_attempts):
+            template = rng_for_current_turn(
+                "text:surface_headline",
+                event_index + attempt,
+            ).choice(templates)
             candidate = self._substitute(template, event)
             if candidate not in self._recent_headlines:
                 return candidate
         
         # If all are repeated, just pick one (fallback)
-        return self._substitute(random.choice(templates), event)
+        return self._substitute(
+            rng_for_current_turn(
+                "text:surface_headline_fallback",
+                event_index,
+            ).choice(templates),
+            event,
+        )
     
     def _describe(
         self,
@@ -411,14 +422,25 @@ class NarrativeSurfaceEngine:
         Returns:
             Selected description string.
         """
-        for _ in range(max_attempts):
-            template = random.choice(templates)
+        event_index = stable_sub_index(event)
+        for attempt in range(max_attempts):
+            template = rng_for_current_turn(
+                "text:surface_description",
+                event_index + attempt,
+            ).choice(templates)
             candidate = self._build_description(template, event, world)
             if candidate not in self._recent_descriptions:
                 return candidate
         
         # If all are repeated, just pick one (fallback)
-        return self._build_description(random.choice(templates), event, world)
+        return self._build_description(
+            rng_for_current_turn(
+                "text:surface_description_fallback",
+                event_index,
+            ).choice(templates),
+            event,
+            world,
+        )
     
     def _build_description(
         self,
@@ -662,18 +684,3 @@ class NarrativeSurfaceEngine:
             "emotional_contexts": 0,
         }
     
-    def get_recent_headlines(self) -> List[str]:
-        """Get recent headlines for debugging/testing.
-        
-        Returns:
-            List of recent headlines.
-        """
-        return list(self._recent_headlines)
-    
-    def get_recent_descriptions(self) -> List[str]:
-        """Get recent descriptions for debugging/testing.
-        
-        Returns:
-            List of recent descriptions.
-        """
-        return list(self._recent_descriptions)

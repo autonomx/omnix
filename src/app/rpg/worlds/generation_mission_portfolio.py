@@ -163,24 +163,6 @@ def _arc_values(row: Mapping[str, Any]) -> tuple[str, str, int, bool, bool]:
     return arc_id, role, sequence, any_declared, complete
 
 
-def _occurrence(
-    *,
-    topic_id: str,
-    item_id: str,
-    path: str,
-    row: Mapping[str, Any],
-) -> MissionSignatureOccurrence:
-    arc_id, role, sequence, _any_declared, _complete = _arc_values(row)
-    return MissionSignatureOccurrence(
-        topic_id=topic_id,
-        item_id=item_id,
-        path=path,
-        campaign_arc_id=arc_id,
-        arc_role=role,
-        arc_sequence=sequence,
-    )
-
-
 def _intentional_arc(occurrences: Sequence[MissionSignatureOccurrence]) -> bool:
     if len(occurrences) < 2:
         return False

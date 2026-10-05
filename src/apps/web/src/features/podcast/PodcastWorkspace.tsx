@@ -1,15 +1,23 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment -- baseline WP-9.x */
+/* eslint-disable @typescript-eslint/no-explicit-any -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 // @ts-nocheck
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { mockPodcastSpeakerProfiles } from '../conversation-production/speakers';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { mockPodcastSpeakerProfiles } from '../conversation-production';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
+import { createPodcastScriptSession } from './podcastScriptSession';
 import { buildConversationalPodcastSegments } from './scriptBuilder';
 import type { PodcastFormat } from './types';
 import './PodcastWorkspace.css';
-import './PodcastWorkspaceLayoutFix.css';
+import { ApiError } from '../../api/errors';
+import { fetchBytes } from '../../api/transport';
+import { jobOutputRefs } from '../../api/schemas/streams';
+import { downloadUrl } from '../../shared/download';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -61,9 +69,9 @@ function toSpeakerDraft(profile: (typeof mockPodcastSpeakerProfiles)[number]) {
 const minutes = (value: string) => Math.max(1, Number.parseInt(value, 10) || 1);
 const clock = (seconds: number) => `${String(Math.floor((seconds || 0) / 60)).padStart(2, '0')}:${String(Math.floor(seconds || 0) % 60).padStart(2, '0')}`;
 const isTerminal = (status: unknown) => ['completed', 'complete', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase());
-const voicePath = (asset: VoiceAsset) => String((asset as any).storage_path || (asset as any).id || '');
-const voiceName = (asset: VoiceAsset) => String((asset as any).metadata?.profile_name || (asset as any).metadata?.name || voicePath(asset).split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'Voice');
-const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: voicePath(asset), label: voiceName(asset) })).filter((voice) => voice.id);
+// A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
+const voiceName = (asset: VoiceAsset) => String((asset as any).metadata?.profile_name || (asset as any).metadata?.name || String((asset as any).file_name || '').replace(/\.[^.]+$/, '') || 'Voice');
+const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: String(asset.id || ''), label: voiceName(asset) })).filter((voice) => voice.id);
 const jobTitle = (job?: JobRecord) => String((job?.input_payload as any)?.title || job?.type || 'Podcast audio');
 const rowsFrom = (segments: Segment[], total: number) => segments.map((segment, index) => ({ timestamp: clock(index * Math.max(8, total / Math.max(1, segments.length))), speaker: segment.speaker, text: segment.text }));
 
@@ -78,7 +86,7 @@ function stages() {
 }
 
 function outputsFrom(jobs: Array<JobRecord | undefined>): Output[] {
-  return jobs.flatMap((job) => ((job?.output_refs ?? []) as any[]).map((ref, index) => {
+  return jobs.flatMap((job) => jobOutputRefs(job).map((ref, index) => {
     const url = typeof ref.data_url === 'string' ? ref.data_url : typeof ref.audio_url === 'string' ? ref.audio_url : '';
     if (!(url.startsWith('data:audio/') || url.startsWith('blob:') || url.startsWith('/api/'))) return null;
     return { dataUrl: url, duration: Number(ref.duration || 0), jobId: job?.id || 'job', key: `${job?.id}:${ref.asset_id || index}`, title: ref.title || jobTitle(job) };
@@ -110,7 +118,7 @@ function parseSegments(text: string): Segment[] {
 
 async function generateScript(args: { title: string; brief: string; audience: string; duration: string; speakers: SpeakerDraft[] }) {
   try {
-    const session = await omnixApiClient.createChatSession({ title: `Podcast script: ${args.title}`.slice(0, 64), system_prompt: 'Return only valid JSON.' });
+    const session = await createPodcastScriptSession({ title: `Podcast script: ${args.title}`.slice(0, 64), system_prompt: 'Return only valid JSON.' });
     const response = await omnixApiClient.sendChatMessage(session.id, {
       content: `Write a speaker-tagged podcast as JSON with segments. Topic: ${args.title}. Brief: ${args.brief}. Speakers: ${args.speakers.map((speaker) => speaker.name).join(', ')}.`,
     });
@@ -263,8 +271,9 @@ function createWavBytes(chunks: WavChunk[]) {
 }
 
 async function loadAudioBytes(url: string) {
-  const response = await fetch(url);
-  if (!response.ok && !url.startsWith('data:')) throw new Error(`Audio fetch failed: ${response.status}`);
+  const response = await fetchBytes(url).catch((error: unknown) => {
+    throw error instanceof ApiError ? new Error(`Audio fetch failed: ${error.status}`) : error;
+  });
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -299,8 +308,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const stitchRunRef = useRef(0);
   const liveBlobUrlsRef = useRef<string[]>([]);
 
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: async () => { try { return (await omnixApiClient.listJobs()) ?? { jobs: [] }; } catch { return { jobs: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
-  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: async () => { try { return (await omnixApiClient.listAssets()) ?? { assets: [] }; } catch { return { assets: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
 
   const [title, setTitle] = useState(defaultTitle);
   const [brief, setBrief] = useState(defaultBrief);
@@ -450,7 +459,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return () => window.clearTimeout(timer);
   }, [current?.key, current?.dataUrl, autoplay, playbackRate]);
 
-  function naturalEnd(audio: HTMLAudioElement | null) { return Boolean(audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.18); }
   function onPause() {
     const audio = audioRef.current;
     if (naturalEnd(audio) && createJobMutation.isPending) return;
@@ -503,11 +511,11 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     }
   }
   function selectRecentJob(id: string) { const output = outputsFrom([podcastJobs.find((job) => job.id === id)])[0]; if (output) install(output); }
-  function downloadCurrentOutput(label = 'Podcast audio') { if (!current) return; const link = document.createElement('a'); link.href = current.dataUrl; link.download = `${title || 'podcast-output'}.wav`; link.click(); setMessage(`${label}: download started.`); }
+  function downloadCurrentOutput(label = 'Podcast audio') { if (!current) return; downloadUrl(current.dataUrl, `${title || 'podcast-output'}.wav`); setMessage(`${label}: download started.`); }
   async function copyEpisodeLink() { try { await navigator.clipboard?.writeText(`${location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}`); setMessage('Podcast link copied.'); } catch {} }
 
   return (
-    <WorkspacePanel className="podcast-workspace-panel">
+    <WorkspacePanel labelledBy="module-title" className="podcast-workspace-panel">
       <div className="podcast-studio-shell">
         <header className="podcast-studio-header">
           <div>
@@ -517,6 +525,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
           <code>/podcast-renderer</code>
         </header>
+        <GatewayErrorNotice label="Podcast jobs and voices" errors={[jobsQuery.error, assetsQuery.error]} />
 
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
@@ -545,16 +554,16 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voices.length ? `Loaded ${voices.length} Voice Library voice${voices.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div>
               <div className="speaker-table editable-speaker-table">
                 <div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span></div>
-                {speakers.map((speaker) => (
+                {speakers.map((speaker, index) => (
                   <div className="speaker-row editable-speaker-row" key={speaker.id}>
-                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span>
-                    <span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span>
+                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input aria-label={`Speaker ${index + 1} name`} value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input aria-label={`Speaker ${index + 1} role`} value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span>
+                    <span><input aria-label={`Speaker ${index + 1} identity`} value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span>
                     <span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voices.length ? <option value="">No cloned voices</option> : null}</select></span>
-                    <span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} beliefs`} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} personality`} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} speaking style`} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} goal this episode`} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} instructions`} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} /></span>
                   </div>
                 ))}
               </div>
@@ -581,7 +590,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 </div>
               </section>
 
-              <div className="podcast-audio-player" aria-label="Podcast audio player">
+              <div role="group" className="podcast-audio-player" aria-label="Podcast audio player">
                 <div className="audio-player-heading">
                   <span>{current ? current.title : selectedOutputKey === '__script__' ? 'Generating podcast script...' : selectedOutputKey === '__streaming__' || selectedOutputKey === stitchedKey ? 'Waiting for first stitched live audio segment...' : 'No podcast audio yet'}</span>
                   <small>{current?.live ? `LIVE STITCHED ${pieces.length} / ${rows.length || pieces.length}` : current ? 'AUDIO READY' : createJobMutation.isPending ? liveStatus : 'Generate a completed podcast to enable playback'}</small>
@@ -615,3 +624,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     </WorkspacePanel>
   );
 }
+
+/** Whether playback reached the end of the audio (not a pause near it). */
+function naturalEnd(audio: HTMLAudioElement | null) { return Boolean(audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.18); }

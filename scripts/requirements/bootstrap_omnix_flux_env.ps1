@@ -4,8 +4,8 @@ $OmnixScriptsRoot = Split-Path -Parent $PSScriptRoot
 $OmnixRepoRoot = Split-Path -Parent $OmnixScriptsRoot
 Set-Location -LiteralPath $OmnixRepoRoot
 
-$EnvName = "omnix312"
-$PythonVersion = "3.12"
+$EnvName = "omnix311"
+$PythonVersion = "3.11"
 
 Write-Host ""
 Write-Host "=== Omnix image environment bootstrap ==="
@@ -49,28 +49,12 @@ function InEnv($command) {
     conda run -n $EnvName powershell -NoProfile -Command $command
 }
 
-Step "Upgrading pip/setuptools/wheel"
-InEnv "python -m pip install --upgrade pip setuptools wheel"
-Ok "pip toolchain upgraded"
-
-Step "Installing PyTorch CUDA 12.4 wheels"
-InEnv "python -m pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124"
-Ok "PyTorch installed"
-
-if (Test-Path "scripts/requirements/requirements-rpg-flux.txt") {
-    Step "Installing pinned local image runtime"
-    InEnv "python -m pip install -r scripts/requirements/requirements-rpg-flux.txt"
-    Ok "Pinned image runtime installed"
+if (Test-Path "requirements/image.lock.txt") {
+    Step "Installing the hash-locked image runtime"
+    InEnv "python -m pip install --require-hashes -r requirements/image.lock.txt"
+    Ok "Hash-locked image runtime installed"
 } else {
-    Fail "scripts/requirements/requirements-rpg-flux.txt was not found."
-}
-
-if (Test-Path "requirements.txt") {
-    Step "Installing project requirements"
-    InEnv "python -m pip install -r requirements.txt"
-    Ok "requirements.txt installed"
-} else {
-    Write-Host "WARN: requirements.txt not found in current directory, skipping." -ForegroundColor Yellow
+    Fail "requirements/image.lock.txt was not found. Run the lock generation step first."
 }
 
 Step "Printing interpreter path"

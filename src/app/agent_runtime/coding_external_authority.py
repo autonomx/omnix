@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from .capabilities import browser_capability_ids
-from .mcp_policy import infer_mcp_capabilities_for_task
+from app.capabilities import browser_capability_ids
+from app.capabilities.mcp_policy import infer_mcp_capabilities_for_task
 
 _BROWSER_EXPLICIT = re.compile(
     r"\b(?:agent[- ]browser|browser\.(?:assert_[a-z_]+|(?:open|snapshot|screenshot|get_text|get_attribute))|"

@@ -1,5 +1,5 @@
 import { installViewApiFirewall } from './viewApiScope';
 
-// Import this before side-effect fetch interceptors so they capture the
-// guarded fetch rather than the unscoped browser implementation.
+// Installed first: every request made through the fetch pipeline (WP-9.2)
+// passes the workspace scope and gets the client headers.
 installViewApiFirewall();

@@ -1,11 +1,13 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskPreview, PaperSide } from './paperTypes';
-import { tradingApi } from './tradingApi';
+import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
 import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type PaperTicketTab = 'order' | 'dom';
 type PaperNotice = { kind: 'success' | 'error'; message: string };
@@ -86,7 +88,7 @@ export function TradingPaperPanel({
   const [stopLossEnabled, setStopLossEnabled] = useState(false);
   const [takeProfit, setTakeProfit] = useState('');
   const [stopLoss, setStopLoss] = useState('');
-  const [quote, setQuote] = useState<Record<string, string> | null>(null);
+  const [quote, setQuote] = useState<TradingQuote | null>(null);
   const [notice, setNotice] = useState<PaperNotice | null>(null);
   const [confirmation, setConfirmation] = useState<PaperConfirmation | null>(null);
   const replayMode = useTradingStore((state) => state.replayMode);
@@ -109,8 +111,8 @@ export function TradingPaperPanel({
   const referencePrice = replayMode ? replayPrice : parsePositive(quote?.price ?? '')
     ?? parsePositive(position?.last_price ?? '')
     ?? parsePositive(position?.average_cost ?? '');
-  const bidPrice = replayMode ? referencePrice : parsePositive(quote?.bid ?? '') ?? referencePrice;
-  const askPrice = replayMode ? referencePrice : parsePositive(quote?.ask ?? '') ?? referencePrice;
+  const bidPrice = replayMode ? referencePrice : parsePositive(String(quote?.bid ?? '')) ?? referencePrice;
+  const askPrice = replayMode ? referencePrice : parsePositive(String(quote?.ask ?? '')) ?? referencePrice;
   const quotePrice = referencePrice === null ? '—' : number(String(referencePrice), 2);
   const bidLabel = bidPrice === null ? '—' : number(String(bidPrice), 2);
   const askLabel = askPrice === null ? '—' : number(String(askPrice), 2);
@@ -182,8 +184,7 @@ export function TradingPaperPanel({
 
   useEffect(() => {
     if (!accountId) return;
-    const timer = window.setInterval(() => void refresh(accountId), 5_000);
-    return () => window.clearInterval(timer);
+    return startPolling(() => refresh(accountId), POLL_INTERVALS_MS.paperAccount);
   }, [accountId]);
 
   useEffect(() => {

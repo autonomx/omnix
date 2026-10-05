@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
+import secrets
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from app.runtime.ports import Port
 
 AgentRunStatus = Literal[
     "queued",
@@ -40,6 +43,8 @@ AgentEventType = Literal[
     "run.recovery_requested",
     "run.recovery_failed",
     "run.stall_suspected",
+    # The run went unsandboxed under OMNIX_AGENT_ALLOW_UNSANDBOXED (WP-4.7).
+    "run.unsandboxed",
     "model.message",
     "tool.requested",
     "tool.started",
@@ -673,7 +678,7 @@ class AgentArtifact(BaseModel):
 class AgentApproval(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    approval_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    approval_id: str = Field(default_factory=lambda: secrets.token_urlsafe(24))
     run_id: str
     capability_id: str
     state: AgentApprovalState = "pending"
@@ -681,6 +686,25 @@ class AgentApproval(BaseModel):
     resolution_payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
     resolved_at: datetime | None = None
+    # PA-1.4: the capability's definition when the approval was issued. Kept
+    # out of the API schema; rows stored before the binding read back as None
+    # and cannot authorize.
+    _definition_hash: str | None = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        from app.capabilities.registry import capability_definition_hash
+
+        self._definition_hash = capability_definition_hash(self.capability_id)
+
+    @property
+    def capability_definition_hash(self) -> str | None:
+        return self._definition_hash
+
+    def with_definition_hash(self, value: str | None) -> "AgentApproval":
+        """This approval as stored: bound to ``value`` (None for rows issued before binding)."""
+        bound = self.model_copy()
+        bound._definition_hash = value
+        return bound
 
 
 class AgentRunCommand(BaseModel):
@@ -733,3 +757,15 @@ class WorkerLease(BaseModel):
     lease_expires_at: datetime
     heartbeat_at: datetime
     revision: int
+
+
+class SecurityInstruments(Protocol):
+    """Resolves an exact US equity ticker to its canonical instrument id, or None."""
+
+    def equity_instrument_id(self, ticker: str) -> str | None: ...
+
+
+# Trading contributes this; without it evidence subjects use the ticker form.
+SECURITY_INSTRUMENTS: Port[SecurityInstruments] = Port(
+    "agent_runtime.security_instruments", SecurityInstruments, "at_most_one",
+)

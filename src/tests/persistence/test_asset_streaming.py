@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.assets.models import AssetRecord
-from app.persistence import asset_compat
+from app.persistence import shared_asset_store
 from app.persistence.blob_store import LocalBlobStore
 
 
@@ -25,8 +25,8 @@ def test_new_asset_streams_source_and_preserves_failure_cleanup(
         storage_path=str(source),
         created_at="2026-09-26T00:00:00Z",
     )
-    store = asset_compat.PostgresSharedAssetStoreAdapter.__new__(
-        asset_compat.PostgresSharedAssetStoreAdapter
+    store = shared_asset_store.PostgresSharedAssetStoreAdapter.__new__(
+        shared_asset_store.PostgresSharedAssetStoreAdapter
     )
     store.database = object()
     store.context = object()
@@ -42,7 +42,11 @@ def test_new_asset_streams_source_and_preserves_failure_cleanup(
     @contextmanager
     def work(database):
         yield SimpleNamespace(
-            assets=SimpleNamespace(get_asset=lambda *args: None, create=create),
+            assets=SimpleNamespace(
+                get_asset=lambda *args: None,
+                update_descriptor=lambda *args, **kwargs: None,
+                create=create,
+            ),
             rollback=lambda: None,
             commit=lambda: None,
         )
@@ -50,7 +54,7 @@ def test_new_asset_streams_source_and_preserves_failure_cleanup(
     def no_buffered_read(self):
         raise AssertionError("asset ingestion must not load the whole file")
 
-    monkeypatch.setattr(asset_compat, "unit_of_work", work)
+    monkeypatch.setattr(shared_asset_store, "unit_of_work", work)
     monkeypatch.setattr(Path, "read_bytes", no_buffered_read)
     monkeypatch.setattr(store, "_asset", lambda record: asset)
     if persist_fails:

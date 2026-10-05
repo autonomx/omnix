@@ -15,15 +15,13 @@ The baseline research variant is expected to reproduce the frozen evaluator.
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import strategy_leader_momentum_continuation as leader
 from .models import MarketBar
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 ResearchVariantName = Literal[
     "baseline_v1_2",

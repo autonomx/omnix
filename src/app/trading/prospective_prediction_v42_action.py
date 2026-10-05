@@ -19,7 +19,6 @@ Scientific boundary:
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -32,9 +31,8 @@ from .prospective_prediction_v4 import (
     apply_execution_costs,
 )
 from .prospective_prediction_v42 import V42Forecast
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 V42_ACTION_VERSION = "prospective-gap-v4.2-action-v1"
 PORTFOLIO_F_VERSION = "prospective-gap-portfolio-f-v1"

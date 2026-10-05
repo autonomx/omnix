@@ -92,26 +92,3 @@ def resolve_rpg_prompt_profile(
     return profile.with_overrides(**dict(overrides))
 
 
-def rpg_prompt_profile_debug_payload(
-    task: RpgPromptTask,
-    *,
-    registry: Mapping[RpgPromptTask, RpgPromptProfile] | None = None,
-    overrides: Mapping[str, object] | None = None,
-    latency_ms: float | None = None,
-    status: str = "configured",
-) -> dict[str, object]:
-    profile = resolve_rpg_prompt_profile(task, registry=registry, overrides=overrides)
-    return profile.debug_payload(latency_ms=latency_ms, status=status)
-
-
-def validate_rpg_prompt_profile_registry(registry: Mapping[RpgPromptTask, RpgPromptProfile]) -> tuple[str, ...]:
-    """Return missing or mismatched profile issues without side effects."""
-
-    issues: list[str] = []
-    for task in default_rpg_prompt_profile_registry():
-        profile = registry.get(task)
-        if profile is None:
-            issues.append(f"missing:{task}")
-        elif profile.task != task:
-            issues.append(f"task_mismatch:{task}:{profile.task}")
-    return tuple(issues)

@@ -2,11 +2,11 @@
 
 ## Hardened runtime composition
 
-Production binds one immutable [RuntimeConfig](../src/app/runtime_config.py), derives [process capabilities](../src/app/runtime_capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
+Production binds one immutable [RuntimeConfig](../src/app/runtime/config.py), derives [process capabilities](../src/app/runtime/capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
 
 PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
 
-Production routing belongs to [ingress](architecture/OMNIX_PRODUCTION_INGRESS.md), using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See [runtime invariants](architecture/OMNIX_RUNTIME_INVARIANTS.md), [architecture gates](testing/ARCHITECTURE_GATES.md), [compatibility retirement](architecture/OMNIX_COMPATIBILITY_RETIREMENT.md) and ADRs 0010–0014 for the enforceable contracts.
+Production routing belongs to [ingress](architecture/OMNIX_PRODUCTION_INGRESS.md), using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See [runtime invariants](architecture/OMNIX_RUNTIME_INVARIANTS.md), [architecture gates](testing/ARCHITECTURE_GATES.md), [compatibility retirement](architecture/OMNIX_COMPATIBILITY_RETIREMENT.md) and ADRs 0010–0016 for the enforceable contracts. [ADR-0016](architecture/ADR-0016-platform-tiers.md) sets the platform tiers (kernel, shared services, platform capabilities, apps) and module boundaries; the [platform architecture roadmap](PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md) sequences the work.
 
 This document describes the architecture implemented by the current Omnix application and the invariants new work must preserve. [`../SPEC.md`](../SPEC.md) is the authority for platform-level design rules; this document connects those rules to the current source tree.
 
@@ -140,7 +140,7 @@ Chat history critical path when `/api/voice-library` is available.
 
 ## Typed API boundary
 
-The web app uses a shared API client under `src/apps/web/src/api`. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:
+The web app's transport and kernel client live under `src/apps/web/src/api`; each feature owns its gateway calls under `features/<name>/api/` (PA-2.4). `api:schema` exports the gateway OpenAPI document and `route-owners.json` (which feature mounted each operation). `api:types` (`scripts/generate-api-types.mjs`) writes `api/generated/core.ts` (kernel operations and schemas shared by several features) and, for each feature, `features/<name>/api/generated.ts` (the operations of the backend modules its manifest lists in `backendModules`, its own schemas, and every core schema re-exported). Feature code reads schemas only from its own `generated.ts` and calls its operations through `features/<name>/api/gateway.ts`:
 
 ```bash
 npm --workspace @omnix/web run api:schema
@@ -188,12 +188,11 @@ The gateway explicitly reports the classic browser UI as retired. Older FastAPI/
 src/app/
 ├─ agent_runtime/       planning, routing, capabilities, Pi execution, evidence, review
 ├─ assets/              shared artifact metadata/storage
-├─ assist_core/         assistant core services
 ├─ assistant_context/   durable assistant context APIs/services
 ├─ assistant_memory/    assistant memory subsystem
 ├─ assistant_tools/     governed tool adapters, connections, credentials, policy projection
 ├─ characters/          character profiles/runtime support
-├─ chat/                chat sessions/messages/generation jobs
+├─ chat/                chat sessions/messages/generation jobs; assist mode in chat/assist/
 ├─ desktop_companion/   companion support subsystem
 ├─ gateway/             browser-facing FastAPI gateway
 ├─ image/               image provider/API domain
@@ -244,6 +243,8 @@ A job can carry:
 - cancellation/retry information.
 
 Common resource classes include CPU plus GPU classes for LLM, TTS, STT, and image work. Feature workspaces can show filtered job subsets, while `/jobs` exposes the shared operational view.
+
+Standalone job-worker processes claim registered job types through independently bounded resource pools. PostgreSQL `SKIP LOCKED` claims and per-attempt lease tokens let workers run on any host without gateway singleton ownership. Each pool reports readiness and Prometheus metrics separately.
 
 Representative staged workflows:
 
@@ -319,7 +320,7 @@ Image service        : 5301 (when enabled)
 PostgreSQL           : 5432 by default
 ```
 
-The exact environment paths in `start_all.bat` are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.
+Interpreter paths come from the launcher configuration (`RPG_*_PYTHON`, `resources/config/launcher.toml`, or the Conda environments) and are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.
 
 ```omnix-diagram service-topology
 ```
@@ -483,11 +484,13 @@ omnix/
 
 Before adding a new feature, verify that the change preserves these rules:
 
+- Follow [ADR-0016](architecture/ADR-0016-platform-tiers.md): declare the module's tier, import other modules only through their declared contracts in the `depends_on` direction, never import another app, and contribute tables, migrations, settings, retention, tools and web clients from the module instead of editing central lists.
 - Add browser UI to the existing web app.
 - Keep authoritative state in backend/domain services.
 - Add typed API contracts instead of feature-specific transport hacks.
 - Use the shared provider/model registry.
 - Use the shared job system for long-running work.
+- Run durable job execution in standalone resource pools; keep the gateway worker role responsible for singleton schedulers and recovery.
 - Store outputs through the shared asset/artifact model.
 - Use the shared event transport.
 - Register settings in the settings infrastructure with an explicit persistence owner.

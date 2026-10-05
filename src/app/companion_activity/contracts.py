@@ -6,13 +6,14 @@ trust-bearing provenance links participate in monotonic trust/sensitivity inheri
 """
 from __future__ import annotations
 
+from importlib import import_module
+
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_memory_v2.contracts import Sensitivity, TrustLevel
-from app.assistant_memory_v2.policy import strongest_sensitivity, weakest_trust
+from app.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
 
 EvidenceRelation = Literal[
     "supports",
@@ -198,3 +199,30 @@ __all__ = [
     "derive_proposition",
     "inherit_evidence_policy",
 ]
+
+
+# Services apps import through this contract, loaded on first use (ADR-0016).
+_LAZY_EXPORTS = {
+    "CompanionInitiativeAuthorityStore": "initiative",
+    "InitiativeAcquireRequest": "initiative",
+    "default_companion_initiative_authority": "initiative",
+    "CognitionResult": "cognition",
+    "CompanionCognition": "cognition",
+    "ActivityCheckpointReason": "persistence",
+    "CompanionActivityCheckpointStore": "persistence",
+    "CompanionCheckpointPolicy": "persistence",
+    "PostgresCompanionActivityCheckpointStore": "persistence",
+    "build_activity_checkpoint": "persistence",
+    "ActivityRuntimeResult": "runtime",
+    "CompanionActivityRuntime": "runtime",
+    "CompanionActivityState": "state",
+    "empty_activity_state": "state",
+    "user_activity_propositions": "user_evidence",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(f"app.companion_activity.{module}"), name)

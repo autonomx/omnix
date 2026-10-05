@@ -12,21 +12,21 @@ on:
       - "src/tests/unit/assets/test_canonical_voice_clone_resolution.py"
       - "src/tests/unit/characters/test_live_call.py"
       - "src/tests/unit/test_voice_resolution_debug_logging.py"
-      - "src/apps/web/src/features/assistant-workspace/runtime-config.ts"
-      - "src/apps/web/src/features/assistant-workspace/runtime-config.test.ts"
-      - "src/apps/web/src/features/assistant-workspace/voice-resolution-diagnostics.ts"
-      - "src/apps/web/src/features/assistant-workspace/assistant-pcm-stream-player.test.ts"
-      - "src/apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.ts"
-      - "src/apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts"
-      - "src/apps/web/src/features/assistant-workspace/live-voice-smooth-audio-controller.ts"
-      - "src/apps/web/src/features/chatbot/characterClient.ts"
-      - "src/apps/web/src/features/chatbot/characterClient.test.ts"
-      - "src/apps/web/src/features/chatbot/CharacterModePanel.tsx"
-      - "src/apps/web/src/features/chatbot/CharacterModePanel.test.tsx"
-      - "src/apps/web/src/features/chatbot/CharacterManagementPanel.tsx"
-      - "src/apps/web/src/features/chatbot/CharacterManagementPanel.selection.test.tsx"
-      - "src/apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
-      - "src/apps/web/src/features/chatbot/VoiceGovernancePanel.test.tsx"
+      - "src/apps/web/src/features/assistant/workspace/runtime-config.ts"
+      - "src/apps/web/src/features/assistant/workspace/runtime-config.test.ts"
+      - "src/apps/web/src/features/assistant/workspace/voice-resolution-diagnostics.ts"
+      - "src/apps/web/src/features/assistant/workspace/assistant-pcm-stream-player.test.ts"
+      - "src/apps/web/src/features/assistant/workspace/chat-message-audio-controller-v2.ts"
+      - "src/apps/web/src/features/assistant/workspace/chat-message-audio-controller-v2.test.ts"
+      - "src/apps/web/src/features/assistant/workspace/live-voice-smooth-audio-controller.ts"
+      - "src/apps/web/src/features/assistant/chat/characterClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterClient.test.ts"
+      - "src/apps/web/src/features/assistant/chat/CharacterModePanel.tsx"
+      - "src/apps/web/src/features/assistant/chat/CharacterModePanel.test.tsx"
+      - "src/apps/web/src/features/assistant/chat/CharacterManagementPanel.tsx"
+      - "src/apps/web/src/features/assistant/chat/CharacterManagementPanel.selection.test.tsx"
+      - "src/apps/web/src/features/assistant/chat/VoiceGovernancePanel.tsx"
+      - "src/apps/web/src/features/assistant/chat/VoiceGovernancePanel.test.tsx"
       - "src/apps/web/src/features/voice/voiceLibraryAssetFallback.ts"
       - "src/apps/web/src/features/voice/voiceLibraryAssetFallback.test.ts"
       - ".github/workflows/character-live-voice-resolution.yml"
@@ -47,18 +47,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install focused Python dependencies
-        run: >-
-          python -m pip install
-          ruff pytest pydantic fastapi httpx requests python-multipart pillow
+        run: |
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
       - name: Lint voice resolution path
         run: |
           ruff check \
@@ -81,11 +80,11 @@ jobs:
       - name: Verify browser playback and character reassignment
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/assistant-workspace/runtime-config.test.ts
-          src/features/assistant-workspace/assistant-pcm-stream-player.test.ts
-          src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts
-          src/features/chatbot/characterClient.test.ts
-          src/features/chatbot/CharacterModePanel.test.tsx
-          src/features/chatbot/CharacterManagementPanel.selection.test.tsx
-          src/features/chatbot/VoiceGovernancePanel.test.tsx
+          src/features/assistant/workspace/runtime-config.test.ts
+          src/features/assistant/workspace/assistant-pcm-stream-player.test.ts
+          src/features/assistant/workspace/chat-message-audio-controller-v2.test.ts
+          src/features/assistant/chat/characterClient.test.ts
+          src/features/assistant/chat/CharacterModePanel.test.tsx
+          src/features/assistant/chat/CharacterManagementPanel.selection.test.tsx
+          src/features/assistant/chat/VoiceGovernancePanel.test.tsx
           src/features/voice/voiceLibraryAssetFallback.test.ts

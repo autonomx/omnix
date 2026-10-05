@@ -5,16 +5,15 @@ import json
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .indicator_signals import MultiTimeframeIndicatorContext
 from .models import MarketBar
 from .providers.alpaca_iex_status import AlpacaIexStatusCache, default_alpaca_iex_status_cache
 from .research.fact_repository import TradingFactRepository, default_fact_repository
 from .research.repository import TradingResearchRepository, default_research_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _SCHEMA_VERSION = "v2-prospective-signal-features-2"
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)

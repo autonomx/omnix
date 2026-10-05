@@ -9,7 +9,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -41,7 +41,7 @@ def test_concurrent_postgresql_claims_select_one_authoritative_owner() -> None:
 
     try:
         apply_migrations(first_database)
-        context = bootstrap_local_tenant(first_database)
+        context = ensure_local_identity(first_database)
         barrier = Barrier(2)
 
         def claim(database: PostgresDatabase) -> dict:

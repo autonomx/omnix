@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';
@@ -14,6 +15,8 @@ import {
   type PaperSimulationEpoch,
 } from './tradingPaperAnalyticsApi';
 import './TradingPaperDashboard.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { chartPalette } from './chartPalette';
 
 type DashboardTab = 'overview' | 'diagnostics' | 'execution';
 type Point = { x: number; y: number; label?: string };
@@ -231,7 +234,7 @@ function WinLossDonut({ wins, losses }: { wins: number; losses: number }) {
   const percentage = winRate * 100;
   return (
     <div className="paper-win-loss">
-      <div className="paper-win-donut" style={{ background: `conic-gradient(#2fb879 0 ${percentage}%, #ec4b5d ${percentage}% 100%)` }} role="img" aria-label={`${wins} winning trades and ${losses} losing trades`}>
+      <div className="paper-win-donut" style={{ background: `conic-gradient(${chartPalette.gain} 0 ${percentage}%, ${chartPalette.loss} ${percentage}% 100%)` }} role="img" aria-label={`${wins} winning trades and ${losses} losing trades`}>
         <div><strong>{total}</strong><small>Total</small></div>
       </div>
       <div className="paper-win-legend">
@@ -394,10 +397,10 @@ export function TradingPaperDashboard() {
       });
     };
     refresh();
-    const timer = window.setInterval(refresh, 5_000);
+    const stopPolling = startPolling(refresh, POLL_INTERVALS_MS.paperAccount);
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [accountId]);
 
@@ -494,8 +497,9 @@ export function TradingPaperDashboard() {
       trade_count: manualPerformance.tradeCount,
       wins: manualPerformance.wins,
       losses: manualPerformance.losses,
-      win_rate: manualPerformance.winRate,
-      profit_factor: manualPerformance.profitFactor,
+      // The gateway sends decimals as strings; keep the same shape.
+      win_rate: manualPerformance.winRate === null ? null : String(manualPerformance.winRate),
+      profit_factor: manualPerformance.profitFactor === null ? null : String(manualPerformance.profitFactor),
       expectancy_r: null,
     };
   }

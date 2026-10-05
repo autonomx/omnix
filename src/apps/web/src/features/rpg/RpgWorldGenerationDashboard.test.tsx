@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
+import type { RpgAuthoringSection } from './api/rpgWorldAuthoringClient';
+import type { RpgWorldGenerationRun } from './api/rpgWorldLibraryClient';
 import { RpgWorldGenerationDashboard } from './RpgWorldGenerationDashboard';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const section: RpgAuthoringSection = {
   id: 'regions',
@@ -83,9 +84,7 @@ const approvedProfileResponse = {
 };
 
 function renderDashboard() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <RpgWorldGenerationDashboard
@@ -160,9 +159,7 @@ describe('RpgWorldGenerationDashboard', () => {
       graph: { nodes: [{ topic_id: 'realm' }, { topic_id: 'places' }] },
       plan: { topic_ids: ['realm'] },
     };
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
         <RpgWorldGenerationDashboard generation={partialReviewRun} sections={[section]} worldId="world:aurelia" />
@@ -269,9 +266,7 @@ describe('RpgWorldGenerationDashboard', () => {
         review_decisions: {},
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }));
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
         <RpgWorldGenerationDashboard generation={previousRun} sections={[section, places]} worldId="world:aurelia" />
@@ -371,9 +366,7 @@ describe('RpgWorldGenerationDashboard', () => {
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }));
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     queryClient.setQueryData(
       ['feature', 'rpg', 'world-dossier-repair-progress', 'world:aurelia'],
       { completed: 7, failed: 2, currentTitle: 'The Net-Ghost Collective', total: 50 },
@@ -395,9 +388,7 @@ describe('RpgWorldGenerationDashboard', () => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })));
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
         <RpgWorldGenerationDashboard

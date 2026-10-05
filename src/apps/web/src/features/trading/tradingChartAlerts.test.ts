@@ -9,8 +9,9 @@ import {
   priceConditionForThreshold,
 } from './tradingChartAlerts';
 import type { TradingAlert } from './tradingTypes';
+import { fixture } from '../../test/fixture';
 
-const baseAlert: TradingAlert = {
+const baseAlert: TradingAlert = fixture({
   alert_id: 'chart-alert-1',
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
   binding_id: 'binance:websocket_and_rest:crypto:BINANCE:spot:BTC-USDT',
@@ -34,7 +35,7 @@ const baseAlert: TradingAlert = {
   enabled: true,
   cooldown_seconds: 0,
   revision: 3,
-};
+});
 
 describe('chart-native Trading alerts', () => {
   it('distinguishes lifecycle state from a transient trigger highlight', () => {

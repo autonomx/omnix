@@ -26,6 +26,7 @@ Usage:
     scene = engine.handle_input("look around")
 """
 
+from threading import Event
 from typing import Any, Callable, Dict, List, Optional
 
 from .event_bus import EventBus
@@ -306,36 +307,3 @@ class GameEngine:
     # PHASE 3 — DEBUG API (PATCH 8)
     # -------------------------
 
-    def get_timeline_branch(self, event_id: str) -> List[str]:
-        """Get the full branch path from root to the specified event.
-
-        PHASE 3 — DEBUG API:
-        Returns the chain of event IDs from the root to the given event,
-        useful for understanding the causal history of any point in the timeline.
-
-        Args:
-            event_id: The event to trace back from.
-
-        Returns:
-            List of event IDs from root to the specified event.
-
-        Raises:
-            KeyError: If the event is not found in the timeline graph.
-        """
-        return self._event_bus.timeline.get_branch(event_id)
-
-    def list_branches(self) -> Dict[str, List[str]]:
-        """List all branch points in the timeline.
-
-        PHASE 3 — DEBUG API:
-        Returns events that have multiple children (fork points).
-        Useful for understanding the shape of the timeline graph.
-
-        Returns:
-            Dictionary mapping fork point event IDs to their child event IDs.
-        """
-        return {
-            eid: node.children
-            for eid, node in self._event_bus.timeline.nodes.items()
-            if node.children
-        }

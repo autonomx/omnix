@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading.strategy_ai_shadow_v2 import MarketStructureSnapshot, StructuredAlphaTrigger
-from app.trading.strategy_ai_shadow_v2_schedule_policy import _effective_armed_trigger_satisfied
+from app.trading.strategy_ai_shadow_v2_roadmap_policy import (
+    _previous_trigger_satisfied as _effective_armed_trigger_satisfied,
+)
 from app.trading.strategy_repository import StrategyEvent
 
 INSTRUMENT = "equity:NASDAQ:TEST"

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_solana_ai_has_dedicated_durable_strategy_and_decision_tables() -> None:
     migration = (
-        ROOT / "app/persistence/migrations/0060_trading_solana_ai_strategy.sql"
+        ROOT / "app/trading/migrations/0060_trading_solana_ai_strategy.sql"
     ).read_text(encoding="utf-8")
     repository = (
         ROOT / "app/trading/strategy_solana_ai_repository.py"

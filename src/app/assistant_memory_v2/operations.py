@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +15,8 @@ from .convergence import (
 from .derived_state import PostgresMemoryV2DerivedStateStore
 from .observation_store import _space_values
 from .search_index import PostgresMemoryV2SearchIndex
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +80,9 @@ class PostgresMemoryV2ConvergenceWorker:
         self.database = database or default_database()
         self.coordinator = coordinator or PostgresMemoryV2DerivedCoordinator(self.database)
         self.search_index = search_index or PostgresMemoryV2SearchIndex(self.database)
+        from .embedding_index import PostgresMemoryV2EmbeddingIndex
+
+        self.embedding_index = PostgresMemoryV2EmbeddingIndex(self.database)
         self.derived_store = derived_store or PostgresMemoryV2DerivedStateStore(self.database)
         self.max_backoff_seconds = max(1, int(max_backoff_seconds))
         self.max_attempts = max(1, int(max_attempts))
@@ -313,6 +319,10 @@ class PostgresMemoryV2ConvergenceWorker:
             if current.derived_revision < job.target_derived_revision:
                 raise RuntimeError("projection target is ahead of canonical derived state")
             self.search_index.rebuild(job.space)
+            try:
+                self.embedding_index.sync(job.space)
+            except Exception:  # noqa: BLE001 - retrieval falls back to words until the next projection
+                logger.warning("memory_v2_embedding_sync_failed", exc_info=True)
             return True
         except Exception as exc:  # noqa: BLE001 - persist arbitrary projection failures
             self._fail_job(

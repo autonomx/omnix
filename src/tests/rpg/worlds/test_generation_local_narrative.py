@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_local_narrative import (
@@ -10,9 +9,7 @@ from app.rpg.session.genesis.world_forge_local_narrative import (
 from app.rpg.session.genesis.world_forge_profile_deterministic import generate_deterministic_profile_topic
 from app.rpg.session.genesis.world_forge_profile_generation import default_profile_registry
 from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.rpg.worlds import generation_compilation
 from app.rpg.worlds.generation_local_narrative import (
-    LocalNarrativeCompilationError,
     local_narrative_issues,
     local_narrative_report,
 )
@@ -180,33 +177,6 @@ def test_duplicate_and_single_pressure_portfolios_are_blocking() -> None:
 
     assert any(row.code == "duplicate_local_narrative_opportunity" for row in duplicate)
     assert any(row.code == "local_narrative_pressure_concentration_high" for row in concentrated)
-
-
-def test_certified_compilation_fails_before_legacy_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = _rows()
-    rows[-1]["candidate"]["entities"][0].pop("local_narrative_signature")
-    called = False
-
-    def legacy(**_kwargs: object) -> object:
-        nonlocal called
-        called = True
-        raise AssertionError("legacy compiler should not run")
-
-    monkeypatch.setattr(generation_compilation, "compile_world_generation_publication", legacy)
-    monkeypatch.setattr(generation_compilation, "_reports", lambda values, graph: {"local_narrative": local_narrative_report(values, graph)})
-    monkeypatch.setattr(generation_compilation, "_graph_audits", lambda: (("local_narrative", local_narrative_report, generation_compilation.extension_audits()[-1][2]),))
-    monkeypatch.setattr(generation_compilation, "require_unique_canon_identifiers", lambda _rows: None)
-    monkeypatch.setattr(generation_compilation, "require_resolved_objective_named_claims", lambda _rows: None)
-
-    with pytest.raises(LocalNarrativeCompilationError):
-        generation_compilation.compile_world_generation_artifact(
-            mode="certified_release",
-            run={"graph": _graph()},
-            world={},
-            topic_rows=rows,
-            revision=1,
-        )
-    assert called is False
 
 
 def test_transaction_discovers_failed_local_narrative_report() -> None:

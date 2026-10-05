@@ -192,10 +192,6 @@ def get_enemy_archetype(archetype_id: str) -> Dict[str, Any]:
     return deepcopy(_safe_dict(ENEMY_ARCHETYPES.get(archetype_id)))
 
 
-def list_enemy_archetypes() -> List[Dict[str, Any]]:
-    return [deepcopy(value) for value in ENEMY_ARCHETYPES.values()]
-
-
 def instantiate_enemy_from_archetype(
     archetype_id: str,
     *,

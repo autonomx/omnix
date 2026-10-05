@@ -25,13 +25,15 @@ class StructuredCapabilities:
 
     @classmethod
     def default_for_provider(cls, provider_name: str) -> "StructuredCapabilities":
-        normalized = str(provider_name or "").strip().casefold()
-        if normalized == "lmstudio":
+        from app.providers.catalog import CLOSED_OBJECT_SCHEMA, NATIVE_JSON_SCHEMA, provider_capabilities
+
+        capabilities = provider_capabilities(provider_name)
+        if NATIVE_JSON_SCHEMA in capabilities:
             return cls(
                 preferred_modes=(StructuredMode.JSON_SCHEMA, StructuredMode.TEXT_JSON),
                 supports_strict_schema=True,
             )
-        if normalized == "chatgpt_codex":
+        if CLOSED_OBJECT_SCHEMA in capabilities:
             # The Codex app-server transport does not expose a native
             # response_format field, so the provider projects JSON Schema into
             # its system instructions. Prefer the schema-bearing mode instead

@@ -1,6 +1,8 @@
 """Operational kill switch and compatibility policy for Desktop Companion."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from collections.abc import Mapping
 
@@ -25,7 +27,7 @@ class DesktopCompanionOperationalStatus(BaseModel):
 def desktop_companion_operational_status(
     environ: Mapping[str, str] | None = None,
 ) -> DesktopCompanionOperationalStatus:
-    values = environ if environ is not None else os.environ
+    values = environ if environ is not None else environment()
     killed = _truthy(values.get("OMNIX_DESKTOP_COMPANION_KILL_SWITCH"))
     return DesktopCompanionOperationalStatus(
         available=not killed,

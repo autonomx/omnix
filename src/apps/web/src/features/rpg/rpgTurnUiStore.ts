@@ -1,3 +1,5 @@
+ 
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { useEffect, useState } from 'react';
 import type { RpgStoryMessagePreview } from './rpgUiState';
 import {
@@ -78,8 +80,7 @@ const sessionResponseCache = new Map<string, CachedResponse>();
 const listeners = new Set<() => void>();
 const MAX_ENTRIES_PER_SESSION = 24;
 const MAX_SESSION_CACHE_ENTRIES = 12;
-const ORIGINAL_FETCH_KEY = '__omnixRpgTurnOriginalFetch';
-const INSTALLED_FETCH_KEY = '__omnixRpgTurnFetchInstalled';
+let removeTurnMiddleware: (() => void) | null = null;
 
 export function createRpgSubmissionId(): string {
   const cryptoValue = globalThis.crypto;
@@ -248,24 +249,18 @@ export function storyMessageIdentity(message: RpgStoryMessagePreview, index: num
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
-  if ([...domains].some((domain) => ['inventory', 'currency', 'merchant', 'player'].includes(domain))) {
-    paths.add('/api/replay/inventory');
-  }
   if ([...domains].some((domain) => ['location', 'world', 'quests', 'journal'].includes(domain))) {
     paths.add('/api/reports');
   }
   return [...paths];
 }
 
-export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): void {
-  const scope = globalThis as typeof globalThis & Record<string, unknown>;
-  if (scope[INSTALLED_FETCH_KEY]) return;
-  const originalFetch = fetchImpl || globalThis.fetch?.bind(globalThis);
-  if (!originalFetch) return;
-  scope[ORIGINAL_FETCH_KEY] = originalFetch;
-  scope[INSTALLED_FETCH_KEY] = true;
+/** Returns a function that removes it. `fetchImpl` replaces the rest of the pipeline (tests). */
+export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
+  if (removeTurnMiddleware || typeof globalThis.fetch !== 'function') return () => undefined;
 
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const remove = registerFetchMiddleware('rpg-turn-ui', async (input, init, next) => {
+    const originalFetch = fetchImpl ?? next;
     const requestUrl = new URL(requestUrlString(input), globalThis.location?.origin || 'http://localhost');
     const turnMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)\/turn$/);
     const sessionMatch = requestUrl.pathname.match(/^\/api\/rpg\/sessions\/([^/]+)$/);
@@ -331,7 +326,12 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): void
     }
 
     return originalFetch(input, init);
-  }) as typeof fetch;
+  });
+  removeTurnMiddleware = remove;
+  return () => {
+    remove();
+    if (removeTurnMiddleware === remove) removeTurnMiddleware = null;
+  };
 }
 
 export function resetRpgTurnUiStoreForTests(): void {
@@ -339,11 +339,8 @@ export function resetRpgTurnUiStoreForTests(): void {
   sessionResponseCache.clear();
   listeners.clear();
   resetRpgTurnDiagnosticsForTests();
-  const scope = globalThis as typeof globalThis & Record<string, unknown>;
-  const originalFetch = scope[ORIGINAL_FETCH_KEY] as typeof fetch | undefined;
-  if (originalFetch) globalThis.fetch = originalFetch;
-  delete scope[ORIGINAL_FETCH_KEY];
-  delete scope[INSTALLED_FETCH_KEY];
+  removeTurnMiddleware?.();
+  removeTurnMiddleware = null;
 }
 
 function visibleEntriesFromPayload(

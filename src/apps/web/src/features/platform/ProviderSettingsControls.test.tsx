@@ -1,18 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderSettings() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'settings');
 
   if (!module) {
@@ -54,6 +50,7 @@ describe('provider settings controls', () => {
           image_enabled: true,
           rpg_visual_enabled: false,
           worker_urls: { tts: 'http://127.0.0.1:5101' },
+          revisions: { provider: 2, audio_provider_tts: 1, audio_provider_stt: 0 },
           settings: {
             lmstudio: { base_url: 'http://localhost:1234', direct: false },
             openrouter: { model: 'openai/gpt-4o-mini', api_key: '***1234' },
@@ -91,7 +88,10 @@ describe('provider settings controls', () => {
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/settings',
         expect.objectContaining({
-          body: JSON.stringify({ provider: 'openrouter', audio_provider_tts: 'faster-qwen3-tts', audio_provider_stt: 'parakeet' }),
+          body: JSON.stringify({
+            values: { provider: 'openrouter', audio_provider_tts: 'faster-qwen3-tts', audio_provider_stt: 'parakeet' },
+            revisions: { provider: 2, audio_provider_tts: 1, audio_provider_stt: 0 },
+          }),
           method: 'POST',
         }),
       );

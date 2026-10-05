@@ -12,8 +12,7 @@ from app.rpg.session.genesis.world_forge_authorship_policy import (
     topic_authorship_policy,
 )
 from app.rpg.session.genesis.world_forge_profiles import FieldDefinition
-from app.rpg.worlds.authorship_audit import _topic_audit
-from app.rpg.worlds.contracts import WorldReleaseDocument, WorldRevisionDocument
+from app.rpg.worlds.contracts import WorldRevisionDocument
 from app.rpg.worlds.generation_authorship import AuthorshipValidationError
 from app.rpg.worlds.generation_authorship_runtime import (
     attach_human_authorship,
@@ -26,7 +25,6 @@ from app.rpg.worlds.generation_authorship_runtime import (
 )
 from app.rpg.worlds.revision_authorship import (
     prepare_direct_world_revision,
-    require_release_authorship,
     require_revision_authorship,
 )
 
@@ -294,29 +292,6 @@ def test_profile_fields_publish_explicit_authorship_policy() -> None:
     }
 
 
-def test_audit_classifies_verified_and_missing_lore() -> None:
-    authored, _artifact = _authored()
-    verified = _topic_audit(
-        {"topic_id": "places", "source": "ai", "status": "ready", "content": authored}
-    )
-    assert verified["classification"] == "verified_authored"
-    assert verified["publishable"] is True
-
-    missing = _candidate()
-    missing["entities"][0]["short_summary"] = ""
-    missing["entities"][0]["dossier"] = {
-        "schema_version": "rpg_world_entity_dossier_v1",
-        "sections": [],
-        "generation_required": True,
-    }
-    missing["provenance"] = {}
-    audited = _topic_audit(
-        {"topic_id": "places", "source": "legacy", "status": "ready", "content": missing}
-    )
-    assert audited["classification"] == "missing_lore"
-    assert audited["entities"][0]["generation_required"] is True
-
-
 def test_manual_revision_gets_server_created_human_authorship() -> None:
     document = WorldRevisionDocument(
         world_id="world:manual",
@@ -345,34 +320,6 @@ def test_direct_ai_revision_is_rejected_in_favour_of_guarded_generation(monkeypa
         prepare_direct_world_revision(
             {"id": "world:ai", "source_mode": "ai"}, document
         )
-
-
-def test_guarded_generation_revision_and_release_form_a_trusted_chain() -> None:
-    revision = WorldRevisionDocument(
-        world_id="world:generated",
-        revision=1,
-        title="Generated World",
-        canon={"compiled": True},
-        provenance={
-            "source": "durable_world_generation",
-            "generation_run_id": "run:generated",
-            "topic_hashes": {"places": "sha256:places"},
-        },
-        content_hash="sha256:" + "d" * 64,
-    )
-    release = WorldReleaseDocument(
-        world_id="world:generated",
-        world_revision=1,
-        release=1,
-        world_revision_hash=revision.content_hash,
-        compiler_provenance={
-            "compiler": "rpg_world_generation_publication_v2",
-            "generation_run_id": "run:generated",
-        },
-    )
-    receipt = require_release_authorship(revision, release)
-    assert receipt["publishable"] is True
-    assert receipt["release_authorship_source"] == "guarded_generation_compiler"
 
 
 def test_unknown_revision_cannot_be_released() -> None:

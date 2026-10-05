@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -27,9 +26,14 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            import requests
+            import httpx
 
-            raise requests.HTTPError(f"HTTP {self.status_code}")
+            request = httpx.Request("GET", "https://provider.test")
+            raise httpx.HTTPStatusError(
+                f"HTTP {self.status_code}",
+                request=request,
+                response=httpx.Response(self.status_code, request=request),
+            )
 
 
 class FakeSession:
@@ -156,17 +160,14 @@ def test_provider_runtime_retries_and_reports_health() -> None:
     assert snapshot.status == "ready"
 
 
-def test_disk_cache_is_atomic_bounded_and_rejects_corruption(tmp_path: Path) -> None:
-    cache = TradingMarketDataCache(max_entries=2, cache_dir=tmp_path)
+def test_market_data_cache_is_bounded_and_writes_no_files(tmp_path: Path, monkeypatch) -> None:
+    # Decision data is not kept in local files (WP-8.3).
+    monkeypatch.chdir(tmp_path)
+    cache = TradingMarketDataCache(max_entries=2)
     cache.put("one", {"value": 1}, ttl_seconds=60, source="fixture")
     cache.put("two", {"value": 2}, ttl_seconds=60, source="fixture")
     cache.put("three", {"value": 3}, ttl_seconds=60, source="fixture")
-    assert len(list(tmp_path.glob("*.json"))) <= 2
-    assert not list(tmp_path.glob("*.tmp"))
 
-    path = cache._disk_path("three")
-    assert path is not None and path.exists()
-    path.write_text(json.dumps({"key": "three", "value": {"value": 999}, "expires_at": 9999999999, "source": "fixture", "fingerprint": "bad"}), encoding="utf-8")
-    cache._entries.clear()
-    assert cache.get("three") is None
-    assert not path.exists()
+    assert cache.get("one") is None
+    assert cache.get("three").value == {"value": 3}
+    assert list(tmp_path.rglob("*")) == []

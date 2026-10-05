@@ -1,0 +1,46 @@
+[layers.kernel]
+packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.memory_contracts", "app.memory_policy", "app.errors", "app.text"]
+may_import = ["kernel"]
+
+[layers.shared_services]
+packages = ["app.providers", "app.prompts", "app.models", "app.tts_http_client", "app.tts_stream_audio", "app.voice_debug"]
+may_import = ["kernel", "shared_services"]
+
+# ADR-0016: platform and app modules are not listed here. Each feature package
+# declares its tier in feature.py (FeatureModule.tier); a nested feature belongs
+# to the outermost feature package that contains it.
+[layers.platform]
+tier = "platform"
+may_import = ["kernel", "shared_services"]
+
+[layers.apps]
+tier = "app"
+may_import = ["kernel", "shared_services"]
+
+[layers.composition]
+packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "app.image_service_app", "app.image_service_runtime"]
+may_import = ["*"]
+
+[modules]
+# A module imports another module only through this contract module (or a
+# package of that name), only when it declares the other in depends_on, and
+# only when the other is a platform capability.
+contract_module = "contracts"
+
+# Transitional (PA-0.2): code that belongs to a module but lives outside its
+# package. Empty after PA-1.5 (replay), PA-3.2 (memory v2) and PA-5.2 (loose files).
+[modules.package_owners]
+"app.assistant_memory_v2" = "app.assistant_memory"
+"app.replay" = "app.rpg"
+"app.image_http_client" = "app.image"
+
+[owners]
+platform_table_sql = ["app/persistence/job_repository.py", "app/persistence/execution_repositories.py", "app/persistence/outbox_repository.py", "app/persistence/identity_service.py", "app/persistence/audit.py", "app/persistence/migrations.py", "app/persistence/retention.py"]
+blob_store_construction = ["app/persistence/blob_store.py", "app/persistence/storage.py", "app/assets/content.py"]
+tenant_bootstrap = ["app/persistence/identity_service.py", "app/persistence/startup.py", "app/production.py", "app/runtime_composition.py", "app/worker.py"]
+
+[rpg_core]
+packages = ["app.rpg.core", "app.rpg.session", "app.rpg.combat", "app.rpg.economy", "app.rpg.items", "app.rpg.world", "app.rpg.social", "app.rpg.action_resolver"]
+
+[production]
+entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/nemotron_eou_stt_server.py", "src/parakeet_stt_runtime.py", "src/parakeet_stt_server.py", "src/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]

@@ -1,22 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { readStorySnapshot } from './StoryAudioPanel';
+import { useMemo } from 'react';
 import { buildChapterAudioStates, documentFromCurrentStory } from './storyAudioManifest';
+import { useStorySnapshot } from './storySnapshotStore';
 
 export function StoryChapterMediaPanel() {
-  const [snapshot, setSnapshot] = useState(() => readStorySnapshot());
+  const snapshot = useStorySnapshot();
   const storyDoc = useMemo(() => documentFromCurrentStory(snapshot.title, snapshot.text), [snapshot.title, snapshot.text]);
-  const chapterStates = useMemo(() => buildChapterAudioStates(storyDoc), [storyDoc]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the revision marks newly saved audio manifests
+  const chapterStates = useMemo(() => buildChapterAudioStates(storyDoc), [storyDoc, snapshot.revision]);
   const readyCount = chapterStates.filter((chapter) => chapter.status === 'ready').length;
-
-  useEffect(() => {
-    const refresh = () => setSnapshot(readStorySnapshot());
-    const intervalId = window.setInterval(refresh, 1_500);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refresh);
-    };
-  }, []);
 
   return (
     <section className="storyteller-cast-panel" aria-label="Story chapter media">

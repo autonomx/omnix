@@ -1,4 +1,4 @@
-from app.assistant_context.models import AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
 from app.research.extraction import ReadablePageExtractor, extract_readable_content
 from app.research.outbound_web import OutboundWebResponse
 from app.research.quick_search import QuickSearchService

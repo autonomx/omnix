@@ -3,7 +3,7 @@ import type {
   RpgAuthoringCollectionPage,
   RpgAuthoringEntityCard,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import { mergeRuntimeLoreCards } from './RpgWorldEditorShell';
 
 function card(

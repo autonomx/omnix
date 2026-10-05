@@ -3,12 +3,12 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
   type RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import {
   rpgWorldLibraryClient,
   RpgWorldGenerationRequestError,
   type RpgWorldGenerationRun,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import './RpgWorldGenerationPanel.css';
 
 interface RpgWorldGenerationPanelProps {

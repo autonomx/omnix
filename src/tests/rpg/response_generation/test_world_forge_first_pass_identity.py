@@ -18,8 +18,8 @@ from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.worlds.generation_first_pass_provider import (
     FirstPassWorldForgeTopicGenerator,
 )
-from app.rpg_world_forge_provider import WorldForgeProviderConfig
-from app.rpg_world_forge_single_pass_provider import SinglePassWorldForgeProviderError
+from app.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.rpg.worlds.providers.single_pass import SinglePassWorldForgeProviderError
 
 
 class _Provider(BaseProvider):

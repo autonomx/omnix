@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
 from collections import defaultdict
 from collections.abc import Callable, Sequence
-from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .alerts import (
     TradingAlert,
     TradingAlertEvaluation,
@@ -37,18 +37,18 @@ _MONITOR_STATE_KEY = "_omnix_trading_alert_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_alert_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_ALERT_MONITOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_ALERT_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
@@ -156,7 +156,7 @@ def _indicator_value(alert: TradingAlert, bars: Sequence[MarketBar]) -> Decimal 
     return values[-1] if values else None
 
 
-class TradingAlertMonitor:
+class TradingAlertMonitor(ScheduledTradingMonitor):
     def __init__(
         self,
         *,
@@ -167,23 +167,10 @@ class TradingAlertMonitor:
         self.repository_factory = repository_factory
         self.market_service_factory = market_service_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
         self.evaluation_count = 0
         self.trigger_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._run_loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def run_once(self) -> int:
         repository = self.repository_factory()
@@ -257,7 +244,7 @@ class TradingAlertMonitor:
     def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": trading_alert_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -265,30 +252,12 @@ class TradingAlertMonitor:
             "trigger_count": self.trigger_count,
         }
 
-    async def _run_loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
 
-
-def register_trading_alert_monitor(gateway: FastAPI) -> TradingAlertMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_alert_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingAlertMonitor):
-        return existing
+        return None
     monitor = TradingAlertMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if trading_alert_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _MONITOR_STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=trading_alert_monitor_enabled)

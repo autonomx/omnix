@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from datetime import datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_repository import TradingCatalystRepository
@@ -19,10 +18,10 @@ from .strategy_evaluability import assess_session_evaluability
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
-_ET = ZoneInfo("America/New_York")
-_REGULAR_CLOSE_ET = time(16, 0)
 
 
 def _archive_universe_id(config: TradingStrategyConfigDocument, now_et: datetime) -> str:
@@ -179,7 +178,7 @@ def archive_daily_universe_if_due(
         if (
             not allow_late_recovery
             or config.config.universe_discovery_source != "finviz"
-            or now_et.time() >= _REGULAR_CLOSE_ET
+            or now_et.time() >= regular_close_time(now_et.date())
         ):
             return None
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.chat.context_budget import PromptBudgetDiagnostics, estimate_tokens
 from app.chat.prompt_rendering import RenderedPrompt, RenderedPromptMessage
-from app.gateway.live_voice_spoken_style import (
+from app.live_voice.prompt.spoken_style import (
     LIVE_VOICE_SPOKEN_STYLE,
     apply_live_voice_spoken_style,
 )

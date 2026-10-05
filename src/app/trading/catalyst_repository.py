@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .bounce_model import BounceModelScore
@@ -11,8 +11,9 @@ from .catalyst_evidence import CatalystEvidence
 
 
 class TradingCatalystRepository:
+    context = RequestTenant()
     def __init__(self, *, context: TenantContext | None = None, uow_factory=unit_of_work) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context
         self.uow_factory = uow_factory
 
     def save_evidence(self, evidence: CatalystEvidence) -> bool:

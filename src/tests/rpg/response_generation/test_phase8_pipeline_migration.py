@@ -11,18 +11,6 @@ AI_ROOT = REPO_ROOT / "src" / "app" / "rpg" / "ai"
 SESSION_RUNTIME = REPO_ROOT / "src" / "app" / "rpg" / "session" / "narration_runtime.py"
 
 
-def test_phase8_facade_uses_explicit_exports_without_fixup_side_effects():
-    source = (AI_ROOT / "world_scene_narrator.py").read_text(encoding="utf-8")
-
-    assert " import *" not in source
-    assert "turn_fixups" not in source
-    assert "current_turn_fixups" not in source
-    assert "patch" not in source.casefold()
-    assert "narrate_scene = narrate_scene_canonical" in source
-    assert not (AI_ROOT / "world_scene_narrator_turn_fixups.py").exists()
-    assert not (AI_ROOT / "world_scene_narrator_current_turn_fixups.py").exists()
-
-
 def test_phase8_session_publication_resolves_through_canonical_facade():
     source = SESSION_RUNTIME.read_text(encoding="utf-8")
 

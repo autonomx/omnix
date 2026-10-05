@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
@@ -16,6 +17,7 @@ import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
+import { chartPalette } from './chartPalette';
 
 type DragState = { alert: TradingAlert; threshold: number };
 type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
@@ -45,10 +47,10 @@ function isoDateTime(value: string): string | null {
 }
 
 function alertColor(state: TradingChartAlertState): string {
-  if (state === 'triggered') return '#ffd43b';
-  if (state === 'disabled') return '#78899b';
-  if (state === 'expired') return '#a875d4';
-  return '#ff8f3d';
+  if (state === 'triggered') return chartPalette.yellow;
+  if (state === 'disabled') return chartPalette.slate;
+  if (state === 'expired') return chartPalette.lavender;
+  return chartPalette.alertOrange;
 }
 
 function formattedPrice(value: number): string {

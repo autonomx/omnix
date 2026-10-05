@@ -3,8 +3,34 @@ name: Architecture runtime gates
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "src/app/**"
+      - "src/tests/**"
+      - "src/apps/web/**"
+      - "scripts/architecture_*.py"
+      - "scripts/run_architecture_gates.py"
+      - "scripts/export_gateway_openapi.py"
+      - "resources/architecture/**"
+      - "requirements/*.lock.txt"
+      - "pyproject.toml"
+      - "package-lock.json"
+      - ".node-version"
+      - ".github/workflows/architecture-runtime.yml"
   push:
-    branches: [main, refactor]
+    branches: [main]
+    paths:
+      - "src/app/**"
+      - "src/tests/**"
+      - "src/apps/web/**"
+      - "scripts/architecture_*.py"
+      - "scripts/run_architecture_gates.py"
+      - "scripts/export_gateway_openapi.py"
+      - "resources/architecture/**"
+      - "requirements/*.lock.txt"
+      - "pyproject.toml"
+      - "package-lock.json"
+      - ".node-version"
+      - ".github/workflows/architecture-runtime.yml"
   workflow_dispatch:
 
 permissions:
@@ -25,12 +51,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
+      - name: Verify clean hash-locked gateway install and production import
+        run: |
+          python -m venv .venv-gateway-lock-check
+          .venv-gateway-lock-check/bin/python -m pip install --require-hashes -r requirements/gateway.lock.txt
+          PYTHONPATH=src .venv-gateway-lock-check/bin/python -c "import app.production"
       - name: Install architecture test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install             pytest fastapi uvicorn httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Run architecture unit gate
         run: python scripts/run_architecture_gates.py --group unit
       - name: Verify production ingress is generated from shared policy
@@ -77,14 +107,63 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Install durable runtime test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install             pytest fastapi uvicorn httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
       - name: Run durable architecture gate
         run: python scripts/run_architecture_gates.py --group ${{ matrix.group }}
+
+  full-python-suite:
+    name: full-python-suite
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install full-suite dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Apply PostgreSQL migrations to the disposable test database
+        run: python -m app.persistence migrate
+      - name: Initialize fresh PostgreSQL runtime authority for tests
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Run the complete Python suite
+        run: |
+          mkdir -p artifacts
+          python -m pytest -n auto -m "not gpu and not live_provider and not playwright and not live_codex" --junitxml artifacts/full-python-suite.xml
+      - name: Upload full-suite triage inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-python-suite-triage
+          path: artifacts/full-python-suite.xml
+          if-no-files-found: error
 
   architecture-web:
     name: architecture-web
@@ -101,14 +180,13 @@ jobs:
           cache-dependency-path: package-lock.json
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Install web dependencies
         run: npm ci
       - name: Install OpenAPI export dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install             fastapi httpx pydantic requests python-multipart pillow numpy             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Typecheck
         run: npm run web:typecheck
       - name: Verify generated API contract
@@ -117,6 +195,6 @@ jobs:
         run: >
           npm run web:test --
           src/test/gateway-routing.test.ts
-          src/features/chatbot
+          src/features/assistant/chat
           src/features/audiobook/AudiobookWorkspace.test.tsx
           src/features/trading

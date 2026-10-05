@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -5,12 +6,12 @@ import {
   type RpgAuthoringSection,
   type RpgDossierEnrichmentCandidate,
   type RpgWorldTokenUsage,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import {
   rpgWorldGenerationReviewClient,
   type RpgWorldGenerationTopicResult,
-} from '../../api/rpgWorldGenerationReviewClient';
-import type { RpgWorldGenerationRun } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldGenerationReviewClient';
+import type { RpgWorldGenerationRun } from './api/rpgWorldLibraryClient';
 import { RpgWorldGenerationCandidateReview } from './RpgWorldGenerationCandidateReview';
 import {
   RpgWorldGenerationPanel,
@@ -470,7 +471,7 @@ export function RpgWorldGenerationDashboard({
     <div className="rpg-generation-dashboard is-operational-dashboard">
       <RpgWorldProfilePreview onApprovalChange={setProfileApproved} worldId={worldId} />
       <section className="rpg-generation-dashboard-header" aria-label="Generation status dashboard">
-        <div className="rpg-generation-dashboard-title"><span className="rpg-generation-dashboard-emblem" aria-hidden="true">✥</span><div><p className="eyebrow">World forge</p><h2>World Generation</h2><div className="rpg-generation-dashboard-live-status"><strong>{run ? label(run.status) : 'Ready'}</strong><span>·</span><span>{accepted.size} reviewed · {validated.size} validated · {overridden.size} accepted with overrides · {unresolvedFindings} unresolved findings</span><div aria-label={`${percent} percent complete`}><i style={{ width: `${percent}%` }} /></div><b>{percent}%</b></div></div></div>
+        <div className="rpg-generation-dashboard-title"><span className="rpg-generation-dashboard-emblem" aria-hidden="true">✥</span><div><p className="eyebrow">World forge</p><h2>World Generation</h2><div className="rpg-generation-dashboard-live-status"><strong>{run ? label(run.status) : 'Ready'}</strong><span>·</span><span>{accepted.size} reviewed · {validated.size} validated · {overridden.size} accepted with overrides · {unresolvedFindings} unresolved findings</span><div role="img" aria-label={`${percent} percent complete`}><i style={{ width: `${percent}%` }} /></div><b>{percent}%</b></div></div></div>
         <aside className="rpg-generation-provider-card"><span>Provider</span><strong>{label(provider)}</strong><span>Model</span><strong>{model || 'Provider default'}</strong><small>{run?.run_id ?? 'No active run'}</small></aside>
       </section>
 

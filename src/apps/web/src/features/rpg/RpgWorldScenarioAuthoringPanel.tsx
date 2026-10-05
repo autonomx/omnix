@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioSummary,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import {
   certification,
   matchingRelease,

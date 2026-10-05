@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable
 
-from app.assistant_context.models import AssistantContextItem
-from app.assistant_context.web_search import WebSearchClient
+from app.conversation.contracts import AssistantContextItem
+from app.research.web_search import WebSearchClient
 
 from .cache import ResearchCacheStore
 from .contracts import ResearchSource, ResearchSourceSnapshot

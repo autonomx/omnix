@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringSection } from './api/rpgWorldAuthoringClient';
 import {
   completeAuthoringSections,
   documentAnchors,

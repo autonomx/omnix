@@ -10,7 +10,7 @@ from app.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -72,7 +72,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Structure Test")
@@ -239,7 +239,7 @@ def test_render_run_omits_fully_skipped_source_chapters(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Skipped chapter test")
@@ -339,7 +339,7 @@ def test_role_override_requeues_analysis_when_speaker_visibility_changes(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Role override test")

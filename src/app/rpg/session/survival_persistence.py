@@ -78,13 +78,3 @@ def normalize_session_survival_for_persistence(session: Mapping[str, Any]) -> Di
     return session
 
 
-def survival_persistence_summary(simulation_state: Mapping[str, Any]) -> Dict[str, Any]:
-    """Small bounded diagnostic summary for tests/reports."""
-    state = normalize_survival_state(_canonical_survival_seed(simulation_state))
-    return {
-        "enabled": bool(state.get("enabled", True)),
-        "needs": {key: int(state.get(key, 0) or 0) for key in _NEED_KEYS},
-        "last_turns": {key: state.get(key) for key in _LAST_TURN_KEYS},
-        "event_count": len(state.get("events") or []),
-        "source": SURVIVAL_PERSISTENCE_SOURCE,
-    }

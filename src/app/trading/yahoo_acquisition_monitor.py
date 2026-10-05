@@ -7,48 +7,52 @@ failures later in the session do not erase already-observed evidence.
 
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
 from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_yahoo_acquisition_monitor"
 _SESSION_OPEN = time(4, 0)
 _SESSION_CLOSE = time(16, 5)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def yahoo_acquisition_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_YAHOO_ACQUISITION", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(15.0, value)
 
 
-class TradingYahooAcquisitionMonitor:
+class TradingYahooAcquisitionMonitor(ScheduledTradingMonitor):
+    def record_cycle_error(self, exc: Exception) -> None:
+        self.capture_error_count += 1
+        self.last_run_at = self.now_factory()
+        super().record_cycle_error(exc)
+
     def __init__(
         self,
         *,
@@ -61,7 +65,6 @@ class TradingYahooAcquisitionMonitor:
         self.market_service_factory = market_service_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self._last_capture_end: dict[str, datetime] = {}
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
@@ -176,34 +179,10 @@ class TradingYahooAcquisitionMonitor:
             self.last_error = None
         return succeeded
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self.capture_error_count += 1
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                self.last_run_at = self.now_factory()
-            await asyncio.sleep(self.interval_seconds)
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": yahoo_acquisition_monitor_enabled(),
-            "running": self._task is not None and not self._task.done(),
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
@@ -215,30 +194,18 @@ class TradingYahooAcquisitionMonitor:
         }
 
 
-def register_trading_yahoo_acquisition_monitor(
-    gateway: FastAPI,
-) -> TradingYahooAcquisitionMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_yahoo_acquisition_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingYahooAcquisitionMonitor):
-        return existing
+        return None
     monitor = TradingYahooAcquisitionMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if yahoo_acquisition_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=yahoo_acquisition_monitor_enabled)
 
 
 __all__ = [
     "TradingYahooAcquisitionMonitor",
-    "register_trading_yahoo_acquisition_monitor",
+    "create_trading_yahoo_acquisition_monitor_task",
     "yahoo_acquisition_monitor_enabled",
 ]

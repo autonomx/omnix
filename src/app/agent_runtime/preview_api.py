@@ -114,7 +114,26 @@ def _preview_headers(*, html: bool) -> dict[str, str]:
 
 @router.get(
     "/{run_id}/workspace-preview/{asset_path:path}",
-    include_in_schema=False,
+    response_model=None,
+    response_class=Response,
+    responses={
+        200: {
+            "description": "Run-scoped preview asset; content type follows its allowlisted file extension.",
+            "content": {
+                "text/html": {"schema": {"type": "string", "format": "binary"}},
+                "text/plain": {"schema": {"type": "string", "format": "binary"}},
+                "text/css": {"schema": {"type": "string", "format": "binary"}},
+                "text/javascript": {"schema": {"type": "string", "format": "binary"}},
+                "application/javascript": {"schema": {"type": "string", "format": "binary"}},
+                "application/json": {"schema": {"type": "object", "additionalProperties": True}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                "image/*": {"schema": {"type": "string", "format": "binary"}},
+                "font/*": {"schema": {"type": "string", "format": "binary"}},
+                "audio/*": {"schema": {"type": "string", "format": "binary"}},
+                "video/*": {"schema": {"type": "string", "format": "binary"}},
+            },
+        }
+    },
 )
 def get_agent_workspace_preview(
     run_id: str,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.compat.character_cards import import_external_character_card
 from app.rpg.presentation.visual_state import ensure_visual_state
@@ -9,11 +9,11 @@ _MAX_PACKS = 32
 _MAX_PACK_CHARACTERS = 64
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -33,7 +33,7 @@ def _first_non_empty(*values: Any) -> str:
     return ""
 
 
-def _normalize_pack_manifest(value: Any) -> Dict[str, Any]:
+def _normalize_pack_manifest(value: Any) -> dict[str, Any]:
     data = _safe_dict(value)
     return {
         "id": _safe_str(data.get("id")).strip(),
@@ -45,7 +45,7 @@ def _normalize_pack_manifest(value: Any) -> Dict[str, Any]:
     }
 
 
-def _normalize_content_pack(value: Any) -> Dict[str, Any]:
+def _normalize_content_pack(value: Any) -> dict[str, Any]:
     data = _safe_dict(value)
     return {
         "manifest": _normalize_pack_manifest(data.get("manifest")),
@@ -58,7 +58,7 @@ def _normalize_content_pack(value: Any) -> Dict[str, Any]:
     }
 
 
-def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def ensure_content_pack_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
@@ -87,10 +87,10 @@ def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     return simulation_state
 
 
-def install_content_pack(
-    simulation_state: Dict[str, Any],
-    pack: Dict[str, Any],
-) -> Dict[str, Any]:
+def add_content_pack(
+    simulation_state: dict[str, Any],
+    pack: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = ensure_content_pack_state(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
@@ -114,7 +114,7 @@ def install_content_pack(
     return simulation_state
 
 
-def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def list_content_packs(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     simulation_state = ensure_content_pack_state(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
@@ -125,7 +125,7 @@ def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]
     return _safe_list(modding_state.get("installed_packs"))
 
 
-def build_pack_application_preview(pack: Dict[str, Any]) -> Dict[str, Any]:
+def build_pack_application_preview(pack: dict[str, Any]) -> dict[str, Any]:
     pack = _normalize_content_pack(pack)
 
     imported_characters = [
@@ -144,7 +144,7 @@ def build_pack_application_preview(pack: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_pack_bootstrap_payload(pack: Dict[str, Any]) -> Dict[str, Any]:
+def build_pack_bootstrap_payload(pack: dict[str, Any]) -> dict[str, Any]:
     """Build deterministic new-session bootstrap payload from a content pack."""
     preview = build_pack_application_preview(pack)
     manifest = _safe_dict(preview.get("manifest"))
@@ -186,13 +186,13 @@ def build_pack_bootstrap_payload(pack: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def apply_content_pack(
-    simulation_state: Dict[str, Any],
-    pack: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    pack: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = ensure_content_pack_state(simulation_state)
     pack = _normalize_content_pack(pack)
 
-    simulation_state = install_content_pack(simulation_state, pack)
+    simulation_state = add_content_pack(simulation_state, pack)
 
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):

@@ -9,6 +9,7 @@ import {
 } from './tradingStrategyOperationsApi';
 import type { TradingStrategyConfig } from './tradingStrategyTypes';
 import './TradingCommandCenter.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 function number(value: string | number | null | undefined, digits = 2): string {
   const parsed = Number(value);
@@ -80,7 +81,6 @@ export function TradingCommandCenter({
 
   useEffect(() => {
     let alive = true;
-    let timer: number | null = null;
     const refresh = async () => {
       try {
         const [nextHealth, nextRuntime, nextStrategy, nextSolanaStrategy, nextSolanaDecisions] = await Promise.all([
@@ -103,10 +103,10 @@ export function TradingCommandCenter({
       }
     };
     void refresh();
-    timer = window.setInterval(() => void refresh(), 5_000);
+    const stopPolling = startPolling(refresh, POLL_INTERVALS_MS.strategyRuntime);
     return () => {
       alive = false;
-      if (timer !== null) window.clearInterval(timer);
+      stopPolling();
     };
   }, [accountId, strategyId]);
 
@@ -226,7 +226,7 @@ export function TradingCommandCenter({
       </div>
 
       {solanaStrategy ? (
-        <div className="command-center-attention" aria-label="Solana AI strategy history">
+        <div role="group" className="command-center-attention" aria-label="Solana AI strategy history">
           <strong>{solanaStrategy.display_name}</strong>
           <span>
             {solanaStrategy.instrument_id} · {solanaStrategy.chart_interval} · research-only · no execution authority

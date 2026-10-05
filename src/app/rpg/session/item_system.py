@@ -8,7 +8,6 @@ being written into session state.
 from __future__ import annotations
 
 from copy import deepcopy
-from math import ceil
 from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
@@ -162,17 +161,6 @@ class RpgItemValidationResult(BaseModel):
     error: str | None = None
     detail: str = ""
     warnings: list[str] = Field(default_factory=list)
-
-
-class RpgItemOperationResult(BaseModel):
-    ok: bool
-    detail: str = ""
-    error: str | None = None
-    item: dict[str, Any] | None = None
-    inventory: list[dict[str, Any]] = Field(default_factory=list)
-    consumed_materials: list[dict[str, Any]] = Field(default_factory=list)
-    added_items: list[dict[str, Any]] = Field(default_factory=list)
-    repairs: list[str] = Field(default_factory=list)
 
 
 class RpgItemFictionProposalResult(BaseModel):
@@ -650,129 +638,11 @@ def normalize_item_instance(item: dict[str, Any], *, quantity: int | None = None
     return normalized
 
 
-def build_starting_inventory(genre: str = "classic_fantasy", *, build_id: str = "balanced_adventurer", level: int = 1) -> list[dict[str, Any]]:
-    catalog = build_item_catalog(genre, level=level)
-    quantities = {
-        "travelers_cloak": 1,
-        "bedroll": 1,
-        "waterskin": 1,
-        "ration": 3,
-        "torch": 2,
-        "iron_dagger": 1,
-        "simple_bow": 1,
-        "arrow": 20,
-        "journal": 1,
-    }
-    if build_id == "warrior":
-        quantities["leather_armor"] = 1
-        quantities["iron_ingot"] = 1
-    elif build_id == "ranger":
-        quantities["rope_coil"] = 1
-        quantities["keenleaf"] = 2
-    elif build_id == "silver_tongue":
-        quantities["focus_crystal"] = 1
-    return [normalize_item_instance(catalog[item_id], quantity=quantity) for item_id, quantity in quantities.items() if item_id in catalog]
-
-
-def build_starting_equipment(genre: str = "classic_fantasy", *, build_id: str = "balanced_adventurer", level: int = 1) -> list[dict[str, Any]]:
-    catalog = build_item_catalog(genre, level=level)
-    equipment_ids = ["iron_dagger", "simple_bow", "travelers_cloak"]
-    if build_id == "warrior" and "leather_armor" in catalog:
-        equipment_ids.insert(1, "leather_armor")
-    equipment: list[dict[str, Any]] = []
-    for item_id in equipment_ids:
-        item = normalize_item_instance(catalog[item_id], quantity=1)
-        equipment.append({
-            "slot": item.get("equip_slot") or item.get("slot") or "Utility",
-            "name": item.get("name"),
-            "item_id": item.get("id"),
-            "rarity": item.get("rarity"),
-            "level": item.get("level"),
-            "damage": deepcopy(item.get("damage")),
-            "defense": deepcopy(item.get("defense")),
-            "upgrade": deepcopy(item.get("upgrade")),
-        })
-    return equipment
-
-
 def _find_inventory_item(inventory: list[dict[str, Any]], item_id: str) -> tuple[int, dict[str, Any] | None]:
     for index, item in enumerate(inventory):
         if _item_id(_safe_dict(item)) == item_id:
             return index, _safe_dict(item)
     return -1, None
-
-
-def _material_requirement(item: dict[str, Any]) -> dict[str, Any]:
-    upgrade = _safe_dict(item.get("upgrade"))
-    current = int(upgrade.get("upgrade_level") or 0)
-    rarity = _rarity(item)
-    quantity = int(upgrade.get("base_cost_quantity") or 1) + current
-    if rarity in {"rare", "epic", "legendary", "mythic"}:
-        quantity += RARITIES.index(rarity)
-    return {
-        "item_id": _text(upgrade.get("material_id"), "iron_ingot"),
-        "name": _text(upgrade.get("material_name"), "Iron ingot"),
-        "quantity": max(1, quantity),
-    }
-
-
-def preview_item_upgrade(item: dict[str, Any]) -> RpgItemOperationResult:
-    item = normalize_item_instance(item)
-    validation = validate_item_template(item)
-    if not validation.ok:
-        return RpgItemOperationResult(ok=False, error=validation.error, detail=validation.detail, item=item)
-    if item.get("item_type") not in {"weapon", "armor"}:
-        return RpgItemOperationResult(ok=False, error="item_not_upgradable", detail="Only weapons and armor can be upgraded.", item=item)
-    upgrade = _safe_dict(item.get("upgrade"))
-    current = int(upgrade.get("upgrade_level") or 0)
-    maximum = int(upgrade.get("max_upgrade_level") or 0)
-    if current >= maximum:
-        return RpgItemOperationResult(ok=False, error="item_upgrade_maxed", detail=f"{item.get('name')} is already at its maximum upgrade level.", item=item)
-    requirement = _material_requirement(item)
-    preview = deepcopy(item)
-    preview["upgrade"] = {**upgrade, "upgrade_level": current + 1}
-    preview["upgrade_level"] = current + 1
-    preview["name"] = _upgraded_name(str(preview.get("name") or "Item"), current + 1)
-    _apply_upgrade_stat_bonus(preview, current + 1)
-    return RpgItemOperationResult(ok=True, detail=f"Upgrade preview for {preview['name']}.", item=preview, consumed_materials=[requirement])
-
-
-def _upgraded_name(name: str, level: int) -> str:
-    base = name.rsplit(" +", 1)[0]
-    return f"{base} +{level}"
-
-
-def _apply_upgrade_stat_bonus(item: dict[str, Any], level: int) -> None:
-    for entry in _safe_list(item.get("damage")):
-        if isinstance(entry, dict):
-            entry["amount"] = int(entry.get("amount") or 0) + max(1, level)
-    for entry in _safe_list(item.get("defense")):
-        if isinstance(entry, dict):
-            entry["amount"] = int(entry.get("amount") or 0) + max(1, ceil(level / 2))
-    item["value"] = int(item.get("value") or 1) + level * 15
-
-
-def upgrade_item_instance(item: dict[str, Any], inventory: Sequence[dict[str, Any]] | None = None) -> RpgItemOperationResult:
-    preview = preview_item_upgrade(item)
-    if not preview.ok:
-        return preview
-    inventory_copy = [normalize_item_instance(raw_item) for raw_item in list(inventory or [])]
-    requirement = preview.consumed_materials[0]
-    index, material = _find_inventory_item(inventory_copy, str(requirement["item_id"]))
-    if inventory is not None:
-        if material is None or int(material.get("quantity") or 0) < int(requirement["quantity"]):
-            return RpgItemOperationResult(
-                ok=False,
-                error="missing_upgrade_materials",
-                detail=f"Need {requirement['quantity']}x {requirement['name']} to upgrade {item.get('name') or 'item'}.",
-                item=normalize_item_instance(item),
-                inventory=inventory_copy,
-                consumed_materials=[requirement],
-            )
-        material["quantity"] = int(material.get("quantity") or 0) - int(requirement["quantity"])
-        if material["quantity"] <= 0:
-            inventory_copy.pop(index)
-    return RpgItemOperationResult(ok=True, detail=f"Upgraded {preview.item.get('name')}.", item=preview.item, inventory=inventory_copy, consumed_materials=[requirement])
 
 
 CRAFTING_RECIPES: dict[str, dict[str, Any]] = {
@@ -798,28 +668,6 @@ CRAFTING_RECIPES: dict[str, dict[str, Any]] = {
         "station": "armorers_kit",
     },
 }
-
-
-def craft_item(recipe_id: str, inventory: Sequence[dict[str, Any]], *, genre: str = "classic_fantasy", level: int = 1) -> RpgItemOperationResult:
-    recipe = CRAFTING_RECIPES.get(recipe_id)
-    if not recipe:
-        return RpgItemOperationResult(ok=False, error="unknown_recipe", detail=f"Unknown recipe: {recipe_id}")
-    inventory_copy = [normalize_item_instance(raw_item) for raw_item in list(inventory or [])]
-    consumed: list[dict[str, Any]] = []
-    for ingredient in _safe_list(recipe.get("ingredients")):
-        item_id = _text(_safe_dict(ingredient).get("item_id"))
-        quantity = _positive_int(_safe_dict(ingredient).get("quantity"), 1)
-        index, material = _find_inventory_item(inventory_copy, item_id)
-        if material is None or int(material.get("quantity") or 0) < quantity:
-            return RpgItemOperationResult(ok=False, error="missing_crafting_materials", detail=f"Need {quantity}x {item_id} for {recipe_id}.", inventory=inventory_copy, consumed_materials=_safe_list(recipe.get("ingredients")))
-        consumed.append({"item_id": item_id, "quantity": quantity})
-        material["quantity"] = int(material.get("quantity") or 0) - quantity
-        if material["quantity"] <= 0:
-            inventory_copy.pop(index)
-    catalog = build_item_catalog(genre, level=level)
-    result_item = normalize_item_instance(catalog[str(recipe["result_item_id"])], quantity=int(recipe.get("quantity") or 1))
-    inventory_copy.append(result_item)
-    return RpgItemOperationResult(ok=True, detail=f"Crafted {result_item['name']}.", item=result_item, inventory=inventory_copy, consumed_materials=consumed, added_items=[result_item])
 
 
 def apply_item_fiction_proposal(item: dict[str, Any], proposal: dict[str, Any] | None, *, genre: str | None = None) -> RpgItemFictionProposalResult:

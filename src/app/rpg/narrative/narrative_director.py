@@ -244,30 +244,6 @@ class NarrativeDirector:
         )
         return sorted_events[:max_events]
     
-    def get_recent_events(
-        self,
-        limit: int = 10,
-        min_importance: float = 0.0,
-    ) -> List[NarrativeEvent]:
-        """Get recent events from the buffer.
-        
-        Args:
-            limit: Maximum number of events to return.
-            min_importance: Minimum importance threshold.
-            
-        Returns:
-            Filtered list of recent events.
-        """
-        filtered = [
-            e for e in self.recent_events
-            if e.importance >= min_importance
-        ]
-        return filtered[-limit:]
-    
-    def clear_buffer(self) -> None:
-        """Clear the recent events buffer."""
-        self.recent_events.clear()
-    
     @staticmethod
     def _extract_description(event: Dict[str, Any]) -> str:
         """Extract or generate a description from a raw event.

@@ -20,16 +20,14 @@ import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import FrozenForecast
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 V4_PREDICTOR_VERSION = "prospective-gap-v4-shadow"
 V4_FEATURE_SCHEMA_VERSION = "prospective-gap-features-v4"
@@ -111,7 +109,6 @@ class FinvizFrozenCohort(BaseModel):
     @property
     def cohort_fingerprint(self) -> str:
         return _hash(self.model_dump(mode="json"))
-
 
 
 def finviz_cohort_from_universe(
@@ -229,7 +226,6 @@ class PremarketMarketStateSnapshot(BaseModel):
             if feature.name == name and feature.available_to_live_forecaster:
                 return feature.value
         return None
-
 
 
 def build_premarket_market_state(
@@ -561,7 +557,6 @@ def summarize_evidence_quality(
         degraded_features=tuple(degraded),
         reasons=reasons,
     )
-
 
 
 def market_state_from_candidate(

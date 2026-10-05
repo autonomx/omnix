@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.assistant_memory.structured_consolidation import (

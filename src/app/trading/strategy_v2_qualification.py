@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import json
 import math
@@ -12,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategies.models import GapPullbackConfig
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+
+logger = logging.getLogger(__name__)
 
 
 V2_PROSPECTIVE_START = date(2026, 8, 24)
@@ -157,8 +161,13 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
             "intraday_llm_top_n",
             "intraday_llm_interval_minutes",
             "universe_discovery_source",
+            "research_score_adjustment_enabled",
         },
     )
+    # Added after profiles were qualified (WP-8.3): only an enabled opt-in is
+    # part of the identity, so existing qualification evidence still matches.
+    if config.research_score_adjustment_enabled:
+        payload["research_score_adjustment_enabled"] = True
     if config.universe_discovery_source != "yahoo":
         payload["universe_discovery_source"] = config.universe_discovery_source
     payload["market_evidence_policy_version"] = MARKET_EVIDENCE_POLICY_VERSION
@@ -197,6 +206,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

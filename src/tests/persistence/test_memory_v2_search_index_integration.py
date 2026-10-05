@@ -52,6 +52,11 @@ def _space(prefix: str) -> MemorySpaceKey:
     )
 
 
+def _id(space: MemorySpaceKey, name: str) -> str:
+    """Assertion ids are global, so each run's ids carry its space (reruns share the database)."""
+    return f"{name}@{space.owner_id}"
+
+
 def _append(store: PostgresMemoryV2ObservationStore, space: MemorySpaceKey, index: int):
     return store.append(
         ObservationAppendRequest(
@@ -79,7 +84,7 @@ def _assertion(
     scope: VisibilityScope | None = None,
 ):
     return GraphAssertion(
-        assertion_id=assertion_id,
+        assertion_id=_id(space, assertion_id),
         space=space,
         visibility_scopes=(scope or VisibilityScope(kind="global", scope_id="global"),),
         subject=GraphEntityRef(entity_id="user:alice", entity_type="user"),
@@ -133,13 +138,28 @@ def test_rebuild_projects_active_graph_and_searches_by_scope() -> None:
             "cyberpunk",
             visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
         )
-        assert [item.ref_id for item in hits] == ["assert:cyberpunk"]
+        assert [item.ref_id for item in hits] == [_id(space, "assert:cyberpunk")]
         hidden = index.search(
             space,
             "skyrim",
             visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
         )
         assert hidden == []
+        # A full question matches on any of its words, not all of them (the old
+        # all-words query found nothing for a natural question).
+        asked = index.search(
+            space,
+            "Do you remember which Cyberpunk game I finished?",
+            visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
+        )
+        assert [item.ref_id for item in asked] == [_id(space, "assert:cyberpunk")]
+        # Any-word matching still never reaches a memory outside the visible scopes.
+        broad = index.search(
+            space,
+            "Is Skyrim the game I play most?",
+            visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
+        )
+        assert _id(space, "assert:project-only") not in [item.ref_id for item in broad]
     finally:
         database.close()
 
@@ -257,10 +277,10 @@ def test_search_index_spaces_are_character_isolated() -> None:
 
         scopes = (VisibilityScope(kind="global", scope_id="global"),)
         assert [item.ref_id for item in index.search(sofia, "cyberpunk", visible_scopes=scopes)] == [
-            "assert:sofia"
+            _id(sofia, "assert:sofia")
         ]
         assert [item.ref_id for item in index.search(maya, "cyberpunk", visible_scopes=scopes)] == [
-            "assert:maya"
+            _id(maya, "assert:maya")
         ]
     finally:
         database.close()

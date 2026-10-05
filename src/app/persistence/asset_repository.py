@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from .errors import EntityNotFound, RevisionConflict
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 from .tenant import TenantContext
 
 
@@ -35,6 +36,7 @@ byte_size, checksum_sha256, storage_provider, storage_key,
 lifecycle_status, generation_job_id, revision, created_at, updated_at,
 metadata, compat
 """
+_ASSET_COLUMN_NAMES = tuple(name.strip() for name in _ASSET_COLUMNS.split(","))
 
 
 class PostgresAssetRepository:
@@ -99,6 +101,25 @@ class PostgresAssetRepository:
         ).fetchone()
         return _asset(row) if row is not None else None
 
+    def asset_fields(
+        self, context: TenantContext, asset_id: str | None, *, active_only: bool = False, lock: bool = False,
+    ) -> dict[str, Any] | None:
+        """One asset's columns with their database types (datetimes, ints), for a module's own transaction.
+
+        A module reads asset metadata here instead of joining ``omnix_assets``
+        (PA-2.2). ``active_only`` skips an asset that is not active; ``lock``
+        holds its row until the transaction ends.
+        """
+        if not asset_id:
+            return None
+        row = self.connection.execute(
+            f"SELECT {_ASSET_COLUMNS} FROM omnix_assets WHERE workspace_id = %s AND id = %s"
+            + (" AND lifecycle_status = 'active'" if active_only else "")
+            + (" FOR UPDATE" if lock else ""),
+            (context.workspace_id, asset_id),
+        ).fetchone()
+        return dict(zip(_ASSET_COLUMN_NAMES, row)) if row is not None else None
+
     def find_by_storage(
         self,
         context: TenantContext,
@@ -118,19 +139,25 @@ class PostgresAssetRepository:
         context: TenantContext,
         *,
         asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
         limit: int = 100,
         before_created_at: str | None = None,
         before_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Newest first, keyset-paged by ``(created_at, id)`` (WP-5.5)."""
         clauses = ["workspace_id = %s", "lifecycle_status <> 'deleted'"]
         parameters: list[Any] = [context.workspace_id]
         if asset_type is not None:
             clauses.append("asset_type = %s")
             parameters.append(asset_type)
+        if modules:
+            clauses.append("module = ANY(%s)")
+            parameters.append(list(modules))
         if before_created_at is not None and before_id is not None:
             clauses.append("(created_at, id) < (%s::timestamptz, %s)")
             parameters.extend([before_created_at, before_id])
-        parameters.append(max(1, min(int(limit), 500)))
+        # One more than a page, so callers can tell whether another follows.
+        parameters.append(page_limit(limit, maximum=MAX_PAGE_SIZE + 1))
         rows = self.connection.execute(
             f"SELECT {_ASSET_COLUMNS} FROM omnix_assets WHERE "
             + " AND ".join(clauses)
@@ -138,6 +165,46 @@ class PostgresAssetRepository:
             tuple(parameters),
         ).fetchall()
         return [_asset(row) for row in rows]
+
+    def update_descriptor(
+        self,
+        context: TenantContext,
+        asset_id: str,
+        *,
+        module: str,
+        asset_type: str,
+        mime_type: str,
+        metadata: dict[str, Any],
+        compat: dict[str, Any],
+        generation_job_id: str | None,
+    ) -> dict[str, Any] | None:
+        """Update an asset's descriptive fields in one statement (WP-8.1).
+
+        Content (storage key, checksum, size) is immutable here; a provided
+        source job replaces the recorded one, otherwise it is kept.
+        """
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_assets
+               SET module = %s, asset_type = %s, mime_type = %s,
+                   metadata = %s::jsonb, compat = %s::jsonb,
+                   generation_job_id = COALESCE(%s, generation_job_id),
+                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND id = %s
+            RETURNING {_ASSET_COLUMNS}
+            """,
+            (
+                module,
+                asset_type,
+                mime_type,
+                json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                json.dumps(compat, sort_keys=True, separators=(",", ":")),
+                generation_job_id,
+                context.workspace_id,
+                asset_id,
+            ),
+        ).fetchone()
+        return _asset(row) if row is not None else None
 
     def mark_deleted(
         self,

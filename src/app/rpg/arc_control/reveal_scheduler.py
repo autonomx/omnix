@@ -13,12 +13,6 @@ from .models import RevealDirectiveState
 class RevealScheduler:
     """Manage scheduled and held reveals deterministically."""
 
-    def list_reveals(
-        self, state: dict[str, RevealDirectiveState]
-    ) -> list[RevealDirectiveState]:
-        """Return all registered reveals."""
-        return list(state.values())
-
     def schedule(
         self, state: dict[str, RevealDirectiveState], reveal: RevealDirectiveState
     ) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import (
@@ -13,8 +13,9 @@ from .contracts import (
 
 
 class TradingFactRepository:
+    context = RequestTenant()
     def __init__(self, *, context: TenantContext | None = None, uow_factory=unit_of_work) -> None:
-        self.context = context or local_tenant_context(); self.uow_factory = uow_factory
+        self.context = context; self.uow_factory = uow_factory
 
     def save_supply_fact(self, item: SupplyFact) -> SupplyFact:
         with self.uow_factory() as uow:

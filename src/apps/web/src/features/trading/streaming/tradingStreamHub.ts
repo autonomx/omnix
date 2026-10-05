@@ -1,5 +1,6 @@
 import { tradingStreamUrl } from '../tradingApi';
 import type { TradingStreamMessage } from '../tradingTypes';
+import { parseJson, tradingStreamMessageSchema } from '../../../api/schemas/streams';
 
 export type TradingStreamStatus = 'connecting' | 'live' | 'polling' | 'closed' | 'error';
 
@@ -110,12 +111,8 @@ export class TradingStreamHub {
     socket.addEventListener('message', (event: Event) => {
       if (entry.socket !== socket) return;
       const data = 'data' in event ? String((event as MessageEvent).data) : '';
-      let message: TradingStreamMessage;
-      try {
-        message = JSON.parse(data) as TradingStreamMessage;
-      } catch {
-        message = { type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned invalid JSON.' };
-      }
+      const message: TradingStreamMessage = (parseJson(tradingStreamMessageSchema, data) as TradingStreamMessage | null)
+        ?? { type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned an invalid message.' };
       entry.messages.forEach((listener) => listener(message));
     });
   }

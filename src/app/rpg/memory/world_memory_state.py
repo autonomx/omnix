@@ -73,18 +73,3 @@ def ensure_world_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     return simulation_state
 
 
-def append_rumor(simulation_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
-    """Append a normalized rumor to world memory with propagation tracking."""
-    simulation_state = ensure_world_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    rumors = _safe_list(memory_state.get("rumors"))
-    rumors.append(_normalize_rumor(rumor))
-    memory_state["rumors"] = sorted(
-        [item for item in rumors if isinstance(item, dict)],
-        key=lambda item: (
-            item.get("tick", 0),
-            _safe_str(item.get("summary")).lower(),
-            _safe_str(item.get("id")),
-        ),
-    )[-_MAX_RUMORS:]
-    return simulation_state

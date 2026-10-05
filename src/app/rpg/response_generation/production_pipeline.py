@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import json
 from dataclasses import replace
@@ -28,7 +30,6 @@ from .orchestration import RpgResponseGenerator, semantic_plan_from_legacy_paylo
 from .profiles import ResponseGenerationProfile, ResponseProfileRegistry
 from .proposal_policy import (
     ProposalBudget,
-    ProposalDecision,
     ProposalPolicy,
     ProposalRisk,
     ProposalStore,
@@ -39,6 +40,8 @@ from .retrieval import EvidenceRecord, build_retrieval_sources
 from .rollout import ResponseRolloutController, rollout_stage_from_context
 from .truth_lifetime import TruthLifetime
 from .validated_delivery import ValidatedDeliverySession
+
+logger = logging.getLogger(__name__)
 
 
 CANONICAL_NARRATION_SOURCE = "rpg_response_generator_v1"
@@ -92,6 +95,7 @@ class ProfileBoundProvider:
             try:
                 setattr(self.provider, name, value)
             except Exception:
+                logger.debug("suppressed error in %s", "ProfileBoundProvider._apply_attributes", exc_info=True)
                 continue
 
     def _call(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
@@ -134,7 +138,7 @@ class HermesSidecarRecoveryClient:
 
     def __init__(self, sidecar: Any | None = None) -> None:
         if sidecar is None:
-            from app.assist_core.hermes_client import HermesSidecarClient
+            from app.providers.hermes_client import HermesSidecarClient
 
             sidecar = HermesSidecarClient(timeout=4.0)
         self._sidecar = sidecar
@@ -149,7 +153,7 @@ class HermesSidecarRecoveryClient:
         if not base_url:
             result = self._sidecar.rpg_plan({"context": dict(payload)})
             return dict(result) if isinstance(result, Mapping) else {}
-        import requests
+        from app.runtime.http_client import shared_http_client
 
         headers = {"Content-Type": "application/json"}
         api_key = getattr(self._sidecar, "api_key", None)
@@ -176,7 +180,7 @@ class HermesSidecarRecoveryClient:
                 },
             ],
         }
-        response = requests.post(
+        response = shared_http_client("hermes").post(
             f"{base_url}/v1/chat/completions",
             headers=headers,
             data=json.dumps(request_payload),
@@ -1070,7 +1074,7 @@ def _hermes_enabled(state: Mapping[str, Any]) -> bool:
     if explicit is not None:
         return bool(explicit)
     try:
-        from app.assist_core.hermes_status import hermes_runtime_config
+        from app.providers.hermes_status import hermes_runtime_config
 
         return bool(hermes_runtime_config().enabled)
     except Exception:

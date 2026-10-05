@@ -1,8 +1,10 @@
 """Resolve the concrete provider route stored with a durable World Forge run."""
 from __future__ import annotations
 
+import logging
+from app.config.env import environment as _environment
+
 import json
-import os
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 from urllib.request import urlopen
@@ -11,7 +13,7 @@ from app.providers.registry import get_provider
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )
@@ -20,6 +22,8 @@ from .generation_recovery_evidence import (
     EvidenceBackedRecoveringWorldForgeTopicGenerator,
 )
 from .generation_test_mode import deterministic_world_forge_test_mode
+
+logger = logging.getLogger(__name__)
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -59,7 +63,7 @@ def _model_key(value: Any) -> str:
 
 def _settings_route() -> tuple[str, str]:
     try:
-        from app.platform.effective_defaults import effective_llm_route, load_effective_profile
+        from app.settings.effective_defaults import effective_llm_route, load_effective_profile
 
         provider_id, model_id = effective_llm_route(
             load_effective_profile(),
@@ -75,9 +79,9 @@ def _auto_detect_lmstudio_route() -> tuple[str, str]:
     """Return the currently loaded LM Studio LLM, without persisting a setting."""
 
     try:
-        from app import shared
+        from app.settings.access import load_settings
 
-        settings = shared.load_settings()
+        settings = load_settings()
         base_url = str(
             dict(settings.get("lmstudio") or {}).get("base_url")
             or "http://localhost:1234"
@@ -97,7 +101,7 @@ def _auto_detect_lmstudio_route() -> tuple[str, str]:
             if model:
                 return "lmstudio", model
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_auto_detect_lmstudio_route", exc_info=True)
     return "", ""
 
 
@@ -110,7 +114,7 @@ def resolve_world_forge_route(
 ) -> ResolvedWorldForgeRoute:
     """Resolve one concrete provider or fail before a durable run is created."""
 
-    env = environ if environ is not None else os.environ
+    env = environ if environ is not None else _environment()
     test_mode = deterministic_world_forge_test_mode(env)
     requested_provider = _provider_key(provider_route)
     requested_model = _model_key(model)
@@ -237,9 +241,9 @@ def build_world_forge_generator_from_settings(
     )
     provider = None
     try:
-        from app import shared
+        from app.providers.service import get_provider as get_runtime_provider
 
-        provider = shared.get_provider(provider_id)
+        provider = get_runtime_provider(provider_id)
     except Exception:
         provider = None
     if provider is None:

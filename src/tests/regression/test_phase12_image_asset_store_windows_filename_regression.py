@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import os
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_save_image_asset_bytes_sanitizes_windows_invalid_filename_chars(tmp_path, monkeypatch):

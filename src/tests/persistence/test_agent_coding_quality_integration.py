@@ -25,9 +25,10 @@ from app.agent_runtime.quality_recovery import (
     reconcile_orphaned_quality_reviews,
 )
 from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.agent_runtime.review_orchestration_core import consume_terminal_reviewer_in_repository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -53,7 +54,7 @@ def _database() -> PostgresDatabase:
 def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-{uuid.uuid4().hex}"
         revision_id = f"revision-{uuid.uuid4().hex}"
         state = WorkspaceState(
@@ -206,7 +207,7 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
 def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-revision-{uuid.uuid4().hex}"
         old_revision = "revision-old"
         new_revision = "revision-new"
@@ -260,7 +261,7 @@ def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
 def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_retry() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-parent-{uuid.uuid4().hex}"
         child_id = f"quality-reviewer-{uuid.uuid4().hex}"
 
@@ -306,11 +307,13 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
             )
+            parent_lease = repository.acquire_lease(run_id, worker_id="dead-quality-worker")
             repository.update_state(
                 run_id,
                 expected_revision=parent.revision,
                 status="waiting_for_children",
                 worker_id="dead-quality-worker",
+                lease_token=parent_lease.lease_token,
             )
             child = repository.create_run(
                 AgentRunSpec(
@@ -349,11 +352,13 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                     },
                 )
             )
+            child_lease = repository.acquire_lease(child_id, worker_id="dead-quality-worker")
             repository.update_state(
                 child_id,
                 expected_revision=child.revision,
                 status="completed",
                 worker_id="dead-quality-worker",
+                lease_token=child_lease.lease_token,
             )
             work.commit()
 
@@ -362,6 +367,8 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 self.database = database
                 self.context = context
                 self.worker_id = "replacement-quality-worker"
+                self.quality_repository_factory = PostgresCodingQualityRepository
+                self.terminal_reviewer_consumer = consume_terminal_reviewer_in_repository
 
             @staticmethod
             def _quality_enabled(spec: AgentRunSpec) -> bool:
@@ -457,7 +464,6 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                     expected_revision=latest.revision,
                     status="running",
                     desired_state="running",
-                    worker_id=self.worker_id,
                     last_error=None,
                 )
                 return None
@@ -485,10 +491,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
 
         service = _RecoveryService()
         with unit_of_work(database) as work:
-            candidates = orphaned_quality_review_run_ids(
-                work.connection,
-                context.workspace_id,
-            )
+            candidates = orphaned_quality_review_run_ids(work.connection, context)
             work.rollback()
         assert run_id in candidates
 
@@ -509,10 +512,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 review_snapshot_id=review_snapshot.snapshot_id,
                 task_revision_id=revision.revision_id,
             )
-            remaining_candidates = orphaned_quality_review_run_ids(
-                work.connection,
-                context.workspace_id,
-            )
+            remaining_candidates = orphaned_quality_review_run_ids(work.connection, context)
             work.rollback()
 
         assert recovered is not None

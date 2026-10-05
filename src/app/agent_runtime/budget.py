@@ -1,19 +1,57 @@
 """Durable fail-closed resource budgets for generalized agent runs."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
+from .profiles import profile_produces_diff
 from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
+from .run_repository_queries import PostgresAgentRunQueries
+
+logger = logging.getLogger(__name__)
 
 _ZERO_COST_PROVIDERS = {"lmstudio", "llamacpp", "chatgpt_codex"}
+
+
+def _agent_run_settings():
+    from app.settings.effective_defaults import agent_run_settings
+
+    return agent_run_settings()
+
+
+def provider_price(provider_id: str | None):
+    """The configured price of a provider, or ``None`` when its cost cannot be metered."""
+    provider = normalize_budget_provider_id(provider_id or "")
+    try:
+        return _agent_run_settings().provider_prices.get(provider)
+    except Exception:  # settings unreadable: treat the provider as unpriced
+        logger.warning("agent_budget_settings_unavailable", exc_info=True)
+        return None
+
+
+def apply_default_run_limits(spec):
+    """Fill a run's unset token and cost limits from the settings' defaults."""
+    try:
+        settings = _agent_run_settings()
+    except Exception:
+        logger.warning("agent_budget_settings_unavailable", exc_info=True)
+        return spec
+    updates: dict[str, object] = {}
+    if spec.limits.max_tokens is None and settings.default_max_output_tokens is not None:
+        updates["max_tokens"] = settings.default_max_output_tokens
+    if spec.limits.max_cost is None and settings.default_max_cost_usd is not None:
+        updates["max_cost"] = settings.default_max_cost_usd
+    if not updates:
+        return spec
+    return spec.model_copy(update={"limits": spec.limits.model_copy(update=updates)})
 _TERMINAL = {"completed", "failed", "cancelled"}
 
 
@@ -27,6 +65,7 @@ def normalize_budget_provider_id(provider_id: str) -> str:
 
 
 class AgentBudgetManager:
+    context = RequestTenant()
     def __init__(
         self,
         database: PostgresDatabase | None = None,
@@ -34,7 +73,7 @@ class AgentBudgetManager:
         context: TenantContext | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = context or bootstrap_local_tenant(self.database)
+        self.context = context
 
     def usage(self, run_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
@@ -85,6 +124,7 @@ class AgentBudgetManager:
             if (
                 snapshot.spec.limits.max_cost is not None
                 and provider not in _ZERO_COST_PROVIDERS
+                and provider_price(provider) is None
             ):
                 reason = f"budget_cost_unmeterable_provider:{provider or 'unknown'}"
                 self._fail_locked(repository, snapshot, reason)
@@ -149,6 +189,7 @@ class AgentBudgetManager:
         *,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        provider_id: str | None = None,
     ) -> dict[str, object]:
         if input_tokens is not None and input_tokens < 0:
             raise ValueError("token usage must be non-negative")
@@ -163,20 +204,26 @@ class AgentBudgetManager:
             if snapshot is None:
                 raise KeyError(run_id)
             effective = self._effective_limits(repository, snapshot)
+            price = provider_price(provider_id) if provider_id else None
+            cost = 0.0
+            if price is not None:
+                cost = ((input_tokens or 0) * price.input_usd_per_million
+                        + (output_tokens or 0) * price.output_usd_per_million) / 1_000_000
+            max_tokens = int(effective["max_tokens"]) if effective["max_tokens"] is not None else None
+            before = repository.get_usage(run_id)
             usage = repository.consume_usage(
                 run_id,
                 input_tokens=input_tokens or 0,
                 output_tokens=output_tokens or 0,
                 input_tokens_reported=input_tokens is not None,
                 output_tokens_reported=output_tokens is not None,
-                max_output_tokens=(
-                    int(effective["max_tokens"])
-                    if effective["max_tokens"] is not None
-                    else None
-                ),
+                cost=cost,
+                max_output_tokens=max_tokens,
+                max_cost=float(effective["max_cost"]) if effective["max_cost"] is not None else None,
             )
             if usage is None:
-                reason = "budget_max_output_tokens_exceeded"
+                tokens_over = max_tokens is not None and int(before["output_tokens"]) + (output_tokens or 0) > max_tokens
+                reason = "budget_max_output_tokens_exceeded" if tokens_over else "budget_cost_exhausted"
                 self._fail_locked(repository, snapshot, reason)
                 work.commit()
                 raise AgentBudgetError(reason)
@@ -216,15 +263,7 @@ class AgentBudgetManager:
         repository: PostgresAgentRunRepository,
         run_id: str,
     ) -> None:
-        row = repository.connection.execute(
-            """
-            SELECT run_id
-              FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
-             FOR UPDATE
-            """,
-            (repository.context.workspace_id, run_id),
-        ).fetchone()
+        row = PostgresAgentRunQueries(repository.connection, repository.context).lock_run(run_id).fetchone()
         if row is None:
             raise KeyError(run_id)
 
@@ -234,14 +273,7 @@ class AgentBudgetManager:
         snapshot: AgentRunSnapshot,
     ) -> tuple[str | None, int]:
         try:
-            row = repository.connection.execute(
-                """
-                SELECT stage, attempt
-                  FROM omnix_agent_coding_quality_state
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (repository.context.workspace_id, snapshot.run_id),
-            ).fetchone()
+            row = PostgresAgentRunQueries(repository.connection, repository.context).quality_stage(snapshot.run_id).fetchone()
         except Exception:
             return None, 1
         return (str(row[0]), max(1, int(row[1] or 1))) if row else (None, 1)
@@ -262,7 +294,7 @@ class AgentBudgetManager:
 
         spec = snapshot.spec
         if (
-            spec.profile != "coding"
+            not profile_produces_diff(spec.profile)
             or "diff" not in spec.expected_artifacts
             or spec.quality_policy == "off"
         ):
@@ -402,6 +434,6 @@ class AgentBudgetManager:
         )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_agent_budget_manager() -> AgentBudgetManager:
     return AgentBudgetManager()

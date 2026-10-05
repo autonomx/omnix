@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.session.genesis.world_forge_local_markets import (
     deterministic_local_market_signature,
     local_market_components,
 )
-from app.rpg.session.genesis.world_forge_profile_deterministic import generate_deterministic_profile_topic
 from app.rpg.session.genesis.world_forge_profile_generation import default_profile_registry
 from app.rpg.session.genesis.world_forge_profile_graph import build_profile_launch_topic_graph, build_profile_topic_graph
 from app.rpg.worlds import generation_compilation
@@ -61,19 +59,6 @@ def test_launch_graph_retains_local_market_places() -> None:
 
     assert "places" in launch.node_map()
     assert launch.node_map()["places"].required_before_launch is True
-
-
-def test_deterministic_generation_builds_valid_local_markets() -> None:
-    profile = default_profile_registry().resolve("fantasy")
-    assert profile is not None
-    graph = build_profile_topic_graph(profile, campaign_template="classic_fantasy", depth="epic")
-    node = graph.node_map()["places"]
-    dependencies = {domain_id: GeneratedTopic(topic_id=domain_id, entities=tuple({"id": f"ent:{domain_id}:{index}"} for index in range(1, 20))) for domain_id in node.dependencies}
-    places = generate_deterministic_profile_topic(node, campaign_context={"world_brief": {"title": "Cinder March"}}, dependency_topics=dependencies)
-    report = local_market_report([{"topic_id": "places", "candidate": places.as_dict()}], graph.as_dict())
-
-    assert report["passed"] is True
-    assert report["checks"]["place_count"] == len(places.entities)
 
 
 def test_missing_unbounded_and_duplicate_markets_are_blocking() -> None:

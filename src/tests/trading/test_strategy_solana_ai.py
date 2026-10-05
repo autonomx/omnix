@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -14,6 +16,7 @@ from app.trading.strategy_solana_ai import (
     SolanaAIAnalyzer,
 )
 from app.trading.strategy_solana_ai_monitor import (
+    SCHEDULED_TASK_ID,
     TradingSolanaAIMonitor,
     create_trading_solana_ai_control_router,
     solana_ai_monitor_enabled,
@@ -136,7 +139,8 @@ class FixtureAnalyzer:
         )
 
 
-def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
+@pytest.mark.anyio
+async def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
     market = FixtureMarket(_bars())
     analyzer = FixtureAnalyzer()
     monitor = TradingSolanaAIMonitor(
@@ -147,10 +151,8 @@ def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
         interval_seconds=2,
     )
 
-    import asyncio
-
-    assert asyncio.run(monitor.run_once()) == 1
-    assert asyncio.run(monitor.run_once()) == 0
+    assert await monitor.run_once() == 1
+    assert await monitor.run_once() == 0
     assert market.bar_calls == 2
     assert analyzer.calls == 1
     assert monitor.ai_call_count == 1
@@ -160,17 +162,35 @@ def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
 
 
 def test_solana_ai_monitor_control_router_stops_only_registered_monitor() -> None:
+    class Scheduler:
+        def __init__(self):
+            self.calls = []
+
+        async def pause_task(self, task_id):
+            self.calls.append(("pause", task_id))
+
+        def resume_task(self, task_id):
+            self.calls.append(("resume", task_id))
+
     app = FastAPI()
     monitor = TradingSolanaAIMonitor()
     app.state._omnix_trading_solana_ai_monitor = monitor
+    app.state.scheduler_runtime = Scheduler()
     app.include_router(create_trading_solana_ai_control_router())
 
-    response = TestClient(app).post("/api/trading/solana-ai/stop")
+    client = TestClient(app)
+    response = client.post("/api/trading/solana-ai/stop")
 
     assert response.status_code == 202
     assert response.json()["status"] == "stopped"
     assert response.json()["execution_authority"] is False
-    assert monitor._task is None
+    assert app.state.scheduler_runtime.calls == [("pause", SCHEDULED_TASK_ID)]
+    assert monitor.scheduled is False
+
+    response = client.post("/api/trading/solana-ai/start")
+    assert response.status_code == 202
+    assert response.json()["status"] == "started"
+    assert app.state.scheduler_runtime.calls[-1] == ("resume", SCHEDULED_TASK_ID)
 
 
 class FixtureStrategyRepository:
@@ -195,7 +215,8 @@ class FixtureStrategyRepository:
         return (len(self.events), signals)
 
 
-def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
+@pytest.mark.anyio
+async def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
     market = FixtureMarket(_bars())
     analyzer = FixtureAnalyzer()
     repository = FixtureStrategyRepository()
@@ -207,9 +228,7 @@ def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
         interval_seconds=2,
     )
 
-    import asyncio
-
-    assert asyncio.run(monitor.run_once()) == 1
+    assert await monitor.run_once() == 1
     assert len(repository.events) == 1
     event = repository.events[0]
     assert event.strategy_id == "solana-ai-1m-shadow"

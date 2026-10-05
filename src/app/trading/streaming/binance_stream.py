@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from collections.abc import AsyncIterator, Callable
@@ -78,7 +80,7 @@ class BinanceWebSocketStream:
             # with ASN1/NOT_ENOUGH_DATA before Binance receives the request. Keep
             # direct connections as the default and allow an explicit proxy when
             # the runtime requires one.
-            connect_kwargs["proxy"] = os.getenv("OMNIX_BINANCE_WS_PROXY") or None
+            connect_kwargs["proxy"] = env_str("OMNIX_BINANCE_WS_PROXY") or None
         stream_name = f"{provider_symbol.lower()}@kline_{BINANCE_INTERVALS.get(interval, interval)}"
         async with connect(f"{self.base_url}/{stream_name}", **connect_kwargs) as socket:
             revision = 0

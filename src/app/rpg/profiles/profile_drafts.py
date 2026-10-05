@@ -80,22 +80,6 @@ def save_profile_draft(draft_state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def delete_profile_draft(npc_id: str) -> Dict[str, Any]:
-    path = profile_draft_path(npc_id)
-    if path.exists():
-        path.unlink()
-        deleted = True
-    else:
-        deleted = False
-
-    return {
-        "deleted": deleted,
-        "path": str(path),
-        "npc_id": _safe_str(npc_id),
-        "source": "deterministic_profile_draft_store",
-    }
-
-
 def normalize_profile_draft_state(draft_state: Dict[str, Any]) -> Dict[str, Any]:
     draft_state = deepcopy(_safe_dict(draft_state))
 

@@ -1,7 +1,7 @@
 import { Progress, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { omnixApiClient } from '../../api/client';
+import { rpgSessionClient } from './api/rpgSessionClient';
 import { RpgMapDialog } from './RpgMapDialog';
 import type {
   RpgCheckpointSummaryPreview,
@@ -18,7 +18,7 @@ const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 interface RpgReportAssetPreview {
   id: unknown;
   module?: unknown;
-  storage_path?: unknown;
+  file_name?: unknown;
   type?: unknown;
 }
 
@@ -71,7 +71,7 @@ export function RpgWorldRail({
   const isPreview = selectedSessionSummary.source === 'preview';
   const liveSessionQuery = useQuery({
     queryKey: ['feature', 'rpg', 'session', selectedSessionSummary.id],
-    queryFn: () => omnixApiClient.getRpgSession(selectedSessionSummary.id),
+    queryFn: () => rpgSessionClient.getRpgSession(selectedSessionSummary.id),
     enabled: !isPreview && Boolean(selectedSessionSummary.id.trim()),
   });
   const sessionRecord = recordValue(liveSessionQuery.data?.session);
@@ -91,7 +91,7 @@ export function RpgWorldRail({
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
           </div>
-          <div className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
+          <div role="img" className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
             {isPreview ? (
               <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
             ) : (
@@ -117,7 +117,7 @@ export function RpgWorldRail({
               </div>
             ))}
           </div>
-          <div className="rpg-encounter-card" aria-label={`${encounter.title} encounter state`}>
+          <div role="group" className="rpg-encounter-card" aria-label={`${encounter.title} encounter state`}>
             <p className="eyebrow">Encounter</p>
             <span aria-hidden="true">{encounter.icon}</span>
             <strong>{encounter.title}</strong>
@@ -170,7 +170,7 @@ export function RpgWorldRail({
               <p className="rpg-empty-state">No RPG jobs are currently queued or running.</p>
             )}
           </div>
-          <div className="rpg-survival-actions" aria-label="RPG runtime tools">
+          <div role="group" className="rpg-survival-actions" aria-label="RPG runtime tools">
             <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
               {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
             </button>
@@ -184,7 +184,7 @@ export function RpgWorldRail({
             <article className="rpg-job-row" key={String(asset.id)}>
               <div>
                 <h3>{String(asset.type)} / {String(asset.module)}</h3>
-                <small>{String(asset.storage_path ?? asset.id)}</small>
+                <small>{String(asset.file_name || asset.id)}</small>
               </div>
             </article>
           ))}

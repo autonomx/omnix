@@ -6,7 +6,7 @@ from typing import Any, Mapping
 from .contracts import ResponseMode, coerce_response_mode
 from .orchestration import RpgResponseGenerator
 from .performance import blocking_path_decision
-from .profiles import ResponseGenerationProfile, ResponseProfileRegistry
+from .profiles import ResponseProfileRegistry
 
 
 class ProfiledRpgResponseGenerator:
@@ -69,19 +69,6 @@ class ProfiledRpgResponseGenerator:
             "validation_complete": True,
         }
         return replace(rendered, metadata=metadata)
-
-    def resolve_profile(self, request, mode) -> ResponseGenerationProfile:
-        result = _mapping(request.authoritative_turn_result)
-        recovery_needed = bool(
-            result.get("recovery_needed")
-            or result.get("resolver_status")
-            in {"unresolved", "partial", "unsupported", "no_match"}
-        )
-        return self.registry.resolve_from_request(
-            coerce_response_mode(mode),
-            request.provider_policy,
-            recovery_needed=recovery_needed,
-        )[0]
 
     @staticmethod
     def _request_mode(request) -> ResponseMode:

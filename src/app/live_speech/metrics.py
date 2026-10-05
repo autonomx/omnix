@@ -4,6 +4,19 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from app.observability.metrics import record_speech_turn
+from app.observability.tracing import record_span
+
+
+_TURN_STAGES = {"final_transcript": "transcript", "first_audio_delta": "first_audio"}
+# Trace spans (WP-10.4): the mark that ends a stage -> (span name, the mark that starts it).
+_STAGE_SPANS = {
+    "speech_stopped": ("live_speech.utterance", "speech_started"),
+    "final_transcript": ("live_speech.transcript", "speech_stopped"),
+    "first_audio_delta": ("live_speech.first_audio", "speech_stopped"),
+    "response_done": ("live_speech.response", "response_created"),
+}
+
 
 def now_ms() -> int:
     return int(time.time() * 1000)
@@ -31,6 +44,14 @@ class LiveSpeechMetrics:
         field_name = f"{name}_ms"
         if hasattr(self, field_name) and getattr(self, field_name) is None:
             setattr(self, field_name, now_ms())
+            stage = _TURN_STAGES.get(name)
+            if stage is not None and self.speech_stopped_ms is not None:
+                # Latency the user hears: from the end of their speech (WP-10.3).
+                record_speech_turn(stage, (getattr(self, field_name) - self.speech_stopped_ms) / 1000)
+            span = _STAGE_SPANS.get(name)
+            started = getattr(self, f"{span[1]}_ms") if span is not None else None
+            if span is not None and started is not None:
+                record_span(span[0], start_ms=started, end_ms=getattr(self, field_name))
 
     def drop_stale_chunk(self) -> None:
         self.stale_chunks_dropped += 1

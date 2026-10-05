@@ -31,7 +31,7 @@ export function TradingSessionTabs({
 
   return (
     <nav className="trading-session-tabs" aria-label="Trading chart sessions">
-      <div className="trading-session-tabs-scroll" role="tablist" aria-label="Independent chart sessions">
+      <div className="trading-session-tabs-scroll" role="group" aria-label="Independent chart sessions">
         {tabs.map((tab, index) => {
           const fallbackLabel = getTabLabel(tab);
           const label = isGeneratedTabName(tab.name) ? fallbackLabel : tab.name;
@@ -40,8 +40,7 @@ export function TradingSessionTabs({
           <div className={`trading-session-tab${tab.tabId === activeTabId ? ' active' : ''}`} key={tab.tabId}>
             <button
               type="button"
-              role="tab"
-              aria-selected={tab.tabId === activeTabId}
+              aria-current={tab.tabId === activeTabId ? 'true' : undefined}
               aria-label={`Open ${label} chart session`}
               onClick={() => onSelect(tab.tabId)}
               onDoubleClick={() => renameSession(tab, fallbackLabel)}

@@ -5,10 +5,12 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { speechInputDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
+import { speechInputDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback } from '../../shared/FeatureSubmitFeedback';
 import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
+import { jobProgressPercent } from '../../api/jobProgress';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -69,7 +71,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
-    <WorkspacePanel>
+    <WorkspacePanel labelledBy="module-title">
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Feature module</p>
@@ -79,6 +81,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
       </div>
 
       <p className="workspace-summary">{module.summary}</p>
+      <GatewayErrorNotice label="Speech-to-text data" errors={[providersQuery.error, jobsQuery.error, assetsQuery.error]} />
 
       <div className="feature-layout">
         <section className="feature-panel">
@@ -108,7 +111,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <option value="">External path</option>
                 {audioAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
-                    {asset.storage_path}
+                    {asset.file_name}
                   </option>
                 ))}
               </select>
@@ -147,7 +150,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
                     <strong>{job.type}</strong>
                     <OmnixStatusPill>{job.status}</OmnixStatusPill>
                   </Group>
-                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
+                  <Progress value={jobProgressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
                 </article>
               ))}
@@ -164,7 +167,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
           {transcriptAssets.length ? (
             <div className="platform-grid">
               {transcriptAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.file_name} />
               ))}
             </div>
           ) : (
@@ -182,10 +185,3 @@ function sttCapableProviders(payload: ProviderFacadePayload | undefined) {
   return payload?.providers.filter((provider) => provider.capabilities.includes('stt')) ?? [];
 }
 
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}

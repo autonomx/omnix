@@ -161,26 +161,6 @@ class TimelineEntry:
     timestamp: float = field(default_factory=time.time)
     tags: List[str] = field(default_factory=list)
 
-    def add_tag(self, tag: str) -> None:
-        """Add an irreversible flag to this entry.
-
-        Args:
-            tag: Tag to add (e.g., "faction_destroyed", "alliance_broken").
-        """
-        if tag not in self.tags:
-            self.tags.append(tag)
-
-    def has_tag(self, tag: str) -> bool:
-        """Check if this entry has a specific tag.
-
-        Args:
-            tag: Tag to check.
-
-        Returns:
-            True if the tag exists, False otherwise.
-        """
-        return tag in self.tags
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert timeline entry to dict for serialization.
 

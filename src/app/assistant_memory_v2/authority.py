@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.tenant_scope import system_scope
 
 from .consolidation import PostgresMemoryV2Consolidator
 from .contracts import (
@@ -544,6 +545,37 @@ class PostgresMemoryV2AuthorityStore:
                 f"cutover readiness receipt is stale: {receipt.receipt_id}"
             )
 
+    @staticmethod
+    def _v1_record_count(connection: Any) -> int:
+        return int(connection.execute("SELECT COUNT(*) FROM omnix_memory_records").fetchone()[0])
+
+    @staticmethod
+    def _assert_v1_fully_imported(connection: Any) -> None:
+        """Every v1 record revision is imported and nothing imported is gone from v1."""
+        from .shadow_report import UNIMPORTED_V1_OWNERS_SQL, V1_CHANGED_SQL
+
+        if connection.execute(UNIMPORTED_V1_OWNERS_SQL).fetchone() is not None:
+            raise CutoverNotReadyError("v1 memory owners are not imported; run the shadow runner")
+        if connection.execute(V1_CHANGED_SQL).fetchone() is not None:
+            raise CutoverNotReadyError("v1 memory changed since the shadow run; run the shadow runner again")
+
+    @staticmethod
+    def _imported_spaces(connection: Any) -> set[MemorySpaceKey]:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT o.principal_id, o.owner_type, o.owner_id
+              FROM omnix_memory_v2_observations o
+              LEFT JOIN omnix_memory_v2_observation_dispositions d
+                ON d.observation_id = o.observation_id
+             WHERE o.event_type = 'imported_legacy_memory'
+               AND COALESCE(d.state, 'active') = 'active'
+            """
+        ).fetchall()
+        return {
+            MemorySpaceKey(principal_id=str(row[0]), owner_type=str(row[1]), owner_id=str(row[2]))
+            for row in rows
+        }
+
     def activate_v2(
         self,
         readiness_receipt_ids: tuple[str, ...],
@@ -552,14 +584,14 @@ class PostgresMemoryV2AuthorityStore:
         reason: str | None = None,
     ) -> AuthorityEpochState:
         receipt_ids = tuple(dict.fromkeys(readiness_receipt_ids))
-        if not receipt_ids:
-            raise CutoverNotReadyError("at least one ready memory space is required for cutover")
         if len(receipt_ids) != len(readiness_receipt_ids):
             raise CutoverNotReadyError("duplicate readiness receipts are not allowed")
         if not activated_by:
             raise ValueError("activated_by is required")
 
-        with self.database.transaction() as connection:
+        # Activation reads v1 records in every workspace (row-level security
+        # would otherwise hide them and make v1 look empty).
+        with system_scope("operator.cli"), self.database.transaction() as connection:
             current_row = connection.execute(
                 """
                 SELECT e.epoch, e.authority, e.activated_at, e.previous_epoch,
@@ -578,6 +610,9 @@ class PostgresMemoryV2AuthorityStore:
             if current.epoch.authority != "v1":  # pragma: no cover
                 raise MemoryAuthorityError("unsupported current memory authority")
 
+            # The row lock above waits for in-flight v1 record writes (they
+            # share-lock it) and stops later ones, so v1 is stable from here on.
+            self._assert_v1_fully_imported(connection)
             receipts = [
                 _readiness_receipt_from_row(
                     self._load_receipt_for_update(connection, receipt_id)
@@ -589,6 +624,13 @@ class PostgresMemoryV2AuthorityStore:
                 raise CutoverNotReadyError(
                     "cutover requires exactly one readiness receipt per space"
                 )
+            uncovered = self._imported_spaces(connection) - set(spaces)
+            if uncovered:
+                raise CutoverNotReadyError(
+                    f"{len(uncovered)} imported memory spaces have no readiness receipt"
+                )
+            if not receipts and self._v1_record_count(connection):
+                raise CutoverNotReadyError("at least one ready memory space is required for cutover")
             for receipt in receipts:
                 self._assert_receipt_fresh(connection, receipt)
 

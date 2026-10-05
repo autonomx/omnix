@@ -1,0 +1,1020 @@
+{
+  "frozen": true,
+  "frozen_after": "0127_agent_approval_definition_hash",
+  "note": "Owners of tables created by the kernel-folder migrations (PA-2.2). Frozen: a new table is created by its module's own migrations/ folder and owned by that module. A `tenant_exempt` reason marks a table without row-level security that holds no workspace data (PA-4.1); a new table states its exemption in an `omnix:tenant-exempt:` table comment instead.",
+  "schema_version": 1,
+  "tables": {
+    "omnix_agent_approvals": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_artifacts": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_capability_executions": {
+      "created_by": "0051_agent_execution_hardening",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_coding_quality_state": {
+      "created_by": "0061_agent_coding_quality",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_evidence_query_reservations": {
+      "created_by": "0056_agent_evidence_budget",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_evidence_receipts": {
+      "created_by": "0055_agent_evidence_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_impact_candidates": {
+      "created_by": "0064_agent_evidence_backed_planning",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_inspection_evidence": {
+      "created_by": "0064_agent_evidence_backed_planning",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_plan_revisions": {
+      "created_by": "0064_agent_evidence_backed_planning",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_planning_decisions": {
+      "created_by": "0064_agent_evidence_backed_planning",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_planning_state": {
+      "created_by": "0064_agent_evidence_backed_planning",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_resource_grants": {
+      "created_by": "0065_agent_review_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_review_attempts": {
+      "created_by": "0065_agent_review_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_review_results": {
+      "created_by": "0061_agent_coding_quality",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_review_snapshots": {
+      "created_by": "0061_agent_coding_quality",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_commands": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_event_counters": {
+      "created_by": "0112_agent_run_event_counters",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_events": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_slot_lock": {
+      "created_by": "0120_agent_run_slots",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_slots": {
+      "created_by": "0120_agent_run_slots",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_run_usage": {
+      "created_by": "0053_agent_run_usage",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_runs": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_self_review_results": {
+      "created_by": "0062_agent_coding_quality_hardening",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_task_revisions": {
+      "created_by": "0055_agent_evidence_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_validation_results": {
+      "created_by": "0061_agent_coding_quality",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_worker_leases": {
+      "created_by": "0049_agent_runtime",
+      "owner": "agent-runtime"
+    },
+    "omnix_agent_workspace_states": {
+      "created_by": "0061_agent_coding_quality",
+      "owner": "agent-runtime"
+    },
+    "omnix_asset_versions": {
+      "created_by": "0003_assets_configuration",
+      "owner": "kernel"
+    },
+    "omnix_assets": {
+      "created_by": "0003_assets_configuration",
+      "owner": "kernel"
+    },
+    "omnix_audiobook_annotations": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_castings": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_chapter_assemblies": {
+      "created_by": "0088_audiobook_assembly_exports",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_chapters": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_document_blocks": {
+      "created_by": "0093_audiobook_document_structure",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_document_overrides": {
+      "created_by": "0093_audiobook_document_structure",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_export_manifests": {
+      "created_by": "0088_audiobook_assembly_exports",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_exports": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_projects": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_pronunciations": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_render_batches": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_renders": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_review_issues": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_source_revisions": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_spans": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_speaker_aliases": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_speakers": {
+      "created_by": "0085_audiobook_v1",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_speech_exclusions": {
+      "created_by": "0094_audiobook_speech_exclusions",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_structural_regions": {
+      "created_by": "0093_audiobook_document_structure",
+      "owner": "audiobook"
+    },
+    "omnix_audiobook_structure_runs": {
+      "created_by": "0093_audiobook_document_structure",
+      "owner": "audiobook"
+    },
+    "omnix_audit_events": {
+      "created_by": "0002_identity_tenancy",
+      "owner": "kernel"
+    },
+    "omnix_auth_login_codes": {
+      "created_by": "0105_auth_sessions",
+      "owner": "kernel"
+    },
+    "omnix_auth_sessions": {
+      "created_by": "0105_auth_sessions",
+      "owner": "kernel"
+    },
+    "omnix_backup_blob_manifest": {
+      "created_by": "0013_coordinated_recovery",
+      "owner": "kernel"
+    },
+    "omnix_backup_generations": {
+      "created_by": "0013_coordinated_recovery",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide backup bookkeeping"
+    },
+    "omnix_capability_approvals": {
+      "created_by": "0098_capability_approvals",
+      "owner": "kernel"
+    },
+    "omnix_capacity_policy": {
+      "created_by": "0016_data_lifecycle_capacity",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide capacity configuration"
+    },
+    "omnix_character_versions": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "characters"
+    },
+    "omnix_characters": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "characters"
+    },
+    "omnix_chat_messages": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "chat"
+    },
+    "omnix_chat_sessions": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "chat"
+    },
+    "omnix_companion_activity_checkpoints": {
+      "created_by": "0081_companion_activity_checkpoints",
+      "owner": "companion-activity"
+    },
+    "omnix_companion_initiative_sessions": {
+      "created_by": "0082_companion_initiative_authority",
+      "owner": "companion-activity"
+    },
+    "omnix_conversation_segments": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "chat"
+    },
+    "omnix_cutover_transitions": {
+      "created_by": "0015_cutover_state_machine",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence cutover history"
+    },
+    "omnix_database_events": {
+      "created_by": "0001_platform",
+      "owner": "kernel"
+    },
+    "omnix_dead_letters": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "kernel"
+    },
+    "omnix_device_capacity": {
+      "created_by": "0103_device_permits",
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
+    },
+    "omnix_device_model_owners": {
+      "created_by": "0103_device_permits",
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
+    },
+    "omnix_device_permit_requests": {
+      "created_by": "0103_device_permits",
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
+    },
+    "omnix_device_permits": {
+      "created_by": "0103_device_permits",
+      "owner": "kernel",
+      "tenant_exempt": "devices are shared by every workspace"
+    },
+    "omnix_external_identities": {
+      "created_by": "0105_auth_sessions",
+      "owner": "kernel",
+      "tenant_exempt": "identity precedes workspace membership"
+    },
+    "omnix_idempotency_keys": {
+      "created_by": "0002_identity_tenancy",
+      "owner": "kernel"
+    },
+    "omnix_install_credentials": {
+      "created_by": "0105_auth_sessions",
+      "owner": "kernel"
+    },
+    "omnix_installation_metadata": {
+      "created_by": "0001_platform",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide metadata"
+    },
+    "omnix_job_attempts": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "kernel"
+    },
+    "omnix_job_events": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "kernel"
+    },
+    "omnix_job_logs": {
+      "created_by": "0102_durable_job_hygiene",
+      "owner": "kernel"
+    },
+    "omnix_jobs": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "kernel"
+    },
+    "omnix_legacy_import_items": {
+      "created_by": "0008_legacy_cutover",
+      "owner": "kernel",
+      "tenant_exempt": "one-time legacy import bookkeeping (ids and hashes only)"
+    },
+    "omnix_legacy_import_runs": {
+      "created_by": "0008_legacy_cutover",
+      "owner": "kernel",
+      "tenant_exempt": "one-time legacy import bookkeeping"
+    },
+    "omnix_lifecycle_cleanup_runs": {
+      "created_by": "0016_data_lifecycle_capacity",
+      "owner": "kernel",
+      "tenant_exempt": "retention worker run log, written in system scope"
+    },
+    "omnix_memory_candidates": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_events": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_records": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_snapshot_items": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_snapshots": {
+      "created_by": "0004_characters_memory_chat",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_affect_observations": {
+      "created_by": "0074_memory_v2_affect",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_assertion_assertion_evidence": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_assertion_observation_evidence": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_assertion_relations": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_assistant_outputs": {
+      "created_by": "0077_memory_v2_assistant_outputs",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_authority_current": {
+      "created_by": "0079_memory_v2_authority_cutover",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_authority_epochs": {
+      "created_by": "0079_memory_v2_authority_cutover",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_authority_streams": {
+      "created_by": "0069_memory_v2_observation_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_consolidation_decision_sets": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_consolidation_receipts": {
+      "created_by": "0071_memory_v2_consolidation",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_consolidation_state": {
+      "created_by": "0071_memory_v2_consolidation",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_cutover_readiness_receipts": {
+      "created_by": "0079_memory_v2_authority_cutover",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_derive_jobs": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_derived_policy_envelopes": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_derived_revisions": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_derived_state": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_embeddings": {
+      "created_by": "0117_memory_v2_embeddings",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_episode_assertions": {
+      "created_by": "0072_memory_v2_episodes",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_episode_observations": {
+      "created_by": "0072_memory_v2_episodes",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_episodes": {
+      "created_by": "0072_memory_v2_episodes",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_grants": {
+      "created_by": "0076_memory_v2_grants",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_graph_assertions": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_graph_entities": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_graph_state": {
+      "created_by": "0070_memory_v2_graph_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_observation_dispositions": {
+      "created_by": "0069_memory_v2_observation_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_observations": {
+      "created_by": "0069_memory_v2_observation_store",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_projection_jobs": {
+      "created_by": "0080_memory_v2_convergence",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_relationship_evidence": {
+      "created_by": "0073_memory_v2_relationships",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_relationship_metric_evidence": {
+      "created_by": "0073_memory_v2_relationships",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_relationship_metrics": {
+      "created_by": "0073_memory_v2_relationships",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_relationships": {
+      "created_by": "0073_memory_v2_relationships",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_search_index_entries": {
+      "created_by": "0075_memory_v2_search_index",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_search_index_state": {
+      "created_by": "0075_memory_v2_search_index",
+      "owner": "assistant-memory"
+    },
+    "omnix_memory_v2_shadow_evaluations": {
+      "created_by": "0078_memory_v2_shadow",
+      "owner": "assistant-memory"
+    },
+    "omnix_module_records": {
+      "created_by": "0007_remaining_modules",
+      "owner": "kernel"
+    },
+    "omnix_oidc_login_states": {
+      "created_by": "0105_auth_sessions",
+      "owner": "kernel",
+      "tenant_exempt": "sign-in state precedes workspace membership"
+    },
+    "omnix_outbox_consumer_inbox": {
+      "created_by": "0011_outbox_delivery_contract",
+      "owner": "kernel"
+    },
+    "omnix_outbox_dead_letters": {
+      "created_by": "0011_outbox_delivery_contract",
+      "owner": "kernel"
+    },
+    "omnix_outbox_events": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "kernel"
+    },
+    "omnix_outbox_sequences": {
+      "created_by": "0011_outbox_delivery_contract",
+      "owner": "kernel"
+    },
+    "omnix_ownership_epochs": {
+      "created_by": "0122_ownership_epochs",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide lock epochs"
+    },
+    "omnix_persistence_cutover": {
+      "created_by": "0008_legacy_cutover",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence cutover state"
+    },
+    "omnix_prompt_templates": {
+      "created_by": "0007_remaining_modules",
+      "owner": "shared"
+    },
+    "omnix_provider_configs": {
+      "created_by": "0007_remaining_modules",
+      "owner": "shared"
+    },
+    "omnix_provider_status_projections": {
+      "created_by": "0007_remaining_modules",
+      "owner": "shared"
+    },
+    "omnix_reports": {
+      "created_by": "0007_remaining_modules",
+      "owner": "research"
+    },
+    "omnix_research_records": {
+      "created_by": "0007_remaining_modules",
+      "owner": "research"
+    },
+    "omnix_retention_policies": {
+      "created_by": "0016_data_lifecycle_capacity",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide retention configuration"
+    },
+    "omnix_rpg_campaign_bible_revisions": {
+      "created_by": "0017_rpg_campaign_bible",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_bibles": {
+      "created_by": "0017_rpg_campaign_bible",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_genesis_runs": {
+      "created_by": "0021_rpg_campaign_genesis",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_map_events": {
+      "created_by": "0023_rpg_map_instances",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_map_instances": {
+      "created_by": "0023_rpg_map_instances",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_spatial_clocks": {
+      "created_by": "0027_rpg_npc_spatial_runtime",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaign_world_bindings": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_campaigns": {
+      "created_by": "0006_rpg_campaigns_turns",
+      "owner": "rpg"
+    },
+    "omnix_rpg_foreground_submissions": {
+      "created_by": "0005_jobs_outbox_submissions",
+      "owner": "rpg"
+    },
+    "omnix_rpg_hermes_research": {
+      "created_by": "0019_rpg_hermes_narrative_research",
+      "owner": "rpg"
+    },
+    "omnix_rpg_interactions": {
+      "created_by": "0006_rpg_campaigns_turns",
+      "owner": "rpg"
+    },
+    "omnix_rpg_item_descriptions": {
+      "created_by": "0029_rpg_item_descriptions",
+      "owner": "rpg"
+    },
+    "omnix_rpg_map_blueprint_revisions": {
+      "created_by": "0026_rpg_map_blueprint_revisions",
+      "owner": "rpg"
+    },
+    "omnix_rpg_map_definitions": {
+      "created_by": "0023_rpg_map_instances",
+      "owner": "rpg"
+    },
+    "omnix_rpg_map_observation_events": {
+      "created_by": "0028_rpg_observer_knowledge",
+      "owner": "rpg"
+    },
+    "omnix_rpg_map_observer_knowledge": {
+      "created_by": "0028_rpg_observer_knowledge",
+      "owner": "rpg"
+    },
+    "omnix_rpg_narration_events": {
+      "created_by": "0104_rpg_narration_events",
+      "owner": "rpg"
+    },
+    "omnix_rpg_narrative_deliveries": {
+      "created_by": "0022_rpg_narrative_delivery",
+      "owner": "rpg"
+    },
+    "omnix_rpg_narrative_responses": {
+      "created_by": "0020_rpg_narrative_responses",
+      "owner": "rpg"
+    },
+    "omnix_rpg_narrative_retirement_records": {
+      "created_by": "0023_rpg_narrative_retirement",
+      "owner": "rpg"
+    },
+    "omnix_rpg_npc_spatial_goals": {
+      "created_by": "0027_rpg_npc_spatial_runtime",
+      "owner": "rpg"
+    },
+    "omnix_rpg_npc_spatial_routines": {
+      "created_by": "0027_rpg_npc_spatial_runtime",
+      "owner": "rpg"
+    },
+    "omnix_rpg_npc_spatial_tick_runs": {
+      "created_by": "0027_rpg_npc_spatial_runtime",
+      "owner": "rpg"
+    },
+    "omnix_rpg_npc_spatial_transitions": {
+      "created_by": "0027_rpg_npc_spatial_runtime",
+      "owner": "rpg"
+    },
+    "omnix_rpg_participants": {
+      "created_by": "0006_rpg_campaigns_turns",
+      "owner": "rpg"
+    },
+    "omnix_rpg_scenario_revisions": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_scenarios": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_snapshots": {
+      "created_by": "0006_rpg_campaigns_turns",
+      "owner": "rpg"
+    },
+    "omnix_rpg_turns": {
+      "created_by": "0006_rpg_campaigns_turns",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_entity_history": {
+      "created_by": "0028_rpg_world_entity_history",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_forge_proposals": {
+      "created_by": "0018_rpg_world_forge",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_generation_runs": {
+      "created_by": "0024_rpg_world_generation_runs",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_generation_topic_results": {
+      "created_by": "0032_rpg_world_generation_topic_results",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_image_attempts": {
+      "created_by": "0027_rpg_world_image_targets",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_image_targets": {
+      "created_by": "0027_rpg_world_image_targets",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_releases": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_revisions": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_topic_history": {
+      "created_by": "0025_rpg_world_topic_history",
+      "owner": "rpg"
+    },
+    "omnix_rpg_world_topics": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_rpg_worlds": {
+      "created_by": "0022_rpg_world_scenario_releases",
+      "owner": "rpg"
+    },
+    "omnix_runtime_failure_evidence": {
+      "created_by": "0014_runtime_coordination",
+      "owner": "kernel"
+    },
+    "omnix_runtime_nodes": {
+      "created_by": "0014_runtime_coordination",
+      "owner": "kernel",
+      "tenant_exempt": "gateway and worker process registry"
+    },
+    "omnix_runtime_persistence_state": {
+      "created_by": "0009_runtime_retirement",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide persistence state"
+    },
+    "omnix_runtime_projections": {
+      "created_by": "0007_remaining_modules",
+      "owner": "kernel"
+    },
+    "omnix_secret_references": {
+      "created_by": "0003_assets_configuration",
+      "owner": "kernel"
+    },
+    "omnix_security_policy_state": {
+      "created_by": "0012_tenant_integrity_security",
+      "owner": "kernel",
+      "tenant_exempt": "installation-wide security policy"
+    },
+    "omnix_settings": {
+      "created_by": "0003_assets_configuration",
+      "owner": "kernel"
+    },
+    "omnix_settings_entries": {
+      "created_by": "0099_settings_entries",
+      "owner": "kernel"
+    },
+    "omnix_side_effect_receipts": {
+      "created_by": "0011_outbox_delivery_contract",
+      "owner": "kernel"
+    },
+    "omnix_task_graph_events": {
+      "created_by": "0058_agent_task_graph",
+      "owner": "agent-runtime"
+    },
+    "omnix_task_graph_node_runs": {
+      "created_by": "0058_agent_task_graph",
+      "owner": "agent-runtime"
+    },
+    "omnix_task_graph_revisions": {
+      "created_by": "0058_agent_task_graph",
+      "owner": "agent-runtime"
+    },
+    "omnix_task_graph_runs": {
+      "created_by": "0058_agent_task_graph",
+      "owner": "agent-runtime"
+    },
+    "omnix_trading_alert_triggers": {
+      "created_by": "0020_trading_alerts",
+      "owner": "trading"
+    },
+    "omnix_trading_alerts": {
+      "created_by": "0020_trading_alerts",
+      "owner": "trading"
+    },
+    "omnix_trading_backtest_equity": {
+      "created_by": "0022_trading_replay_backtests",
+      "owner": "trading"
+    },
+    "omnix_trading_backtest_logs": {
+      "created_by": "0022_trading_replay_backtests",
+      "owner": "trading"
+    },
+    "omnix_trading_backtest_runs": {
+      "created_by": "0022_trading_replay_backtests",
+      "owner": "trading"
+    },
+    "omnix_trading_backtest_trades": {
+      "created_by": "0022_trading_replay_backtests",
+      "owner": "trading"
+    },
+    "omnix_trading_catalyst_evidence": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_climatology_states": {
+      "created_by": "0124_trading_prospective_gap_inputs",
+      "owner": "trading"
+    },
+    "omnix_trading_datasets": {
+      "created_by": "0022_trading_replay_backtests",
+      "owner": "trading"
+    },
+    "omnix_trading_evidence_counters": {
+      "created_by": "0125_trading_market_evidence",
+      "owner": "trading"
+    },
+    "omnix_trading_evidence_imports": {
+      "created_by": "0125_trading_market_evidence",
+      "owner": "trading"
+    },
+    "omnix_trading_evidence_session_counters": {
+      "created_by": "0125_trading_market_evidence",
+      "owner": "trading"
+    },
+    "omnix_trading_fact_sets": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_gapper_universes": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_ibkr_session_evidence": {
+      "created_by": "0125_trading_market_evidence",
+      "owner": "trading"
+    },
+    "omnix_trading_issuer_identities": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_kill_switches": {
+      "created_by": "0121_trading_order_gateway",
+      "owner": "trading"
+    },
+    "omnix_trading_model_artifacts": {
+      "created_by": "0040_trading_model_artifacts",
+      "owner": "trading"
+    },
+    "omnix_trading_model_scores": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_accounts": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_balances": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_epoch_archives": {
+      "created_by": "0043_trading_paper_analytics",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_equity_snapshots": {
+      "created_by": "0043_trading_paper_analytics",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_fills": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_ledger": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_orders": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_positions": {
+      "created_by": "0023_trading_paper",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_protections": {
+      "created_by": "0039_trading_paper_protections",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_simulation_epochs": {
+      "created_by": "0043_trading_paper_analytics",
+      "owner": "trading"
+    },
+    "omnix_trading_paper_trade_records": {
+      "created_by": "0043_trading_paper_analytics",
+      "owner": "trading"
+    },
+    "omnix_trading_premarket_handoffs": {
+      "created_by": "0124_trading_prospective_gap_inputs",
+      "owner": "trading"
+    },
+    "omnix_trading_research_actions": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_research_evidence": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_research_features": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_research_outcomes": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_research_reports": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_research_shadow_annotations": {
+      "created_by": "0042_trading_research_shadow_annotations",
+      "owner": "trading"
+    },
+    "omnix_trading_research_validation_reports": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_scanner_results": {
+      "created_by": "0021_trading_scanners",
+      "owner": "trading"
+    },
+    "omnix_trading_scanner_runs": {
+      "created_by": "0021_trading_scanners",
+      "owner": "trading"
+    },
+    "omnix_trading_scanners": {
+      "created_by": "0021_trading_scanners",
+      "owner": "trading"
+    },
+    "omnix_trading_session_evidence_manifests": {
+      "created_by": "0083_trading_evidence_execution_v3",
+      "owner": "trading"
+    },
+    "omnix_trading_solana_ai_decisions": {
+      "created_by": "0060_trading_solana_ai_strategy",
+      "owner": "trading"
+    },
+    "omnix_trading_solana_ai_strategies": {
+      "created_by": "0060_trading_solana_ai_strategy",
+      "owner": "trading"
+    },
+    "omnix_trading_strategy_archives": {
+      "created_by": "0043_trading_paper_analytics",
+      "owner": "trading"
+    },
+    "omnix_trading_strategy_configs": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_strategy_events": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_strategy_protections": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_strategy_runs": {
+      "created_by": "0038_trading_strategy_automation",
+      "owner": "trading"
+    },
+    "omnix_trading_supply_facts": {
+      "created_by": "0041_trading_hermes_research",
+      "owner": "trading"
+    },
+    "omnix_trading_trigger_plans": {
+      "created_by": "0083_trading_evidence_execution_v3",
+      "owner": "trading"
+    },
+    "omnix_trading_yahoo_bar_revisions": {
+      "created_by": "0125_trading_market_evidence",
+      "owner": "trading"
+    },
+    "omnix_users": {
+      "created_by": "0002_identity_tenancy",
+      "owner": "kernel",
+      "tenant_exempt": "identity precedes workspace membership"
+    },
+    "omnix_workflow_definitions": {
+      "created_by": "0050_agent_workflows",
+      "owner": "agent-runtime"
+    },
+    "omnix_workflow_run_events": {
+      "created_by": "0054_workflow_scheduling",
+      "owner": "agent-runtime"
+    },
+    "omnix_workflow_runs": {
+      "created_by": "0050_agent_workflows",
+      "owner": "agent-runtime"
+    },
+    "omnix_workflow_schedule_fires": {
+      "created_by": "0054_workflow_scheduling",
+      "owner": "agent-runtime"
+    },
+    "omnix_workflow_schedules": {
+      "created_by": "0054_workflow_scheduling",
+      "owner": "agent-runtime"
+    },
+    "omnix_workflow_step_runs": {
+      "created_by": "0050_agent_workflows",
+      "owner": "agent-runtime"
+    },
+    "omnix_workspace_memberships": {
+      "created_by": "0002_identity_tenancy",
+      "owner": "kernel"
+    },
+    "omnix_workspaces": {
+      "created_by": "0002_identity_tenancy",
+      "owner": "kernel"
+    }
+  }
+}

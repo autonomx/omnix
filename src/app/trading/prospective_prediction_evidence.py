@@ -14,14 +14,13 @@ import math
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import AdjustmentMode, MarketBar
-from .us_equity_calendar import early_close_time
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
-_ET = ZoneInfo("America/New_York")
 
 PREMARKET_EVIDENCE_SCHEMA_VERSION = "premarket-evidence-v1"
 FEATURE_SCHEMA_VERSION = "prospective-gap-features-v1"
@@ -63,11 +62,8 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-
-
-
 def _regular_session_end(session_date: date) -> datetime:
-    close = early_close_time(session_date) or time(16, 0)
+    close = regular_close_time(session_date)
     return datetime.combine(session_date, close, tzinfo=_ET).astimezone(timezone.utc)
 
 
@@ -75,7 +71,7 @@ def _regular_session_minutes(session_date: date) -> Decimal:
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
     close = datetime.combine(
         session_date,
-        early_close_time(session_date) or time(16, 0),
+        regular_close_time(session_date),
         tzinfo=_ET,
     )
     return Decimal(str((close - start).total_seconds() / 60))

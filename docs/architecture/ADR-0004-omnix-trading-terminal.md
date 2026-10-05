@@ -15,7 +15,7 @@ Omnix needs a TradingView-style research workspace with multiple linked charts, 
 3. TradingView Lightweight Charts is the renderer candidate, not an interaction framework. Omnix owns chart lifecycle, synchronization, drawings, hit testing, keyboard behavior, persistence, streaming recovery, and accessibility.
 4. A disposable spike must prove four charts with 5,000 bars each, different-interval synchronization, an RSI pane, selectable and resizable time/price drawings, resize/fullscreen behavior, shared live-stream handling, exact gap recovery, and lifecycle cleanup.
 5. The spike is a go/no-go gate. Production `/trading` routing begins only after benchmark evidence and an explicit architecture decision accept the renderer and drawing approach.
-6. PostgreSQL is authoritative for workspaces, watchlists, drawings, presets, alerts, backtest metadata, and paper state. `resources/cache/trading/` is disposable provider cache only.
+6. PostgreSQL is authoritative for workspaces, watchlists, drawings, presets, alerts, backtest metadata, and paper state. The provider cache is a bounded in-process cache only (WP-8.3; it no longer persists to `resources/cache/trading/`).
 7. Canonical instrument identity is independent of provider/feed identity. Instrument-owned state survives provider changes and fallback.
 8. Provider legality and intended usage are executable adapter capabilities. No dataset silently splices multiple providers.
 9. The first qualified release is crypto-only and uses Binance spot data. Equities begin only after Charting Beta qualification.

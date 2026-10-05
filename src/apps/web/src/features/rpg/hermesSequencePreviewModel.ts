@@ -1,4 +1,4 @@
-import type { HermesRpgSequenceResponse } from '../../api/hermesRpgSequenceClient';
+import type { HermesRpgSequenceResponse } from './api/hermesRpgSequenceClient';
 import type { HermesSequencePreviewItem, HermesSequencePreviewState } from './HermesSequencePreview';
 
 function recordValue(value: unknown): Record<string, unknown> {

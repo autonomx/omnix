@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import create_fastapi_app
-from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_sequence_review_payload
+from app.rpg.hermes.approved_routes import hermes_rpg_sequence_review_payload
 
 
 def sample_payload() -> dict:
@@ -36,7 +36,7 @@ def test_sequence_payload_invalid() -> None:
 
 
 def test_sequence_live_route_ok() -> None:
-    response = TestClient(create_fastapi_app()).post(
+    response = TestClient(create_fastapi_app(), headers={"X-Omnix-Client": "test"}).post(
         "/api/hermes/rpg/sequence/review",
         json={key: value for key, value in sample_payload().items() if key != "session_id"},
     )

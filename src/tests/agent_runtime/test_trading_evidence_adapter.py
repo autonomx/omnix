@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.assistant_tools.models import AssistantToolRequest
-from app.assistant_tools.trading_adapter import run_trading_tool_request
+from app.trading.assistant_tool import run_trading_tool_request
 from app.trading.execution import ExecutionObservation
 
 

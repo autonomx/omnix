@@ -1,21 +1,17 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PodcastWorkspace } from './PodcastWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const GENERATED_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 const STITCHED_AUDIO_BLOB_URL = 'blob:stitched-podcast-preview';
 
 function renderPodcast() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'podcast');
 
   if (!module) {
@@ -75,7 +71,7 @@ describe('PodcastWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'audio/wav',
-              storage_path: 'resources/voice_clones/alex.wav',
+              file_name: 'alex.wav',
               metadata: { profile_name: 'Alex Voice' },
               created_at: '2026-06-14T00:00:00Z',
             },
@@ -155,7 +151,7 @@ describe('PodcastWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"script_segments"');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
-      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/alex.wav"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"voice-cloning:alex"');
       expect(createCall?.[1]?.body).toContain('"voice_mapping"');
       expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
       expect(createCall?.[1]?.body).toContain('"maxSpeakerTurnSeconds":45');

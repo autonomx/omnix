@@ -5,12 +5,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
-
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import continuous_bar_end, is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -23,12 +22,12 @@ INTERVALS = {
 }
 
 
-class AdditionalCryptoProvider:
+class AdditionalCryptoProvider(ProviderAdapter):
     def __init__(
         self,
         provider_id: str,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:

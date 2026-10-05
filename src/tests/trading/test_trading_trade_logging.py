@@ -9,6 +9,8 @@ from app.trading.trade_logging import trade_log, trade_log_path
 def test_trade_audit_log_writes_jsonl_and_redacts_secrets(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_TRADE_LOG_DIR", str(tmp_path / "trade"))
     monkeypatch.setenv("OMNIX_TRADE_AUDIT_LOGGING", "1")
+    monkeypatch.delenv("OMNIX_INSTANCE_NAME", raising=False)
+    monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "worker")
 
     trade_log(
         "auto_trading",
@@ -28,7 +30,7 @@ def test_trade_audit_log_writes_jsonl_and_redacts_secrets(monkeypatch, tmp_path)
     payload = json.loads(raw)
 
     assert path.parent == tmp_path / "trade"
-    assert path.name == "auto_trading.jsonl"
+    assert path.name == "auto_trading.worker.jsonl"
     assert payload["channel"] == "auto_trading"
     assert payload["event"] == "risk_decision"
     assert payload["strategy_id"] == "strategy-1"
@@ -47,3 +49,18 @@ def test_trade_audit_log_can_be_disabled(monkeypatch, tmp_path) -> None:
     trade_log("backtest", "backtest_requested", strategy_id="strategy-1")
 
     assert not trade_log_path("backtest").exists()
+
+
+def test_each_process_writes_its_own_file(monkeypatch, tmp_path) -> None:
+    from app.trading.trade_logging import trade_log_process_name
+
+    monkeypatch.setenv("OMNIX_TRADE_LOG_DIR", str(tmp_path / "trade"))
+    monkeypatch.delenv("OMNIX_INSTANCE_NAME", raising=False)
+    monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "job-worker")
+    job_worker = trade_log_path("backtest")
+    monkeypatch.setenv("OMNIX_INSTANCE_NAME", "api 8001/../x")
+    replica = trade_log_path("backtest")
+
+    assert job_worker.name == "backtest.job-worker.jsonl"
+    assert replica.name == "backtest.api-8001-..-x.jsonl" and replica.parent == tmp_path / "trade"
+    assert trade_log_process_name() == "api-8001-..-x"

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import prompt_store
-from app.gateway import memory_job_offload
 from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
 
 
@@ -31,14 +30,13 @@ def test_post_turn_maintenance_failure_does_not_fail_completed_chat(
     monkeypatch,
     caplog,
 ):
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: _StaticProvider())
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: _StaticProvider())
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
 
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("PostgreSQL operation failed")
 
-    monkeypatch.setattr(prompt_store, "enqueue_memory_suggestion_job", unavailable)
-    monkeypatch.setattr(memory_job_offload, "enqueue_memory_suggestion_job", unavailable)
+    monkeypatch.setattr(prompt_store.ChatSessionStore, "_publish_turn_completed", unavailable)
     monkeypatch.setattr(prompt_store, "enqueue_compaction_job", unavailable)
     store = prompt_store.ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(
@@ -59,5 +57,25 @@ def test_post_turn_maintenance_failure_does_not_fail_completed_chat(
     assert persisted is not None
     assert persisted.messages[-1].role == "assistant"
     assert persisted.messages[-1].metadata["generation_status"] == "completed"
-    assert "memory suggestion maintenance unavailable" in caplog.text
+    assert "turn completed event unavailable" in caplog.text
     assert "history compaction maintenance unavailable" in caplog.text
+
+
+def test_a_completed_turn_publishes_its_event_once_with_the_memory_policy(tmp_path, monkeypatch):
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: _StaticProvider())
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
+    published = []
+    monkeypatch.setattr(
+        prompt_store.ChatSessionStore, "_publish_turn_completed",
+        lambda _store, session, user_message_id: published.append(
+            prompt_store.turn_completed_event(session, user_message_id, user_id="user:1")
+        ),
+    )
+    store = prompt_store.ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="Events", interaction_mode="system", provider_id="lmstudio"))
+
+    store.append_user_message(session.id, SendChatMessageRequest(content="Hello"))
+
+    (event,) = published
+    user_message = next(message for message in store.get_session(session.id).messages if message.role == "user")
+    assert (event.session_id, event.user_message_id, event.memory_writes_allowed) == (session.id, user_message.id, True)

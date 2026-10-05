@@ -161,14 +161,6 @@ def load_baseline_scenarios(path: str | Path) -> tuple[BaselineScenario, ...]:
     return scenarios
 
 
-def load_observations(path: str | Path) -> tuple[BaselineObservation, ...]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    rows = payload.get("observations") if isinstance(payload, dict) else payload
-    if not isinstance(rows, list):
-        raise ValueError("observation file must contain an observations list")
-    return tuple(BaselineObservation.from_mapping(row) for row in rows if isinstance(row, dict))
-
-
 def validate_scenarios(scenarios: Sequence[BaselineScenario]) -> None:
     if not scenarios:
         raise ValueError("baseline fixture must not be empty")

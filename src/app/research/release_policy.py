@@ -1,6 +1,8 @@
 """Release controls for Web Research capabilities."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import os
 from typing import Literal
@@ -201,7 +203,7 @@ def _in_cohort(identity: str, percentage: int, salt: str) -> bool:
 
 
 def _env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
@@ -209,7 +211,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _env_percent(name: str, default: int) -> int:
     try:
-        value = int(os.environ.get(name, str(default)))
+        value = int(environment().get(name, str(default)))
     except ValueError:
         value = default
     return max(0, min(100, value))

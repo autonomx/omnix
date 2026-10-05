@@ -6,6 +6,7 @@ waiting for the loop itself to recover. Stack payloads contain code locations
 only; frame locals and user content are never inspected.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import os
@@ -19,9 +20,8 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 
-from .tts_stream_diagnostics import active_streams_snapshot, stream_log
+from app.observability.tts_stream_diagnostics import active_streams_snapshot, stream_log
 
-_HOOK_SENTINEL = "_omnix_event_loop_lag_monitor_hook_installed"
 _ROUTE_SENTINEL = "_omnix_event_loop_lag_monitor_registered"
 _MONITOR_STATE_KEY = "_omnix_event_loop_lag_monitor"
 _DEFAULT_INTERVAL_SECONDS = 0.025
@@ -31,12 +31,12 @@ _DEFAULT_STACK_LIMIT = 10
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)) or default)
+        value = float(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, value)
@@ -44,7 +44,7 @@ def _env_float(name: str, default: float, *, minimum: float) -> float:
 
 def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
-        value = int(os.environ.get(name, str(default)) or default)
+        value = int(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, min(maximum, value))
@@ -379,19 +379,3 @@ def register_event_loop_lag_monitor(gateway: FastAPI) -> None:
 
     from .feature_registry import FeatureLifecycle, register_feature_lifecycle
     register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
-
-
-def install_event_loop_lag_monitor_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-
-    original_init = FastAPI.__init__
-
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        is_gateway = kwargs.get("title") == "Omnix Web Gateway"
-        if is_gateway or (args and args[0] == "Omnix Web Gateway"):
-            register_event_loop_lag_monitor(self)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

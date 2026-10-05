@@ -1,0 +1,30 @@
+{
+  "measurement": "WP-10.7 restore rehearsal at benchmark volume",
+  "date": "2026-10-02",
+  "environment": "local pgserver PostgreSQL 16 on Windows; source omnix_bench seeded by scripts/seed_benchmark_data.py",
+  "backup_seconds": 6,
+  "database_dump_bytes": 65224004,
+  "ok": true,
+  "backup_created_at": "2026-10-02T14:24:45+00:00",
+  "schema_version": "0116_job_metrics_active_index",
+  "steps": {
+    "checksums": "ok",
+    "database_restore": "ok",
+    "verify": "ok",
+    "table_counts": {
+      "omnix_workspaces": 1,
+      "omnix_jobs": 100000,
+      "omnix_job_events": 303000,
+      "omnix_assets": 100000,
+      "omnix_chat_sessions": 10000,
+      "omnix_chat_messages": 1000000,
+      "omnix_agent_runs": 20,
+      "omnix_audit_events": 1
+    },
+    "blobs": {
+      "files": 5,
+      "sample_checked": 5
+    }
+  },
+  "restore_seconds": 41.69
+}

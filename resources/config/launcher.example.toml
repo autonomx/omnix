@@ -1,0 +1,17 @@
+# Omnix launcher settings (WP-11.4). Copy to resources/config/launcher.toml
+# (ignored by git) and adjust. Environment variables still win:
+# RPG_FLUX_PYTHON, RPG_TTS_PYTHON, RPG_STT_PYTHON and CONDA_ROOT.
+
+[python]
+# Conda installation holding the environments below (default: ~/miniconda3).
+# conda_root = "D:/miniconda3"
+
+[python.environments]
+# Conda environment per process: the app (gateway, workers), TTS and STT.
+app = "rpg-flux"
+tts = "rpg-tts"
+stt = "rpg-stt"
+
+[python.paths]
+# Explicit interpreters instead of Conda environments.
+# app = "D:/venvs/omnix/Scripts/python.exe"

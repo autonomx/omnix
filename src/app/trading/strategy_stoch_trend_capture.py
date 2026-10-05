@@ -26,7 +26,6 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
@@ -35,9 +34,9 @@ from .indicators.engine import average_true_range
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 OVERSOLD = Decimal("20")
 OVERBOUGHT = Decimal("80")
 PARTIAL_FRACTION = Decimal("0.25")

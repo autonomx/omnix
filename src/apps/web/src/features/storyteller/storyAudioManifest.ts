@@ -1,5 +1,6 @@
 import { buildStoryDocumentFromText, storyDocumentFingerprint, type StoryAudioManifest, type StoryDocument } from './storyDocument';
 import { voiceCastFingerprint, loadStoryVoiceCast } from './storyVoiceCast';
+import { writeStoryData } from './storySnapshotStore';
 
 const STORY_AUDIO_MANIFEST_STORAGE_PREFIX = 'omnix.storyteller.audioManifests:';
 
@@ -30,11 +31,7 @@ export function loadStoryAudioManifests(storyId: string): StoryAudioManifest[] {
 }
 
 export function saveStoryAudioManifests(storyId: string, manifests: StoryAudioManifest[]): void {
-  try {
-    window.localStorage.setItem(storyAudioManifestStorageKey(storyId), JSON.stringify(manifests.filter(isManifest)));
-  } catch {
-    // Best-effort local persistence until backend metadata exists.
-  }
+  writeStoryData(storyAudioManifestStorageKey(storyId), JSON.stringify(manifests.filter(isManifest)));
 }
 
 export function buildChapterAudioStates(document: StoryDocument): StoryAudioChapterState[] {

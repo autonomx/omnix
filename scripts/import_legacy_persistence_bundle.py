@@ -10,7 +10,8 @@ from app.persistence.complete_cutover import CompletePostgresLegacyImporter
 from app.persistence.config import database_settings
 from app.persistence.cutover import preflight_bundle
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
+from app.persistence.migrations import migration_status
 
 
 def _bundle(path: Path) -> dict:
@@ -70,12 +71,22 @@ def main() -> int:
 
     database = PostgresDatabase(database_settings())
     try:
+        migration_report = migration_status(database, initialize_table=False)
+        if (
+            not migration_report.get("ok")
+            or migration_report.get("pending")
+            or migration_report.get("compatible") is not True
+        ):
+            raise RuntimeError(
+                "PostgreSQL schema is not ready for legacy import; "
+                "run python -m app.persistence migrate first"
+            )
         importer = CompletePostgresLegacyImporter(
             database,
             blob_store=LocalBlobStore(getattr(args, "blob_root", None)),
         )
         if args.command == "import":
-            context = bootstrap_local_tenant(
+            context = ensure_local_identity(
                 database,
                 authority_operation=AuthorityOperation.LEGACY_IMPORT,
             )

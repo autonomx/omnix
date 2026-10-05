@@ -36,22 +36,22 @@ _TRUE = {"1", "true", "yes", "on"}
 _PROMPT = (
     "in the attached workspace, change the system-mode settings button label "
     "from personality to profile in "
-    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _REVISED_PROMPT = (
     "now, in the attached workspace, change that system-mode settings button "
     "label from profile to personality in "
-    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _LATEST_PROMPT = (
     "now, in the attached workspace, change that system-mode settings button "
     "label from personality to profile in "
-    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+    "src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"
 )
 _TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 _RUN_ID_PATTERN = re.compile(r"\bAgent run ([A-Za-z0-9_-]+)")
 _TARGET_FILES = (
-    Path("src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"),
+    Path("src/apps/web/src/features/assistant/chat/ChatIdentityModeControl.tsx"),
 )
 _SYSTEM_MODE_LABEL_PATTERN = re.compile(
     r"(?P<prefix>mode\s*===\s*['\"]character['\"]\s*\?\s*['\"][^'\"]+['\"]\s*:\s*['\"]+)"
@@ -390,7 +390,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             content = str(complete.get("content") or "")
             metadata = complete.get("metadata")
             assert isinstance(metadata, dict), complete
-            assert "Started coding Agent run" in content, content
+            assert "Queued coding Agent run" in content, content
 
             route = metadata.get("omnix_route")
             routing = metadata.get("routing_decision")
@@ -530,7 +530,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             revised_content = str(revised_complete.get("content") or "")
             revised_metadata = revised_complete.get("metadata")
             assert isinstance(revised_metadata, dict), revised_complete
-            assert "Started coding Agent run" in revised_content, revised_content
+            assert "Queued coding Agent run" in revised_content, revised_content
             revised_routing = revised_metadata.get("routing_decision")
             assert isinstance(revised_routing, dict), revised_metadata
             assert revised_routing.get("production_router") == "semantic_v2"
@@ -627,7 +627,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             latest_content = str(latest_complete.get("content") or "")
             latest_metadata = latest_complete.get("metadata")
             assert isinstance(latest_metadata, dict), latest_complete
-            assert "Started coding Agent run" in latest_content, latest_content
+            assert "Queued coding Agent run" in latest_content, latest_content
             latest_agent_run = latest_metadata.get("agent_run")
             latest_run_id = (
                 str(latest_agent_run.get("run_id") or "").strip()

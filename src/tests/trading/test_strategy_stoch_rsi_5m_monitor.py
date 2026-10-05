@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -110,7 +109,8 @@ def test_strategy_document_is_shadow_only() -> None:
         _config(mode="auto_paper")
 
 
-def test_monitor_persists_stoch_rsi_evidence_without_execution(
+@pytest.mark.anyio
+async def test_monitor_persists_stoch_rsi_evidence_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -128,13 +128,11 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
     monitor = TradingStrategyMonitor(interval_seconds=30)
     monitor.current_run_id = "stoch-test-run"
 
-    asyncio.run(
-        monitor._run_stoch_rsi_5m_config(
-            _config(),
-            repository,
-            market,
-            now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
-        )
+    await monitor._run_stoch_rsi_5m_config(
+        _config(),
+        repository,
+        market,
+        now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
     )
 
     assert market.calls == 1
@@ -150,3 +148,50 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
         "recovery_confirmation_threshold": "20",
         "entry_above_ema_period": 5,
     }
+
+
+@pytest.mark.anyio
+async def test_monitor_uses_early_single_evaluator_for_early_single_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.trading import strategy_stoch_rsi_5m_monitor as monitor_module
+    from app.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot
+
+    calls: list[str] = []
+    snapshot = StochRsi5mSnapshot(
+        state="waiting_oversold",
+        reason_code="STOCH_RSI_5M_WAITING_OVERSOLD_ARM",
+    )
+
+    def early_single(bars, config):
+        calls.append(config.trade_selection)
+        return snapshot
+
+    def canonical(bars, config):
+        raise AssertionError("early-single child must not use the sequential evaluator")
+
+    monkeypatch.setattr(monitor_module, "evaluate_stoch_rsi_5m_early_single", early_single)
+    monkeypatch.setattr(monitor_module, "evaluate_stoch_rsi_5m", canonical)
+    document = _config().model_copy(
+        update={
+            "strategy_id": "stoch-rsi-5min-early-single",
+            "parent_strategy_id": "interday-trading-strategy-shadow",
+            "config": StochRsi5mConfig(trade_selection="early_single"),
+        }
+    )
+    repository = MemoryRepository()
+    monitor = TradingStrategyMonitor(interval_seconds=30)
+    monitor.current_run_id = "stoch-early-single-run"
+
+    await monitor._run_stoch_rsi_5m_config(
+        document,
+        repository,
+        FixtureMarketService(),
+        now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
+    )
+
+    assert calls == ["early_single"]
+    payload = repository.events[0].payload
+    assert payload["trade_selection"] == "early_single"
+    assert payload["exit_policy"]["allow_sequential_trades_per_symbol"] is False
+    assert payload["execution_authority"] is False

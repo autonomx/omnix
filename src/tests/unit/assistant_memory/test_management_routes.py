@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from app.assistant_memory import (
     MemoryService,
     OwnerAwareMemoryService,
-    OwnerAwareSQLiteMemoryRepository,
-    SQLiteMemoryRepository,
+    OwnerAwareInMemoryMemoryRepository,
+    InMemoryMemoryRepository,
     resolve_chat_scope,
 )
 from app.assistant_memory.management import candidates_for_session
@@ -17,9 +17,24 @@ from app.assistant_memory.routes import register_assistant_memory_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def legacy_test_persistence(monkeypatch):
+    from app.persistence.runtime import reset_persistence_mode_cache
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
+    reset_persistence_mode_cache()
+    yield
+    reset_persistence_mode_cache()
+
+
 def setup_client(tmp_path):
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    memory_service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    memory_service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     session = chat_store.create_session(CreateChatSessionRequest(title="Memory management"))
     other_session = chat_store.create_session(CreateChatSessionRequest(title="Other session"))
     app = FastAPI()
@@ -229,7 +244,7 @@ def test_candidate_management_never_crosses_session_or_scope(tmp_path):
 
 
 def test_character_candidate_listing_uses_active_owner(tmp_path):
-    service = OwnerAwareMemoryService(OwnerAwareSQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = OwnerAwareMemoryService(OwnerAwareInMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     session = SimpleNamespace(
         id="chat:maya",
         interaction_mode="character",
@@ -271,10 +286,12 @@ def test_character_candidate_listing_uses_active_owner(tmp_path):
     assert isolated.candidates == []
 
 
-def test_management_routes_are_hidden_from_generated_openapi(tmp_path):
+def test_browser_memory_routes_are_typed_in_generated_openapi(tmp_path):
     client, _, _, session, _ = setup_client(tmp_path)
     schema = client.get("/openapi.json").json()
 
-    assert "/api/assistant/memory" not in schema["paths"]
-    assert "/api/chat/sessions/{session_id}/memory" not in schema["paths"]
+    assert "/api/assistant/memory" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory"]
+    assert "/api/chat/sessions/{session_id}/memory" in schema["paths"]
+    assert "get" in schema["paths"]["/api/chat/sessions/{session_id}/memory"]
     assert client.get("/api/assistant/memory", params={"session_id": session.id}).status_code == 200

@@ -15,6 +15,11 @@ class FakeRepository:
     def __init__(self) -> None:
         self.records: dict[tuple[str, str], dict] = {}
 
+    def iter(self, record_type: str):
+
+        return iter(self.list(record_type, limit=10_000))
+
+
     def list(self, record_type: str, *, limit: int = 100):
         return [value for (kind, _), value in self.records.items() if kind == record_type][:limit]
 

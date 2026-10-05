@@ -1,78 +1,29 @@
-"""Native Omnix Trading domain."""
+"""Native Omnix Trading domain.
 
-# The managed Windows trading runtime may still run Python 3.10, where
-# ``enum.StrEnum`` is unavailable. Install a narrow Trading-package compatibility
-# shim before importing submodules so gateway startup does not depend on the
-# launcher interpreter being Python 3.11+.
-import enum as _enum
+Names load on first use, so importing a submodule (such as the module's
+declarations.py) loads nothing else (PA-2.1).
+"""
+from __future__ import annotations
 
-if not hasattr(_enum, "StrEnum"):
-    class _TradingStrEnum(str, _enum.Enum):
-        def __str__(self) -> str:
-            return str(self.value)
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
-    _enum.StrEnum = _TradingStrEnum  # type: ignore[attr-defined]
+if TYPE_CHECKING:
+    from .models import (
+        CanonicalInstrument,
+        DatasetProvenance,
+        MarketBar,
+        ProviderBinding,
+        ProviderPolicy,
+    )
 
-from .models import (
-    CanonicalInstrument,
-    DatasetProvenance,
-    MarketBar,
-    ProviderBinding,
-    ProviderPolicy,
-)
-from .ai_shadow_reliability import install_ai_shadow_reliability
-from .ai_shadow_circuit_persistence import install_persistent_ai_shadow_circuit
-from .trading_data_hardening import install_trading_data_hardening
-from .trading_data_runtime_refinements import install_trading_data_runtime_refinements
-from .trading_session_reliability import install_trading_session_reliability
-from .strategy_ai_shadow_v2_hardening import install_ai_shadow_v2_hardening
-from .strategy_ai_shadow_v2_catalyst_provenance import (
-    install_ai_shadow_v2_catalyst_consistency,
-    install_ai_shadow_v2_catalyst_provenance,
-)
-from .strategy_ai_shadow_v2_roadmap_policy import install_ai_shadow_v2_roadmap_policy
-from .strategy_ai_shadow_v2_schedule_policy import install_ai_shadow_v2_schedule_policy
-from .strategy_ai_shadow_v2_metrics_policy import install_ai_shadow_v2_metrics_policy
-from .strategy_ai_shadow_v2_risk_policy import install_ai_shadow_v2_risk_policy
-from .strategy_runtime_reliability_fixes import install_strategy_runtime_reliability_fixes
-from .strategy_shadow_data_gap_guard import install_shadow_data_gap_guard
-from .strategy_intraday_llm_reliability import install_intraday_llm_reliability
-from .strategy_ai_shadow_v2_circuit_guard import install_ai_shadow_v2_circuit_guard
-from .strategy_runtime_compatibility_fixes import install_strategy_runtime_compatibility_fixes
-from .strategy_dynamic_discovery_completeness import (
-    install_dynamic_discovery_completeness,
-)
-from .strategy_dynamic_discovery_completeness_refinements import (
-    install_dynamic_discovery_completeness_refinements,
-)
-
-# Reliability installs first so the market-data layer wraps the final AI provider
-# behavior rather than bypassing its retry/structured-output/circuit protections.
-install_ai_shadow_reliability()
-install_persistent_ai_shadow_circuit()
-install_trading_data_hardening()
-install_trading_data_runtime_refinements()
-install_trading_session_reliability()
-install_ai_shadow_v2_hardening()
-install_ai_shadow_v2_catalyst_provenance()
-install_ai_shadow_v2_roadmap_policy()
-install_ai_shadow_v2_catalyst_consistency()
-install_ai_shadow_v2_schedule_policy()
-install_ai_shadow_v2_metrics_policy()
-install_ai_shadow_v2_risk_policy()
-
-# Session/runtime overlays intentionally install after the complete V2 policy
-# stack so their saved originals point at the final causal/metrics behavior.
-install_strategy_runtime_reliability_fixes()
-install_shadow_data_gap_guard()
-install_intraday_llm_reliability()
-install_ai_shadow_v2_circuit_guard()
-install_strategy_runtime_compatibility_fixes()
-
-# Causal-discovery completeness installs last so live discovery, replay, learning,
-# attribution, and SHADOW-universe consumers share one state-transition authority.
-install_dynamic_discovery_completeness()
-install_dynamic_discovery_completeness_refinements()
+_LAZY_EXPORTS = {
+    "CanonicalInstrument": "app.trading.models",
+    "DatasetProvenance": "app.trading.models",
+    "MarketBar": "app.trading.models",
+    "ProviderBinding": "app.trading.models",
+    "ProviderPolicy": "app.trading.models",
+}
 
 __all__ = [
     "CanonicalInstrument",
@@ -81,3 +32,10 @@ __all__ = [
     "ProviderBinding",
     "ProviderPolicy",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(module), name)

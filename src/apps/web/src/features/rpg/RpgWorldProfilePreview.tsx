@@ -5,7 +5,7 @@ import {
   type RpgWorldGenreProfile,
   type RpgWorldProfileDomain,
   type RpgWorldProfileReview,
-} from '../../api/rpgWorldProfileClient';
+} from './api/rpgWorldProfileClient';
 import './RpgWorldProfilePreview.css';
 
 interface RpgWorldProfilePreviewProps {

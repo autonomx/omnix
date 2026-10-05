@@ -6,9 +6,12 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
 
-from app.gateway import live_chat_speculation as speculation_runtime
+from app.chat import live_chat_speculation as speculation_runtime
+from app.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import ChatResponse, LMStudioProvider, ProviderConfig
+from app.runtime.cancellation import CancellationToken
+from app.providers import service as provider_service
 
 
 class _BlockingStreamResponse:
@@ -36,11 +39,13 @@ class _CapturingProvider:
         self.cancel_event: threading.Event | None = None
 
     def chat_completion(self, **kwargs: Any):
-        self.cancel_event = kwargs.get("_cancel_event")
+        self.cancel_event = kwargs.get("cancel")
         return iter([ChatResponse(content="Ready.", model="fake")])
 
 
 class _FakeStore:
+    live_voice_chat_port = create_live_voice_chat_port()
+
     def build_provider_prompt(self, _session, user_message, _context_items):
         rendered = SimpleNamespace(
             messages=[SimpleNamespace(role="user", content=user_message.content)]
@@ -59,19 +64,21 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
     response = _BlockingStreamResponse()
     captured_payloads: list[dict[str, Any]] = []
 
-    def fake_request(payload, *, stream, include_metrics, timeout=None):
+    def fake_request(payload, *, stream, include_metrics, timeout=None, cancel=None):
         captured_payloads.append(dict(payload))
+        # The pooled client aborts its real stream on cancel; the fake closes.
+        cancel.on_cancel(response.close)
         assert stream is True
         assert include_metrics is False
         return response
 
     monkeypatch.setattr(provider, "_make_chat_completion_request", fake_request)
-    cancel_event = threading.Event()
+    cancel_event = CancellationToken()
     stream = provider.chat_completion(
         messages=[ProviderMessage(role="user", content="Hello")],
         model="test-model",
         stream=True,
-        _cancel_event=cancel_event,
+        cancel=cancel_event,
     )
 
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -79,7 +86,7 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
         assert response.iter_started.wait(timeout=1.0)
 
         started = time.perf_counter()
-        cancel_event.set()
+        cancel_event.cancel()
         result = future.result(timeout=0.5)
         elapsed_ms = (time.perf_counter() - started) * 1000.0
 
@@ -88,13 +95,13 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
     assert response.close_calls >= 1
     assert elapsed_ms < 500.0
     assert len(captured_payloads) == 1
-    assert "_cancel_event" not in captured_payloads[0]
+    assert "cancel" not in captured_payloads[0]
 
 
 def test_side_effect_free_lmstudio_speculation_receives_cancel_event(monkeypatch) -> None:
     provider = _CapturingProvider()
     monkeypatch.setattr(
-        speculation_runtime.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -108,7 +115,7 @@ def test_side_effect_free_lmstudio_speculation_receives_cancel_event(monkeypatch
         source_sequence=1,
         created_at=time.time(),
     )
-    cancel_event = threading.Event()
+    cancel_event = CancellationToken()
 
     events = list(
         speculation_runtime._generate_side_effect_free(

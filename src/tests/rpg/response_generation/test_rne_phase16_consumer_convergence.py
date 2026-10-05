@@ -106,13 +106,3 @@ def test_consumer_publication_patches_latest_interaction_without_regeneration() 
     assert interaction["visible_response"]["narration"].count("road is muddy") == 0
     assert len(interaction["visible_response"]["messages"]) == 1
     assert published["narrative_session_projection_patched"] is True
-
-
-def test_foreground_pipeline_publishes_and_persists_consumer_bundle() -> None:
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[3]
-    source = (root / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(encoding="utf-8")
-    assert "attach_canonical_consumer_bundle" in source
-    assert 'payload["narrative_projections"]' in source
-    assert "narrative_session_projection_patched" in source

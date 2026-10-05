@@ -6,7 +6,7 @@ import inspect
 import logging
 import time
 
-from app.runtime_logging import runtime_transition
+from app.runtime.logging import runtime_transition
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ async def _invoke(callback):
 
 @asynccontextmanager
 async def gateway_lifespan(app, *, get_chat_store, get_job_store, recover_jobs):
-    from app.runtime_capabilities import RuntimeCapability
+    from app.runtime.capabilities import RuntimeCapability
     capabilities = getattr(app.state, "runtime_capabilities", None)
     config = getattr(app.state, 'runtime_config', None)
     role = config.gateway_role.value if config is not None else 'test'
@@ -50,6 +50,9 @@ async def gateway_lifespan(app, *, get_chat_store, get_job_store, recover_jobs):
         yield
     finally:
         app.state.runtime_started = False
+        readers = getattr(app.state, "event_readers", None)
+        if readers is not None:
+            readers.stop()
         failures = []
         callbacks = list(reversed(app.router.on_shutdown))
         callbacks.extend(callback for feature in reversed(started_features) for callback in reversed(feature.shutdown))

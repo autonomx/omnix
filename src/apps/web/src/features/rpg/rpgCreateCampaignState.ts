@@ -1,4 +1,4 @@
-import type { RpgCapability, RpgNewGameRequest, RpgPowerSource } from '../../api/client';
+import type { RpgCapability, RpgNewGameRequest, RpgPowerSource } from './api/rpgSessionClient';
 
 export type Capability = 'combat' | 'influence' | 'technical' | 'survival' | 'knowledge' | 'support';
 export type BuildKey = 'balanced' | 'scout' | 'negotiator' | 'survivor' | 'scholar';

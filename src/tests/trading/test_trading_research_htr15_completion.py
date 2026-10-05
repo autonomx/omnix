@@ -15,7 +15,7 @@ from app.trading.research.contracts import (
 )
 from app.trading.research.policy import ResearchPolicyDecision
 from app.trading.research.validation import build_validation_report
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
 from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
 from app.trading.strategy_repository import TradingStrategyConfigDocument
@@ -230,6 +230,7 @@ def test_v12_backtest_arbitrates_with_research_adjusted_quality() -> None:
     )
     config = GapPullbackConfig(
         strategy_version="1.2.0",
+        research_score_adjustment_enabled=True,
         pivot_left_bars=1,
         pivot_right_bars=1,
         volume_lookback_bars=5,

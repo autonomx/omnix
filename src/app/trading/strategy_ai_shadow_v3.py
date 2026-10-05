@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Canonical AI Shadow v3 alpha contracts and deterministic geometry.
 
 The LLM owns setup/thesis classification only. Stops, targets, R math, execution
@@ -12,7 +16,6 @@ import time as monotonic_time
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,12 +31,14 @@ from .feature_qualification import (
 from .models import MarketBar
 from .research import _provider_identity, default_research_provider
 from .strategy_ai_shadow_v2 import build_market_structure_snapshot
+from .structured_llm import TradingModelOutputError, trading_model_call
 from .trigger_plan import AuthoritativeTradeGeometry, TriggerCondition
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 
 AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-1"
 RUNNER_GEOMETRY_CHALLENGER_VERSION = "runner-geometry-challenger-v1"
-_ET = ZoneInfo("America/New_York")
 
 V3State = Literal["avoid", "watch", "armed", "enter"]
 SetupFamily = Literal[
@@ -313,11 +318,11 @@ class AIShadowV3Analyzer:
             ),
         ]
         response_format: dict[str, object]
-        if str(provider_name).casefold() == "chatgpt_codex":
+        if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
             schema = project_provider_schema(
                 AIShadowV3BatchResponse.model_json_schema(),
                 mode=StructuredMode.JSON_SCHEMA,
-                provider_name="chatgpt_codex",
+                provider_name=provider_name,
             )
             response_format = {
                 "type": "json_schema",
@@ -332,32 +337,21 @@ class AIShadowV3Analyzer:
 
         started = monotonic_time.monotonic()
         try:
-            response = provider.chat_completion(
-                messages=messages,
+            reply = trading_model_call(
+                provider,
+                messages,
+                output_model=AIShadowV3BatchResponse,
+                contract_id="trading.ai_shadow_v3.batch",
+                schema_name="ai_shadow_v3_batch_response",
                 model=model,
-                stream=False,
-                response_format=response_format,
-                request_timeout_seconds=45,
-                temperature=0,
                 max_tokens=max(1200, 420 * len(rows)),
+                response_format=response_format,
             )
-        except TypeError:
-            response = provider.chat_completion(
-                messages=messages,
-                model=model,
-                stream=False,
-            )
-        latency = Decimal(str((monotonic_time.monotonic() - started) * 1000))
-        content = str(getattr(response, "content", "") or "").strip()
-        fence = chr(96) * 3
-        if content.startswith(fence):
-            content = content.strip(chr(96)).strip()
-            if content.lower().startswith("json"):
-                content = content[4:].strip()
-        try:
-            parsed = AIShadowV3BatchResponse.model_validate_json(content)
-        except Exception as exc:
+        except TradingModelOutputError as exc:
             raise RuntimeError("ai_shadow_v3_invalid_json") from exc
+        latency = Decimal(str((monotonic_time.monotonic() - started) * 1000))
+        response = reply.response
+        parsed = reply.value
 
         decisions: list[AIShadowV3Decision] = []
         seen: set[str] = set()
@@ -385,6 +379,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

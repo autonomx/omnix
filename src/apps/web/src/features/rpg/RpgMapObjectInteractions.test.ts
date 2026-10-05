@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RpgMapDefinition, RpgMapObjectDefinition } from '../../api/rpgMapClient';
+import type { RpgMapDefinition, RpgMapObjectDefinition } from './api/rpgMapClient';
 import { projectMapObjectToPercent } from './RpgMapObjectInteractions';
 
 const definition = {

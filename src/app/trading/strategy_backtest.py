@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,14 +27,12 @@ from .paper import (
 )
 from .research.policy import ResearchPolicyDecision
 from .strategy_research_policy import apply_research_policy_to_quality
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
 from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels
 from .strategy_timeframes import proposal_priority, resample_final_bars
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 class BacktestSessionDataset(BaseModel):
@@ -764,6 +761,7 @@ def run_gap_pullback_backtest(
                         research_decision,
                         base_quality_score=proposal.quality_score,
                         minimum_quality_score=active.minimum_quality_score,
+                        score_adjustment_enabled=active.research_score_adjustment_enabled,
                     )
                     research_reason = None if quality_gate.allowed else quality_gate.reason_code
                     adjusted_quality_score = quality_gate.adjusted_quality_score

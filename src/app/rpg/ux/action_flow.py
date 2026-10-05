@@ -37,18 +37,6 @@ class UXActionFlow:
     # Scene & choices
     # ------------------------------------------------------------------
 
-    def get_current_scene(self, loop: Any) -> dict:
-        """Return the current scene as a presented payload dict."""
-        payload = self._payload_builder.build_scene_payload(loop)
-        return payload.to_dict()
-
-    def get_current_choices(self, loop: Any) -> dict:
-        """Return only the current choice cards."""
-        payload = self._payload_builder.build_scene_payload(loop)
-        return {
-            "choices": [c.to_dict() for c in payload.choices],
-        }
-
     # ------------------------------------------------------------------
     # Choice selection
     # ------------------------------------------------------------------

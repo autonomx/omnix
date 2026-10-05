@@ -46,16 +46,6 @@ def test_wall_blocks_movement():
     assert result["reason"] == "blocked"
 
 
-def test_move_entity_updates_current_area_on_success():
-    graph = tavern_spatial_fixture()
-    result = move_entity(graph, "player", "street")
-
-    assert result["ok"] is True
-    assert result["moved"] is True
-    assert get_entity_area(graph, "player") == "street"
-    assert graph["current_area_id"] == "street"
-
-
 def test_move_entity_does_not_update_area_on_failure():
     graph = tavern_spatial_fixture()
     result = move_entity(graph, "player", "cellar")

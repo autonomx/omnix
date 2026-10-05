@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from app.trading.execution import ExecutionObservation
 from app.trading.execution_observation_plane import ExecutionObservationPlane
@@ -123,7 +124,8 @@ def _row(
     }
 
 
-def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> None:
+@pytest.mark.anyio
+async def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -135,47 +137,39 @@ def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> N
     market_service = object()
 
     first = _row(START, _feature())
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[first],
-            config=config,
-            repository=repository,
-            market_service=market_service,
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[first],
+        config=config,
+        repository=repository,
+        market_service=market_service,
+        events=events,
     )
-    asyncio.run(
-        monitor._run_policy(
-            policy="event",
-            rows=[first],
-            config=config,
-            repository=repository,
-            market_service=market_service,
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="event",
+        rows=[first],
+        config=config,
+        repository=repository,
+        market_service=market_service,
+        events=events,
     )
 
     second = _row(START + timedelta(minutes=1), _feature())
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[second],
-            config=config,
-            repository=repository,
-            market_service=market_service,
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[second],
+        config=config,
+        repository=repository,
+        market_service=market_service,
+        events=events,
     )
-    asyncio.run(
-        monitor._run_policy(
-            policy="event",
-            rows=[second],
-            config=config,
-            repository=repository,
-            market_service=market_service,
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="event",
+        rows=[second],
+        config=config,
+        repository=repository,
+        market_service=market_service,
+        events=events,
     )
 
     policies = [policy for policy, _ in analyzer.calls]
@@ -202,7 +196,8 @@ def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> N
     assert not any(event.event_type == "entry_order_submitted" for event in repository.events)
 
 
-def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
+@pytest.mark.anyio
+async def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -213,22 +208,21 @@ def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
     # 16:00 UTC is 12:00 ET in September, after the 11:30 ET entry cutoff.
     row = _row(START + timedelta(hours=2), _feature())
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[],
     )
 
     assert analyzer.calls == []
     assert repository.events == []
 
 
-def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
+@pytest.mark.anyio
+async def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -253,15 +247,13 @@ def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
         },
     )
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[_row(START + timedelta(minutes=5), _feature())],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[closed],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[_row(START + timedelta(minutes=5), _feature())],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[closed],
     )
 
     assert config.risk.one_trade_per_symbol_per_day is True
@@ -269,7 +261,8 @@ def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
     assert repository.events == []
 
 
-def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted() -> None:
+@pytest.mark.anyio
+async def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -300,15 +293,13 @@ def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted(
         },
     )
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[_row(START + timedelta(minutes=5), _feature())],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[closing_fill],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[_row(START + timedelta(minutes=5), _feature())],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[closing_fill],
     )
 
     assert analyzer.calls == []
@@ -349,7 +340,8 @@ def _open_position_fill(config, instrument_id: str, trade_id: str) -> StrategyEv
     )
 
 
-def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> None:
+@pytest.mark.anyio
+async def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
     config = managed_finviz_shadow_document("shadow-account")
@@ -369,21 +361,19 @@ def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> Non
         invalidation_price=Decimal("9.50"),
     )
 
-    asyncio.run(
-        monitor._apply_decision(
-            policy="minute",
-            decision=decision,
-            row=row,
-            candidate=row["candidate"],
-            bars=[],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=events,
-            result=SimpleNamespace(current_price=Decimal("10")),
-            batch_result=None,
-            trigger_reasons=("completed_1m_bar",),
-        )
+    await monitor._apply_decision(
+        policy="minute",
+        decision=decision,
+        row=row,
+        candidate=row["candidate"],
+        bars=[],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=events,
+        result=SimpleNamespace(current_price=Decimal("10")),
+        batch_result=None,
+        trigger_reasons=("completed_1m_bar",),
     )
 
     persisted = repository.events
@@ -393,7 +383,8 @@ def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> Non
     assert "AI_SHADOW_MAX_POSITIONS" in persisted[0].payload["action_normalization_reasons"]
 
 
-def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
+@pytest.mark.anyio
+async def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
     config = managed_finviz_shadow_document("shadow-account")
@@ -413,28 +404,27 @@ def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
         invalidation_price=Decimal("9.50"),
     )
 
-    asyncio.run(
-        monitor._apply_decision(
-            policy="minute",
-            decision=decision,
-            row=row,
-            candidate=row["candidate"],
-            bars=[],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=events,
-            result=SimpleNamespace(current_price=Decimal("10")),
-            batch_result=None,
-            trigger_reasons=("completed_1m_bar",),
-        )
+    await monitor._apply_decision(
+        policy="minute",
+        decision=decision,
+        row=row,
+        candidate=row["candidate"],
+        bars=[],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=events,
+        result=SimpleNamespace(current_price=Decimal("10")),
+        batch_result=None,
+        trigger_reasons=("completed_1m_bar",),
     )
 
     assert repository.events[0].payload["effective_action"] == "skip"
     assert "AI_SHADOW_MAX_TRADES_PER_DAY" in repository.events[0].payload["action_normalization_reasons"]
 
 
-def test_event_policy_reacts_to_material_state_change() -> None:
+@pytest.mark.anyio
+async def test_event_policy_reacts_to_material_state_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -445,15 +435,13 @@ def test_event_policy_reacts_to_material_state_change() -> None:
     events = []
 
     first = _row(START, _feature())
-    asyncio.run(
-        monitor._run_policy(
-            policy="event",
-            rows=[first],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="event",
+        rows=[first],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=events,
     )
 
     changed = _feature(price="10.4")
@@ -465,15 +453,13 @@ def test_event_policy_reacts_to_material_state_change() -> None:
         "current_volume_ratio_to_prior10": "2.0",
     }
     second = _row(START + timedelta(minutes=1), changed)
-    asyncio.run(
-        monitor._run_policy(
-            policy="event",
-            rows=[second],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="event",
+        rows=[second],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=events,
     )
 
     assert [policy for policy, _ in analyzer.calls] == ["event", "event"]
@@ -488,7 +474,8 @@ def test_event_policy_reacts_to_material_state_change() -> None:
     assert "vwap_side_changed" in decisions[-1].payload["trigger_reasons"]
 
 
-def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries() -> None:
+@pytest.mark.anyio
+async def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
     config = managed_finviz_shadow_document("shadow-account")
@@ -644,15 +631,13 @@ def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries(
         ),
     ]
 
-    asyncio.run(
-        monitor._comparison_summary(
-            config=config,
-            repository=repository,
-            events=events,
-            session_date=START.astimezone(timezone.utc).date(),
-            cohort_candidate_count=5,
-            now=now,
-        )
+    await monitor._comparison_summary(
+        config=config,
+        repository=repository,
+        events=events,
+        session_date=START.astimezone(timezone.utc).date(),
+        cohort_candidate_count=5,
+        now=now,
     )
 
     comparison = next(
@@ -683,7 +668,8 @@ def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries(
     assert comparison["ranking_deferred_until_risk_normalized"] is True
 
 
-def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() -> None:
+@pytest.mark.anyio
+async def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() -> None:
     repository = MemoryRepository()
     analyzer = FailingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -693,15 +679,13 @@ def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() 
     config = managed_finviz_shadow_document("shadow-account")
     row = _row(START, _feature())
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[],
     )
     assert analyzer.calls == 1
     errors = [
@@ -712,33 +696,30 @@ def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() 
     ]
     assert len(errors) == 1
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=list(repository.events),
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=list(repository.events),
     )
     assert analyzer.calls == 1
 
     next_row = _row(START + timedelta(minutes=1), _feature("10.1"))
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[next_row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=list(repository.events),
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[next_row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=list(repository.events),
     )
     assert analyzer.calls == 2
 
 
-def test_same_max_minute_allows_late_symbol_request_signature() -> None:
+@pytest.mark.anyio
+async def test_same_max_minute_allows_late_symbol_request_signature() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -750,32 +731,28 @@ def test_same_max_minute_allows_late_symbol_request_signature() -> None:
     instrument_b = "equity:NASDAQ:B"
     minute_one = START + timedelta(minutes=1)
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[
-                _row(minute_one, _feature("10.1"), instrument_id=instrument_a),
-                _row(START, _feature("9.9"), instrument_id=instrument_b),
-            ],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[
+            _row(minute_one, _feature("10.1"), instrument_id=instrument_a),
+            _row(START, _feature("9.9"), instrument_id=instrument_b),
+        ],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[],
     )
     assert len(analyzer.calls) == 1
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[
-                _row(minute_one, _feature("10.0"), instrument_id=instrument_b),
-            ],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=list(repository.events),
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[
+            _row(minute_one, _feature("10.0"), instrument_id=instrument_b),
+        ],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=list(repository.events),
     )
 
     assert len(analyzer.calls) == 2
@@ -819,7 +796,8 @@ def _pending_exit_event(config, *, trade_id: str, observed_at: datetime) -> Stra
     )
 
 
-def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> None:
+@pytest.mark.anyio
+async def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     plane = ExecutionObservationPlane()
@@ -861,15 +839,13 @@ def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> Non
         recorded_at=quote_time,
     )
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=events,
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=events,
     )
 
     assert analyzer.calls == []
@@ -891,7 +867,8 @@ def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> Non
     )
 
 
-def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
+@pytest.mark.anyio
+async def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
     repository = MemoryRepository()
     monitor = TradingAIShadowMonitor(interval_seconds=5)
     config = managed_finviz_shadow_document("shadow-account")
@@ -904,14 +881,12 @@ def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
     )
     now = datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc)
 
-    asyncio.run(
-        monitor._mark_incomplete_open_trades(
-            config=config,
-            repository=repository,
-            events=[open_fill, pending],
-            session_date=START.astimezone(timezone.utc).date(),
-            now=now,
-        )
+    await monitor._mark_incomplete_open_trades(
+        config=config,
+        repository=repository,
+        events=[open_fill, pending],
+        session_date=START.astimezone(timezone.utc).date(),
+        now=now,
     )
 
     assert any(
@@ -927,7 +902,8 @@ def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
 
 
 
-def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() -> None:
+@pytest.mark.anyio
+async def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     plane = ExecutionObservationPlane()
@@ -950,22 +926,20 @@ def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() ->
         invalidation_price=Decimal("9.50"),
     )
 
-    asyncio.run(
-        monitor._apply_decision(
-            policy="minute",
-            decision=decision,
-            row=row,
-            candidate=row["candidate"],
-            bars=[],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[],
-            result=SimpleNamespace(current_price=Decimal("10")),
-            batch_result=None,
-            trigger_reasons=("completed_1m_bar",),
-            decision_completed_at=START + timedelta(seconds=2),
-        )
+    await monitor._apply_decision(
+        policy="minute",
+        decision=decision,
+        row=row,
+        candidate=row["candidate"],
+        bars=[],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[],
+        result=SimpleNamespace(current_price=Decimal("10")),
+        batch_result=None,
+        trigger_reasons=("completed_1m_bar",),
+        decision_completed_at=START + timedelta(seconds=2),
     )
 
     pending = next(
@@ -996,15 +970,13 @@ def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() ->
         recorded_at=quote_time,
     )
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[_row(START + timedelta(minutes=1), _feature())],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[pending],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[_row(START + timedelta(minutes=1), _feature())],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[pending],
     )
 
     assert analyzer.calls == []
@@ -1022,7 +994,8 @@ def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() ->
 
 
 
-def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> None:
+@pytest.mark.anyio
+async def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
     monitor = TradingAIShadowMonitor(
@@ -1065,15 +1038,13 @@ def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> N
     # 16:00 UTC is noon ET in September, after the 11:30 ET entry cutoff.
     row = _row(START + timedelta(hours=2), _feature())
 
-    asyncio.run(
-        monitor._run_policy(
-            policy="minute",
-            rows=[row],
-            config=config,
-            repository=repository,
-            market_service=object(),
-            events=[pending],
-        )
+    await monitor._run_policy(
+        policy="minute",
+        rows=[row],
+        config=config,
+        repository=repository,
+        market_service=object(),
+        events=[pending],
     )
 
     assert analyzer.calls == []

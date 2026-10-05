@@ -8,20 +8,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from .event_queries import all_events
 from . import review_orchestration_core as _core
 from .candidate_test_validation import (
     candidate_test_validation_specs,
     missing_candidate_test_execution,
     reconcile_candidate_test_validation_results,
 )
-from .coding_quality_repository import PostgresCodingQualityRepository
 from .contracts import AgentEvent
 from .repository import PostgresAgentRunRepository
+from .run_repository_queries import PostgresAgentRunQueries
 
 
-# Explicit aliases preserve the existing import surface. The reconciliation
-# wrapper below temporarily mirrors monkeypatched facade attributes into the core
-# module so existing recovery tests retain their isolation semantics.
+# Explicit aliases preserve the existing import surface without mutating the
+# implementation module at call time.
 review_snapshot_id_from_child = _core.review_snapshot_id_from_child
 consume_terminal_reviewer_in_repository = _core.consume_terminal_reviewer_in_repository
 finalize_reviewer_child_in_repository = _core.finalize_reviewer_child_in_repository
@@ -56,20 +56,10 @@ def _redirect_missing_candidate_tests_before_review(
 
     action: tuple | None = None
     redirected = False
-    with service._lock:
-        from app.persistence.unit_of_work import unit_of_work
-
-        with unit_of_work(service.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, service.context)
-            locked = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                 FOR UPDATE
-                """,
-                (service.context.workspace_id, parent_run_id),
-            ).fetchone()
+    with service._run_lock(parent_run_id):
+        with service.unit_of_work(service.database) as work:
+            repository = service.repository_factory(work.connection, service.context)
+            locked = PostgresAgentRunQueries(work.connection, service.context).lock_run(parent_run_id).fetchone()
             if locked is None:
                 work.rollback()
                 return False
@@ -84,7 +74,7 @@ def _redirect_missing_candidate_tests_before_review(
                 work.rollback()
                 return False
 
-            quality = PostgresCodingQualityRepository(work.connection, service.context)
+            quality = service.quality_repository_factory(work.connection, service.context)
             snapshot = quality.get_review_snapshot(parent_run_id, snapshot_id)
             revision = service._current_revision(repository, parent_run_id)
             stage = quality.get_stage(parent_run_id) or {}
@@ -103,43 +93,9 @@ def _redirect_missing_candidate_tests_before_review(
                 parent_run_id,
                 task_revision_id=revision.revision_id,
             )
-            events = repository.list_events(parent_run_id, after_sequence=0, limit=5000)
+            events = all_events(repository, parent_run_id)
 
-            reconciled = reconcile_candidate_test_validation_results(
-                snapshot.subject_paths,
-                validations,
-                run_id=parent_run_id,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=snapshot.workspace_state_id,
-                events=events,
-                workspace_root=snapshot.workspace_root,
-                covers_requirement_ids=[item.id for item in revision.requirements if item.required],
-            )
-            for validation in reconciled:
-                quality.add_validation_result(validation)
-                repository.append_event(
-                    AgentEvent(
-                        run_id=parent_run_id,
-                        event_type="quality.validation_recorded",
-                        payload={
-                            "result_id": validation.result_id,
-                            "validation_id": validation.validation_id,
-                            "kind": validation.kind,
-                            "task_revision_id": validation.task_revision_id,
-                            "workspace_state_id": validation.workspace_state_id,
-                            "command": validation.command,
-                            "exit_code": validation.exit_code,
-                            "success": validation.success,
-                            "outcome": validation.outcome,
-                            "output_digest": validation.output_digest,
-                            "covers_requirement_ids": list(validation.covers_requirement_ids),
-                            "metadata": dict(validation.metadata),
-                            "source": "candidate_test_raw_reconciliation",
-                        },
-                    )
-                )
-            if reconciled:
-                validations.extend(reconciled)
+            reconciled = _reconcile_raw_test_runs(snapshot, validations, parent_run_id, revision, events, quality, repository)
 
             missing_paths = missing_candidate_test_execution(
                 snapshot.subject_paths,
@@ -190,6 +146,46 @@ def _redirect_missing_candidate_tests_before_review(
     return redirected
 
 
+def _reconcile_raw_test_runs(snapshot, validations, parent_run_id, revision, events, quality, repository):
+    """Record successful direct test runs after the last mutation as validation results for the snapshot state."""
+    reconciled = reconcile_candidate_test_validation_results(
+        snapshot.subject_paths,
+        validations,
+        run_id=parent_run_id,
+        task_revision_id=revision.revision_id,
+        workspace_state_id=snapshot.workspace_state_id,
+        events=events,
+        workspace_root=snapshot.workspace_root,
+        covers_requirement_ids=[item.id for item in revision.requirements if item.required],
+    )
+    for validation in reconciled:
+        quality.add_validation_result(validation)
+        repository.append_event(
+            AgentEvent(
+                run_id=parent_run_id,
+                event_type="quality.validation_recorded",
+                payload={
+                    "result_id": validation.result_id,
+                    "validation_id": validation.validation_id,
+                    "kind": validation.kind,
+                    "task_revision_id": validation.task_revision_id,
+                    "workspace_state_id": validation.workspace_state_id,
+                    "command": validation.command,
+                    "exit_code": validation.exit_code,
+                    "success": validation.success,
+                    "outcome": validation.outcome,
+                    "output_digest": validation.output_digest,
+                    "covers_requirement_ids": list(validation.covers_requirement_ids),
+                    "metadata": dict(validation.metadata),
+                    "source": "candidate_test_raw_reconciliation",
+                },
+            )
+        )
+    if reconciled:
+        validations.extend(reconciled)
+    return reconciled
+
+
 def launch_reviewer_children(
     service: Any,
     parent_run_id: str,
@@ -208,14 +204,10 @@ def reconcile_review_progress_in_repository(
     repository: PostgresAgentRunRepository,
     parent_run_id: str,
 ):
-    """Delegate reconciliation while preserving monkeypatch-compatible globals."""
+    """Delegate reconciliation with the service's constructed collaborators."""
 
-    prior_quality = _core.PostgresCodingQualityRepository
-    prior_consume = _core.consume_terminal_reviewer_in_repository
-    try:
-        _core.PostgresCodingQualityRepository = PostgresCodingQualityRepository
-        _core.consume_terminal_reviewer_in_repository = consume_terminal_reviewer_in_repository
-        return _core.reconcile_review_progress_in_repository(service, repository, parent_run_id)
-    finally:
-        _core.PostgresCodingQualityRepository = prior_quality
-        _core.consume_terminal_reviewer_in_repository = prior_consume
+    return _core.reconcile_review_progress_in_repository(
+        service,
+        repository,
+        parent_run_id,
+    )

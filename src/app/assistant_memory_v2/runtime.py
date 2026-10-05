@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -33,6 +34,14 @@ from .relationship_store import PostgresMemoryV2RelationshipStore
 from .retrieval import UnifiedMemoryV2Retriever
 from .search_index import PostgresMemoryV2SearchIndex
 
+
+
+
+def _embedding_index(database: PostgresDatabase):
+    # Imported on use: the embedding stack is not needed to compose the gateway.
+    from .embedding_index import PostgresMemoryV2EmbeddingIndex
+
+    return PostgresMemoryV2EmbeddingIndex(database)
 
 class MemoryV2RuntimeError(RuntimeError):
     pass
@@ -129,6 +138,7 @@ class PostgresMemoryV2Runtime:
             index_graph_revision_provider=self.search_index.index_graph_revision,
             search_index=self.search_index,
             derived_store=self.derived_store,
+            embedding_index=_embedding_index(self.database),
         )
         self.federated_retriever = FederatedMemoryV2Retriever(
             local_retriever=self.local_retriever,
@@ -206,6 +216,9 @@ class PostgresMemoryV2Runtime:
     def append_authoritative_next(
         self,
         request: ObservationAppendRequest,
+        *,
+        supersede: Callable[[Any], Iterable[str]] | None = None,
+        actor_id: str = "memory-v2-runtime",
     ) -> Observation:
         """Atomically allocate and append the next authoritative sequence.
 
@@ -213,15 +226,48 @@ class PostgresMemoryV2Runtime:
         observation insertion, watermark advancement, and derive-job coalescing all happen
         inside one transaction. Competing ordinary producers therefore never calculate or
         retry authority watermarks themselves.
+
+        ``supersede`` runs under those locks before the insert (it may raise to
+        abort, e.g. on a revision conflict) and names observations to revoke in
+        the same transaction, so a new revision never coexists with its
+        predecessor.
         """
 
-        return self._append_authoritative_locked(request, exact_sequence=None)
+        return self._append_authoritative_locked(
+            request, exact_sequence=None, supersede=supersede, actor_id=actor_id,
+        )
+
+    def govern_authoritative(
+        self,
+        space: MemorySpaceKey,
+        decide: Callable[[Any], Iterable[tuple[str, str, str]]],
+        *,
+        actor_id: str,
+    ) -> int:
+        """Apply governance decisions under the v2 authority and stream locks.
+
+        ``decide(connection)`` returns ``(observation_id, state, reason)``
+        triples (state ``revoked``, ``purged`` or ``active``); it may raise to
+        abort. Returns how many observations changed.
+        """
+        with self.database.transaction() as connection:
+            self._lock_v2_authority(connection)
+            PostgresMemoryV2ObservationStore._ensure_and_lock_stream(connection, space)
+            changed = 0
+            for observation_id, state, reason in decide(connection):
+                PostgresMemoryV2ObservationStore.apply_disposition(
+                    connection, space, observation_id, state=state, actor_id=actor_id, reason=reason,
+                )
+                changed += 1
+            return changed
 
     def _append_authoritative_locked(
         self,
         request: ObservationAppendRequest,
         *,
         exact_sequence: int | None,
+        supersede: Callable[[Any], Iterable[str]] | None = None,
+        actor_id: str = "memory-v2-runtime",
     ) -> Observation:
         digest = observation_content_digest(request)
         values = _space_values(request.space)
@@ -276,6 +322,8 @@ class PostgresMemoryV2Runtime:
                 raise AuthoritativeIngestSequenceError(
                     "authoritative event and observation watermarks are not synchronized"
                 )
+
+            superseded = tuple(supersede(connection)) if supersede is not None else ()
 
             expected_previous = event_watermark
             sequence = expected_previous + 1 if exact_sequence is None else exact_sequence
@@ -352,6 +400,15 @@ class PostgresMemoryV2Runtime:
                 request.space,
                 target_observation_watermark=sequence,
             )
+            for observation_id in superseded:
+                PostgresMemoryV2ObservationStore.apply_disposition(
+                    connection,
+                    request.space,
+                    observation_id,
+                    state="revoked",
+                    actor_id=actor_id,
+                    reason=f"superseded by {row[0]}",
+                )
             return _observation_from_row(row)
 
     def operational_status(self) -> MemoryV2OperationalStatus:
@@ -459,6 +516,27 @@ class PostgresMemoryV2Runtime:
             current = PostgresMemoryV2AuthorityStore._epoch_from_row(current_row)
             if current.epoch.authority == "v1":
                 return current
+
+            # Any memory written, edited or forgotten under v2, in any space
+            # (including spaces created after the cutover), would be lost or
+            # resurrected by returning to v1.
+            changed_after = connection.execute(
+                """
+                SELECT EXISTS (
+                           SELECT 1 FROM omnix_memory_v2_observations
+                            WHERE recorded_at >= %s
+                       )
+                    OR EXISTS (
+                           SELECT 1 FROM omnix_memory_v2_observation_dispositions
+                            WHERE changed_at >= %s
+                       )
+                """,
+                (current.epoch.activated_at, current.epoch.activated_at),
+            ).fetchone()
+            if changed_after is not None and bool(changed_after[0]):
+                raise UnsafeMemoryRollbackError(
+                    "rollback would discard or resurrect memory changed under Memory v2"
+                )
 
             for receipt_id in current.readiness_receipt_ids:
                 receipt_row = connection.execute(

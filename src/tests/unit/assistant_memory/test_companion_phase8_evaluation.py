@@ -12,12 +12,15 @@ from app.assistant_memory.initiative import (
     plan_companion_initiative,
     reset_initiative_surface_history,
 )
-from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.observability import (
     companion_metrics_snapshot,
+    memory_usage_snapshot,
     record_companion_diagnostics,
+    record_memory_usage,
     reset_companion_metrics,
 )
+from app.assistant_memory import observability
 from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.assistant_memory.paralinguistic_state import (
@@ -27,7 +30,6 @@ from app.assistant_memory.paralinguistic_state import (
 from app.assistant_memory.rollout import companion_rollout_policy
 from app.assistant_memory.settings import (
     AssistantMemoryRuntimeSettings,
-    AssistantMemorySettingsStore,
     AssistantMemorySettingsUpdate,
 )
 from app.assistant_memory.settings_routes import register_memory_settings_routes
@@ -39,6 +41,7 @@ from app.assistant_memory.temporal_retrieval import (
 )
 from app.assistant_memory.typed_memory import supersede_typed_memory
 from app.characters.live_conversation_profile import LiveConversationProfile
+from tests.support.assistant_memory_settings import in_memory_assistant_memory_settings_store
 
 
 def _context(owner_id: str = "character:maya") -> MemoryScopeContext:
@@ -105,8 +108,7 @@ def test_rollout_is_reversible_and_master_disable_preserves_authority() -> None:
 
 
 def test_controls_persist_independently_and_environment_can_lock_stage(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "memory-settings.json"
-    store = AssistantMemorySettingsStore(path)
+    _service, store = in_memory_assistant_memory_settings_store()
     status = store.update(
         AssistantMemorySettingsUpdate(
             automatic_direct_assertion_memory=True,
@@ -255,7 +257,35 @@ def test_observability_is_content_free_and_metrics_route_is_hidden() -> None:
     response = client.get("/api/assistant/memory/metrics")
     assert response.status_code == 200
     assert response.json()["turns"] == 1
-    assert "/api/assistant/memory/metrics" not in client.get("/openapi.json").json()["paths"]
+    schema = client.get("/openapi.json").json()
+    assert "/api/assistant/memory/metrics" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory/metrics"]
+
+
+def test_observability_registries_are_bounded_expiring_and_clearable(monkeypatch) -> None:
+    reset_companion_metrics()
+    now = 100.0
+    monkeypatch.setattr(observability, "_metrics_now", lambda: now)
+    monkeypatch.setattr(observability, "_MAX_METRIC_KEYS", 1)
+    monkeypatch.setattr(observability, "_MAX_USAGE_SESSIONS", 1)
+
+    record_companion_diagnostics({"companion_context": {"cache_hit": True}})
+    assert len(observability._METRIC_TOUCHED) == 1
+    now += observability._METRIC_TTL_SECONDS + 1
+    assert companion_metrics_snapshot().counters == {}
+    assert not observability._METRIC_TOUCHED
+
+    record_memory_usage("first", [])
+    record_memory_usage("second", [])
+    assert len(observability._LATEST_USAGE) == 1
+    assert memory_usage_snapshot("first").items == ()
+    now += observability._USAGE_TTL_SECONDS + 1
+    assert memory_usage_snapshot("second").items == ()
+    assert not observability._LATEST_USAGE
+
+    reset_companion_metrics()
+    assert not observability._METRIC_TOUCHED
+    assert not observability._USAGE_TOUCHED
 
 
 def test_high_volume_temporal_ranking_stays_bounded() -> None:

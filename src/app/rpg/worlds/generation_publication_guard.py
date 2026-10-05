@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_authorship_signing import validate_signed_authorship
@@ -110,7 +110,7 @@ def publication_review_report(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:

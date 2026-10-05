@@ -3,7 +3,7 @@ import type {
   RpgMapDefinition,
   RpgMapObjectDefinition,
   RpgMapObjectDynamicState,
-} from '../../api/rpgMapClient';
+} from './api/rpgMapClient';
 import { rpgMapAssetUrl } from './rpgMapAssets';
 import type { RpgMapViewportState } from './rpgMapViewport';
 

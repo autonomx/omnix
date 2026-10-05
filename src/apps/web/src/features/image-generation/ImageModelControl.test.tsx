@@ -5,10 +5,10 @@ import { omnixTheme } from '../../design/theme';
 import {
   ImageModelControl,
   imageModelGenerationBlockReason,
-  type ImageModelStatusPayload,
+  type ImageModelStatusView,
 } from './ImageModelControl';
 
-const unloadedStatus: ImageModelStatusPayload = {
+const unloadedStatus: ImageModelStatusView = {
   ok: true,
   service: 'image',
   enabled: true,
@@ -26,7 +26,7 @@ const unloadedStatus: ImageModelStatusPayload = {
   },
 };
 
-function renderControl(status: ImageModelStatusPayload, overrides: Partial<React.ComponentProps<typeof ImageModelControl>> = {}) {
+function renderControl(status: ImageModelStatusView, overrides: Partial<React.ComponentProps<typeof ImageModelControl>> = {}) {
   const props = {
     status,
     statusLoading: false,

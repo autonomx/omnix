@@ -5,6 +5,13 @@ from copy import deepcopy
 from typing import Any, Callable, Mapping
 
 from app.rpg.session.player_personality_profile import extract_player_personality_profile
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_player_agency_contract.prompt', "1", (
+    "Add player-personality flavor to RPG next-action option labels/descriptions. "
+        "For an evil, cruel, or ruthless player, darker undertones are allowed, but commands must remain unchanged. "
+        "Return JSON: {\"options\":[{\"id\":string,\"label\":string,\"description\":string,\"tone_tags\":[string]}]}."
+))
 
 PLAYER_AGENCY_CONTRACT_VERSION = "rpg_player_agency_contract_v1"
 PLAYER_AGENCY_FLAVOR_VERSION = "rpg_player_agency_flavor_v1"
@@ -269,6 +276,9 @@ def _json_obj(value: Any) -> dict[str, Any]:
 def _provider_payload(provider: Any, prompt: str, context: Mapping[str, Any]) -> dict[str, Any]:
     if provider is None:
         return {}
+    from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+
+    provider = adapt_base_provider(provider)
     if hasattr(provider, "generate"):
         return _json_obj(provider.generate(prompt, context=dict(context), timeout_s=20.0))
     if hasattr(provider, "complete_json"):
@@ -320,9 +330,7 @@ def flavor_player_agency_options(
         ],
     }
     prompt = (
-        "Add player-personality flavor to RPG next-action option labels/descriptions. "
-        "For an evil, cruel, or ruthless player, darker undertones are allowed, but commands must remain unchanged. "
-        "Return JSON: {\"options\":[{\"id\":string,\"label\":string,\"description\":string,\"tone_tags\":[string]}]}."
+        _PROMPT_1.text
     )
     try:
         diagnostics["provider_called"] = bool(provider)

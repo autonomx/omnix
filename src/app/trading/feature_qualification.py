@@ -13,16 +13,15 @@ import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Generic, Literal, TypeVar
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .market_data_recovery import PriceScope, RecoveryBucketEvidence, VolumeScope
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 
 FeatureDependencyClass = Literal[
     "POINT_IN_TIME",
@@ -184,7 +183,7 @@ def _floor_to_interval(value: datetime, step: timedelta) -> datetime:
 
 def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
     start = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET).astimezone(timezone.utc)
-    end = datetime.combine(session_date, _REGULAR_CLOSE, tzinfo=_ET).astimezone(timezone.utc)
+    end = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET).astimezone(timezone.utc)
     return start, end
 
 

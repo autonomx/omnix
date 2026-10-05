@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -15,10 +14,10 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import trading_data_hardening as hardening_module
+from app.trading import order_gateway as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.market_evidence import (
@@ -29,7 +28,7 @@ from app.trading.market_evidence import (
 from app.trading.models import MarketBar
 from app.trading.paper import PaperAccountCreate, PaperMarketObservation
 from app.trading.paper_repository import TradingPaperRepository
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_data_integrity import finviz_atomic_source_locator
 from app.trading.strategy_monitor import TradingStrategyMonitor
@@ -272,7 +271,8 @@ class ReplayMarketService:
         return self.execution
 
 
-def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_position(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_position(monkeypatch) -> None:
     fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     selected = fixture["selected"]
     assumptions = fixture["execution_assumptions"]
@@ -387,7 +387,7 @@ def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_posit
 
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
 
         def uow_factory():
             return unit_of_work(database)
@@ -432,11 +432,21 @@ def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_posit
             interval_seconds=5,
         )
 
-        submitted = asyncio.run(monitor.run_once())
+        submitted = await monitor.run_once()
         assert submitted == 1
         before_fill = paper_repository.snapshot(account_id)
         assert len(before_fill.open_orders) == 1
         order = before_fill.open_orders[0]
+        # PostgreSQL stamps created_at with the real clock, the only clock the
+        # replay does not freeze. Align it with the replayed session so the
+        # fill below stays causal whenever the test runs.
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_trading_paper_orders SET created_at = %s
+                    WHERE workspace_id = %s AND account_id = %s AND order_id = %s""",
+                (REPLAY_RUNTIME_NOW, context.workspace_id, account_id, order.order_id),
+            )
+            work.commit()
 
         events = strategy_repository.recent_events(strategy_id, 20_000)
         auth = next(event for event in events if event.event_type == "trade_authorization")

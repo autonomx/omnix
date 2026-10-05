@@ -1,4 +1,4 @@
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { RpgWorldDossierQualityPanel } from './RpgWorldDossierQualityPanel';
 
 interface RpgWorldAdvancedPanelProps {

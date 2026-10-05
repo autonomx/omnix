@@ -9,7 +9,7 @@ from app.agent_runtime.profiles import (
 from app.assistant_tools.config_store import default_assistant_tools_config
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.models import AssistantToolRequest
-from app.assistant_tools.research_adapter import run_research_tool_request
+from app.research.assistant_tool import run_research_tool_request
 
 
 class _FakeResearchItem:

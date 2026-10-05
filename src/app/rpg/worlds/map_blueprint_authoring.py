@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import ScenarioRevisionDocument, canonical_content_hash
@@ -346,7 +346,7 @@ def materialize_missing_location_blueprints(
             identifier = str(entity.get("id") or entity.get("entity_id") or "").strip()
             if identifier:
                 locations[identifier] = entity
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         created = materialize_generated_location_blueprints(
@@ -366,7 +366,7 @@ def save_map_blueprint(
     expected_revision: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         current = work.connection.execute(
@@ -398,7 +398,7 @@ def list_map_blueprints(
     latest_only: bool = True,
     database: Any | None = None,
 ) -> list[dict[str, Any]]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         if work.world_scenarios.get_world(context, world_id) is None:
             raise KeyError(f"world_not_found:{world_id}")

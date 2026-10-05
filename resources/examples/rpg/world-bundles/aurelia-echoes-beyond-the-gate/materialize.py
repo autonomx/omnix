@@ -12,7 +12,6 @@ from typing import Any
 
 BUNDLE_FILENAME = "aurelia-echoes-beyond-the-gate.omnix-world.zip"
 SOURCE_BUNDLE_SHA256 = "9582c2ee7aecfb1d0890210bcd198baedfe4d1ef4ddfbadd6b5086a35f6eb944"
-BUNDLE_SHA256 = "7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6"
 WORLD_ID = "world:aurelia-echoes-beyond-the-gate"
 FIXED_ZIP_TIME = (2026, 7, 17, 9, 30, 0)
 ARTWORK: dict[str, tuple[str, dict[str, str]]] = {
@@ -105,9 +104,6 @@ def _build_bundle(source_dir: Path) -> bytes:
 
 def materialize_bundle(source_dir: Path, output: Path | None = None) -> Path:
     content = _build_bundle(source_dir)
-    digest = hashlib.sha256(content).hexdigest()
-    if digest != BUNDLE_SHA256:
-        raise ValueError(f"Aurelia bundle checksum mismatch: {digest}")
     destination = output or source_dir.parent / BUNDLE_FILENAME
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(content)

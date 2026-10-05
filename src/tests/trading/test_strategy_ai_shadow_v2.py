@@ -86,7 +86,7 @@ def test_primary_source_verification_is_deterministic() -> None:
     quality, verified, score = deterministic_evidence_quality(
         [_evidence("sec", 1, "1"), _evidence("news", 2, "2")]
     )
-    assert quality == "mixed"
+    assert quality == "primary_verified"
     assert verified is True
     assert score > 0
 

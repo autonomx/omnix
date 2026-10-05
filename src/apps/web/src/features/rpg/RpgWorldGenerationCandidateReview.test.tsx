@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldGenerationTopicResult } from '../../api/rpgWorldGenerationReviewClient';
+import type { RpgAuthoringSection } from './api/rpgWorldAuthoringClient';
+import type { RpgWorldGenerationTopicResult } from './api/rpgWorldGenerationReviewClient';
 import { RpgWorldGenerationCandidateReview } from './RpgWorldGenerationCandidateReview';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const section: RpgAuthoringSection = {
   id: 'history_timeline',
@@ -78,9 +79,7 @@ const result: RpgWorldGenerationTopicResult = {
 };
 
 function renderReview(onAccepted = vi.fn(), reviewEnabled = true) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   render(
     <QueryClientProvider client={queryClient}>
       <RpgWorldGenerationCandidateReview
@@ -150,7 +149,7 @@ describe('RpgWorldGenerationCandidateReview', () => {
         summary: 'world_forge_integrity_failed:provider_presentation_contradiction:places:ent:places:005:entities:entity.dossier;provider_short_summary_required:places:ent:places:006:entities',
       },
     };
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createTestQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
         <RpgWorldGenerationCandidateReview

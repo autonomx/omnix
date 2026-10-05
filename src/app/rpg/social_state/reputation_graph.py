@@ -19,11 +19,6 @@ class ReputationGraph:
         edge_id = self._edge_id(source_id, target_id)
         return state.reputation_edges.get(edge_id)
 
-    def upsert_edge(self, state: SocialState, edge: ReputationEdge) -> None:
-        """Insert or replace a reputation edge."""
-        edge_id = self._edge_id(edge.source_id, edge.target_id)
-        state.reputation_edges[edge_id] = edge
-
     def adjust_score(
         self,
         state: SocialState,

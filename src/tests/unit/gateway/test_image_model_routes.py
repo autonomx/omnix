@@ -3,12 +3,12 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway import image_model_routes
+from app.image.routes import models as image_model_routes
 
 
 def _app() -> FastAPI:
     app = FastAPI()
-    app.include_router(image_model_routes.router)
+    app.include_router(image_model_routes.create_image_model_router())
     return app
 
 

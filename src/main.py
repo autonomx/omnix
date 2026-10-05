@@ -4,9 +4,10 @@
 import uvicorn
 
 from app.production import app
+from app.runtime.net import bind_host
 
 
-HOST = "127.0.0.1"
+HOST = bind_host()
 PORT = 8000
 
 
@@ -21,6 +22,9 @@ if __name__ == "__main__":
     print(f"Gateway: http://{HOST}:{PORT}")
     print("=" * 50 + "\n")
 
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     uvicorn.run(
         app,
         host=HOST,

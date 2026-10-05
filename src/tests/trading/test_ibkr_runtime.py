@@ -256,3 +256,22 @@ def test_official_transport_socket_reset_wakes_waiters_and_clears_request_state(
     assert transport._market_data_types == {}
     assert transport._request_errors == {}
     assert transport._farm_status == {}
+
+
+def test_wait_for_quote_wakes_when_the_quote_arrives_instead_of_polling():
+    contract = _contract()
+    transport = FakeIbkrTransport(contracts={"AAPL": [contract]})
+    runtime = _runtime(transport)
+    runtime.connect()
+    token = runtime.subscribe_quote(INSTRUMENT, contract=contract)
+    snapshot = IbkrQuoteSnapshot(contract=contract, last=Decimal("100.01"), market_data_type="LIVE")
+
+    timer = threading.Timer(0.05, transport.emit, args=(token, snapshot))
+    timer.start()
+    started = datetime.now(timezone.utc)
+    assert runtime.wait_for_quote(INSTRUMENT, timeout_seconds=5.0) == snapshot
+    assert datetime.now(timezone.utc) - started < timedelta(seconds=2)
+    timer.join()
+
+    # No quote with a last price: the wait ends at the timeout with what it has.
+    assert runtime.wait_for_quote("equity:NASDAQ:MSFT", timeout_seconds=0.05) is None

@@ -84,13 +84,6 @@ def _slug(value: Any) -> str:
     return "-".join(_clip(value, 80).lower().replace("_", "-").split())
 
 
-def list_player_personality_presets() -> dict[str, Any]:
-    return {
-        "format_version": "rpg_player_personality_presets_v1",
-        "presets": [deepcopy(_PRESETS[key]) for key in sorted(_PRESETS)],
-    }
-
-
 def _descriptor(parts: list[str], traits: list[str]) -> str:
     chunks = [part for part in parts if part]
     if traits:
@@ -209,13 +202,3 @@ def extract_player_personality_profile(
     return normalize_player_personality_profile(merged)
 
 
-def attach_player_personality_profile(target: dict[str, Any], raw_profile: Mapping[str, Any] | None = None, *, preset: str = "") -> dict[str, Any]:
-    if not isinstance(target, dict):
-        return target
-    profile = normalize_player_personality_profile(raw_profile, preset=preset)
-    target["player_personality_profile"] = deepcopy(profile)
-    player_state = _d(target.get("player_state"))
-    if player_state:
-        player_state["personality_profile"] = deepcopy(profile)
-        target["player_state"] = player_state
-    return target

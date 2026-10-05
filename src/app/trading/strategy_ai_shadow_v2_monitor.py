@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
 import hashlib
-import os
-from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import TradingResearchRepository, default_research_repository
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v2 import (
@@ -30,7 +30,7 @@ from .strategy_ai_shadow_v2 import (
     alpha_prompt_snapshot,
     build_market_structure_snapshot,
     derive_catalyst_influence,
-    deterministic_risk_geometry,
+    deterministic_risk_geometry as _base_deterministic_risk_geometry,
     evaluate_opportunity_episode,
     evidence_fingerprint,
     trigger_satisfied,
@@ -44,9 +44,13 @@ from .strategy_repository import (
 )
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import after_regular_close
 
-_ET = ZoneInfo("America/New_York")
+logger = logging.getLogger(__name__)
+
 _STATE_KEY = "_omnix_trading_ai_shadow_v2_monitor"
 _ARMS: tuple[AIShadowV2Arm, ...] = (
     "morning_control", "morning_catalyst",
@@ -55,10 +59,40 @@ _ARMS: tuple[AIShadowV2Arm, ...] = (
 _EVENT_TYPES = (
     "ai_v2_catalyst_snapshot", "ai_v2_research_refresh", "ai_v2_decision",
     "ai_v2_fill", "ai_v2_opportunity_episode", "ai_v2_session_summary",
+    "ai_v2_catalyst_freeze", "ai_v2_catalyst_lift_summary",
+    "ai_v2_alpha_error", "ai_v2_alpha_policy_veto", "ai_v2_decision_outcome",
+    "ai_v2_arm_unavailable",
 )
 _PREMARKET_START_ET = time(6, 0)
 _REGULAR_SESSION_START_ET = time(9, 30)
 _FULL_SESSION_LAST_ENTRY_ET = time(15, 30)
+AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT = Decimal("8")
+
+
+def deterministic_risk_geometry(
+    decision,
+    *,
+    entry_reference: Decimal,
+    estimated_cost_bps: Decimal,
+    minimum_net_r: Decimal,
+):
+    geometry = _base_deterministic_risk_geometry(
+        decision,
+        entry_reference=entry_reference,
+        estimated_cost_bps=estimated_cost_bps,
+        minimum_net_r=minimum_net_r,
+    )
+    if geometry.risk_per_share is None or entry_reference <= 0:
+        return geometry
+    risk_pct = geometry.risk_per_share / entry_reference * Decimal("100")
+    if risk_pct <= AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT:
+        return geometry
+    return geometry.model_copy(
+        update={
+            "valid": False,
+            "reason": "maximum_structural_risk_pct_exceeded",
+        }
+    )
 
 
 class V2PositionState(BaseModel):
@@ -77,18 +111,18 @@ class V2PositionState(BaseModel):
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ai_shadow_v2_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_AI_SHADOW_V2_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_AI_SHADOW_V2_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        return max(5.0, float(os.environ.get("OMNIX_TRADING_AI_SHADOW_V2_INTERVAL_SECONDS", "15")))
+        return max(5.0, float(_env_str("OMNIX_TRADING_AI_SHADOW_V2_INTERVAL_SECONDS", "15")))
     except ValueError:
         return 15.0
 
@@ -190,6 +224,7 @@ def _latest_snapshot(events: list[StrategyEvent], instrument_id: str) -> Catalys
             max(values, key=lambda e: (e.observed_at, e.event_id)).payload["snapshot"]
         )
     except Exception:
+        logger.debug("suppressed error in %s", "_latest_snapshot", exc_info=True)
         return None
 
 
@@ -236,51 +271,21 @@ def _research_selection_is_due(
 
 
 def _historical_episodes(repository: TradingStrategyRepository, strategy_id: str) -> list[dict[str, object]]:
-    try:
-        recent = repository.recent_events(strategy_id, 50_000)
-    except Exception:
-        return []
-    return [
-        dict(e.payload["outcome"]) for e in recent
-        if e.event_type == "ai_v2_opportunity_episode"
-        and e.payload.get("arm") in {"morning_catalyst", "full_session_catalyst"}
-        and isinstance(e.payload.get("outcome"), dict)
-    ]
+    from .strategy_ai_shadow_v2_roadmap_policy import _historical_episodes_policy
+
+    return _historical_episodes_policy(repository, strategy_id)
 
 
 def _persistence_calibration(episodes: list[dict[str, object]], persistence: str) -> tuple[Decimal | None, int]:
-    values = [
-        row for row in episodes
-        if row.get("catalyst_persistence_class") == persistence
-        and row.get("plus_two_r_before_minus_one_r") is not None
-    ]
-    if len(values) < 30:
-        return None, len(values)
-    wins = sum(row.get("plus_two_r_before_minus_one_r") is True for row in values)
-    return Decimal(wins) / Decimal(len(values)), len(values)
+    from .strategy_ai_shadow_v2_roadmap_policy import _persistence_calibration_policy
+
+    return _persistence_calibration_policy(episodes, persistence)
 
 
 def _setup_calibration(episodes: list[dict[str, object]], persistence: str) -> dict[str, dict[str, object]]:
-    result: dict[str, dict[str, object]] = {}
-    for setup in (
-        "trend_continuation", "failed_selloff_reclaim", "first_pullback",
-        "squeeze_continuation", "gap_hold", "distribution", "unresolved",
-    ):
-        values = [
-            row for row in episodes
-            if row.get("catalyst_persistence_class") == persistence
-            and row.get("setup_family") == setup
-            and row.get("plus_two_r_before_minus_one_r") is not None
-        ]
-        wins = sum(row.get("plus_two_r_before_minus_one_r") is True for row in values)
-        result[setup] = {
-            "sample_size": len(values),
-            "two_r_before_minus_one_r_rate": (
-                str(Decimal(wins) / Decimal(len(values))) if len(values) >= 30 else None
-            ),
-            "calibrated": len(values) >= 30,
-        }
-    return result
+    from .strategy_ai_shadow_v2_roadmap_policy import _setup_calibration_policy
+
+    return _setup_calibration_policy(episodes, persistence)
 
 
 def _apply_fill(state: V2PositionState, side: str, units: Decimal, price: Decimal, at: datetime, trade_id: str) -> V2PositionState:
@@ -303,7 +308,9 @@ def _apply_fill(state: V2PositionState, side: str, units: Decimal, price: Decima
     })
 
 
-class TradingAIShadowV2Monitor:
+class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
+    error_event = "ai_shadow_v2_monitor_error"
+
     def __init__(
         self,
         *,
@@ -322,7 +329,6 @@ class TradingAIShadowV2Monitor:
         self.catalyst_analyzer_factory = catalyst_analyzer_factory
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.alpha_call_count = 0
@@ -330,17 +336,6 @@ class TradingAIShadowV2Monitor:
         self.decision_count = 0
         self.fill_count = 0
         self.episode_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task, self._task = self._task, None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def _append(
         self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument,
@@ -378,7 +373,7 @@ class TradingAIShadowV2Monitor:
             and start_et.astimezone(timezone.utc) <= e.observed_at.astimezone(timezone.utc) < end.astimezone(timezone.utc)
         ]
 
-    async def _refresh_catalyst(
+    async def _refresh_catalyst_core(
         self, *, candidate, config: TradingStrategyConfigDocument,
         strategy_repository: TradingStrategyRepository,
         research_repository: TradingResearchRepository,
@@ -453,12 +448,38 @@ class TradingAIShadowV2Monitor:
         )
         return snapshot
 
+    async def _refresh_catalyst(
+        self,
+        *,
+        candidate,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        research_repository: TradingResearchRepository,
+        events: list[StrategyEvent],
+        now: datetime,
+        history: list[dict[str, object]],
+    ) -> CatalystIntelligenceSnapshot:
+        from .strategy_ai_shadow_v2_roadmap_policy import _refresh_catalyst_policy
+
+        return await _refresh_catalyst_policy(
+            self,
+            candidate=candidate,
+            config=config,
+            strategy_repository=strategy_repository,
+            research_repository=research_repository,
+            events=events,
+            now=now,
+            history=history,
+            original=self._refresh_catalyst_core,
+        )
+
     async def _microstructure(self, market_service: TradingMarketDataService, candidate) -> dict[str, object] | None:
         try:
             obs = await asyncio.to_thread(
                 market_service.execution_observation, candidate.instrument_id, candidate.binding_id
             )
         except Exception:
+            logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._microstructure", exc_info=True)
             return None
         bid, ask = getattr(obs, "bid", None), getattr(obs, "ask", None)
         if bid is None or ask is None:
@@ -587,7 +608,7 @@ class TradingAIShadowV2Monitor:
                 idempotency_key=_key(arm, decision.instrument_id, at, "local"), payload=fill_payload,
             ))
 
-    async def _run_arm(
+    async def _run_arm_core(
         self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]],
         config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent],
@@ -616,7 +637,7 @@ class TradingAIShadowV2Monitor:
                     if trigger_satisfied(trigger, structure=row["structure"], previous_structure=prior):
                         reasons.append("armed_trigger_satisfied")
                 except Exception:
-                    pass
+                    logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._run_arm_core", exc_info=True)
             if previous is not None and at - previous.observed_at.astimezone(at.tzinfo) >= timedelta(minutes=5):
                 reasons.append("five_minute_heartbeat")
             if not reasons:
@@ -651,6 +672,37 @@ class TradingAIShadowV2Monitor:
                     trigger_reasons=reasons_by_id.get(decision.instrument_id, ()),
                 )
 
+    async def _run_arm(
+        self,
+        *,
+        arm: AIShadowV2Arm,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+    ) -> None:
+        from . import strategy_ai_shadow_provider as reliability
+
+        now = reliability.time.monotonic()
+        circuit = reliability._CIRCUIT
+        if circuit.is_open(now):
+            self.last_error = (
+                "ai_shadow_v2_provider_circuit_open:"
+                f"retry_after_seconds={circuit.retry_after(now)};"
+                f"failure_count={circuit.failure_count}"
+            )
+            return None
+        from .strategy_ai_shadow_v2_roadmap_policy import _run_arm_policy
+
+        await _run_arm_policy(
+            self,
+            arm=arm,
+            rows=rows,
+            config=config,
+            repository=repository,
+            events=events,
+        )
+
     async def _force_flat(
         self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
@@ -673,11 +725,11 @@ class TradingAIShadowV2Monitor:
                     events=events, trigger_reasons=("force_flat",),
                 )
 
-    async def _label_episodes(
+    async def _label_episodes_core(
         self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
         existing = {
             str(e.payload.get("episode_id")) for e in events if e.event_type == "ai_v2_opportunity_episode"
@@ -728,6 +780,7 @@ class TradingAIShadowV2Monitor:
                             catalyst_persistence_class=persistence,
                         )
                     except Exception:
+                        logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._label_episodes_core", exc_info=True)
                         continue
                     if await self._append(
                         repository, config, instrument_id=instrument_id,
@@ -740,11 +793,31 @@ class TradingAIShadowV2Monitor:
                     ):
                         self.episode_count += 1
 
-    async def _summary(
+    async def _label_episodes(
+        self,
+        *,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        now: datetime,
+    ) -> None:
+        from .strategy_ai_shadow_v2_roadmap_policy import _label_episodes_policy
+
+        await _label_episodes_policy(
+            self,
+            rows=rows,
+            config=config,
+            repository=repository,
+            events=events,
+            now=now,
+        )
+
+    async def _summary_core(
         self, *, config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent], session_date, now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
 
         def arm_metrics(arm: AIShadowV2Arm) -> dict[str, object]:
@@ -787,11 +860,36 @@ class TradingAIShadowV2Monitor:
             identity=(session_date.isoformat(), _key(payload["arms"])),
         )
 
+    async def _summary(
+        self,
+        *,
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        session_date,
+        now: datetime,
+    ) -> None:
+        from .strategy_ai_shadow_v2_roadmap_policy import _summary_policy
+
+        await _summary_policy(
+            self,
+            config=config,
+            repository=repository,
+            events=events,
+            session_date=session_date,
+            now=now,
+        )
+
     async def _run_config(
         self, config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         research_repository: TradingResearchRepository, market_service: TradingMarketDataService,
         *, now: datetime,
     ) -> None:
+        market_service = _CurrentSessionMarketDataProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+        )
         universe = await asyncio.to_thread(resolve_v2_shadow_archive, config, repository, now=now)
         if universe is None:
             return
@@ -897,21 +995,9 @@ class TradingAIShadowV2Monitor:
         self.last_run_at = now
         return self.decision_count
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading", "ai_shadow_v2_monitor_error",
-                    error_type=type(exc).__name__, detail=str(exc), execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
-
     def diagnostics(self) -> dict[str, object]:
         return {
-            "enabled": ai_shadow_v2_monitor_enabled(), "running": self._task is not None,
+            "enabled": ai_shadow_v2_monitor_enabled(), "running": self.scheduled,
             "version": AI_SHADOW_V2_VERSION, "arms": list(_ARMS),
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error, "alpha_call_count": self.alpha_call_count,
@@ -921,27 +1007,17 @@ class TradingAIShadowV2Monitor:
         }
 
 
-def register_trading_ai_shadow_v2_monitor(gateway: FastAPI) -> TradingAIShadowV2Monitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ai_shadow_v2_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingAIShadowV2Monitor):
-        return existing
+        return None
     monitor = TradingAIShadowV2Monitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if ai_shadow_v2_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=ai_shadow_v2_monitor_enabled)
 
 
 __all__ = [
     "TradingAIShadowV2Monitor", "V2PositionState",
-    "ai_shadow_v2_monitor_enabled", "register_trading_ai_shadow_v2_monitor",
+    "ai_shadow_v2_monitor_enabled", "create_trading_ai_shadow_v2_monitor_task",
 ]

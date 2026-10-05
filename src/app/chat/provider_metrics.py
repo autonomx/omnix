@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from app.providers.catalog import RUNTIME_STATS, provider_supports
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -66,7 +67,7 @@ def merge_provider_response_metrics(
 
     # The normalized row is currently intended for LM Studio. Still accept an
     # explicit stats payload so compatible adapters can opt in without branching.
-    if provider_key != "lmstudio" and not stats:
+    if not provider_supports(provider_key, RUNTIME_STATS) and not stats:
         return metrics
 
     metrics["provider"] = provider_key or "lmstudio"

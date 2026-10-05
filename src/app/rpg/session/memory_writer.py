@@ -7,8 +7,7 @@ context, reports, and grounding guards without changing the schema contract.
 """
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 MEMORY_SCHEMA_VERSION = "rpg_memory_v1"
 MAX_MEMORY_TEXT = 500
@@ -45,15 +44,6 @@ def _clean_tags(values: Iterable[Any]) -> List[str]:
         if tag and tag not in tags:
             tags.append(tag)
     return tags[:12]
-
-
-def empty_memory_state() -> Dict[str, Any]:
-    """Return the canonical empty memory state."""
-    return {
-        "version": MEMORY_SCHEMA_VERSION,
-        "next_sequence": 1,
-        "entries": [],
-    }
 
 
 def memory_state_from_session(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -114,89 +104,3 @@ def make_memory_entry(
     return entry
 
 
-def _extract_turn_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
-    authoritative = _safe_dict(payload.get("authoritative"))
-    result = _safe_dict(payload.get("result"))
-    source = authoritative or result or payload
-    resolved = _safe_dict(source.get("resolved_result"))
-    presentation = _safe_dict(source.get("presentation"))
-    npc = _safe_dict(source.get("npc")) or _safe_dict(presentation.get("npc"))
-    return {
-        "tick": source.get("tick", 0),
-        "turn_id": source.get("turn_id", ""),
-        "summary": source.get("summary") or resolved.get("summary") or "",
-        "narration": source.get("narration") or presentation.get("narration") or "",
-        "npc_line": npc.get("line") or npc.get("text") or "",
-        "npc_id": npc.get("id") or npc.get("actor_id") or npc.get("speaker") or "",
-        "location_id": source.get("location_id") or resolved.get("location_id") or "",
-        "action_type": source.get("action_type") or resolved.get("action_type") or "",
-    }
-
-
-def build_post_turn_memory_entries(
-    session: Dict[str, Any],
-    payload: Dict[str, Any],
-    *,
-    player_input: str = "",
-) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Build deterministic memory entries for a resolved turn payload."""
-    memory = memory_state_from_session(session)
-    fields = _extract_turn_fields(_safe_dict(payload))
-    entries: List[Dict[str, Any]] = []
-    player_text = _clean_text(player_input)
-    summary = _clean_text(fields["summary"] or fields["narration"])
-    if player_text or summary:
-        pieces = []
-        if player_text:
-            pieces.append(f"Player: {player_text}")
-        if summary:
-            pieces.append(f"Outcome: {summary}")
-        entries.append(
-            make_memory_entry(
-                memory,
-                kind="turn",
-                text=" | ".join(pieces),
-                tick=fields["tick"],
-                turn_id=fields["turn_id"],
-                location_id=fields["location_id"],
-                salience=DEFAULT_TURN_SALIENCE,
-                tags=["turn", fields["action_type"]],
-            )
-        )
-    npc_line = _clean_text(fields["npc_line"])
-    if npc_line:
-        entries.append(
-            make_memory_entry(
-                memory,
-                kind="dialogue",
-                text=npc_line,
-                tick=fields["tick"],
-                turn_id=fields["turn_id"],
-                actor_id=fields["npc_id"],
-                subject_id=fields["npc_id"],
-                location_id=fields["location_id"],
-                salience=DEFAULT_DIALOGUE_SALIENCE,
-                tags=["dialogue", fields["npc_id"]],
-            )
-        )
-    return memory, entries
-
-
-def write_post_turn_memory(
-    session: Dict[str, Any],
-    payload: Dict[str, Any],
-    *,
-    player_input: str = "",
-) -> Dict[str, Any]:
-    """Return a copied session with post-turn memory entries appended."""
-    updated = deepcopy(_safe_dict(session))
-    runtime = dict(_safe_dict(updated.get("runtime_state")))
-    memory, entries = build_post_turn_memory_entries(
-        updated,
-        payload,
-        player_input=player_input,
-    )
-    memory["entries"].extend(entries)
-    runtime["memory"] = memory
-    updated["runtime_state"] = runtime
-    return updated

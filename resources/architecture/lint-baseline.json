@@ -1,0 +1,200 @@
+{
+  "errors": [],
+  "policy_digest": "d201205b90b62968eaee8771f420a107584a58ce0a853341a0a2fbfc7fe91168",
+  "rules": [
+    "AL001",
+    "AL002",
+    "AL003",
+    "AL004",
+    "AL005",
+    "AL006",
+    "AL007",
+    "AL008",
+    "AL009",
+    "AL010",
+    "AL011",
+    "AL012",
+    "AL013",
+    "AL014",
+    "AL015",
+    "AL016"
+  ],
+  "schema_version": 1,
+  "scope": "tracked_nonvendor_production_python_and_migrations",
+  "violations": [
+    {
+      "count": 1,
+      "fingerprint": "register_character_integration_routes.memory_repository_factory:app.assistant_memory.owner_repository",
+      "lines": [
+        102
+      ],
+      "path": "src/app/character_interactions/routes.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        10
+      ],
+      "path": "src/app/chat/character_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        18
+      ],
+      "path": "src/app/chat/compaction.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/context_budget.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        13
+      ],
+      "path": "src/app/chat/history_search.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/memory_commands.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 2,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        8,
+        16
+      ],
+      "path": "src/app/chat/memory_prompt.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory_v2",
+      "lines": [
+        17
+      ],
+      "path": "src/app/chat/memory_prompt.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_memory_v2_runtime:app.assistant_memory_v2.runtime",
+      "lines": [
+        37
+      ],
+      "path": "src/app/chat/memory_prompt.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        14
+      ],
+      "path": "src/app/chat/prompt_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        6
+      ],
+      "path": "src/app/chat/retention_policy.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory.contracts",
+      "lines": [
+        9
+      ],
+      "path": "src/app/chat/sqlite_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "lines": [
+        16
+      ],
+      "path": "src/app/desktop_companion/memory_bridge.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory_v2.observation_store",
+      "lines": [
+        21
+      ],
+      "path": "src/app/desktop_companion/memory_bridge.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
+      "fingerprint": "<module>:app.assistant_memory_v2.runtime",
+      "lines": [
+        22
+      ],
+      "path": "src/app/desktop_companion/memory_bridge.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 3,
+      "fingerprint": "_recovery_command:app.persistence.blob_store.LocalBlobStore",
+      "lines": [
+        260,
+        261,
+        275
+      ],
+      "path": "src/app/persistence/cli.py",
+      "rule": "AL011"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.assets<->app.persistence",
+      "lines": [
+        1
+      ],
+      "path": "src/app/assets/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.persistence<->app.security",
+      "lines": [
+        1
+      ],
+      "path": "src/app/persistence/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions",
+      "lines": [
+        38
+      ],
+      "path": "src/app/assistant_memory/persistence/owner_memory_store.py",
+      "rule": "AL016"
+    }
+  ]
+}

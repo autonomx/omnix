@@ -255,15 +255,6 @@ class EmotionalState:
         """Check if specific emotion exceeds threshold."""
         return self.emotions.get(emotion, 0.0) >= threshold
     
-    def add_emotional_event(self, event: Dict[str, Any]) -> None:
-        """Record an emotional event for memory tracking."""
-        self.emotional_memory.append({
-            "event": event,
-            "emotions_at_time": dict(self.emotions),
-        })
-        if len(self.emotional_memory) > 20:
-            self.emotional_memory = self.emotional_memory[-20:]
-    
     def to_dict(self) -> Dict[str, Any]:
         """Serialize emotional state to dict."""
         return {
@@ -419,71 +410,6 @@ class EmotionModifier:
             was_blocked=False,
             confidence=confidence,
         )
-    
-    def apply_dialogue_modifier(
-        self,
-        character: Any,
-        base_dialogue: str = "",
-    ) -> Dict[str, Any]:
-        """Get dialogue style modifiers based on character's emotions."""
-        emotional_state = self._get_emotional_state(character)
-        if emotional_state is None:
-            return {
-                "style": "neutral",
-                "tone": "neutral",
-                "suggested_modifications": {},
-            }
-        
-        dominant = emotional_state.dominant_emotion
-        dominant_intensity = emotional_state.get_dominant_intensity()
-        dialogue_mod = EMOTION_DIALOGUE_MODIFIERS.get(dominant, {})
-        
-        modifications = {}
-        for key, value in dialogue_mod.items():
-            if isinstance(value, (int, float)):
-                modifications[key] = value * dominant_intensity
-            else:
-                modifications[key] = value
-        
-        return {
-            "style": dominant,
-            "tone": dialogue_mod.get("tone", "neutral"),
-            "vocabulary": dialogue_mod.get("vocabulary", "neutral"),
-            "directness": modifications.get("directness", 0),
-            "formality": modifications.get("formality", 0),
-            "suggested_modifications": modifications,
-        }
-    
-    def get_emotional_memory_impact(
-        self,
-        character: Any,
-        target: str = "",
-        action_type: str = "",
-    ) -> Dict[str, float]:
-        """Get emotional memory impact for a specific target/action."""
-        emotional_state = self._get_emotional_state(character)
-        if emotional_state is None:
-            return {}
-        
-        impact = {}
-        for memory in emotional_state.emotional_memory[-5:]:
-            event = memory.get("event", {})
-            past_emotions = memory.get("emotions_at_time", {})
-            
-            if target and event.get("target") == target:
-                for emotion, intensity in past_emotions.items():
-                    if intensity > self.thresholds.get(emotion, 0.3):
-                        key = f"{emotion}_memory_{target}"
-                        impact[key] = impact.get(key, 0.0) + intensity * 0.3
-            
-            if action_type:
-                event_type = event.get("type", "")
-                if event_type == action_type:
-                    for emotion, intensity in past_emotions.items():
-                        key = f"{emotion}_pattern_{action_type}"
-                        impact[key] = impact.get(key, 0.0) + intensity * 0.2
-        
-        return impact
     
     def _get_emotional_state(self, character: Any) -> Optional[EmotionalState]:
         """Extract emotional state from character."""

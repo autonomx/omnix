@@ -1,18 +1,19 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests
+import httpx
 
-from app.persistence.provider_secret_store import load_trading_provider_secrets
+from app.security.provider_secret_store import load_trading_provider_secrets
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import COINMARKETCAP_POLICY, bindings_for_instrument, instrument_by_id
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
@@ -39,8 +40,8 @@ class _CoinMarketCapHttpError(ProviderDataUnavailableError):
 
 def _environment_api_key() -> str:
     return (
-        os.environ.get("COINMARKETCAP_API_KEY")
-        or os.environ.get("CMC_PRO_API_KEY")
+        _env_str("COINMARKETCAP_API_KEY")
+        or _env_str("CMC_PRO_API_KEY")
         or ""
     ).strip()
 
@@ -83,14 +84,18 @@ def _date_key(value: object) -> date:
     return _timestamp(value).date()
 
 
-class CoinMarketCapProvider:
+class CoinMarketCapProvider(ProviderAdapter):
     provider_id = "coinmarketcap"
     policy = COINMARKETCAP_POLICY
+    display_name = "CoinMarketCap"
+
+    def configured(self) -> bool:
+        return coinmarketcap_configured()
 
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
         base_url: str = CMC_BASE_URL,
@@ -140,7 +145,7 @@ class CoinMarketCapProvider:
                 timeout=20,
                 cancellation=cancellation,
             )
-        except requests.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             response = exc.response
             if response is None:
                 raise ProviderDataUnavailableError(str(exc)) from exc

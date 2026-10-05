@@ -5,6 +5,29 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
+
+
+@pytest.fixture(autouse=True)
+def fresh_profile_defaults():
+    """The workspace's profile defaults are shared state; start and end without them."""
+    from app.persistence.module_repositories import PostgresModuleRecordRepository
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    def clear() -> None:
+        with unit_of_work() as work:
+            PostgresModuleRecordRepository(work.connection).delete(
+                current_tenant(), module="live-chat", record_type="conversation-profiles", record_id="default",
+            )
+            work.commit()
+
+    clear()
+    yield
+    clear()
 
 
 def _create_session(client: TestClient) -> str:
@@ -23,7 +46,7 @@ def test_live_conversation_profile_api_persists_defaults_and_overrides(
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
     session_id = _create_session(client)
 
     defaults = client.get("/api/live-chat/profile/defaults")
@@ -68,7 +91,7 @@ def test_live_conversation_profile_api_rejects_missing_session(
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
 
     response = client.get(
         "/api/chat/sessions/chat:missing/live-conversation/profile"

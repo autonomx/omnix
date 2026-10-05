@@ -515,47 +515,6 @@ class NarrativeMemory:
         
         return resonance
     
-    def get_world_impact(self) -> Dict[str, Any]:
-        """Get aggregated impact of all stored arcs on the world.
-        
-        Returns:
-            Dict with world impact summary.
-        """
-        if not self._arcs:
-            return {
-                "total_arcs": 0,
-                "average_impact": 0.0,
-                "dominant_outcomes": {},
-                "active_conflicts": [],
-            }
-        
-        total_impact = sum(arc.impact * arc.relevance for arc in self._arcs)
-        average_impact = total_impact / len(self._arcs)
-        
-        # Count outcome types
-        outcomes: Dict[str, int] = {}
-        for arc in self._arcs:
-            outcome = arc.resolution_type
-            outcomes[outcome] = outcomes.get(outcome, 0) + 1
-        
-        # Sort by count
-        dominant = dict(sorted(outcomes.items(), key=lambda x: x[1], reverse=True)[:5])
-        
-        # Active conflicts: arcs where resolution_type suggests ongoing tension
-        active = [
-            arc.to_dict()
-            for arc in self._arcs
-            if arc.resolution_type in ("stalemate", "betrayal", "tragedy")
-            and arc.relevance > 0.3
-        ]
-        
-        return {
-            "total_arcs": len(self._arcs),
-            "average_impact": round(average_impact, 3),
-            "dominant_outcomes": dominant,
-            "active_conflicts": active,
-        }
-    
     def _decay_all_arcs(self, current_tick: int) -> None:
         """Apply decay to all arc memories.
         
@@ -586,14 +545,6 @@ class NarrativeMemory:
             if arc.arc_id == arc_id:
                 return arc
         return None
-    
-    def get_all_arcs(self) -> List[Dict[str, Any]]:
-        """Get all stored arcs.
-        
-        Returns:
-            List of all arc memory dicts.
-        """
-        return [arc.to_dict() for arc in self._arcs]
     
     def get_stats(self) -> Dict[str, Any]:
         """Get narrative memory statistics.

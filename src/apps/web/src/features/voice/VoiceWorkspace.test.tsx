@@ -1,18 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { VoiceWorkspace } from './VoiceWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderVoice() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'voice');
 
   if (!module) {
@@ -37,6 +33,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Mantine transitions schedule state updates on timers. Let the last ones
+// run while jsdom still exists; otherwise they can fire after teardown
+// ("window is not defined") and fail an otherwise green run.
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 400));
+});
+
 describe('VoiceWorkspace', () => {
   it('plays the completed speech when the job list still has a queued summary', async () => {
     let detailRequests = 0;
@@ -48,11 +51,11 @@ describe('VoiceWorkspace', () => {
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/settings') return Response.json({ success: true, settings: {} });
+      if (path === '/api/settings/profile') return Response.json({ success: true, settings: {} });
       if (path === '/api/providers') return Response.json({ providers: [], models: [] });
       if (path === '/api/assets') return Response.json({ assets: [] });
       if (path === '/api/jobs' && init?.method === 'POST') return Response.json(queuedJob);
-      if (path === '/api/jobs') {
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') {
         return Response.json({ jobs: [
           queuedJob,
           { ...queuedJob, id: 'job:old', status: 'completed', output_refs: [{ title: 'Old speech', data_url: 'data:audio/wav;base64,b2xk' }] },
@@ -61,7 +64,8 @@ describe('VoiceWorkspace', () => {
       if (path === '/api/jobs/job%3Anew') {
         detailRequests += 1;
         return Response.json(detailRequests === 1 ? queuedJob : {
-          ...queuedJob, status: 'completed', output_refs: [{ title: 'New speech', data_url: 'data:audio/wav;base64,bmV3' }],
+          // Current contract: audio is served from the stored asset.
+          ...queuedJob, status: 'completed', output_refs: [{ title: 'New speech', asset_id: 'audio:new', audio_url: '/api/assets/audio%3Anew/audio' }],
         });
       }
       return new Response('not found', { status: 404 });
@@ -76,7 +80,7 @@ describe('VoiceWorkspace', () => {
 
     expect(await screen.findByText('Generating new speech… · 1 speaker')).toBeInTheDocument();
     expect(await screen.findByText('New speech · 1 speaker', {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(document.querySelector('audio')).toHaveAttribute('src', 'data:audio/wav;base64,bmV3');
+    expect(document.querySelector('audio')).toHaveAttribute('src', '/api/assets/audio%3Anew/audio');
   });
 
   it('loads central defaults, resets local edits, and queues TTS through the shared jobs API', async () => {
@@ -84,7 +88,7 @@ describe('VoiceWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/settings') {
+      if (path === '/api/settings/profile') {
         return Response.json({
           success: true,
           provider: 'lmstudio',
@@ -153,7 +157,7 @@ describe('VoiceWorkspace', () => {
         return Response.json({ ok: true, asset_id: 'voice-cloning:jinx2', deleted: true, file_deleted: true });
       }
 
-      if (path === '/api/jobs') {
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') {
         return Response.json({
           jobs: [
             {
@@ -179,7 +183,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'application/octet-stream',
-              storage_path: 'resources/voice_clones/Dave.wav',
+              file_name: 'Dave.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
             {
@@ -187,7 +191,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'audio/wav',
-              storage_path: 'resources/voice_clones/jinx2.wav',
+              file_name: 'jinx2.wav',
               metadata: { profile_name: 'jinx2', voice_id: 'jinx2' },
               created_at: '2026-06-14T00:00:01Z',
             },
@@ -196,7 +200,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice',
               type: 'audio',
               mime_type: 'audio/wav',
-              storage_path: 'artifacts/voice.wav',
+              file_name: 'voice.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
           ],
@@ -240,7 +244,7 @@ describe('VoiceWorkspace', () => {
 
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);
-    fireEvent.change(screen.getByLabelText('Narrator voice'), { target: { value: 'resources/voice_clones/jinx2.wav' } });
+    fireEvent.change(screen.getByLabelText('Narrator voice'), { target: { value: 'voice-cloning:jinx2' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
     expect(await screen.findByText('TTS job queued: job:tts')).toBeInTheDocument();
@@ -254,7 +258,7 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
       expect(createCall?.[1]?.body).toContain('"language":"English"');
-      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/jinx2.wav"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"voice-cloning:jinx2"');
       expect(createCall?.[1]?.body).toContain('"speed":1.25');
       expect(createCall?.[1]?.body).toContain('"audio_effects":["Compression"]');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
@@ -271,7 +275,7 @@ describe('VoiceWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
-      if (path === '/api/settings') {
+      if (path === '/api/settings/profile') {
         return Response.json({
           success: true,
           provider: 'lmstudio',
@@ -318,7 +322,7 @@ describe('VoiceWorkspace', () => {
           progress: { current: 5, total: 5 },
         });
       }
-      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
       if (path === '/api/assets') return Response.json({ assets: [] });
       return new Response('not found', { status: 404 });
     });

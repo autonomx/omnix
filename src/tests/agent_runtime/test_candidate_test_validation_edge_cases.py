@@ -26,7 +26,7 @@ def _validation(command: str, *, state: str = "state-final") -> ValidationResult
 
 
 def test_broad_playwright_does_not_claim_vitest_unit_test() -> None:
-    unit = "src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx"
+    unit = "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
     e2e = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
     missing = missing_candidate_test_execution(
         [unit, e2e],
@@ -37,7 +37,7 @@ def test_broad_playwright_does_not_claim_vitest_unit_test() -> None:
 
 
 def test_generic_npm_test_does_not_claim_separate_e2e_tree() -> None:
-    unit = "src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx"
+    unit = "src/apps/web/src/features/assistant/chat/ChatbotWorkspace.test.tsx"
     e2e = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
     missing = missing_candidate_test_execution(
         [unit, e2e],

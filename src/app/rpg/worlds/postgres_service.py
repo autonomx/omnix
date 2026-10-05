@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import GridMapDefinition
 
@@ -110,7 +110,7 @@ def create_world_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     profile_plan = None
     with unit_of_work(database) as work:
         world_id = str(request.world_id or "").strip()
@@ -171,7 +171,7 @@ def list_world_projects(
     database: Any | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         worlds = work.world_scenarios.list_worlds(context, limit=limit)
         work.rollback()
@@ -184,7 +184,7 @@ def publish_world_revision(
     expected_revision: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, document.world_id)
         document = prepare_direct_world_revision(world, document)
@@ -205,7 +205,7 @@ def publish_world_release(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, document.world_id)
         world_revision = _world_revision_from_work(
@@ -252,7 +252,7 @@ def create_scenario_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, request.world_id)
         scenario_id = str(request.scenario_id or "").strip()
@@ -293,7 +293,7 @@ def publish_scenario_revision(
     database: Any | None = None,
 ) -> dict[str, Any]:
     document = _ensure_hash(document, "content_hash")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_scenario_writable(work, context, document.scenario_id)
         next_row = work.connection.execute(
@@ -351,7 +351,7 @@ def bind_campaign_world(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_scenario_writable(work, context, binding.scenario_id)
         world_revision = _world_revision_from_work(
@@ -393,7 +393,7 @@ def read_campaign_world_binding(
     *,
     database: Any | None = None,
 ) -> dict[str, Any] | None:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
         work.rollback()
@@ -407,7 +407,7 @@ def load_release_definitions(
     database: Any | None = None,
 ) -> dict[str, GridMapDefinition]:
     require_release_authorship(world_revision, release)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         definitions = _definitions_from_work(work, context, release)
         work.rollback()
@@ -424,7 +424,7 @@ def load_published_resources(
     scenario_revision: int,
     database: Any | None = None,
 ) -> tuple[WorldRevisionDocument, WorldReleaseDocument, ScenarioRevisionDocument]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         revision = work.world_scenarios.get_world_revision(
             context, world_id, world_revision

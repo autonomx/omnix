@@ -3,8 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   rpgWorldDeletionClient,
   type RpgWorldDeletionResponse,
-} from '../../api/rpgWorldDeletionClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldDeletionClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import './RpgWorldDeleteDialog.css';
 
 interface RpgWorldDeleteDialogProps {

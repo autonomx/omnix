@@ -3,30 +3,20 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import pytest
-
 from app.trading import strategy_dynamic_discovery as dd
-from app.trading.strategy_discovery_acquisition import CausalMarketObservation
+from app.trading.strategy_discovery_acquisition import (
+    CausalMarketObservation,
+    PersistedCatalystIntelligenceSource,
+    install_default_discovery_sources,
+    registered_discovery_sources,
+    unregister_discovery_acquisition_source,
+)
 from app.trading.strategy_discovery_replay import (
     DiscoveryOpportunityLabel,
     DiscoveryReplayObservation,
     replay_dynamic_discovery,
 )
-from app.trading.strategy_dynamic_discovery_completeness import (
-    CompleteDynamicCandidate,
-    CompleteTrendDurabilityOutcome,
-    _complete_evaluate_shadow_qualification,
-    _complete_opportunity_characterization,
-    _complete_strategy_rankings,
-    _complete_trend_outcome_from_ohlc,
-    _replay_dynamic_discovery_complete,
-    apply_discovery_scan,
-)
-from app.trading.strategy_dynamic_discovery_completeness_refinements import (
-    _apply_scan_refined,
-    _build_replay_result,
-)
-from app.trading.strategy_repository import StrategyEvent
+from app.trading.strategy_interday_postclose import label_candidate_outcome
 
 
 SESSION = date(2026, 9, 11)
@@ -79,9 +69,19 @@ def _candidate(symbol: str, score: float, at: datetime = T0):
     return dd.merge_discovery_event(None, event)
 
 
+def test_default_acquisition_includes_market_and_persisted_catalyst_sources():
+    before = {row.name for row in registered_discovery_sources()}
+    install_default_discovery_sources()
+    names = {row.name for row in registered_discovery_sources()}
+    assert "finviz_live_leaders" in names
+    assert PersistedCatalystIntelligenceSource.name in names
+    for name in names - before:
+        unregister_discovery_acquisition_source(name)
+
+
 def test_live_and_replay_share_leader_fallback_and_lifecycle():
     first = _observation(T0, gap=10.0, rvol=0.0)
-    live_first = apply_discovery_scan(
+    live_first = dd.apply_discovery_scan(
         previous_state={}, observations=(first,), watermark=T0, session_date=SESSION
     )
     assert len(live_first.candidates) == 1
@@ -89,7 +89,7 @@ def test_live_and_replay_share_leader_fallback_and_lifecycle():
 
     weak_at = T0 + timedelta(minutes=31)
     weak = _observation(weak_at, source="fixture", gap=1.0, rvol=0.0)
-    live_second = apply_discovery_scan(
+    live_second = dd.apply_discovery_scan(
         previous_state={row.instrument_id: row for row in live_first.candidates},
         observations=(weak,),
         watermark=weak_at,
@@ -97,7 +97,7 @@ def test_live_and_replay_share_leader_fallback_and_lifecycle():
     )
     assert live_second.candidates[0].lifecycle == dd.CandidateLifecycleState.COOLING
 
-    replay_result = _replay_dynamic_discovery_complete(
+    replay_result = replay_dynamic_discovery(
         session_date=SESSION,
         observations=(
             DiscoveryReplayObservation(
@@ -123,14 +123,14 @@ def test_live_and_replay_share_leader_fallback_and_lifecycle():
 
 def test_current_attention_drops_while_peak_is_retained_for_analysis():
     hot = _observation(T0, gap=30.0, rvol=200.0)
-    first = apply_discovery_scan(
+    first = dd.apply_discovery_scan(
         previous_state={}, observations=(hot,), watermark=T0, session_date=SESSION
     ).candidates[0]
     assert first.attention_score > 35
 
     later = T0 + timedelta(minutes=5)
     cool = _observation(later, gap=10.0, rvol=0.0)
-    second = apply_discovery_scan(
+    second = dd.apply_discovery_scan(
         previous_state={first.instrument_id: first},
         observations=(cool,),
         watermark=later,
@@ -142,10 +142,10 @@ def test_current_attention_drops_while_peak_is_retained_for_analysis():
 
 def test_scan_heartbeat_does_not_rewrite_last_causal_observation_time():
     first_observation = _observation(T0, gap=30.0, rvol=200.0)
-    first = _apply_scan_refined(
+    first = dd.apply_discovery_scan(
         previous_state={}, observations=(first_observation,), watermark=T0, session_date=SESSION
     ).candidates[0]
-    heartbeat = _apply_scan_refined(
+    heartbeat = dd.apply_discovery_scan(
         previous_state={first.instrument_id: first},
         observations=(),
         watermark=T0 + timedelta(minutes=5),
@@ -171,11 +171,11 @@ def test_catalyst_decay_is_operational_in_shared_state():
         source="persisted_catalyst_intelligence_v2",
         catalyst_payload=catalyst,
     )
-    first = apply_discovery_scan(
+    first = dd.apply_discovery_scan(
         previous_state={}, observations=(observation,), watermark=T0, session_date=SESSION
     ).candidates[0]
     later = T0 + timedelta(minutes=60)
-    decayed = apply_discovery_scan(
+    decayed = dd.apply_discovery_scan(
         previous_state={first.instrument_id: first},
         observations=(),
         watermark=later,
@@ -187,7 +187,7 @@ def test_catalyst_decay_is_operational_in_shared_state():
 
 def test_unknown_supply_and_promo_are_neutral_not_benign():
     candidate = _candidate("equity:NASDAQ:UNK", 80)
-    char = _complete_opportunity_characterization(
+    char = dd.build_opportunity_characterization(
         candidate,
         observed_at=T0,
         catalyst=None,
@@ -216,7 +216,7 @@ def test_experiment_cohorts_are_independent():
         source="persisted_catalyst_intelligence_v2",
         catalyst_payload=catalyst,
     )
-    scan = apply_discovery_scan(
+    scan = dd.apply_discovery_scan(
         previous_state={}, observations=(observation,), watermark=T0, session_date=SESSION
     )
     symbol = observation.instrument_id
@@ -241,7 +241,7 @@ def test_catalyst_first_candidate_can_gain_later_market_payload_without_new_admi
         source="persisted_catalyst_intelligence_v2",
         catalyst_payload=catalyst,
     )
-    first = apply_discovery_scan(
+    first = dd.apply_discovery_scan(
         previous_state={}, observations=(first_obs,), watermark=T0, session_date=SESSION
     ).candidates[0]
 
@@ -254,7 +254,7 @@ def test_catalyst_first_candidate_can_gain_later_market_payload_without_new_admi
         rvol=0.0,
         candidate_payload=payload,
     )
-    second = apply_discovery_scan(
+    second = dd.apply_discovery_scan(
         previous_state={first.instrument_id: first},
         observations=(market_obs,),
         watermark=later,
@@ -265,7 +265,7 @@ def test_catalyst_first_candidate_can_gain_later_market_payload_without_new_admi
 
 def test_future_observation_is_rejected_and_counted_not_self_authorized():
     future = _observation(T0 + timedelta(seconds=1), gap=30, rvol=100)
-    scan = apply_discovery_scan(
+    scan = dd.apply_discovery_scan(
         previous_state={}, observations=(future,), watermark=T0, session_date=SESSION
     )
     assert scan.candidates == ()
@@ -291,7 +291,7 @@ def test_per_arm_selection_can_keep_common_rank_outside_top_five():
             execution_quality=100,
         )
         rows.append(candidate.model_copy(update={"characterization": char}))
-    ranked = _complete_strategy_rankings(rows)
+    ranked = dd.apply_strategy_rankings(rows)
     special = next(row for row in ranked if row.instrument_id.endswith("T11"))
     assert special.strategy_ranks["deterministic-v2"] == 1
     assert "deterministic-v2" in special.selected_for_strategies
@@ -313,10 +313,10 @@ def test_qualification_enforces_execution_drawdown_lcb_stress_and_holdout():
         "data_reliability_fraction": 0.99,
         "causality_violations": 0,
     }
-    passing = _complete_evaluate_shadow_qualification(metrics)
+    passing = dd.evaluate_shadow_qualification(metrics)
     assert passing.eligible_for_review is True
     assert passing.auto_paper_authorized is False
-    failing = _complete_evaluate_shadow_qualification(
+    failing = dd.evaluate_shadow_qualification(
         {**metrics, "max_drawdown_r": -6.0}
     )
     assert failing.eligible_for_review is False
@@ -331,24 +331,25 @@ class _Bar:
         self.high = high
         self.low = low
         self.close = close
+        self.is_final = True
+        self.session = "regular"
 
 
 def test_discovery_label_uses_ohlc_and_stop_first_for_same_bar_ambiguity():
-    bar = _Bar(T0, 100, 111, 94, 110)
-    outcome = _complete_trend_outcome_from_ohlc(
-        "equity:NASDAQ:X",
-        discovery_at=T0 - timedelta(hours=1),
-        reference_at=T0,
-        reference_price=100,
-        bars=(bar,),
-        stop_fraction=0.05,
-        reference_mode="regular_open_after_premarket_discovery",
+    regular_open = datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)
+    discovery_at = regular_open - timedelta(hours=1)
+    candidate = _candidate("equity:NASDAQ:X", 80, discovery_at)
+    bar = _Bar(regular_open, 100, 111, 94, 110)
+    outcome = label_candidate_outcome(
+        SimpleNamespace(bars=lambda *args: SimpleNamespace(bars=(bar,))),
+        candidate,
+        observed_at=regular_open + timedelta(minutes=2),
     )
-    assert isinstance(outcome, CompleteTrendDurabilityOutcome)
+    assert isinstance(outcome, dd.TrendDurabilityOutcome)
     assert outcome.plus_1r_before_minus_1r is False
     assert outcome.plus_2r_before_minus_1r is False
-    assert outcome.discovery_at == T0 - timedelta(hours=1)
-    assert outcome.tradeable_reference_at == T0
+    assert outcome.discovery_at == discovery_at
+    assert outcome.tradeable_reference_at == regular_open
     assert outcome.label_kind == "discovery_path"
 
 
@@ -376,20 +377,30 @@ def test_replay_uses_same_finviz_fallback_as_live():
 
 
 def test_replay_precision_ignores_unlabeled_symbols_instead_of_calling_them_false_positive():
-    candidate = _candidate("equity:NASDAQ:LABELED", 80)
-    unlabeled = _candidate("equity:NASDAQ:UNKNOWN", 70)
+    candidate = "equity:NASDAQ:LABELED"
+    unlabeled = "equity:NASDAQ:UNKNOWN"
     label = DiscoveryOpportunityLabel(
-        instrument_id=candidate.instrument_id,
+        instrument_id=candidate,
         opportunity=True,
         first_actionable_at=T0,
     )
-    result = _build_replay_result(
+    result = replay_dynamic_discovery(
         session_date=SESSION,
-        state={candidate.instrument_id: candidate, unlabeled.instrument_id: unlabeled},
-        events=(),
+        observations=(
+            DiscoveryReplayObservation(
+                instrument_id=candidate,
+                observed_at=T0,
+                source="fixture",
+                market=_market(T0, gap=30, rvol=20),
+            ),
+            DiscoveryReplayObservation(
+                instrument_id=unlabeled,
+                observed_at=T0,
+                source="fixture",
+                market=_market(T0, gap=25, rvol=20),
+            ),
+        ),
         labels=(label,),
-        observations=(),
-        fingerprint_payload={"test": True},
     )
     assert result.discovery_precision == 1.0
     assert result.false_positive_symbols == ()

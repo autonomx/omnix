@@ -1,15 +1,17 @@
 """Validated import of portable RPG world archives into durable authoring state."""
 from __future__ import annotations
 
-from pathlib import Path
+import logging
+
 from typing import Any, Iterable, Mapping
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.rpg_repository import canonical_json
+from app.assets.content import asset_available, asset_checksum
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
+from app.security.tenant_context import current_tenant
+from app.rpg.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import GridMapDefinition
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .contracts import ScenarioRevisionDocument
 from .map_blueprint_authoring import MapBlueprintDocument, reconcile_blueprint_scenarios
@@ -22,6 +24,8 @@ from .world_bundle import (
     sha256_hex,
 )
 from .world_bundle_transform import TransformedWorldBundle, transform_world_bundle
+
+logger = logging.getLogger(__name__)
 
 
 class WorldBundleImportConflict(ValueError):
@@ -59,7 +63,7 @@ def _prepare_assets(
     transformed: TransformedWorldBundle,
     store: SharedAssetStore,
 ) -> tuple[list[AssetRecord], list[str], dict[str, str]]:
-    existing = {asset.id: asset for asset in store.list_assets().assets}
+    existing = {asset.id: asset for asset in iter_assets(store)}
     occupied = set(existing)
     created: list[AssetRecord] = []
     reused: list[str] = []
@@ -84,8 +88,7 @@ def _prepare_assets(
         asset_map[source_id] = target_id
         current = existing.get(target_id)
         if current is not None:
-            current_path = Path(str(current.storage_path or ""))
-            if current_path.is_file() and sha256_hex(current_path.read_bytes()) == descriptor.checksum_sha256:
+            if asset_available(current) and asset_checksum(current) == descriptor.checksum_sha256:
                 reused.append(target_id)
                 continue
             raise WorldBundleImportConflict(f"world_bundle_asset_conflict:{target_id}")
@@ -128,7 +131,7 @@ def _prepare_assets(
     return created, reused, asset_map
 
 
-def _install_assets(store: SharedAssetStore, assets: Iterable[AssetRecord]) -> list[str]:
+def _register_assets(store: SharedAssetStore, assets: Iterable[AssetRecord]) -> list[str]:
     installed: list[str] = []
     try:
         for asset in assets:
@@ -146,6 +149,7 @@ def _cleanup_assets(store: SharedAssetStore, asset_ids: Iterable[str]) -> None:
         try:
             store.delete_asset(asset_id)
         except Exception:
+            logger.debug("suppressed error in %s", "_cleanup_assets", exc_info=True)
             continue
 
 
@@ -432,7 +436,7 @@ def import_world_bundle(
     if not target:
         raise ValueError("world_bundle_target_world_id_required")
     store = asset_store or default_asset_store()
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         if work.world_scenarios.get_world(context, target) is not None:
             work.rollback()
@@ -445,11 +449,11 @@ def import_world_bundle(
         bundle_sha256=parsed.bundle_sha256,
         existing_scenario_ids=existing["scenario"],
         existing_map_ids=existing["map"],
-        existing_asset_ids={asset.id for asset in store.list_assets().assets},
+        existing_asset_ids={asset.id for asset in iter_assets(store)},
         existing_run_ids=existing["run"],
     )
     created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, store)
-    installed_assets = _install_assets(store, created_assets)
+    installed_assets = _register_assets(store, created_assets)
     try:
         with unit_of_work(database) as work:
             if work.world_scenarios.get_world(context, target) is not None:

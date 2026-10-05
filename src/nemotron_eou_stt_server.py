@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
 import shutil
 import subprocess
 import time
@@ -13,6 +12,9 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from app.config.env import env_int, env_str
+from app.runtime.net import allowed_origins, bind_host
+from app.security.model_service import ModelServiceMiddleware
 
 from app.providers.nemotron_eou_live_websocket import (
     PROVIDER_NAME,
@@ -28,11 +30,12 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(ModelServiceMiddleware)
 install_nemotron_eou_websocket(app, manager=model_manager)
 
 
@@ -42,7 +45,7 @@ async def warm_hybrid_stt() -> None:
 
 
 @app.get("/health")
-async def health() -> dict[str, object]:
+def health() -> dict[str, object]:
     details = model_manager.health_details()
     return {
         "ok": model_manager.loaded,
@@ -53,7 +56,7 @@ async def health() -> dict[str, object]:
 
 
 @app.get("/authorityz")
-async def authorityz(language: str = "en", mode: str = "auto") -> dict[str, object]:
+def authorityz(language: str = "en", mode: str = "auto") -> dict[str, object]:
     normalized_language = language.strip().lower()
     english = normalized_language in {"en", "en-us", "en_us", "english"}
     ready = model_manager.loaded
@@ -132,7 +135,7 @@ def _decode_audio(payload: bytes, filename: str) -> tuple[bytes, float]:
 
 
 def _ffmpeg_binary() -> str:
-    configured = os.environ.get("OMNIX_FFMPEG", "").strip()
+    configured = (env_str("OMNIX_FFMPEG", "") or "").strip()
     if configured and Path(configured).is_file():
         return configured
     executable = shutil.which("ffmpeg")
@@ -174,7 +177,7 @@ async def transcribe(
         text = await asyncio.to_thread(model_manager.transcribe_pcm16, pcm16)
         inference_ms = (time.perf_counter() - started) * 1000.0
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="model_service_error") from exc
     return {
         "success": bool(text),
         "text": text,
@@ -186,10 +189,14 @@ async def transcribe(
 
 
 def main() -> None:
-    port = int(os.environ.get("OMNIX_STT_PORT", "5201"))
-    print(f"[STT] Starting {PROVIDER_NAME} on http://0.0.0.0:{port}")
+    from app.observability.logging import configure_logging
+
+    configure_logging()
+    host = bind_host()
+    port = env_int("OMNIX_STT_PORT", 5201, minimum=1, maximum=65535)
+    print(f"[STT] Starting {PROVIDER_NAME} on http://{host}:{port}")
     print("[STT] Nemotron is authoritative transcript; Parakeet Realtime EOU is endpoint-only")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

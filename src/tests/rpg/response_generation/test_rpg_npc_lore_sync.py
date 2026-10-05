@@ -6,7 +6,9 @@ from app.rpg.narrative_engine import (
     campaign_bible_evidence,
 )
 from app.rpg.session.genesis import turn_grounding
+from app.rpg.session.genesis import npc_lore_projection
 from app.rpg.session.genesis.npc_lore_projection import ensure_encountered_npc_lore
+from app.rpg.world import npc_biography_registry
 
 
 def _session() -> dict:
@@ -31,7 +33,9 @@ def _empty_bible() -> dict:
     }
 
 
-def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
+def test_encountered_bran_gets_one_player_known_bio_and_dossier(monkeypatch) -> None:
+    monkeypatch.setattr(npc_lore_projection, "load_npc_profile", lambda _npc_id: {})
+    monkeypatch.setattr(npc_biography_registry, "get_file_npc_profile", None)
     updated, ensured, created, changed = ensure_encountered_npc_lore(
         _empty_bible(),
         _session(),
@@ -45,7 +49,10 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
     assert bran["kind"] == "npc"
     assert bran["profile_authority"] == "campaign_bible"
     assert bran["visibility"] == "player_known"
-    assert "watches debts carefully" in bran["description"]
+    assert bran["description"] == (
+        "Bran keeps the tavern running, watches debts carefully, and treats rumors "
+        "as useful only when they come from reliable mouths."
+    )
     assert bran["provenance"]["first_seen_tick"] == 7
 
     document = updated["documents"][0]
@@ -53,7 +60,7 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
     assert document["topic_id"] == "npcs"
     assert document["title"] == "Bran"
     assert document["visibility"] == "player_known"
-    assert "watches debts carefully" in document["full_text"]
+    assert bran["description"] in document["full_text"]
     assert "old mill debts" not in document["full_text"].casefold()
     assert updated["discovery_state"]["pages"][document["document_id"]] == "learned"
     assert updated["discovery_state"]["entities"]["npc:Bran"] == "learned"
@@ -69,7 +76,9 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
     assert len(unchanged["documents"]) == 1
 
 
-def test_encountered_npc_bio_is_searchable_gameplay_evidence() -> None:
+def test_encountered_npc_bio_is_searchable_gameplay_evidence(monkeypatch) -> None:
+    monkeypatch.setattr(npc_lore_projection, "load_npc_profile", lambda _npc_id: {})
+    monkeypatch.setattr(npc_biography_registry, "get_file_npc_profile", None)
     bible, _ensured, _created, _changed = ensure_encountered_npc_lore(
         _empty_bible(),
         _session(),

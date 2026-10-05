@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import WorldSimState, WorldSimTickResult
+from .models import WorldSimState
 
 
 class WorldSimPresenter:
@@ -86,52 +86,6 @@ class WorldSimPresenter:
             "rumor_overlays": rumor_heat,
             "metadata": {},
         }
-
-    def present_recent_effects(
-        self, state: WorldSimState | None
-    ) -> list[dict]:
-        """Return player/GM-safe summaries of recent offscreen developments."""
-        if state is None:
-            return []
-
-        results: list[dict] = []
-        for effect in state.recent_effects:
-            results.append({
-                "effect_type": effect.get("effect_type", ""),
-                "scope": effect.get("scope", ""),
-                "target_id": effect.get("target_id"),
-                "summary": self._effect_summary(effect),
-            })
-        return results
-
-    def present_tick_result(
-        self, result: WorldSimTickResult | None
-    ) -> dict:
-        """Present a tick result for action-result UX and debugging."""
-        if result is None:
-            return {
-                "tick": None,
-                "advanced": False,
-                "effect_count": 0,
-                "summary_count": 0,
-                "journal_count": 0,
-            }
-
-        return {
-            "tick": result.tick,
-            "advanced": result.advanced,
-            "effect_count": len(result.generated_effects),
-            "summary_count": len(result.generated_summaries),
-            "journal_count": len(result.journal_payloads),
-        }
-
-    def present_journal_payloads(
-        self, result: WorldSimTickResult | None
-    ) -> list[dict]:
-        """Return journal-ready payloads from a tick result."""
-        if result is None:
-            return []
-        return [dict(j) for j in result.journal_payloads]
 
     # ------------------------------------------------------------------
     # Internal helpers

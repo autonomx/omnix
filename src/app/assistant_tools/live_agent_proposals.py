@@ -1,6 +1,8 @@
 """Translate proposal-only Live Agent output into governed assistant tool previews."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import os
@@ -38,7 +40,6 @@ def live_agent_tool_proposals(
             session_id=session_id,
             proposal_id=proposal_id,
             input=input_payload,
-            approved=False,
         )
         decision = review_assistant_tool_request(request)
         missing_fields = _missing_calendar_fields(action_id, input_payload)
@@ -64,7 +65,7 @@ def live_agent_tool_proposals(
 
 
 def live_agent_planner_context() -> dict[str, str]:
-    timezone_name = os.environ.get("OMNIX_TIMEZONE", "UTC").strip() or "UTC"
+    timezone_name = environment().get("OMNIX_TIMEZONE", "UTC").strip() or "UTC"
     return {
         "current_datetime": datetime.now().astimezone().isoformat(timespec="seconds"),
         "user_timezone": timezone_name,
@@ -84,7 +85,7 @@ def _normalize_calendar_input(user_request: str, action_id: str, value: object) 
     if action_id == "calendar.create_event":
         lower = user_request.lower()
         payload.setdefault("title", "Reminder" if "remind" in lower else "Meeting" if "meeting" in lower else "Calendar event")
-        payload.setdefault("timezone", os.environ.get("OMNIX_TIMEZONE", "UTC").strip() or "UTC")
+        payload.setdefault("timezone", environment().get("OMNIX_TIMEZONE", "UTC").strip() or "UTC")
         if "remind" in lower or "reminder" in lower:
             payload.setdefault("reminder_minutes", 0)
     return payload
@@ -113,3 +114,39 @@ def _is_iso_datetime(value: str) -> bool:
 def _proposal_id(session_id: str, message_id: str, action_id: str, index: int, payload: dict[str, Any]) -> str:
     source = json.dumps([session_id, message_id, action_id, index, payload], sort_keys=True, default=str)
     return f"proposal-{hashlib.sha256(source.encode('utf-8')).hexdigest()[:20]}"
+
+
+class AssistantLiveAgentTools:
+    """Assistant tools' implementation of chat's ``LIVE_AGENT_TOOLS`` port (PA-1.3)."""
+
+    @property
+    def read_tool_names(self) -> frozenset[str]:
+        from .kasa_plan import KASA_READ_TOOLS
+
+        return frozenset(KASA_READ_TOOLS)
+
+    def is_device_tool(self, name: str) -> bool:
+        from .kasa_plan import is_kasa_tool_name
+
+        return is_kasa_tool_name(name)
+
+    def read_request(self, call: Any, *, session_id: str) -> AssistantToolRequest | None:
+        from .kasa_plan import kasa_request_from_tool_call
+
+        return kasa_request_from_tool_call(call, session_id=session_id)
+
+    def planner_context(self) -> dict[str, str]:
+        return live_agent_planner_context()
+
+    def tool_proposals(self, *, user_request: str, session_id: str, source_message_id: str,
+                       mode_result: dict[str, Any]) -> list[dict[str, Any]]:
+        return live_agent_tool_proposals(user_request=user_request, session_id=session_id,
+                                         source_message_id=source_message_id, mode_result=mode_result)
+
+    def first_pending_write(self, mode_result: dict[str, Any], *, session_id: str) -> AssistantToolRequest | None:
+        from .kasa_plan import first_pending_kasa_write
+
+        return first_pending_kasa_write(mode_result, session_id=session_id)
+
+    def parse_request(self, raw: dict[str, Any]) -> AssistantToolRequest:
+        return AssistantToolRequest.model_validate(raw)

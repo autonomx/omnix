@@ -161,15 +161,3 @@ class NPCMind:
         self.last_decision = decision.to_dict()
         return decision
 
-    def apply_player_action_feedback(self, action_event: Dict[str, Any], npc_context: Dict[str, Any], tick: int) -> None:
-        if self._event_is_relevant(action_event, npc_context):
-            self.memory.remember(action_event, tick=tick, index=0)
-            self.beliefs.update_from_event(action_event, npc_context=npc_context)
-
-    def build_narrator_context(self) -> Dict[str, Any]:
-        return {
-            "memory_summary": self.memory.summary(limit=5),
-            "belief_summary": self.beliefs.summarize(limit=8),
-            "active_goals": [dict(goal) for goal in self.goal_engine.goals],
-            "last_decision": dict(self.last_decision),
-        }

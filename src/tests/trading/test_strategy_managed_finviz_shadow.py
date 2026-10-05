@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import asyncio
+import logging
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from fastapi import FastAPI
 
@@ -15,8 +17,28 @@ from app.trading.strategy_managed_finviz_shadow import (
     managed_finviz_shadow_config,
     provision_managed_finviz_shadow_strategy,
 )
-from app.trading.strategy_monitor import register_trading_strategy_monitor
+from app.runtime.capabilities import RuntimeCapabilities
+from app.runtime.config import RuntimeConfig
+from app.runtime.features import FeatureContext
+from app.trading.strategy_monitor import create_trading_strategy_monitor_task
 from app.trading.strategy_repository import TradingStrategyConfigDocument
+
+
+
+
+def _strategy_monitor_worker(app):
+    config = RuntimeConfig()
+    return create_trading_strategy_monitor_task(
+        FeatureContext(
+            feature_id="trading",
+            config=None,
+            runtime=config,
+            capabilities=RuntimeCapabilities.from_config(config),
+            services=None,
+            logger=logging.getLogger("tests.trading"),
+            runtime_state=app.state,
+        )
+    )
 
 
 class FakePaperRepository:
@@ -330,9 +352,12 @@ def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
         raise AssertionError("missing explicit account should fail closed")
 
 
-def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
     app = FastAPI()
-    monitor = register_trading_strategy_monitor(app)
+    worker = _strategy_monitor_worker(app)
+    assert worker is not None
+    monitor = worker.monitor
     strategy_repo = object()
     paper_repo = object()
     monitor.strategy_repository_factory = lambda: strategy_repo
@@ -365,8 +390,8 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
         fake_provision,
     )
 
-    startup = app.router.on_startup[-1]
-    asyncio.run(startup())
+    startup = worker.startup[0]
+    await startup()
 
     assert calls == [(strategy_repo, paper_repo)]
     assert monitor.managed_finviz_shadow_provision == {
@@ -378,12 +403,15 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
         "detail": None,
     }
     assert monitor.managed_finviz_shadow_provision_error is None
-    assert monitor._task is None
+    assert monitor.scheduled is False
 
 
-def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
     app = FastAPI()
-    monitor = register_trading_strategy_monitor(app)
+    worker = _strategy_monitor_worker(app)
+    assert worker is not None
+    monitor = worker.monitor
     monitor.strategy_repository_factory = lambda: object()
     monitor.paper_repository_factory = lambda: object()
 
@@ -407,8 +435,8 @@ def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> No
         fail_provision,
     )
 
-    startup = app.router.on_startup[-1]
-    asyncio.run(startup())
+    startup = worker.startup[0]
+    await startup()
 
     assert monitor.managed_finviz_shadow_provision is None
     assert (
@@ -418,7 +446,7 @@ def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> No
     assert monitor.last_error == (
         "managed_finviz_shadow_provision: RuntimeError: database unavailable"
     )
-    assert monitor._task is None
+    assert monitor.scheduled is False
 
 
 def test_legacy_test_mode_does_not_autoprovision_without_opt_in(monkeypatch) -> None:

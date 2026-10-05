@@ -1,3 +1,5 @@
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
+
 type AssetRecordLike = {
   id?: unknown;
   module?: unknown;
@@ -9,8 +11,7 @@ type AssetListLike = {
   [key: string]: unknown;
 };
 
-let installed = false;
-let previousFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
 
 function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
   if (init?.method) return init.method.toUpperCase();
@@ -83,12 +84,12 @@ function responseWithAssets(response: Response, payload: AssetListLike, assets: 
   });
 }
 
-export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): void {
-  if (installed || typeof window === 'undefined') return;
+/** Returns a function that removes it. `fetchImpl` replaces the rest of the pipeline (tests). */
+export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): () => void {
+  if (removeMiddleware || typeof window === 'undefined') return () => undefined;
 
-  previousFetch = window.fetch;
-  const delegate = fetchImpl ?? window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const remove = registerFetchMiddleware('voice-library-asset-fallback', async (input, init, next) => {
+    const delegate = fetchImpl ?? next;
     const rawUrl = requestUrl(input);
     if (requestMethod(input, init) !== 'GET' || !isAssetListRequest(rawUrl)) {
       return delegate(input, init);
@@ -150,12 +151,15 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): void
       });
       return response;
     }
+  });
+  removeMiddleware = remove;
+  return () => {
+    remove();
+    if (removeMiddleware === remove) removeMiddleware = null;
   };
-  installed = true;
 }
 
 export function resetVoiceLibraryAssetFallbackForTests(): void {
-  if (typeof window !== 'undefined' && previousFetch) window.fetch = previousFetch;
-  previousFetch = null;
-  installed = false;
+  removeMiddleware?.();
+  removeMiddleware = null;
 }

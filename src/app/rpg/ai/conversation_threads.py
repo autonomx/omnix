@@ -241,16 +241,3 @@ def build_conversation_thread_prompt_context(
     )
     return rows[:limit]
 
-def choose_next_thread_speaker(thread: Dict[str, Any]) -> str:
-    thread = _safe_dict(thread)
-    participants = [_safe_str(p) for p in _safe_list(thread.get("participants")) if _safe_str(p)]
-    if not participants:
-        return ""
-    lines = _safe_list(thread.get("lines"))
-    if not lines:
-        return participants[0]
-    last_speaker = _safe_str(_safe_dict(lines[-1]).get("speaker_id"))
-    for participant in participants:
-        if participant != last_speaker:
-            return participant
-    return participants[0]

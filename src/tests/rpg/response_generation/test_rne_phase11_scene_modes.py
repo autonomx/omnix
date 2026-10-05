@@ -70,10 +70,3 @@ def test_phase28_triggers_become_required_beats_not_separate_prose() -> None:
     purposes = [block["purpose"] for block in result["canonical_narrative_response"]["blocks"]]
     assert purposes[:2] == ["scene_establishment", "meaningful_environmental_change"]
     assert result["source"] == "narrative_engine_scene_turn_v1"
-
-
-def test_gateway_presents_scene_modes_through_single_entry_before_shadow() -> None:
-    source = (REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(encoding="utf-8")
-    assert source.index("present_authoritative_turn") < source.index("attach_shadow_report")
-    assert 'rpg_pipeline_span("turn.narrative_present")' in source
-    assert "canonicalize_scene_turn_result" not in source

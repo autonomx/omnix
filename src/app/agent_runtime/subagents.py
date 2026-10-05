@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from .evidence import classify_evidence, compile_task_authority, task_requires_workspace_mutation
-from .profiles import get_agent_profile
+from .profiles import get_agent_profile, profile_produces_diff
 from .contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
@@ -122,7 +122,7 @@ def derive_child_spec(
         artifact_policy=parent_spec.artifact_policy,
         expected_artifacts=(
             ["diff"]
-            if profile_id == "coding" and task_requires_workspace_mutation(effective_task)
+            if profile_produces_diff(profile_id) and task_requires_workspace_mutation(effective_task)
             else []
         ),
         persistence_policy=parent_spec.persistence_policy,

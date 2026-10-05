@@ -9,7 +9,8 @@ All logic is deterministic and bounded — no randomness.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.runtime.clock import utc_now
+
 from typing import Any, Dict, List, Set
 
 # ── Hard caps ─────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ def _safe_str(v: Any) -> str:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 
 def _is_internal_maintenance_event(raw: Dict[str, Any]) -> bool:

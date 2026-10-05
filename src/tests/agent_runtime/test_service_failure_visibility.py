@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.agent_runtime import service as service_module
+from app.agent_runtime import service_core as core_module
 from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, ValidationSpec
 from app.agent_runtime.service import AgentRunService
 
@@ -70,8 +71,9 @@ def test_claimed_command_is_applied_while_runtime_events_are_serialized(monkeypa
     service = object.__new__(AgentRunService)
     service.database = object()
     service.context = object()
-    service._lock = lock
-    service._ensure_supervisor = MagicMock()
+    service._run_lock = lambda _run_id: lock
+    service.runtime = MagicMock()
+    service.runtime.get_status.return_value = "running"
     service._cancel_descendants = MagicMock()
     service._maybe_finalize_parent_in_repository = MagicMock()
     service.get = MagicMock(return_value=snapshot)
@@ -82,8 +84,8 @@ def test_claimed_command_is_applied_while_runtime_events_are_serialized(monkeypa
         return snapshot
 
     service._apply_claimed_command = apply_claimed
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", _Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = _Repository
 
     service.command(command)
 
@@ -126,8 +128,8 @@ def test_command_failure_terminalizes_cancel_request(monkeypatch) -> None:
     service.worker_id = "worker-1"
     service.runtime = runtime
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", _Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = _Repository
     monkeypatch.setattr(service, "_cancel_descendants", lambda _run_id: None)
 
     command = AgentRunCommand(run_id="run-1", command_type="cancel")
@@ -173,11 +175,12 @@ def test_runtime_failure_cancels_desired_state_and_closes_runtime(monkeypatch) -
     service.database = object()
     service.context = object()
     service.worker_id = "worker-1"
+    service.job_store = None
     service.runtime = SimpleNamespace(close_run=closed)
-    service._lock = _TrackingLock()
+    service._run_lock = lambda _run_id: _TrackingLock()
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(
@@ -220,11 +223,12 @@ def test_late_event_closes_stale_terminal_runtime(monkeypatch) -> None:
     service.database = object()
     service.context = object()
     service.worker_id = "worker-1"
+    service.job_store = None
     service.runtime = SimpleNamespace(close_run=closed)
-    service._lock = _TrackingLock()
+    service._run_lock = lambda _run_id: _TrackingLock()
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(run_id=spec.run_id, event_type="run.started")
@@ -263,16 +267,17 @@ def test_terminal_acceptance_closes_runtime_after_settled_event(monkeypatch) -> 
     service.database = object()
     service.context = object()
     service.worker_id = "worker-1"
+    service.job_store = None
     service.runtime = SimpleNamespace(close_run=closed)
-    service._lock = _TrackingLock()
+    service._run_lock = lambda _run_id: _TrackingLock()
     service._finalize_acceptance = lambda repository, current: repository.update_state(
         current.run_id,
         expected_revision=current.revision,
         status="completed",
     )
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(run_id=spec.run_id, event_type="run.settled")
@@ -340,14 +345,15 @@ def test_stalled_coding_run_records_advisory_without_interrupting_pi(monkeypatch
     service.context = object()
     service.worker_id = "worker-1"
     service.runtime = runtime
-    service._lock = MagicMock()
-    service._lock.__enter__.side_effect = lambda: None
-    service._lock.__exit__.return_value = False
+    run_lock = MagicMock()
+    run_lock.__enter__.side_effect = lambda: None
+    run_lock.__exit__.return_value = False
+    service._run_lock = lambda _run_id: run_lock
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repository
 
     service._supervise_stalled_run(spec.run_id)
     service._supervise_stalled_run(spec.run_id)
@@ -413,14 +419,15 @@ def test_stalled_run_terminalizes_after_recovery_limit(monkeypatch) -> None:
     service.context = object()
     service.worker_id = "worker-1"
     service.runtime = runtime
-    service._lock = MagicMock()
-    service._lock.__enter__.side_effect = lambda: None
-    service._lock.__exit__.return_value = False
+    run_lock = MagicMock()
+    run_lock.__enter__.side_effect = lambda: None
+    run_lock.__exit__.return_value = False
+    service._run_lock = lambda _run_id: run_lock
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repository
 
     service._supervise_stalled_run(spec.run_id)
 
@@ -463,6 +470,7 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
         ),
     ]
     updates: list[dict[str, object]] = []
+    queued_commands = []
 
     class _Repository:
         def latest_task_revision(self, _run_id):
@@ -488,12 +496,15 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
             updates.append(kwargs)
             return snapshot.model_copy(update=kwargs)
 
-    dispatched = []
+        def enqueue_command_with_status(self, command):
+            queued_commands.append(command)
+            return command, "pending"
+
     service = object.__new__(AgentRunService)
     service.worker_id = "worker-1"
     service.runtime = SimpleNamespace(
         get_status=lambda _run_id: snapshot,
-        command=lambda command: dispatched.append(command) or snapshot,
+        command=MagicMock(side_effect=AssertionError("promote worker dispatched a local command")),
     )
     service._capture_diff = MagicMock()
     service._children_terminal_state = MagicMock(return_value=(True, False))
@@ -501,9 +512,9 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
 
     service._finalize_acceptance(_Repository(), snapshot)
 
-    assert len(dispatched) == 1
-    assert dispatched[0].command_type == "resume"
-    retry_message = str(dispatched[0].payload["message"])
+    assert len(queued_commands) == 1
+    assert queued_commands[0].command_type == "resume"
+    retry_message = str(queued_commands[0].payload["message"])
     assert "Continue the same task; do not stop yet" in retry_message
     assert "unrelated passing test" in retry_message
     assert "pre-existing workspace change" in retry_message
@@ -514,11 +525,12 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
         if event.event_type == "acceptance.completed"
     ][-1]
     assert completed.payload["retrying"] is True
+    service.runtime.command.assert_not_called()
     assert updates[-1]["status"] == "running"
     assert updates[-1]["last_error"] is None
 
 
-def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> None:
+def test_acceptance_retry_stays_queued_for_the_run_owner(monkeypatch) -> None:
     spec = AgentRunSpec(
         run_id="run-retry-transport-fail",
         task="Fix the code",
@@ -550,6 +562,7 @@ def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> Non
     ]
     state = {"snapshot": snapshot}
     updates = []
+    queued_commands = []
 
     class _Repository:
         def latest_task_revision(self, _run_id):
@@ -576,11 +589,18 @@ def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> Non
             state["snapshot"] = state["snapshot"].model_copy(update=kwargs)
             return state["snapshot"]
 
+        def enqueue_command_with_status(self, command):
+            queued_commands.append(command)
+            return command, "pending"
+
     service = object.__new__(AgentRunService)
     service.worker_id = "worker-1"
+    runtime_command = MagicMock(
+        side_effect=AssertionError("promotion must leave command delivery to the run owner")
+    )
     service.runtime = SimpleNamespace(
         get_status=lambda _run_id: snapshot,
-        command=lambda _command: (_ for _ in ()).throw(RuntimeError("Pi stopped")),
+        command=runtime_command,
     )
     service._capture_diff = MagicMock()
     service._children_terminal_state = MagicMock(return_value=(True, False))
@@ -588,10 +608,11 @@ def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> Non
 
     service._finalize_acceptance(_Repository(), snapshot)
 
-    assert updates[-1]["status"] == "failed"
-    assert updates[-1]["desired_state"] == "cancelled"
-    assert "acceptance_retry_failed:RuntimeError: Pi stopped" in str(updates[-1]["last_error"])
-    assert any(event.event_type == "run.failed" for event in stored_events)
+    assert updates[-1]["status"] == "running"
+    assert updates[-1]["desired_state"] == "running"
+    assert queued_commands and queued_commands[0].command_type == "resume"
+    runtime_command.assert_not_called()
+    assert not any(event.event_type == "run.failed" for event in stored_events)
 
 
 def test_acceptance_retry_count_is_scoped_to_task_revision() -> None:
@@ -619,10 +640,10 @@ def test_acceptance_retry_count_is_scoped_to_task_revision() -> None:
 
 
 def test_nonrecoverable_acceptance_failure_is_never_retried() -> None:
-    assert service_module._acceptance_failures_retryable(
+    assert core_module._acceptance_failures_retryable(
         ["modified_paths_outside_scope"]
     ) is False
-    assert service_module._acceptance_failures_retryable(
+    assert core_module._acceptance_failures_retryable(
         ["successful_test_command"]
     ) is True
 

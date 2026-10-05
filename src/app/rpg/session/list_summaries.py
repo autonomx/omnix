@@ -124,8 +124,8 @@ def _summary_from_path(path: Path) -> Dict[str, Any]:
 def list_session_summaries_from_disk(*, limit: int | None = None) -> List[Dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().list_session_summaries(limit=limit)
+        from app.rpg.persistence.rpg_compat import list_session_summaries_from_postgres
+        return list_session_summaries_from_postgres(limit=limit)
     """Return bounded session summaries without normalizing full session payloads."""
 
     sessions: List[Dict[str, Any]] = []

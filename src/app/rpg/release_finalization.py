@@ -1,8 +1,8 @@
 """Canonical evidence and operating policy for the interactive RPG response release."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Any, Iterable
+from dataclasses import dataclass
+from typing import Any
 
 INTERACTIVE_RELEASE_VERSION = "rpg_interactive_response_release_v1"
 LOCAL_LIVE_SMOKE_ENV = "OMNIX_RPG_LIVE_SMOKE"
@@ -105,56 +105,6 @@ PHASE_EVIDENCE: tuple[ReleasePhaseEvidence, ...] = (
         "8b11adfda8aedb40a6aad11f4125a010f14aa1bb",
     ),
 )
-
-
-def build_release_evidence_index(
-    phases: Iterable[ReleasePhaseEvidence] = PHASE_EVIDENCE,
-) -> dict[str, Any]:
-    values = tuple(phases)
-    failures = validate_release_evidence(values)
-    return {
-        "format_version": INTERACTIVE_RELEASE_VERSION,
-        "ready_for_operator_validation": not failures,
-        "failures": failures,
-        "completed_phase_count": len(values),
-        "completed_phases": [asdict(item) for item in values],
-        "required_provider_free_checks": list(REQUIRED_PROVIDER_FREE_CHECKS),
-        "github_actions_policy": "provider_free_only",
-        "live_provider_validation": {
-            "execution_scope": "local_operator_only",
-            "enable_env": LOCAL_LIVE_SMOKE_ENV,
-            "github_actions_allowed": False,
-        },
-    }
-
-
-def validate_release_evidence(
-    phases: Iterable[ReleasePhaseEvidence] = PHASE_EVIDENCE,
-) -> list[str]:
-    values = tuple(phases)
-    failures: list[str] = []
-    expected = list(range(1, 12))
-    actual = [item.phase for item in values]
-    if actual != expected:
-        failures.append("phase_sequence_must_be_1_through_11")
-    if len({item.pull_request for item in values}) != len(values):
-        failures.append("duplicate_pull_request")
-    for item in values:
-        if len(item.exact_head_sha) != 40:
-            failures.append(f"phase_{item.phase}_invalid_exact_head_sha")
-        if len(item.merge_sha) != 40:
-            failures.append(f"phase_{item.phase}_invalid_merge_sha")
-        if not item.provider_free_ci:
-            failures.append(f"phase_{item.phase}_provider_backed_ci_forbidden")
-    return failures
-
-
-def assert_release_evidence_ready(
-    phases: Iterable[ReleasePhaseEvidence] = PHASE_EVIDENCE,
-) -> None:
-    failures = validate_release_evidence(phases)
-    if failures:
-        raise AssertionError(";".join(failures))
 
 
 def local_live_acceptance_criteria() -> dict[str, Any]:

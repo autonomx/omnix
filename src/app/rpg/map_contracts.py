@@ -211,10 +211,6 @@ class MapDefinition:
         if self.background and self.background.destination_bounds != self.bounds:
             raise MapContractError("background_bounds_mismatch", self.map_id)
 
-    def sorted_objects(self) -> tuple[MapObjectDefinition, ...]:
-        return tuple(sorted(self.objects, key=lambda item: item.render_order.key(item.id)))
-
-
 @dataclass(frozen=True)
 class MapRouteOverlay:
     route_id: str
@@ -310,25 +306,6 @@ def normalize_polygon(points: Sequence[Point]) -> tuple[Point, ...]:
     if _polygon_area_twice(normalized) > 0:
         normalized = tuple(reversed(normalized))
     return normalized
-
-
-def point_in_polygon(point: Point, polygon: MapPolygon) -> bool:
-    """Return true for interior and boundary points using deterministic integer math."""
-
-    x, y = point
-    inside = False
-    points = polygon.points
-    for index, left in enumerate(points):
-        right = points[(index + 1) % len(points)]
-        if _point_on_segment(point, left, right):
-            return True
-        x1, y1 = left
-        x2, y2 = right
-        if (y1 > y) != (y2 > y):
-            crossing_x = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
-            if crossing_x >= x:
-                inside = not inside
-    return inside
 
 
 def _require_id(value: str, code: str) -> None:

@@ -11,36 +11,25 @@ import type {
   MarketBar,
 } from './tradingTypes';
 import { decodeTradingFormula, evaluateTradingFormula, parseTradingFormula } from './tradingFormula';
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
+import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
+import { api } from './api/gateway';
 
 export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
 
-export type TradingCurrencyRate = {
-  base_currency: string;
-  quote_currency: string;
-  rate: number;
-  provider: string;
-  received_at: string;
-  freshness_mode: string;
-};
+export type TradingCurrencyRate = components['schemas']['CurrencyRateResponse'];
+export type TradingQuote = components['schemas']['QuoteResponse'];
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string' ? payload.detail : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Trading request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
+const trading = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading');
 
-function arrayField<T>(payload: unknown, field: string): T[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const value = (payload as Record<string, unknown>)[field];
-  return Array.isArray(value) ? value as T[] : [];
-}
+// The four trading document families share one contract.
+const DOCUMENT_PATHS = {
+  workspaces: { list: '/api/trading/workspaces', record: '/api/trading/workspaces/{record_id}' },
+  watchlists: { list: '/api/trading/watchlists', record: '/api/trading/watchlists/{record_id}' },
+  drawings: { list: '/api/trading/drawings', record: '/api/trading/drawings/{record_id}' },
+  'indicator-presets': { list: '/api/trading/indicator-presets', record: '/api/trading/indicator-presets/{record_id}' },
+} as const;
 
 export function tradingStreamUrl(instrumentId: string, interval: string, bindingId?: string | null): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -60,25 +49,16 @@ export function subscribeTradingStream(
   const socket = new WebSocket(tradingStreamUrl(instrumentId, interval, bindingId));
   socket.addEventListener('open', () => onStatus?.('live'));
   socket.addEventListener('message', (event) => {
-    try {
-      onMessage(JSON.parse(String(event.data)) as TradingStreamMessage);
-    } catch {
-      onMessage({ type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned invalid JSON.' });
-    }
+    onMessage((parseJson(tradingStreamMessageSchema, String(event.data)) as TradingStreamMessage | null)
+      ?? { type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned an invalid message.' });
   });
   socket.addEventListener('error', () => onStatus?.('error'));
   socket.addEventListener('close', () => onStatus?.('closed'));
   return () => socket.close(1000, 'chart disposed');
 }
 
-function marketQuery(
-  instrumentId: string,
-  bindingId?: string | null,
-  extra?: Record<string, string>,
-): string {
-  const query = new URLSearchParams({ instrument_id: instrumentId, ...(extra ?? {}) });
-  if (bindingId) query.set('binding_id', bindingId);
-  return query.toString();
+function barsQuery(instrumentId: string, interval: string, limit: number, bindingId?: string | null) {
+  return { instrument_id: instrumentId, interval, limit, ...(bindingId ? { binding_id: bindingId } : {}) };
 }
 
 function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument {
@@ -112,10 +92,9 @@ function isCanonicalFormulaOperand(value: string): boolean {
 async function resolveFormulaOperand(symbol: string, operandId: string): Promise<string> {
   if (isCanonicalFormulaOperand(operandId)) return operandId;
 
-  const candidates = arrayField<CanonicalInstrument>(
-    await requestJson<unknown>(`/api/trading/instruments/search?query=${encodeURIComponent(operandId || symbol)}`),
-    'instruments',
-  );
+  const candidates = (await trading(api.GET('/api/trading/instruments/search', {
+    params: { query: { query: operandId || symbol } },
+  }))).instruments;
   const normalized = normalizedFormulaSymbol(operandId || symbol);
   const match = candidates.find((candidate) => [
     candidate.display_symbol,
@@ -140,9 +119,9 @@ async function formulaBars(
     symbol,
     payload.operands[symbol] ?? symbol,
   )));
-  const responses = await Promise.all(operandIds.map((operandId) => requestJson<BarsResponse>(
-    `/api/trading/bars?${marketQuery(operandId, undefined, { interval, limit: String(limit) })}`,
-  )));
+  const responses: BarsResponse[] = await Promise.all(operandIds.map((operandId) => trading(api.GET('/api/trading/bars', {
+    params: { query: barsQuery(operandId, interval, limit) },
+  }))));
   const source = responses[0];
   if (!source) throw new Error('Arithmetic chart formula has no market data.');
 
@@ -208,84 +187,55 @@ async function formulaBars(
 }
 
 export const tradingApi = {
-  providers: async () => {
-    const payload = await requestJson<unknown>('/api/trading/providers/status');
-    return arrayField<ProviderDescriptor>(payload, 'providers');
-  },
-  instruments: async (query = '') => {
-    const payload = await requestJson<unknown>(
-      `/api/trading/instruments/search?query=${encodeURIComponent(query)}`,
-    );
-    return arrayField<CanonicalInstrument>(payload, 'instruments');
-  },
-  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null) => {
+  providers: async (): Promise<ProviderDescriptor[]> =>
+    (await trading(api.GET('/api/trading/providers/status'))).providers,
+  instruments: async (query = ''): Promise<CanonicalInstrument[]> =>
+    (await trading(api.GET('/api/trading/instruments/search', { params: { query: { query } } }))).instruments,
+  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null): Promise<BarsResponse> => {
     if (decodeTradingFormula(instrumentId)) return formulaBars(instrumentId, interval, limit);
-    return requestJson<BarsResponse>(
-      `/api/trading/bars?${marketQuery(instrumentId, bindingId, { interval, limit: String(limit) })}`,
-    );
+    return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId) } }));
   },
-  quote: (instrumentId: string, bindingId?: string | null) =>
-    requestJson<Record<string, string>>(
-      `/api/trading/quotes?${marketQuery(instrumentId, bindingId)}`,
-    ),
-  currencyRate: (baseCurrency: string, quoteCurrency: string) => {
-    const query = new URLSearchParams({ base_currency: baseCurrency, quote_currency: quoteCurrency });
-    return requestJson<TradingCurrencyRate>(`/api/trading/currency-rates?${query.toString()}`);
-  },
-  diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
-  documents: async (kind: TradingDocumentKind) => {
-    const payload = await requestJson<unknown>(`/api/trading/${kind}`);
-    return arrayField<TradingDocument>(payload, 'records');
-  },
-  createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>) =>
-    requestJson<TradingDocument>(`/api/trading/${kind}`, {
-      method: 'POST',
-      body: JSON.stringify({ record_id: recordId, payload }),
-    }),
-  updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>) =>
-    requestJson<TradingDocument>(`/api/trading/${kind}/${encodeURIComponent(record.record_id)}`, {
-      method: 'PUT',
-      headers: { 'If-Match': String(record.revision) },
-      body: JSON.stringify({ record_id: record.record_id, payload }),
-    }),
-  archiveDocument: (kind: TradingDocumentKind, record: TradingDocument) =>
-    requestJson<TradingDocument>(`/api/trading/${kind}/${encodeURIComponent(record.record_id)}`, {
-      method: 'DELETE',
-      headers: { 'If-Match': String(record.revision) },
-    }),
-  alerts: async () => {
-    const payload = await requestJson<unknown>('/api/trading/alerts', { cache: 'no-store' });
-    return arrayField<TradingAlert>(payload, 'alerts');
-  },
-  alertTriggers: async () => {
-    const payload = await requestJson<unknown>('/api/trading/alerts/triggers', { cache: 'no-store' });
-    return arrayField<TradingAlertTrigger>(payload, 'triggers');
-  },
-  createAlert: (input: TradingAlertCreateInput) =>
-    requestJson<TradingAlert>('/api/trading/alerts', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  updateAlert: (alert: TradingAlert, input: TradingAlertUpdateInput) =>
-    requestJson<TradingAlert>(`/api/trading/alerts/${encodeURIComponent(alert.alert_id)}`, {
-      method: 'PUT',
-      headers: { 'If-Match': String(alert.revision) },
-      body: JSON.stringify(input),
-    }),
-  archiveAlert: (alert: TradingAlert) =>
-    requestJson<TradingAlert>(`/api/trading/alerts/${encodeURIComponent(alert.alert_id)}`, {
-      method: 'DELETE',
-      headers: { 'If-Match': String(alert.revision) },
-    }),
-  evaluateAlerts: async (instrumentId: string, observedPrice: string, observedAt?: string) => {
-    const payload = await requestJson<unknown>('/api/trading/alerts/evaluate', {
-      method: 'POST',
-      body: JSON.stringify({
+  quote: (instrumentId: string, bindingId?: string | null): Promise<TradingQuote> =>
+    trading(api.GET('/api/trading/quotes', {
+      params: { query: { instrument_id: instrumentId, ...(bindingId ? { binding_id: bindingId } : {}) } },
+    })),
+  currencyRate: (baseCurrency: string, quoteCurrency: string): Promise<TradingCurrencyRate> =>
+    trading(api.GET('/api/trading/currency-rates', { params: { query: { base_currency: baseCurrency, quote_currency: quoteCurrency } } })),
+  diagnostics: () => trading(api.GET('/api/trading/diagnostics')),
+  documents: async (kind: TradingDocumentKind): Promise<TradingDocument[]> =>
+    (await trading(api.GET(DOCUMENT_PATHS[kind].list))).records,
+  createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>): Promise<TradingDocument> =>
+    trading(api.POST(DOCUMENT_PATHS[kind].list, { body: { record_id: recordId, payload } })),
+  updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>): Promise<TradingDocument> =>
+    trading(api.PUT(DOCUMENT_PATHS[kind].record, {
+      params: { path: { record_id: record.record_id }, header: { 'If-Match': record.revision } },
+      body: { record_id: record.record_id, payload },
+    })),
+  archiveDocument: (kind: TradingDocumentKind, record: TradingDocument): Promise<TradingDocument> =>
+    trading(api.DELETE(DOCUMENT_PATHS[kind].record, {
+      params: { path: { record_id: record.record_id }, header: { 'If-Match': record.revision } },
+    })),
+  alerts: async (): Promise<TradingAlert[]> =>
+    (await trading(api.GET('/api/trading/alerts', { cache: 'no-store' }))).alerts,
+  alertTriggers: async (): Promise<TradingAlertTrigger[]> =>
+    (await trading(api.GET('/api/trading/alerts/triggers', { cache: 'no-store' }))).triggers,
+  createAlert: (input: TradingAlertCreateInput): Promise<TradingAlert> =>
+    trading(api.POST('/api/trading/alerts', { body: input })),
+  updateAlert: (alert: TradingAlert, input: TradingAlertUpdateInput): Promise<TradingAlert> =>
+    trading(api.PUT('/api/trading/alerts/{alert_id}', {
+      params: { path: { alert_id: alert.alert_id }, header: { 'If-Match': alert.revision } },
+      body: input,
+    })),
+  archiveAlert: (alert: TradingAlert): Promise<TradingAlert> =>
+    trading(api.DELETE('/api/trading/alerts/{alert_id}', {
+      params: { path: { alert_id: alert.alert_id }, header: { 'If-Match': alert.revision } },
+    })),
+  evaluateAlerts: async (instrumentId: string, observedPrice: string, observedAt?: string): Promise<TradingAlertTrigger[]> =>
+    (await trading(api.POST('/api/trading/alerts/evaluate', {
+      body: {
         instrument_id: instrumentId,
         observed_price: observedPrice,
         ...(observedAt ? { observed_at: observedAt } : {}),
-      }),
-    });
-    return arrayField<TradingAlertTrigger>(payload, 'triggers');
-  },
+      },
+    }))).triggers,
 };

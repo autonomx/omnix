@@ -1,6 +1,8 @@
 """Persistent assistant tool configuration with safe defaults."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from pathlib import Path
@@ -36,7 +38,7 @@ class AssistantToolsConfigPayload(BaseModel):
 
 
 def assistant_tool_config_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH")
+    configured = environment().get("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH")
     return Path(configured) if configured else DEFAULT_CONFIG_PATH
 
 
@@ -97,8 +99,8 @@ def _merge_known_config(payload: AssistantToolsConfigPayload) -> AssistantToolsC
 def load_assistant_tools_config(path: Path | None = None) -> AssistantToolsConfigPayload:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_assistant_tools_config(path)
+        from app.assistant_tools.persistence.configuration import load_assistant_tools_config
+        return load_assistant_tools_config(path)
     config_path = path or assistant_tool_config_path()
     if not config_path.exists():
         return default_assistant_tools_config()
@@ -115,8 +117,8 @@ def save_assistant_tools_config(
 ) -> AssistantToolsConfigPayload:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_assistant_tools_config(payload, path)
+        from app.assistant_tools.persistence.configuration import save_assistant_tools_config
+        return save_assistant_tools_config(payload, path)
     config_path = path or assistant_tool_config_path()
     normalized = _merge_known_config(payload)
     if path is None:
@@ -128,9 +130,16 @@ def save_assistant_tools_config(
     return normalized
 
 
+def _declared_tool(tool_id: str):
+    from app.capabilities.registry import declared_tools
+
+    return next((tool for tool in declared_tools() if tool.tool_id == tool_id), None)
+
+
 def _default_tool_enabled(tool_id: str) -> bool:
-    if tool_id == "research":
-        return True
+    declared = _declared_tool(tool_id)
+    if declared is not None:
+        return declared.default_enabled()
     if tool_id == "browser":
         try:
             from .browser_adapter import browser_available
@@ -145,23 +154,13 @@ def _default_tool_enabled(tool_id: str) -> bool:
             return mcp_runtime_available()
         except Exception:
             return False
-    if tool_id == "trading":
-        try:
-            from app.trading.providers.alpaca_iex import alpaca_iex_configured
-            return alpaca_iex_configured()
-        except Exception:
-            return False
     if tool_id in {"kasa", "home"}:
         return _flag("OMNIX_KASA_ENABLED")
     return False
 
 
 def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
-    if tool_id == "research" and enabled:
-        return "connected"
-    if tool_id in {"browser", "mcp"}:
-        return "connected" if enabled else "not_configured"
-    if tool_id == "trading":
+    if tool_id in {"browser", "mcp"} or _declared_tool(tool_id) is not None:
         return "connected" if enabled else "not_configured"
     if tool_id in {"kasa", "home"} and enabled:
         return "connected"
@@ -169,25 +168,24 @@ def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
 
 
 def _default_account_label(tool_id: str) -> str | None:
-    if tool_id == "research":
-        return "Omnix Research"
+    declared = _declared_tool(tool_id)
+    if declared is not None:
+        return declared.account_label
     if tool_id == "browser":
         return "agent-browser"
     if tool_id == "mcp":
         return "MCPorter"
-    if tool_id == "trading":
-        return "Alpaca IEX"
     if tool_id not in {"kasa", "home"}:
         return None
     return (
-        os.environ.get("OMNIX_KASA_DEVICE_ALIAS", "").strip()
-        or os.environ.get("OMNIX_KASA_DEVICE_HOST", "").strip()
+        environment().get("OMNIX_KASA_DEVICE_ALIAS", "").strip()
+        or environment().get("OMNIX_KASA_DEVICE_HOST", "").strip()
         or "Local Kasa network"
     )
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}

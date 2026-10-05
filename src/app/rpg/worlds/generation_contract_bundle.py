@@ -25,7 +25,7 @@ from pydantic import (
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg_world_forge_provider import WorldForgeTopicResponse
+from app.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
 from app.rpg.worlds.generation_contract_receipt import (
     RECEIPT_SCHEMA_VERSION,
     canonical_candidate_content_hash,
@@ -84,14 +84,6 @@ class ProviderDocumentDraft(BaseModel):
     summary_500: StrictStr
     summary_120: StrictStr
     entities: list[StrictStr] = Field(default_factory=list, max_length=32)
-
-
-class ProviderFactDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    content: StrictStr
-    expanded_description: StrictStr
-    entity_refs: list[StrictStr] = Field(min_length=1, max_length=32)
 
 
 class ProviderRelationshipDraft(BaseModel):

@@ -1,7 +1,6 @@
 """Compact foreground RPG turn response contract."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from .turn_response_budget import enforce_turn_response_budget
@@ -97,10 +96,6 @@ def build_turn_response_v2(
         _drop_none(payload),
         max_bytes=TURN_RESPONSE_MAX_BYTES,
     )
-
-
-def turn_response_size_bytes(payload: dict[str, Any]) -> int:
-    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def _compact_timing(sources: tuple[dict[str, Any], ...]) -> dict[str, Any]:

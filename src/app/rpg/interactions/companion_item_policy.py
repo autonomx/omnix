@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Dict, List
 
 from app.rpg.interactions.item_model import normalize_item_instance
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_str(value: Any) -> str:
@@ -96,14 +100,14 @@ def _loyalty_score(companion: Dict[str, Any]) -> int:
         try:
             return int(raw)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_loyalty_score", exc_info=True)
 
     relationship = _safe_dict(companion.get("relationship"))
     for key in ("loyalty", "trust", "score"):
         try:
             return int(relationship.get(key))
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_loyalty_score", exc_info=True)
 
     return 0
 

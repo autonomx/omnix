@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,8 +7,8 @@ import {
   type RpgAuthoringGroup,
   type RpgAuthoringPage,
   type RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { RpgWorldAdvancedPanel } from './RpgWorldAdvancedPanel';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
 import {
@@ -288,7 +289,7 @@ export function RpgWorldEditorShell({
     <section className={`rpg-authoring-editor rpg-world-product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} aria-label="World editor">
       <div className="rpg-world-shell-layout">
         <aside className="rpg-world-sidebar">
-          <div className="rpg-world-brand" aria-label="Worlds and Campaigns">
+          <div role="group" className="rpg-world-brand" aria-label="Worlds and Campaigns">
             <span className="rpg-world-brand-mark">✥</span>
             <strong><span>Worlds &amp;</span><span>Campaigns</span></strong>
           </div>

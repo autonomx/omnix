@@ -6,13 +6,13 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.image.reference_assets import (
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
+from app.image.contracts import (
     ImageReferenceError,
     close_image_references,
     load_image_reference_assets,
 )
-from app.jobs import CreateJobRequest, InMemoryJobStore, JobRecord, JobStatus, ResourceClass, default_job_store
+from app.jobs import CreateJobRequest, JobRecord, JobStatus, ResourceClass, default_job_store
 
 from .avatar_generation_models import (
     BackfillClonedVoiceCharactersRequest,
@@ -29,6 +29,55 @@ from .models import CreateCharacterRequest
 from .repository import CharacterConflictError
 from .service import CharacterService, default_character_service
 from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
+from app.prompts import prompt_template
+
+
+VARIANT_PROMPTS_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompts', "1",
+    (
+        'Change only the clothing to: {strip}. Preserve face, hair, pose, camera, lighting, and '
+        'mouth.'
+    ),
+)
+
+VARIANT_PROMPTS_2_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompts_2', "1",
+    'Create a clean matching background: {strip}. Do not include a person or text.',
+)
+
+BASE_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.base_prompt', "1",
+    (
+        'Create one original fictional character portrait for {display_name}. '
+        '{gender_direction}{custom}Front-facing head-and-shoulders composition, centered, eyes '
+        'open, neutral relaxed expression, mouth fully closed, consistent hair and clothing, '
+        'clean even lighting, no text. This canonical portrait will be reused as a locked '
+        'reference for live-chat animation frames. Do not depict or imitate a real public person.'
+    ),
+)
+
+UPLOADED_BASE_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.uploaded_base_prompt', "1",
+    (
+        'Using the supplied user-provided image as the authoritative identity reference for '
+        '{display_name}, create one faithful front-facing head-and-shoulders live-avatar '
+        "portrait. Preserve the person's recognizable facial identity, skin tone, face "
+        'proportions, hair, and other defining features. Do not replace them with a different '
+        'person. {custom}Center the face, keep both eyes open, use a neutral relaxed expression '
+        'and a fully closed mouth, with clean even lighting and no text. This canonical portrait '
+        'will be reused as a locked reference for mouth, blink, expression, and viseme frames.'
+    ),
+)
+
+VARIANT_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompt', "1",
+    (
+        'Using the supplied canonical portrait of {display_name}, preserve the exact identity, '
+        'crop, head position, hair, clothing, lighting, and background. {change} Keep all '
+        'unrelated visual details unchanged. No text or watermark.'
+    ),
+)
+
 
 _VARIANT_PROMPTS: dict[str, str] = {
     "mouth_small": "Change only the mouth to a small slightly open speaking shape.",
@@ -53,10 +102,22 @@ class CharacterAvatarGenerationService:
         *,
         character_service_factory: Callable[[], CharacterService] = default_character_service,
         avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
-        job_store_factory: Callable[[], InMemoryJobStore] = default_job_store,
+        job_store_factory: Callable[[], Any] = default_job_store,
         asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
     ) -> None:
-        self.repository = repository or CharacterAvatarGenerationRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+
+            if uses_postgresql_runtime():
+                # Feature-owned adapter; the composition root is not imported here.
+                from app.characters.persistence.avatar_generation_repository import (
+                    PostgresCharacterAvatarGenerationRepositoryAdapter,
+                )
+
+                repository = PostgresCharacterAvatarGenerationRepositoryAdapter()
+            else:
+                repository = CharacterAvatarGenerationRepository()
+        self.repository = repository
         self.character_service_factory = character_service_factory
         self.avatar_service_factory = avatar_service_factory
         self.job_store_factory = job_store_factory
@@ -112,9 +173,8 @@ class CharacterAvatarGenerationService:
     ) -> BackfillClonedVoiceCharactersResponse:
         character_service = self.character_service_factory()
         avatar_service = self.avatar_service_factory()
-        assets = self.asset_store_factory().list_assets().assets
         voices = sorted(
-            (asset for asset in assets if asset.type == AssetType.VOICE_PROFILE),
+            iter_assets(self.asset_store_factory(), asset_type=AssetType.VOICE_PROFILE.value),
             key=lambda asset: (_voice_display_name(asset).lower(), asset.id),
         )
         existing = character_service.list(include_archived=True).characters
@@ -354,13 +414,17 @@ class CharacterAvatarGenerationService:
             avatar_pack_version=pack.version,
             error="",
         )
-        from .avatar_viseme_generation import (
-            CharacterVisemeGenerationRepository,
-            CharacterVisemeGenerationService,
-        )
+        from .avatar_viseme_generation import CharacterVisemeGenerationService
+
+        viseme_repository = None
+        repository_path = getattr(self.repository, "db_path", None)
+        if repository_path is not None:
+            from .avatar_viseme_generation import CharacterVisemeGenerationRepository
+
+            viseme_repository = CharacterVisemeGenerationRepository(repository_path)
 
         CharacterVisemeGenerationService(
-            CharacterVisemeGenerationRepository(self.repository.db_path),
+            viseme_repository,
             character_service=self.character_service_factory(),
             avatar_service=self.avatar_service_factory(),
             job_store=self.job_store_factory(),
@@ -379,13 +443,11 @@ class CharacterAvatarGenerationService:
         }
         if request.include_outfit and request.outfit_prompt.strip():
             prompts["outfit_alternate"] = (
-                f"Change only the clothing to: {request.outfit_prompt.strip()}. "
-                "Preserve face, hair, pose, camera, lighting, and mouth."
+                VARIANT_PROMPTS_TEMPLATE.format(strip=request.outfit_prompt.strip())
             )
         if request.include_background and request.background_prompt.strip():
             prompts["background_alternate"] = (
-                f"Create a clean matching background: {request.background_prompt.strip()}. "
-                "Do not include a person or text."
+                VARIANT_PROMPTS_2_TEMPLATE.format(strip=request.background_prompt.strip())
             )
         return prompts
 
@@ -399,10 +461,7 @@ class CharacterAvatarGenerationService:
         if not consent_confirmed:
             raise ValueError("avatar_source_consent_required")
         store = self.asset_store_factory()
-        asset = next(
-            (candidate for candidate in store.list_assets().assets if candidate.id == source_asset_id),
-            None,
-        )
+        asset = store.get_asset(source_asset_id)
         if asset is None:
             raise ValueError(f"avatar_source_not_found:{source_asset_id}")
         if asset.type != AssetType.IMAGE:
@@ -490,35 +549,27 @@ def _base_prompt(display_name: str, appearance_prompt: str, gender: str = "") ->
         f"The character's gender presentation is {gender.strip()}. " if gender.strip() else ""
     )
     return (
-        f"Create one original fictional character portrait for {display_name}. "
-        f"{gender_direction}"
-        f"{custom + ' ' if custom else ''}"
-        "Front-facing head-and-shoulders composition, centered, eyes open, neutral relaxed expression, "
-        "mouth fully closed, consistent hair and clothing, clean even lighting, no text. "
-        "This canonical portrait will be reused as a locked reference for live-chat animation frames. "
-        "Do not depict or imitate a real public person."
+        BASE_PROMPT_TEMPLATE.format(
+            display_name=display_name,
+            gender_direction=gender_direction,
+            custom=custom + ' ' if custom else '',
+        )
     )
 
 
 def _uploaded_base_prompt(display_name: str, appearance_prompt: str) -> str:
     custom = appearance_prompt.strip()
     return (
-        f"Using the supplied user-provided image as the authoritative identity reference for {display_name}, "
-        "create one faithful front-facing head-and-shoulders live-avatar portrait. "
-        "Preserve the person's recognizable facial identity, skin tone, face proportions, hair, and other "
-        "defining features. Do not replace them with a different person. "
-        f"{custom + ' ' if custom else ''}"
-        "Center the face, keep both eyes open, use a neutral relaxed expression and a fully closed mouth, "
-        "with clean even lighting and no text. This canonical portrait will be reused as a locked reference "
-        "for mouth, blink, expression, and viseme frames."
+        UPLOADED_BASE_PROMPT_TEMPLATE.format(
+            display_name=display_name,
+            custom=custom + ' ' if custom else '',
+        )
     )
 
 
 def _variant_prompt(display_name: str, change: str) -> str:
     return (
-        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, crop, "
-        f"head position, hair, clothing, lighting, and background. {change} "
-        "Keep all unrelated visual details unchanged. No text or watermark."
+        VARIANT_PROMPT_TEMPLATE.format(display_name=display_name, change=change)
     )
 
 

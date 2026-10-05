@@ -7,6 +7,11 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set
 
 from app.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block', "1", "- You may say an NPC remembers, recalls, or refers to a prior event only when that fact appears in Relevant Memory or authoritative state.")
+_PROMPT_2 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block_2', "1", "- Do not invent remembered purchases, debts, promises, warnings, injuries, crimes, rumors, quest clues, or relationships.")
+_PROMPT_3 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block_3', "1", "- If no backing memory exists, answer from the current turn only and avoid words like remember, again, last time, or earlier.")
 
 MEMORY_NARRATION_GROUNDING_SOURCE = "memory_narration_grounding_guard"
 MEMORY_NARRATION_GROUNDING_VERSION = "rpg_memory_narration_grounding_v1"
@@ -412,9 +417,9 @@ def memory_narration_prompt_block(context: Mapping[str, Any]) -> str:
     memory_ids = _safe_list(evidence.get("memory_ids"))
     lines = [
         "Memory grounding guard:",
-        "- You may say an NPC remembers, recalls, or refers to a prior event only when that fact appears in Relevant Memory or authoritative state.",
-        "- Do not invent remembered purchases, debts, promises, warnings, injuries, crimes, rumors, quest clues, or relationships.",
-        "- If no backing memory exists, answer from the current turn only and avoid words like remember, again, last time, or earlier.",
+        _PROMPT_1.text,
+        _PROMPT_2.text,
+        _PROMPT_3.text,
         "- Backed memory ids: " + (", ".join(memory_ids[:12]) if memory_ids else "none"),
     ]
     return "\n".join(lines)

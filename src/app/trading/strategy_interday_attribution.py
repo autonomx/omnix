@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable
 
-from .strategy_dynamic_discovery import AttributionEvent, AttributionStage, INTERDAY_TRADING_STRATEGY_ID
-from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
+from .strategy_dynamic_discovery import AttributionStage, INTERDAY_TRADING_STRATEGY_ID
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
 
 
@@ -61,6 +60,8 @@ def _arm_for_event(event: StrategyEvent, source_strategy_id: str) -> str | None:
         return arm
     if source_strategy_id == "stoch-rsi-5min":
         return "stoch-rsi-5min"
+    if source_strategy_id == "stoch-rsi-5min-early-single":
+        return "stoch-rsi-5min-early-single"
     if source_strategy_id == "gap-pullback-v2-prospective-20260825":
         return "gap-pullback-v2-prospective-20260825"
     if source_strategy_id == INTERDAY_TRADING_STRATEGY_ID:
@@ -75,35 +76,15 @@ def bridge_strategy_events(
     session_date: date,
     events_by_strategy: dict[str, Iterable[StrategyEvent]],
 ) -> int:
-    persisted = DynamicDiscoveryEventRepository(repository)
-    count = 0
-    for source_strategy_id, events in events_by_strategy.items():
-        for event in events:
-            if event.instrument_id.startswith("portfolio:") or event.instrument_id.startswith("__"):
-                continue
-            stage = attribution_stage_for_strategy_event(event)
-            if stage is None:
-                continue
-            row = AttributionEvent(
-                session_date=session_date,
-                instrument_id=event.instrument_id,
-                stage=stage,
-                observed_at=event.observed_at,
-                sub_strategy=_arm_for_event(event, source_strategy_id),
-                passed=True,
-                reason=event.reason_code,
-                payload={
-                    "source_strategy_id": source_strategy_id,
-                    "source_event_id": event.event_id,
-                    "source_event_type": event.event_type,
-                    "source_state": event.state,
-                    "research_only": event.event_type.startswith("ai_") or event.event_type.startswith("intraday_"),
-                    "execution_authority": event.event_type == "entry_order_submitted",
-                },
-            )
-            if persisted.persist_attribution(row):
-                count += 1
-    return count
+    """Persist monotonic, event-level attribution through the discovery owner."""
+
+    from .strategy_dynamic_discovery_runtime import _bridge_strategy_events_complete
+
+    return _bridge_strategy_events_complete(
+        repository,
+        session_date=session_date,
+        events_by_strategy=events_by_strategy,
+    )
 
 
 __all__ = ["attribution_stage_for_strategy_event", "bridge_strategy_events"]

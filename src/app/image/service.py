@@ -1,16 +1,13 @@
 """Global image generation service."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Dict
 
 from app.image.cache import image_cache_key, lookup_image_cache, store_image_cache
 from app.image.config import get_active_image_provider_name, get_provider_config
-from app.image.consumer_adapters import (
-    build_chat_image_request,
-    build_story_image_request,
-)
-from app.image.job_queue import enqueue_image_job
 from app.image.lifecycle import (
     get_cached_provider,
     get_or_create_image_provider,
@@ -28,8 +25,14 @@ from app.image.reference_assets import (
 from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
 from app.image.style import apply_image_style
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
+from app.persistence.device_permits import device_permit_slot
 
 _GIB = float(1024**3)
+
+
+def _generate_with_device_permit(provider: Any, payload: dict[str, Any], *, priority: str) -> Any:
+    with device_permit_slot("image", priority=priority, timeout_seconds=30.0):
+        return provider.generate(payload)
 
 
 def _safe_str(value: Any) -> str:
@@ -254,7 +257,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
         return _generation_failure(req, provider_name, budget_error)
 
     if definition.get("supports_local_model") and not is_image_provider_loaded(provider_name):
-        if _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")):
+        if _truthy(environment().get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")):
             return _model_unloaded_response(req, provider_name)
         try:
             load_image_provider(provider_name)
@@ -310,7 +313,19 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
             if reference_images:
                 provider_payload["image"] = reference_images[0] if len(reference_images) == 1 else reference_images
 
-            result = provider.generate(provider_payload)
+            if definition.get("supports_local_model"):
+                priority = (
+                    "batch"
+                    if payload.get("_device_permit_priority") == "batch"
+                    else "interactive"
+                )
+                result = _generate_with_device_permit(
+                    provider,
+                    provider_payload,
+                    priority=priority,
+                )
+            else:
+                result = provider.generate(provider_payload)
             if use_cache and result.ok:
                 cached = store_image_cache(cache_key, result)
                 if cached:
@@ -372,8 +387,14 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
 
 
 def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
-    if is_image_service_enabled() and os.environ.get("OMNIX_IMAGE_SERVICE_MODE") != "1":
-        data = generate_image_via_service(payload if isinstance(payload, dict) else {})
+    if is_image_service_enabled() and environment().get("OMNIX_IMAGE_SERVICE_MODE") != "1":
+        request_payload = dict(payload) if isinstance(payload, dict) else {}
+        # The callback cannot cross the wire; the service streams its steps back.
+        progress_callback = request_payload.pop("_progress_callback", None)
+        data = generate_image_via_service(
+            request_payload,
+            on_progress=progress_callback if callable(progress_callback) else None,
+        )
         return ImageGenerationResponse(
             ok=bool(data.get("ok")),
             provider=_safe_str(data.get("provider")),
@@ -381,6 +402,8 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
             error=_safe_str(data.get("error")),
             asset_url=_safe_str(data.get("asset_url")),
             local_path=_safe_str(data.get("local_path")),
+            blob_key=_safe_str(data.get("blob_key")),
+            checksum_sha256=_safe_str(data.get("checksum_sha256")),
             seed=data.get("seed"),
             width=_safe_int(data.get("width"), 0),
             height=_safe_int(data.get("height"), 0),
@@ -389,11 +412,3 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
         )
 
     return generate_image_local(payload)
-
-
-def enqueue_chat_image(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return enqueue_image_job(build_chat_image_request(payload))
-
-
-def enqueue_story_image(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return enqueue_image_job(build_story_image_request(payload))

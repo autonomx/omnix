@@ -24,6 +24,9 @@ Design Compliance:
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.narration_narrator.prompt', "1", "Narrate this as a story:\n\n{v0}\n\n{v1}\n\nRules:\n- Do not add events that didn't happen\n- Do not contradict the facts\n- Keep it concise (under 200 words)\n- Use present tense\n- Second person if player is involved\n\nNarrative:")
 
 
 class NarratorAgent:
@@ -129,20 +132,7 @@ class NarratorAgent:
         
         style_instruction = style_prompt.get(self.style, style_prompt["dramatic"])
         
-        prompt = f"""Narrate this as a story:
-
-{combined}
-
-{style_instruction}
-
-Rules:
-- Do not add events that didn't happen
-- Do not contradict the facts
-- Keep it concise (under 200 words)
-- Use present tense
-- Second person if player is involved
-
-Narrative:"""
+        prompt = _PROMPT_1.format(v0=(combined), v1=(style_instruction))
 
         try:
             result = self.llm(prompt)
@@ -176,8 +166,8 @@ Narrative:"""
             return sentences[0]
             
         result = sentences[0]
-        for sentence in sentences[1:]:
-            result += f" {self._transition()}{sentence[0].lower()}{sentence[1:]}"
+        for index, sentence in enumerate(sentences[1:]):
+            result += f" {self._transition(index)}{sentence[0].lower()}{sentence[1:]}"
             
         return result
     
@@ -322,41 +312,16 @@ Narrative:"""
         else:
             return str(event)
     
-    def _transition(self) -> str:
+    def _transition(self, sub_index: int = 0) -> str:
         """Get a narrative transition word.
         
         Returns:
             Transition string for joining sentences.
         """
-        import random
+        from app.rpg.core.determinism import rng_for_current_turn
+
         transitions = ["Then, ", "Meanwhile, ", "Suddenly, ", "Moments later, ", ""]
-        return random.choice(transitions)
-    
-    def narrate_turn(
-        self,
-        events: List[Dict[str, Any]],
-        context: Optional[str] = None,
-    ) -> str:
-        """Narrate a complete turn with optional scene context.
-        
-        Convenience method that wraps generate() with context support.
-        
-        Args:
-            events: Events from this turn.
-            context: Optional scene context string (location, mood, etc).
-            
-        Returns:
-            Complete narrative text for the turn.
-        """
-        if not events:
-            return context or ""
-            
-        if context and self.llm:
-            # Include context in the narration
-            narrative = self.generate(events)
-            return f"{context}\n\n{narrative}"
-            
-        return self.generate(events)
+        return rng_for_current_turn("text:narrator_transition", sub_index).choice(transitions)
     
     def reset(self) -> None:
         """Reset narrator state."""

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { rpgWorldAuthoringClient } from '../../api/rpgWorldAuthoringClient';
+import { rpgWorldAuthoringClient } from './api/rpgWorldAuthoringClient';
 import './RpgWorldDossierQualityPanel.css';
 
 interface RpgWorldDossierQualityPanelProps {
@@ -77,7 +77,7 @@ export function RpgWorldDossierQualityPanel({ worldId }: RpgWorldDossierQualityP
         <strong>{metrics.coverage_percent}%</strong>
       </header>
 
-      <div className="rpg-dossier-quality-meter" aria-label={`${metrics.coverage_percent} percent rich dossier coverage`}>
+      <div role="img" className="rpg-dossier-quality-meter" aria-label={`${metrics.coverage_percent} percent rich dossier coverage`}>
         <i style={{ width: `${Math.max(0, Math.min(100, metrics.coverage_percent))}%` }} />
       </div>
 

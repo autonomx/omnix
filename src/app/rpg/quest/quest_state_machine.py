@@ -139,24 +139,6 @@ class QuestStateMachine:
             quest.arc_progress = quest.current_stage_index / len(quest.stages)
             quest.description = next_stage.description
 
-    def force_advance(self, quest: Any, world: Dict[str, Any]) -> None:
-        """Force advance quest to next stage regardless of objectives.
-
-        Useful for quest debugging or story events.
-
-        Args:
-            quest: Quest object to update.
-            world: World state dict to modify with world effects.
-        """
-        if quest.current_stage_index < len(quest.stages):
-            # Mark all remaining objectives as complete
-            stage = quest.stages[quest.current_stage_index]
-            for obj in stage.objectives:
-                obj.completed = True
-                obj.progress = 1.0
-
-            self._advance_stage(quest, world)
-
     def apply_consequences(
         self,
         quest: Any,
@@ -390,14 +372,3 @@ class QuestStateMachine:
                 return factions[faction_name].get("destroyed", False)
         return False
 
-    def reset_quest_progress(self, quest: Any) -> None:
-        """Reset all objective progress in current stage.
-
-        Args:
-            quest: Quest object to reset.
-        """
-        if quest.stages and quest.current_stage_index < len(quest.stages):
-            stage = quest.stages[quest.current_stage_index]
-            for obj in stage.objectives:
-                obj.progress = 0.0
-                obj.completed = False

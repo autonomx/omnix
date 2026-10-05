@@ -1,16 +1,17 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_world_authoring_routes import register_rpg_world_authoring_routes
+from app.rpg.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
 
 
 def test_entity_routes_read_edit_and_regenerate_with_topic_tokens(monkeypatch) -> None:
     calls: list[tuple[str, dict[str, object]]] = []
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.read_world_entity",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.read_world_entity",
         lambda world_id, topic_id, entity_id: {
             "ok": True,
             "world": {"id": world_id},
@@ -28,11 +29,11 @@ def test_entity_routes_read_edit_and_regenerate_with_topic_tokens(monkeypatch) -
         calls.append(("regenerate", {"world_id": world_id, "topic_id": topic_id, "entity_id": entity_id, **kwargs}))
         return {"ok": True, "topic": {"content_hash": "sha256:regen"}, "entity": {"id": entity_id}, "stale_topic_ids": [], "stale_entity_ids": []}
 
-    monkeypatch.setattr("app.gateway.rpg_world_authoring_routes.update_world_entity", fake_update)
-    monkeypatch.setattr("app.gateway.rpg_world_authoring_routes.regenerate_world_entity", fake_regenerate)
+    monkeypatch.setattr("app.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_entity", fake_update)
+    monkeypatch.setattr("app.rpg.api.feature_routes.rpg_world_authoring_routes.regenerate_world_entity", fake_regenerate)
 
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
     path = "/api/rpg/worlds/world:aurelia/topics/npcs/entities/npc:bran"
 
@@ -82,12 +83,12 @@ def test_entity_routes_read_edit_and_regenerate_with_topic_tokens(monkeypatch) -
             },
         ),
     ]
-    assert "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}" not in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}" in app.openapi()["paths"]
 
 
 def test_entity_patch_requires_changes_and_concurrency_tokens() -> None:
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
     path = "/api/rpg/worlds/world:aurelia/topics/npcs/entities/npc:bran"
 

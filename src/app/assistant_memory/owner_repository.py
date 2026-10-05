@@ -5,18 +5,19 @@ in-memory canonical repository with owner-aware filtering; no SQLite behavior
 or schema remains.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from copy import deepcopy
 from pathlib import Path
 
-from .models import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.runtime.pagination import bounded_count
 from .repository import InMemoryMemoryRepository
 
 
 class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
     def __init__(self, db_path: str | Path | None = None) -> None:
-        override = (os.environ.get("OMNIX_ASSISTANT_MEMORY_DB_PATH") or "").strip()
+        override = (_env_str("OMNIX_ASSISTANT_MEMORY_DB_PATH") or "").strip()
         resolved = db_path if db_path is not None else (Path(override) if override else None)
         super().__init__(resolved)
 
@@ -45,7 +46,7 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             and (owner_id is None or record.owner_id == owner_id)
         ]
         start = max(0, int(offset))
-        return deepcopy(values[start : start + max(0, min(int(limit), 500))])
+        return deepcopy(values[start : start + bounded_count(limit)])
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         return super().create_candidate(candidate)
@@ -57,6 +58,7 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
         owner_id: str | None = None,
         status: str = "pending",
         limit: int = 100,
+        offset: int = 0,
     ) -> list[MemoryCandidate]:
         values = super().list_candidates(status=status, limit=10_000)
         values = [
@@ -65,7 +67,8 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             if (owner_type is None or candidate.owner_type == owner_type)
             and (owner_id is None or candidate.owner_id == owner_id)
         ]
-        return deepcopy(values[: max(0, min(int(limit), 500))])
+        start = max(0, int(offset))
+        return deepcopy(values[start : start + bounded_count(limit)])
 
     def latest_snapshot(
         self,

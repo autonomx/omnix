@@ -1,13 +1,11 @@
 """Pure world and event RPG memory writer and retrieval helpers."""
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, Iterable, List
 
 from .memory_writer import (
     MAX_MEMORY_TEXT,
     MEMORY_SCHEMA_VERSION,
-    make_memory_entry,
     memory_state_from_session,
 )
 
@@ -83,103 +81,6 @@ def _normalize_query_terms(query_terms: Iterable[Any] | str | None) -> List[str]
         if term and term not in terms:
             terms.append(term)
     return terms
-
-
-def build_world_memory_entry(
-    memory: Dict[str, Any],
-    *,
-    text: Any,
-    event_type: Any,
-    scope: Any = "",
-    scope_id: Any = "",
-    location_id: Any = "",
-    visibility: Any = "public",
-    salience: Any = DEFAULT_WORLD_MEMORY_SALIENCE,
-    tick: Any = 0,
-    turn_id: Any = "",
-    actor_id: Any = "",
-    subject_id: Any = "",
-    tags: Iterable[Any] = (),
-    source: Any = "world_memory_writer",
-) -> Dict[str, Any] | None:
-    """Build one canonical world/event memory entry, or None for empty input."""
-    cleaned_text = _clean_text(text)
-    cleaned_event_type = _clean_id(event_type).casefold()
-    cleaned_scope_id = _clean_id(scope_id)
-    cleaned_location_id = _clean_id(location_id)
-    if not cleaned_text or not cleaned_event_type:
-        return None
-    cleaned_scope = _clean_scope(scope, cleaned_scope_id, cleaned_location_id)
-    if not cleaned_scope_id and cleaned_scope == "location":
-        cleaned_scope_id = cleaned_location_id
-    world_tags = [
-        "world",
-        cleaned_event_type,
-        cleaned_scope,
-        cleaned_scope_id,
-        cleaned_location_id,
-        *list(tags),
-    ]
-    entry = make_memory_entry(
-        memory,
-        kind=WORLD_MEMORY_KIND,
-        text=cleaned_text,
-        tick=_clean_int(tick),
-        turn_id=_clean_id(turn_id),
-        actor_id=_clean_id(actor_id),
-        subject_id=_clean_id(subject_id),
-        location_id=cleaned_location_id,
-        visibility=_clean_visibility(visibility),
-        salience=_clean_int(salience, DEFAULT_WORLD_MEMORY_SALIENCE),
-        tags=_clean_tags(world_tags),
-        source=_clean_id(source) or "world_memory_writer",
-    )
-    entry["event_type"] = cleaned_event_type
-    entry["scope"] = cleaned_scope
-    entry["scope_id"] = cleaned_scope_id
-    return entry
-
-
-def write_world_memory(
-    session: Dict[str, Any],
-    *,
-    text: Any,
-    event_type: Any,
-    scope: Any = "",
-    scope_id: Any = "",
-    location_id: Any = "",
-    visibility: Any = "public",
-    salience: Any = DEFAULT_WORLD_MEMORY_SALIENCE,
-    tick: Any = 0,
-    turn_id: Any = "",
-    actor_id: Any = "",
-    subject_id: Any = "",
-    tags: Iterable[Any] = (),
-) -> Dict[str, Any]:
-    """Return a copied session with one world/event memory appended when valid."""
-    updated = deepcopy(_safe_dict(session))
-    runtime = dict(_safe_dict(updated.get("runtime_state")))
-    memory = memory_state_from_session(updated)
-    entry = build_world_memory_entry(
-        memory,
-        text=text,
-        event_type=event_type,
-        scope=scope,
-        scope_id=scope_id,
-        location_id=location_id,
-        visibility=visibility,
-        salience=salience,
-        tick=tick,
-        turn_id=turn_id,
-        actor_id=actor_id,
-        subject_id=subject_id,
-        tags=tags,
-    )
-    if entry is not None:
-        memory["entries"].append(entry)
-    runtime["memory"] = memory
-    updated["runtime_state"] = runtime
-    return updated
 
 
 def _compact_world_entry(entry: Dict[str, Any]) -> Dict[str, Any] | None:

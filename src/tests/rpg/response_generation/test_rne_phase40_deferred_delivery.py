@@ -239,38 +239,3 @@ def test_result_adapter_persists_once_and_public_deferred_payload_contains_no_pr
     assert delivery["stream_path"].endswith(
         f"/{response.response_id}/stream"
     )
-
-
-def test_phase40_source_guards_cover_persistence_streaming_and_gateway_cutover() -> None:
-    migration = (
-        ROOT
-        / "src"
-        / "app"
-        / "persistence"
-        / "migrations"
-        / "0022_rpg_narrative_delivery.sql"
-    ).read_text(encoding="utf-8")
-    gateway = (
-        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
-    ).read_text(encoding="utf-8")
-    routes = (
-        ROOT
-        / "src"
-        / "app"
-        / "gateway"
-        / "rpg_narrative_delivery_routes.py"
-    ).read_text(encoding="utf-8")
-    sessions = (
-        ROOT / "src" / "app" / "gateway" / "rpg_session_routes.py"
-    ).read_text(encoding="utf-8")
-
-    assert "omnix_rpg_narrative_deliveries" in migration
-    assert "semantic_hash" in migration
-    assert "delivered_block_ids_jsonb" in migration
-    assert "x-omnix-rpg-delivery-mode" in gateway
-    assert "prepare_canonical_result_delivery" in gateway
-    assert "deferred_public_turn_payload" in gateway
-    assert "last-event-id" in routes
-    assert "event: narrative_block" in routes
-    assert "cancel_before_publication" in routes
-    assert "register_rpg_narrative_delivery_routes(app)" in sessions

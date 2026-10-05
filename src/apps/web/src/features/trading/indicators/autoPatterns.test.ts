@@ -8,9 +8,10 @@ import {
   detectAutoChartPatterns,
   findPatternPivots,
 } from './autoPatterns';
+import { fixture } from '../../../test/fixture';
 
 function barsFromPrices(prices: readonly number[]): MarketBar[] {
-  return prices.map((price, index) => ({
+  return prices.map((price, index) => (fixture({
     instrument_id: 'fixture',
     interval: '5m',
     start_time: new Date(Date.UTC(2026, 0, 2, 14, index * 5)).toISOString(),
@@ -26,7 +27,7 @@ function barsFromPrices(prices: readonly number[]): MarketBar[] {
     provider: 'fixture',
     ingestion_revision: 1,
     received_at: new Date(Date.UTC(2026, 0, 2, 15)).toISOString(),
-  }));
+  })));
 }
 
 const doubleTopBars = barsFromPrices([

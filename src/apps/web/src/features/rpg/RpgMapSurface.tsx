@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { applyRpgMapAction } from '../../api/rpgMapActionClient';
+import { applyRpgMapAction } from './api/rpgMapActionClient';
 import {
   getRpgMapDefinition,
   getRpgMapOverlay,
@@ -10,7 +10,7 @@ import {
   type RpgMapObjectDynamicState,
   type RpgMapOverlay,
   type RpgMapOverlayResponse,
-} from '../../api/rpgMapClient';
+} from './api/rpgMapClient';
 import { RpgMapChildControls, RpgMapHierarchyNav } from './RpgMapHierarchyNav';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
 import './RpgMapSurface.css';
@@ -144,7 +144,7 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
         overlay={revisionMismatch ? { ...overlay, availability: 'stale', capabilities: [] } : overlay}
         selectedObjectId={selectedObjectId}
       />
-      <div className="rpg-map-surface-meta" aria-label="Map revision information">
+      <div role="group" className="rpg-map-surface-meta" aria-label="Map revision information">
         <span>{definition.level}</span>
         <span>Definition {shortRevision(definition.definition_revision)}</span>
         <span>Overlay {overlay.overlay_revision}</span>
@@ -202,7 +202,7 @@ function SelectedObjectPanel({
         <p>{objectState?.presentation_hint || item.description || `A ${humanizeReason(item.kind)} on the current map.`}</p>
         <small>{item.location_id ?? item.id} • {humanizeReason(objectState?.status ?? 'normal')}</small>
       </div>
-      {item.tags.length ? <div className="rpg-map-object-tags" aria-label="Object tags">{item.tags.map((tag) => <span key={tag}>{humanizeReason(tag)}</span>)}</div> : null}
+      {item.tags.length ? <div role="group" className="rpg-map-object-tags" aria-label="Object tags">{item.tags.map((tag) => <span key={tag}>{humanizeReason(tag)}</span>)}</div> : null}
       {item.child_map_id && enterCapability ? (
         <RpgMapChildControls
           canEnter={enterCapability.enabled}
@@ -212,7 +212,7 @@ function SelectedObjectPanel({
           onPeek={() => onPeek(item.child_map_id!)}
         />
       ) : null}
-      <div className="rpg-map-capability-list" aria-label="Projected map capabilities">
+      <div role="group" className="rpg-map-capability-list" aria-label="Projected map capabilities">
         {capabilities.length ? capabilities.map((capability) => (
           <button
             className={capability.enabled ? 'rpg-map-capability-enabled' : 'rpg-map-capability-disabled'}
@@ -240,7 +240,7 @@ function AccessibleObjectList({ activeObjectId, definition, onActiveObjectChange
   selectedObjectId: string | null;
 }) {
   return (
-    <div className="rpg-map-accessible-list" aria-label="Visible map locations">
+    <div role="group" className="rpg-map-accessible-list" aria-label="Visible map locations">
       <p className="eyebrow">Visible map objects</p>
       <ul>{visibleObjects(definition, overlay).map((item) => (
         <li key={item.id}><button aria-pressed={selectedObjectId === item.id} className={activeObjectId === item.id ? 'rpg-map-object-list-active' : undefined} onBlur={() => onActiveObjectChange(null)} onClick={() => onSelectObject(item.id)} onFocus={() => onActiveObjectChange(item.id)} onMouseEnter={() => onActiveObjectChange(item.id)} onMouseLeave={() => onActiveObjectChange(null)} type="button">{item.label || item.location_id || item.id}</button></li>

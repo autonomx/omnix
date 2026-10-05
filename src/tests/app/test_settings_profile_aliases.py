@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.platform.settings_profile_repository import load_settings_profile, profile_payload, save_settings_profile
+from app.settings.profile_repository import load_settings_profile, profile_payload, save_settings_profile
 
 
 def test_frontend_camel_case_profile_fields_round_trip() -> None:

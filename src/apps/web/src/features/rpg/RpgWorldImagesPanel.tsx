@@ -1,9 +1,10 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldImageClient,
   type RpgWorldImageTarget,
-} from '../../api/rpgWorldImageClient';
+} from './api/rpgWorldImageClient';
 import './RpgWorldImagesPanel.css';
 
 interface RpgWorldImagesPanelProps {

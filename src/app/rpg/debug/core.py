@@ -138,31 +138,3 @@ class DebugCore:
     # System debug snapshot
     # ------------------------------------------------------------------
 
-    def build_system_debug_snapshot(
-        self,
-        tick: int | None = None,
-        control_output: dict | None = None,
-        action_result: dict | None = None,
-        last_dialogue_response: dict | None = None,
-        has_encounter: bool = False,
-        world_effect_count: int = 0,
-        warning_count: int = 0,
-        arc_summary: dict | None = None,
-    ) -> dict:
-        """Build a quick system-level debug snapshot."""
-        choice_count = 0
-        if control_output:
-            choice_set = control_output.get("choice_set", {})
-            choice_count = len(choice_set.get("options", []))
-
-        has_dialogue = bool(last_dialogue_response)
-
-        return self._presenter.present_system_summary(
-            tick=tick,
-            choice_count=choice_count,
-            has_dialogue=has_dialogue,
-            has_encounter=has_encounter,
-            world_effect_count=world_effect_count,
-            warning_count=warning_count,
-            arc_summary=arc_summary,
-        )

@@ -3,42 +3,43 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import ClassVar, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from app.persistence.errors import RevisionConflict
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .gapper_dataset import GapperUniverseSnapshot
 from .strategies.models import (
-    GapPullbackConfig,
-    StochRsi5mConfig,
     StrategyMode,
     StrategyRiskProfile,
 )
+from .strategies.registrations import STRATEGY_REGISTRY
+from .strategies.registry import StrategyRegistry, UnknownStrategyKind
 from .trade_logging import trade_log
 
 
-class TradingStrategyConfigDocument(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class _StrategyConfigDocumentBase(BaseModel):
+    """Validation shared by every registry's configuration document."""
 
-    strategy_id: str = Field(min_length=1, max_length=200)
-    parent_strategy_id: str | None = Field(default=None, min_length=1, max_length=200)
-    account_id: str = Field(min_length=1, max_length=200)
-    strategy_kind: Literal["gap_pullback_v1", "stoch_rsi_5m_v1"] = "gap_pullback_v1"
-    strategy_version: str = "1.0.0"
-    mode: StrategyMode = "off"
-    active_universe_id: str | None = None
-    config: GapPullbackConfig | StochRsi5mConfig = Field(default_factory=GapPullbackConfig)
-    risk: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
-    enabled: bool = True
-    archived_at: datetime | None = None
-    archived_reason: str | None = None
-    revision: int = Field(default=1, ge=1)
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    model_config = ConfigDict(extra="forbid")
+    strategy_registry: ClassVar[StrategyRegistry]
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_config_for_its_kind(cls, data):
+        # A configuration is parsed by its own kind's model, not guessed from
+        # the union of every registered model.
+        if isinstance(data, dict) and isinstance(data.get("config"), dict):
+            kind = data.get("strategy_kind", cls.strategy_registry.kinds()[0])
+            try:
+                entry = cls.strategy_registry.get(str(kind))
+            except UnknownStrategyKind:
+                return data
+            data = {**data, "config": entry.config_model.model_validate(data["config"])}
+        return data
 
     @model_validator(mode="after")
     def validate_strategy_version_alignment(self):
@@ -46,14 +47,52 @@ class TradingStrategyConfigDocument(BaseModel):
             raise ValueError("strategy_cannot_parent_itself")
         if self.strategy_version != self.config.strategy_version:
             raise ValueError("strategy_version_mismatch_between_document_and_config")
-        if self.strategy_kind == "gap_pullback_v1" and not isinstance(self.config, GapPullbackConfig):
+        entry = type(self).strategy_registry.get(self.strategy_kind)
+        if not isinstance(self.config, entry.config_model):
             raise ValueError("strategy_kind_config_mismatch")
-        if self.strategy_kind == "stoch_rsi_5m_v1":
-            if not isinstance(self.config, StochRsi5mConfig):
-                raise ValueError("strategy_kind_config_mismatch")
-            if self.mode == "auto_paper":
-                raise ValueError("stoch_rsi_5m_is_shadow_only")
+        if self.mode not in entry.allowed_modes:
+            raise ValueError(getattr(entry, "mode_rejection", "strategy_mode_not_allowed"))
         return self
+
+
+def strategy_config_document_model(
+    registry: StrategyRegistry,
+    *,
+    name: str = "TradingStrategyConfigDocument",
+) -> type[_StrategyConfigDocumentBase]:
+    """The persisted configuration document for every kind in ``registry``.
+
+    ``strategy_kind`` accepts exactly the registered kinds and ``config`` their
+    configuration models; the first registration is the default.
+    """
+    default = registry.get(registry.kinds()[0])
+    models = registry.config_models()
+    config_type = models[0] if len(models) == 1 else Union[models]  # noqa: UP007
+    model = create_model(
+        name,
+        __base__=_StrategyConfigDocumentBase,
+        __module__=__name__,
+        strategy_id=(str, Field(min_length=1, max_length=200)),
+        parent_strategy_id=(str | None, Field(default=None, min_length=1, max_length=200)),
+        account_id=(str, Field(min_length=1, max_length=200)),
+        strategy_kind=(Literal[registry.kinds()], default.kind),
+        strategy_version=(str, "1.0.0"),
+        mode=(StrategyMode, "off"),
+        active_universe_id=(str | None, None),
+        config=(config_type, Field(default_factory=default.config_model)),
+        risk=(StrategyRiskProfile, Field(default_factory=StrategyRiskProfile)),
+        enabled=(bool, True),
+        archived_at=(datetime | None, None),
+        archived_reason=(str | None, None),
+        revision=(int, Field(default=1, ge=1)),
+        created_at=(datetime | None, None),
+        updated_at=(datetime | None, None),
+    )
+    model.strategy_registry = registry
+    return model
+
+
+TradingStrategyConfigDocument = strategy_config_document_model(STRATEGY_REGISTRY)
 
 
 class StrategyEvent(BaseModel):
@@ -110,11 +149,7 @@ def _config(row) -> TradingStrategyConfigDocument:
         strategy_version=str(row[4]),
         mode=str(row[5]),
         active_universe_id=str(row[6]) if row[6] is not None else None,
-        config=(
-            GapPullbackConfig.model_validate(row[7])
-            if str(row[3]) == "gap_pullback_v1"
-            else StochRsi5mConfig.model_validate(row[7])
-        ),
+        config=STRATEGY_REGISTRY.get(str(row[3])).config_model.model_validate(row[7]),
         risk=StrategyRiskProfile.model_validate(row[8]),
         enabled=bool(row[9]),
         archived_at=row[10],
@@ -210,13 +245,14 @@ source_fingerprint, candidates
 
 
 class TradingStrategyRepository:
+    context = RequestTenant()
     def __init__(
         self,
         *,
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context
         self.uow_factory = uow_factory
 
     def create_config(self, document: TradingStrategyConfigDocument) -> TradingStrategyConfigDocument:

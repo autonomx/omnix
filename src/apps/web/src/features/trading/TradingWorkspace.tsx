@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useTradingInstrumentLink } from './useTradingInstrumentLink';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
@@ -97,6 +99,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [intervalMenuOpen, setIntervalMenuOpen] = useState(false);
   const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [formulaResolution, setFormulaResolution] = useState<FormulaResolution | null>(null);
@@ -155,12 +158,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
-  const visibleInstruments = useMemo(
-    () => (instruments.data ?? []).filter((instrument) => (
-      instrument.asset_class !== 'crypto' || instrument.venue === 'BINANCE'
-    )),
-    [instruments.data],
-  );
+  const visibleInstruments = useMemo(() => (instruments.data ?? []).filter((instrument) => (
+    instrument.asset_class !== 'crypto' || instrument.venue === 'BINANCE'
+  )), [instruments.data]);
   const activeInstrument = useMemo(
     () => (instruments.data ?? []).find((instrument) => instrument.instrument_id === activeChart.instrumentId),
     [activeChart.instrumentId, instruments.data],
@@ -176,17 +176,19 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     updateChart(activeChartId, { instrumentId: preferred.instrument_id, bindingId: null });
   }, [activeChart.instrumentId, activeChartId, activeInstrument, instruments.data, updateChart]);
 
+  useTradingInstrumentLink({
+    workspaceHydrated,
+    instruments: instruments.data,
+    activeInstrumentId: activeChart.instrumentId,
+    showInstrument: (instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null }),
+  });
+
   useEffect(() => {
     if (!selectedBinding || isIntervalAvailable(activeChart.interval, selectedBinding.supported_intervals)) return;
     updateChart(activeChartId, { interval: preferredInterval(selectedBinding, activeChart.interval) });
   }, [activeChart.interval, activeChartId, selectedBinding?.binding_id, updateChart]);
 
-  const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({
-    layout,
-    activeChartId,
-    charts,
-    links,
-  }));
+  const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({ layout, activeChartId, charts, links }));
 
   useEffect(() => {
     const query = symbolQuery.trim();
@@ -498,7 +500,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
       <section className="trading-command-bar" aria-label="Trading command bar">
         <div className="trading-chart-controls" role="group" aria-label="Chart controls">
-        <div className="trading-chart-symbol-options" aria-label="Chart symbol options">
+        <div role="group" className="trading-chart-symbol-options" aria-label="Chart symbol options">
         <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={() => openSymbolSearch()}>
           <span className="trading-symbol-trigger-icon" aria-hidden="true" />
           <span className="trading-symbol-trigger-copy">
@@ -554,11 +556,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {intervalLabel(item)}
             </button>
           ))}
-          <details className="trading-interval-manager">
+          <details className="trading-interval-manager" onToggle={(event) => setIntervalMenuOpen(event.currentTarget.open)}>
             <summary
               role="combobox"
               aria-label="All supported Trading intervals"
               aria-haspopup="listbox"
+              aria-expanded={intervalMenuOpen}
             >
               <span>{intervalLabel(activeChart.interval)}</span>
               <span className="trading-menu-caret" aria-hidden="true">⌄</span>

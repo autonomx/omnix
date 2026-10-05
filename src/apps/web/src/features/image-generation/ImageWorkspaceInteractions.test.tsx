@@ -1,20 +1,19 @@
-import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetListResponse, JobRecord } from '../../api/client';
-import { omnixTheme } from '../../design/theme';
 import { ImageAssetGallery } from './ImageAssetGallery';
 import { ImageJobList } from './ImageJobList';
 import { ImageLatestResult } from './ImageLatestResult';
+import { fixture } from '../../test/fixture';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
 const assets: AssetListResponse['assets'] = [
-  {
+  fixture({
     id: 'asset-one',
     module: 'image-generation',
     type: 'image',
     mime_type: 'image/png',
-    storage_path: 'artifacts/one.png',
+    file_name: 'one.png',
     created_at: '2026-06-14T00:00:00Z',
     metadata: {
       title: 'Mountain lake',
@@ -23,13 +22,13 @@ const assets: AssetListResponse['assets'] = [
       width: 1024,
       height: 768,
     },
-  },
-  {
+  }),
+  fixture({
     id: 'asset-two',
     module: 'image-generation',
     type: 'image',
     mime_type: 'image/png',
-    storage_path: 'artifacts/two.png',
+    file_name: 'two.png',
     created_at: '2026-06-14T00:01:00Z',
     metadata: {
       title: 'Neon city',
@@ -38,24 +37,14 @@ const assets: AssetListResponse['assets'] = [
       width: 768,
       height: 768,
     },
-  },
+  }),
 ];
 
-function renderWithTheme(node: React.ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
-    </MantineProvider>,
-  );
-}
 
 describe('ImageAssetGallery interactions', () => {
   it('filters, switches views, selects assets, and exposes real file actions', () => {
     const onSelect = vi.fn();
-    renderWithTheme(<ImageAssetGallery assets={assets} selectedAssetId="asset-one" onSelect={onSelect} />);
+    renderWithProviders(<ImageAssetGallery assets={assets} selectedAssetId="asset-one" onSelect={onSelect} />);
 
     expect(screen.getByRole('button', { name: 'Select Mountain lake' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Select Neon city' }));
@@ -92,7 +81,7 @@ describe('ImageJobList interactions', () => {
     const onCancel = vi.fn();
     const onRetry = vi.fn();
     const onSelectAsset = vi.fn();
-    const jobs = [
+    const jobs = fixture<JobRecord[]>([
       {
         id: 'job-completed',
         module: 'image-generation',
@@ -151,9 +140,9 @@ describe('ImageJobList interactions', () => {
         updated_at: '2026-06-14T00:04:00Z',
         input_payload: { prompt: 'Fifth image' },
       },
-    ] as JobRecord[];
+    ]);
 
-    renderWithTheme(
+    renderWithProviders(
       <ImageJobList jobs={jobs} onCancel={onCancel} onRetry={onRetry} onSelectAsset={onSelectAsset} />,
     );
 
@@ -192,7 +181,7 @@ describe('ImageJobList interactions', () => {
 describe('ImageLatestResult interactions', () => {
   it('opens the selected asset in the gallery and exposes download and open links', () => {
     const onOpenInAssets = vi.fn();
-    renderWithTheme(<ImageLatestResult asset={assets[0]} onOpenInAssets={onOpenInAssets} />);
+    renderWithProviders(<ImageLatestResult asset={assets[0]} onOpenInAssets={onOpenInAssets} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open in Assets' }));
     expect(onOpenInAssets).toHaveBeenCalledWith('asset-one');

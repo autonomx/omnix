@@ -1,16 +1,14 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .paper import PaperOrder
 from .paper_runtime_repository import default_runtime_paper_repository
 from .research.fact_repository import TradingFactRepository, default_fact_repository
@@ -22,24 +20,24 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_research_outcome_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_research_outcome_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_RESEARCH_OUTCOME_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_RESEARCH_OUTCOME_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_RESEARCH_OUTCOME_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(10.0, value)
@@ -154,25 +152,14 @@ def capture_closed_paper_outcome(
     return persisted
 
 
-class TradingStrategyResearchOutcomeMonitor:
+class TradingStrategyResearchOutcomeMonitor(ScheduledTradingMonitor):
+    error_event = "paper_research_outcome_monitor_error"
+
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.capture_count = 0
-
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     async def run_once(self) -> int:
         strategy_repository: TradingStrategyRepository = default_strategy_repository()
@@ -232,47 +219,20 @@ class TradingStrategyResearchOutcomeMonitor:
         self.last_run_at = datetime.now(timezone.utc)
         return captured
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "paper_research_outcome_monitor_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    execution_authority=False,
-                )
-            await asyncio.sleep(self.interval_seconds)
 
-
-def register_trading_strategy_research_outcome_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyResearchOutcomeMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_research_outcome_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyResearchOutcomeMonitor):
-        return existing
+        return None
     monitor = TradingStrategyResearchOutcomeMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if strategy_research_outcome_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_research_outcome_monitor_enabled)
 
 
 __all__ = [
     "TradingStrategyResearchOutcomeMonitor",
     "capture_closed_paper_outcome",
-    "register_trading_strategy_research_outcome_monitor",
+    "create_trading_strategy_research_outcome_monitor_task",
     "strategy_research_outcome_monitor_enabled",
 ]

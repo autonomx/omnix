@@ -2,16 +2,30 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-import app.gateway.research_mode_routes as routes
+import app.chat.research_mode_routes as routes
+import app.chat.character_store as character_store
+
+
+class _Segment:
+    id = "segment:test"
+
+
+class _Segments:
+    def create_segment(self, **_kwargs):
+        return _Segment()
+
+
+def _use_memory_character_repository(monkeypatch) -> None:
+    monkeypatch.setattr(character_store, "conversation_segments", _Segments)
+    monkeypatch.setattr(character_store, "_attach_character_snapshot", lambda _session: None)
 
 
 def test_conversation_research_mode_is_backend_persisted(tmp_path, monkeypatch) -> None:
+    _use_memory_character_repository(monkeypatch)
     store = ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Research chat"))
-    monkeypatch.setattr(routes, "default_chat_store", lambda: store)
-
     app = FastAPI()
-    routes.register_research_mode_routes(app)
+    app.include_router(routes.create_research_mode_router(chat_store_factory=lambda: store))
     client = TestClient(app)
 
     response = client.post(
@@ -25,14 +39,13 @@ def test_conversation_research_mode_is_backend_persisted(tmp_path, monkeypatch) 
 
 
 def test_conversation_research_mode_can_return_to_profile_default(tmp_path, monkeypatch) -> None:
+    _use_memory_character_repository(monkeypatch)
     store = ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(
         CreateChatSessionRequest(title="Research chat", research_mode_override="quick")
     )
-    monkeypatch.setattr(routes, "default_chat_store", lambda: store)
-
     app = FastAPI()
-    routes.register_research_mode_routes(app)
+    app.include_router(routes.create_research_mode_router(chat_store_factory=lambda: store))
     client = TestClient(app)
 
     response = client.post(

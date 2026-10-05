@@ -17,6 +17,6 @@ def test_broker_exposes_exact_workspace_command_permission_flow() -> None:
 
 
 def test_repository_preserves_batch_claim_contract() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "repository.py").read_text(encoding="utf-8")
-    assert "def claim_commands(" in source
-    assert "status = 'consumed'" in source
+    runtime = Path(__file__).parents[2] / "app" / "agent_runtime"
+    assert "def claim_commands(" in (runtime / "repository.py").read_text(encoding="utf-8")
+    assert "status = 'consumed'" in (runtime / "run_repository_commands.py").read_text(encoding="utf-8")

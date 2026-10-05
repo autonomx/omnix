@@ -1,7 +1,7 @@
 """Boundary projections derived from canonical narrative blocks."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any
 
 from .authority import BeatKind, BeatPurpose
 from .contracts import CanonicalNarrativeResponse, NarrativeBlock, ordered_blocks
@@ -187,5 +187,3 @@ def canonical_consumer_bundle(response: CanonicalNarrativeResponse) -> dict[str,
     }
 
 
-def projection_block_ids(rows: Iterable[dict[str, Any]]) -> tuple[str, ...]:
-    return tuple(str(row.get("block_id") or "") for row in rows if row.get("block_id"))

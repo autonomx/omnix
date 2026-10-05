@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { rpgCampaignLoreClient } from '../../api/rpgCampaignLoreClient';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
+import { rpgCampaignLoreClient } from './api/rpgCampaignLoreClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
 import { RpgLorePanel } from './RpgLorePanel';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
 import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
@@ -160,7 +160,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
         >
           Worlds &amp; Campaigns
         </button>
-        <div className="rpg-unified-header-controls" aria-label="Workspace layout controls">
+        <div role="group" className="rpg-unified-header-controls" aria-label="Workspace layout controls">
           <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden((value) => !value)}>
             {isHidden ? 'Show header' : 'Hide header'}
           </button>

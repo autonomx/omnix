@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Execution-cost accounting for the Stoch trend-capture SHADOW strategy.
 
 This module deliberately reuses the canonical paper-execution-v2 fill kernel.
@@ -84,6 +88,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -317,6 +322,7 @@ def _simulation_from_payload(
     try:
         return StochExecutionSimulation.model_validate(raw)
     except Exception:
+        logger.debug("suppressed error in %s", "_simulation_from_payload", exc_info=True)
         return None
 
 

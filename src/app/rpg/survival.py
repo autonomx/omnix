@@ -120,11 +120,6 @@ def ensure_survival_state(simulation_state: MutableMapping[str, Any], *, enabled
     return state
 
 
-def serialize_survival_state(value: Any) -> Dict[str, Any]:
-    """Serialize survival state in the exact bounded shape persisted by sessions."""
-    return normalize_survival_state(value)
-
-
 def survival_state_snapshot(simulation_state: Mapping[str, Any]) -> Dict[str, Any]:
     """Return a copy of the current normalized survival state without mutation."""
     return normalize_survival_state(_safe_dict(simulation_state).get(SURVIVAL_STATE_KEY))

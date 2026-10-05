@@ -1,39 +1,38 @@
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
-from contextlib import suppress
 from datetime import datetime, time, timezone
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import default_research_repository
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET=ZoneInfo("America/New_York")
 _STATE_KEY="_omnix_trading_strategy_research_monitor"
 
 
-def _flag(name: str,default: str="1") -> bool: return os.environ.get(name,default).strip().lower() in {"1","true","yes","on"}
+def _flag(name: str,default: str="1") -> bool: return environment().get(name,default).strip().lower() in {"1","true","yes","on"}
 
 def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
-    try: value=int(os.environ.get(name,str(default)))
+    try: value=int(environment().get(name,str(default)))
     except ValueError: value=default
     return max(minimum,min(maximum,value))
 
 def strategy_research_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
+    if environment().get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
     return _flag("OMNIX_TRADING_RESEARCH_MONITOR","1")
 
 def _interval_seconds() -> float:
-    try:value=float(os.environ.get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
+    try:value=float(environment().get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
     except ValueError:value=60.0
     return max(15.0,value)
 
@@ -52,8 +51,10 @@ def _ai_shadow_v2_owns_research(config) -> bool:
     return config.strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 
 
-class TradingStrategyResearchMonitor:
+class TradingStrategyResearchMonitor(ScheduledTradingMonitor):
     """Evidence-only research funnel; has no order/config/universe mutation path."""
+
+    error_event = "trading_research_monitor_error"
     def __init__(
         self,
         *,
@@ -66,16 +67,7 @@ class TradingStrategyResearchMonitor:
         self.max_candidates_per_strategy=max(1,min(15,max_candidates_per_strategy))
         self.max_reports_per_candidate_day=max_reports_per_candidate_day or _int_env("OMNIX_TRADING_RESEARCH_MAX_REPORTS_PER_CANDIDATE_DAY",3,1,10)
         self.unresolved_retry_seconds=unresolved_retry_seconds or _int_env("OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS",300,60,3600)
-        self._task=None
         self.last_run_at:datetime|None=None;self.last_error:str|None=None;self.research_count=0
-
-    def start(self)->None:
-        if self._task is None:self._task=asyncio.create_task(self._loop())
-    async def stop(self)->None:
-        task=self._task;self._task=None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):await task
 
     async def run_once(self)->int:
         strategy_repo:TradingStrategyRepository=default_strategy_repository();research_repo=default_research_repository();now=datetime.now(timezone.utc);now_et=now.astimezone(_ET)
@@ -120,25 +112,15 @@ class TradingStrategyResearchMonitor:
                         universe_id=universe.universe_id,error_type=type(exc).__name__,detail=str(exc),execution_authority=False)
         self.research_count+=completed;self.last_run_at=datetime.now(timezone.utc);return completed
 
-    async def _loop(self)->None:
-        while True:
-            try:await self.run_once()
-            except Exception as exc:
-                self.last_error=f"{type(exc).__name__}: {exc}";trade_log("auto_trading","trading_research_monitor_error",error_type=type(exc).__name__,detail=str(exc),execution_authority=False)
-            await asyncio.sleep(self.interval_seconds)
+
+def create_trading_strategy_research_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
+    if isinstance(existing, TradingStrategyResearchMonitor):
+        return None
+    monitor = TradingStrategyResearchMonitor()
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=strategy_research_monitor_enabled)
 
 
-def register_trading_strategy_research_monitor(gateway:FastAPI)->TradingStrategyResearchMonitor:
-    existing=getattr(gateway.state,_STATE_KEY,None)
-    if isinstance(existing,TradingStrategyResearchMonitor):return existing
-    monitor=TradingStrategyResearchMonitor();setattr(gateway.state,_STATE_KEY,monitor)
-    async def startup():
-        if strategy_research_monitor_enabled():monitor.start()
-    async def shutdown():await monitor.stop()
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
-
-
-__all__=["TradingStrategyResearchMonitor","register_trading_strategy_research_monitor","strategy_research_monitor_enabled"]
+__all__=["TradingStrategyResearchMonitor","create_trading_strategy_research_monitor_task","strategy_research_monitor_enabled"]

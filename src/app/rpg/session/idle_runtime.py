@@ -4,7 +4,6 @@ from typing import Any, Callable, Dict
 
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.world_simulation import step_simulation_state
-from app.rpg.session.ambient_builder import _MAX_RESUME_CATCHUP_TICKS
 from app.rpg.session.state_normalization import (
     _copy_dict,
     _ensure_simulation_state,
@@ -12,34 +11,6 @@ from app.rpg.session.state_normalization import (
     _safe_list,
     _safe_str,
 )
-
-
-def compute_idle_tick_count(
-    session: Dict[str, Any],
-    *,
-    elapsed_seconds: int = 0,
-    reason: str = "heartbeat",
-) -> int:
-    session = _safe_dict(session)
-    runtime = _safe_dict(session.get("runtime_state"))
-    sim = _safe_dict(session.get("simulation_state"))
-
-    encounter_active = bool(sim.get("encounter_active") or sim.get("active_encounter"))
-    quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
-
-    if reason == "resume_catchup":
-        raw = max(0, elapsed_seconds // 5)
-        return min(raw, _MAX_RESUME_CATCHUP_TICKS)
-
-    if reason == "heartbeat":
-        if encounter_active:
-            return 0
-        if quiet_ticks > 0:
-            return 0
-        return 1
-
-    return 1
-
 
 
 def advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:

@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import hashlib
 from copy import deepcopy
-from functools import lru_cache
 from typing import Any
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.rpg_item_description_repository import (
+from app.security.tenant_context import current_tenant
+from app.rpg.persistence.rpg_item_description_repository import (
     PostgresRpgItemDescriptionRepository,
 )
-from app.persistence.rpg_repository import canonical_json
+from app.rpg.persistence.rpg_repository import canonical_json
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.inventory_items import (
     canonical_item_id,
@@ -21,6 +20,16 @@ from app.rpg.session.inventory_items import (
     normalize_inventory_items,
 )
 from app.rpg.session.item_descriptions import build_item_description_context
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_item_detail.prompt', "1", (
+    "Write a medium-detail lore description for this RPG inventory item in exactly three sentences, "
+        "roughly 45 to 80 words. Ground its materials, construction, wear, visual character, and common cultural "
+        "use in the supplied campaign genre and setting. You may add low-stakes setting-consistent descriptive "
+        "fiction, but do not invent unique provenance, named makers, quest significance, hidden secrets, magical "
+        "properties, effects, values, rarity, or mechanics. Do not mention inventory quantity, stackability, current "
+        "equipment status, condition data, missing fields, UI, or game systems. Return immersive prose only."
+))
 
 ITEM_DETAIL_SOURCE = "rpg_item_detail_v1"
 GENERIC_GENRES = {"", "deterministic_rpg_campaign", "rpg_campaign", "default"}
@@ -233,10 +242,9 @@ def _detail_payload(item_name: str, item: dict[str, Any] | None, *, summary: str
     }
 
 
-@lru_cache(maxsize=1)
 def _description_database_context() -> tuple[Any, Any]:
     database = default_database()
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     return database, context
 
 
@@ -381,12 +389,7 @@ def generate_item_detail(
         }
 
     prompt = (
-        "Write a medium-detail lore description for this RPG inventory item in exactly three sentences, "
-        "roughly 45 to 80 words. Ground its materials, construction, wear, visual character, and common cultural "
-        "use in the supplied campaign genre and setting. You may add low-stakes setting-consistent descriptive "
-        "fiction, but do not invent unique provenance, named makers, quest significance, hidden secrets, magical "
-        "properties, effects, values, rarity, or mechanics. Do not mention inventory quantity, stackability, current "
-        "equipment status, condition data, missing fields, UI, or game systems. Return immersive prose only."
+        _PROMPT_1.text
     )
     try:
         summary = _text(

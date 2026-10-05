@@ -4,14 +4,19 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.assist_core.mode_chat import ModeChatResponse
+from app.chat.assist.modes import ModeChatResponse
+from app.chat.segments import InMemoryConversationSegments
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.gateway.main import create_gateway_app
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
-class EmptyJobStore:
-    def list_events(self, after_id: int, limit: int):
-        return []
+class StaticPlanner:
+    def __init__(self, response: ModeChatResponse) -> None:
+        self.response = response
+
+    def plan_proposal(self, **kwargs):
+        return self.response
 
 
 def _events(body: str) -> list[dict]:
@@ -30,9 +35,19 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setenv("OMNIX_ASSISTANT_TURN_STORE_PATH", str(tmp_path / "turns.json"))
+    from app.chat.assistant_turns import AssistantTurnCoordinator
+
+    coordinator = AssistantTurnCoordinator(tmp_path / "turns.json")
     monkeypatch.setattr(
-        "app.chat.live_agent_store.plan_live_agent_proposal",
-        lambda **kwargs: ModeChatResponse(
+        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
+    monkeypatch.setattr(
+        "app.chat.character_store.default_assistant_turn_coordinator",
+        lambda *_args, **_kwargs: coordinator,
+    )
+    planner = StaticPlanner(
+        ModeChatResponse(
             ok=True,
             mode="agent",
             backend="hermes",
@@ -45,15 +60,24 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
                 "requires_confirmation": True,
                 "error": None,
             },
-        ),
+        )
     )
-    store = ChatSessionStore(tmp_path / "chat.json")
+    store = ChatSessionStore(
+        tmp_path / "chat.json",
+        live_agent_planner=planner,
+    )
+    monkeypatch.setattr("app.chat.character_store.conversation_segments", InMemoryConversationSegments)
     session = store.create_session(CreateChatSessionRequest(title="Live Agent"))
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(
-        job_store_factory=lambda: EmptyJobStore(),
+        job_store_factory=lambda: job_store,
         chat_store_factory=lambda: store,
     )
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
 
     response = client.post(
         f"/api/chat/sessions/{session.id}/messages/stream",

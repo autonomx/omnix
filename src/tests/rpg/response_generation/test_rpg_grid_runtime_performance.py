@@ -1,8 +1,9 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 
-from app.gateway.rpg_grid_performance_routes import register_rpg_grid_performance_routes
+from app.rpg.api.feature_routes.rpg_grid_performance_routes import register_rpg_grid_performance_routes
 from app.rpg.grid_runtime_performance import (
     GridRuntimeMetrics,
     GridRuntimeTimings,
@@ -150,18 +151,8 @@ def test_profile_measures_observer_projection_and_path_probe() -> None:
     assert profile.decision.timings.pathfinding_ms is not None
 
 
-def test_grid_performance_route_is_hidden_and_installed() -> None:
+def test_grid_performance_route_is_documented() -> None:
     path = "/api/rpg/map-instances/{map_instance_id}/performance-profile"
     app = FastAPI()
-    register_rpg_grid_performance_routes(app)
-    assert path in {route.path for route in app.routes}
-    assert path not in app.openapi()["paths"]
-
-    gateway = FastAPI(title="Omnix Web Gateway")
-    gateway_paths = {
-        route_path
-        for route in gateway.routes
-        if (route_path := getattr(route, "path", None)) is not None
-    }
-    assert path in gateway_paths
-    assert path not in gateway.openapi()["paths"]
+    include_router_registrar(app, register_rpg_grid_performance_routes)
+    assert path in app.openapi()["paths"]

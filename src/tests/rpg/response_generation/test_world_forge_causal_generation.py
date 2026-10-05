@@ -6,7 +6,7 @@ from app.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
 from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.rpg_world_forge_provider import _payload
+from app.rpg.worlds.providers.world_forge import _payload
 
 
 def _causal_node():

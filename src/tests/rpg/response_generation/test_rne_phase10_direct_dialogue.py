@@ -149,15 +149,3 @@ def test_existing_canonical_identity_is_rebound_after_interaction_commit(monkeyp
     )
     assert canonical["content_hash"] != stale_hash
     assert rebound["result"]["canonical_narrative_response"] == canonical
-
-
-def test_runtime_uses_direct_canonical_entry_without_monkey_patch() -> None:
-    gateway = (
-        REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py"
-    ).read_text(encoding="utf-8")
-    first_call = (
-        REPO_ROOT / "src/app/rpg/session/first_call_dialogue.py"
-    ).read_text(encoding="utf-8")
-    assert "install_interactive_direct_dialogue_cutover" not in gateway
-    assert "canonicalize_direct_dialogue_result" in first_call
-    assert 'payload["canonical_narrative_response"]' in gateway

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
+import type { RpgLaunchResponse, RpgNewGameRequest } from './api/rpgSessionClient';
 import {
   BASE_STAT,
   MAX_STAT,
@@ -394,7 +394,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld, publis
           <div className="rpg-create-field-grid">
             <OptionSelect label="Primary focus" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
           </div>
-          <div className="rpg-capability-grid" aria-label="Secondary capabilities">
+          <div role="group" className="rpg-capability-grid" aria-label="Secondary capabilities">
             {(Object.keys(capabilities) as Capability[]).map((capability) => (
               <label key={capability} className="rpg-create-check-row">
                 <input type="checkbox" checked={capabilities[capability]} onChange={() => toggleCapability(capability)} />
@@ -512,7 +512,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onEnterWorld, publis
               ))}
             </ul>
           </div>
-          <div className="rpg-derived-stats" aria-label="Derived stat preview">
+          <div role="group" className="rpg-derived-stats" aria-label="Derived stat preview">
             {statDefinitions.slice(0, 6).map((stat) => (
               <span key={stat.key}>{stat.label}: {derivedStats[stat.key]}</span>
             ))}

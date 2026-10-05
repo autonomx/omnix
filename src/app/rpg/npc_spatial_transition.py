@@ -1,7 +1,7 @@
 """Resolved cross-map portal events for living NPC spatial goals."""
 from __future__ import annotations
 
-from typing import Iterable, Literal
+from typing import Literal
 
 from pydantic import Field
 
@@ -184,11 +184,3 @@ def reduce_npc_spatial_map_event(
     )
 
 
-def replay_npc_spatial_map_events(
-    initial: CampaignMapInstanceSnapshot,
-    events: Iterable[NpcSpatialResolvedMapEvent],
-) -> CampaignMapInstanceSnapshot:
-    snapshot = initial
-    for event in sorted(events, key=lambda row: row.event_sequence):
-        snapshot = reduce_npc_spatial_map_event(snapshot, event)
-    return snapshot

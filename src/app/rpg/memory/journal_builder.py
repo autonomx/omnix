@@ -63,31 +63,6 @@ class JournalBuilder:
 
         return entries
 
-    def build_from_scene_transition(
-        self,
-        transition: dict,
-        tick: int | None = None,
-    ) -> JournalEntry | None:
-        """Build a journal entry from a scene transition."""
-        destination = transition.get("destination", "")
-        reason = transition.get("reason", "")
-        if not destination and not reason:
-            return None
-
-        summary = f"Scene transition to {destination}." if destination else "Scene transition."
-        if reason:
-            summary += f" Reason: {reason}"
-
-        return JournalEntry(
-            entry_id=self._entry_id("transition", tick, destination or "unknown"),
-            tick=tick,
-            entry_type="transition",
-            title=f"Transition: {destination}" if destination else "Scene Transition",
-            summary=summary,
-            location=destination or None,
-            metadata={"source": "scene_transition"},
-        )
-
     def build_from_thread_changes(
         self,
         coherence_core: Any,
@@ -122,36 +97,6 @@ class JournalBuilder:
                         entity_ids=list(thread.anchor_entity_ids),
                         thread_ids=[thread_id],
                         metadata={"source": "thread_change"},
-                    )
-                )
-
-        return entries
-
-    def build_from_social_changes(
-        self,
-        social_state_core: Any,
-        tick: int | None = None,
-    ) -> list[JournalEntry]:
-        """Build journal entries from social state changes (rumors, relationships)."""
-        entries: list[JournalEntry] = []
-        if social_state_core is None:
-            return entries
-
-        state = social_state_core.get_state()
-
-        # Rumor entries
-        for idx, (rumor_id, rumor) in enumerate(sorted(state.rumors.items())):
-            if rumor.active:
-                entries.append(
-                    JournalEntry(
-                        entry_id=self._entry_id("rumor", tick, rumor_id, idx),
-                        tick=tick,
-                        entry_type="rumor",
-                        title=f"Rumor: {rumor.summary[:50]}",
-                        summary=rumor.summary,
-                        entity_ids=[eid for eid in [rumor.source_npc_id, rumor.subject_id] if eid],
-                        location=rumor.location,
-                        metadata={"source": "social_state", "rumor_id": rumor_id},
                     )
                 )
 

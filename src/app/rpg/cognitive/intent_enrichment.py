@@ -38,12 +38,17 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
+
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.cognitive_intent_enrichment.prompt', "1", 'Character:\n- Name: {v0}\n- Traits: {v1}\n- Goals: {v2}\n- Beliefs: {v3}\n\nCurrent Intent:\n- Type: {v4}\n- Priority: {v5}\n- Target: {v6}\n- Reasoning: {v7}\n\nWorld Context:\n- Nearby threats: {v8}\n- Potential allies: {v9}\n- Faction dynamics: {v10}\n\nRefine the intent:\n- Keep the SAME intent type (required)\n- Adjust priority (0-10): higher if situation is urgent, lower if not\n- Optionally suggest a target entity (must exist in context)\n- Add brief reasoning\n\nReturn JSON ONLY with this structure:\n{{\n  "priority": 5.0,\n  "target": "entity_id or null",\n  "reasoning": "brief explanation"\n}}\n')
 
 logger = logging.getLogger(__name__)
 
 # Allowed intent types — LLM cannot create new ones
-ALLOWED_INTENTS: Set[str] = {
+ALLOWED_INTENTS: set[str] = {
     "expand_influence",
     "attack_target",
     "deliver_aid",
@@ -93,10 +98,10 @@ class IntentEnrichment:
                         Can be None if LLM enrichment not needed.
             cooldown_ticks: Minimum ticks between LLM enrichment calls.
         """
-        self.llm_client = llm_client
+        self.llm_client = adapt_base_provider(llm_client)
         self.cooldown_ticks = cooldown_ticks
         self._last_llm_call_tick: int = -cooldown_ticks  # Ready immediately
-        self._stats: Dict[str, int] = {
+        self._stats: dict[str, int] = {
             "enrichment_attempts": 0,
             "enrichment_success": 0,
             "enrichment_fallbacks": 0,
@@ -105,11 +110,11 @@ class IntentEnrichment:
     
     def enrich(
         self,
-        intent: Optional[Dict[str, Any]],
+        intent: Optional[dict[str, Any]],
         character: Any,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         current_tick: int = 0,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Enrich an intent with LLM-based refinement.
         
         If the base intent is None, returns None.
@@ -153,7 +158,7 @@ class IntentEnrichment:
     def _should_use_llm(
         self,
         character: Any,
-        intent: Dict[str, Any],
+        intent: dict[str, Any],
     ) -> bool:
         """Determine if LLM should be used for this character/intent.
         
@@ -186,10 +191,10 @@ class IntentEnrichment:
     
     def _llm_enrich_intent(
         self,
-        intent: Dict[str, Any],
+        intent: dict[str, Any],
         character: Any,
-        world_state: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        world_state: dict[str, Any],
+    ) -> dict[str, Any]:
         """Use LLM to enrich an intent with context-aware refinement.
         
         The LLM receives a constrained prompt and must return valid JSON
@@ -221,36 +226,7 @@ class IntentEnrichment:
         allies = self._extract_allies(world_state, character)
         factions_info = self._extract_faction_context(world_state, character)
         
-        prompt = f"""Character:
-- Name: {char_id}
-- Traits: {', '.join(char_traits) if char_traits else 'None specified'}
-- Goals: {', '.join(char_goals) if char_goals else 'None specified'}
-- Beliefs: {self._format_beliefs(beliefs)}
-
-Current Intent:
-- Type: {intent.get('type', 'unknown')}
-- Priority: {intent.get('priority', 5.0)}
-- Target: {intent.get('target', 'None')}
-- Reasoning: {intent.get('reasoning', 'Unknown')}
-
-World Context:
-- Nearby threats: {', '.join(threats) if threats else 'None identified'}
-- Potential allies: {', '.join(allies) if allies else 'None identified'}
-- Faction dynamics: {factions_info}
-
-Refine the intent:
-- Keep the SAME intent type (required)
-- Adjust priority (0-10): higher if situation is urgent, lower if not
-- Optionally suggest a target entity (must exist in context)
-- Add brief reasoning
-
-Return JSON ONLY with this structure:
-{{
-  "priority": 5.0,
-  "target": "entity_id or null",
-  "reasoning": "brief explanation"
-}}
-"""
+        prompt = _PROMPT_1.format(v0=(char_id), v1=(', '.join(char_traits) if char_traits else 'None specified'), v2=(', '.join(char_goals) if char_goals else 'None specified'), v3=(self._format_beliefs(beliefs)), v4=(intent.get('type', 'unknown')), v5=(intent.get('priority', 5.0)), v6=(intent.get('target', 'None')), v7=(intent.get('reasoning', 'Unknown')), v8=(', '.join(threats) if threats else 'None identified'), v9=(', '.join(allies) if allies else 'None identified'), v10=(factions_info))
         
         try:
             # Call LLM with expected JSON response
@@ -269,9 +245,9 @@ Return JSON ONLY with this structure:
     
     def _validate_and_apply(
         self,
-        llm_response: Dict[str, Any],
-        original_intent: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        llm_response: dict[str, Any],
+        original_intent: dict[str, Any],
+    ) -> dict[str, Any]:
         """Validate LLM response and apply changes to original intent.
         
         Guardrails:
@@ -321,7 +297,7 @@ Return JSON ONLY with this structure:
         
         return enriched
     
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any]:
         """Parse JSON from LLM text response.
         
         Args:
@@ -345,9 +321,9 @@ Return JSON ONLY with this structure:
     
     def _extract_threats(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Extract nearby threats from world state.
         
         Args:
@@ -374,9 +350,9 @@ Return JSON ONLY with this structure:
     
     def _extract_allies(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Extract potential allies from world state.
         
         Args:
@@ -402,7 +378,7 @@ Return JSON ONLY with this structure:
     
     def _extract_faction_context(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
     ) -> str:
         """Extract faction dynamics as human-readable text.
@@ -441,7 +417,7 @@ Return JSON ONLY with this structure:
                 return ", ".join(f"{k}: {v:.2f}" for k, v in items[:10])
         return "No belief data"
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get enrichment statistics.
         
         Returns:
@@ -458,21 +434,3 @@ Return JSON ONLY with this structure:
             "invalid_responses": 0,
         }
     
-    def set_cooldown(self, ticks: int) -> None:
-        """Set the cooldown between LLM calls.
-        
-        Args:
-            ticks: Number of ticks for cooldown.
-        """
-        self.cooldown_ticks = max(0, ticks)
-    
-    def is_ready(self, current_tick: int) -> bool:
-        """Check if LLM enrichment is ready (not on cooldown).
-        
-        Args:
-            current_tick: Current simulation tick.
-            
-        Returns:
-            True if LLM can be called.
-        """
-        return current_tick - self._last_llm_call_tick >= self.cooldown_ticks

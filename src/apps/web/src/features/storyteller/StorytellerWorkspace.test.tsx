@@ -1,15 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { StorytellerWorkspace } from './StorytellerWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderStoryteller() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'storyteller');
   if (!module) throw new Error('Storyteller module is missing');
   return render(
@@ -83,7 +82,7 @@ function assetPayload() {
         module: 'storyteller',
         type: 'story',
         mime_type: 'text/markdown',
-        storage_path: 'artifacts/the-glass-orchard.md',
+        file_name: 'the-glass-orchard.md',
         created_at: '2026-06-14T00:00:00Z',
       },
     ],
@@ -132,7 +131,7 @@ describe('StorytellerWorkspace', () => {
   it('shows an empty manuscript state before the first story is generated', async () => {
     stubStoryApi([]);
     renderStoryteller();
-    expect(await screen.findByText(/Start with a premise/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Start with a premise/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Save story' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeDisabled();
   });

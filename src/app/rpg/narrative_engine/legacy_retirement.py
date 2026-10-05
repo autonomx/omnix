@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -22,7 +22,7 @@ _RETIRED_PUBLICATION_TOKENS = (
     'result["visible_publisher"]',
 )
 _PRODUCTION_OWNER_PATHS = (
-    "src/app/gateway/rpg_turn_pipeline.py",
+    "src/app/rpg/api/turn_pipeline.py",
     "src/app/rpg/session/turn_presenter.py",
     "src/app/rpg/session/narrative_engine_bridge.py",
     "src/app/rpg/narrative_engine/consumer_publish.py",
@@ -84,7 +84,7 @@ def audit_legacy_publisher_retirement(
         if hits:
             forbidden_hits[relative] = hits
 
-    gateway = sources.get("src/app/gateway/rpg_turn_pipeline.py", "")
+    gateway = sources.get("src/app/rpg/api/turn_pipeline.py", "")
     presenter = sources.get("src/app/rpg/session/turn_presenter.py", "")
     bridge = sources.get("src/app/rpg/session/narrative_engine_bridge.py", "")
     publisher = sources.get("src/app/rpg/narrative_engine/consumer_publish.py", "")
@@ -129,10 +129,8 @@ def audit_legacy_publisher_retirement(
     )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_legacy_retirement_audit() -> LegacyPublisherRetirementAudit:
     return audit_legacy_publisher_retirement(Path(__file__).resolve().parents[4])
 
 
-def reset_legacy_retirement_audit_cache() -> None:
-    production_legacy_retirement_audit.cache_clear()

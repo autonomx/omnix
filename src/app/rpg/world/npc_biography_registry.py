@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -7,6 +9,8 @@ try:
     from app.rpg.world.npc_profile_loader import get_file_npc_profile
 except Exception:
     get_file_npc_profile = None  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_str(value: Any) -> str:
@@ -334,7 +338,7 @@ def get_npc_biography(npc_id_or_name: Any) -> Dict[str, Any]:
             if profile:
                 return profile
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "get_npc_biography", exc_info=True)
 
     bio = NPC_BIOGRAPHIES.get(npc_id)
     if bio:
@@ -368,5 +372,3 @@ def get_npc_biography(npc_id_or_name: Any) -> Dict[str, Any]:
     )
 
 
-def list_npc_biographies() -> List[Dict[str, Any]]:
-    return [deepcopy(value) for value in NPC_BIOGRAPHIES.values()]

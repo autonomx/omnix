@@ -1,9 +1,9 @@
 """Profile-aware image target planning layered over the legacy image service."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_jobs import canonical_hash
@@ -117,7 +117,7 @@ def read_world_image_targets(
     database: Any | None = None,
 ) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _base._upsert_targets(work, context, world_id, _desired_targets(detail))
@@ -143,7 +143,7 @@ def regenerate_world_image_prompts(
     )
     if not selected:
         raise ValueError("world_image_prompt_targets_required")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _base._upsert_targets(work, context, world_id, selected)
@@ -160,13 +160,52 @@ def regenerate_world_image_prompts(
     }
 
 
-# The legacy generator resolves read_world_image_targets from its module globals.
-# Install the profile-aware materializer once, then keep the proven generation and
-# review implementations unchanged.
-_base.read_world_image_targets = read_world_image_targets
+def generate_world_images(
+    world_id: str,
+    *,
+    target_ids: Sequence[str],
+    prompts: Mapping[str, str] | None = None,
+    provider_id: str = "",
+    width: int = 768,
+    height: int = 768,
+    style: str = "",
+    no_cache: bool = False,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    return _base.generate_world_images(
+        world_id,
+        target_ids=target_ids,
+        prompts=prompts,
+        provider_id=provider_id,
+        width=width,
+        height=height,
+        style=style,
+        no_cache=no_cache,
+        database=database,
+        target_reader=read_world_image_targets,
+    )
 
-generate_world_images = _base.generate_world_images
-update_world_image_target = _base.update_world_image_target
+
+def update_world_image_target(
+    world_id: str,
+    target_id: str,
+    *,
+    review_state: str | None = None,
+    active_asset_id: str | None = None,
+    suggested_prompt: str | None = None,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    return _base.update_world_image_target(
+        world_id,
+        target_id,
+        review_state=review_state,
+        active_asset_id=active_asset_id,
+        suggested_prompt=suggested_prompt,
+        database=database,
+        target_reader=read_world_image_targets,
+    )
+
+
 approved_world_asset_bindings = _base.approved_world_asset_bindings
 
 __all__ = [

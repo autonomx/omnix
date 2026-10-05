@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { OMNIX_TEXT_SCALE_STORAGE_KEY } from './appearanceEffects';
+import { OMNIX_TEXT_SCALE_STORAGE_KEY } from '../../design/appearanceEffects';
 import { SettingsControlCenter } from './SettingsControlCenter';
 
 describe('settings shell', () => {

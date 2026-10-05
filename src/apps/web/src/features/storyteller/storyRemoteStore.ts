@@ -1,18 +1,4 @@
-import type { StoryAudioManifest, StoryDocument } from './storyDocument';
-
-export type StoryRemoteStoreResult = {
-  ok: boolean;
-  status: number;
-  message: string;
-};
-
-export async function tryStoreStoryDocument(document: StoryDocument): Promise<StoryRemoteStoreResult> {
-  return postJson('/api/storyteller/documents', document, 'Story document backend endpoint is not available yet.');
-}
-
-export async function tryStoreStoryAudioManifest(manifest: StoryAudioManifest): Promise<StoryRemoteStoreResult> {
-  return postJson('/api/storyteller/audio-manifests', manifest, 'Story audio metadata backend endpoint is not available yet.');
-}
+import type { StoryDocument } from './storyDocument';
 
 export function validateStoryDocumentForRemote(document: StoryDocument): string[] {
   const issues: string[] = [];
@@ -26,14 +12,4 @@ export function validateStoryDocumentForRemote(document: StoryDocument): string[
     }
   }
   return issues;
-}
-
-async function postJson(url: string, payload: unknown, fallbackMessage: string): Promise<StoryRemoteStoreResult> {
-  try {
-    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) return { ok: false, status: response.status, message: response.status === 404 ? fallbackMessage : `Backend returned HTTP ${response.status}.` };
-    return { ok: true, status: response.status, message: 'Stored successfully.' };
-  } catch (error) {
-    return { ok: false, status: 0, message: error instanceof Error ? error.message : fallbackMessage };
-  }
 }

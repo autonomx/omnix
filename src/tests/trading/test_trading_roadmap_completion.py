@@ -60,7 +60,7 @@ def test_live_rsi_helper_matches_causal_cross_contract() -> None:
 
 
 def test_completion_migration_preserves_initial_risk_and_protection_snapshots() -> None:
-    migration = Path("src/app/persistence/migrations/0044_trading_roadmap_completion.sql").read_text()
+    migration = Path("src/app/trading/migrations/0044_trading_roadmap_completion.sql").read_text()
     for token in (
         "archived_at", "initial_stop_price", "mae_price", "mfe_price",
         "trg_omnix_trading_strategy_protection_equity",

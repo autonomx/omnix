@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
+/* eslint-disable react-hooks/rules-of-hooks -- baseline WP-9.x */
 import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -5,13 +8,17 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type AssetListResponse, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { voiceStudioDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { voiceStudioDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
 import { firstResultAsset } from './resultList';
 import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type ScriptSpeakerRow } from './scriptLines';
 import './VoiceStudioWorkspace.css';
+import { jobProgressPercent } from '../../api/jobProgress';
+import { isFallbackOutputRef, jobOutputRefs, type JobOutputRef } from '../../api/schemas/streams';
+import { downloadUrl } from '../../shared/download';
+import { voiceApiClient } from './api/voiceClient';
 
 interface VoiceFormValues {
   text: string;
@@ -30,19 +37,6 @@ interface VoiceCloneFormValues {
   generateTranscript: boolean;
 }
 
-interface VoiceOutputRef {
-  asset_id?: string;
-  content?: string;
-  data_url?: string;
-  duration?: number;
-  mime_type?: string;
-  provider_fallback?: boolean;
-  provider_success?: boolean;
-  segments?: unknown[];
-  storage_path?: string;
-  title?: string;
-  type?: string;
-}
 
 interface PlayableVoiceOutput {
   dataUrl: string;
@@ -66,7 +60,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const appliedSettingsRevision = useRef('');
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
+  // Under ['platform', 'jobs'] so job invalidations refresh it; bounded to voice jobs.
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs', 'voice-summaries'], queryFn: () => voiceApiClient.listVoiceJobSummaries() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
   const moduleDefaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
@@ -161,7 +156,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const selectedCloneSampleName = cloneSource === 'record' ? 'recorded-voice.webm' : sampleFile?.name ?? null;
   const defaultTtsProviderId = moduleDefaults.providerId || ttsProviders[0]?.id || '';
   const defaultCloneProviderId = moduleDefaults.voiceCloningProviderId || cloneProviders[0]?.id || '';
-  const defaultVoiceId = profileAssets[0] ? voiceStoragePath(profileAssets[0]) : '';
+  const defaultVoiceId = profileAssets[0] ? voiceReference(profileAssets[0]) : '';
   const defaultSpeakerName = parsedSpeakers[0]?.name ?? 'Narrator';
 
   const createJobMutation = useMutation({
@@ -210,7 +205,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   const previewVoiceMutation = useMutation({
     mutationFn: (asset: VoiceAsset) => {
-      const voiceId = voiceStoragePath(asset) || voiceAssetId(asset);
+      const voiceId = voiceReference(asset);
       const voiceName = voiceAssetName(asset);
       return omnixApiClient.createJob({
         module: 'voice',
@@ -300,7 +295,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const deleteVoiceMutation = useMutation({
     mutationFn: (asset: VoiceAsset) => omnixApiClient.deleteVoiceAsset(voiceAssetId(asset)),
     onSuccess: async (_result, asset) => {
-      const deletedIds = new Set([voiceAssetId(asset), voiceStoragePath(asset)]);
+      const deletedIds = new Set([voiceAssetId(asset)]);
       if (deletedIds.has(getValues('voiceId'))) {
         setValue('voiceId', '');
         setValue('speaker', '');
@@ -445,10 +440,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       setSaveMessage('Generate speech before saving output.');
       return;
     }
-    const link = document.createElement('a');
-    link.href = currentOutput.dataUrl;
-    link.download = `${safeDownloadName(currentOutput.title)}.wav`;
-    link.click();
+    downloadUrl(currentOutput.dataUrl, `${safeDownloadName(currentOutput.title)}.wav`);
   }
 
   async function toggleRecording() {
@@ -519,7 +511,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }
 
   return (
-    <WorkspacePanel>
+    <WorkspacePanel label={module.label}>
       <div className="voice-studio-app">
         <main className="voice-workspace-final">
           <header className="voice-final-header">
@@ -552,7 +544,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <section className="voice-panel-final library-panel-final">
               <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button aria-label="Refresh voice library" size="xs" variant="subtle" loading={assetsQuery.isFetching} onClick={() => void assetsQuery.refetch()}>Refresh ⟳</Button></Group>
               <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
-              <div className="voice-library-table" aria-label="Voice library">
+              <div role="group" className="voice-library-table" aria-label="Voice library">
                 <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Status</span><span>Actions</span></div>
                 {assetsQuery.isLoading ? <div className="platform-empty" role="status">Loading cloned voices…</div> : assetsQuery.isError ? <div className="platform-empty" role="alert">Voice Library failed to load. The local asset index may be unavailable.<Button aria-label="Retry voice library" size="xs" variant="subtle" onClick={() => void assetsQuery.refetch()}>Retry</Button></div> : visibleProfileAssets.length ? visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />) : <div className="platform-empty" role="status">No cloned voices were indexed. Create a clone or refresh the library to rescan local voice files.</div>}
               </div>
@@ -598,14 +590,14 @@ function VoiceLibraryRow({ asset, deleting, onDelete, onPreview, onUse }: { asse
   return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span title={voiceProfileName(asset)}>{voiceProfileName(asset)}</span><span className="ready-chip">Ready</span><span className="voice-library-actions"><Button aria-label={`Preview ${voiceAssetName(asset)}`} size="xs" variant="subtle" onClick={onPreview}>Preview</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button aria-label={`Delete ${voiceAssetName(asset)}`} color="red" loading={deleting} size="xs" variant="outline" onClick={onDelete}>Delete</Button></span></div>;
 }
 
-function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
-  const progress = progressPercent(job.progress);
+function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current?: number; total?: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
+  const progress = jobProgressPercent(job.progress);
   const stageSummary = job.stages?.length ? `${job.stages.length} stages · ${job.stages.slice(0, 2).map((stage) => stage.label || stage.status || 'stage').join(', ')}` : job.module;
   return <article className={selected ? 'queue-row-final selected' : 'queue-row-final'}><span className="job-icon">▥</span><div><b>{job.type}</b><small>{stageSummary}</small></div><div><OmnixStatusPill>{job.status}</OmnixStatusPill>{progress ? <div className="queue-progress"><span style={{ width: `${progress}%` }} /></div> : null}</div><small>{progress || job.status === 'completed' ? `${progress}%` : '—'}</small><button type="button" onClick={onSelect}>▶</button></article>;
 }
 
 function AssignmentRow({ assets, index, speaker, voiceValue, styleValue, onPreview, onVoiceChange, onStyleChange }: { assets: VoiceAsset[]; index: number; speaker: ScriptSpeakerRow; voiceValue: string; styleValue: string; onPreview: (voiceId: string) => void; onVoiceChange: (voiceId: string) => void; onStyleChange: (style: string) => void }) {
-  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={voiceAssetId(asset)} value={voiceStoragePath(asset)}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
+  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={voiceAssetId(asset)} value={voiceReference(asset)}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
 }
 
 function Waveform() {
@@ -630,7 +622,7 @@ function buildSpeakerAssignments(speakers: ScriptSpeakerRow[], assets: VoiceAsse
 }
 
 function assignedVoiceFor(speaker: ScriptSpeakerRow, assets: VoiceAsset[], voiceAssignments: Record<string, string>): string {
-  return voiceAssignments[speaker.name] ?? voiceStoragePath(findMatchingVoice(speaker.name, assets)) ?? voiceStoragePath(assets[0]) ?? '';
+  return voiceAssignments[speaker.name] ?? voiceReference(findMatchingVoice(speaker.name, assets)) ?? voiceReference(assets[0]) ?? '';
 }
 
 function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | undefined {
@@ -639,7 +631,9 @@ function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | und
 }
 
 function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset: VoiceAsset) => void, setSaveMessage: (message: string) => void) {
-  const asset = assets.find((entry) => voiceStoragePath(entry) === voiceId || voiceAssetId(entry) === voiceId);
+  // Older saved assignments name the voice's file path.
+  const fileName = voiceId.split(/[\/]/).pop();
+  const asset = assets.find((entry) => voiceReference(entry) === voiceId || (Boolean(fileName) && voiceFileName(entry) === fileName));
   if (asset) {
     preview(asset);
   } else {
@@ -648,7 +642,7 @@ function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset
 }
 
 function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFormValues>>['setValue'], setSaveMessage: (message: string) => void) {
-  setValue('voiceId', voiceStoragePath(asset));
+  setValue('voiceId', voiceReference(asset));
   setValue('speaker', voiceAssetName(asset));
   setSaveMessage(`Selected ${voiceAssetName(asset)} for synthesis.`);
 }
@@ -670,11 +664,10 @@ function mergeVoiceJobs(jobs: Array<JobRecord | undefined>): JobRecord[] {
 function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
   const outputs: PlayableVoiceOutput[] = [];
   for (const job of jobs) {
-    const refs = (job.output_refs ?? []) as VoiceOutputRef[];
-    for (const ref of refs) {
+    for (const ref of jobOutputRefs(job)) {
       if (isPlayableAudioRef(ref)) {
         const title = ref.title || job.type || 'voice_output';
-        outputs.push({ dataUrl: ref.data_url, duration: Number(ref.duration || 0), jobId: job.id, key: `${job.id}:${ref.asset_id || ref.title || outputs.length}`, title });
+        outputs.push({ dataUrl: playableAudioUrl(ref), duration: Number(ref.duration || 0), jobId: job.id, key: `${job.id}:${ref.asset_id || ref.title || outputs.length}`, title });
       }
     }
   }
@@ -682,27 +675,20 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
 }
 
 function transcriptFromJob(job: JobRecord): string {
-  const refs = (job.output_refs ?? []) as VoiceOutputRef[];
-  const transcript = refs.find((ref) => ref.type === 'transcript' && typeof ref.content === 'string')?.content;
-  return transcript?.trim() ?? '';
+  const transcript = jobOutputRefs(job).find((ref) => ref.type === 'transcript' && typeof ref.content === 'string')?.content;
+  return typeof transcript === 'string' ? transcript.trim() : '';
 }
 
-function isPlayableAudioRef(ref: VoiceOutputRef): ref is VoiceOutputRef & { data_url: string } {
-  return typeof ref.data_url === 'string' && ref.data_url.startsWith('data:audio/') && !isFallbackOutput(ref);
+// New outputs reference the stored asset (audio_url); older job rows embed
+// the audio as a data URL.
+function playableAudioUrl(ref: JobOutputRef): string {
+  if (typeof ref.audio_url === 'string' && ref.audio_url.startsWith('/api/assets/')) return ref.audio_url;
+  if (typeof ref.data_url === 'string' && ref.data_url.startsWith('data:audio/')) return ref.data_url;
+  return '';
 }
 
-function isFallbackOutput(ref: VoiceOutputRef): boolean {
-  if (ref.provider_fallback || ref.provider_success === false) {
-    return true;
-  }
-  const segments = Array.isArray(ref.segments) ? ref.segments : [];
-  return segments.some((segment) => {
-    if (!segment || typeof segment !== 'object') {
-      return false;
-    }
-    const row = segment as { provider_fallback?: unknown; provider_success?: unknown };
-    return row.provider_fallback === true || row.provider_success === false;
-  });
+function isPlayableAudioRef(ref: JobOutputRef): boolean {
+  return playableAudioUrl(ref) !== '' && !isFallbackOutputRef(ref);
 }
 
 function selectFirstJobOutput(job: JobRecord, setSelectedOutputKey: (key: string) => void): void {
@@ -764,13 +750,14 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) return 0;
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
+/** The voice a job names: its asset id, which the TTS provider resolves (WP-4.10). */
+function voiceReference(asset: VoiceAsset | undefined): string {
+  const value = (asset as { id?: unknown } | undefined)?.id;
+  return typeof value === 'string' ? value : '';
 }
 
-function voiceStoragePath(asset: VoiceAsset | undefined): string {
-  const value = (asset as { storage_path?: unknown } | undefined)?.storage_path;
+function voiceFileName(asset: VoiceAsset | undefined): string {
+  const value = (asset as { file_name?: unknown } | undefined)?.file_name;
   return typeof value === 'string' ? value : '';
 }
 
@@ -788,7 +775,7 @@ function voiceAssetName(asset: VoiceAsset): string {
   const metadata = voiceAssetMetadata(asset);
   const preferred = metadata.profile_name ?? metadata.name ?? metadata.voice_name;
   if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
-  const source = voiceStoragePath(asset) || voiceAssetId(asset);
+  const source = voiceFileName(asset) || voiceAssetId(asset);
   return source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceAssetId(asset);
 }
 

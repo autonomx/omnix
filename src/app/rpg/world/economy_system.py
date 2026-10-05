@@ -43,7 +43,7 @@ Key Features:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 @dataclass
@@ -81,46 +81,6 @@ class Market:
             "demand": max(0.0, demand),
             "price": max(0.01, price),
         }
-    
-    def set_supply(self, good: str, supply: float) -> None:
-        """Set supply level for a good.
-        
-        Args:
-            good: Good name.
-            supply: Supply value (0.0 to 1.0+).
-        """
-        if good in self.goods:
-            self.goods[good]["supply"] = max(0.0, supply)
-    
-    def set_demand(self, good: str, demand: float) -> None:
-        """Set demand level for a good.
-        
-        Args:
-            good: Good name.
-            demand: Demand value (0.0 to 1.0+).
-        """
-        if good in self.goods:
-            self.goods[good]["demand"] = max(0.0, demand)
-    
-    def adjust_supply(self, good: str, delta: float) -> None:
-        """Adjust supply by a delta amount.
-        
-        Args:
-            good: Good name.
-            delta: Change amount (positive = more supply).
-        """
-        if good in self.goods:
-            self.goods[good]["supply"] = max(0.0, self.goods[good]["supply"] + delta)
-    
-    def adjust_demand(self, good: str, delta: float) -> None:
-        """Adjust demand by a delta amount.
-        
-        Args:
-            good: Good name.
-            delta: Change amount (positive = more demand).
-        """
-        if good in self.goods:
-            self.goods[good]["demand"] = max(0.0, self.goods[good]["demand"] + delta)
     
     def update_prices(self) -> List[Dict[str, Any]]:
         """Update prices based on supply/demand ratio.
@@ -226,27 +186,6 @@ class EconomySystem:
         """
         self.markets[market.location_id] = market
         
-    def remove_market(self, location_id: str) -> Optional[Market]:
-        """Remove a market from the simulation.
-        
-        Args:
-            location_id: Location identifier.
-            
-        Returns:
-            Removed market, or None if not found.
-        """
-        market = self.markets.pop(location_id, None)
-        
-        # Clean up trade routes
-        if market is not None:
-            self.trade_routes = [
-                (src, dst, good)
-                for src, dst, good in self.trade_routes
-                if src != location_id and dst != location_id
-            ]
-            
-        return market
-    
     def add_trade_route(self, source: str, destination: str, good: str) -> None:
         """Add a trade route between two locations.
         
@@ -262,23 +201,6 @@ class EconomySystem:
         route = (source, destination, good)
         if route not in self.trade_routes:
             self.trade_routes.append(route)
-    
-    def remove_trade_route(self, source: str, destination: str, good: str) -> bool:
-        """Remove a specific trade route.
-        
-        Args:
-            source: Source location ID.
-            destination: Destination location ID.
-            good: Good being traded.
-            
-        Returns:
-            True if route was removed, False if not found.
-        """
-        route = (source, destination, good)
-        if route in self.trade_routes:
-            self.trade_routes.remove(route)
-            return True
-        return False
     
     def update(self) -> List[Dict[str, Any]]:
         """Advance the economy simulation by one tick.
@@ -353,23 +275,6 @@ class EconomySystem:
                 })
         
         return events
-    
-    def get_market_summary(self) -> Dict[str, Dict[str, Any]]:
-        """Get summary of all market states.
-        
-        Returns:
-            Dict mapping location_id to market data.
-        """
-        return {
-            loc_id: {
-                "location": loc_id,
-                "goods": {
-                    good: dict(data)
-                    for good, data in market.goods.items()
-                }
-            }
-            for loc_id, market in self.markets.items()
-        }
     
     def reset(self) -> None:
         """Clear all market and trade route data."""

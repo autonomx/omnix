@@ -1,10 +1,11 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { ImageGenerationWorkspace } from './ImageGenerationWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
@@ -13,7 +14,7 @@ function requestPath(input: RequestInfo | URL): string {
 function renderWorkspace() {
   const module = omnixModules.find((entry) => entry.id === 'image-generation');
   if (!module) throw new Error('Image Generation module is missing');
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const queryClient = createTestQueryClient();
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>
@@ -36,7 +37,7 @@ describe('Image Generation model residency wiring', () => {
           models: [],
         });
       }
-      if (path === '/api/settings') return Response.json({ success: true, provider: '', audio_provider_tts: '', audio_provider_stt: '', settings: {} });
+      if (path === '/api/settings/profile') return Response.json({ success: true, provider: '', audio_provider_tts: '', audio_provider_stt: '', settings: {} });
       if (path === '/api/workers/health') {
         return Response.json({
           ok: true,

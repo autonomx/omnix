@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from app.chat.models import ChatMessage, ChatSession
+from app.chat.contracts import ChatMessage, ChatSession
 
 from .activity_bridge import (
     CompanionActivityUserTurnUpdate,

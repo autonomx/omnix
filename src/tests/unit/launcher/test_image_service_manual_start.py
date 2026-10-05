@@ -108,6 +108,10 @@ def test_gateway_preserves_explicit_agent_repository_override(monkeypatch) -> No
 
 def test_launcher_drops_retired_semantic_shadow_environment(monkeypatch, tmp_path) -> None:
     captured_environment: dict[str, str] = {}
+    monkeypatch.setenv(
+        "OMNIX_SERVICE_TOKEN",
+        "test-service-token-for-local-launcher-unit-tests-0001",
+    )
 
     class FakeProcess:
         pid = 12345
@@ -159,6 +163,7 @@ def test_auto_start_waits_for_gateway_before_starting_web(monkeypatch, tmp_path)
     ])
 
     monkeypatch.setattr(manager, "start", lambda service_id: events.append(service_id) or {"ok": True})
+    monkeypatch.setattr(manager, "_run_release_migrations", lambda: {"ok": True, "skipped": False})
     monkeypatch.setattr(
         launcher_service_manager,
         "_wait_for_port_open",
@@ -193,6 +198,10 @@ def test_auto_start_retries_slow_gateway_before_starting_web(monkeypatch, tmp_pa
         return next(readiness_results)
 
     monkeypatch.setenv("OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS", "90")
+    monkeypatch.setenv(
+        "OMNIX_SERVICE_TOKEN",
+        "test-service-token-for-local-launcher-unit-tests-0001",
+    )
     monkeypatch.setattr(launcher_service_manager.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(launcher_service_manager, "_wait_for_port_open", fake_wait)
     monkeypatch.setattr(launcher_service_manager, "_kill_processes_for_port", lambda _port: [])
@@ -212,6 +221,7 @@ def test_auto_start_retries_slow_gateway_before_starting_web(monkeypatch, tmp_pa
             ports=(5173,),
         ),
     ])
+    monkeypatch.setattr(manager, "_run_release_migrations", lambda: {"ok": True, "skipped": False})
 
     result = manager.start_auto_services()
 

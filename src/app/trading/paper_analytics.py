@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import logging
+
 import math
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
@@ -19,8 +20,10 @@ from .strategy_v2_qualification import (
     V2ProspectiveQualification,
     evaluate_v2_prospective_qualification,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
+logger = logging.getLogger(__name__)
+
 _ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 
 
@@ -216,6 +219,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -546,13 +550,14 @@ def factor_studies(trades: list[PaperAnalyticsTrade]) -> list[PaperFactorStudy]:
 
 
 class TradingPaperAnalytics:
+    context = RequestTenant()
     def __init__(
         self,
         *,
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context
         self.uow_factory = uow_factory
 
     def list_epochs(self, account_id: str) -> list[PaperSimulationEpoch]:

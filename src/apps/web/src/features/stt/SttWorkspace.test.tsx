@@ -1,18 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { SttWorkspace } from './SttWorkspace';
+import { createTestQueryClient, renderWithProviders, stubGateway } from '../../test/renderWithProviders';
 
 function renderStt() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'stt');
 
   if (!module) {
@@ -82,7 +78,7 @@ describe('SttWorkspace', () => {
               module: 'voice',
               type: 'audio',
               mime_type: 'audio/wav',
-              storage_path: 'artifacts/input.wav',
+              file_name: 'input.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
             {
@@ -90,7 +86,7 @@ describe('SttWorkspace', () => {
               module: 'stt',
               type: 'transcript',
               mime_type: 'text/plain',
-              storage_path: 'artifacts/transcript.txt',
+              file_name: 'transcript.txt',
               created_at: '2026-06-14T00:00:00Z',
             },
           ],
@@ -124,5 +120,25 @@ describe('SttWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"asset_id":"asset:audio"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"parakeet"');
     });
+  });
+
+  it('shows why a transcription could not be queued', async () => {
+    stubGateway({
+      '/api/providers': () => ({ providers: [{ id: 'parakeet', label: 'Parakeet STT', family: 'stt', source: 'settings', status: 'configured', capabilities: ['stt'] }], models: [] }),
+      'GET /api/jobs': () => ({ jobs: [] }),
+      'POST /api/jobs': () => Response.json({ detail: 'The STT worker is offline.' }, { status: 503 }),
+      '/api/assets': () => ({ assets: [{ id: 'asset:audio', module: 'voice', type: 'audio', mime_type: 'audio/wav', file_name: 'input.wav', created_at: '2026-06-14T00:00:00Z' }] }),
+    });
+    const module = omnixModules.find((entry) => entry.id === 'stt');
+    if (!module) throw new Error('STT module is missing');
+    renderWithProviders(<SttWorkspace module={module} />);
+
+    expect(await screen.findByText('Parakeet STT')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'parakeet' } });
+    fireEvent.change(screen.getByLabelText('Audio asset'), { target: { value: 'asset:audio' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue transcription' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('STT request');
+    expect(screen.queryByText(/STT job queued/)).not.toBeInTheDocument();
   });
 });

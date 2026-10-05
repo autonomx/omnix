@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
-import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
+import { rpgWorldLibraryClient } from './api/rpgWorldLibraryClient';
+import { rpgWorldImageClient } from './api/rpgWorldImageClient';
 import { RpgWorldMapAuthoringPanel } from './RpgWorldMapAuthoringPanel';
 import { array, record, text, worldLocationOptions } from './rpgWorldAuthoringData';
 
@@ -291,7 +291,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
   const activeMapAssetId = detailMapAssetId ?? mapAssetId;
   const displayZoom = zoom;
   const canvasStyle = activeMapAssetId ? {
-    backgroundImage: `linear-gradient(rgba(3, 7, 18, 0.32), rgba(3, 7, 18, 0.68)), url(${JSON.stringify(assetUrl(activeMapAssetId))})`,
+    backgroundImage: `linear-gradient(color-mix(in srgb, var(--c-blue-130) 32%, transparent), color-mix(in srgb, var(--c-blue-130) 68%, transparent)), url(${JSON.stringify(assetUrl(activeMapAssetId))})`,
   } : undefined;
   const selectedDescription = locationDescription(selected?.entity);
   const handleZoom = (event: WheelEvent<HTMLDivElement>) => {
@@ -375,7 +375,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
               role="application"
             >
               <div className="rpg-atlas-coordinate-readout">x {Math.round(-pan.x / zoom)} · y {Math.round(-pan.y / zoom)} · {Math.round(zoom * 100)}%</div>
-              <div className="rpg-atlas-toolbar" aria-label="Map controls">
+              <div role="group" className="rpg-atlas-toolbar" aria-label="Map controls">
                 <button type="button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + 0.2))}>+</button>
                 <button type="button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - 0.2))}>−</button>
                 <button type="button" aria-label="Reset map view" onClick={resetView}>⌖</button>

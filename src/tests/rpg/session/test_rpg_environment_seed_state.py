@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.rpg.session import durable_store
 from app.rpg.session.environment import build_initial_environment_seed_state
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session, start_rpg_preset
@@ -92,6 +94,7 @@ def test_environment_seed_state_varies_initial_weather_event_by_seed_within_prof
     assert first["environment"]["active_events"] != second["environment"]["active_events"]
 
 
+@pytest.mark.postgres
 def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monkeypatch, tmp_path) -> None:
     state = _environment_from_created_game(42, "rusty_flagon_tavern", tmp_path, monkeypatch)
     environment = state["world"]["environment"]
@@ -124,6 +127,7 @@ def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monk
     assert scene_context["region_id"] == environment["region_id"]
 
 
+@pytest.mark.postgres
 def test_mountain_pass_new_game_persists_outdoor_scene_context(monkeypatch, tmp_path) -> None:
     state = _environment_from_created_game(140914, "glimmerdeep_pass", tmp_path, monkeypatch)
     environment = state["world"]["environment"]
@@ -145,6 +149,7 @@ def test_mountain_pass_new_game_persists_outdoor_scene_context(monkeypatch, tmp_
     assert scene_context["region_id"] == environment["region_id"]
 
 
+@pytest.mark.postgres
 def test_demo_preset_normalization_gets_environment_state(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)

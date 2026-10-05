@@ -1,19 +1,21 @@
 """Typed management contracts and owner-bound memory operations."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat import ChatSession, ChatSessionStore
+from app.conversation.contracts import ChatSession, TranscriptReader
 
-from .models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
     MemoryRecord,
+    MemorySensitivity,
     MemoryScope,
 )
+from app.runtime.pagination import bounded_count
 from .scope import resolve_session_memory_scope, scope_id_for
 from .service import MemoryPolicyError, MemoryService
 
@@ -37,6 +39,7 @@ class CreateManagedMemoryRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=200)
     scope: MemoryScope
     category: MemoryCategory
+    sensitivity: MemorySensitivity = "normal"
     content: str = Field(min_length=1, max_length=4096)
     pinned: bool = False
 
@@ -82,7 +85,7 @@ class ForgetCandidateResponse(BaseModel):
     candidate_id: str
 
 
-def resolve_session_scope(store: ChatSessionStore, session_id: str):
+def resolve_session_scope(store: TranscriptReader, session_id: str):
     session = store.get_session(session_id)
     if session is None:
         return None, None
@@ -95,7 +98,7 @@ def require_memory_write(session: ChatSession) -> None:
 
 
 def records_for_session(
-    store: ChatSessionStore,
+    store: TranscriptReader,
     service: MemoryService,
     session_id: str,
     *,
@@ -125,7 +128,7 @@ def records_for_session(
     ]
     filtered.sort(key=lambda record: (not record.pinned, record.scope, record.category, record.id))
     total = len(filtered)
-    bounded_limit = max(0, min(limit, 500))
+    bounded_limit = bounded_count(limit)
     bounded_offset = max(0, offset)
     return MemoryListResponse(
         records=filtered[bounded_offset : bounded_offset + bounded_limit],
@@ -134,8 +137,30 @@ def records_for_session(
     )
 
 
+def session_record(
+    store: TranscriptReader,
+    service: MemoryService,
+    session_id: str,
+    memory_id: str,
+) -> tuple[bool, MemoryRecord | None]:
+    """``(session found, the session's active record with this id)``."""
+    _, context = resolve_session_scope(store, session_id)
+    if context is None:
+        return False, None
+    return True, next((record for record in service.list_active(context) if record.id == memory_id), None)
+
+
+def is_candidate_visible(candidate: MemoryCandidate, context: Any) -> bool:
+    """A pending candidate of this owner, proposed for one of the session's scopes."""
+    return (
+        candidate.status == "pending"
+        and (candidate.owner_type, candidate.owner_id) == (context.owner_type, context.owner_id)
+        and scope_id_for(candidate.proposed_scope, context) == candidate.proposed_scope_id
+    )
+
+
 def candidates_for_session(
-    store: ChatSessionStore,
+    store: TranscriptReader,
     service: MemoryService,
     session_id: str,
     *,
@@ -144,7 +169,7 @@ def candidates_for_session(
     _, context = resolve_session_scope(store, session_id)
     if context is None:
         return None
-    bounded_limit = max(0, min(limit, 500))
+    bounded_limit = bounded_count(limit)
     try:
         candidates = service.repository.list_candidates(
             owner_type=context.owner_type,
@@ -157,12 +182,7 @@ def candidates_for_session(
             status="pending",
             limit=bounded_limit,
         )
-    visible = [
-        candidate
-        for candidate in candidates
-        if (candidate.owner_type, candidate.owner_id) == (context.owner_type, context.owner_id)
-        and scope_id_for(candidate.proposed_scope, context) == candidate.proposed_scope_id
-    ]
+    visible = [candidate for candidate in candidates if is_candidate_visible(candidate, context)]
     return MemoryCandidateListResponse(
         candidates=visible,
         total=len(visible),

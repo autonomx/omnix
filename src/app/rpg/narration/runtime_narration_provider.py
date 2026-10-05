@@ -250,6 +250,7 @@ def _call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 320) ->
             if content:
                 return str(content)
         except Exception:
+            logger.debug("suppressed error in %s", "_call_provider_text", exc_info=True)
             continue
     return ""
 
@@ -351,6 +352,7 @@ def _public_callable_names(value: Any, *, limit: int = 80) -> List[str]:
             try:
                 attr = getattr(value, name)
             except Exception:
+                logger.debug("suppressed error in %s", "_public_callable_names", exc_info=True)
                 continue
             if callable(attr):
                 names.append(name)
@@ -370,6 +372,7 @@ def _safe_child_objects(provider: Any) -> List[Dict[str, Any]]:
         try:
             child = getattr(provider, attr_name, None)
         except Exception:
+            logger.debug("suppressed error in %s", "_safe_child_objects", exc_info=True)
             continue
         if child is None:
             continue

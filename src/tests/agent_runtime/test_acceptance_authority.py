@@ -9,7 +9,7 @@ from app.agent_runtime.service import AgentRunService
 
 def test_start_paths_require_diff_only_for_workspace_mutation_authority() -> None:
     root = Path(__file__).parents[2] / "app" / "agent_runtime"
-    for name in ("api.py", "chat_bridge.py"):
+    for name in ("api.py", "chat_lane_agent.py"):
         source = (root / name).read_text(encoding="utf-8")
         assert "task_requires_workspace_mutation" in source
         assert 'expected_artifacts=["diff"] if profile.requires_workspace' not in source
@@ -76,9 +76,9 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
         def list_artifacts(self, _run_id):
             return list(self.artifacts)
 
-    monkeypatch.setattr("app.agent_runtime.service.WorkspaceAuthority", FakeAuthority)
     service = object.__new__(AgentRunService)
     service.context = SimpleNamespace(workspace_id="workspace-1")
+    service.workspace_authority_factory = FakeAuthority
     service.blob_store = FakeBlobStore()
     repository = FakeRepository()
     spec = AgentRunSpec(

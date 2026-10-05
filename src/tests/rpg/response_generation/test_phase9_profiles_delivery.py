@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
 
-import pytest
 
 from app.rpg.response_generation.contracts import (
     CandidateSource,
@@ -24,14 +22,8 @@ from app.rpg.response_generation.performance import (
 )
 from app.rpg.response_generation.profiled_generator import ProfiledRpgResponseGenerator
 from app.rpg.response_generation.profiles import (
-    DeliveryMode,
     ResponseProfileRegistry,
     validate_response_profile,
-)
-from app.rpg.response_generation.validated_delivery import (
-    DeliveryState,
-    ValidatedDeliverySession,
-    validate_publishable_response,
 )
 
 
@@ -144,63 +136,6 @@ def test_phase9_profiled_generator_records_authoritative_policy():
     assert path["action"] == "recover"
     assert path["use_hermes"] is True
     assert rendered.metadata["validation_complete"] is True
-
-
-def test_phase9_no_delivery_unit_exists_before_full_validation():
-    generator, request, rendered = _profiled(ResponseMode.ACTION)
-    profile = generator.resolve_profile(request, rendered.mode)
-    invalid_quality = replace(rendered, quality_report={"ok": False})
-    invalid_gate = replace(
-        rendered,
-        metadata={
-            **dict(rendered.metadata),
-            "hard_gate_decisions": [{"gate": "state_claims", "passed": False}],
-        },
-    )
-
-    with pytest.raises(ValueError, match="quality_not_approved"):
-        ValidatedDeliverySession.prepare(invalid_quality, profile)
-    with pytest.raises(ValueError, match="hard_gate_failed"):
-        ValidatedDeliverySession.prepare(invalid_gate, profile)
-    assert validate_publishable_response(rendered) == ()
-
-
-def test_phase9_delivery_streams_only_approved_sentence_units_in_order():
-    generator, request, rendered = _profiled(ResponseMode.ACTION)
-    profile = generator.resolve_profile(request, rendered.mode)
-    assert profile.delivery_mode is DeliveryMode.SENTENCE
-    session = ValidatedDeliverySession.prepare(rendered, profile)
-
-    first = session.next_unit()
-    assert first is not None and first.approved is True
-    assert first.text == "The approved response arrives."
-    session.acknowledge(first)
-    second = session.next_unit()
-    assert second is not None and second.text == "Another sentence follows."
-    session.acknowledge(second)
-
-    assert session.state is DeliveryState.COMPLETED
-    assert session.next_unit() is None
-    assert session.checkpoint().delivered_text == rendered.text
-
-
-def test_phase9_interruption_and_restore_never_deliver_unheard_suffix():
-    generator, request, rendered = _profiled(ResponseMode.DIALOGUE)
-    profile = generator.resolve_profile(request, rendered.mode)
-    session = ValidatedDeliverySession.prepare(rendered, profile)
-    first = session.next_unit()
-    assert first is not None
-    session.acknowledge(first)
-    checkpoint = session.interrupt("player_spoke")
-
-    assert checkpoint.state is DeliveryState.INTERRUPTED
-    assert checkpoint.delivered_text == first.text
-    assert session.next_unit() is None
-
-    restored = ValidatedDeliverySession.prepare(rendered, profile)
-    restored.restore(checkpoint)
-    assert restored.next_unit() is None
-    assert restored.checkpoint() == checkpoint
 
 
 def test_phase9_legacy_bridge_buffers_raw_chunks_until_canonical_approval(monkeypatch):

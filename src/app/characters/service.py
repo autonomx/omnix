@@ -3,14 +3,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from pathlib import Path
+from typing import Any, Protocol
 
+from app.assets.content import asset_available
 from app.assets import (
     AssetRecord,
     AssetType,
     SharedAssetStore,
     default_asset_store,
     discover_canonical_voice_clone_assets,
+    iter_assets,
 )
 
 from .models import (
@@ -21,6 +23,8 @@ from .models import (
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
+from app.runtime.ports import Port, implementations
+
 from .repository import (
     CharacterConflictError,
     CharacterNotFoundError,
@@ -29,6 +33,41 @@ from .repository import (
 from .voice_consent import governance_from_asset
 
 LOGGER = logging.getLogger("uvicorn.error")
+
+
+class CharacterSnapshotObserver(Protocol):
+    """Follows character snapshots and changes in this process (ADR-0016 port, PA-3.4).
+
+    Called right after a snapshot is resolved or a character changes; an
+    observer that fails is logged and never fails the character operation.
+    """
+
+    def on_resolve(self, snapshot: Any) -> None:
+        """A version-pinned snapshot was resolved."""
+
+    def on_change(self, character_id: str) -> None:
+        """The character was created, updated or archived."""
+
+
+CHARACTER_SNAPSHOT_OBSERVERS: Port[CharacterSnapshotObserver] = Port(
+    "characters.snapshot_observers", CharacterSnapshotObserver, "many",
+)
+
+
+def _publish_snapshot(snapshot: Any) -> None:
+    for observer in implementations(CHARACTER_SNAPSHOT_OBSERVERS):
+        try:
+            observer.on_resolve(snapshot)
+        except Exception:
+            LOGGER.warning("character snapshot cache observer failed", exc_info=True)
+
+
+def _invalidate_snapshot_caches(character_id: str) -> None:
+    for observer in implementations(CHARACTER_SNAPSHOT_OBSERVERS):
+        try:
+            observer.on_change(character_id)
+        except Exception:
+            LOGGER.warning("character snapshot cache invalidator failed", exc_info=True)
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -45,7 +84,7 @@ class CharacterService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.runtime_composition import production_character_repository
+                from app.characters.persistence.character_store import production_character_repository
                 repository = production_character_repository()
             else:
                 repository = CharacterRepository()
@@ -67,23 +106,31 @@ class CharacterService:
         asset = self._validate_voice_asset(request.default_voice_asset_id)
         if asset is not None and request.default_voice_asset_id != asset.id:
             request = request.model_copy(update={"default_voice_asset_id": asset.id})
-        return self.repository.create(request)
+        result = self.repository.create(request)
+        _invalidate_snapshot_caches(result.id)
+        return result
 
     def update(self, character_id: str, request: UpdateCharacterRequest) -> CharacterProfile:
         if request.default_voice_asset_id is not None:
             asset = self._validate_voice_asset(request.default_voice_asset_id)
             if asset is not None and request.default_voice_asset_id != asset.id:
                 request = request.model_copy(update={"default_voice_asset_id": asset.id})
-        return self.repository.update(character_id, request)
+        result = self.repository.update(character_id, request)
+        _invalidate_snapshot_caches(character_id)
+        return result
 
     def archive(self, character_id: str) -> ArchiveCharacterResponse:
-        return ArchiveCharacterResponse(character=self.repository.archive(character_id))
+        result = ArchiveCharacterResponse(character=self.repository.archive(character_id))
+        _invalidate_snapshot_caches(character_id)
+        return result
 
     def versions(self, character_id: str) -> CharacterVersionListResponse:
         return CharacterVersionListResponse(versions=self.repository.versions(character_id))
 
     def resolve_snapshot(self, character_id: str):
-        return self.get(character_id).snapshot()
+        snapshot = self.get(character_id).snapshot()
+        _publish_snapshot(snapshot)
+        return snapshot
 
     def resolve_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
         """Resolve a voice from the shared store or canonical clone directory.
@@ -102,7 +149,7 @@ class CharacterService:
 
         candidates: dict[str, AssetRecord] = {}
         try:
-            for item in self.asset_store_factory().list_assets().assets:
+            for item in iter_assets(self.asset_store_factory()):
                 candidates.setdefault(item.id, item)
         except (OSError, TypeError, ValueError) as exc:
             LOGGER.warning(
@@ -147,8 +194,7 @@ class CharacterService:
             raise CharacterVoiceAssetError(
                 f"asset is not a voice profile: {asset_id} ({asset.type.value})"
             )
-        storage_path = Path(asset.storage_path)
-        if asset.mime_type == "audio/wav" and not storage_path.is_file():
+        if asset.mime_type == "audio/wav" and not asset_available(asset):
             raise CharacterVoiceAssetError(f"voice profile audio is missing: {asset.id}")
         self.validate_voice_for_use(asset.id, "character")
         return asset
@@ -159,6 +205,8 @@ def default_character_service() -> CharacterService:
 
 
 __all__ = [
+    "CHARACTER_SNAPSHOT_OBSERVERS",
+    "CharacterSnapshotObserver",
     "CharacterConflictError",
     "CharacterNotFoundError",
     "CharacterService",

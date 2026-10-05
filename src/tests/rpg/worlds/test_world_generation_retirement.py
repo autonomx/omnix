@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
+from app.gateway.main import create_gateway_app
 from app.rpg.worlds.generation_recovery_evidence import _DiagnosticsWithRawEvidence
 
 
@@ -25,17 +25,13 @@ class _Diagnostics:
 
 
 def test_retired_legacy_generation_routes_are_not_registered() -> None:
-    paths = {
-        str(route.path)
-        for route in rpg_adventure_bp.routes
-    }
+    paths = set(create_gateway_app().openapi()["paths"])
 
     assert not paths.intersection(_RETIRED_PATHS)
     assert {
         "/api/rpg/adventure/templates",
         "/api/rpg/adventure/validate",
         "/api/rpg/adventure/preview",
-        "/api/rpg/adventure/start",
         "/api/rpg/adventure/inspect-world",
         "/api/rpg/adventure/simulate-step",
     }.issubset(paths)

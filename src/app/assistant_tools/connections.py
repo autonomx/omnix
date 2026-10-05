@@ -1,9 +1,12 @@
 """Assistant tool provider connection discovery."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import json
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +20,7 @@ from .credentials import (
     AssistantToolCredentialRecord,
     AssistantToolOAuthClientRecord,
     credential_for_tool,
+    delete_tool_credential,
     expires_at_from_now,
     is_expired,
     oauth_client_for_provider,
@@ -43,6 +47,13 @@ class AssistantToolConnectionCompletePayload(BaseModel):
     message: str = ""
 
 
+class AssistantToolDisconnectPayload(BaseModel):
+    tool_id: str
+    disconnected: bool = True
+    revoked_at_provider: bool = False
+    message: str = ""
+
+
 class AssistantToolOAuthClientPayload(BaseModel):
     client_id: str = ""
     client_secret: str = ""
@@ -50,6 +61,8 @@ class AssistantToolOAuthClientPayload(BaseModel):
 
 GOOGLE_TOOL_IDS = {"gmail", "calendar", "contacts"}
 _OAUTH_STATE_TTL_SECONDS = 600.0
+_MAX_PENDING_OAUTH_STATES = 2048
+_PENDING_OAUTH_LOCK = threading.RLock()
 _PENDING_OAUTH_STATES: dict[str, tuple[str, str, float]] = {}
 
 
@@ -309,6 +322,76 @@ def complete_github_connection(code: str, state: str, request_base_url: str | No
     )
 
 
+def disconnect_tool_account(tool_id: str) -> AssistantToolDisconnectPayload:
+    """Forget a connected account: revoke its grant at the provider and delete the stored token (ASVS 3.5.1).
+
+    Revocation is best effort; the stored token is deleted either way. Google
+    grants are shared by the Google tools of one account, so the grant is
+    revoked only when no other Google tool still holds a token.
+    """
+    credential = credential_for_tool(tool_id)
+    revoked = False
+    if credential is not None:
+        shared = tool_id in GOOGLE_TOOL_IDS and any(
+            credential_for_tool(other) is not None for other in GOOGLE_TOOL_IDS - {tool_id}
+        )
+        if not shared:
+            revoked = _revoke_at_provider(tool_id, credential)
+        delete_tool_credential(tool_id)
+    payload = load_assistant_tools_config()
+    payload.tools = [
+        tool.model_copy(update={"connection_status": "not_configured", "account_label": None,
+                                "account_email": None, "connected_at": None})
+        if tool.tool_id == tool_id
+        else tool
+        for tool in payload.tools
+    ]
+    save_assistant_tools_config(payload)
+    if credential is None:
+        message = "No stored account token to remove."
+    elif revoked:
+        message = "Account disconnected and its access revoked at the provider."
+    else:
+        message = "Account disconnected; its stored token is deleted. Revoke Omnix's access in the provider's account settings to end the grant there."
+    return AssistantToolDisconnectPayload(tool_id=tool_id, revoked_at_provider=revoked, message=message)
+
+
+def _revoke_at_provider(tool_id: str, credential: AssistantToolCredentialRecord) -> bool:
+    token = credential.refresh_token or credential.access_token
+    if not token:
+        return False
+    try:
+        if tool_id in GOOGLE_TOOL_IDS:
+            _post_form_json_status("https://oauth2.googleapis.com/revoke", {"token": token})
+            return True
+        if tool_id == "github":
+            client_id, client_secret = _oauth_client_credentials("github")
+            if not client_id or not client_secret:
+                return False
+            import base64
+
+            basic = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+            request = Request(
+                f"https://api.github.com/applications/{client_id}/grant",
+                data=json.dumps({"access_token": credential.access_token}).encode("utf-8"),
+                headers={"Authorization": f"Basic {basic}", "Accept": "application/vnd.github+json",
+                         "Content-Type": "application/json"},
+                method="DELETE",
+            )
+            with urlopen(request, timeout=15):
+                return True
+    except (OSError, ValueError):
+        return False
+    return False
+
+
+def _post_form_json_status(url: str, values: dict[str, str]) -> None:
+    request = Request(url, data=urlencode(values).encode("utf-8"),
+                      headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    with urlopen(request, timeout=15):
+        return None
+
+
 def _save_connected_account(tool_id: str, account_label: str, account_email: str) -> None:
     payload = load_assistant_tools_config()
     connected_at = datetime.now(timezone.utc).isoformat()
@@ -379,7 +462,7 @@ def _safe_str(value: object) -> str:
 
 def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> str:
     provider_key = provider.upper()
-    configured = os.environ.get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
+    configured = environment().get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
     if configured:
         return configured
     base_url = (request_base_url or "http://127.0.0.1:8000").rstrip("/")
@@ -388,8 +471,8 @@ def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> s
 
 def _oauth_client_credentials(provider: str) -> tuple[str, str]:
     provider_key = provider.upper()
-    env_client_id = os.environ.get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
-    env_client_secret = os.environ.get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
+    env_client_id = environment().get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
+    env_client_secret = environment().get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
     if env_client_id or env_client_secret:
         return env_client_id, env_client_secret
     record = oauth_client_for_provider(provider)
@@ -408,16 +491,26 @@ def _provider_for_tool(tool_id: str) -> str:
 
 def _issue_oauth_state(provider: str, tool_id: str) -> str:
     now = time.monotonic()
-    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
-        if expires_at <= now:
-            _PENDING_OAUTH_STATES.pop(token, None)
-    token = secrets.token_urlsafe(32)
-    _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
-    return token
+    with _PENDING_OAUTH_LOCK:
+        _prune_pending_oauth_locked(now)
+        while len(_PENDING_OAUTH_STATES) >= _MAX_PENDING_OAUTH_STATES:
+            oldest = min(_PENDING_OAUTH_STATES, key=lambda key: _PENDING_OAUTH_STATES[key][2])
+            _PENDING_OAUTH_STATES.pop(oldest, None)
+        token = secrets.token_urlsafe(32)
+        _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
+        return token
+
+
+def clear_pending_oauth_states() -> None:
+    """Invalidate pending OAuth handshakes for tests and controlled resets."""
+
+    with _PENDING_OAUTH_LOCK:
+        _PENDING_OAUTH_STATES.clear()
 
 
 def _consume_oauth_state(provider: str, token: str) -> str | None:
-    value = _PENDING_OAUTH_STATES.pop(token, None)
+    with _PENDING_OAUTH_LOCK:
+        value = _PENDING_OAUTH_STATES.pop(token, None)
     if value is None:
         return None
     stored_provider, tool_id, expires_at = value
@@ -426,8 +519,14 @@ def _consume_oauth_state(provider: str, token: str) -> str | None:
     return tool_id
 
 
+def _prune_pending_oauth_locked(now: float) -> None:
+    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
+        if expires_at <= now:
+            _PENDING_OAUTH_STATES.pop(token, None)
+
+
 def _load_local_env() -> None:
-    if os.environ.get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
+    if environment().get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
         return
     env_path = Path(__file__).resolve().parents[3] / ".env.local"
     if not env_path.exists():
@@ -440,4 +539,4 @@ def _load_local_env() -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         if key:
-            os.environ.setdefault(key, value)
+            environment().setdefault(key, value)

@@ -1,6 +1,10 @@
 """End-to-end RPG request tracing with bounded structured stage metrics."""
 from __future__ import annotations
 
+import logging
+
+from app.config.env import env_str
+
 import json
 import os
 import sys
@@ -12,7 +16,11 @@ from typing import Any, Iterator
 
 from fastapi.responses import Response
 
+from app.observability.tracing import annotate
+from app.observability.tracing import span as tracing_span
 from app.rpg.debug_logging import log_rpg_event, new_rpg_trace_id
+
+logger = logging.getLogger(__name__)
 
 _WARNING_THRESHOLD_ENV = "OMNIX_RPG_SLOW_SPAN_MS"
 _DEFAULT_WARNING_THRESHOLD_MS = 500.0
@@ -150,6 +158,25 @@ def rpg_pipeline_trace(
     trace_id: str | None = None,
     fields: dict[str, Any] | None = None,
 ) -> Iterator[RpgPipelineTrace]:
+    """Measure an RPG request; with tracing on, it is also an OpenTelemetry span (WP-10.4)."""
+    name = str(operation or "rpg.pipeline")
+    with tracing_span(f"rpg.{name}", session_id=session_id) as otel_span, _measured_pipeline_trace(
+        name, session_id=session_id, trace_id=trace_id, fields=fields,
+    ) as trace:
+        try:
+            yield trace
+        finally:
+            annotate(otel_span, {"rpg_trace_id": trace.trace_id, **trace.fields})
+
+
+@contextmanager
+def _measured_pipeline_trace(
+    operation: str,
+    *,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[RpgPipelineTrace]:
     trace = RpgPipelineTrace(
         trace_id=trace_id or new_rpg_trace_id("pipeline"),
         operation=str(operation or "rpg.pipeline"),
@@ -206,6 +233,20 @@ def rpg_pipeline_span(
     *,
     fields: dict[str, Any] | None = None,
 ) -> Iterator[dict[str, Any]]:
+    """Measure one stage; with tracing on, it is also a child OpenTelemetry span."""
+    with tracing_span(f"rpg.{name}") as otel_span, _measured_pipeline_span(name, fields=fields) as stage:
+        try:
+            yield stage
+        finally:
+            annotate(otel_span, stage)
+
+
+@contextmanager
+def _measured_pipeline_span(
+    name: str,
+    *,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[dict[str, Any]]:
     trace = current_rpg_pipeline_trace()
     started_at = perf_counter()
     cpu_started = process_time()
@@ -249,6 +290,21 @@ def rpg_pipeline_span(
         _SPAN_DEPTH.reset(depth_token)
 
 
+@contextmanager
+def rpg_pipeline_span_if_active(
+    name: str,
+    *,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[dict[str, Any] | None]:
+    """Measure an internal operation only when a request trace is already active."""
+
+    if current_rpg_pipeline_trace() is None:
+        yield None
+        return
+    with rpg_pipeline_span(name, fields=fields) as span:
+        yield span
+
+
 def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 200) -> Response:
     if payload.get("contract_version") == "rpg_turn_response_v2":
         from app.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
@@ -280,7 +336,7 @@ def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 20
 
 def slow_span_threshold_ms() -> float:
     try:
-        return max(0.0, float(os.getenv(_WARNING_THRESHOLD_ENV, str(_DEFAULT_WARNING_THRESHOLD_MS))))
+        return max(0.0, float(env_str(_WARNING_THRESHOLD_ENV, str(_DEFAULT_WARNING_THRESHOLD_MS))))
     except (TypeError, ValueError):
         return _DEFAULT_WARNING_THRESHOLD_MS
 
@@ -321,7 +377,7 @@ def _rss_bytes() -> int | None:
         rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         return rss if sys.platform == "darwin" else rss * 1024
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
     if os.name == "nt":
         try:
             import ctypes
@@ -347,6 +403,7 @@ def _rss_bytes() -> int | None:
             if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
                 return int(counters.WorkingSetSize)
         except Exception:
+            logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
             return None
     return None
 

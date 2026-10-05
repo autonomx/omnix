@@ -1,6 +1,9 @@
 """Omnix-authoritative acceptance checks for agent completion."""
 from __future__ import annotations
 
+from .profiles import profile_produces_diff
+from .exception_logging import log_recovered_exception
+
 from pathlib import Path
 import re
 import shlex
@@ -41,7 +44,7 @@ def compile_acceptance_plan(spec: AgentRunSpec, *, task_revision: TaskRevision |
         else list(spec.expected_artifacts)
     )
     mutating_code = (
-        spec.profile == "coding"
+        profile_produces_diff(spec.profile)
         and (
             "diff" in expected_artifacts
             if task_revision is not None
@@ -156,7 +159,34 @@ def evaluate_acceptance(
         expected=(requested_replacement[1] if requested_replacement is not None else None),
     )
 
-    if spec.profile == "coding" and plan.require_diff and _is_web_ui_task(spec, task_revision):
+    already_satisfied_without_diff = _check_web_ui_task(plan, spec, task_revision, modified_paths, tool_calls, diff_artifacts, diff_is_nonempty, requested_replacement, exact_ui_validation, checks, failures, already_satisfied_without_diff)
+
+    if plan.require_diff and diff_artifacts and not diff_is_nonempty and not already_satisfied_without_diff:
+        failures.append("empty_diff_artifact")
+
+    for index, required_command in enumerate(plan.required_commands, start=1):
+        key = f"required_command:{index}"
+        ok = any(
+            success and _command_matches(command, required_command)
+            for command, success in tool_calls
+        )
+        checks[key] = ok
+        if not ok:
+            failures.append(key)
+
+    _check_required_command_kinds(plan, spec, task_revision, tool_calls, checks, failures)
+
+    return AcceptanceResult(
+        passed=not failures,
+        checks=checks,
+        failures=failures,
+        modified_paths=modified_paths,
+    )
+
+
+def _check_web_ui_task(plan, spec, task_revision, modified_paths, tool_calls, diff_artifacts, diff_is_nonempty, requested_replacement, exact_ui_validation, checks, failures, already_satisfied_without_diff):
+    """A web UI coding task changes UI paths, validates them in the browser, and verifies an exact requested label replacement."""
+    if profile_produces_diff(spec.profile) and plan.require_diff and _is_web_ui_task(spec, task_revision):
         relevant_paths = any(_is_web_ui_path(path) for path in modified_paths)
         relevant_validation = any(
             success and _is_web_ui_validation(command)
@@ -200,20 +230,11 @@ def evaluate_acceptance(
             checks["requested_ui_label_replacement"] = replacement_verified
             if not replacement_verified:
                 failures.append("ui_label_replacement_not_verified")
+    return already_satisfied_without_diff
 
-    if plan.require_diff and diff_artifacts and not diff_is_nonempty and not already_satisfied_without_diff:
-        failures.append("empty_diff_artifact")
 
-    for index, required_command in enumerate(plan.required_commands, start=1):
-        key = f"required_command:{index}"
-        ok = any(
-            success and _command_matches(command, required_command)
-            for command, success in tool_calls
-        )
-        checks[key] = ok
-        if not ok:
-            failures.append(key)
-
+def _check_required_command_kinds(plan, spec, task_revision, tool_calls, checks, failures):
+    """Each required command kind (test, typecheck, lint) ran successfully."""
     for requirement in plan.checks:
         if requirement == "successful_test_command":
             ok = any(
@@ -239,13 +260,6 @@ def evaluate_acceptance(
         checks[requirement] = ok
         if not ok:
             failures.append(requirement)
-
-    return AcceptanceResult(
-        passed=not failures,
-        checks=checks,
-        failures=failures,
-        modified_paths=modified_paths,
-    )
 
 
 def _modified_paths(
@@ -375,9 +389,10 @@ def _authoritative_diff_text(
                 forbidden_paths=list(spec.workspace.forbidden_paths),
             )
             return authority.git_diff(modified_paths if modified_paths else None)
-        except Exception:
+        except Exception as exc:
             # Runtime-created diff artifacts are produced from the authoritative
             # workspace and retain a bounded preview for acceptance fallback.
+            log_recovered_exception("acceptance diff artifact fallback", exc, level="DEBUG")
             pass
     previews = [
         str(item.metadata.get("preview") or "")

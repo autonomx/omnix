@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from .contracts import (
     AcceptancePlan,
     AgentApprovalPolicy,
@@ -26,7 +26,7 @@ from .contracts import (
     WorkspaceSpec,
 )
 from .evidence import EvidenceCompilationError, capability_for_requirement, compile_task_authority
-from .profiles import get_agent_profile, resolve_profile_capabilities
+from .profiles import get_agent_profile, profile_produces_diff, resolve_profile_capabilities
 from .semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
@@ -529,7 +529,7 @@ def _acceptance_plan_for_node(
 ) -> AcceptancePlan | None:
     """Preserve the single-Agent coding completion floor inside composites."""
 
-    if profile_id != "coding" or "workspace_mutate" not in set(action_intents):
+    if not profile_produces_diff(profile_id) or "workspace_mutate" not in set(action_intents):
         return None
     return AcceptancePlan(
         allowed_modified_paths=list(
@@ -684,7 +684,7 @@ def _compile_profile_node(
                 description=(
                     "Complete the scoped coding change, run the smallest relevant "
                     "validation, and report verifiable evidence."
-                    if profile_id == "coding"
+                    if profile_produces_diff(profile_id)
                     and "workspace_mutate" in set(compilation.action_intents)
                     else f"Complete the {profile_id} scoped portion of the user request."
                 ),
@@ -850,61 +850,7 @@ def _compile_segmented_profile_graph(
                 )
             )
 
-    result_node_id = nodes[0].id
-    if len(nodes) > 1:
-        profile_nodes = list(nodes)
-        join = TaskNode(
-            id="join-results",
-            kind="join",
-            objective="Aggregate completed node results without acquiring new authority.",
-            output_keys=["result"],
-        )
-        nodes.append(join)
-        for source_node in profile_nodes:
-            edges.append(
-                TaskEdge(
-                    source=source_node.id,
-                    target=join.id,
-                    kind="data",
-                    source_output="result",
-                )
-            )
-
-        synthesis = TaskNode(
-            id="synthesize-results",
-            kind="synthesis",
-            profile_id=None,
-            objective=(
-                "Synthesize the completed TaskGraph node results into one final "
-                "user-facing answer. Use only predecessor results as reference "
-                "data; do not perform actions or acquire new evidence."
-            ),
-            semantic_targets=["conversation"],
-            semantic_action_intents=[],
-            success_criteria=[
-                SuccessCriterion(
-                    id="synthesis-complete",
-                    description=(
-                        "Return a faithful final answer from the completed node "
-                        "results without inventing unsupported facts or actions."
-                    ),
-                )
-            ],
-            model=model,
-            cacheable=False,
-            estimated_cost=0.25,
-        )
-        nodes.append(synthesis)
-        edges.append(
-            TaskEdge(
-                source=join.id,
-                target=synthesis.id,
-                kind="data",
-                source_output="result",
-                target_input="graph_results",
-            )
-        )
-        result_node_id = synthesis.id
+    result_node_id = _add_result_synthesis(nodes, edges, model)
 
     return TaskGraphCompilation(
         graph=TaskGraph(
@@ -940,23 +886,7 @@ def compile_task_graph(
             ]
         )
 
-    profile_map = _effective_profile_map(task)
-    ordered_profiles: list[str] = []
-    operation_profile_order: list[str] = []
-    for operation in task.operations:
-        profile = profile_map.get(operation.target)
-        if profile is not None:
-            operation_profile_order.append(profile)
-            if profile not in ordered_profiles:
-                ordered_profiles.append(profile)
-    for dependency in task.data_dependencies:
-        profile = profile_map.get(dependency.target)
-        if dependency.required and profile is not None and profile not in ordered_profiles:
-            ordered_profiles.append(profile)
-    for subject in task.subjects:
-        profile = profile_map.get(subject.target)
-        if profile is not None and profile not in ordered_profiles:
-            ordered_profiles.append(profile)
+    operation_profile_order, ordered_profiles, profile_map = _graph_profile_order(task)
 
     if not ordered_profiles:
         return TaskGraphCompilation(
@@ -1039,6 +969,45 @@ def compile_task_graph(
     # it conservatively as a prerequisite of every explicit operation profile;
     # this covers read -> read producer/consumer flows without inventing
     # mutation as a proxy for semantic dependency.
+    _add_dependency_only_edges(operation_profile_order, ordered_profiles, profile_node, profile_sequence, edges)
+
+    result_node_id = _add_result_synthesis(nodes, edges, model)
+
+    graph = TaskGraph(
+        user_request_digest=_request_digest(latest_user_message),
+        nodes=nodes,
+        edges=edges,
+        output_contract={"result_node": result_node_id},
+        reference_context=str(reference_context or "")[:12000],
+        max_parallel_nodes=max_parallel_nodes,
+    )
+    return TaskGraphCompilation(graph=graph)
+
+
+def _graph_profile_order(task):
+    """Profiles in first-appearance order across operations, required dependencies and subjects."""
+    profile_map = _effective_profile_map(task)
+    ordered_profiles: list[str] = []
+    operation_profile_order: list[str] = []
+    for operation in task.operations:
+        profile = profile_map.get(operation.target)
+        if profile is not None:
+            operation_profile_order.append(profile)
+            if profile not in ordered_profiles:
+                ordered_profiles.append(profile)
+    for dependency in task.data_dependencies:
+        profile = profile_map.get(dependency.target)
+        if dependency.required and profile is not None and profile not in ordered_profiles:
+            ordered_profiles.append(profile)
+    for subject in task.subjects:
+        profile = profile_map.get(subject.target)
+        if profile is not None and profile not in ordered_profiles:
+            ordered_profiles.append(profile)
+    return operation_profile_order, ordered_profiles, profile_map
+
+
+def _add_dependency_only_edges(operation_profile_order, ordered_profiles, profile_node, profile_sequence, edges):
+    """A dependency-only profile runs before every explicit operation profile."""
     operation_profiles = set(operation_profile_order)
     dependency_only_profiles = [
         profile_id
@@ -1066,6 +1035,9 @@ def compile_task_graph(
                 )
             )
 
+
+def _add_result_synthesis(nodes, edges, model):
+    """Join several profile nodes and add a capability-free synthesis node; return the graph's result node."""
     result_node_id = nodes[0].id
     if len(nodes) > 1:
         profile_nodes = list(nodes)
@@ -1124,13 +1096,4 @@ def compile_task_graph(
             )
         )
         result_node_id = synthesis.id
-
-    graph = TaskGraph(
-        user_request_digest=_request_digest(latest_user_message),
-        nodes=nodes,
-        edges=edges,
-        output_contract={"result_node": result_node_id},
-        reference_context=str(reference_context or "")[:12000],
-        max_parallel_nodes=max_parallel_nodes,
-    )
-    return TaskGraphCompilation(graph=graph)
+    return result_node_id

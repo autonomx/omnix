@@ -5,14 +5,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.assistant_memory.typed_memory import create_typed_memory, supersede_typed_memory
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
-from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
 
 pytestmark = pytest.mark.skipif(
@@ -39,7 +39,7 @@ def _database() -> PostgresDatabase:
 def test_typed_memory_round_trip_and_supersession() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with database.transaction() as connection:
             connection.execute(
                 "TRUNCATE omnix_memory_snapshot_items, omnix_memory_snapshots, "

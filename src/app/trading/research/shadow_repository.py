@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import NoveltyShadowAnnotation
@@ -11,7 +11,7 @@ from .contracts import NoveltyShadowAnnotation
 
 class TradingShadowResearchRepository:
     def __init__(self, *, context: TenantContext | None = None, uow_factory=unit_of_work) -> None:
-        self.context=context or local_tenant_context(); self.uow_factory=uow_factory
+        self.context=context or current_tenant(); self.uow_factory=uow_factory
 
     def save(self, item: NoveltyShadowAnnotation) -> bool:
         with self.uow_factory() as uow:

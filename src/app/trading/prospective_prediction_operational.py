@@ -19,7 +19,6 @@ import json
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -52,10 +51,9 @@ from .prospective_prediction_v4 import (
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
-from .us_equity_calendar import early_close_time
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
-
-_ET = ZoneInfo("America/New_York")
 
 PROSPECTIVE_OPERATIONAL_VERSION = "prospective-gap-operational-v1"
 RAW_5M_FALLBACK_PRICE_VERSION = "sip-analysis-prices-raw-5m-fallback-v1"
@@ -303,7 +301,7 @@ def raw_5m_fallback_analysis_prices(
     session_start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
     session_end = datetime.combine(
         session_date,
-        early_close_time(session_date) or time(16, 0),
+        regular_close_time(session_date),
         tzinfo=_ET,
     ).astimezone(timezone.utc)
     regular = [
@@ -390,7 +388,7 @@ def build_operational_formal_outcome(
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
     end = datetime.combine(
         session_date,
-        early_close_time(session_date) or time(16, 0),
+        regular_close_time(session_date),
         tzinfo=_ET,
     ).astimezone(timezone.utc)
     boundary_complete = bool(
@@ -424,7 +422,7 @@ def load_operational_formal_outcome(
     if callable(recovered):
         close_at = datetime.combine(
             session_date,
-            early_close_time(session_date) or time(16, 0),
+            regular_close_time(session_date),
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         try:

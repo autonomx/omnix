@@ -2,7 +2,7 @@ import type {
   RpgAuthoringDossierQuickFact,
   RpgAuthoringDossierSection,
   RpgAuthoringEntityDossier,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import './RpgWorldDossierSectionEditor.css';
 
 interface RpgWorldDossierSectionEditorProps {

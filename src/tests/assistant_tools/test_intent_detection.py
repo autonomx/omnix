@@ -21,7 +21,7 @@ def test_detect_assistant_tool_intent_for_availability():
 
 
 def test_assistant_tool_intent_route_returns_preview():
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post("/api/assistant/tools/intent", json={"message": "Find Ada in contacts"})
 

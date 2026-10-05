@@ -83,7 +83,8 @@ def _result() -> dict:
     }
 
 
-def test_final_path_retires_legacy_ownership_and_certifies_every_invariant() -> None:
+def test_final_path_retires_legacy_ownership_and_certifies_every_invariant(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_RPG_NARRATIVE_RETIREMENT_REPOSITORY", "in_memory")
     publisher_guard.reset_for_tests()
     try:
         result = attach_canonical_consumer_bundle(_result())
@@ -122,15 +123,3 @@ def test_final_path_fails_closed_when_publisher_telemetry_is_corrupted() -> None
             enforce_production_narrative_result(result)
     finally:
         publisher_guard.reset_for_tests()
-
-
-def test_gateway_enforces_certification_before_persistence_and_response_build() -> None:
-    source = (REPO_ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(
-        encoding="utf-8"
-    )
-    certification_index = source.index("enforce_production_narrative_result")
-    persistence_index = source.index('rpg_pipeline_span("turn.session_persist")')
-    response_index = source.index('rpg_pipeline_span("turn.response_contract_build")')
-    assert certification_index < persistence_index < response_index
-    assert "rpg_narrative_production_certification_failed" in source
-    assert 'payload["narrative_production_certification"]' in source

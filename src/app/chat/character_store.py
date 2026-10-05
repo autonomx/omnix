@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 
-from app.assistant_memory import default_memory_service, resolve_session_memory_scope
-from app.characters import (
-    InteractionSelection,
-    SetSessionInteractionRequest,
-    default_character_service,
-    resolve_interaction_context,
-)
+from app.runtime.ports import Port, required
+
+from app.assistant_memory.contracts import default_memory_service, resolve_session_memory_scope
+from app.conversation.contracts import InteractionSelection, SetSessionInteractionRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
@@ -24,7 +21,28 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _record_accepted_activity(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+) -> None:
+    recorder = getattr(store, "accepted_chat_activity_recorder", None)
+    if callable(recorder):
+        recorder(session, user_message)
+
+
+def conversation_segments() -> Any:
+    """Chat's segment repository, loaded when a session first needs it."""
+    from app.chat.segments import conversation_segments as segments
+
+    return segments()
+
+
 class _CharacterSessionMixin:
+    def segments(self, session_id: str) -> list[Any]:
+        """The session's conversation segments, oldest first."""
+        return conversation_segments().segments(session_id)
+
     @serialized_chat_mutation
     def create_session(self, request: CreateChatSessionRequest) -> ChatSession:
         now = _utcnow()
@@ -38,7 +56,7 @@ class _CharacterSessionMixin:
             request.write_memory if request.interaction_mode == "character" else False,
             request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
-        segment = _character_repository().create_segment(
+        segment = conversation_segments().create_segment(
             session_id=session_id,
             interaction_mode=interaction.interaction_mode,
             character_id=interaction.character_id,
@@ -78,7 +96,9 @@ class _CharacterSessionMixin:
 
     @serialized_chat_mutation
     def set_session_interaction(self, session_id: str, request: SetSessionInteractionRequest) -> ChatSession | None:
-        sessions = self._load_sessions()
+        session = self.get_session(session_id)
+        if session is None:
+            return None
         interaction, character_profile = _resolve_request(
             request.interaction_mode,
             request.character_id,
@@ -89,80 +109,87 @@ class _CharacterSessionMixin:
             request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
         now = _utcnow()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            context_changed = (
-                session.interaction_mode != interaction.interaction_mode
-                or session.character_id != interaction.character_id
-                or session.transcript_policy != interaction.transcript_policy
-                or session.read_memory != interaction.read_memory
-                or session.write_memory != interaction.write_memory
-                or session.shared_memory_access != interaction.shared_memory_access
+        context_changed = (
+            session.interaction_mode != interaction.interaction_mode
+            or session.character_id != interaction.character_id
+            or session.transcript_policy != interaction.transcript_policy
+            or session.read_memory != interaction.read_memory
+            or session.write_memory != interaction.write_memory
+            or session.shared_memory_access != interaction.shared_memory_access
+        )
+        if context_changed:
+            carryover = _neutral_topic_carryover(session) if request.continue_topic else None
+            if session.active_segment_id:
+                conversation_segments().close_segment(session.active_segment_id)
+            segment = conversation_segments().create_segment(
+                session_id=session.id,
+                interaction_mode=interaction.interaction_mode,
+                character_id=interaction.character_id,
+                profile_version=interaction.character_profile_version,
+                transcript_policy=interaction.transcript_policy,
+                read_memory=interaction.read_memory,
+                write_memory=interaction.write_memory,
+                shared_memory_access=interaction.shared_memory_access,
+                carryover_summary=carryover,
             )
-            if context_changed:
-                carryover = _neutral_topic_carryover(session) if request.continue_topic else None
-                if session.active_segment_id:
-                    _character_repository().close_segment(session.active_segment_id)
-                segment = _character_repository().create_segment(
-                    session_id=session.id,
-                    interaction_mode=interaction.interaction_mode,
-                    character_id=interaction.character_id,
-                    profile_version=interaction.character_profile_version,
-                    transcript_policy=interaction.transcript_policy,
-                    read_memory=interaction.read_memory,
-                    write_memory=interaction.write_memory,
-                    shared_memory_access=interaction.shared_memory_access,
-                    carryover_summary=carryover,
-                )
-                session.active_segment_id = segment.id
-                session.memory_snapshot_id = None
-                session.memory_snapshot_revision = None
-                session.memory_record_count = 0
-                session.memory_last_refreshed_at = None
-                _append_character_greeting(session.messages, character_profile, now, segment.id)
-            session.interaction_mode = interaction.interaction_mode
-            session.character_id = interaction.character_id
-            session.voice_asset_id = interaction.voice_asset_id
-            session.read_memory = interaction.read_memory
-            session.write_memory = interaction.write_memory
-            session.shared_memory_access = interaction.shared_memory_access
-            session.transcript_policy = interaction.transcript_policy
-            session.character_profile_version = interaction.character_profile_version
-            session.effective_identity_hash = interaction.effective_identity_hash
-            _attach_character_snapshot(session)
-            session.message_count = len(session.messages)
-            session.updated_at = now
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session
-        return None
+            session.active_segment_id = segment.id
+            session.memory_snapshot_id = None
+            session.memory_snapshot_revision = None
+            session.memory_record_count = 0
+            session.memory_last_refreshed_at = None
+            _append_character_greeting(session.messages, character_profile, now, segment.id)
+        session.interaction_mode = interaction.interaction_mode
+        session.character_id = interaction.character_id
+        session.voice_asset_id = interaction.voice_asset_id
+        session.read_memory = interaction.read_memory
+        session.write_memory = interaction.write_memory
+        session.shared_memory_access = interaction.shared_memory_access
+        session.transcript_policy = interaction.transcript_policy
+        session.character_profile_version = interaction.character_profile_version
+        session.effective_identity_hash = interaction.effective_identity_hash
+        _attach_character_snapshot(session)
+        session.message_count = len(session.messages)
+        session.updated_at = now
+        self._save_session(session)
+        return session
 
     @serialized_chat_mutation
     def append_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
         existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
         if existing is not None:
+            _record_accepted_activity(self, *existing)
             return existing
         result = super().append_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
-        record = _start_assistant_turn(session, user_message, request)
-        record = default_assistant_turn_coordinator().mark_streaming(record.assistant_turn_id) or record
-        default_assistant_turn_coordinator().try_complete(record.assistant_turn_id)
+        record = _start_assistant_turn(
+            session, user_message, request, database=_store_database(self)
+        )
+        coordinator = _turn_coordinator(self)
+        record = coordinator.mark_streaming(record.assistant_turn_id) or record
+        coordinator.try_complete(record.assistant_turn_id)
         _tag_turn_and_save(self, session, user_message.id, record.assistant_turn_id, record.user_turn_id, record.speech_segment_id)
+        _record_accepted_activity(self, session, user_message)
         return session, user_message
 
     @serialized_chat_mutation
-    def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+    def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None, start_streaming: bool = False):
         existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
         if existing is not None:
+            _record_accepted_activity(self, *existing)
             return existing
         result = super().begin_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
             return None
         session, user_message = result
-        record = _start_assistant_turn(session, user_message, request)
+        record = _start_assistant_turn(
+            session,
+            user_message,
+            request,
+            database=_store_database(self),
+            streaming=start_streaming,
+        )
         user_message.metadata.update({
             "segment_id": session.active_segment_id,
             "user_turn_id": record.user_turn_id,
@@ -170,11 +197,37 @@ class _CharacterSessionMixin:
             "assistant_turn_id": record.assistant_turn_id,
             "assistant_turn": record.model_dump(mode="json"),
         })
-        self._save_sessions(_replace_session(self._load_sessions(), session))
+        self._save_session(session)
+        _record_accepted_activity(self, session, user_message)
         return session, user_message
 
+    def begin_streaming_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+    ):
+        """Begin a streamed turn with running state in the first durable write."""
+        return self.begin_user_message(session_id, request, start_streaming=True)
+
     def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
-        coordinator = default_assistant_turn_coordinator()
+        from .live_agent_store import stream_live_agent_turn
+
+        yield from stream_live_agent_turn(
+            self,
+            session,
+            user_message,
+            planner=self.live_agent_planner,
+            original_stream=self._stream_provider_reply_chunks_with_turn,
+            **kwargs,
+        )
+
+    def _stream_provider_reply_chunks_with_turn(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        **kwargs,
+    ):
+        coordinator = _turn_coordinator(self)
         assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
         if assistant_turn_id:
             coordinator.mark_streaming(assistant_turn_id)
@@ -246,7 +299,7 @@ class _CharacterSessionMixin:
             if user_message
             else str(metadata.get("assistant_turn_id") or "").strip()
         )
-        coordinator = default_assistant_turn_coordinator()
+        coordinator = _turn_coordinator(self)
         if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
             return _persist_interrupted_reply(
                 self,
@@ -281,7 +334,7 @@ class _CharacterSessionMixin:
                     if turn is not None:
                         message.metadata["assistant_turn"] = turn.model_dump(mode="json")
                 break
-        self._save_sessions(_replace_session(self._load_sessions(), session))
+        self._save_session(session)
         return session
 
     @staticmethod
@@ -299,16 +352,22 @@ class InMemoryChatSessionStore(_CharacterSessionMixin, BaseInMemoryChatSessionSt
     pass
 
 
+class ChatStoreFactory(Protocol):
+    def __call__(self) -> Any: ...
+
+
+# The PostgreSQL chat store wires memory, live voice and desktop companion into
+# chat; only the composition root knows them, so it binds this port (ADR-0016).
+CHAT_STORE_FACTORY: Port[ChatStoreFactory] = Port("chat.store_factory", ChatStoreFactory, "exactly_one")
+
+
 def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_chat_store
-        return production_chat_store()
-    return InMemoryChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
-
-
-def _character_repository():
-    return default_character_service().repository
+        return required(CHAT_STORE_FACTORY)()
+    if chat_sqlite_store_enabled():
+        return InMemoryChatSessionStore()
+    raise RuntimeError("PostgreSQL chat persistence is required when local memory storage is disabled")
 
 
 def _resolve_request(
@@ -329,8 +388,9 @@ def _resolve_request(
         shared_memory_access=shared_memory_access,
         transcript_policy=transcript_policy,
     )
-    character_profile = default_character_service().resolve_snapshot(character_id or "") if interaction_mode == "character" else None
-    return resolve_interaction_context(selection, character=character_profile), character_profile
+    from .session_identity import resolve_selection
+
+    return resolve_selection(selection)
 
 
 def _attach_character_snapshot(session: ChatSession) -> None:
@@ -372,9 +432,28 @@ def _find_idempotent_user_turn(session: ChatSession | None, user_turn_id: str | 
     return (session, message) if message is not None else None
 
 
-def _start_assistant_turn(session: ChatSession, user_message: ChatMessage, request: SendChatMessageRequest):
+def _store_database(store):
+    repository = getattr(store, "_repository", None)
+    return getattr(repository, "database", None)
+
+
+def _turn_coordinator(store):
+    database = _store_database(store)
+    return default_assistant_turn_coordinator(database) if database is not None else default_assistant_turn_coordinator()
+
+
+def _start_assistant_turn(
+    session: ChatSession,
+    user_message: ChatMessage,
+    request: SendChatMessageRequest,
+    *,
+    database=None,
+    streaming: bool = False,
+):
     user_turn_id = request.user_turn_id or f"user-turn:{uuid.uuid4().hex}"
-    record = default_assistant_turn_coordinator().start(
+    coordinator = default_assistant_turn_coordinator(database) if database is not None else default_assistant_turn_coordinator()
+    start = coordinator.start_streaming if streaming else coordinator.start
+    record = start(
         session_id=session.id,
         user_message_id=user_message.id,
         user_turn_id=user_turn_id,
@@ -392,7 +471,7 @@ def _start_assistant_turn(session: ChatSession, user_message: ChatMessage, reque
 def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assistant_turn_id: str, user_turn_id: str, speech_segment_id: str | None) -> None:
     segment_id = session.active_segment_id
     found_user = False
-    coordinator = default_assistant_turn_coordinator()
+    coordinator = _turn_coordinator(store)
     for message in session.messages:
         if message.id == user_message_id:
             message.metadata.update({
@@ -409,47 +488,40 @@ def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assist
         if found_user and message.role == "assistant":
             message.metadata.update({"segment_id": segment_id, "assistant_turn_id": assistant_turn_id})
             break
-    store._save_sessions(_replace_session(store._load_sessions(), session))
+    store._save_session(session)
 
 
 def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, assistant_turn_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
-    sessions = store._load_sessions()
-    coordinator = default_assistant_turn_coordinator()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        user_message = next((message for message in session.messages if message.id == user_message_id), None)
-        if user_message is None:
-            return session
-        user_message.metadata["generation_status"] = "interrupted"
-        turn = coordinator.get(assistant_turn_id)
-        if turn is not None:
-            user_message.metadata["assistant_turn"] = turn.model_dump(mode="json")
-        already_persisted = any(
-            message.role == "assistant" and message.metadata.get("assistant_turn_id") == assistant_turn_id
-            for message in session.messages
-        )
-        generated = content.strip()
-        if generated and not already_persisted:
-            session.messages.append(ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="assistant",
-                content=generated,
-                created_at=_utcnow(),
-                metadata={
-                    **metadata,
-                    "generation_status": "interrupted",
-                    "delivery_status": "interrupted",
-                    "assistant_turn_id": assistant_turn_id,
-                },
-            ))
-        session.message_count = len(session.messages)
-        session.updated_at = _utcnow()
-        sessions[index] = session
-        store._save_sessions(sessions)
+    session = store.get_session(session_id)
+    if session is None:
+        return None
+    coordinator = _turn_coordinator(store)
+    user_message = next((message for message in session.messages if message.id == user_message_id), None)
+    if user_message is None:
         return session
-    return None
-
-
-def _replace_session(sessions: list[ChatSession], replacement: ChatSession) -> list[ChatSession]:
-    return [replacement if session.id == replacement.id else session for session in sessions]
+    user_message.metadata["generation_status"] = "interrupted"
+    turn = coordinator.get(assistant_turn_id)
+    if turn is not None:
+        user_message.metadata["assistant_turn"] = turn.model_dump(mode="json")
+    already_persisted = any(
+        message.role == "assistant" and message.metadata.get("assistant_turn_id") == assistant_turn_id
+        for message in session.messages
+    )
+    generated = content.strip()
+    if generated and not already_persisted:
+        session.messages.append(ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content=generated,
+            created_at=_utcnow(),
+            metadata={
+                **metadata,
+                "generation_status": "interrupted",
+                "delivery_status": "interrupted",
+                "assistant_turn_id": assistant_turn_id,
+            },
+        ))
+    session.message_count = len(session.messages)
+    session.updated_at = _utcnow()
+    store._save_session(session)
+    return session

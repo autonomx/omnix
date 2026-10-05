@@ -3,15 +3,16 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse } from '../../api/client';
 import { ImageLatestResult } from './ImageLatestResult';
+import { fixture } from '../../test/fixture';
 
 type ImageAsset = AssetListResponse['assets'][number];
 
-const asset = {
+const asset = fixture<ImageAsset>({
   id: 'image:night',
   module: 'image-generation',
   type: 'image',
   mime_type: 'image/png',
-  storage_path: 'private/night.png',
+  file_name: 'night.png',
   created_at: '2026-07-05T00:00:00Z',
   metadata: {
     title: 'Night harbor',
@@ -19,7 +20,7 @@ const asset = {
     height: 768,
     provider_key: 'flux_klein',
   },
-} as ImageAsset;
+});
 
 describe('ImageLatestResult', () => {
   it('announces completed results and exposes asset-id actions', () => {

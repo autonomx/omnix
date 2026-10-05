@@ -4,11 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5173",
-    "dev:devtools": "vite --host 0.0.0.0 --port 5173 --mode devtools",
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "dev:devtools": "vite --host 127.0.0.1 --port 5173 --mode devtools",
+    "dev:lan": "vite --host 0.0.0.0 --port 5173",
     "devtools": "react-devtools",
+    "lint": "eslint .",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "preview:lan": "vite preview --host 0.0.0.0 --port 4173",
     "test": "vitest run",
     "test:trading": "vitest run src/features/trading",
     "test:watch": "vitest",
@@ -17,16 +20,18 @@
     "typecheck": "tsc -b",
     "typecheck:trading": "tsc -p tsconfig.trading.json",
     "api:schema": "python ../../../scripts/export_gateway_openapi.py src/apps/web/src/api/generated/openapi.json",
-    "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
+    "api:types": "node scripts/generate-api-types.mjs",
     "api:generate": "npm run api:schema && npm run api:types",
-    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/openapi.json src/api/generated/types.ts"
+    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated \"src/features/*/api/generated.ts\""
   },
   "dependencies": {
     "@mantine/core": "^9.3.1",
     "@mantine/hooks": "^9.3.1",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-router": "^1.170.15",
+    "@tanstack/react-virtual": "^3.14.13",
     "lightweight-charts": "^5.1.0",
+    "openapi-fetch": "^0.17.0",
     "pixi.js": "^8.13.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -36,6 +41,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.2",
@@ -43,8 +49,11 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.0",
+    "typescript-eslint": "8.71.0",
     "vite": "^7.2.0",
     "vitest": "^4.1.0"
   }

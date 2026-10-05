@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { omnixApiClient, type AssetListResponse } from '../../api/client';
-import { readStorySnapshot, voiceOptionsFromAssets } from './StoryAudioPanel';
+import { voiceOptionsFromAssets } from './StoryAudioPanel';
 import { deriveStoryCast, loadStoryCast, type StoryCharacter } from './storyCast';
 import { buildStoryDocumentFromText } from './storyDocument';
 import { loadStoryVoiceCastAny, removeVoiceAssignment, saveStoryVoiceCastAliases, upsertVoiceAssignment, voiceAssignmentFor, type VoiceCastOption } from './storyVoiceCast';
+import { useStorySnapshot } from './storySnapshotStore';
 
 const styleOptions = ['Story narrator', 'Warm', 'Dramatic', 'Soft', 'Gravelly', 'Playful'];
 
 export function StoryVoiceCastPanel() {
-  const [snapshot, setSnapshot] = useState(() => readStorySnapshot());
+  const snapshot = useStorySnapshot();
   const [characters, setCharacters] = useState<StoryCharacter[]>(() => deriveStoryCast(snapshot.text, loadStoryCast(snapshot.fingerprint)));
   const [voices, setVoices] = useState<VoiceCastOption[]>([]);
   const [documentId, setDocumentId] = useState(() => buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text }).id);
@@ -26,23 +27,13 @@ export function StoryVoiceCastPanel() {
     return () => { active = false; };
   }, []);
 
+  // The cast panel's saved characters advance the snapshot revision.
   useEffect(() => {
-    const refresh = () => {
-      const nextSnapshot = readStorySnapshot();
-      const nextDocumentId = buildStoryDocumentFromText({ title: nextSnapshot.title, text: nextSnapshot.text }).id;
-      setSnapshot(nextSnapshot);
-      setDocumentId(nextDocumentId);
-      setCharacters(deriveStoryCast(nextSnapshot.text, loadStoryCast(nextSnapshot.fingerprint)));
-      setAssignments(loadStoryVoiceCastAny([nextSnapshot.fingerprint, nextDocumentId]));
-    };
-    refresh();
-    const intervalId = window.setInterval(refresh, 1_500);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refresh);
-    };
-  }, []);
+    const nextDocumentId = buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text }).id;
+    setDocumentId(nextDocumentId);
+    setCharacters(deriveStoryCast(snapshot.text, loadStoryCast(snapshot.fingerprint)));
+    setAssignments(loadStoryVoiceCastAny([snapshot.fingerprint, nextDocumentId]));
+  }, [snapshot.title, snapshot.text, snapshot.fingerprint, snapshot.revision]);
 
   function persistAssignments(next: ReturnType<typeof loadStoryVoiceCastAny>): void {
     setAssignments(next);

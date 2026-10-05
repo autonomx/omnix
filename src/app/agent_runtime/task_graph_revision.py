@@ -204,6 +204,36 @@ def merge_task_graph_continuation(
         ),
     ]
 
+    synthesis, synthesis_id = _continuation_synthesis(addition, previous, revision, final_edges, final_join_id)
+    return TaskGraph(
+        graph_id=previous.graph_id,
+        revision=revision,
+        user_request_digest=addition.user_request_digest,
+        nodes=[
+            *previous.nodes,
+            *renamed_nodes,
+            final_join,
+            synthesis,
+        ],
+        edges=[
+            *previous.edges,
+            *renamed_edges,
+            *final_edges,
+        ],
+        output_contract={"result_node": synthesis_id},
+        reference_context=(
+            addition.reference_context
+            or previous.reference_context
+        ),
+        max_parallel_nodes=max(
+            previous.max_parallel_nodes,
+            addition.max_parallel_nodes,
+        ),
+    )
+
+
+def _continuation_synthesis(addition, previous, revision, final_edges, final_join_id):
+    """The synthesis node joining the prior result and the continuation, on the latest available model."""
     synthesis_model = next(
         (
             node.model
@@ -255,31 +285,7 @@ def merge_task_graph_continuation(
             target_input="graph_results",
         )
     )
-    return TaskGraph(
-        graph_id=previous.graph_id,
-        revision=revision,
-        user_request_digest=addition.user_request_digest,
-        nodes=[
-            *previous.nodes,
-            *renamed_nodes,
-            final_join,
-            synthesis,
-        ],
-        edges=[
-            *previous.edges,
-            *renamed_edges,
-            *final_edges,
-        ],
-        output_contract={"result_node": synthesis_id},
-        reference_context=(
-            addition.reference_context
-            or previous.reference_context
-        ),
-        max_parallel_nodes=max(
-            previous.max_parallel_nodes,
-            addition.max_parallel_nodes,
-        ),
-    )
+    return synthesis, synthesis_id
 
 
 _MUTATING_ACTION_INTENTS = {
@@ -520,6 +526,30 @@ def merge_task_graph_additive_revision(
     addition_roots = _graph_roots(renamed_addition, addition_edges)
     addition_leaves = _graph_leaves(renamed_addition, addition_edges)
 
+    _sequence_addition(previous_core, renamed_addition, addition_leaves, edges, context_dependent, previous_leaves, addition_roots)
+
+    all_core, join, synthesis, synthesis_id = _rebuild_join_and_synthesis(previous_core, renamed_addition, edges, addition, previous)
+
+    return TaskGraph(
+        graph_id=previous.graph_id,
+        revision=revision,
+        user_request_digest=addition.user_request_digest,
+        nodes=[*all_core, join, synthesis],
+        edges=edges,
+        output_contract={"result_node": synthesis_id},
+        reference_context=(
+            addition.reference_context
+            or previous.reference_context
+        ),
+        max_parallel_nodes=max(
+            previous.max_parallel_nodes,
+            addition.max_parallel_nodes,
+        ),
+    )
+
+
+def _sequence_addition(previous_core, renamed_addition, addition_leaves, edges, context_dependent, previous_leaves, addition_roots):
+    """Order the addition: evidence before existing delivery consumers, later execution after the previous frontier."""
     terminal_consumers = [
         node
         for node in previous_core
@@ -580,6 +610,9 @@ def merge_task_graph_additive_revision(
                     )
                 )
 
+
+def _rebuild_join_and_synthesis(previous_core, renamed_addition, edges, addition, previous):
+    """Rebuild the authority-free join and synthesis over all executable nodes."""
     all_core = [*previous_core, *renamed_addition]
     join_id = "join-results"
     synthesis_id = "synthesize-results"
@@ -651,20 +684,4 @@ def merge_task_graph_additive_revision(
             target_input="graph_results",
         )
     )
-
-    return TaskGraph(
-        graph_id=previous.graph_id,
-        revision=revision,
-        user_request_digest=addition.user_request_digest,
-        nodes=[*all_core, join, synthesis],
-        edges=edges,
-        output_contract={"result_node": synthesis_id},
-        reference_context=(
-            addition.reference_context
-            or previous.reference_context
-        ),
-        max_parallel_nodes=max(
-            previous.max_parallel_nodes,
-            addition.max_parallel_nodes,
-        ),
-    )
+    return all_core, join, synthesis, synthesis_id

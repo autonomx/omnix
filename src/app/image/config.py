@@ -1,11 +1,14 @@
 """Global image configuration helpers."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import os
 from typing import Any, Dict
 
 from app.image.providers.registry import is_supported_image_provider
-from app.shared import MODELS_DIR, load_settings
+from app.runtime.paths import MODELS_DIR
+from app.settings.access import load_settings
 
 DEFAULT_MODEL_DIR = os.path.join(MODELS_DIR, "image")
 
@@ -29,7 +32,7 @@ def _truthy(value: Any) -> bool:
 def is_image_generation_enabled() -> bool:
     """Image generation is opt-in because local models can consume substantial VRAM."""
 
-    return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
+    return _truthy(environment().get("OMNIX_IMAGE_ENABLED", "0"))
 
 
 def get_image_settings() -> Dict[str, Any]:

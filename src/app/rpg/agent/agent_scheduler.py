@@ -175,22 +175,6 @@ class AgentScheduler:
         for cid in selected_ids:
             self._selection_count[cid] = self._selection_count.get(cid, 0) + 1
     
-    def get_last_selected(self) -> List[str]:
-        """Get the list of NPCs selected in the last tick.
-        
-        Returns:
-            List of character IDs, or empty list if never called.
-        """
-        return list(self._last_selected)
-    
-    def get_selection_stats(self) -> Dict[str, int]:
-        """Get selection frequency statistics.
-        
-        Returns:
-            Dict of char_id → times selected.
-        """
-        return dict(self._selection_count)
-    
     def reset(self) -> None:
         """Reset scheduler state."""
         self._last_selected = []

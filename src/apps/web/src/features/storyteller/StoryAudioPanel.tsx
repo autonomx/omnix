@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
+import { jobProgressPercent } from '../../api/jobProgress';
+import { isFallbackOutputRef, jobOutputRefs } from '../../api/schemas/streams';
+import { storyAudioStreamControlMessageSchema } from './storyAudioMessages';
+import { parseJson } from '../../api/schemas/streams';
+import { normalizeStoryAudioText, useStorySnapshot } from './storySnapshotStore';
+import { downloadUrl } from '../../shared/download';
 
 export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
 
 type StoryAudioStatus = 'ready' | 'loading_voices' | 'queued' | 'running' | 'completed' | 'failed';
-type StoryAudioJobOutputRef = { data_url?: unknown; audio_url?: unknown; url?: unknown; provider_fallback?: unknown; provider_success?: unknown; segments?: unknown };
-type StoryAudioStreamControlMessage =
+export type StoryAudioStreamControlMessage =
   | { type: 'start'; total_segments?: number }
   | { type: 'segment'; index?: number; speaker?: string; text?: string }
   | { type: 'done'; job_id?: string }
@@ -45,7 +50,8 @@ export function StoryAudioPanel() {
   const [jobId, setJobId] = useState('');
   const [audioSource, setAudioSource] = useState('');
   const [filename, setFilename] = useState('story-audio.wav');
-  const [storySnapshot, setStorySnapshot] = useState(() => readStorySnapshot());
+  const storySnapshot = useStorySnapshot();
+  const previousFingerprint = useRef(storySnapshot.fingerprint);
   const [debugAudioJson, setDebugAudioJson] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generationRunRef = useRef(0);
@@ -81,29 +87,18 @@ export function StoryAudioPanel() {
   }, []);
 
   useEffect(() => {
-    const refreshSnapshot = () => {
-      const next = readStorySnapshot();
-      setStorySnapshot((current) => {
-        if (current.fingerprint === next.fingerprint) return current;
-        streamAbortRef.current?.();
-        streamAbortRef.current = null;
-        setAudioSource('');
-        setProgress(0);
-        setJobId('');
-        setDebugAudioJson('');
-        setFilename(`${slugify(next.title || 'story')}-audio.wav`);
-        setStatus('ready');
-        setStatusMessage('Story changed. Ready to regenerate full-story narration.');
-        return next;
-      });
-    };
-    const intervalId = window.setInterval(refreshSnapshot, 1_000);
-    window.addEventListener('focus', refreshSnapshot);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshSnapshot);
-    };
-  }, []);
+    if (previousFingerprint.current === storySnapshot.fingerprint) return;
+    previousFingerprint.current = storySnapshot.fingerprint;
+    streamAbortRef.current?.();
+    streamAbortRef.current = null;
+    setAudioSource('');
+    setProgress(0);
+    setJobId('');
+    setDebugAudioJson('');
+    setFilename(`${slugify(storySnapshot.title || 'story')}-audio.wav`);
+    setStatus('ready');
+    setStatusMessage('Story changed. Ready to regenerate full-story narration.');
+  }, [storySnapshot.fingerprint, storySnapshot.title]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -142,27 +137,18 @@ export function StoryAudioPanel() {
 
   function printAudioDebugJson(): void {
     if (!debugAudioJson) return;
-    try {
-      console.info('[STORY AUDIO DEBUG PAYLOAD]', JSON.parse(debugAudioJson));
-    } catch {
-      console.info('[STORY AUDIO DEBUG PAYLOAD]', debugAudioJson);
-    }
+    logStoryAudioDebugPayload(debugAudioJson);
     setStatusMessage('Printed Story Audio JSON to the browser console.');
   }
 
   async function copyAudioDebugJson(): Promise<void> {
     if (!debugAudioJson) return;
-    if (!navigator.clipboard) {
-      printAudioDebugJson();
-      setStatusMessage('Clipboard unavailable. Printed Story Audio JSON to the browser console.');
-      return;
-    }
-    await navigator.clipboard.writeText(debugAudioJson);
-    setStatusMessage('Copied Story Audio JSON to clipboard.');
+    const copied = await copyStoryAudioDebugPayload(debugAudioJson);
+    setStatusMessage(copied ? 'Copied Story Audio JSON to clipboard.' : 'Clipboard unavailable. Printed Story Audio JSON to the browser console.');
   }
 
   async function generateStoryAudio(): Promise<void> {
-    const snapshot = readStorySnapshot();
+    const snapshot = storySnapshot;
     const audioMap = mapStoryToAudioSegments(snapshot.title, snapshot.text, selectedVoiceId);
     const segments = audioMap.segments;
     if (!snapshot.text.trim() || !segments.length) {
@@ -177,7 +163,6 @@ export function StoryAudioPanel() {
     streamAbortRef.current?.();
     const streamAbortController = new AbortController();
     streamAbortRef.current = () => streamAbortController.abort();
-    setStorySnapshot(snapshot);
     setAudioSource('');
     setFilename(`${slugify(snapshot.title || 'story')}-audio.wav`);
     setProgress(2);
@@ -261,8 +246,8 @@ export function StoryAudioPanel() {
 
   function applyJobProgress(job: JobRecord): void {
     setJobId(job.id);
-    if (job.progress && job.progress.total > 0) {
-      setProgress(Math.min(100, Math.round((job.progress.current / job.progress.total) * 100)));
+    if ((job.progress?.total ?? 0) > 0) {
+      setProgress(jobProgressPercent(job.progress));
     } else if (job.status === 'completed') {
       setProgress(100);
     } else if (job.status === 'running' || job.status === 'leased') {
@@ -278,13 +263,7 @@ export function StoryAudioPanel() {
 
   function downloadAudio(): void {
     if (!audioSource) return;
-    const link = document.createElement('a');
-    link.href = audioSource;
-    link.download = filename;
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    downloadUrl(audioSource, filename);
     setStatusMessage(`Downloaded ${filename}.`);
   }
 
@@ -325,20 +304,6 @@ export function StoryAudioPanel() {
       </div>
     </section>
   );
-}
-
-export function readStorySnapshot(): { title: string; text: string; fingerprint: string } {
-  const text = extractStoryTextFromDocument(document);
-  const title = readStoryTitle();
-  return { title, text, fingerprint: fingerprintStoryAudio(text) };
-}
-
-export function extractStoryTextFromDocument(root: ParentNode = document): string {
-  const prose = root.querySelector('.storyteller-prose') as HTMLElement | null;
-  const storyModePage = root.querySelector('.story-mode-page') as HTMLElement | null;
-  const manuscript = root.querySelector('[aria-label="Story manuscript"]') as HTMLElement | null;
-  const source = prose?.innerText || prose?.textContent || storyModePage?.innerText || storyModePage?.textContent || manuscript?.innerText || manuscript?.textContent || '';
-  return normalizeStoryAudioText(source);
 }
 
 export function splitStoryAudioSegments(text: string): StoryAudioSegment[] {
@@ -396,6 +361,24 @@ async function createStoryAudioJob({ title, text, segments, voiceId, storyDocume
       { id: 'store-story-audio', label: 'Save downloadable story audio', resource_class: 'cpu', status: 'queued' },
     ],
   }, { timeoutMs: 120_000, timeoutMessage: 'Story audio generation timed out after 120s.' });
+}
+
+function logStoryAudioDebugPayload(json: string): void {
+  try {
+    console.info('[STORY AUDIO DEBUG PAYLOAD]', JSON.parse(json));
+  } catch {
+    console.info('[STORY AUDIO DEBUG PAYLOAD]', json);
+  }
+}
+
+/** Copies the debug payload; without a clipboard, logs it to the console and returns false. */
+async function copyStoryAudioDebugPayload(json: string): Promise<boolean> {
+  if (!navigator.clipboard) {
+    logStoryAudioDebugPayload(json);
+    return false;
+  }
+  await navigator.clipboard.writeText(json);
+  return true;
 }
 
 function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
@@ -540,7 +523,9 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
       }
 
       try {
-        const message = JSON.parse(String(event.data)) as StoryAudioStreamControlMessage;
+        // Messages of other or malformed shapes are ignored.
+        const message = parseJson(storyAudioStreamControlMessageSchema, String(event.data));
+        if (!message) return;
         if (message.type === 'start') {
           totalSegments = typeof message.total_segments === 'number' && message.total_segments > 0 ? message.total_segments : totalSegments;
           callbacks.onStatusMessage('Realtime narration buffering through the story audio player…');
@@ -668,10 +653,8 @@ function makeAbortError(message: string): Error { const error = new Error(messag
 function isAbortError(error: unknown): boolean { return error instanceof Error && error.name === 'AbortError'; }
 
 function playableAudioSource(job: JobRecord): string {
-  const refs = Array.isArray(job.output_refs) ? job.output_refs : [];
-  for (const ref of refs) {
-    const output = ref as StoryAudioJobOutputRef | null;
-    if (!output || isFallbackVoiceOutput(output)) continue;
+  for (const output of jobOutputRefs(job)) {
+    if (isFallbackOutputRef(output)) continue;
     const dataUrl = typeof output.data_url === 'string' ? output.data_url : '';
     if (dataUrl.startsWith('data:audio/')) return dataUrl;
     const audioUrl = typeof output.audio_url === 'string' ? output.audio_url : '';
@@ -682,21 +665,11 @@ function playableAudioSource(job: JobRecord): string {
   return '';
 }
 
-function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
-  if (ref.provider_fallback === true || ref.provider_success === false) return true;
-  const segments = Array.isArray(ref.segments) ? ref.segments : [];
-  return segments.some((segment) => {
-    const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null;
-    return row?.provider_fallback === true || row?.provider_success === false;
-  });
-}
 function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
-function readStoryTitle(): string { return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story'; }
-function normalizeStoryAudioText(value: string): string { return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim(); }
-function fingerprintStoryAudio(text: string): string { return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`; }
-function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }
-function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
+// A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
+function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return asset.id; }
+function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.file_name) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
 function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string { return voices.find((voice) => voice.id === voiceId)?.label || voiceId; }
 function stringValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function basename(path: string | undefined): string { return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || ''; }

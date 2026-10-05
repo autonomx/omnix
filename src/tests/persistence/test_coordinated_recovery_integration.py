@@ -9,7 +9,7 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.coordinated_recovery import CoordinatedRecoveryRepository
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -78,7 +78,7 @@ def test_backup_generation_captures_and_verifies_blob_authority(tmp_path) -> Non
     restored_store = LocalBlobStore(tmp_path / "restored-blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_asset(
                 work,
@@ -141,7 +141,7 @@ def test_backup_verification_reports_missing_blob(tmp_path) -> None:
     restored_store = LocalBlobStore(tmp_path / "missing-restored-blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_asset(
                 work,

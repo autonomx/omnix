@@ -129,27 +129,6 @@ class ActionExecutor:
                 "error": f"Failed to execute {action_type}",
             }]
     
-    def register_handler(
-        self,
-        action_type: str,
-        handler: Callable[[Any, Dict[str, Any], Dict[str, Any]], List[Dict[str, Any]]],
-    ) -> None:
-        """Register a custom action handler.
-        
-        Args:
-            action_type: Action type string to handle.
-            handler: Callable(character, action, world_state) -> list of events.
-        """
-        self._handlers[action_type] = handler
-    
-    def get_available_actions(self) -> List[str]:
-        """Get list of registered action types.
-        
-        Returns:
-            List of action type strings.
-        """
-        return list(self._handlers.keys())
-    
     # === Default Action Handlers ===
     # Each handler: (character, action, world_state) -> list of events
     

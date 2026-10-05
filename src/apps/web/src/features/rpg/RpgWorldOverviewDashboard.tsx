@@ -3,8 +3,8 @@ import type {
   RpgAuthoringDocumentPage,
   RpgAuthoringEntityCard,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import { RpgWorldDocumentBlock } from './RpgWorldDocumentBlocks';
 import './RpgWorldOverviewDesign.css';
 
@@ -109,7 +109,7 @@ export function RpgWorldOverviewDashboard({
       <div
         className={`rpg-world-overview-hero${bannerAssetId ? ' has-image' : ''}`}
         style={bannerAssetId ? {
-          backgroundImage: `linear-gradient(90deg, rgba(3, 6, 18, 0.96), rgba(3, 6, 18, 0.3)), url(${JSON.stringify(assetUrl(bannerAssetId))})`,
+          backgroundImage: `linear-gradient(90deg, color-mix(in srgb, var(--c-blue-130) 96%, transparent), color-mix(in srgb, var(--c-blue-130) 30%, transparent)), url(${JSON.stringify(assetUrl(bannerAssetId))})`,
         } : undefined}
       >
         <div className="rpg-world-overview-identity">
@@ -127,7 +127,7 @@ export function RpgWorldOverviewDashboard({
         <button className="rpg-secondary-button" type="button" onClick={onEdit}>Edit world details</button>
       </div>
 
-      <div className="rpg-world-overview-stat-strip" aria-label="World statistics">
+      <div role="group" className="rpg-world-overview-stat-strip" aria-label="World statistics">
         {stats.map((stat) => (
           <button key={stat.label} type="button" onClick={() => stat.section && onOpenSection?.(stat.section.id)} disabled={!stat.section}>
             <strong>{stat.value ?? stat.section?.entity_count ?? 0}</strong>

@@ -34,7 +34,7 @@ export function RpgHermesSequenceJobPanel({ activeJob, isPending = false, onCanc
           <strong>{progressLabel(activeJob)}</strong>
         </div>
       </div>
-      <div className="rpg-survival-actions" aria-label="Hermes sequence job controls">
+      <div role="group" className="rpg-survival-actions" aria-label="Hermes sequence job controls">
         <button className="rpg-secondary-button" disabled={isPending} onClick={onStart} type="button">Start</button>
         <button className="rpg-secondary-button" disabled={isPending || !activeJob} onClick={onPause} type="button">Pause</button>
         <button className="rpg-secondary-button" disabled={isPending} onClick={onResume} type="button">Resume</button>

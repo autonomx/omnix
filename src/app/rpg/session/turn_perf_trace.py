@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import os
+from app.config.env import env_str
+
 import time
 import traceback
 from contextlib import contextmanager
@@ -14,20 +15,12 @@ _TURN_TRACE_ROWS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
 
 
 def turn_perf_trace_enabled() -> bool:
-    return os.getenv("RPG_TRACE_SESSION_TURN", "").strip().lower() in {
+    return env_str("RPG_TRACE_SESSION_TURN", "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
-
-
-def clear_turn_perf_trace() -> None:
-    _TURN_TRACE_ROWS.set([])
-
-
-def get_turn_perf_trace() -> List[Dict[str, Any]]:
-    return list(_TURN_TRACE_ROWS.get() or [])
 
 
 def _rows() -> List[Dict[str, Any]]:
@@ -78,34 +71,6 @@ def traced_turn_stage(event: str, **fields: Any) -> Iterator[None]:
             elapsed_seconds=round(time.perf_counter() - start, 3),
             **fields,
         )
-
-
-def summarize_turn_perf_trace(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    exits = [
-        row for row in rows
-        if isinstance(row, dict)
-        and str(row.get("event") or "").endswith("_exit")
-        and row.get("elapsed_seconds") is not None
-    ]
-    return {
-        "stage_count": len(exits),
-        "total_stage_seconds": round(
-            sum(float(row.get("elapsed_seconds") or 0.0) for row in exits),
-            3,
-        ),
-        "slowest_stages": sorted(
-            [
-                {
-                    "event": row.get("event"),
-                    "elapsed_seconds": row.get("elapsed_seconds"),
-                }
-                for row in exits
-            ],
-            key=lambda item: float(item.get("elapsed_seconds") or 0.0),
-            reverse=True,
-        )[:20],
-        "events": [row.get("event") for row in rows if isinstance(row, dict)],
-    }
 
 
 def record_elapsed_turn_stage(stage: str, started: float, **fields: Any) -> None:

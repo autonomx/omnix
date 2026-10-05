@@ -1,6 +1,8 @@
 """Durable, bounded JSONL diagnostics for audiobook classification runs."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import logging
 import logging.handlers
@@ -12,7 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
+
+logger = logging.getLogger(__name__)
 
 
 AUDIOBOOK_LOG_DIR = resources_root() / "logs" / "audiobook"
@@ -31,7 +35,7 @@ _MAX_NESTING = 6
 
 def classification_log_dir() -> Path:
     """Return the writable audiobook log directory, honoring test overrides."""
-    override = os.environ.get(AUDIOBOOK_LOG_DIR_ENV, "").strip()
+    override = environment().get(AUDIOBOOK_LOG_DIR_ENV, "").strip()
     if override:
         path = Path(override)
     else:
@@ -42,7 +46,7 @@ def classification_log_dir() -> Path:
 
 def classification_log_path() -> Path:
     """Return the JSONL classification audit path."""
-    override = os.environ.get(AUDIOBOOK_CLASSIFICATION_LOG_PATH_ENV, "").strip()
+    override = environment().get(AUDIOBOOK_CLASSIFICATION_LOG_PATH_ENV, "").strip()
     if override:
         path = Path(override)
     else:
@@ -130,7 +134,7 @@ def _bounded(value: Any, *, depth: int = 0) -> Any:
         try:
             return _bounded(value.model_dump(mode="json"), depth=depth + 1)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_bounded", exc_info=True)
     return str(value)
 
 
@@ -149,6 +153,7 @@ def classification_log(event: str, **details: Any) -> None:
         classification_logger().info(payload)
     except Exception:
         # Diagnostics must never turn a recoverable classification into a failed job.
+        logger.debug("suppressed error in %s", "classification_log", exc_info=True)
         return
 
 

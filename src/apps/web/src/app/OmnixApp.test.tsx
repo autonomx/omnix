@@ -1,12 +1,13 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { omnixTheme } from '../design/theme';
 import { OmnixApp } from './OmnixApp';
+import { createTestQueryClient } from '../test/renderWithProviders';
 
 function renderApp() {
-  const queryClient = new QueryClient();
+  const queryClient = createTestQueryClient();
 
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">

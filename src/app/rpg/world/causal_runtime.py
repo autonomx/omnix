@@ -233,7 +233,7 @@ def replay_causal_events(
     return state
 
 
-def install_causal_runtime(
+def initialize_causal_runtime(
     simulation_state: dict[str, Any],
     runtime_bootstrap: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -254,7 +254,7 @@ def ensure_causal_runtime_installed(
         if isinstance(manifest, Mapping):
             bootstrap = manifest.get("causal_runtime_bootstrap")
             if isinstance(bootstrap, Mapping):
-                return install_causal_runtime(simulation_state, bootstrap)
+                return initialize_causal_runtime(simulation_state, bootstrap)
     raise ValueError("causal_world_runtime_not_installed")
 
 
@@ -295,6 +295,6 @@ __all__ = [
     "advance_installed_causal_runtime",
     "bootstrap_causal_runtime",
     "ensure_causal_runtime_installed",
-    "install_causal_runtime",
+    "initialize_causal_runtime",
     "replay_causal_events",
 ]

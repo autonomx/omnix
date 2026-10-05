@@ -4,11 +4,11 @@ import type {
   RpgAuthoringDocumentBlock,
   RpgAuthoringEntityCard,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 import {
   rpgWorldGenerationReviewClient,
   type RpgWorldGenerationTopicResult,
-} from '../../api/rpgWorldGenerationReviewClient';
+} from './api/rpgWorldGenerationReviewClient';
 import { documentAnchors, presentLoreBlocks } from './RpgWorldCompletionModels';
 import { RpgWorldEntityCard } from './RpgWorldEntityCard';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';

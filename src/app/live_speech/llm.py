@@ -1,12 +1,14 @@
 """Streaming text generation adapters for live speech."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import json
 import os
 from dataclasses import dataclass
 from typing import Iterable
 
-import requests
+from app.runtime.http_client import shared_http_client
 
 
 class StreamingTextGenerator:
@@ -42,19 +44,19 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
         }
         try:
             headers = {}
-            api_token = os.environ.get("LM_API_TOKEN", "").strip()
+            api_token = environment().get("LM_API_TOKEN", "").strip()
             if api_token:
                 headers["Authorization"] = f"Bearer {api_token}"
-            with requests.post(
+            with shared_http_client("live-speech-llm").stream(
+                "POST",
                 f"{self.base_url.rstrip('/')}/chat/completions",
                 headers=headers,
                 json=payload,
-                stream=True,
                 timeout=self.timeout_seconds,
             ) as response:
                 response.raise_for_status()
                 yielded = False
-                for line in response.iter_lines(decode_unicode=True):
+                for line in response.iter_lines():
                     token = _parse_sse_delta(line)
                     if token:
                         yielded = True
@@ -65,12 +67,16 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
             yield from EchoTextGenerator().generate(prompt, instructions=instructions, generation=generation)
 
 
+# LIVE_SPEECH_LLM_PROVIDER values that select an OpenAI-compatible endpoint.
+_OPENAI_COMPATIBLE_SETTINGS = frozenset({"openai", "openai_compatible", "lmstudio", "real"})
+
+
 def create_text_generator_from_env() -> StreamingTextGenerator:
-    provider = os.environ.get("LIVE_SPEECH_LLM_PROVIDER", "fake").strip().lower()
-    if provider in {"openai", "openai_compatible", "lmstudio", "real"}:
+    provider = environment().get("LIVE_SPEECH_LLM_PROVIDER", "fake").strip().lower()
+    if provider in _OPENAI_COMPATIBLE_SETTINGS:
         return OpenAICompatibleTextGenerator(
-            base_url=os.environ.get("LIVE_SPEECH_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
-            model=os.environ.get("LIVE_SPEECH_LLM_MODEL", "local-model"),
+            base_url=environment().get("LIVE_SPEECH_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
+            model=environment().get("LIVE_SPEECH_LLM_MODEL", "local-model"),
         )
     return EchoTextGenerator()
 

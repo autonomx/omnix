@@ -206,23 +206,6 @@ QUEST_TYPE_ARC_MAP: Dict[str, str] = {
 }
 
 
-def get_arc_template(arc_type: str) -> List[Dict[str, Any]]:
-    """Get the arc template for the specified type.
-
-    Args:
-        arc_type: Type of quest arc (e.g., "conflict", "betrayal").
-
-    Returns:
-        List of stage dicts defining the quest arc structure.
-
-    Raises:
-        KeyError: If arc_type is not recognized.
-    """
-    if arc_type in QUEST_ARCS:
-        return QUEST_ARCS[arc_type]
-    raise KeyError(f"Unknown quest arc type: {arc_type}")
-
-
 def get_arc_type_for_quest(quest_type: str) -> str:
     """Map a quest type to its corresponding arc type.
 

@@ -160,7 +160,7 @@ follow one documented execution contract.
 monitors on each app instance. For example, [paper_monitor.py](../src/app/trading/paper_monitor.py),
 line 433, guards startup through `gateway.state`, which is local to that app.
 Image concurrency uses a process-local semaphore. The PostgreSQL compatibility
-`claim_next` in [job_compat.py](../src/app/persistence/job_compat.py), line 110,
+`claim_next` in [job_compat.py](../src/app/persistence/job_store.py), line 110,
 discards `residency` and `residency_policy`; the durable claim query filters runnable
 jobs but does not establish a general device-wide resource allocation policy.
 
@@ -179,7 +179,7 @@ two workers sharing one GPU honor one capacity policy; expired owners release pe
 
 ### R6 — P1: Collection adapters lose pagination and filter after truncation
 
-**Evidence:** [asset_compat.py](../src/app/persistence/asset_compat.py), line 32,
+**Evidence:** [asset_compat.py](../src/app/persistence/shared_asset_store.py), line 32,
 requests only the newest 500 assets. The underlying
 [asset_repository.py](../src/app/persistence/asset_repository.py), line 116, already
 supports a `(created_at, id)` cursor and asset type filtering. The image gallery
@@ -369,7 +369,7 @@ suites they include and which services they require.
 
 ### R14 — P2: Media ingestion still has avoidable whole-file buffering
 
-**Evidence:** [asset_compat.py](../src/app/persistence/asset_compat.py), line 88,
+**Evidence:** [asset_compat.py](../src/app/persistence/shared_asset_store.py), line 88,
 loads the source with `read_bytes()` and passes it to `put_bytes()`. The existing
 [blob_store.py](../src/app/persistence/blob_store.py) already offers streaming
 `put_file`, verified staging, and bounded-memory copying. Many speech submissions

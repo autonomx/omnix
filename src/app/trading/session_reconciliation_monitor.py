@@ -7,18 +7,18 @@ It never substitutes IEX, web quotes, adjusted daily bars, or partial prints.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
-import os
-from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
+from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .providers.alpaca_sip import AlpacaSipResearchProvider
 from .prospective_experiment_outcomes import evaluate_geometry_on_sip_tape
@@ -38,26 +38,27 @@ from .session_evidence import (
 )
 from .strategy_repository import (
     StrategyEvent,
-    TradingStrategyConfigDocument,
     TradingStrategyRepository,
     default_strategy_repository,
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
+
+logger = logging.getLogger(__name__)
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_session_reconciliation_monitor"
-_SESSION_CLOSE = time(16, 0)
 _DEFAULT_CREATE_AFTER = time(16, 5)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def session_reconciliation_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR", "1")
 
@@ -65,7 +66,7 @@ def session_reconciliation_monitor_enabled() -> bool:
 def _interval_seconds() -> float:
     try:
         value = float(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS",
                 "300",
             )
@@ -78,7 +79,7 @@ def _interval_seconds() -> float:
 def _retry_minutes() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES",
                 "15",
             )
@@ -91,7 +92,7 @@ def _retry_minutes() -> int:
 def _max_age_days() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS",
                 "7",
             )
@@ -110,7 +111,7 @@ def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
 def _formal_close(session_date: date) -> datetime:
     return datetime.combine(
         session_date,
-        _SESSION_CLOSE,
+        regular_close_time(session_date),
         tzinfo=_ET,
     ).astimezone(timezone.utc)
 
@@ -197,6 +198,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -226,6 +228,7 @@ def _prospective_experiment_outcomes(
                     invalidation_price=invalidation,
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "_prospective_experiment_outcomes", exc_info=True)
                 continue
 
             champion_outcome = None
@@ -290,6 +293,7 @@ def _prospective_experiment_outcomes(
                     invalidation_price=invalidation,
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "_prospective_experiment_outcomes", exc_info=True)
                 continue
             records.append(
                 {
@@ -393,7 +397,7 @@ def _serializable_outcome(
     }
 
 
-class TradingSessionReconciliationMonitor:
+class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
     def __init__(
         self,
         *,
@@ -408,7 +412,6 @@ class TradingSessionReconciliationMonitor:
         self.sip_provider_factory = sip_provider_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
-        self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.manifest_create_count = 0
@@ -816,7 +819,7 @@ class TradingSessionReconciliationMonitor:
     def diagnostics(self) -> dict[str, object]:
         return {
             "enabled": session_reconciliation_monitor_enabled(),
-            "running": self._task is not None,
+            "running": self.scheduled,
             "interval_seconds": self.interval_seconds,
             "retry_minutes": _retry_minutes(),
             "maximum_pending_age_days": _max_age_days(),
@@ -832,51 +835,19 @@ class TradingSessionReconciliationMonitor:
             "fallback_substitution_allowed": False,
         }
 
-    async def _loop(self) -> None:
-        while True:
-            try:
-                await self.run_once()
-            except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
 
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-
-    async def stop(self) -> None:
-        task = self._task
-        self._task = None
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-def register_trading_session_reconciliation_monitor(
-    gateway: FastAPI,
-) -> TradingSessionReconciliationMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_session_reconciliation_monitor_task(context: FeatureContext) -> TradingMonitorTask | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingSessionReconciliationMonitor):
-        return existing
+        return None
     monitor = TradingSessionReconciliationMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
-        if session_reconciliation_monitor_enabled():
-            monitor.start()
-
-    async def shutdown() -> None:
-        await monitor.stop()
-
-    register_background_worker(gateway, BackgroundWorker(
-        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    setattr(state, _STATE_KEY, monitor)
+    return TradingMonitorTask(name=__name__, monitor=monitor, enabled=session_reconciliation_monitor_enabled)
 
 
 __all__ = [
     "TradingSessionReconciliationMonitor",
-    "register_trading_session_reconciliation_monitor",
+    "create_trading_session_reconciliation_monitor_task",
     "session_reconciliation_monitor_enabled",
 ]

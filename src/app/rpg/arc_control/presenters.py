@@ -54,27 +54,6 @@ class ArcControlPresenter:
             "count": len(items),
         }
 
-    def present_pacing_plan_panel(self, controller: Any) -> dict:
-        """Return a stable dict for the pacing-plan panel.
-
-        Shape::
-
-            {
-                "title": "Pacing Plan",
-                "items": [ <plan_dict>, ... ],
-                "count": <int>,
-            }
-        """
-        items = sorted(
-            [p.to_dict() for p in controller.pacing_plans.values()],
-            key=lambda x: x.get("plan_id", ""),
-        )
-        return {
-            "title": "Pacing Plan",
-            "items": items,
-            "count": len(items),
-        }
-
     def present_scene_bias_panel(self, controller: Any) -> dict:
         """Return a stable dict for the scene-bias panel.
 
@@ -96,26 +75,3 @@ class ArcControlPresenter:
             "count": len(items),
         }
 
-    def present_director_context(self, context: dict) -> dict:
-        """Return a stable dict for the director context.
-
-        The input *context* is the output of
-        ``ArcControlController.build_director_context()``.
-
-        Shape::
-
-            {
-                "title": "Director Context",
-                "active_arcs": [...],
-                "due_reveals": [...],
-                "active_pacing_plan": {...} | None,
-                "active_scene_bias": {...} | None,
-            }
-        """
-        return {
-            "title": "Director Context",
-            "active_arcs": context.get("active_arcs", []),
-            "due_reveals": context.get("due_reveals", []),
-            "active_pacing_plan": context.get("active_pacing_plan"),
-            "active_scene_bias": context.get("active_scene_bias"),
-        }

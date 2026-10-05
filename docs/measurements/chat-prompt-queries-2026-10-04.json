@@ -1,0 +1,20 @@
+{
+  "measurement": "chat-prompt-queries",
+  "messages": 10000,
+  "runs": 40,
+  "measured_at": "2026-10-04T08:16:14Z",
+  "p95_ms": {
+    "prompt_db_ms": 19.591,
+    "window_load_ms": 6.898,
+    "transcript_load_ms": 89.004,
+    "latest_summary_ms": 1.827,
+    "history_search_ms": 2.995
+  },
+  "median_ms": {
+    "prompt_db_ms": 10.517,
+    "window_load_ms": 6.247,
+    "transcript_load_ms": 72.118,
+    "latest_summary_ms": 1.433,
+    "history_search_ms": 2.459
+  }
+}

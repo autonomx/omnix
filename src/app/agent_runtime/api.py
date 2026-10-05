@@ -1,13 +1,19 @@
 """HTTP API for durable generalized agent runs."""
 from __future__ import annotations
 
+from app.capabilities.approvals import require_approver
+from app.security import audit
+from app.security.rate_limit import rate_limited
+from app.security.permissions import ensure_permission
+
 import asyncio
 import json
+import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .contracts import (
     AgentApproval,
@@ -36,9 +42,12 @@ from .local_workspace import (
     local_request_origin_allowed,
     pick_local_workspace,
 )
-from .profiles import get_agent_profile, resolve_profile_capabilities
+from .profiles import get_agent_profile, profile_produces_diff, resolve_profile_capabilities
+from .request_policy import allowed_workspace_root, validate_request_policy
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
 
@@ -53,7 +62,8 @@ class StartAgentRunRequest(BaseModel):
     repository: str | None = None
     workspace_root: str | None = None
     base_ref: str = "main"
-    isolation_policy: str = "supervised_worktree"
+    # None takes the profile's default (the sandbox for profiles that change workspaces).
+    isolation_policy: str | None = None
     capabilities: list[str] | None = None
     external_capabilities: list[str] | None = None
     resource_scopes: list[ResourceScope] = Field(default_factory=list)
@@ -70,6 +80,18 @@ class StartAgentRunRequest(BaseModel):
     forbidden_paths: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_profile_policy(self) -> StartAgentRunRequest:
+        profile = get_agent_profile(self.profile)
+        if self.isolation_policy is None:
+            self.isolation_policy = profile.isolation_policy
+        validate_request_policy(
+            profile, approval_policy=self.approval_policy,
+            isolation_policy=self.isolation_policy, allowed_paths=self.allowed_paths,
+        )
+        self.allowed_paths = [value.replace("\\", "/") for value in self.allowed_paths]
+        return self
+
 
 class AgentCommandRequest(BaseModel):
     command_type: Literal["steer", "pause", "resume", "cancel", "approve", "reject"]
@@ -83,11 +105,16 @@ class LocalWorkspacePickResponse(BaseModel):
     cancelled: bool = False
 
 
-def _service() -> AgentRunService:
+def _service(request: Request | None = None) -> AgentRunService:
+    if request is not None:
+        services = getattr(request.app.state, "runtime_services", None)
+        service = getattr(services, "agent_runs", None) if services is not None else None
+        if service is not None:
+            return service
     return default_agent_run_service()
 
 
-@router.post("/workspace-picker", response_model=LocalWorkspacePickResponse, include_in_schema=False)
+@router.post("/workspace-picker", response_model=LocalWorkspacePickResponse)
 def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
     host = request.client.host if request.client is not None else None
     origin = request.headers.get("origin")
@@ -108,10 +135,14 @@ def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
     )
 
 
-@router.post("", response_model=AgentRunSnapshot)
-def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
+@router.post("", response_model=AgentRunSnapshot, status_code=202)
+def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> AgentRunSnapshot:
     try:
         profile = get_agent_profile(request.profile)
+        # Validate both paths: an allowed workspace cannot hide an arbitrary
+        # repository path later consumed by the worktree manager.
+        repository = allowed_workspace_root(request.repository) if request.repository else None
+        workspace_root = allowed_workspace_root(request.workspace_root) if request.workspace_root else None
         effective_task = request.objective or request.task
         evidence_decision = classify_evidence(effective_task, profile_id=request.profile)
         compiled = compile_task_authority(profile, effective_task, evidence_decision)
@@ -128,7 +159,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         )
     except (ValueError, EvidenceCompilationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    root = request.workspace_root or request.repository
+    root = workspace_root or repository
     if profile.requires_workspace and not root:
         raise HTTPException(status_code=422, detail="repository or workspace_root is required for this profile")
     limit_kwargs = {"limits": request.limits} if request.limits is not None else {}
@@ -153,9 +184,9 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         workspace=(
             WorkspaceSpec(
                 root=str(root),
-                repository=request.repository,
+                repository=repository,
                 base_ref=request.base_ref,
-                isolation_policy=request.isolation_policy,
+                isolation_policy=request.isolation_policy or get_agent_profile(request.profile).isolation_policy,
                 allowed_paths=request.allowed_paths,
                 forbidden_paths=request.forbidden_paths,
             )
@@ -168,20 +199,41 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         ],
         expected_artifacts=(
             ["diff"]
-            if request.profile == "coding" and task_requires_workspace_mutation(effective_task)
+            if profile_produces_diff(request.profile) and task_requires_workspace_mutation(effective_task)
             else []
         ),
     )
     try:
-        return _service().start(spec)
+        services = getattr(http_request.app.state, "runtime_services", None)
+        job_store = getattr(services, "jobs", None) if services is not None else None
+        if job_store is None:
+            raise RuntimeError("durable agent job service is not composed")
+        started = _service(http_request).submit_start(spec, job_store=job_store)
+        audit.record("agent.run.start", target_type="agent_run", target_id=started.run_id,
+                     details={"profile": spec.profile, "provider_id": spec.model.provider_id})
+        return started
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"agent_start_failed:{type(exc).__name__}:{exc}") from exc
+        # The failure text can carry paths and provider errors: log it, return the code (WP-10.5).
+        logger.exception("agent_start_failed")
+        raise HTTPException(status_code=503, detail="agent_start_failed") from exc
 
 
-@router.post("/{run_id}/children", response_model=AgentRunSnapshot)
-def start_child_agent_run(run_id: str, request: ChildRunRequest) -> AgentRunSnapshot:
+@router.post("/{run_id}/children", response_model=AgentRunSnapshot, status_code=202)
+def start_child_agent_run(
+    run_id: str,
+    request: ChildRunRequest,
+    http_request: Request,
+) -> AgentRunSnapshot:
     try:
-        return _service().start_child(run_id, request)
+        services = getattr(http_request.app.state, "runtime_services", None)
+        job_store = getattr(services, "jobs", None) if services is not None else None
+        if job_store is None:
+            raise RuntimeError("durable agent job service is not composed")
+        return _service(http_request).submit_child_start(
+            run_id,
+            request,
+            job_store=job_store,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
     except ValueError as exc:
@@ -196,19 +248,36 @@ def get_agent_run(run_id: str) -> AgentRunSnapshot:
     return snapshot
 
 
-@router.post("/{run_id}/commands", response_model=AgentRunSnapshot)
-def command_agent_run(run_id: str, request: AgentCommandRequest) -> AgentRunSnapshot:
+@router.post("/{run_id}/commands", response_model=AgentRunSnapshot, dependencies=[Depends(rate_limited("approvals"))])
+def command_agent_run(
+    run_id: str,
+    request: AgentCommandRequest,
+    http_request: Request,
+) -> AgentRunSnapshot:
+    # The command type decides the permission (WP-4.3). Approvals record the
+    # approving principal; a client cannot supply it (WP-4.5).
+    payload = {key: value for key, value in request.payload.items() if key != "issued_by"}
+    if request.command_type in {"approve", "reject"}:
+        payload["issued_by"] = require_approver("agent:approve")
+    elif request.command_type == "steer":
+        ensure_permission("agent:steer")
     try:
-        return _service().command(
+        snapshot = _service(http_request).command(
             AgentRunCommand(
                 run_id=run_id,
                 command_type=request.command_type,
-                payload=request.payload,
+                payload=payload,
                 **({"idempotency_key": request.idempotency_key} if request.idempotency_key else {}),
             )
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+    if request.command_type in {"approve", "reject"}:
+        audit.record("approval.decide", target_type="agent_approval", target_id=str(payload.get("approval_id") or ""),
+                     details={"run_id": run_id, "decision": request.command_type})
+    elif request.command_type == "cancel":
+        audit.record("agent.run.stop", target_type="agent_run", target_id=run_id)
+    return snapshot
 
 
 @router.get("/{run_id}/events", response_model=list[AgentEvent])
@@ -228,14 +297,14 @@ def list_agent_artifacts(run_id: str) -> list[AgentArtifact]:
     return _service().artifacts(run_id)
 
 
-@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision], include_in_schema=False)
+@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision])
 def list_agent_task_revisions(run_id: str) -> list[TaskRevision]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().task_revisions(run_id)
 
 
-@router.get("/{run_id}/quality", response_model=dict[str, object], include_in_schema=False)
+@router.get("/{run_id}/quality", response_model=dict[str, object])
 def get_agent_quality_state(run_id: str) -> dict[str, object]:
     try:
         return _service().quality_state(run_id) or {}
@@ -243,35 +312,35 @@ def get_agent_quality_state(run_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
 
 
-@router.get("/{run_id}/quality/validations", response_model=list[ValidationResult], include_in_schema=False)
+@router.get("/{run_id}/quality/validations", response_model=list[ValidationResult])
 def list_agent_validation_results(run_id: str) -> list[ValidationResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().validation_results(run_id)
 
 
-@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult], include_in_schema=False)
+@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult])
 def list_agent_self_review_results(run_id: str) -> list[SelfReviewResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().self_review_results(run_id)
 
 
-@router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult], include_in_schema=False)
+@router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult])
 def list_agent_review_results(run_id: str) -> list[ReviewResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().review_results(run_id)
 
 
-@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt], include_in_schema=False)
+@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt])
 def list_agent_evidence_receipts(run_id: str) -> list[EvidenceReceipt]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().evidence_receipts(run_id)
 
 
-@router.get("/{run_id}/evidence", response_model=EvidenceSet, include_in_schema=False)
+@router.get("/{run_id}/evidence", response_model=EvidenceSet)
 def get_agent_evidence_set(run_id: str) -> EvidenceSet:
     try:
         return _service().evidence_set(run_id)
@@ -279,28 +348,41 @@ def get_agent_evidence_set(run_id: str) -> EvidenceSet:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
 
 
-@router.get("/{run_id}/events/stream")
-async def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingResponse:
+@router.get(
+    "/{run_id}/events/stream",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Agent run events as Server-Sent Events.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
+def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingResponse:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
 
+    from app.events.run_streams import run_event_wakeups, wakeup_key
+    from app.runtime.tenant_context import current_tenant
+
+    key = wakeup_key(current_tenant().workspace_id, "agent_run", run_id)
+
     async def generate():
         sequence = max(0, after_sequence)
-        idle = 0
-        while True:
-            rows = await asyncio.to_thread(_service().events, run_id, after_sequence=sequence)
-            if rows:
-                idle = 0
-                for event in rows:
-                    sequence = max(sequence, int(event.sequence or 0))
-                    yield f"id: {sequence}\nevent: {event.event_type}\ndata: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
-                snapshot = await asyncio.to_thread(_service().get, run_id)
-                if snapshot and snapshot.status in {"completed", "failed", "cancelled"}:
-                    return
-            else:
-                idle += 1
-                if idle % 15 == 0:
+        # Woken by the outbox relay when the run has new events (WP-5.3);
+        # without a notification the stream reads every few seconds.
+        with run_event_wakeups().subscribe(key) as wakeups:
+            while True:
+                rows = await asyncio.to_thread(_service().events, run_id, after_sequence=sequence)
+                if rows:
+                    for event in rows:
+                        sequence = max(sequence, int(event.sequence or 0))
+                        yield f"id: {sequence}\nevent: {event.event_type}\ndata: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
+                    snapshot = await asyncio.to_thread(_service().get, run_id)
+                    if snapshot and snapshot.status in {"completed", "failed", "cancelled"}:
+                        return
+                elif not await wakeups.wait():
                     yield ": heartbeat\n\n"
-            await asyncio.sleep(1)
 
     return StreamingResponse(generate(), media_type="text/event-stream")

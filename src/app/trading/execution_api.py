@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.provider_secret_store import (
+from app.security.provider_secret_store import (
     load_trading_provider_secrets,
     save_trading_provider_secrets,
     trading_provider_credential_sources,
 )
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 
 from .execution import ExecutionObservation
 from .service import TradingMarketDataService, default_market_data_service
+
+logger = logging.getLogger(__name__)
 
 
 class AlpacaIexCredentialStatus(BaseModel):
@@ -113,9 +116,11 @@ def create_trading_execution_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("execution_market_data_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "execution_market_data_failed", "message": str(exc)},
+                detail={"code": "execution_market_data_failed", "message": "The execution provider's market data request failed."},
             ) from exc
 
     return router

@@ -589,10 +589,11 @@ test('chart session tabs isolate symbols and can be closed', async ({ page }) =>
   await installTradingMocks(page);
   await page.goto('/trading');
 
-  const tabs = page.getByRole('tablist', { name: 'Independent chart sessions' });
-  await expect(tabs.getByRole('tab')).toHaveCount(1);
+  const tabs = page.getByRole('group', { name: 'Independent chart sessions' });
+  const sessionTab = { name: /^Open .* chart session$/ };
+  await expect(tabs.getByRole('button', sessionTab)).toHaveCount(1);
   await page.getByRole('button', { name: 'Create chart session tab' }).click();
-  await expect(tabs.getByRole('tab')).toHaveCount(2);
+  await expect(tabs.getByRole('button', sessionTab)).toHaveCount(2);
 
   await page.getByRole('button', { name: 'Open symbol search' }).click();
   const symbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
@@ -600,7 +601,7 @@ test('chart session tabs isolate symbols and can be closed', async ({ page }) =>
   await symbolSearch.getByRole('button', { name: /ETHUSDT/ }).click();
   await expect(page.locator('.trading-chart-panel').first()).toContainText('ETHUSDT');
 
-  const sessionTabs = tabs.getByRole('tab');
+  const sessionTabs = tabs.getByRole('button', sessionTab);
   await sessionTabs.nth(0).click();
   await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');
   await sessionTabs.nth(1).click();
@@ -608,7 +609,7 @@ test('chart session tabs isolate symbols and can be closed', async ({ page }) =>
 
   page.once('dialog', (dialog) => dialog.accept());
   await tabs.getByRole('button', { name: /Close ETHUSDT chart session/ }).click();
-  await expect(tabs.getByRole('tab')).toHaveCount(1);
+  await expect(tabs.getByRole('button', sessionTab)).toHaveCount(1);
 });
 
 test('chart layout picker applies TradingView-style templates', async ({ page }) => {

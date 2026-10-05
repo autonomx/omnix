@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import json
-import os
 import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 PROFILE_VERSION = "npc_evolution_profile_v1"
 
@@ -38,7 +42,7 @@ def _slug(value: str) -> str:
 
 def default_profile_root() -> Path:
     return Path(
-        os.environ.get(
+        _env_str(
             "RPG_NPC_PROFILE_ROOT",
             "resources/data/rpg_npc_profiles",
         )
@@ -66,8 +70,8 @@ def legacy_profile_paths_for_npc(npc_id: str, *, root: Path | None = None) -> Li
 def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_npc_profile(npc_id, root=root)
+        from app.rpg.persistence.rpg_feature_compat import load_npc_profile_postgres
+        return load_npc_profile_postgres(npc_id, root=root)
     path = profile_path_for_npc(npc_id, root=root)
     if not path.exists():
         return {
@@ -97,7 +101,7 @@ def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]
             data.setdefault("audit", [])
             return data
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "load_npc_profile", exc_info=True)
     return {
         "format_version": PROFILE_VERSION,
         "npc_id": npc_id,
@@ -151,8 +155,8 @@ def persist_npc_evolution_profiles(
     """Persist runtime_state.npc_evolution.arcs into file-based NPC profiles."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().persist_npc_evolution_profiles(runtime_state=runtime_state, root=root)
+        from app.rpg.persistence.rpg_feature_compat import persist_npc_evolution_profiles_postgres
+        return persist_npc_evolution_profiles_postgres(runtime_state=runtime_state, root=root)
     runtime_state = _safe_dict(runtime_state)
     evo = _safe_dict(runtime_state.get("npc_evolution"))
     arcs = _safe_dict(evo.get("arcs"))
@@ -248,7 +252,7 @@ def persist_npc_evolution_profiles(
                         legacy_path.unlink()
                         removed_legacy_paths.append(str(legacy_path))
                     except Exception:
-                        pass
+                        logger.debug("suppressed error in %s", "persist_npc_evolution_profiles", exc_info=True)
 
             written.append(
                 {
@@ -301,8 +305,8 @@ def load_npc_evolution_profiles_for_runtime(
     """Load file-based NPC evolution profiles into a bounded runtime shape."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_npc_evolution_profiles_for_runtime(npc_ids=npc_ids, root=root)
+        from app.rpg.persistence.rpg_feature_compat import load_npc_evolution_profiles_for_runtime_postgres
+        return load_npc_evolution_profiles_for_runtime_postgres(npc_ids=npc_ids, root=root)
     root = root or default_profile_root()
     loaded: Dict[str, Any] = {}
     missing: List[str] = []
@@ -337,14 +341,3 @@ def load_npc_evolution_profiles_for_runtime(
     }
 
 
-def attach_loaded_profiles_to_runtime_state(
-    *,
-    runtime_state: Dict[str, Any],
-    load_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Attach loaded NPC profiles to runtime state."""
-    runtime_state = _safe_dict(runtime_state)
-    load_result = _safe_dict(load_result)
-    evo = runtime_state.setdefault("npc_evolution", {})
-    evo["loaded_profiles"] = _safe_dict(load_result.get("loaded"))
-    return runtime_state

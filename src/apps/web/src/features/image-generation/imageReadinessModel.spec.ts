@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderFacadePayload } from '../../api/client';
 import { readyImageProviders, resolveImageReadiness } from './imageReadinessModel';
+import { fixture } from '../../test/fixture';
 
-const providers = {
+const providers = fixture<ProviderFacadePayload>({
   providers: [
     { id: 'image:flux_klein', label: 'FLUX', family: 'image', capabilities: ['image'], status: 'configured', source: 'settings' },
     { id: 'image:broken', label: 'Broken', family: 'image', capabilities: ['image'], status: 'degraded', source: 'settings' },
     { id: 'llm:local', label: 'Local', family: 'llm', capabilities: ['chat'], status: 'configured', source: 'settings' },
   ],
   models: [],
-} as ProviderFacadePayload;
+});
 
 describe('image runtime readiness', () => {
   it('keeps only usable standalone image providers', () => {
@@ -17,7 +18,7 @@ describe('image runtime readiness', () => {
   });
 
   it('uses inline generation when no image worker is configured', () => {
-    expect(resolveImageReadiness({ providers, workers: { ok: true, status: 'not_configured', workers: [] } })).toMatchObject({
+    expect(resolveImageReadiness({ providers, workers: fixture({ ok: true, status: 'not_configured', workers: [] }) })).toMatchObject({
       status: 'ready',
       canGenerate: true,
       workerMode: 'inline',
@@ -28,11 +29,11 @@ describe('image runtime readiness', () => {
   it('blocks generation when an image worker is unreachable', () => {
     expect(resolveImageReadiness({
       providers,
-      workers: {
+      workers: fixture({
         ok: false,
         status: 'degraded',
         workers: [{ id: 'image', ok: false, status: 'unreachable', capabilities: ['image'], error: 'connection refused' }],
-      },
+      }),
     })).toMatchObject({ status: 'blocked', canGenerate: false, workerMode: 'unavailable' });
   });
 

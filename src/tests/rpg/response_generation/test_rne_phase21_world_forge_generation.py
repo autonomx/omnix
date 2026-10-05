@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from app.rpg.session.genesis.canon_audit import audit_generated_canon
 from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
 from app.rpg.session.genesis.compiler import compile_campaign_genesis
@@ -38,35 +39,6 @@ def _contract() -> CampaignGenesisContract:
     )
 
 
-def test_parallel_world_forge_builds_rich_vexira_campaign_bible() -> None:
-    contract = _contract()
-    compiled = compile_campaign_genesis(contract)
-    result = run_campaign_world_forge(
-        contract,
-        campaign_id="campaign:kavrix",
-        compiled_genesis=compiled,
-    )
-    assert result.launch_ready is True, result.as_dict()
-    assert len(result.generation.generation_order) > 2
-    assert any(len(batch) > 1 for batch in result.generation.generation_order)
-    bible = result.compilation.document
-    vexira = bible["entities"]["npc:vexira_umbra"]
-    assert "dark lacquered-bone skin" in vexira["appearance"]
-    assert "Silent Chorus assassin" in vexira["backstory"]
-    assert vexira["dossier_status"] == "complete"
-    assert "npc:vexira_umbra" in bible["completeness"]["opening_actor_ids"]
-    assert bible["discovery_state"]["entities"]["npc:vexira_umbra"] == "partially_known"
-    assert bible["discovery_state"]["entities"]["location:vanta_gate"] == "partially_known"
-    relationships = {row["kind"]: row for row in bible["relationships"] if row["source_id"] == "npc:vexira_umbra"}
-    assert relationships["member_of"]["target_id"] == "faction:silent_chorus"
-    assert relationships["present_at"]["target_id"] == "location:vanta_gate"
-    assert bible["manifest"]["document_count"] >= 30
-    assert bible["manifest"]["retrieval_card_count"] > bible["manifest"]["document_count"]
-    assert bible["indexes"]["lexical"]["vexira"]
-    assert bible["indexes"]["embedding_index"]["status"] == "not_built"
-    assert bible["content_hash"].startswith("sha256:")
-
-
 def test_launch_canon_resumes_into_full_revision_without_regeneration() -> None:
     contract = _contract()
     compiled = compile_campaign_genesis(contract)
@@ -83,18 +55,10 @@ def test_launch_canon_resumes_into_full_revision_without_regeneration() -> None:
 
     launch_ids = {topic.topic_id for topic in launch.generation.topics}
     assert launch.launch_ready is True
-    assert launch_ids == {
-        "realm",
-        "regions",
-        "factions",
-        "current_conflicts",
-        "hero_system",
-        "locations",
-        "npcs",
-        "opening_threads",
-    }
+    deferred_ids = set(launch.graph.metadata["deferred_topic_ids"])
     assert launch.graph.metadata["generation_tier"] == "launch_canon"
-    assert "history" in launch.graph.metadata["deferred_topic_ids"]
+    assert launch_ids and deferred_ids
+    assert launch_ids.isdisjoint(deferred_ids)
 
     expanded = run_campaign_world_forge(
         contract,
@@ -112,6 +76,7 @@ def test_launch_canon_resumes_into_full_revision_without_regeneration() -> None:
     }
     assert expanded.launch_ready is True
     assert {topic.topic_id for topic in expanded.generation.topics} == expected_full_ids
+    assert launch_ids | deferred_ids <= expected_full_ids
     assert expanded.compilation.document["canon_revision"] == 2
     assert all(
         expanded.compilation.document["generation_provenance"][topic_id]

@@ -12,8 +12,8 @@ from app.rpg.narrative_engine import (
 from app.rpg.narrative_engine.persistence_policy import (
     narrative_repository_save_policy,
 )
-from app.persistence.rpg_compat import save_session_to_postgres
-from app.persistence.rpg_session_save_policy import rpg_session_save_policy
+from app.rpg.persistence.rpg_compat import save_session_to_postgres
+from app.rpg.persistence.rpg_session_save_policy import rpg_session_save_policy
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -91,7 +91,7 @@ def test_outer_transaction_policy_stages_canon_without_repository_side_effect() 
 def test_outer_transaction_policy_stages_compatibility_session_save(monkeypatch) -> None:
     session = {"manifest": {"session_id": "campaign:phase33"}}
     monkeypatch.setattr(
-        "app.persistence.rpg_compat._database",
+        "app.rpg.persistence.rpg_compat._database",
         lambda: (_ for _ in ()).throw(AssertionError("database write was not deferred")),
     )
 
@@ -99,22 +99,3 @@ def test_outer_transaction_policy_stages_compatibility_session_save(monkeypatch)
         saved = save_session_to_postgres(session)
 
     assert saved is session
-
-
-def test_production_hook_generates_canon_before_postgresql_commit() -> None:
-    hook = (
-        ROOT / "src" / "app" / "rpg" / "session" / "interaction_timeline_hook.py"
-    ).read_text(encoding="utf-8")
-    service = (
-        ROOT / "src" / "app" / "persistence" / "rpg_turn_service.py"
-    ).read_text(encoding="utf-8")
-
-    assert hook.index("canonicalize_resolved_turn_result(") < hook.index(
-        "persist_foreground_turn("
-    )
-    assert "narrative_repository_save_policy(defer=postgres_active)" in hook
-    assert "rpg_session_save_policy(defer=postgres_active)" in hook
-    assert service.index("work.narrative_responses.save(") < service.index(
-        "work.rpg.commit_turn("
-    )
-    assert '"narrative_atomic_with_turn": stored_narrative is not None' in service

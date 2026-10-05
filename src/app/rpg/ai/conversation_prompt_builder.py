@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.ai_conversation_prompt_builder.build_npc_conversation_line_prompt', "1", 'Write exactly one NPC conversation line as JSON.\nSchema: {{"speaker": "...", "text": "...", "kind": "statement|question|challenge|warning|agreement|interruption"}}\nConversation kind: {v0}\nTopic type: {v1}\nTopic summary: {v2}\nSpeaker: {v3}\nRecent lines:\n{v4}\nConstraints: one short line only, no narration, no markdown.')
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -27,12 +30,5 @@ def build_npc_conversation_line_prompt(
         for line in (recent_lines or [])[-4:]
     )
     return (
-        "Write exactly one NPC conversation line as JSON.\n"
-        'Schema: {"speaker": "...", "text": "...", "kind": "statement|question|challenge|warning|agreement|interruption"}\n'
-        f"Conversation kind: {_safe_str(conversation.get('kind'))}\n"
-        f"Topic type: {_safe_str(topic.get('type'))}\n"
-        f"Topic summary: {_safe_str(topic.get('summary'))}\n"
-        f"Speaker: {_safe_str(speaker_id)}\n"
-        f"Recent lines:\n{lines_text}\n"
-        "Constraints: one short line only, no narration, no markdown."
+        _PROMPT_1.format(v0=(_safe_str(conversation.get('kind'))), v1=(_safe_str(topic.get('type'))), v2=(_safe_str(topic.get('summary'))), v3=(_safe_str(speaker_id)), v4=(lines_text))
     )

@@ -6,8 +6,8 @@ request, commits certified canon, materializes the session, and opens the first-
 gate. Expired leases are reclaimed by the shared job repository after restart.
 """
 from __future__ import annotations
+from app.config.env import environment as _environment
 
-import os
 import threading
 from contextlib import nullcontext
 from contextvars import copy_context
@@ -41,8 +41,8 @@ _background_owner = None
 
 def configure_campaign_genesis_owner(owner):
     global _background_owner
-    from app.runtime_capabilities import RuntimeCapability
-    owner.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
+    from app.runtime.capabilities import RuntimeCapability
+    owner.capabilities.require(RuntimeCapability.RUN_JOB_WORKERS)
     _background_owner = owner
 
 
@@ -62,7 +62,7 @@ def campaign_genesis_async_enabled(
 ) -> bool:
     """Use asynchronous Genesis in production while keeping deterministic CI explicit."""
 
-    env = environ or os.environ
+    env = environ or _environment()
     configured = str(env.get("OMNIX_RPG_CAMPAIGN_GENESIS_MODE") or "").strip().casefold()
     if configured:
         return configured not in {"sync", "synchronous", "disabled", "off", "test"}
@@ -74,7 +74,7 @@ def campaign_genesis_sync_fallback_allowed(
 ) -> bool:
     """Allow portable generation unless the operator explicitly requires async."""
 
-    env = environ or os.environ
+    env = environ or _environment()
     configured = str(env.get("OMNIX_RPG_CAMPAIGN_GENESIS_MODE") or "").strip().casefold()
     return configured not in {"async", "asynchronous", "required", "durable"}
 
@@ -228,10 +228,10 @@ def enqueue_campaign_genesis(
     saved = save_session(session, compact=True)
     try:
         db = _database(database)
-        from app.persistence.identity_service import bootstrap_local_tenant
+        from app.security.tenant_context import current_tenant
         from app.persistence.unit_of_work import unit_of_work
 
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             state = _mapping(saved.get("state"))
@@ -469,7 +469,7 @@ def _run_campaign_expansion_job(
         }
         selected_generator = generator
         if selected_generator is None:
-            from app.rpg_world_forge_provider import (
+            from app.rpg.worlds.providers.world_forge import (
                 build_production_world_forge_generator,
             )
 
@@ -583,10 +583,10 @@ def run_campaign_genesis_worker_once(
     """Claim and execute one durable Genesis job. Returns ``None`` when idle."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         job = work.jobs.claim_next(
             context,
@@ -794,8 +794,8 @@ def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
     """Start one process-local recovery worker without creating duplicate consumers."""
 
     global _worker_active, _worker_thread
-    from app.runtime_config import get_runtime_config
-    if not get_runtime_config().owns_background_runtime:
+    from app.runtime.config import get_runtime_config
+    if not get_runtime_config().runs_job_workers:
         return False
     if not campaign_genesis_async_enabled():
         return False
@@ -810,7 +810,7 @@ def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
 
     def run():
         global _worker_active
-        from app.gateway.background_runtime import BackgroundOwnershipUnavailable
+        from app.runtime.background import BackgroundOwnershipUnavailable
         try:
             with background_execution(owner) if owner is not None else nullcontext():
                 _worker_loop(database)

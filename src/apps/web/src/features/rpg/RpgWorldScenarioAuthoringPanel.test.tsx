@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
@@ -70,9 +71,7 @@ function detail(overrides: Record<string, unknown> = {}) {
 }
 
 function renderPanel() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = createTestQueryClient();
   render(
     <QueryClientProvider client={client}>
       <RpgWorldScenarioAuthoringPanel worldId={world.id} />

@@ -1,4 +1,4 @@
-import type { ConversationProduction, ProductionAsset, ProductionConstraints, ProductionGenerationStyle, ReviewPolicy } from '../conversation-production/types';
+import type { ConversationProduction, ProductionAsset } from '../conversation-production';
 
 export type PodcastFormat = 'debate' | 'interview' | 'speech' | 'roundtable';
 
@@ -29,17 +29,6 @@ export interface PodcastDownloadAsset {
   label: string;
   metadata: string;
   icon: string;
-}
-
-export interface PodcastGenerationRequest {
-  title: string;
-  brief: string;
-  format: PodcastFormat;
-  audience: string;
-  generationStyle: ProductionGenerationStyle;
-  reviewPolicy: ReviewPolicy;
-  constraints: ProductionConstraints;
-  rendererConfig: PodcastRendererConfig;
 }
 
 export interface PodcastEpisode {

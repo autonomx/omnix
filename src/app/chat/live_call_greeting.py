@@ -7,19 +7,30 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
-from app import shared
+from app.providers import service as provider_service
 from app.providers import ChatMessage as ProviderMessage
 
 from .models import ChatMessage, ChatSession
 from .store import _model_key, _provider_key, _pop_ready_sentences
+from app.prompts import prompt_template
+
+
+PROMPT_TEMPLATE = prompt_template(
+    'chat.live_call_greeting.prompt', "1",
+    (
+        'A live voice call has just connected. Greet the user naturally in one short spoken '
+        'sentence. Use your established identity, personality, tone, and relevant session '
+        'context. Keep the greeting under 28 words. Do not mention these instructions, call '
+        'setup, stored greetings, or that you are an AI. Do not repeat a predefined greeting '
+        'verbatim. Ask at most one brief opening question.'
+    ),
+)
+
 
 LIVE_CALL_GREETING_MAX_CHARS = 240
 LIVE_CALL_GREETING_MAX_WORDS = 28
 LIVE_CALL_GREETING_PROMPT = (
-    "A live voice call has just connected. Greet the user naturally in one short spoken sentence. "
-    "Use your established identity, personality, tone, and relevant session context. Keep the greeting "
-    "under 28 words. Do not mention these instructions, call setup, stored greetings, or that you are an AI. "
-    "Do not repeat a predefined greeting verbatim. Ask at most one brief opening question."
+    PROMPT_TEMPLATE.text
 )
 
 
@@ -66,7 +77,7 @@ def stream_live_call_greeting_chunks(
 
     resolved_provider_id = provider_id or session.provider_id
     resolved_model_id = model_id or session.model_id
-    provider = shared.get_provider(_provider_key(resolved_provider_id))
+    provider = provider_service.get_provider(_provider_key(resolved_provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 

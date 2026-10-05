@@ -143,23 +143,3 @@ class QuestDetector:
         template = title_templates.get(quest_type, "The {event} Quest")
         return template.format(event=event_type.title())
 
-    def is_quest_generating_event(
-        self,
-        event: Dict[str, Any],
-        world_state: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Check if an event would generate a quest without creating one.
-
-        Args:
-            event: Event dict to check.
-            world_state: Current world state (optional).
-
-        Returns:
-            True if event would generate a quest.
-        """
-        importance = event.get("importance", 0.5)
-        if importance < self.importance_threshold:
-            return False
-
-        event_type = event.get("type", "")
-        return self._map_event_to_quest_type(event_type) is not None

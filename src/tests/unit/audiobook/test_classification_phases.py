@@ -35,7 +35,8 @@ def test_quote_extraction_publishes_spans_without_queuing_classification(monkeyp
             return None
     @contextmanager
     def work(_database):
-        yield SimpleNamespace(connection=Connection(), jobs=Jobs(), commit=lambda: None, rollback=lambda: None)
+        assets = SimpleNamespace(asset_fields=lambda *_args, **_kwargs: {"storage_key": "key", "checksum_sha256": "checksum"})
+        yield SimpleNamespace(connection=Connection(), jobs=Jobs(), assets=assets, commit=lambda: None, rollback=lambda: None)
     monkeypatch.setattr("app.audiobook.worker.unit_of_work", work)
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
@@ -61,7 +62,8 @@ def test_classification_uses_reviewed_spans_and_changed_rules_require_extraction
     @contextmanager
     def work(_database):
         yield SimpleNamespace(connection=Connection(), commit=lambda: None,
-                              jobs=SimpleNamespace(create_job=lambda _context, payload: queued.append(payload)))
+                              jobs=SimpleNamespace(create_job=lambda _context, payload: queued.append(payload),
+                                                   query_jobs=lambda *_args, **_kwargs: []))
     monkeypatch.setattr("app.audiobook.service.unit_of_work", work)
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")

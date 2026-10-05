@@ -605,6 +605,68 @@ def compile_semantic_task(
 ) -> SemanticTaskCompilation:
     """Compile semantic facts into an execution domain without granting authority."""
 
+    actions, anomalies = _compiled_actions(task)
+
+    profile_id, profile_anomalies = _profile_for_actions(actions)
+    anomalies.extend(profile_anomalies)
+
+    _check_subject_domains(task, actions, anomalies)
+
+    dependencies, profile_id = _dependency_profile(task, profile_id, anomalies)
+
+    # Some private/stateful reads inherently depend on the current private state.
+    # Mutation does not automatically imply inbox/calendar reads; the parser must
+    # state those dependencies when the task actually depends on them.
+    _add_implicit_dependencies(task, actions, dependencies)
+
+    requirements = _compiled_requirements(dependencies, latest_user_message, task, anomalies)
+
+    # A selected Local folder is authoritative for local repository contents.
+    # Local environment state does not grant an action, but once the semantic
+    # task already asks for workspace work it prevents a redundant external
+    # github.read_repo evidence grant. Remote CI remains external/current.
+    requirements = _without_local_repository_evidence(routing_environment, actions, requirements)
+
+    evidence_decision = _compiled_evidence_decision(latest_user_message, requirements, task)
+
+    lane, profile_id, requires_clarification, retrieval_modes = _compiled_lane(dependencies, task, actions, anomalies, profile_id)
+
+    # Existing execution callers already transport action_intents into the
+    # deterministic authority compiler. Preserve the dedicated typed surface
+    # field as canonical while carrying a namespaced compatibility marker until
+    # every caller can pass semantic_workspace_surfaces explicitly. The marker
+    # is ignored by lane/profile derivation above and grants nothing by itself.
+    authority_actions = list(actions)
+    authority_actions.extend(
+        f"workspace_surface:{surface}"
+        for surface in dict.fromkeys(task.workspace_surfaces)
+    )
+
+    return SemanticTaskCompilation(
+        lane=lane,
+        profile_id=profile_id,
+        action_intents=authority_actions,
+        workspace_surfaces=list(dict.fromkeys(task.workspace_surfaces)),
+        evidence_decision=evidence_decision,
+        ambiguity=task.ambiguity,
+        requires_clarification=requires_clarification,
+        reason_code=task.reason_code,
+        anomalies=anomalies,
+        denied_actions=list(
+            dict.fromkeys(
+                anomaly.rejected_operation
+                for anomaly in anomalies
+                if anomaly.rejected_operation
+            )
+        ),
+        retrieval_modes=retrieval_modes,
+        multi_step=task.multi_step,
+        autonomous=task.autonomous,
+    )
+
+
+def _compiled_actions(task):
+    """Map operations to action intents; unsupported operations become anomalies."""
     actions: list[str] = []
     anomalies: list[SemanticCompilerAnomaly] = []
     for operation in task.operations:
@@ -629,10 +691,11 @@ def compile_semantic_task(
                 rejected_operation=f"{operation.kind}:{operation.target}",
             )
         )
+    return actions, anomalies
 
-    profile_id, profile_anomalies = _profile_for_actions(actions)
-    anomalies.extend(profile_anomalies)
 
+def _check_subject_domains(task, actions, anomalies):
+    """Flag actions whose domain contradicts the single domain the subjects imply."""
     subject_profiles = {
         _SUBJECT_PROFILES[subject.target]
         for subject in task.subjects
@@ -677,6 +740,9 @@ def compile_semantic_task(
                 )
             )
 
+
+def _dependency_profile(task, profile_id, anomalies):
+    """The profile implied by required dependencies, and conflicts with the action profile."""
     dependencies: list[SemanticDataDependency] = list(task.data_dependencies)
 
     # A dependency may be the only authority-bearing semantic fact (for
@@ -711,10 +777,11 @@ def compile_semantic_task(
                     ),
                 )
             )
+    return dependencies, profile_id
 
-    # Some private/stateful reads inherently depend on the current private state.
-    # Mutation does not automatically imply inbox/calendar reads; the parser must
-    # state those dependencies when the task actually depends on them.
+
+def _add_implicit_dependencies(task, actions, dependencies):
+    """Add the current-state dependencies that private reads and external targets always have."""
     implicit_dependencies: list[tuple[str, str]] = []
     if any(
         operation.target == "home"
@@ -770,6 +837,9 @@ def compile_semantic_task(
                 )
             )
 
+
+def _compiled_requirements(dependencies, latest_user_message, task, anomalies):
+    """Evidence requirements for the dependencies; market and filing evidence needs a resolved subject."""
     requirements: list[EvidenceRequirement] = []
     for dependency in dependencies:
         requirement = _evidence_requirement(latest_user_message, dependency, task)
@@ -794,11 +864,11 @@ def compile_semantic_task(
         requirements.append(requirement)
 
     requirements = merge_evidence_requirements(requirements)
+    return requirements
 
-    # A selected Local folder is authoritative for local repository contents.
-    # Local environment state does not grant an action, but once the semantic
-    # task already asks for workspace work it prevents a redundant external
-    # github.read_repo evidence grant. Remote CI remains external/current.
+
+def _without_local_repository_evidence(routing_environment, actions, requirements):
+    """A selected Local folder answers repository-contents evidence for workspace work."""
     active_workspace = str(
         getattr(routing_environment, "active_workspace", None)
         or (
@@ -818,7 +888,11 @@ def compile_semantic_task(
             for requirement in requirements
             if requirement.source_class != "repo_contents"
         ]
+    return requirements
 
+
+def _compiled_evidence_decision(latest_user_message, requirements, task):
+    """The evidence policy: required sources, forbidden external access and attribution, from the latest message."""
     lowered = " ".join(str(latest_user_message or "").casefold().split())
     external_forbidden = any(
         phrase in lowered
@@ -854,7 +928,11 @@ def compile_semantic_task(
         reason=f"semantic_task_compiler:{task.reason_code}"[:240],
         classifier="deterministic",
     )
+    return evidence_decision
 
+
+def _compiled_lane(dependencies, task, actions, anomalies, profile_id):
+    """The execution lane and profile: clarification, stateful work, bounded public reads or research."""
     retrieval_modes = _retrieval_modes(task, dependencies)
     public_read_only = bool(actions) and set(actions) <= {"research_read", "market_read"}
     public_dependency = any(
@@ -898,39 +976,7 @@ def compile_semantic_task(
         # Autonomous reasoning/research without stateful operations uses the
         # research profile. This is derived policy, not model-selected profile.
         profile_id = "research"
-
-    # Existing execution callers already transport action_intents into the
-    # deterministic authority compiler. Preserve the dedicated typed surface
-    # field as canonical while carrying a namespaced compatibility marker until
-    # every caller can pass semantic_workspace_surfaces explicitly. The marker
-    # is ignored by lane/profile derivation above and grants nothing by itself.
-    authority_actions = list(actions)
-    authority_actions.extend(
-        f"workspace_surface:{surface}"
-        for surface in dict.fromkeys(task.workspace_surfaces)
-    )
-
-    return SemanticTaskCompilation(
-        lane=lane,
-        profile_id=profile_id,
-        action_intents=authority_actions,
-        workspace_surfaces=list(dict.fromkeys(task.workspace_surfaces)),
-        evidence_decision=evidence_decision,
-        ambiguity=task.ambiguity,
-        requires_clarification=requires_clarification,
-        reason_code=task.reason_code,
-        anomalies=anomalies,
-        denied_actions=list(
-            dict.fromkeys(
-                anomaly.rejected_operation
-                for anomaly in anomalies
-                if anomaly.rejected_operation
-            )
-        ),
-        retrieval_modes=retrieval_modes,
-        multi_step=task.multi_step,
-        autonomous=task.autonomous,
-    )
+    return lane, profile_id, requires_clarification, retrieval_modes
 
 
 def semantic_task_from_legacy(decision: object) -> SemanticTask:

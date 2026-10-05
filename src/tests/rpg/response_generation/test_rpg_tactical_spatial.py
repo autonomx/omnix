@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 import pytest
 from fastapi import FastAPI
 
-from app.gateway.rpg_tactical_spatial_routes import register_rpg_tactical_spatial_routes
+from app.rpg.api.feature_routes.rpg_tactical_spatial_routes import register_rpg_tactical_spatial_routes
 from app.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
@@ -226,21 +227,11 @@ def test_tactical_ranged_attack_applies_low_cover_and_action_budget() -> None:
         )
 
 
-def test_tactical_routes_are_hidden_and_installed_on_gateway() -> None:
+def test_tactical_routes_are_documented() -> None:
     paths = {
         "/api/rpg/map-instances/{map_instance_id}/tactical/move",
         "/api/rpg/map-instances/{map_instance_id}/tactical/attack",
     }
     app = FastAPI()
-    register_rpg_tactical_spatial_routes(app)
-    assert paths <= {route.path for route in app.routes}
-    assert paths.isdisjoint(app.openapi()["paths"])
-
-    gateway = FastAPI(title="Omnix Web Gateway")
-    gateway_paths = {
-        route_path
-        for route in gateway.routes
-        if (route_path := getattr(route, "path", None)) is not None
-    }
-    assert paths <= gateway_paths
-    assert paths.isdisjoint(gateway.openapi()["paths"])
+    include_router_registrar(app, register_rpg_tactical_spatial_routes)
+    assert paths <= app.openapi()["paths"].keys()

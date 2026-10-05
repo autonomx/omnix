@@ -8,7 +8,7 @@ Reference: `autonomxDeveloper/tradingview-mcp`
 | Stooq daily fallback | Rewrite with attribution | `src/app/trading/providers/stooq.py` | Whole-dataset fallback only. Never splice with Yahoo. |
 | Binance candle pagination | Migrate selectively with attribution | `src/app/trading/providers/binance.py` | Preserve pagination tests; separate REST and WebSocket bindings from canonical instrument identity. |
 | Coinbase/Kraken adapters | Rewrite later | provider modules | Add only after crypto-only Beta qualification. |
-| Market-data file cache | Reference only | `src/app/trading/cache.py` | New cache is bounded and disposable under `resources/cache/trading/`; no user authority. |
+| Market-data file cache | Reference only | `src/app/trading/cache.py` | New cache is bounded, disposable and in-process (no disk copy since WP-8.3); no user authority. |
 | Symbol suffix inference | Reject as authority | instrument resolver | `BTCUSDT` is an alias, not a canonical ID. |
 | Workstation FastAPI app | Reject | Omnix gateway | No second server or static app owner. |
 | MCP tools/server | Reject | none | No MCP runtime dependency. |

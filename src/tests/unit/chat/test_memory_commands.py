@@ -2,10 +2,24 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.chat.memory_commands import parse_memory_command
+from app.providers import service as provider_service
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def legacy_test_persistence(monkeypatch):
+    from app.persistence.runtime import reset_persistence_mode_cache
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
+    reset_persistence_mode_cache()
+    yield
+    reset_persistence_mode_cache()
 
 
 class FailingProvider:
@@ -14,7 +28,7 @@ class FailingProvider:
 
 
 def setup_store(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     store = ChatSessionStore(tmp_path / "chat.json", memory_service_factory=lambda: service)
     session = store.create_session(
         CreateChatSessionRequest(
@@ -46,7 +60,7 @@ def test_parser_is_anchored_and_does_not_trigger_ordinary_discussion():
 
 def test_non_streaming_save_list_refresh_and_disable_bypass_provider(monkeypatch, tmp_path):
     store, service, session, _ = setup_store(tmp_path)
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: FailingProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: FailingProvider())
 
     saved = store.append_user_message(
         session.id,
@@ -81,7 +95,7 @@ def test_non_streaming_save_list_refresh_and_disable_bypass_provider(monkeypatch
 
 def test_forget_is_non_mutating_when_ambiguous_and_purges_unique_match(monkeypatch, tmp_path):
     store, service, session, context = setup_store(tmp_path)
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: FailingProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: FailingProvider())
     first = service.create_explicit_memory(
         context,
         scope="session",
@@ -116,7 +130,7 @@ def test_forget_is_non_mutating_when_ambiguous_and_purges_unique_match(monkeypat
 
 def test_streaming_command_returns_deterministic_events_without_provider(monkeypatch, tmp_path):
     store, _, session, _ = setup_store(tmp_path)
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: FailingProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: FailingProvider())
     appended = store.begin_user_message(
         session.id,
         SendChatMessageRequest(content="remember that streaming commands are deterministic"),
@@ -141,7 +155,7 @@ def test_streaming_command_returns_deterministic_events_without_provider(monkeyp
 
 def test_update_requires_an_available_exact_memory_id(monkeypatch, tmp_path):
     store, service, session, context = setup_store(tmp_path)
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: FailingProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: FailingProvider())
     record = service.create_explicit_memory(
         context,
         scope="session",

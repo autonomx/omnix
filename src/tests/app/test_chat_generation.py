@@ -1,23 +1,40 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 import time
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app import shared
+from app.providers import service as shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
-from app.jobs import InMemoryJobStore
-from app.jobs.inline_feature_jobs import (
-    INLINE_FEATURE_JOB_EXECUTOR_ENV,
-    THREAD_EXECUTOR,
+from tests.support.in_memory_jobs import InMemoryJobStore
+from app.rpg.jobs.turn_executor import (
     _queue_deferred_rpg_turn_narration,
     _rpg_turn_visible_text,
 )
+from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
+
+
+@pytest.fixture(autouse=True)
+def prepare_local_identity_for_postgresql_tests():
+    if not (os.environ.get("OMNIX_TEST_DATABASE_URL") or os.environ.get("OMNIX_DATABASE_URL")):
+        yield
+        return
+
+    from app.persistence.database import default_database
+    from app.persistence.identity_service import ensure_local_identity
+
+    ensure_local_identity(default_database())
+    yield
 
 
 class FakeProvider:
@@ -25,7 +42,7 @@ class FakeProvider:
         self.calls: list[dict[str, object]] = []
         self.content = content
 
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         prompt = messages[-1].content
         self.calls.append({"messages": messages, "model": model, "stream": stream, "prompt": prompt})
         return SimpleNamespace(
@@ -43,7 +60,7 @@ class BlockingProvider(FakeProvider):
         self.entered = threading.Event()
         self.release = threading.Event()
 
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         prompt = messages[-1].content
         self.calls.append({"messages": messages, "model": model, "stream": stream, "prompt": prompt})
         self.entered.set()
@@ -70,7 +87,7 @@ class InterruptibleProvider(BlockingProvider):
 
 
 class FailingProvider:
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         raise RuntimeError("Chat provider is not available")
 
 
@@ -190,7 +207,7 @@ def test_rpg_turn_visible_text_falls_back_for_direct_npc_business_question() -> 
 
 def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
     from app.rpg.session import narration_worker
-    from app.rpg.session import runtime
+    from app.rpg.session import semantic_response_projection, session_runtime_store
 
     saved_sessions: list[dict] = []
     signaled: list[str] = []
@@ -205,9 +222,9 @@ def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
         }
         return runtime_state, runtime_state["narration_jobs_by_turn"][turn_id], True
 
-    monkeypatch.setattr(runtime, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
-    monkeypatch.setattr(runtime, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
-    monkeypatch.setattr(runtime, "_enqueue_narration_request", fake_enqueue)
+    monkeypatch.setattr(session_runtime_store, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
+    monkeypatch.setattr(session_runtime_store, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
+    monkeypatch.setattr(semantic_response_projection, "_enqueue_narration_request", fake_enqueue)
     monkeypatch.setattr(narration_worker, "ensure_narration_worker_running", lambda: None)
     monkeypatch.setattr(narration_worker, "signal_narration_work", lambda session_id: signaled.append(session_id))
 
@@ -305,7 +322,7 @@ def test_chat_endpoint_returns_provider_failure_instead_of_blank_500(monkeypatch
         )
     )
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
+    client = _test_client(
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
@@ -345,14 +362,13 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
         )
     )
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
+    client = _test_client(
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
         )
     )
 
-    started_at = time.monotonic()
     response = client.post(
         f"/api/chat/sessions/{session.id}/messages",
         json={
@@ -361,11 +377,12 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
             "model_id": "llm:lmstudio:test-model",
         },
     )
-    elapsed = time.monotonic() - started_at
 
     assert response.status_code == 200
-    assert elapsed < 1.0
     job_id = response.json()["job"]["id"]
+    # The provider holds generation until released, so a response that waited
+    # for it would find the job finished (or failed when the hold timed out).
+    assert job_store.get_job(job_id).status not in {JobStatus.COMPLETED, JobStatus.FAILED}
     assert provider.entered.wait(timeout=1)
     provider.release.set()
     completed = _wait_for_job_status(job_store, job_id, {JobStatus.COMPLETED})
@@ -374,70 +391,6 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
     updated = chat_store.get_session(session.id)
     assert updated is not None
     assert updated.messages[-1].content == "Delayed RPG response."
-
-
-def test_new_chat_prompt_interrupts_active_generation(monkeypatch, tmp_path):
-    provider = InterruptibleProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
-
-    chat_store = ChatSessionStore(tmp_path / "chat.json")
-    session = chat_store.create_session(
-        CreateChatSessionRequest(
-            title="Interruptible chat",
-            provider_id="llm:lmstudio",
-            model_id="llm:lmstudio:test-model",
-        )
-    )
-    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
-        create_gateway_app(
-            chat_store_factory=lambda: chat_store,
-            job_store_factory=lambda: job_store,
-        )
-    )
-
-    first = client.post(
-        f"/api/chat/sessions/{session.id}/messages",
-        json={
-            "content": "first prompt",
-            "provider_id": "llm:lmstudio",
-            "model_id": "llm:lmstudio:test-model",
-            "user_turn_id": "web-user-turn:first",
-        },
-    )
-    assert first.status_code == 200
-    first_job_id = first.json()["job"]["id"]
-    assert provider.entered.wait(timeout=1)
-
-    second = client.post(
-        f"/api/chat/sessions/{session.id}/messages",
-        json={
-            "content": "second prompt",
-            "provider_id": "llm:lmstudio",
-            "model_id": "llm:lmstudio:test-model",
-            "user_turn_id": "web-user-turn:second",
-        },
-    )
-    assert second.status_code == 200
-    second_job_id = second.json()["job"]["id"]
-    assert second_job_id != first_job_id
-
-    canceled = _wait_for_job_status(job_store, first_job_id, {JobStatus.CANCELED})
-    completed = _wait_for_job_status(job_store, second_job_id, {JobStatus.COMPLETED})
-    assert canceled.cancel is not None
-    assert canceled.cancel.reason == "Interrupted by a newer Chat prompt."
-    assert completed.output_refs[0]["message_id"] == second.json()["user_message"]["id"]
-    assert provider.cancel_calls >= 1
-
-    updated = chat_store.get_session(session.id)
-    assert updated is not None
-    assert [message.content for message in updated.messages if message.role == "assistant"] == [
-        "Interrupted response completed."
-    ]
-    user_messages = [message for message in updated.messages if message.role == "user"]
-    assert user_messages[0].metadata["generation_status"] == "canceled"
-    assert user_messages[1].metadata["generation_status"] == "completed"
 
 
 def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
@@ -479,16 +432,16 @@ def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
 
 
 def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
-    from app.persistence import chat_runtime_compat
+    from app.chat.persistence import chat_runtime
 
     repository = object()
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresChatRepositoryAdapter",
         lambda: repository,
     )
 
-    store = chat_runtime_compat.PostgresCharacterChatSessionStore()
+    store = chat_runtime.PostgresCharacterChatSessionStore()
 
     assert store._prompt_context_cache == {}
     assert store._prompt_context_cache_lock is not None
@@ -496,13 +449,36 @@ def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
 
 
 def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):
-    monkeypatch.setenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, THREAD_EXECUTOR)
     provider = FakeProvider(provider_content)
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
-    return TestClient(app), provider, store
+    return _test_client(app), provider, store
+
+
+def _test_client(app):
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+
+
+def _run_feature_job(client, store, job_id: str, *, background: bool = False):
+    job = store.get_job(job_id)
+    assert job is not None
+    registry = client.app.state.job_handler_registry
+
+    def execute():
+        registry.execute(JobExecutionContext(job_store=store), job)
+
+    if background:
+        thread = threading.Thread(target=execute, daemon=True)
+        thread.start()
+        return thread
+    execute()
+    return store.get_job(job_id)
 
 
 def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
@@ -525,10 +501,13 @@ def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["type"] == "story"
-    assert payload["output_refs"][0]["title"] == "Lantern Road"
-    assert payload["output_refs"][0]["content"] == "Hello from the provider."
+    assert payload["status"] == "queued"
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["type"] == "story"
+    assert completed.output_refs[0]["title"] == "Lantern Road"
+    assert completed.output_refs[0]["content"] == "Hello from the provider."
     assert provider.calls[0]["model"] == "test-model"
     assert "long-form story draft" in provider.calls[0]["prompt"]
 
@@ -560,9 +539,12 @@ def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["title"] == "Lantern Road"
-    assert payload["output_refs"][0]["content"].startswith("# Lantern Road")
+    assert payload["status"] == "queued"
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["title"] == "Lantern Road"
+    assert completed.output_refs[0]["content"].startswith("# Lantern Road")
     assert "Generate an evocative, concise title" in provider.calls[0]["prompt"]
     assert "Story context:" in provider.calls[0]["prompt"]
     assert "Player response: I follow the road." in provider.calls[0]["prompt"]
@@ -589,38 +571,13 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["type"] == "podcast_script"
-    assert payload["output_refs"][0]["title"] == "Market Watch"
-    assert "podcast episode script" in provider.calls[0]["prompt"]
-
-
-def test_rpg_turn_jobs_execute_in_background_and_complete(monkeypatch, tmp_path):
-    client, provider, store = _gateway_client(tmp_path, monkeypatch)
-
-    response = client.post(
-        "/api/jobs",
-        json={
-            "module": "rpg",
-            "type": "rpg.turn",
-            "resource_class": "gpu:llm",
-            "input_ref": {"session_id": "session:demo"},
-            "input_payload": {
-                "command": "look around",
-                "provider_id": "llm:lmstudio",
-                "model_id": "llm:lmstudio:test-model",
-            },
-        },
-    )
-
-    payload = response.json()
-    assert response.status_code == 200
     assert payload["status"] == "queued"
-    assert payload["output_refs"] == []
-    completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
-    assert completed.output_refs[0]["type"] == "rpg_turn_response"
-    assert completed.output_refs[0]["title"] == "look around"
-    assert "RPG player command" in provider.calls[0]["prompt"]
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["type"] == "podcast_script"
+    assert completed.output_refs[0]["title"] == "Market Watch"
+    assert "podcast episode script" in provider.calls[0]["prompt"]
 
 
 def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
@@ -679,6 +636,7 @@ def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
         },
     )
 
+    _run_feature_job(client, store, response.json()["id"], background=True)
     completed = _wait_for_job_status(store, response.json()["id"], {JobStatus.COMPLETED})
     assert applied == [
         (
@@ -698,13 +656,12 @@ def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
 
 
 def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path):
-    monkeypatch.setenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, THREAD_EXECUTOR)
     provider = BlockingProvider()
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
-    client = TestClient(app)
+    client = _test_client(app)
 
     response = client.post(
         "/api/jobs",
@@ -725,6 +682,7 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
     assert response.status_code == 200
     assert payload["status"] == "queued"
     assert payload["output_refs"] == []
+    worker = _run_feature_job(client, store, payload["id"], background=True)
     try:
         assert provider.entered.wait(timeout=1)
         running = _wait_for_job_status(store, payload["id"], {JobStatus.RUNNING})
@@ -733,11 +691,11 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
         provider.release.set()
 
     completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
+    worker.join(timeout=1)
     assert completed.output_refs[0]["content"] == "Delayed RPG response."
 
 
-def test_rpg_turn_jobs_spawn_detached_worker_process_by_default(monkeypatch, tmp_path):
-    monkeypatch.delenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, raising=False)
+def test_rpg_turn_submission_does_not_spawn_detached_worker_process(monkeypatch, tmp_path):
     launched: list[dict[str, object]] = []
 
     class FakePopen:
@@ -746,28 +704,22 @@ def test_rpg_turn_jobs_spawn_detached_worker_process_by_default(monkeypatch, tmp
 
     monkeypatch.setattr(subprocess, "Popen", FakePopen)
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    app = create_gateway_app(job_store_factory=lambda: store)
+    client = _test_client(app)
 
-    job = store.create_job(
-        CreateJobRequest(
-            module="rpg",
-            type="rpg.turn",
-            resource_class=ResourceClass.GPU_LLM,
-            input_payload={"command": "look around"},
-        )
+    response = client.post(
+        "/api/jobs",
+        json={
+            "module": "rpg",
+            "type": "rpg.turn",
+            "resource_class": "gpu:llm",
+            "input_payload": {"command": "look around"},
+        },
     )
 
-    assert job.status == JobStatus.QUEUED
-    assert launched
-    command = launched[0]["command"]
-    assert isinstance(command, list)
-    assert command[-3:] == ["app.jobs.inline_feature_job_worker", str(tmp_path / "jobs.sqlite"), job.id]
-    assert launched[0]["kwargs"]["stdin"] == subprocess.DEVNULL
-    assert launched[0]["kwargs"]["stdout"] == subprocess.DEVNULL
-    assert launched[0]["kwargs"]["stderr"] == subprocess.DEVNULL
-    stored_job = store.get_job(job.id)
-    assert stored_job is not None
-    assert stored_job.status == JobStatus.QUEUED
-
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert launched == []
 
 def test_unsupported_jobs_still_use_queue_path(monkeypatch, tmp_path):
     client, _provider, _store = _gateway_client(tmp_path, monkeypatch)

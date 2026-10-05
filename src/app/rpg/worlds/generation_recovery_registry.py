@@ -12,7 +12,7 @@ from app.rpg.worlds.generation_first_pass_provider import (
     _identity_contract,
     _strict_registry_contract,
 )
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     _entity_registry_payload,

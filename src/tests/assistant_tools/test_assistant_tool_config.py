@@ -1,18 +1,13 @@
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant_tools.config_store import (
-    AssistantActionConfigRecord,
-    AssistantToolConfigRecord,
-    AssistantToolsConfigPayload,
     default_assistant_tools_config,
-    load_assistant_tools_config,
-    save_assistant_tools_config,
 )
-from app.assistant_tools.credentials import load_assistant_tool_credentials
+from app.assistant_tools import connections, proposals
 from app.gateway.main import create_gateway_app
+from app.persistence.tenant import TenantContext
 
 
 @pytest.fixture(autouse=True)
@@ -32,40 +27,37 @@ def test_default_config_uses_safe_approval_policies():
     assert actions["calendar.delete_event"].enabled is False
 
 
-def test_config_save_and_load_preserves_known_tool_settings(tmp_path):
-    path = tmp_path / "assistant_tools_config.json"
-    request = AssistantToolsConfigPayload(
-        tools=[
-            AssistantToolConfigRecord(
-                tool_id="gmail",
-                enabled=True,
-                connection_status="connected",
-                actions=[
-                    AssistantActionConfigRecord(action_id="gmail.read_email", enabled=True, approval_policy="allow_automatic"),
-                    AssistantActionConfigRecord(action_id="gmail.send_email", enabled=True, approval_policy="always_ask"),
-                ],
-            )
-        ]
-    )
+def test_default_proposal_service_reads_current_tenant_each_call(monkeypatch):
+    contexts = [
+        TenantContext(
+            user_id="user:first",
+            workspace_id="workspace:first",
+            membership_id="membership:first",
+            roles=frozenset({"owner"}),
+        ),
+        TenantContext(
+            user_id="user:second",
+            workspace_id="workspace:second",
+            membership_id="membership:second",
+            roles=frozenset({"owner"}),
+        ),
+    ]
+    monkeypatch.setattr(proposals, "default_database", lambda: object())
+    monkeypatch.setattr(proposals, "current_tenant", lambda: contexts.pop(0))
 
-    saved = save_assistant_tools_config(request, path)
-    loaded = load_assistant_tools_config(path)
-    gmail = next(tool for tool in loaded.tools if tool.tool_id == "gmail")
-    gmail_actions = {action.action_id: action for action in gmail.actions}
+    first = proposals.default_tool_proposal_service()
+    second = proposals.default_tool_proposal_service()
 
-    assert saved == loaded
-    assert gmail.enabled is True
-    assert gmail.connection_status == "connected"
-    assert gmail_actions["gmail.send_email"].enabled is True
-    assert "calendar" in {tool.tool_id for tool in loaded.tools}
+    assert first is not second
+    assert first.context.workspace_id == "workspace:first"
+    assert second.context.workspace_id == "workspace:second"
 
 
+@pytest.mark.postgres
 def test_assistant_tool_config_routes_persist_payload(monkeypatch, tmp_path):
     path = tmp_path / "assistant_tools_config.json"
-    credentials_path = tmp_path / "assistant_tool_credentials.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(credentials_path))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     initial = client.get("/api/assistant/tools/config")
     assert initial.status_code == 200
@@ -85,11 +77,10 @@ def test_assistant_tool_config_routes_persist_payload(monkeypatch, tmp_path):
 
 
 def test_assistant_tool_connect_route_reports_missing_google_oauth(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/gmail")
 
@@ -99,15 +90,14 @@ def test_assistant_tool_connect_route_reports_missing_google_oauth(monkeypatch, 
     assert payload["provider"] == "Google"
     assert payload["configured"] is False
     assert payload["auth_url"] is None
-    assert payload["redirect_uri"] == "http://testserver/api/assistant/tools/connect/google/callback"
+    assert payload["redirect_uri"] == "http://127.0.0.1/api/assistant/tools/connect/google/callback"
     assert "Google OAuth is not configured" in payload["message"]
 
 
 def test_assistant_tool_connect_route_builds_google_auth_url(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/gmail")
 
@@ -115,39 +105,18 @@ def test_assistant_tool_connect_route_builds_google_auth_url(monkeypatch, tmp_pa
     payload = response.json()
     assert payload["configured"] is True
     assert payload["provider"] == "Google"
-    assert payload["redirect_uri"] == "http://testserver/api/assistant/tools/connect/google/callback"
+    assert payload["redirect_uri"] == "http://127.0.0.1/api/assistant/tools/connect/google/callback"
     assert payload["auth_url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
     assert "client_id=client-123" in payload["auth_url"]
-    assert "redirect_uri=http%3A%2F%2Ftestserver%2Fapi%2Fassistant%2Ftools%2Fconnect%2Fgoogle%2Fcallback" in payload["auth_url"]
+    assert "redirect_uri=http%3A%2F%2F127.0.0.1%2Fapi%2Fassistant%2Ftools%2Fconnect%2Fgoogle%2Fcallback" in payload["auth_url"]
     assert "gmail.modify" in payload["auth_url"]
 
 
-def test_assistant_tool_oauth_client_route_saves_google_app_and_builds_auth_url(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH", str(tmp_path / "oauth_clients.json"))
-    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
-    monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
-
-    response = client.post(
-        "/api/assistant/tools/connect/gmail/oauth-client",
-        json={"client_id": "saved-client", "client_secret": "saved-secret"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["configured"] is True
-    assert payload["auth_url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
-    assert "client_id=saved-client" in payload["auth_url"]
-
-
 def test_assistant_tool_google_callback_reports_missing_secret(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/google/callback?code=abc&state=invalid", follow_redirects=False)
 
@@ -156,48 +125,22 @@ def test_assistant_tool_google_callback_reports_missing_secret(monkeypatch, tmp_
     assert "Google+OAuth+state+is+invalid+or+expired" in response.headers["location"]
 
 
-def test_assistant_tool_google_callback_saves_account_and_credentials(monkeypatch, tmp_path):
-    config_path = tmp_path / "assistant_tools_config.json"
-    credentials_path = tmp_path / "assistant_tool_credentials.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(credentials_path))
-    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
-    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret-123")
-    monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL", "/chatbot")
+def test_pending_oauth_states_are_size_and_ttl_bounded(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(connections.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(connections, "_MAX_PENDING_OAUTH_STATES", 2)
+    monkeypatch.setattr(connections, "_OAUTH_STATE_TTL_SECONDS", 5.0)
+    with connections._PENDING_OAUTH_LOCK:
+        connections._PENDING_OAUTH_STATES.clear()
 
-    def fake_post_form_json(url, values, headers=None):
-        assert url == "https://oauth2.googleapis.com/token"
-        assert values["code"] == "abc"
-        assert values["redirect_uri"] == "http://testserver/api/assistant/tools/connect/google/callback"
-        return {
-            "access_token": "access-token",
-            "refresh_token": "refresh-token",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "scope": "openid email profile https://www.googleapis.com/auth/gmail.modify",
-        }
+    first = connections._issue_oauth_state("google", "gmail")
+    second = connections._issue_oauth_state("google", "calendar")
+    third = connections._issue_oauth_state("google", "contacts")
+    assert len(connections._PENDING_OAUTH_STATES) == 2
+    assert connections._consume_oauth_state("google", first) is None
+    assert connections._consume_oauth_state("google", second) == "calendar"
+    assert connections._consume_oauth_state("google", second) is None
 
-    def fake_get_bearer_json(url, access_token):
-        assert url == "https://www.googleapis.com/oauth2/v2/userinfo"
-        assert access_token == "access-token"
-        return {"email": "ada@example.com", "name": "Ada Lovelace"}
-
-    monkeypatch.setattr("app.assistant_tools.connections._post_form_json", fake_post_form_json)
-    monkeypatch.setattr("app.assistant_tools.connections._get_bearer_json", fake_get_bearer_json)
-    client = TestClient(create_gateway_app())
-    start = client.get("/api/assistant/tools/connect/gmail").json()
-    state = parse_qs(urlparse(start["auth_url"]).query)["state"][0]
-
-    response = client.get(f"/api/assistant/tools/connect/google/callback?code=abc&state={state}", follow_redirects=False)
-
-    assert response.status_code == 303
-    assert "assistant_tool_connected=1" in response.headers["location"]
-    gmail = next(tool for tool in load_assistant_tools_config(config_path).tools if tool.tool_id == "gmail")
-    assert gmail.enabled is True
-    assert gmail.connection_status == "connected"
-    assert gmail.account_email == "ada@example.com"
-    credential = next(record for record in load_assistant_tool_credentials(credentials_path).credentials if record.tool_id == "gmail")
-    assert credential.access_token == "access-token"
-    assert credential.refresh_token == "refresh-token"
-    assert credential.account_email == "ada@example.com"
+    clock[0] += 6
+    assert connections._consume_oauth_state("google", third) is None
+    assert not connections._PENDING_OAUTH_STATES

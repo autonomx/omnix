@@ -13,7 +13,7 @@ from app.rpg.session.genesis.world_forge_profile_provider import (
     ProfileTargetRangeResponse,
     profile_from_proposal,
 )
-from app.rpg_world_forge_provider import WorldForgeProviderConfig
+from app.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
 from app.rpg.worlds.generation_routing import ResolvedWorldForgeRoute
 from app.rpg.worlds.profile_authoring import profile_review_from_world
 from app.rpg.worlds.profile_generation_jobs import (

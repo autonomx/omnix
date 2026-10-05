@@ -1,61 +1,14 @@
 import { useEffect, useState } from 'react';
-import { omnixApiClient } from '../../api/client';
 import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 import { SettingsAdvanced, SettingsField, SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 import type { ResearchProvider } from './settingsDocumentTypes';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
-type ProviderRuntimeStatus = {
-  provider: string;
-  available: boolean;
-  credential_required: boolean;
-  credential_configured: boolean;
-  coverage: string;
-};
 
-type ResearchRuntimeStatus = {
-  default_mode: string;
-  provider: ProviderRuntimeStatus;
-  provider_chain: ProviderRuntimeStatus[];
-  budgets: {
-    quick_max_results: number;
-    deep_max_steps: number;
-    deep_max_queries: number;
-    deep_max_sources: number;
-    deep_max_extracts: number;
-  };
-  retention: {
-    search_cache_ttl_seconds: number;
-    extraction_cache_ttl_seconds: number;
-    raw_snapshot_retention_days: number;
-    source_manifest_retention_days: number;
-  };
-  release: {
-    master_enabled: boolean;
-    quick_enabled: boolean;
-    quick_percentage: number;
-    deep_local_enabled: boolean;
-    deep_local_percentage: number;
-    hermes_enabled: boolean;
-    hermes_percentage: number;
-    availability: {
-      disabled: boolean;
-      quick: boolean;
-      deep: boolean;
-      hermes_planner: boolean;
-    };
-  };
-  compatibility: {
-    aliases_enabled: boolean;
-    sunset: string | null;
-    total_legacy_requests: number;
-    alias_counts: Record<string, number>;
-    canonical_field: string;
-  };
-  deep_enabled: boolean;
-  hermes_planner_enabled: boolean;
-  diagnostics_enabled: boolean;
-};
+type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];
 
 const PROVIDERS: Array<{ value: ResearchProvider; label: string }> = [
   { value: 'brave', label: 'Brave Search · API-backed general web search' },
@@ -74,7 +27,7 @@ export function ResearchSettingsSection() {
 
   useEffect(() => {
     let active = true;
-    omnixApiClient.get<ResearchRuntimeStatus>('/api/assistant/research/status').then((result) => {
+    unwrap(api.GET('/api/assistant/research/status')).then((result: ResearchRuntimeStatus) => {
       if (!active) return;
       setRuntime(result);
       setStatusMessage('Research runtime status loaded.');
@@ -194,7 +147,7 @@ export function ResearchSettingsSection() {
         </div>
       </SettingsAdvanced>
 
-      <div className="settings-status-list" aria-label="Research runtime status">
+      <div role="group" className="settings-status-list" aria-label="Research runtime status">
         <SettingsStatusRow
           label="Primary provider"
           value={runtime ? `${providerLabel(runtime.provider.provider)} · ${runtime.provider.available ? 'Ready' : 'Credential required'}` : 'Checking'}

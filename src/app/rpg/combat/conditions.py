@@ -61,15 +61,6 @@ def get_participant_status_effects(participant: Dict[str, Any]) -> List[Dict[str
     return normalize_status_effects(participant.get("status_effects"))
 
 
-def set_participant_status_effects(
-    participant: Dict[str, Any],
-    effects: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    participant = dict(_safe_dict(participant))
-    participant["status_effects"] = normalize_status_effects(effects)
-    return participant
-
-
 def actor_has_condition(participant: Dict[str, Any], kind: str) -> bool:
     kind = _safe_str(kind).strip().lower()
     return any(effect.get("kind") == kind for effect in get_participant_status_effects(participant))

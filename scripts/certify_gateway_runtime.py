@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+from dataclasses import replace
 import socket
 import statistics
 import sys
@@ -40,6 +41,11 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
         @app.get('/api/tts/speakers')
         def speakers():
             return {'speakers': ['default']}
+        @app.post('/api/tts/live-call/stream')
+        def live_call_stream():
+            # Streaming PCM16 contract used by the gateway's remote TTS client.
+            return Response(bytes.fromhex('0020 00e0') * 2400, media_type='application/octet-stream', headers={
+                'X-Omnix-Audio-Format': 'pcm_s16le', 'X-Omnix-Channels': '1', 'X-Omnix-Sample-Rate': '24000'})
         @app.post('/api/tts/generate_stream_audio')
         def synthesize():
             output = io.BytesIO()
@@ -54,20 +60,32 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
                           OMNIX_GATEWAY_BACKGROUND_ROLE=role, OMNIX_TTS_URL=tts_url,
                           OMNIX_GATEWAY_TTS_HTTP='1', OMNIX_TTS_STARTUP_WARMUP='0',
                           OMNIX_GATEWAY_REQUIRED_WORKERS='tts')
-        from app.gateway import feature_registry
-        feature_registry.FEATURES = tuple(feature for feature in feature_registry.FEATURES if feature.module in {
-            'app.gateway.live_voice_runtime_offload', 'app.gateway.event_loop_lag_monitor',
-            'app.gateway.tts_pcm_websocket', 'app.gateway.tts_runtime_routes',
-            'app.gateway.blocking_route_offload',
-        })
+        from app.config.env import environment
+        from app.runtime.config import RuntimeConfig
+        from app.runtime.feature_catalog import FEATURE_CATALOG, load_feature
+
+        enabled = {"chat", "voice"}
+        pending = list(enabled)
+        while pending:
+            feature = load_feature(pending.pop())
+            for dependency in feature.depends_on:
+                if dependency not in enabled:
+                    enabled.add(dependency)
+                    pending.append(dependency)
+        config = replace(
+            RuntimeConfig.from_environment(environment()),
+            enabled_features=tuple(sorted(enabled)),
+            disabled_features=tuple(sorted(set(FEATURE_CATALOG) - enabled)),
+        )
         from app.chat import generation_jobs
         generation_jobs._generate_reply = lambda *args, **kwargs: {'content': 'Certified deterministic reply.', 'metadata': {}}
-        from app import shared
+        from app.providers import audio_registry
         def no_local_registry():
             raise AssertionError('certification processes must use remote TTS')
-        shared.get_audio_registry = no_local_registry
+        audio_registry.get_audio_registry = no_local_registry
+        from app.observability.metrics import request_snapshot
         from app.production import create_production_app
-        app = create_production_app()
+        app = create_production_app(config)
         # Failure certification can shorten observation deadlines without
         # changing durable checks or the production defaults.
         app.state.execution_owner.lease_seconds = ownership_lease_seconds
@@ -86,7 +104,7 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
             services = getattr(app.state, 'runtime_services', None)
             control.send({'python_bytes': tracemalloc.get_traced_memory()[0], 'threads': threading.active_count(),
                           'tasks': len(asyncio.all_tasks()), 'process_id': os.getpid(), 'role': role,
-                          'requests': app.state.runtime_metrics.snapshot() if services else {},
+                          'requests': request_snapshot() if services else {},
                           'pool': services.jobs.database.pool_statistics() if services else {}})
     async def run():
         await asyncio.gather(server.serve(sockets=[listener]), commands())
@@ -101,6 +119,11 @@ def certify(url, duration):
     import httpx
     from websockets.sync.client import connect
     context = multiprocessing.get_context('spawn')
+    # Gateways authenticate to their model sidecars with the shared service
+    # token (WP-0.5); spawned processes inherit this disposable one.
+    if not os.environ.get('OMNIX_SERVICE_TOKEN'):
+        import secrets
+        os.environ['OMNIX_SERVICE_TOKEN'] = secrets.token_urlsafe(32)
     cohort = []
     def start(role, tts=''):
         parent, child = context.Pipe()
@@ -118,7 +141,8 @@ def certify(url, duration):
     try:
         tts, _ = start('tts')
         gateways = [start(role, tts) for role in ('worker', 'api', 'api')]
-        with httpx.Client(timeout=20) as client:
+        # Mutations need the request-guard client header (WP-0.3).
+        with httpx.Client(timeout=20, headers={"X-Omnix-Client": "certification"}) as client:
             def request(method, address, **kwargs):
                 started = time.perf_counter()
                 response = client.request(method, address, **kwargs)

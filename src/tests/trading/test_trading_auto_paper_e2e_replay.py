@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import trading_data_hardening as hardening_module
+from app.trading import order_gateway as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.market_evidence import (
@@ -33,7 +33,7 @@ from app.trading.paper import (
     paper_fill_is_fundable,
     paper_fill_key,
 )
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_data_integrity import finviz_atomic_source_locator
 from app.trading.strategy_monitor import TradingStrategyMonitor
@@ -182,7 +182,7 @@ class InMemoryPaperRepository:
             recent_ledger=[],
         )
 
-    def place_order(self, account_id, request: PaperOrderRequest):
+    def place_order(self, account_id, request: PaperOrderRequest, *, authority):
         assert account_id == self.account.account_id
         existing = self.orders.get(request.order_id)
         if existing is not None:

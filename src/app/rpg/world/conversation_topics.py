@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -398,76 +397,3 @@ _STOP_WORDS = frozenset({
 })
 
 
-def _topic_keywords(topic: Dict[str, Any]) -> frozenset:
-    topic = _safe_dict(topic)
-    raw = " ".join([
-        _safe_str(topic.get("title")),
-        _safe_str(topic.get("summary")),
-        _safe_str(topic.get("source_id")),
-        _safe_str(topic.get("topic_id")),
-    ])
-    return frozenset(
-        word
-        for word in re.sub(r"[^a-z0-9 ]", " ", raw.lower()).split()
-        if word and word not in _STOP_WORDS and len(word) > 2
-    )
-
-
-def _input_keywords(player_input: str) -> frozenset:
-    raw = _safe_str(player_input).lower()
-    return frozenset(
-        word
-        for word in re.sub(r"[^a-z0-9 ]", " ", raw).split()
-        if word and word not in _STOP_WORDS and len(word) > 2
-    )
-
-
-def detect_topic_pivot_hint(
-    player_input: str,
-    simulation_state: Dict[str, Any],
-    *,
-    current_topic: Dict[str, Any] | None = None,
-    settings: Dict[str, Any] | None = None,
-    exclude_event_ids: List[str] | None = None,
-) -> Dict[str, Any]:
-    """Return the best matching backed topic for the player's reply text.
-
-    Scores topics by keyword overlap with player_input.  Only returns a match
-    when the best candidate is backed by state.  Returns::
-
-        {"found": True,  "topic": {...}, "hint_text": "mill bandit", "score": 2}
-        {"found": False, "topic": {},    "hint_text": "",             "score": 0}
-
-    Hard constraints: read-only, no state mutation.
-    """
-    input_words = _input_keywords(player_input)
-    if not input_words:
-        return {"found": False, "topic": {}, "hint_text": "", "score": 0}
-
-    topics = conversation_topics_for_state(
-        simulation_state,
-        settings=settings,
-        exclude_event_ids=exclude_event_ids,
-    )
-
-    best_score = 0
-    best_topic: Dict[str, Any] = {}
-    best_overlap: frozenset = frozenset()
-
-    for topic in topics:
-        topic_words = _topic_keywords(topic)
-        overlap = input_words & topic_words
-        score = len(overlap)
-        if score > best_score:
-            best_score = score
-            best_topic = topic
-            best_overlap = overlap
-
-    if best_score > 0 and best_topic and topic_is_backed_by_state(best_topic):
-        return {
-            "found": True,
-            "topic": deepcopy(best_topic),
-            "hint_text": " ".join(sorted(best_overlap)),
-            "score": best_score,
-        }
-    return {"found": False, "topic": {}, "hint_text": "", "score": 0}

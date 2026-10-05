@@ -1,7 +1,7 @@
 """Event-sourced campaign geometry overlays for immutable map definitions."""
 from __future__ import annotations
 
-from typing import Iterable, Literal
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -140,11 +140,3 @@ def reduce_campaign_map_event(
     )
 
 
-def replay_campaign_map_events(
-    initial: CampaignMapInstanceSnapshot,
-    events: Iterable[CampaignMapResolvedEvent],
-) -> CampaignMapInstanceSnapshot:
-    snapshot = initial
-    for event in sorted(events, key=lambda row: row.event_sequence):
-        snapshot = reduce_campaign_map_event(snapshot, event)
-    return snapshot

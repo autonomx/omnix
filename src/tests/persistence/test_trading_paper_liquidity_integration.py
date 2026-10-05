@@ -9,13 +9,14 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.trading.paper import (
     PaperAccountCreate,
     PaperMarketObservation,
     PaperOrderRequest,
 )
+from app.trading.order_gateway import OrderGateway
 from app.trading.paper_repository import TradingPaperRepository
 
 
@@ -41,7 +42,7 @@ def _database() -> PostgresDatabase:
 def test_paper_observation_liquidity_is_aggregate_and_replay_safe() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         repository = TradingPaperRepository(
             context=context,
             uow_factory=lambda: unit_of_work(database),
@@ -58,7 +59,7 @@ def test_paper_observation_liquidity_is_aggregate_and_replay_safe() -> None:
             )
         )
         for index in range(2):
-            repository.place_order(
+            OrderGateway(repository).place_manual_entry(
                 account_id,
                 PaperOrderRequest(
                     order_id=f"order-{suffix}-{index}",

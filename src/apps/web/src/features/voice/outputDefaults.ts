@@ -1,4 +1,4 @@
-import type { SettingsDocument } from '../settings/settingsDocumentTypes';
+import type { SettingsDocument } from '../settings';
 
 export interface OutputDefaults {
   stability: number;

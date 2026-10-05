@@ -1,1 +1,0 @@
-"""Autoplay campaign harness helpers."""

@@ -129,10 +129,6 @@ def get_ability_definition(ability_id: str) -> Dict[str, Any]:
     return deepcopy(_safe_dict(ABILITY_DEFINITIONS.get(ability_id)))
 
 
-def list_ability_definitions() -> List[Dict[str, Any]]:
-    return [deepcopy(value) for value in ABILITY_DEFINITIONS.values()]
-
-
 def normalize_ability_cooldowns(value: Any) -> Dict[str, int]:
     cooldowns = _safe_dict(value)
     normalized: Dict[str, int] = {}
@@ -146,12 +142,6 @@ def normalize_ability_cooldowns(value: Any) -> Dict[str, int]:
 
 def get_participant_cooldowns(participant: Dict[str, Any]) -> Dict[str, int]:
     return normalize_ability_cooldowns(_safe_dict(participant).get("ability_cooldowns"))
-
-
-def set_participant_cooldowns(participant: Dict[str, Any], cooldowns: Dict[str, int]) -> Dict[str, Any]:
-    participant = dict(_safe_dict(participant))
-    participant["ability_cooldowns"] = normalize_ability_cooldowns(cooldowns)
-    return participant
 
 
 def decrement_participant_cooldowns(participant: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
@@ -196,12 +186,6 @@ def _participant_hp(participant: Dict[str, Any]) -> int:
     participant = _safe_dict(participant)
     resources = _safe_dict(participant.get("resources"))
     return _safe_int(participant.get("hp", resources.get("hp")), 0)
-
-
-def _participant_max_hp(participant: Dict[str, Any]) -> int:
-    participant = _safe_dict(participant)
-    resources = _safe_dict(participant.get("resources"))
-    return max(1, _safe_int(participant.get("max_hp", resources.get("max_hp")), 1))
 
 
 def _set_participant_hp(participant: Dict[str, Any], hp: int) -> Dict[str, Any]:

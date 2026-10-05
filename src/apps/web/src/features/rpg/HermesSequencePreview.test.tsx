@@ -1,28 +1,19 @@
-import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { HermesSequencePreview } from './HermesSequencePreview';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>,
-  );
-}
 
 describe('HermesSequencePreview', () => {
   it('renders an empty preview state', () => {
-    renderWithTheme(<HermesSequencePreview sequence={null} />);
+    renderWithProviders(<HermesSequencePreview sequence={null} />);
 
     expect(screen.getByText('No Hermes sequence is ready for review.')).toBeInTheDocument();
   });
 
   it('renders a safe reviewed sequence', () => {
     const onUseFirstItem = vi.fn();
-    renderWithTheme(
+    renderWithProviders(
       <HermesSequencePreview
         onUseFirstItem={onUseFirstItem}
         sequence={{
@@ -51,7 +42,7 @@ describe('HermesSequencePreview', () => {
   });
 
   it('renders a blocked sequence reason', () => {
-    renderWithTheme(
+    renderWithProviders(
       <HermesSequencePreview
         sequence={{
           objective: 'Spend coins at the market',
@@ -72,7 +63,7 @@ describe('HermesSequencePreview', () => {
   });
 
   it('renders an empty reviewed sequence', () => {
-    renderWithTheme(
+    renderWithProviders(
       <HermesSequencePreview
         sequence={{
           objective: 'Review nothing',
@@ -90,7 +81,7 @@ describe('HermesSequencePreview', () => {
   });
 
   it('renders invalid validation issues', () => {
-    renderWithTheme(
+    renderWithProviders(
       <HermesSequencePreview
         sequence={{
           review_status: 'invalid',

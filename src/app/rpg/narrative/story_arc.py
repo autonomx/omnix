@@ -185,17 +185,6 @@ class StoryArc:
             
         return 0.02  # Default small progress
         
-    def get_description(self) -> str:
-        """Get human-readable arc description.
-        
-        Returns:
-            String describing arc status.
-        """
-        status = "COMPLETE" if self.completed else "ACTIVE"
-        pct = int(self.progress * 100)
-        entity_list = ", ".join(sorted(self.entities))
-        return f"[{status}] {self.goal} ({pct}%) - Entities: {entity_list}"
-        
     def to_dict(self) -> Dict[str, Any]:
         """Serialize arc to dict.
         
@@ -476,55 +465,6 @@ class StoryArcManager:
                 lines.append(f"  - {arc.goal} (requires: {arc.dependency})")
                 
         return "\n".join(lines)
-        
-    def get_active_arc_summaries(self) -> List[Dict[str, Any]]:
-        """Get summaries of active arcs as dicts.
-        
-        Returns:
-            List of arc summary dicts.
-        """
-        return [
-            {
-                "id": arc.id,
-                "goal": arc.goal,
-                "progress": arc.progress,
-                "entities": list(arc.entities),
-                "tags": arc.tags,
-            }
-            for arc in self.active_arcs
-        ]
-        
-    def get_arcs_for_entity(self, entity_id: str) -> List[StoryArc]:
-        """Get all arcs involving a specific entity.
-        
-        Args:
-            entity_id: Entity ID to search for.
-            
-        Returns:
-            List of arcs involving this entity.
-        """
-        arcs = []
-        for arc in self.active_arcs + self.completed_arcs + self.pending_arcs:
-            if entity_id in arc.entities:
-                arcs.append(arc)
-        return arcs
-        
-    def get_most_urgent_arc(self) -> Optional[StoryArc]:
-        """Get the arc that needs the most Director attention.
-        
-        Priority-based urgency: high progress but not complete arcs
-        with high priority are most urgent.
-        
-        Returns:
-            Most urgent StoryArc, or None.
-        """
-        if not self.active_arcs:
-            return None
-            
-        return max(
-            self.active_arcs,
-            key=lambda a: a.priority * (1 - a.progress),
-        )
         
     def reset(self) -> None:
         """Reset arc manager state."""

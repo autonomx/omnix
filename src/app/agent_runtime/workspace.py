@@ -1,11 +1,11 @@
 """Local workspace authority for supervised agent execution."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
-import os
 import re
 import shutil
 import subprocess
@@ -13,7 +13,7 @@ import tempfile
 from typing import Any
 
 from .contracts import AgentEvent
-from .process_environment import bounded_process_environment
+from app.runtime.process_environment import bounded_process_environment
 
 
 class WorkspacePolicyError(PermissionError):
@@ -90,7 +90,7 @@ def _workspace_process_environment(overrides: dict[str, str] | None = None) -> d
     """
 
     return bounded_process_environment(
-        os.environ,
+        _environment(),
         _SAFE_PROCESS_ENVIRONMENT_KEYS,
         overrides=overrides,
     )

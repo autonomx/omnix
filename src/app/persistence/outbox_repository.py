@@ -26,6 +26,75 @@ class PostgresOutboxRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
 
+    def retention_counts(self) -> dict[str, int]:
+        row = self.connection.execute(
+            """SELECT
+                   (SELECT count(*) FROM omnix_outbox_events),
+                   (SELECT count(*) FROM omnix_outbox_consumer_inbox),
+                   (SELECT count(*) FROM omnix_outbox_dead_letters),
+                   (SELECT COALESCE(max(pg_column_size(payload)), 0) FROM omnix_outbox_events)"""
+        ).fetchone()
+        return {
+            "outbox_events": int(row[0]),
+            "outbox_consumer_inbox": int(row[1]),
+            "outbox_dead_letters": int(row[2]),
+            "max_outbox_payload_bytes": int(row[3]),
+        }
+
+    def delete_retained(
+        self, *, record_type: str, retention_days: int, batch_size: int
+    ) -> int:
+        batch = max(1, min(int(batch_size), 100_000))
+        if record_type == "outbox_consumer_inbox":
+            statement = """DELETE FROM omnix_outbox_consumer_inbox
+                WHERE (consumer_id, event_key) IN (
+                    SELECT consumer_id, event_key FROM omnix_outbox_consumer_inbox
+                     WHERE status IN ('completed', 'dead_letter')
+                       AND updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                     ORDER BY updated_at, consumer_id, event_key LIMIT %s
+                )"""
+        elif record_type == "outbox_events":
+            statement = """DELETE FROM omnix_outbox_events
+                WHERE id IN (
+                    SELECT id FROM omnix_outbox_events
+                     WHERE status = 'published'
+                       AND published_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                       AND NOT EXISTS (
+                           SELECT 1 FROM omnix_outbox_consumer_inbox AS inbox
+                            WHERE inbox.event_key = omnix_outbox_events.event_key
+                       )
+                     ORDER BY published_at, id LIMIT %s
+                )"""
+        elif record_type == "outbox_dead_letters":
+            statement = """DELETE FROM omnix_outbox_dead_letters
+                WHERE id IN (
+                    SELECT id FROM omnix_outbox_dead_letters
+                     WHERE resolved_at IS NOT NULL
+                       AND resolved_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                     ORDER BY resolved_at, id LIMIT %s
+                )"""
+        else:
+            raise ValueError(f"unsupported outbox retention type: {record_type}")
+        cursor = self.connection.execute(statement, (int(retention_days), batch))
+        return int(cursor.rowcount)
+
+    def lag(self, context: TenantContext) -> dict[str, Any]:
+        """Relay lag of one workspace: undelivered events and the oldest age."""
+        row = self.connection.execute(
+            """SELECT count(*) FILTER (WHERE status <> 'dead_letter'),
+                      COALESCE(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - min(created_at)
+                               FILTER (WHERE status <> 'dead_letter')), 0),
+                      count(*) FILTER (WHERE status = 'dead_letter')
+                 FROM omnix_outbox_events
+                WHERE workspace_id = %s AND status <> 'published'""",
+            (context.workspace_id,),
+        ).fetchone()
+        return {
+            "unpublished": int(row[0]),
+            "oldest_unpublished_age_seconds": round(float(row[1]), 3),
+            "dead_letters": int(row[2]),
+        }
+
     def _next_sequence(self, workspace_id: str, ordering_key: str) -> int:
         row = self.connection.execute(
             """
@@ -52,7 +121,14 @@ class PostgresOutboxRepository:
         correlation_id: str | None = None,
         causation_id: str | None = None,
         event_key: str | None = None,
+        skip_existing: bool = False,
     ) -> int:
+        """Append one event; returns its id.
+
+        With ``skip_existing`` an event whose ``event_key`` is already in the
+        outbox is not appended again, and the existing event's id is returned:
+        a producer that may publish twice (a retried turn) publishes once.
+        """
         key = event_key or uuid.uuid4().hex
         sequence = (
             self._next_sequence(context.workspace_id, ordering_key)
@@ -69,8 +145,9 @@ class PostgresOutboxRepository:
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
                 CURRENT_TIMESTAMP
             )
-            RETURNING id
-            """,
+            """
+            + (" ON CONFLICT (event_key) DO NOTHING" if skip_existing else "")
+            + " RETURNING id",
             (
                 key,
                 context.workspace_id,
@@ -85,6 +162,10 @@ class PostgresOutboxRepository:
                 _json(payload),
             ),
         ).fetchone()
+        if row is None:
+            row = self.connection.execute(
+                "SELECT id FROM omnix_outbox_events WHERE event_key = %s", (key,),
+            ).fetchone()
         return int(row[0])
 
     def claim_batch(
@@ -300,8 +381,9 @@ class PostgresOutboxConsumerRepository:
         ).fetchone()
         if existing is None:
             raise OutboxDeliveryConflict("consumer inbox reservation disappeared")
+        states = {"completed": "duplicate_completed", "dead_letter": "dead_lettered"}
         return {
-            "state": "duplicate_completed" if str(existing[0]) == "completed" else "busy",
+            "state": states.get(str(existing[0]), "busy"),
             "claim_token": None,
             "claim_expires_at": existing[2].isoformat() if existing[2] is not None else None,
             "attempt_count": int(existing[3]),
@@ -391,6 +473,51 @@ class PostgresOutboxConsumerRepository:
             (consumer_id, event_key),
         )
         return cursor.rowcount == 1
+
+    def undelivered(self, *, consumer_id: str, aggregate_types: list[str], after_id: int = 0, limit: int = 200) -> list[dict[str, Any]]:
+        """Unpublished events of these aggregate types this consumer has not completed or dead-lettered, by id."""
+        rows = self.connection.execute(
+            """SELECT events.id, events.event_key, events.event_type
+                 FROM omnix_outbox_events AS events
+                WHERE events.aggregate_type = ANY(%s) AND events.status IN ('pending', 'retrying', 'claimed')
+                  AND events.id > %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM omnix_outbox_consumer_inbox AS inbox
+                       WHERE inbox.consumer_id = %s AND inbox.event_key = events.event_key
+                         AND inbox.status IN ('completed', 'dead_letter'))
+                ORDER BY events.id
+                LIMIT %s""",
+            (sorted(set(aggregate_types)), int(after_id), consumer_id, max(1, min(int(limit), 500))),
+        ).fetchall()
+        return [{"id": int(row[0]), "event_key": str(row[1]), "event_type": str(row[2])} for row in rows]
+
+    def dead_letter(self, *, consumer_id: str, event_key: str, reason: str) -> bool:
+        """Close one consumer's delivery of an event as dead-lettered, unless it is being processed (PA-4.3).
+
+        Only this consumer's delivery ends: the event still reaches its other
+        consumers, and the relay skips a dead-lettered delivery.
+        """
+        row = self.connection.execute(
+            """INSERT INTO omnix_outbox_consumer_inbox AS inbox (consumer_id, event_key, status, last_error)
+               VALUES (%s, %s, 'dead_letter', %s)
+               ON CONFLICT (consumer_id, event_key) DO UPDATE
+                  SET status = 'dead_letter', last_error = EXCLUDED.last_error,
+                      claim_token = NULL, claim_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE inbox.status = 'failed'
+                   OR (inbox.status = 'processing' AND inbox.claim_expires_at <= CURRENT_TIMESTAMP)
+               RETURNING attempt_count""",
+            (consumer_id, event_key, reason[:2000]),
+        ).fetchone()
+        if row is None:
+            return False
+        self.connection.execute(
+            """INSERT INTO omnix_outbox_dead_letters (workspace_id, consumer_id, event_key, reason, payload, attempt_count)
+               SELECT workspace_id, %s, event_key, %s, payload, GREATEST(%s, 1) FROM omnix_outbox_events WHERE event_key = %s
+               ON CONFLICT (consumer_id, event_key) DO UPDATE
+                  SET reason = EXCLUDED.reason, attempt_count = EXCLUDED.attempt_count, resolved_at = NULL""",
+            (consumer_id, reason[:2000], int(row[0]), event_key),
+        )
+        return True
 
 
 class PostgresSideEffectRepository:

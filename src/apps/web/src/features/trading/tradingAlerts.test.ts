@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
+import { fixture } from '../../test/fixture';
 
-const alert: TradingAlert = {
+const alert: TradingAlert = fixture({
   alert_id: 'alert-1',
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
   binding_id: null,
@@ -26,7 +27,7 @@ const alert: TradingAlert = {
   enabled: true,
   cooldown_seconds: 60,
   revision: 3,
-};
+});
 
 afterEach(() => vi.unstubAllGlobals());
 

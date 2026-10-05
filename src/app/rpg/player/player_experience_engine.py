@@ -169,33 +169,6 @@ class PlayerExperienceEngine:
 
         return profile
 
-    def translate_change(
-        self,
-        mechanical_change: Dict[str, Any],
-        player_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Translate a mechanical change into emotional feedback.
-
-        Args:
-            mechanical_change: Raw game state change.
-            player_id: Optional player ID for profile-aware feedback.
-
-        Returns:
-            Emotional feedback dict.
-        """
-        player_profile = None
-        if player_id:
-            player_profile = self.get_or_create_profile(player_id)
-
-        feedback = self.feedback.translate(mechanical_change, player_profile)
-        self._stats["feedback_generated"] += 1
-
-        return feedback
-
-    def get_emotional_summary(self) -> str:
-        """Get summary of player's emotional journey."""
-        return self.feedback.get_emotional_state_summary()
-
     def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive statistics."""
         return {

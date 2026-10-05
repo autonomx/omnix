@@ -1,27 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readStorySnapshot } from './StoryAudioPanel';
 import { buildChapterAudioStates, documentFromCurrentStory, manifestForChapter, upsertStoryAudioManifest, type StoryAudioChapterState } from './storyAudioManifest';
+import { useStorySnapshot } from './storySnapshotStore';
 
 export function StoryChapterAudioPanel() {
-  const [snapshot, setSnapshot] = useState(() => readStorySnapshot());
+  const snapshot = useStorySnapshot();
   const document = useMemo(() => documentFromCurrentStory(snapshot.title, snapshot.text), [snapshot.title, snapshot.text]);
   const [chapterStates, setChapterStates] = useState<StoryAudioChapterState[]>(() => buildChapterAudioStates(document));
 
+  // Saved manifests (this panel's or the audio panel's) advance the snapshot revision.
   useEffect(() => {
-    const refresh = () => {
-      const nextSnapshot = readStorySnapshot();
-      setSnapshot(nextSnapshot);
-      const nextDocument = documentFromCurrentStory(nextSnapshot.title, nextSnapshot.text);
-      setChapterStates(buildChapterAudioStates(nextDocument));
-    };
-    refresh();
-    const intervalId = window.setInterval(refresh, 1_500);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refresh);
-    };
-  }, []);
+    setChapterStates(buildChapterAudioStates(document));
+  }, [document, snapshot.revision]);
 
   function markChapterForRegeneration(chapterId: string): void {
     upsertStoryAudioManifest(document.id, manifestForChapter(document, chapterId));

@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { RpgMapSurface } from './RpgMapSurface';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const polygon = { kind: 'polygon', points: [[-50, -50], [50, -50], [50, 20], [-50, 20]] };
 const definition = {
@@ -37,7 +38,7 @@ it('uses ID-based shared asset URLs while keeping vector fallback geometry', asy
     if (path.includes('/api/rpg/maps/')) return Response.json({ ok: true, map_id: definition.map_id, definition_revision: definition.definition_revision, definition });
     return Response.json({ ok: true, map_id: definition.map_id, definition_revision: definition.definition_revision, overlay_revision: 0, session_turn_index: 0, overlay });
   }));
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   const view = render(<QueryClientProvider client={client}><RpgMapSurface mapId={definition.map_id} sessionId="session:test" /></QueryClientProvider>);
 
   expect(await screen.findByRole('img', { name: /interactive map/i })).toBeInTheDocument();

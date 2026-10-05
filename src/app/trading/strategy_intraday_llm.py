@@ -17,9 +17,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers import ChatMessage
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 from .gapper_dataset import GapperCandidate
 from .strategy_intraday_learning import IntradayLearningSnapshot
+from .structured_llm import TradingModelOutputError, trading_model_call
 
 
 ThesisChange = Literal["initial", "strengthened", "weakened", "flipped", "unchanged"]
@@ -81,20 +83,46 @@ class IntradayLLMResult(BaseModel):
     usage_source: Literal["provider", "estimated"] = "estimated"
 
 
-def _strip_json_fence(value: str) -> str:
-    text = str(value or "").strip()
-    fence = chr(96) * 3
-    if text.startswith(fence):
-        text = text.strip(chr(96)).strip()
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    return text
-
-
 def _default_provider():
-    from app import shared
+    from app.providers.service import get_provider
 
-    return shared.get_provider()
+    provider = get_provider()
+    if provider is not None and provider_supports(provider, CLOSED_OBJECT_SCHEMA):
+        return _IntradaySchemaProviderProxy(provider)
+    return provider
+
+
+class _IntradaySchemaProviderProxy:
+    def __init__(self, delegate: Any) -> None:
+        self._delegate = delegate
+
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
+    def chat_completion(self, *args, **kwargs):
+        response_format = kwargs.get("response_format")
+        if (
+            isinstance(response_format, dict)
+            and str(response_format.get("type") or "").casefold() == "json_object"
+        ):
+            from app.providers.structured.contracts import StructuredMode
+            from app.providers.structured.schema_projection import project_provider_schema
+
+            schema = project_provider_schema(
+                IntradayLLMBatchResponse.model_json_schema(),
+                mode=StructuredMode.JSON_SCHEMA,
+                provider_name="chatgpt_codex",
+            )
+            kwargs = dict(kwargs)
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "intraday_llm_batch_response",
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
+        return self._delegate.chat_completion(*args, **kwargs)
 
 
 def _usage_int(usage: Any, *keys: str) -> int | None:
@@ -618,6 +646,31 @@ class IntradayLLMAnalyzer:
         trigger_reasons_by_instrument: dict[str, tuple[str, ...]] | None = None,
         payload_modes_by_instrument: dict[str, Literal["delta", "full"]] | None = None,
     ) -> IntradayLLMResult:
+        from .strategy_ai_shadow_provider import assess_intraday_with_shared_circuit
+
+        kwargs = {
+            "ranks": ranks,
+            "previous_by_instrument": previous_by_instrument,
+            "trigger_reasons_by_instrument": trigger_reasons_by_instrument,
+            "payload_modes_by_instrument": payload_modes_by_instrument,
+        }
+        return assess_intraday_with_shared_circuit(
+            self,
+            rows,
+            kwargs=kwargs,
+            original=type(self)._assess_core,
+            default_provider=_default_provider,
+        )
+
+    def _assess_core(
+        self,
+        rows: Iterable[tuple[GapperCandidate, Any, datetime, IntradayLearningSnapshot]],
+        *,
+        ranks: dict[str, int],
+        previous_by_instrument: dict[str, dict[str, Any]] | None = None,
+        trigger_reasons_by_instrument: dict[str, tuple[str, ...]] | None = None,
+        payload_modes_by_instrument: dict[str, Literal["delta", "full"]] | None = None,
+    ) -> IntradayLLMResult:
         rows = list(rows)
         if not rows:
             return IntradayLLMResult(assessments=(), provider="none", model=None)
@@ -656,31 +709,31 @@ class IntradayLLMAnalyzer:
         input_characters = sum(len(message.content) for message in messages)
         model = getattr(getattr(provider, "config", None), "model", None) or None
         try:
-            response = provider.chat_completion(
-                messages=messages,
+            reply = trading_model_call(
+                provider,
+                messages,
+                output_model=IntradayLLMBatchResponse,
+                contract_id="trading.intraday_llm.batch",
+                schema_name="intraday_llm_batch_response",
                 model=model,
-                stream=False,
-                response_format={"type": "json_object"},
-                request_timeout_seconds=45,
-                temperature=0,
                 max_tokens=max(900, 350 * len(rows)),
+                # A Codex provider is wrapped in _IntradaySchemaProviderProxy,
+                # which supplies the strict schema itself.
+                response_format={"type": "json_object"},
             )
-        except TypeError:
-            response = provider.chat_completion(messages=messages, model=model, stream=False)
-
+        except TradingModelOutputError as exc:
+            if exc.reason == "empty":
+                raise RuntimeError("intraday_llm_provider_returned_no_text") from exc
+            raise RuntimeError("intraday_llm_provider_returned_invalid_json") from exc
+        response = reply.response
         content = str(getattr(response, "content", "") or "").strip()
-        if not content:
-            raise RuntimeError("intraday_llm_provider_returned_no_text")
         output_characters = len(content)
         input_tokens, output_tokens, total_tokens, usage_source = _normalized_usage(
             getattr(response, "usage", None),
             input_characters=input_characters,
             output_characters=output_characters,
         )
-        try:
-            parsed = IntradayLLMBatchResponse.model_validate_json(_strip_json_fence(content))
-        except Exception as exc:
-            raise RuntimeError("intraday_llm_provider_returned_invalid_json") from exc
+        parsed = reply.value
 
         seen: set[str] = set()
         valid: list[IntradayLLMAssessment] = []

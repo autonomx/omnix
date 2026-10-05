@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
+from tests.support.routers import include_router_registrar
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_session_routes import register_rpg_session_routes
+from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from app.rpg.session import durable_store
 from app.rpg.session import service as session_service
 from app.rpg.session.service import load_session
@@ -149,12 +152,13 @@ def _wizard_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.postgres
 def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI()
-    register_rpg_session_routes(app)
+    include_router_registrar(app, register_rpg_session_routes)
     client = TestClient(app)
 
     response = client.post("/api/rpg/new-game", json=_wizard_payload())
@@ -208,6 +212,7 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     assert state["player"]["currency"]["silver"] == 10
 
 
+@pytest.mark.postgres
 def test_new_game_route_uses_one_compact_genesis_final_save(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -221,7 +226,7 @@ def test_new_game_route_uses_one_compact_genesis_final_save(monkeypatch, tmp_pat
     monkeypatch.setattr(session_service, "save_session_to_disk", spy_save_session_to_disk)
 
     app = FastAPI()
-    register_rpg_session_routes(app)
+    include_router_registrar(app, register_rpg_session_routes)
     client = TestClient(app)
 
     response = client.post("/api/rpg/new-game", json=_wizard_payload())

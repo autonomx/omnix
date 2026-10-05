@@ -13,6 +13,8 @@ snapshot for research/backtests.
 
 from __future__ import annotations
 
+import logging
+
 import re
 from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
@@ -20,7 +22,6 @@ from decimal import Decimal, InvalidOperation
 from html import unescape
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
-from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
@@ -45,6 +46,10 @@ from .strategy_data_integrity import (
     FINVIZ_ATOMIC_FIRST_PAGE_MAX,
     finviz_atomic_source_locator,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
+
+logger = logging.getLogger(__name__)
 
 
 FINVIZ_TOP_GAINERS_URL = "https://finviz.com/screener"
@@ -54,10 +59,8 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION = YAHOO_HARDENED_EVIDENCE_POLICY_VERSION
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 _ALLOWED_DISCOVERY_SKEW_SECONDS = 120
 _TICKER_PATHS = {"/quote", "/quote.ashx", "/stock"}
 _HREF_RE = re.compile(r"href\s*=\s*([\"'])(.*?)\1", re.IGNORECASE | re.DOTALL)
@@ -169,6 +172,7 @@ def _yahoo_exact_quote(runtime: ProviderHttpRuntime, symbol: str) -> dict[str, A
         )
         payload = response.json()
     except Exception:
+        logger.debug("suppressed error in %s", "_yahoo_exact_quote", exc_info=True)
         return None
     quotes = payload.get("quotes") if isinstance(payload, dict) else None
     if not isinstance(quotes, list):
@@ -252,7 +256,7 @@ def _yahoo_chart_snapshot(
                     nonzero_count_by_date[observed.date()] += 1
         if observed.date() == current_date and _PREMARKET_OPEN <= clock <= same_clock:
             latest_current = (observed, close)
-        if observed.date() < current_date and _REGULAR_OPEN <= clock < _REGULAR_CLOSE:
+        if observed.date() < current_date and _REGULAR_OPEN <= clock < regular_close_time(observed.date()):
             regular_closes_by_date[observed.date()].append((observed, close))
 
     if latest_current is None:

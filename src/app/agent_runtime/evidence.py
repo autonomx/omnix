@@ -5,13 +5,15 @@ the run, provenance receipts, and completion acceptance.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+from app.config.env import env_str as _env_str
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 import re
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 from .active_objective import normalize_objective_relation
@@ -142,6 +144,10 @@ DEFAULT_FRESHNESS_SECONDS = {
     "email_state": 300,
 }
 
+# Returned by an extracted step that did not settle its caller.
+_CONTINUE = object()
+
+
 def freshness_max_age_seconds(source_class: str) -> int | None:
     """Resolve source-specific freshness from policy configuration.
 
@@ -149,7 +155,7 @@ def freshness_max_age_seconds(source_class: str) -> int | None:
     freshness deploy-time policy rather than classifier code.
     """
     key = "OMNIX_AGENT_EVIDENCE_MAX_AGE_" + re.sub(r"[^A-Z0-9]+", "_", source_class.upper())
-    raw = str(os.environ.get(key, "") or "").strip()
+    raw = str(_env_str(key, "") or "").strip()
     if raw:
         try:
             value = int(raw)
@@ -189,22 +195,84 @@ SOURCE_CAPABILITIES: dict[str, tuple[str, str]] = {
 _SEMANTIC_SOURCE_CLASSES = frozenset(SOURCE_CAPABILITIES)
 
 
+_HERMES_EVIDENCE_SCHEMA = {
+    "requirement": "none|optional|required",
+    "external_access": "allowed|forbidden",
+    "requirements": [
+        {
+            "source_class": (
+                "general_current_web|breaking_news|market_news|company_filing|"
+                "software_release|repo_contents|repo_ci_state|home_state|"
+                "home_energy|calendar_state|email_state|market_quote|"
+                "market_status|weather_state"
+            ),
+            "freshness": "timeless|current",
+            "trust_floor": "authoritative|primary|reputable|general",
+            "fallback_policy": "fail_closed|allow_fallback",
+        }
+    ],
+    "user_visible_attribution": "none|when_used|required",
+    "retrieval_strategy": "lookup|bounded|adaptive",
+    "confidence": "number 0..1",
+    "reason": "short string",
+}
+
+
+def _hermes_evidence_decision(client: Any, task: str, profile_id: str) -> dict[str, Any]:
+    """Proposal-only semantic evidence classification for ambiguous Agent tasks.
+
+    The sidecar never executes tools. Omnix validates the returned source
+    classes against the selected profile ceiling before issuing authority.
+    """
+    from app.providers import ChatMessage
+    from app.providers.hermes_client import JsonObject
+
+    decision = client.structured(
+        [
+            ChatMessage(
+                role="system",
+                content=(
+                    "You are a non-executing evidence-policy adviser. Return one JSON object "
+                    "matching the supplied schema. Determine whether the task needs external "
+                    "evidence, what semantic source classes are required, freshness/trust, and "
+                    "attribution. Never execute tools, never name unlisted source classes, and "
+                    "never grant capabilities."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=json.dumps(
+                    {"task": task, "profile": profile_id, "schema": _HERMES_EVIDENCE_SCHEMA},
+                    sort_keys=True,
+                ),
+            ),
+        ],
+        output_model=JsonObject,
+        contract_id="hermes.evidence_decision",
+        json_mode=True,
+        timeout=min(client.timeout, 15.0),
+        error="Hermes did not return a valid evidence decision",
+    )
+    return decision.model_dump()
+
+
 def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision | None:
-    enabled = str(os.environ.get("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
+    enabled = str(_env_str("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
     if enabled not in {"1", "true", "yes", "hermes"}:
         return None
     try:
-        from app.assist_core.hermes_client import HermesSidecarClient
+        from app.providers.hermes_client import HermesSidecarClient
 
         client = HermesSidecarClient(
-            base_url=str(os.environ.get("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
-            api_key=os.environ.get("OMNIX_HERMES_API_KEY"),
-            timeout=float(os.environ.get("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
+            base_url=str(_env_str("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
+            api_key=_env_str("OMNIX_HERMES_API_KEY"),
+            timeout=float(_env_str("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
         )
-        payload = client.classify_agent_evidence(task, profile_id)
-    except Exception:
+        payload = _hermes_evidence_decision(client, task, profile_id)
+    except Exception as exc:
         # Advisory failures never weaken the policy. The caller falls back to
         # conservative Omnix classification.
+        log_recovered_exception("advisory evidence classification", exc)
         return None
 
     requirement = str(payload.get("requirement") or "none").casefold()
@@ -348,19 +416,17 @@ def _security_subject(ticker: str) -> SubjectRef:
     canonical_id = f"{ticker}:US"
     qualifiers: dict[str, object] = {"ticker": ticker}
     try:
-        from app.trading.catalog import search_instruments
-        from app.trading.models import AssetClass
+        from app.runtime.ports import optional
 
-        candidates = [
-            item
-            for item in search_instruments(ticker)
-            if item.asset_class is AssetClass.EQUITY
-            and item.display_symbol.upper() == ticker
-        ]
-        if len(candidates) == 1:
-            canonical_id = candidates[0].instrument_id
-            qualifiers["instrument_id"] = candidates[0].instrument_id
-    except Exception:
+        from .contracts import SECURITY_INSTRUMENTS
+
+        instruments = optional(SECURITY_INSTRUMENTS)
+        instrument_id = instruments.equity_instrument_id(ticker) if instruments is not None else None
+        if instrument_id:
+            canonical_id = instrument_id
+            qualifiers["instrument_id"] = instrument_id
+    except Exception as exc:
+        log_recovered_exception("security instrument resolution", exc, level="DEBUG")
         pass
     return SubjectRef(
         type="security",
@@ -752,6 +818,15 @@ def classify_evidence(
         market_signal or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
     )
 
+    outcome = _advised_evidence_decision(advised, external_forbidden, attribution, requirements, hard_requirement_sources, potentially_current, market_signal, text)
+    if outcome is not _CONTINUE:
+        return outcome
+
+    return _deterministic_evidence_decision(requirements, external_forbidden, attribution, text, potentially_current, market_signal)
+
+
+def _advised_evidence_decision(advised, external_forbidden, attribution, requirements, hard_requirement_sources, potentially_current, market_signal, text):
+    """Combine the semantic adviser with the deterministic hard floors; a low-confidence adviser keeps a conservative floor."""
     if advised is not None:
         advised_policy = advised.policy.model_copy(
             update={
@@ -837,7 +912,11 @@ def classify_evidence(
                 classifier="conservative",
             )
         return advised.model_copy(update={"policy": advised_policy})
+    return _CONTINUE
 
+
+def _deterministic_evidence_decision(requirements, external_forbidden, attribution, text, potentially_current, market_signal):
+    """The evidence policy from deterministic floors alone: required sources, timeless concepts, or a conservative current domain."""
     if requirements:
         policy = EvidencePolicy(
             requirement="required",
@@ -1062,7 +1141,40 @@ def compile_task_authority(
         if intent.startswith("workspace_surface:") and ":" in intent
     )
 
-    if profile.id == "coding":
+    local = _local_task_capabilities(profile, text, intents, allow_text_semantic_fallback)
+
+    external = list(evidence.required_external)
+    if profile.produces_diff:
+        # Browser and MCP providers remain outside Pi. SemanticTask describes
+        # whether the workspace surface is web UI; deterministic policy maps
+        # that description to capabilities inside the coding profile ceiling.
+        from .coding_external_authority import coding_external_capabilities_for_task
+
+        external.extend(coding_external_capabilities_for_task(
+            text,
+            semantic_workspace_surfaces=surfaces,
+            allow_text_semantic_fallback=allow_text_semantic_fallback,
+        ))
+    _add_domain_capabilities(profile, intents, external, text, allow_text_semantic_fallback)
+
+    ceiling = profile_external_ceiling(profile)
+    outside = [cap for cap in external if cap not in ceiling]
+    if outside:
+        raise EvidenceCompilationError(
+            "required_source_outside_profile_ceiling",
+            f"required capabilities outside profile {profile.id}: {', '.join(outside)}",
+        )
+    return CompiledEvidence(
+        decision=decision,
+        required_local=tuple(dict.fromkeys(local)),
+        required_external=tuple(dict.fromkeys(external)),
+        external_groups=evidence.external_groups,
+    )
+
+
+def _local_task_capabilities(profile, text, intents, allow_text_semantic_fallback):
+    """Workspace capabilities: reads always, edits and commands only when the task mutates or executes."""
+    if profile.produces_diff:
         read_caps = [
             capability
             for capability in profile.capabilities
@@ -1129,19 +1241,11 @@ def compile_task_authority(
             )
     else:
         local = list(profile.capabilities)
+    return local
 
-    external = list(evidence.required_external)
-    if profile.id == "coding":
-        # Browser and MCP providers remain outside Pi. SemanticTask describes
-        # whether the workspace surface is web UI; deterministic policy maps
-        # that description to capabilities inside the coding profile ceiling.
-        from .coding_external_authority import coding_external_capabilities_for_task
 
-        external.extend(coding_external_capabilities_for_task(
-            text,
-            semantic_workspace_surfaces=surfaces,
-            allow_text_semantic_fallback=allow_text_semantic_fallback,
-        ))
+def _add_domain_capabilities(profile, intents, external, text, allow_text_semantic_fallback):
+    """Home and personal-assistant capabilities the semantic actions (or, for compatibility, the text) ask for."""
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")
@@ -1185,20 +1289,6 @@ def compile_task_authority(
         if "contacts_read" in intents:
             external.extend(["contacts.search_contacts", "contacts.resolve_recipient"])
 
-    ceiling = profile_external_ceiling(profile)
-    outside = [cap for cap in external if cap not in ceiling]
-    if outside:
-        raise EvidenceCompilationError(
-            "required_source_outside_profile_ceiling",
-            f"required capabilities outside profile {profile.id}: {', '.join(outside)}",
-        )
-    return CompiledEvidence(
-        decision=decision,
-        required_local=tuple(dict.fromkeys(local)),
-        required_external=tuple(dict.fromkeys(external)),
-        external_groups=evidence.external_groups,
-    )
-
 
 def validate_required_evidence_capabilities(
     capabilities: tuple[str, ...] | list[str],
@@ -1208,8 +1298,8 @@ def validate_required_evidence_capabilities(
     """Require one live capability per evidence requirement, not every fallback."""
     if not capabilities:
         return
-    from app.assistant_tools.gate import review_assistant_tool_request
-    from app.assistant_tools.models import AssistantToolRequest
+    from app.assistant_tools.contracts import review_assistant_tool_request
+    from .capability_requests import AssistantToolRequest
 
     allowed_set = set(capabilities)
 
@@ -1527,29 +1617,7 @@ def evaluate_evidence_set(
             matched_units += _receipt_source_units_for_requirement(requirement, receipt)
             accepted_receipts.add(receipt.receipt_id)
 
-        if matched_units >= requirement.minimum_matches:
-            status = "satisfied"
-            reason = None
-        elif not candidates:
-            status = "missing"
-            reason = "no receipt for required source class"
-            missing.append(requirement.id)
-        elif "stale" in statuses:
-            status = "stale"
-            reason = "matching receipts are stale"
-            missing.append(requirement.id)
-        elif "wrong_subject" in statuses:
-            status = "wrong_subject"
-            reason = "receipts do not match required subject"
-            missing.append(requirement.id)
-        elif "insufficient_trust" in statuses:
-            status = "insufficient_trust"
-            reason = "receipts are below trust floor"
-            missing.append(requirement.id)
-        else:
-            status = "rejected"
-            reason = "insufficient acceptable receipts"
-            missing.append(requirement.id)
+        reason, status = _requirement_status(matched_units, requirement, candidates, missing, statuses)
         evaluations.append(EvidenceRequirementEvaluation(
             requirement_id=requirement.id,
             status=status,
@@ -1578,6 +1646,34 @@ def evaluate_evidence_set(
         }),
         passed=not missing,
     )
+
+
+def _requirement_status(matched_units, requirement, candidates, missing, statuses):
+    """A requirement's verdict from its matched units and the rejection reasons seen."""
+    if matched_units >= requirement.minimum_matches:
+        status = "satisfied"
+        reason = None
+    elif not candidates:
+        status = "missing"
+        reason = "no receipt for required source class"
+        missing.append(requirement.id)
+    elif "stale" in statuses:
+        status = "stale"
+        reason = "matching receipts are stale"
+        missing.append(requirement.id)
+    elif "wrong_subject" in statuses:
+        status = "wrong_subject"
+        reason = "receipts do not match required subject"
+        missing.append(requirement.id)
+    elif "insufficient_trust" in statuses:
+        status = "insufficient_trust"
+        reason = "receipts are below trust floor"
+        missing.append(requirement.id)
+    else:
+        status = "rejected"
+        reason = "insufficient acceptable receipts"
+        missing.append(requirement.id)
+    return reason, status
 
 
 def request_digest(payload: dict[str, object]) -> str:

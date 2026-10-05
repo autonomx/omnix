@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_memory import OwnerAwareInMemoryMemoryRepository
+from app.runtime.pagination import MAX_PAGE_SIZE
 
 from .models import CharacterProfile, CharacterProfileVersion
 from .service import CharacterService
@@ -15,6 +15,15 @@ from .service import CharacterService
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+
+def _all_pages(list_page: Any, **filters: Any) -> list[Any]:
+    items: list[Any] = []
+    while True:
+        page = list_page(limit=MAX_PAGE_SIZE, offset=len(items), **filters)
+        items.extend(page)
+        if len(page) < MAX_PAGE_SIZE:
+            return items
 
 class CharacterSessionSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -81,35 +90,29 @@ class CharacterManagementService:
         self,
         character_service: CharacterService,
         chat_store: Any,
-        memory_repository: OwnerAwareInMemoryMemoryRepository | None = None,
+        memory_repository: Any,
     ) -> None:
         self.character_service = character_service
         self.chat_store = chat_store
-        if memory_repository is None:
-            from app.persistence.runtime import uses_postgresql_runtime
-            if uses_postgresql_runtime():
-                from app.runtime_composition import production_owner_memory_repository
-                memory_repository = production_owner_memory_repository()
-            else:
-                memory_repository = OwnerAwareInMemoryMemoryRepository()
         self.memory_repository = memory_repository
 
     def export(self, character_id: str) -> CharacterDataExport:
         profile = self.character_service.get(character_id, include_archived=True)
-        records = self.memory_repository.list_records(
+        # Every memory and candidate of the character, page by page (WP-5.5).
+        records = _all_pages(
+            self.memory_repository.list_records,
             owner_type="character",
             owner_id=character_id,
             status=None,
-            limit=500,
         )
         candidates = []
         for status in ("pending", "accepted", "rejected"):
             candidates.extend(
-                self.memory_repository.list_candidates(
+                _all_pages(
+                    self.memory_repository.list_candidates,
                     owner_type="character",
                     owner_id=character_id,
                     status=status,
-                    limit=500,
                 )
             )
         sessions = self._session_summaries(character_id)
@@ -171,31 +174,39 @@ class CharacterManagementService:
 
     def _session_summaries(self, character_id: str) -> list[CharacterSessionSummary]:
         summaries: list[CharacterSessionSummary] = []
-        repository = self.character_service.repository
-        for session in self.chat_store._load_sessions():
-            segment_ids = {
-                segment.id
-                for segment in repository.segments(session.id)
-                if segment.character_id == character_id
-            }
-            character_messages = sum(
-                1
-                for message in session.messages
-                if message.metadata.get("segment_id") in segment_ids
-                or message.metadata.get("character_id") == character_id
-            )
-            if session.character_id != character_id and character_messages == 0:
-                continue
-            summaries.append(
-                CharacterSessionSummary(
-                    id=session.id,
-                    title=session.title,
-                    message_count=len(session.messages),
-                    character_message_count=character_messages,
-                    created_at=session.created_at,
-                    updated_at=session.updated_at,
+        cursor = None
+        while True:
+            page = self.chat_store.list_sessions(limit=100, cursor=cursor)
+            for summary in page.sessions:
+                session = self.chat_store.get_session(summary.id)
+                if session is None:
+                    continue
+                segment_ids = {
+                    segment.id
+                    for segment in self.chat_store.segments(session.id)
+                    if segment.character_id == character_id
+                }
+                character_messages = sum(
+                    1
+                    for message in session.messages
+                    if message.metadata.get("segment_id") in segment_ids
+                    or message.metadata.get("character_id") == character_id
                 )
-            )
+                if session.character_id != character_id and character_messages == 0:
+                    continue
+                summaries.append(
+                    CharacterSessionSummary(
+                        id=session.id,
+                        title=session.title,
+                        message_count=len(session.messages),
+                        character_message_count=character_messages,
+                        created_at=session.created_at,
+                        updated_at=session.updated_at,
+                    )
+                )
+            if not page.next_cursor:
+                break
+            cursor = page.next_cursor
         return summaries
 
     def _delete_memory_owner(self, character_id: str) -> tuple[int, int, int]:
@@ -205,28 +216,39 @@ class CharacterManagementService:
         )
 
     def _delete_character_transcripts(self, character_id: str) -> int:
-        repository = self.character_service.repository
-        sessions = self.chat_store._load_sessions()
         deleted = 0
-        for session in sessions:
-            segment_ids = {
-                segment.id
-                for segment in repository.segments(session.id)
-                if segment.character_id == character_id
-            }
-            kept = []
-            for message in session.messages:
-                belongs = (
-                    message.metadata.get("segment_id") in segment_ids
+        cursor = None
+        while True:
+            page = self.chat_store.list_sessions(limit=100, cursor=cursor)
+            for summary in page.sessions:
+                session = self.chat_store.get_session(summary.id)
+                if session is None:
+                    continue
+                segment_ids = {
+                    segment.id
+                    for segment in self.chat_store.segments(session.id)
+                    if segment.character_id == character_id
+                }
+                message_ids = [
+                    message.id
+                    for message in session.messages
+                    if message.metadata.get("segment_id") in segment_ids
                     or message.metadata.get("character_id") == character_id
-                )
-                if belongs:
-                    deleted += 1
-                else:
-                    kept.append(message)
-            session.messages = kept
-            session.message_count = len(kept)
-        self.chat_store._save_sessions(sessions)
+                ]
+                delete_messages = getattr(self.chat_store, "delete_messages", None)
+                if callable(delete_messages):
+                    deleted += delete_messages(session.id, message_ids)
+                elif message_ids:
+                    delete_ids = set(message_ids)
+                    session.messages = [
+                        message for message in session.messages if message.id not in delete_ids
+                    ]
+                    session.message_count = len(session.messages)
+                    self.chat_store._save_session(session)
+                    deleted += len(message_ids)
+            if not page.next_cursor:
+                break
+            cursor = page.next_cursor
         return deleted
 
 

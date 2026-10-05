@@ -7,13 +7,11 @@ context to request or validate display text from a presentation layer.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 from app.rpg.session.item_system import (
     AI_FICTION_ITEM_FIELDS,
     ENGINE_OWNED_ITEM_FIELDS,
-    apply_item_fiction_proposal,
     normalize_item_instance,
     suggest_genre_item_name,
 )
@@ -124,38 +122,3 @@ def build_item_description_context(item: dict[str, Any], *, genre: str = "classi
     }
 
 
-def compile_item_description(
-    item: dict[str, Any],
-    proposal: dict[str, Any] | None,
-    *,
-    genre: str = "classic_fantasy",
-) -> dict[str, Any]:
-    """Apply display-only proposal data and return trace-ready output."""
-
-    before = normalize_item_instance(item)
-    applied = apply_item_fiction_proposal(before, proposal, genre=genre)
-    after = normalize_item_instance(applied.item)
-    context = build_item_description_context(after, genre=genre)
-    trace = {
-        "event": "item_description_compiled",
-        "source": "engine_item_description_v1",
-        "item_id": _item_id(after),
-        "ok": bool(applied.ok),
-        "ignored_fields": list(applied.ignored_fields),
-        "repairs": list(applied.repairs),
-        "mechanics_preserved": _mechanics_fingerprint(before) == _mechanics_fingerprint(after),
-    }
-    return {
-        "ok": bool(applied.ok),
-        "item": after,
-        "context": context,
-        "trace": trace,
-        "ignored_fields": list(applied.ignored_fields),
-        "repairs": list(applied.repairs),
-        "validation": deepcopy(applied.validation),
-    }
-
-
-def _mechanics_fingerprint(item: dict[str, Any]) -> dict[str, Any]:
-    normalized = normalize_item_instance(item)
-    return {field: deepcopy(normalized.get(field)) for field in MECHANIC_FIELDS if field in normalized}

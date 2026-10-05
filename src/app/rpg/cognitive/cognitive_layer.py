@@ -194,44 +194,6 @@ class CognitiveLayer:
         )
         self._stats["outcomes_recorded"] += 1
     
-    def record_action(
-        self,
-        actor_id: str,
-        action: str,
-        target: str,
-        success: bool,
-        importance: float = 0.5,
-        faction_id: Optional[str] = None,
-        current_tick: int = 0,
-    ) -> None:
-        """Record a reputation-affecting action.
-        
-        Updates identity system with the action's reputation impact.
-        
-        Args:
-            actor_id: Character performing action.
-            action: Action type.
-            target: Action target.
-            success: Whether action succeeded.
-            importance: Action importance.
-            faction_id: Faction context.
-            current_tick: Current simulation tick.
-        """
-        # Update identity/reputation
-        changes = self.identity.process_action(
-            actor_id, action, target, importance, faction_id
-        )
-        
-        # Record for learning
-        self.learning.record_outcome(
-            actor_id, action, success, current_tick,
-            {"target": target, "reputation_changes": changes},
-        )
-        
-        # Add rumor for notable actions
-        if importance > 0.7:
-            self._add_action_rumor(actor_id, action, target, importance)
-    
     def generate_dialogue(
         self,
         speaker: Any,
@@ -290,36 +252,6 @@ class CognitiveLayer:
             logger.warning("DialogueEngine not available, using fallback")
             return self._fallback_dialogue(speaker_id, listener_id)
     
-    def check_coalition_opportunity(
-        self,
-        faction_id: str,
-        world_state: Dict[str, Any],
-        current_tick: int = 0,
-    ) -> Optional[Any]:
-        """Check and potentially form a coalition.
-        
-        Args:
-            faction_id: Faction to check coalition for.
-            world_state: Current world state.
-            current_tick: Current simulation tick.
-            
-        Returns:
-            Coalition object if formed, None otherwise.
-        """
-        if self.coalition.should_seek_coalition(faction_id, world_state):
-            partners = self.coalition.find_potential_partners(
-                faction_id, world_state
-            )
-            if partners:
-                coalition = self.coalition.form_coalition(
-                    faction_id, partners,
-                    current_tick=current_tick,
-                )
-                if coalition:
-                    self._stats["coalitions_formed"] += 1
-                return coalition
-        return None
-    
     def tick_update(self, current_tick: int = 0) -> Dict[str, Any]:
         """Perform periodic system updates.
         
@@ -350,43 +282,6 @@ class CognitiveLayer:
         updates["coalitions"] = coalition_updates
         
         return updates
-    
-    def get_character_summary(
-        self,
-        character_id: str,
-    ) -> Dict[str, Any]:
-        """Get complete summary of character's cognitive state.
-        
-        Args:
-            character_id: Character identifier.
-            
-        Returns:
-            Summary dict with reputation, learning history, coalition info.
-        """
-        summary = {
-            "character_id": character_id,
-            "identity": self.identity.get_reputation_summary(character_id),
-            "learning": {
-                "failure_counts": self.learning.get_failure_counts(
-                    character_id
-                ),
-                "recent_actions": self.learning.get_action_history(
-                    character_id, limit=5
-                ),
-            },
-        }
-        
-        # Coalition membership
-        for coalition in self.coalition.coalitions.values():
-            if character_id in coalition.members:
-                summary["coalition"] = {
-                    "id": coalition.id,
-                    "type": coalition.coalition_type,
-                    "members": list(coalition.members),
-                }
-                break
-        
-        return summary
     
     def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive system statistics.
@@ -448,32 +343,6 @@ class CognitiveLayer:
                 intent["participants"] = coordinated.get("participants", [])
         
         return intent
-    
-    def _add_action_rumor(
-        self,
-        actor_id: str,
-        action: str,
-        target: str,
-        importance: float,
-    ) -> None:
-        """Add a rumor about a notable action.
-        
-        Args:
-            actor_id: Character who performed action.
-            action: Action type.
-            target: Action target.
-            importance: Importance level.
-        """
-        if action in ("attack", "kill", "betray"):
-            rumor = f"Word is {actor_id} {action} {target}!"
-        elif action in ("aid", "heal", "save", "help"):
-            rumor = f"They say {actor_id} {action} {target}!"
-        elif action in ("alliance",):
-            rumor = f"{actor_id} has joined forces with {target}."
-        else:
-            rumor = f"{actor_id} was seen near {target} ({action})."
-        
-        self.identity.add_rumor(actor_id, rumor)
     
     def _fallback_dialogue(
         self,

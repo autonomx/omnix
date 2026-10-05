@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .policy import is_expired, is_visible_in_scope
 from .repository import MemoryConflictError
 from .selection import estimate_memory_tokens

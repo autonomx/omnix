@@ -1,13 +1,14 @@
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
+
 type AssetRecordLike = {
   id?: unknown;
   module?: unknown;
-  storage_path?: unknown;
+  file_name?: unknown;
   type?: unknown;
   metadata?: unknown;
 };
 
-let installed = false;
-let previousFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
 
 function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
   if (init?.method) return init.method.toUpperCase();
@@ -59,7 +60,7 @@ function voiceProfileSummary(body: string): Record<string, unknown> {
         return {
           id: asset.id,
           name: metadata.profile_name ?? metadata.voice_id ?? metadata.speaker,
-          storagePath: asset.storage_path,
+          fileName: asset.file_name,
         };
       }),
     };
@@ -75,12 +76,12 @@ function errorSummary(error: unknown): Record<string, unknown> {
   return { error };
 }
 
-export function installVoiceLibraryFetchDiagnostics(fetchImpl?: typeof fetch): void {
-  if (installed || typeof window === 'undefined') return;
+/** Returns a function that removes it. `fetchImpl` replaces the rest of the pipeline (tests). */
+export function installVoiceLibraryFetchDiagnostics(fetchImpl?: typeof fetch): () => void {
+  if (removeMiddleware || typeof window === 'undefined') return () => undefined;
 
-  previousFetch = window.fetch;
-  const delegate = fetchImpl ?? window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const remove = registerFetchMiddleware('voice-library-fetch-diagnostics', async (input, init, next) => {
+    const delegate = fetchImpl ?? next;
     const rawUrl = requestUrl(input);
     if (!isAssetListRequest(rawUrl)) return delegate(input, init);
 
@@ -136,12 +137,15 @@ export function installVoiceLibraryFetchDiagnostics(fetchImpl?: typeof fetch): v
       });
       throw error;
     }
+  });
+  removeMiddleware = remove;
+  return () => {
+    remove();
+    if (removeMiddleware === remove) removeMiddleware = null;
   };
-  installed = true;
 }
 
 export function resetVoiceLibraryFetchDiagnosticsForTests(): void {
-  if (typeof window !== 'undefined' && previousFetch) window.fetch = previousFetch;
-  previousFetch = null;
-  installed = false;
+  removeMiddleware?.();
+  removeMiddleware = null;
 }

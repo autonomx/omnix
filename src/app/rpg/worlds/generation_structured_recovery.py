@@ -1,6 +1,8 @@
 """Bounded recovery helpers for malformed World Forge structured responses."""
 from __future__ import annotations
 
+import logging
+
 import copy
 import hashlib
 import json
@@ -23,6 +25,8 @@ from app.providers.base import ChatMessage, ChatResponse
 from app.providers.structured import StructuredContract
 from app.providers.structured.parsing import canonical_structured_text, decode_json_object
 from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
+
+logger = logging.getLogger(__name__)
 
 _COLLECTIONS = (
     "documents",
@@ -229,6 +233,7 @@ def decode_candidate(raw_text: str) -> Mapping[str, Any] | None:
     try:
         value = decode_json_object(raw_text)
     except Exception:
+        logger.debug("suppressed error in %s", "decode_candidate", exc_info=True)
         return None
     return dict(value) if isinstance(value, Mapping) else None
 

@@ -1,6 +1,6 @@
 import pytest
 
-from app.platform.settings_profile_repository import (
+from app.settings.profile_repository import (
     SettingsProfileRevisionConflict,
     load_settings_profile,
     profile_payload,

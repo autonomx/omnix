@@ -7,15 +7,15 @@ on:
       - "src/app/image_http_client.py"
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
-      - "src/app/gateway/image_model_routes.py"
-      - "src/app/gateway/image_asset_routes.py"
+      - "src/app/image/routes/models.py"
+      - "src/app/image/routes/assets.py"
       - "src/app/launcher/service_manager.py"
       - "src/app/jobs/models.py"
-      - "src/app/platform/effective_defaults.py"
+      - "src/app/settings/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -24,7 +24,9 @@ on:
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
       - "src/apps/web/src/features/image-generation/**"
-      - "src/requirements-rpg-flux.txt"
+      - "requirements/image.in"
+      - "requirements/image.lock.txt"
+      - "scripts/requirements/requirements-rpg-visual-flux.txt"
       - "bootstrap_omnix_flux_env.ps1"
       - ".github/workflows/image-model-lifecycle.yml"
   push:
@@ -33,15 +35,15 @@ on:
       - "src/app/image_http_client.py"
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
-      - "src/app/gateway/image_model_routes.py"
-      - "src/app/gateway/image_asset_routes.py"
+      - "src/app/image/routes/models.py"
+      - "src/app/image/routes/assets.py"
       - "src/app/launcher/service_manager.py"
       - "src/app/jobs/models.py"
-      - "src/app/platform/effective_defaults.py"
+      - "src/app/settings/effective_defaults.py"
       - "src/app/characters/avatar_generation_api.py"
       - "src/app/characters/avatar_generation_models.py"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.ts"
+      - "src/apps/web/src/features/assistant/chat/characterAvatarClient.test.ts"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -50,7 +52,9 @@ on:
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
       - "src/apps/web/src/features/image-generation/**"
-      - "src/requirements-rpg-flux.txt"
+      - "requirements/image.in"
+      - "requirements/image.lock.txt"
+      - "scripts/requirements/requirements-rpg-visual-flux.txt"
       - "bootstrap_omnix_flux_env.ps1"
       - ".github/workflows/image-model-lifecycle.yml"
 
@@ -63,13 +67,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Install focused test dependencies
-        run: >-
-          python -m pip install
-          pytest fastapi httpx pydantic requests python-multipart playwright
-          packaging pyyaml huggingface_hub pillow
+        run: |
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Run image lifecycle, avatar routing, and browser-output tests
         run: >-
           python -m pytest
@@ -95,7 +97,7 @@ jobs:
           node-version: "22"
           cache: npm
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
       - name: Typecheck image lifecycle modules
         run: |
           cat > src/apps/web/tsconfig.image-lifecycle.json <<'JSON'
@@ -105,7 +107,7 @@ jobs:
               "types": ["vite/client"]
             },
             "include": [
-              "src/features/chatbot/characterAvatarClient.ts",
+              "src/features/assistant/chat/characterAvatarClient.ts",
               "src/features/image-generation/**/*.ts",
               "src/features/image-generation/**/*.tsx"
             ],
@@ -122,7 +124,7 @@ jobs:
       - name: Run image generation and avatar-routing unit tests
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/chatbot/characterAvatarClient.test.ts
+          src/features/assistant/chat/characterAvatarClient.test.ts
           src/features/image-generation/ImageModelControl.test.tsx
           src/features/image-generation/ImageModelSelection.test.tsx
           src/features/image-generation/ImageGenerationWorkspace.test.tsx

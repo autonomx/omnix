@@ -7,12 +7,13 @@ from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import Any
 
-import requests
+import httpx
 
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
 from app.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
+from .base import ProviderAdapter
 from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError, ProviderFallbackEligibleError
 from .http_runtime import ProviderHttpRuntime
@@ -105,14 +106,14 @@ def fetch_yahoo_chart_result(
     return result, received
 
 
-class YahooEquityProvider:
+class YahooEquityProvider(ProviderAdapter):
     provider_id = "yahoo"
     policy = POLICIES["yahoo"]
 
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:
@@ -498,7 +499,7 @@ class YahooEquityProvider:
 
             try:
                 return {"rate": read_pair(base, quote)}
-            except (ProviderFallbackEligibleError, requests.RequestException):
+            except (ProviderFallbackEligibleError, httpx.HTTPError):
                 inverse = read_pair(quote, base)
                 if inverse <= 0:
                     raise ProviderDataUnavailableError("Yahoo returned an invalid FX rate")
@@ -520,14 +521,14 @@ class YahooEquityProvider:
         }
 
 
-class StooqEquityProvider:
+class StooqEquityProvider(ProviderAdapter):
     provider_id = "stooq"
     policy = POLICIES["stooq"]
 
     def __init__(
         self,
         *,
-        session: requests.Session | None = None,
+        session: Any | None = None,
         cache: TradingMarketDataCache | None = None,
         runtime: ProviderHttpRuntime | None = None,
     ) -> None:

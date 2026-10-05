@@ -43,9 +43,10 @@ Key Features:
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 # Leader trait templates that affect faction behavior
 LEADER_TRAITS = {
@@ -165,10 +166,15 @@ class PoliticalSystem:
         
         Args:
             random_module: Optional random module replacement for testing.
-                          If None, uses the standard random module.
+                          If None, decisions use the active seeded RPG turn.
         """
         self.leaders: Dict[str, Leader] = {}
-        self._random = random_module or random
+        self._random = random_module
+
+    def _rng(self, purpose: str, subject: str):
+        if self._random is not None:
+            return self._random
+        return rng_for_current_turn(purpose, stable_sub_index(subject))
         
     def set_leader(self, faction_id: str, leader: Leader) -> None:
         """Assign a leader to a faction.
@@ -179,28 +185,6 @@ class PoliticalSystem:
         """
         self.leaders[faction_id] = leader
         
-    def remove_leader(self, faction_id: str) -> Optional[Leader]:
-        """Remove a faction's leader.
-        
-        Args:
-            faction_id: Faction identifier.
-            
-        Returns:
-            Removed leader, or None if none existed.
-        """
-        return self.leaders.pop(faction_id, None)
-    
-    def get_leader(self, faction_id: str) -> Optional[Leader]:
-        """Get the current leader of a faction.
-        
-        Args:
-            faction_id: Faction identifier.
-            
-        Returns:
-            Leader object, or None if no leader assigned.
-        """
-        return self.leaders.get(faction_id)
-    
     def update(self, faction_system: Any) -> List[Dict[str, Any]]:
         """Check for political upheaval in all factions.
         
@@ -223,7 +207,7 @@ class PoliticalSystem:
             
             if instability > INSTABILITY_THRESHOLD:
                 # Unstable faction - possible coup
-                if self._random.random() < COUP_PROBABILITY:
+                if self._rng("world:political_coup", faction.id).random() < COUP_PROBABILITY:
                     events.extend(self._trigger_coup(faction))
         
         return events
@@ -243,7 +227,7 @@ class PoliticalSystem:
         old_leader = self.leaders.get(faction.id)
         
         # Generate new leader with random traits
-        new_traits = self._generate_leader_traits()
+        new_traits = self._generate_leader_traits(faction.id)
         new_leader = Leader(
             name=self._generate_leader_name(faction.id),
             traits=new_traits,
@@ -268,14 +252,15 @@ class PoliticalSystem:
             "description": f"Revolution in {faction.name}: {new_leader.name} takes power{' from ' + old_leader.name if old_leader else ''}",
         }]
     
-    def _generate_leader_traits(self) -> List[str]:
+    def _generate_leader_traits(self, faction_id: str) -> List[str]:
         """Generate random leader traits.
         
         Returns:
             List of 1-2 trait names.
         """
-        num_traits = self._random.randint(1, 2)
-        return self._random.sample(list(LEADER_TRAITS.keys()), num_traits)
+        rng = self._rng("world:political_leader_traits", faction_id)
+        num_traits = rng.randint(1, 2)
+        return rng.sample(list(LEADER_TRAITS.keys()), num_traits)
     
     def _generate_leader_name(self, faction_id: str) -> str:
         """Generate a leader name based on faction.
@@ -296,7 +281,7 @@ class PoliticalSystem:
         # Find matching prefix
         for key, prefix_list in prefixes.items():
             if key in faction_id.lower():
-                prefix = self._random.choice(prefix_list)
+                prefix = self._rng("world:political_leader_title", faction_id).choice(prefix_list)
                 break
         else:
             prefix = "Leader"
@@ -306,7 +291,7 @@ class PoliticalSystem:
                  "Freya", "Gareth", "Helena", "Isaac", "Julia",
                  "Klaus", "Lena", "Marcus", "Nora", "Oscar",
                  "Petra", "Roland", "Sigrid", "Theo", "Ursula"]
-        name = self._random.choice(names)
+        name = self._rng("world:political_leader_name", faction_id).choice(names)
         
         return f"{prefix} {name}"
     

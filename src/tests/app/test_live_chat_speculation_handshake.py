@@ -7,8 +7,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatMessage, ChatSession
-from app.gateway import live_chat_speculation as speculation
-from app.gateway import live_chat_speculation_handshake as handshake
+from app.chat import live_chat_speculation as speculation
+from app.chat import live_chat_speculation_handshake as handshake
+from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
+from tests.support.routers import include_router_registrar
 
 
 class _FakeProvider:
@@ -46,6 +49,7 @@ class _BlockingProvider:
 
 class _FakeStore:
     def __init__(self) -> None:
+        self.live_voice_chat_port = create_live_voice_chat_port()
         self.get_session_calls = 0
         self.begin_calls = 0
         self.complete_calls = 0
@@ -130,12 +134,14 @@ def _wait_until(predicate, timeout: float = 1.0) -> bool:
 
 def _client(store: _FakeStore) -> TestClient:
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(
+    include_router_registrar(
         app,
+        speculation.register_live_chat_speculation_routes,
         chat_store_factory=lambda: store,
     )
-    handshake.register_live_chat_speculation_handshake_routes(
+    include_router_registrar(
         app,
+        handshake.register_live_chat_speculation_handshake_routes,
         chat_store_factory=lambda: store,
     )
     return TestClient(app)
@@ -147,7 +153,7 @@ def test_json_handshake_starts_generation_before_stream_attachment(monkeypatch) 
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -208,13 +214,40 @@ def test_json_handshake_starts_generation_before_stream_attachment(monkeypatch) 
     assert store.complete_calls == 1
 
 
+def test_handshake_registry_is_capacity_and_ttl_bounded(monkeypatch) -> None:
+    handshake.clear_live_speculation_handshake_state()
+    speculation._SPECULATIONS.clear()
+    monkeypatch.setattr(handshake, "_MAX_HANDSHAKE_GENERATIONS", 2)
+    monkeypatch.setattr(handshake, "_HANDSHAKE_TTL_SECONDS", 5.0)
+    now = {"value": 100.0}
+    monkeypatch.setattr(handshake.time, "time", lambda: now["value"])
+
+    for generation_id, created_at in (("oldest", 97.0), ("middle", 98.0), ("newest", 99.0)):
+        generation = handshake._HandshakeGeneration(
+            store=_FakeStore(),
+            session=object(),
+            created_at=created_at,
+        )
+        handshake._HANDSHAKE_GENERATIONS[generation_id] = generation
+        speculation._SPECULATIONS[generation_id] = object()
+
+    handshake._prune_handshake_state_locked()
+    assert set(handshake._HANDSHAKE_GENERATIONS) == {"middle", "newest"}
+    assert handshake._HANDSHAKE_GENERATIONS.get("oldest") is None
+
+    now["value"] = 110.0
+    handshake._prune_handshake_state_locked()
+    assert handshake._HANDSHAKE_GENERATIONS == {}
+    speculation._SPECULATIONS.clear()
+
+
 def test_generation_stream_is_single_consumer(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -248,7 +281,7 @@ def test_cancel_marks_eager_generation_failed_without_persistence(monkeypatch) -
     store = _FakeStore()
     provider = _BlockingProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )

@@ -255,7 +255,7 @@ def test_replay_api_freezes_then_runs_only_the_stored_snapshot() -> None:
 
 def test_replay_migration_persists_complete_run_evidence() -> None:
     migration = Path(
-        "src/app/persistence/migrations/0022_trading_replay_backtests.sql"
+        "src/app/trading/migrations/0022_trading_replay_backtests.sql"
     ).read_text()
     for table in (
         "omnix_trading_datasets",
@@ -266,13 +266,13 @@ def test_replay_migration_persists_complete_run_evidence() -> None:
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in migration
     sequencing = Path(
-        "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
+        "src/app/trading/migrations/0024_trading_backtest_bar_indices.sql"
     ).read_text()
     assert "signal_bar_index" in sequencing
     assert "fill_bar_index" in sequencing
     assert "fill_bar_index = signal_bar_index + 1" in sequencing
     artifacts = Path(
-        "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
+        "src/app/trading/migrations/0025_trading_backtest_artifacts.sql"
     ).read_text()
     assert "win_rate_percent" in artifacts
     assert "exposure_percent" in artifacts

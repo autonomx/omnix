@@ -6,6 +6,9 @@ from typing import Any, Dict, Iterable, List
 from .memory_actor import get_actor_memory, get_relevant_actor_memory
 from .memory_retrieval import get_relevant_recent_memory
 from .memory_world import get_relevant_world_memory, get_world_memory
+from app.prompts import prompt_template
+
+_PROMPT_1 = prompt_template('rpg.session_memory_prompt.build_relevant_memory_prompt_block', "1", "Usage: continuity only; current runtime state and turn contract remain authoritative.")
 
 MEMORY_PROMPT_CONTEXT_VERSION = "rpg_relevant_memory_prompt_v1"
 DEFAULT_PROMPT_MEMORY_LIMIT = 4
@@ -190,7 +193,7 @@ def build_relevant_memory_prompt_block(memory_context: Dict[str, Any]) -> str:
         ("Actor memory", _safe_list(memory_context.get("actors"))),
         ("World/event memory", _safe_list(memory_context.get("world"))),
     ]
-    lines = ["Relevant Memory:", "Usage: continuity only; current runtime state and turn contract remain authoritative."]
+    lines = ["Relevant Memory:", _PROMPT_1.text]
     any_memory = False
     for title, entries in sections:
         lines.append(f"{title}:")

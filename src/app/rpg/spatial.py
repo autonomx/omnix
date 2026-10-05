@@ -22,22 +22,6 @@ def euclidean_distance(a, b):
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
 
 
-def in_range(a, b, r):
-    """Check if point a is within range r of point b.
-    
-    Uses Euclidean distance for circular range checks.
-    
-    Args:
-        a: First point as (x, y) tuple.
-        b: Second point as (x, y) tuple.
-        r: Maximum range.
-        
-    Returns:
-        True if a is within range r of b.
-    """
-    return euclidean_distance(a, b) <= r
-
-
 def is_near(a, b, radius=5):
     """Check if point a is near point b within given radius.
     

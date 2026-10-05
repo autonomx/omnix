@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from app.rpg.locations.graph import (
     NEARBY_WILDERNESS,
-    OLD_MILL,
     OLD_ROAD,
     get_canonical_location,
     list_canonical_edges,

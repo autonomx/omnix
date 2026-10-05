@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "note": "Gaps catalog modules still have against the PA-4.1 conformance checks (scripts/module_conformance.py). It only shrinks: fixing a gap means deleting its entry here. tenant_isolation lists, per owner, tables that are neither isolated nor exempt; each needs row-level security or an owner-reviewed exemption.",
+  "modules": {
+    "agent-runtime": [],
+    "assistant-memory": [],
+    "assistant-tools": [
+      "declarations"
+    ],
+    "audiobook": [
+      "contract",
+      "declarations"
+    ],
+    "character-interactions": [
+      "contract",
+      "declarations"
+    ],
+    "characters": [
+      "declarations"
+    ],
+    "chat": [],
+    "companion-activity": [
+      "declarations"
+    ],
+    "desktop-companion": [
+      "contract",
+      "declarations"
+    ],
+    "hermes": [
+      "contract",
+      "declarations"
+    ],
+    "image": [
+      "declarations"
+    ],
+    "live-speech": [
+      "contract",
+      "declarations"
+    ],
+    "live-voice": [
+      "declarations"
+    ],
+    "research": [
+      "declarations"
+    ],
+    "rpg": [
+      "contract"
+    ],
+    "story": [
+      "contract"
+    ],
+    "trading": [
+      "contract"
+    ],
+    "voice": []
+  },
+  "tenant_isolation": {
+    "agent-runtime": [
+      "omnix_agent_run_slot_lock",
+      "omnix_agent_run_slots"
+    ],
+    "assistant-memory": [
+      "omnix_memory_v2_affect_observations",
+      "omnix_memory_v2_assertion_assertion_evidence",
+      "omnix_memory_v2_assertion_observation_evidence",
+      "omnix_memory_v2_assertion_relations",
+      "omnix_memory_v2_assistant_outputs",
+      "omnix_memory_v2_authority_current",
+      "omnix_memory_v2_authority_epochs",
+      "omnix_memory_v2_authority_streams",
+      "omnix_memory_v2_consolidation_decision_sets",
+      "omnix_memory_v2_consolidation_receipts",
+      "omnix_memory_v2_consolidation_state",
+      "omnix_memory_v2_cutover_readiness_receipts",
+      "omnix_memory_v2_derive_jobs",
+      "omnix_memory_v2_derived_policy_envelopes",
+      "omnix_memory_v2_derived_revisions",
+      "omnix_memory_v2_derived_state",
+      "omnix_memory_v2_embeddings",
+      "omnix_memory_v2_episode_assertions",
+      "omnix_memory_v2_episode_observations",
+      "omnix_memory_v2_episodes",
+      "omnix_memory_v2_grants",
+      "omnix_memory_v2_graph_assertions",
+      "omnix_memory_v2_graph_entities",
+      "omnix_memory_v2_graph_state",
+      "omnix_memory_v2_observation_dispositions",
+      "omnix_memory_v2_observations",
+      "omnix_memory_v2_projection_jobs",
+      "omnix_memory_v2_relationship_evidence",
+      "omnix_memory_v2_relationship_metric_evidence",
+      "omnix_memory_v2_relationship_metrics",
+      "omnix_memory_v2_relationships",
+      "omnix_memory_v2_search_index_entries",
+      "omnix_memory_v2_search_index_state",
+      "omnix_memory_v2_shadow_evaluations"
+    ],
+    "companion-activity": [
+      "omnix_companion_activity_checkpoints",
+      "omnix_companion_initiative_sessions"
+    ],
+    "kernel": [
+      "omnix_database_events",
+      "omnix_runtime_failure_evidence"
+    ],
+    "rpg": [
+      "omnix_rpg_narration_events"
+    ],
+    "trading": [
+      "omnix_trading_climatology_states",
+      "omnix_trading_evidence_counters",
+      "omnix_trading_evidence_imports",
+      "omnix_trading_evidence_session_counters",
+      "omnix_trading_ibkr_session_evidence",
+      "omnix_trading_premarket_handoffs",
+      "omnix_trading_yahoo_bar_revisions"
+    ]
+  }
+}

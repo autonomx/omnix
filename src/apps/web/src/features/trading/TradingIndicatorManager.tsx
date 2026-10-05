@@ -318,7 +318,7 @@ export function TradingIndicatorManager({
                 </button>
               ))}
             </div>
-            <div className="trading-indicator-picker-filters" aria-label="Indicator filters">
+            <div role="group" className="trading-indicator-picker-filters" aria-label="Indicator filters">
               <label>
                 <span>Market</span>
                 <select aria-label="Market filter" value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as IndicatorMarketFilter)}>

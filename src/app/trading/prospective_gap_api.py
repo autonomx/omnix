@@ -53,32 +53,32 @@ def create_trading_prospective_gap_router(
     )
 
     @router.post("/premarket/freeze", response_model=PremarketFreezeResult)
-    async def freeze_premarket(request: PremarketFreezeRequest) -> PremarketFreezeResult:
+    def freeze_premarket(request: PremarketFreezeRequest) -> PremarketFreezeResult:
         return runtime_factory().freeze_premarket(request)
 
     @router.post("/confirmation/run", response_model=ConfirmationRunResult)
-    async def run_confirmation(request: ConfirmationRunRequest) -> ConfirmationRunResult:
+    def run_confirmation(request: ConfirmationRunRequest) -> ConfirmationRunResult:
         return runtime_factory().run_confirmation(
             session_date=request.session_date,
             evaluated_at=request.evaluated_at,
         )
 
     @router.post("/postclose/finalize", response_model=PostcloseRunResult)
-    async def finalize_postclose(request: PostcloseRunRequest) -> PostcloseRunResult:
+    def finalize_postclose(request: PostcloseRunRequest) -> PostcloseRunResult:
         return runtime_factory().finalize_postclose(
             session_date=request.session_date,
             evaluated_at=request.evaluated_at,
         )
 
     @router.get("/session/{session_date}", response_model=ProspectiveGapSessionLedger)
-    async def session_ledger(session_date: date) -> ProspectiveGapSessionLedger:
+    def session_ledger(session_date: date) -> ProspectiveGapSessionLedger:
         return runtime_factory().session_ledger(session_date)
 
     @router.get(
         "/session/{session_date}/markdown",
         response_model=MarkdownProjectionResponse,
     )
-    async def markdown_projection(session_date: date) -> MarkdownProjectionResponse:
+    def markdown_projection(session_date: date) -> MarkdownProjectionResponse:
         return MarkdownProjectionResponse(
             session_date=session_date,
             markdown=runtime_factory().render_markdown(session_date),

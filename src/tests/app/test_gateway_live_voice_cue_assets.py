@@ -28,7 +28,10 @@ def test_live_voice_cue_manifest_discovers_safe_voice_pack(tmp_path: Path, monke
     _write_wav(tmp_path / "Nate Fallout" / "inhale-v2.wav", 48_000)
     _write_wav(tmp_path / "Nate Fallout" / "not-a-cue.wav", 24_000)
 
-    client = TestClient(create_gateway_app(job_store_factory=lambda: EmptyJobStore()))
+    client = TestClient(
+        create_gateway_app(job_store_factory=lambda: EmptyJobStore()),
+        base_url="http://127.0.0.1",
+    )
     response = client.get("/api/voice/cues/Nate%20Fallout/manifest")
 
     assert response.status_code == 200
@@ -47,7 +50,10 @@ def test_live_voice_cue_manifest_discovers_safe_voice_pack(tmp_path: Path, monke
 def test_live_voice_cue_file_uses_etag_and_blocks_invalid_paths(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_LIVE_VOICE_CUE_ROOT", str(tmp_path))
     _write_wav(tmp_path / "Jinx" / "mhm-v1.wav")
-    client = TestClient(create_gateway_app(job_store_factory=lambda: EmptyJobStore()))
+    client = TestClient(
+        create_gateway_app(job_store_factory=lambda: EmptyJobStore()),
+        base_url="http://127.0.0.1",
+    )
 
     first = client.get("/api/voice/cues/Jinx/mhm/mhm-v1.wav")
     assert first.status_code == 200
@@ -66,7 +72,10 @@ def test_live_voice_cue_file_uses_etag_and_blocks_invalid_paths(tmp_path: Path, 
 
 def test_missing_voice_pack_returns_explicit_unavailable_manifest(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_LIVE_VOICE_CUE_ROOT", str(tmp_path))
-    client = TestClient(create_gateway_app(job_store_factory=lambda: EmptyJobStore()))
+    client = TestClient(
+        create_gateway_app(job_store_factory=lambda: EmptyJobStore()),
+        base_url="http://127.0.0.1",
+    )
 
     response = client.get("/api/voice/cues/Maya/manifest")
 

@@ -1,9 +1,9 @@
-"""FastAPI routes for Character avatar generation and governed voice backfill."""
+"""Router registration for Character avatar generation and governed voice backfill."""
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from .avatar_generation_logging import (
     avatar_generation_log_path,
@@ -31,7 +31,7 @@ def _queue_failure_detail(exc: RuntimeError) -> str:
 
 
 def register_character_avatar_generation_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     service_factory: Callable[
         [], CharacterAvatarGenerationService
@@ -43,14 +43,13 @@ def register_character_avatar_generation_routes(
         avatar_generation_payload(log_path=avatar_generation_log_path()),
     )
 
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/avatar-generations",
         response_model=CharacterAvatarGenerationBatch,
         status_code=202,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def create_character_avatar_generation(
+    def create_character_avatar_generation(
         character_id: str,
         request: CreateCharacterAvatarGenerationRequest,
     ) -> CharacterAvatarGenerationBatch:
@@ -102,13 +101,12 @@ def register_character_avatar_generation_routes(
         )
         return batch
 
-    @app.get(
+    @router.get(
         "/api/characters/{character_id}/avatar-generations",
         response_model=CharacterAvatarGenerationListResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def list_character_avatar_generations(
+    def list_character_avatar_generations(
         character_id: str,
     ) -> CharacterAvatarGenerationListResponse:
         try:
@@ -130,13 +128,12 @@ def register_character_avatar_generation_routes(
         )
         return result
 
-    @app.get(
+    @router.get(
         "/api/character-avatar-generations/{batch_id}",
         response_model=CharacterAvatarGenerationBatch,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def get_character_avatar_generation(
+    def get_character_avatar_generation(
         batch_id: str,
     ) -> CharacterAvatarGenerationBatch:
         try:
@@ -160,13 +157,12 @@ def register_character_avatar_generation_routes(
         )
         return result
 
-    @app.post(
+    @router.post(
         "/api/characters/backfill-cloned-voices",
         response_model=BackfillClonedVoiceCharactersResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def backfill_cloned_voice_characters(
+    def backfill_cloned_voice_characters(
         request: BackfillClonedVoiceCharactersRequest,
     ) -> BackfillClonedVoiceCharactersResponse:
         request_context = avatar_generation_payload(

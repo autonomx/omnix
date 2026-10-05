@@ -1,361 +1,369 @@
-.trading-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+@layer features {
+  .trading-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
-.trading-header-actions > span {
-  border-radius: 999px;
-  background: rgba(125, 150, 180, 0.1);
-  padding: 6px 9px;
-  color: #91a3b7;
-  font-size: 11px;
-}
+  .trading-header-actions > span {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c-blue-660) 10%, transparent);
+    padding: 6px 9px;
+    color: var(--c-blue-710);
+    font-size: 11px;
+  }
 
-.trading-header-actions .workspace-saved {
-  background: rgba(32, 201, 151, 0.12);
-  color: #63e6be;
-}
+  .trading-header-actions .workspace-saved {
+    background: color-mix(in srgb, var(--c-teal-740) 12%, transparent);
+    color: var(--c-teal-860);
+  }
 
-.trading-header-actions .workspace-conflict,
-.trading-header-actions .workspace-error {
-  background: rgba(255, 107, 107, 0.12);
-  color: #ffa8a8;
-}
+  .trading-header-actions .workspace-conflict,
+  .trading-header-actions .workspace-error {
+    background: color-mix(in srgb, var(--c-red-720) 12%, transparent);
+    color: var(--c-red-810);
+  }
 
-.trading-header-actions .workspace-draft,
-.trading-header-actions .workspace-saving {
-  background: rgba(255, 212, 59, 0.1);
-  color: #ffe066;
-}
+  .trading-header-actions .workspace-draft,
+  .trading-header-actions .workspace-saving {
+    background: color-mix(in srgb, var(--c-yellow-880) 10%, transparent);
+    color: var(--c-yellow-910-3);
+  }
 
-.trading-watchlist {
-  display: grid;
-  gap: 0;
-  margin-top: 0;
-  min-width: 0;
-}
+  .trading-watchlist {
+    display: grid;
+    gap: 0;
+    margin-top: 0;
+    min-width: 0;
+  }
 
-.trading-watchlist-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px 34px;
-  gap: 5px;
-  margin-bottom: 10px;
-}
+  .trading-watchlist-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px 34px;
+    gap: 5px;
+    margin-bottom: 10px;
+  }
 
-.trading-watchlist .trading-watchlist-controls select,
-.trading-watchlist .trading-watchlist-controls > button {
-  height: 31px;
-}
+  .trading-watchlist .trading-watchlist-controls select,
+  .trading-watchlist .trading-watchlist-controls > button {
+    height: 31px;
+  }
 
-.trading-watchlist .trading-watchlist-controls select {
-  min-width: 0;
-  padding: 5px 8px;
-  font-size: 10px;
-}
+  .trading-watchlist .trading-watchlist-controls select {
+    min-width: 0;
+    padding: 5px 8px;
+    font-size: 10px;
+  }
 
-.trading-watchlist .trading-watchlist-controls > button {
-  padding: 4px 0;
-  color: #aebdcb;
-  font-size: 16px;
-}
+  .trading-watchlist .trading-watchlist-controls > button {
+    padding: 4px 0;
+    color: var(--c-slate-790);
+    font-size: 16px;
+  }
 
-.trading-watchlist-controls > button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
+  .trading-watchlist-controls > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
 
-.trading-watchlist-options {
-  position: relative;
-}
+  .trading-watchlist-options {
+    position: relative;
+  }
 
-.trading-watchlist .trading-watchlist-options > button {
-  width: 34px;
-  height: 31px;
-  padding: 0 0 5px;
-  color: #aebdcb;
-  font-size: 18px;
-  line-height: 1;
-}
+  .trading-watchlist .trading-watchlist-options > button {
+    width: 34px;
+    height: 31px;
+    padding: 0 0 5px;
+    color: var(--c-slate-790);
+    font-size: 18px;
+    line-height: 1;
+  }
 
-.trading-watchlist-options-menu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 4px);
-  right: 0;
-  display: grid;
-  min-width: 148px;
-  gap: 2px;
-  padding: 5px;
-  border: 1px solid rgba(116, 151, 181, 0.25);
-  border-radius: 5px;
-  background: rgba(7, 16, 27, 0.98);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
-}
+  .trading-watchlist-options-menu {
+    position: absolute;
+    z-index: 8;
+    top: calc(100% + 4px);
+    right: 0;
+    display: grid;
+    min-width: 148px;
+    gap: 2px;
+    padding: 5px;
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 25%, transparent);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
+  }
 
-.trading-watchlist .trading-watchlist-options-menu button {
-  padding: 6px 7px;
-  text-align: left;
-  font-size: 9px;
-}
+  .trading-watchlist .trading-watchlist-options-menu button {
+    padding: 6px 7px;
+    text-align: left;
+    font-size: 9px;
+  }
 
-.trading-watchlist-columns,
-.trading-watchlist li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px 55px;
-  align-items: center;
-}
-
-.trading-watchlist-columns {
-  padding: 0 8px 6px;
-  border-bottom: 1px solid rgba(117, 151, 181, 0.14);
-  color: #75889d;
-  font-size: 8px;
-  text-transform: none;
-}
-
-.trading-watchlist-columns span:not(:first-child) {
-  text-align: right;
-}
-
-.trading-watchlist-columns .trading-watchlist-change-sort {
-  display: inline-flex;
-  align-items: center;
-  justify-self: end;
-  gap: 3px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  text-align: right;
-  cursor: pointer;
-}
-
-.trading-watchlist-columns .trading-watchlist-change-sort:hover,
-.trading-watchlist-columns .trading-watchlist-change-sort[aria-pressed='true'] {
-  color: #70baff;
-}
-
-.trading-watchlist ul {
-  display: grid;
-  max-height: calc(100vh - 205px);
-  overflow: auto;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  scrollbar-color: rgba(121, 148, 174, 0.5) transparent;
-}
-
-.trading-watchlist li {
-  position: relative;
-  min-height: 38px;
-  border-bottom: 1px solid rgba(117, 151, 181, 0.1);
-}
-
-.trading-watchlist li.active {
-  background: rgba(22, 136, 255, 0.08);
-}
-
-.trading-watchlist li > button:first-child {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  width: 100%;
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 7px 5px 7px 8px;
-  text-align: left;
-}
-
-.trading-watchlist li > button:first-child:hover {
-  background: rgba(22, 136, 255, 0.1);
-}
-
-.trading-watchlist-asset-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(116, 151, 181, 0.35);
-  border-radius: 50%;
-  background: rgba(116, 151, 181, 0.15);
-  color: #dbe8f3;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.trading-watchlist-asset-icon svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.trading-watchlist-asset-icon.apple {
-  border-color: rgba(210, 220, 232, 0.5);
-  background: #202b38;
-  color: #f0f4f8;
-}
-
-.trading-watchlist-asset-icon.apple svg {
-  fill: currentColor;
-  stroke: none;
-}
-
-.trading-watchlist-asset-icon.nvidia {
-  border-color: rgba(118, 213, 83, 0.45);
-  background: rgba(118, 213, 83, 0.16);
-  color: #76d553;
-}
-
-.trading-watchlist-asset-icon.tesla {
-  border-color: rgba(235, 75, 88, 0.5);
-  background: rgba(235, 75, 88, 0.16);
-  color: #ff6570;
-}
-
-.trading-watchlist-asset-icon.spy {
-  border-color: rgba(78, 164, 237, 0.5);
-  background: rgba(78, 164, 237, 0.16);
-  color: #70baff;
-}
-
-.trading-watchlist-asset-icon.bitcoin {
-  border-color: rgba(247, 147, 26, 0.55);
-  background: rgba(247, 147, 26, 0.18);
-  color: #f7931a;
-}
-
-.trading-watchlist-asset-icon.ethereum {
-  border-color: rgba(147, 122, 255, 0.5);
-  background: rgba(147, 122, 255, 0.16);
-  color: #a896ff;
-}
-
-.trading-watchlist-asset-icon.solana {
-  border-color: rgba(72, 226, 198, 0.5);
-  background: linear-gradient(135deg, rgba(72, 226, 198, 0.2), rgba(151, 94, 255, 0.2));
-  color: #64e5cd;
-}
-
-.trading-watchlist-asset-icon.hyperliquid {
-  border-color: rgba(72, 202, 255, 0.5);
-  background: rgba(72, 202, 255, 0.16);
-  color: #6bd2ff;
-}
-
-.trading-watchlist-asset-icon.generic {
-  background: rgba(116, 151, 181, 0.15);
-}
-
-.trading-watchlist li > button strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #c8d4df;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.trading-watchlist-price,
-.trading-watchlist-change {
-  padding: 0 5px;
-  color: #bdcbd8;
-  font-size: 10px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.trading-watchlist-change.positive {
-  color: #39d99a !important;
-}
-
-.trading-watchlist-change.negative {
-  color: #ff7079 !important;
-}
-
-.trading-watchlist-change.neutral {
-  color: #bdcbd8;
-}
-
-.trading-watchlist-row-actions {
-  position: absolute;
-  z-index: 2;
-  right: 4px;
-  top: 50%;
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid rgba(116, 151, 181, 0.2);
-  border-radius: 4px;
-  background: rgba(7, 16, 27, 0.96);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-50%);
-  transition: opacity 0.12s ease;
-}
-
-.trading-watchlist li:hover .trading-watchlist-row-actions,
-.trading-watchlist li:focus-within .trading-watchlist-row-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.trading-watchlist-row-actions button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  min-width: 28px;
-  height: 22px;
-  padding: 0 !important;
-  font-size: 12px !important;
-  line-height: 1 !important;
-}
-
-.trading-watchlist-row-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.trading-watchlist-row-actions.is-sorted button[aria-label^='Move '] {
-  display: none;
-}
-
-.trading-watchlist-status {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.trading-side-panel > [role='tabpanel'].trading-side-panel-watchlist {
-  overflow: hidden;
-}
-
-.trading-side-panel-watchlist > .trading-watchlist {
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-}
-
-.trading-side-panel-watchlist .trading-watchlist ul {
-  min-height: 0;
-  max-height: none;
-}
-
-@media (max-width: 600px) {
   .trading-watchlist-columns,
   .trading-watchlist li {
-    grid-template-columns: minmax(0, 1fr) 64px 50px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 72px 55px;
+    align-items: center;
+  }
+
+  .trading-watchlist-columns {
+    padding: 0 8px 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
+    color: var(--c-slate-630);
+    font-size: 8px;
+    text-transform: none;
+  }
+
+  .trading-watchlist-columns span:not(:first-child) {
+    text-align: right;
+  }
+
+  .trading-watchlist-columns .trading-watchlist-change-sort {
+    display: inline-flex;
+    align-items: center;
+    justify-self: end;
+    gap: 3px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: right;
+    cursor: pointer;
+  }
+
+  .trading-watchlist-columns .trading-watchlist-change-sort:hover,
+  .trading-watchlist-columns .trading-watchlist-change-sort[aria-pressed='true'] {
+    color: var(--c-blue-770);
+  }
+
+  .trading-watchlist ul {
+    display: grid;
+    max-height: calc(100vh - 205px);
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    scrollbar-color: color-mix(in srgb, var(--c-blue-660) 50%, transparent) transparent;
+  }
+
+  .trading-watchlist li {
+    position: relative;
+    min-height: 38px;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 10%, transparent);
+  }
+
+  .trading-watchlist li.active {
+    background: color-mix(in srgb, var(--c-blue-630) 8%, transparent);
+  }
+
+  .trading-watchlist li > button:first-child {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+    gap: 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 7px 5px 7px 8px;
+    text-align: left;
+  }
+
+  .trading-watchlist li > button:first-child:hover {
+    background: color-mix(in srgb, var(--c-blue-630) 10%, transparent);
+  }
+
+  .trading-watchlist-asset-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 35%, transparent);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--c-blue-660) 15%, transparent);
+    color: var(--c-slate-930);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .trading-watchlist-asset-icon svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .trading-watchlist-asset-icon.apple {
+    border-color: color-mix(in srgb, var(--c-slate-890) 50%, transparent);
+    background: var(--c-slate-280);
+    color: var(--c-neutral-960);
+  }
+
+  .trading-watchlist-asset-icon.apple svg {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .trading-watchlist-asset-icon.nvidia {
+    border-color: color-mix(in srgb, var(--c-green-790) 45%, transparent);
+    background: color-mix(in srgb, var(--c-green-790) 16%, transparent);
+    color: var(--c-green-790);
+  }
+
+  .trading-watchlist-asset-icon.tesla {
+    border-color: color-mix(in srgb, var(--c-red-640) 50%, transparent);
+    background: color-mix(in srgb, var(--c-red-640) 16%, transparent);
+    color: var(--c-red-720);
+  }
+
+  .trading-watchlist-asset-icon.spy {
+    border-color: color-mix(in srgb, var(--c-blue-710-2) 50%, transparent);
+    background: color-mix(in srgb, var(--c-blue-710-2) 16%, transparent);
+    color: var(--c-blue-770);
+  }
+
+  .trading-watchlist-asset-icon.bitcoin {
+    border-color: color-mix(in srgb, var(--c-amber-770) 55%, transparent);
+    background: color-mix(in srgb, var(--c-amber-770) 18%, transparent);
+    color: var(--c-amber-770);
+  }
+
+  .trading-watchlist-asset-icon.ethereum {
+    border-color: color-mix(in srgb, var(--c-violet-660) 50%, transparent);
+    background: color-mix(in srgb, var(--c-violet-660) 16%, transparent);
+    color: var(--c-indigo-750);
+  }
+
+  .trading-watchlist-asset-icon.solana {
+    border-color: color-mix(in srgb, var(--c-cyan-810) 50%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-810) 20%, transparent), color-mix(in srgb, var(--c-violet-630) 20%, transparent));
+    color: var(--c-teal-860);
+  }
+
+  .trading-watchlist-asset-icon.hyperliquid {
+    border-color: color-mix(in srgb, var(--c-sky-800) 50%, transparent);
+    background: color-mix(in srgb, var(--c-sky-800) 16%, transparent);
+    color: var(--c-sky-830);
+  }
+
+  .trading-watchlist-asset-icon.generic {
+    background: color-mix(in srgb, var(--c-blue-660) 15%, transparent);
+  }
+
+  .trading-watchlist li > button strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--c-slate-870);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trading-watchlist-price,
+  .trading-watchlist-change {
+    padding: 0 5px;
+    color: var(--c-slate-820);
+    font-size: 10px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .trading-watchlist-change.neutral {
+    color: var(--c-slate-820);
+  }
+
+  .trading-watchlist-row-actions {
+    position: absolute;
+    z-index: 2;
+    right: 4px;
+    top: 50%;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--c-slate-170-2) 96%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity 0.12s ease;
+  }
+
+  .trading-watchlist li:hover .trading-watchlist-row-actions,
+  .trading-watchlist li:focus-within .trading-watchlist-row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .trading-watchlist-row-actions button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    min-width: 28px;
+    height: 22px;
+  }
+
+  .trading-watchlist-row-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
+  .trading-watchlist-row-actions.is-sorted button[aria-label^='Move '] {
+    display: none;
+  }
+
+  .trading-watchlist-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .trading-side-panel > [role='tabpanel'].trading-side-panel-watchlist {
+    overflow: hidden;
+  }
+
+  .trading-side-panel-watchlist > .trading-watchlist {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+
+  .trading-side-panel-watchlist .trading-watchlist ul {
+    min-height: 0;
+    max-height: none;
+  }
+
+  @media (max-width: 600px) {
+    .trading-watchlist-columns,
+    .trading-watchlist li {
+      grid-template-columns: minmax(0, 1fr) 64px 50px;
+    }
+  }
+}
+
+/* Declarations that must win over every other layer. */
+@layer overrides {
+  .trading-watchlist-change.positive {
+    color: var(--c-green-790-2);
+  }
+
+  .trading-watchlist-change.negative {
+    color: var(--c-red-720);
+  }
+
+  .trading-watchlist-row-actions button {
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
   }
 }

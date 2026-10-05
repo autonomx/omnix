@@ -6,6 +6,7 @@ from app.assistant_tools import (
     is_valid_tool_id,
     validate_assistant_tool_request,
 )
+import pytest
 
 
 def _tool(*, enabled: bool = True, action_enabled: bool = True, approval_policy: str = "allow_automatic") -> AssistantToolSpec:
@@ -106,8 +107,9 @@ def test_approval_required_request_is_not_executable_until_approved():
         [_tool()],
     )
     approved = validate_assistant_tool_request(
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", approved=True),
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email"),
         [_tool()],
+        approved=True,
     )
 
     assert pending.valid is True
@@ -118,3 +120,29 @@ def test_approval_required_request_is_not_executable_until_approved():
     assert approved.approval_required is True
     assert approved.executable is True
     assert approved.reason is None
+
+
+@pytest.mark.parametrize("category,destructive", [("delete", False), ("write", True), ("execute", True)])
+def test_destructive_action_cannot_run_automatically(category, destructive):
+    tool = _tool()
+    action = tool.actions[0].model_copy(update={
+        "category": category, "is_destructive": destructive,
+        "approval_policy": "allow_automatic",
+    })
+    tool.actions = [action]
+    request = AssistantToolRequest(tool_id=tool.id, action_id=action.id)
+    pending = validate_assistant_tool_request(request, [tool])
+    assert pending.valid is True
+    assert pending.approval_required is True
+    assert pending.executable is False
+    from app.assistant_tools.gate import review_assistant_tool_request
+    from app.assistant_tools.config_store import default_assistant_tools_config
+    config = default_assistant_tools_config()
+    configured = next(item for item in config.tools if item.tool_id == tool.id)
+    configured.enabled = True
+    configured.connection_status = "connected"
+    configured_action = next(item for item in configured.actions if item.action_id == action.id)
+    configured_action.approval_policy = "allow_automatic"
+    reviewed = review_assistant_tool_request(request, config=config, tools=[tool])
+    assert reviewed.approval_required == pending.approval_required
+    assert reviewed.executable is False

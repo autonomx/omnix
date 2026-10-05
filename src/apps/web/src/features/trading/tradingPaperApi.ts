@@ -12,101 +12,54 @@ import type {
   PaperRiskPreviewInput,
 } from './paperTypes';
 
-const orderManagementHeaders = { 'X-Omnix-Paper-Order-Management': 'v2' };
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof payload?.detail === 'string'
-      ? payload.detail
-      : JSON.stringify(payload?.detail ?? payload);
-    throw new Error(`Paper Trading request failed (${response.status}): ${detail}`);
-  }
-  return payload as T;
-}
+const paper = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Paper Trading');
+const orderManagement = { 'X-Omnix-Paper-Order-Management': 'v2' } as const;
+const account = (accountId: string) => ({ account_id: accountId });
 
 export const tradingPaperApi = {
-  accounts: async () => {
-    const payload = await requestJson<unknown>('/api/trading/paper/accounts');
-    if (!payload || typeof payload !== 'object') return [];
-    const accounts = (payload as Record<string, unknown>).accounts;
-    return Array.isArray(accounts) ? accounts as PaperAccount[] : [];
-  },
-  createAccount: (input: PaperAccountCreateInput) =>
-    requestJson<PaperAccountSnapshot>('/api/trading/paper/accounts', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  snapshot: (accountId: string) =>
-    requestJson<PaperAccountSnapshot>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}`),
-  riskPreview: (accountId: string, input: PaperRiskPreviewInput) =>
-    requestJson<PaperRiskPreview>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-preview`,
-      { method: 'POST', body: JSON.stringify(input) },
-    ),
-  placeRiskOrder: (accountId: string, input: PaperRiskOrderInput) =>
-    requestJson<PaperRiskOrderResult>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-orders`,
-      { method: 'POST', body: JSON.stringify(input) },
-    ),
-  placeOrder: (accountId: string, input: PaperOrderInput) =>
-    requestJson<PaperOrder>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  cancelOrder: (accountId: string, orderId: string) =>
-    requestJson<PaperOrder>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}`,
-      { method: 'DELETE', headers: orderManagementHeaders },
-    ),
-  replaceOrder: (accountId: string, orderId: string, replacement: PaperOrderInput) =>
-    requestJson<{ cancelled: PaperOrder; replacement: PaperOrder }>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}/replace`,
-      { method: 'POST', headers: orderManagementHeaders, body: JSON.stringify({ replacement }) },
-    ),
-  /** @deprecated Browser observations are deliberately non-authoritative. */
-  processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
-  protections: async (accountId: string) => {
-    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
-    );
-    return Array.isArray(payload.protections) ? payload.protections : [];
-  },
-  protection: async (accountId: string, instrumentId: string) => {
-    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
-    );
-    return payload.protections?.find((item) => item.instrument_id === instrumentId) ?? null;
-  },
-  setProtection: (accountId: string, input: PaperProtectionInput) =>
-    requestJson<PaperPositionProtection>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections`,
-      { method: 'PUT', body: JSON.stringify(input) },
-    ),
-  clearProtection: (accountId: string, instrumentId: string) =>
-    requestJson<PaperPositionProtection>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections/${encodeURIComponent(instrumentId)}`,
-      { method: 'DELETE' },
-    ),
-  resetAccount: (account: PaperAccount, initialCash: string) =>
-    requestJson<PaperAccountSnapshot>(
-      `/api/trading/paper/accounts/${encodeURIComponent(account.account_id)}/reset`,
-      {
-        method: 'POST',
-        headers: { 'If-Match': String(account.revision) },
-        body: JSON.stringify({ initial_cash: initialCash }),
-      },
-    ),
-  archiveAccount: (account: PaperAccount) =>
-    requestJson<PaperAccountSnapshot>(
-      `/api/trading/paper/accounts/${encodeURIComponent(account.account_id)}`,
-      {
-        method: 'DELETE',
-        headers: { 'If-Match': String(account.revision) },
-      },
-    ),
+  accounts: async (): Promise<PaperAccount[]> =>
+    (await paper(api.GET('/api/trading/paper/accounts'))).accounts,
+  createAccount: (input: PaperAccountCreateInput): Promise<PaperAccountSnapshot> =>
+    paper(api.POST('/api/trading/paper/accounts', { body: input })),
+  snapshot: (accountId: string): Promise<PaperAccountSnapshot> =>
+    paper(api.GET('/api/trading/paper/accounts/{account_id}', { params: { path: account(accountId) } })),
+  riskPreview: (accountId: string, input: PaperRiskPreviewInput): Promise<PaperRiskPreview> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/risk-preview', { params: { path: account(accountId) }, body: input })),
+  placeRiskOrder: (accountId: string, input: PaperRiskOrderInput): Promise<PaperRiskOrderResult> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/risk-orders', { params: { path: account(accountId) }, body: input })),
+  placeOrder: (accountId: string, input: PaperOrderInput): Promise<PaperOrder> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/orders', { params: { path: account(accountId) }, body: input })),
+  cancelOrder: (accountId: string, orderId: string): Promise<PaperOrder> =>
+    paper(api.DELETE('/api/trading/paper/accounts/{account_id}/orders/{order_id}', {
+      params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
+    })),
+  replaceOrder: (accountId: string, orderId: string, replacement: PaperOrderInput): Promise<{ cancelled: PaperOrder; replacement: PaperOrder }> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace', {
+      params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
+      body: { replacement },
+    })),
+  protections: async (accountId: string): Promise<PaperPositionProtection[]> =>
+    (await paper(api.GET('/api/trading/paper/accounts/{account_id}/protections', {
+      params: { path: account(accountId), query: { active_only: true } },
+    }))).protections,
+  protection: async (accountId: string, instrumentId: string): Promise<PaperPositionProtection | null> =>
+    (await tradingPaperApi.protections(accountId)).find((item) => item.instrument_id === instrumentId) ?? null,
+  setProtection: (accountId: string, input: PaperProtectionInput): Promise<PaperPositionProtection> =>
+    paper(api.PUT('/api/trading/paper/accounts/{account_id}/protections', { params: { path: account(accountId) }, body: input })),
+  clearProtection: (accountId: string, instrumentId: string): Promise<PaperPositionProtection> =>
+    paper(api.DELETE('/api/trading/paper/accounts/{account_id}/protections/{instrument_id}', {
+      params: { path: { account_id: accountId, instrument_id: instrumentId } },
+    })),
+  resetAccount: (paperAccount: PaperAccount, initialCash: string): Promise<PaperAccountSnapshot> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/reset', {
+      params: { path: account(paperAccount.account_id), header: { 'If-Match': paperAccount.revision } },
+      body: { initial_cash: initialCash },
+    })),
+  archiveAccount: (paperAccount: PaperAccount): Promise<PaperAccountSnapshot> =>
+    paper(api.DELETE('/api/trading/paper/accounts/{account_id}', {
+      params: { path: account(paperAccount.account_id), header: { 'If-Match': paperAccount.revision } },
+    })),
 };

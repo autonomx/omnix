@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading.strategy_runtime_reliability_fixes import _CurrentShadowSessionProxy
+from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 class _UnavailableHistory:
@@ -22,7 +22,7 @@ def test_trend_shadow_history_failure_becomes_waiting_prefix_at_open() -> None:
     """
 
     observed = datetime(2026, 9, 11, 13, 30, 14, tzinfo=timezone.utc)
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         _UnavailableHistory(),
         session_date=observed.date(),
         observed_at=observed,

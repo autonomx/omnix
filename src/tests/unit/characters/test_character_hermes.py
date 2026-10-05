@@ -9,7 +9,7 @@ from app.assistant_memory.hermes_adapter import (
 )
 from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.characters.hermes_adapter import (
+from app.assistant_memory.character_hermes_adapter import (
     export_character_memory_to_hermes,
     import_character_hermes_memory,
 )
@@ -42,6 +42,7 @@ def test_character_sync_is_disabled_by_default_and_missing_storage_is_non_fatal(
         service,
         context,
         "maya",
+        enabled=False,
         memory_dir=root,
     )
     assert disabled.enabled is False
@@ -52,6 +53,7 @@ def test_character_sync_is_disabled_by_default_and_missing_storage_is_non_fatal(
         service,
         context,
         "maya",
+        enabled=True,
         memory_dir=root,
     )
     assert missing.enabled is True
@@ -84,12 +86,14 @@ def test_character_import_is_review_first_idempotent_and_owner_bound(
         service,
         maya,
         "maya",
+        enabled=True,
         memory_dir=root,
     )
     second = import_character_hermes_memory(
         service,
         maya,
         "maya",
+        enabled=True,
         memory_dir=root,
     )
 
@@ -109,6 +113,7 @@ def test_character_import_is_review_first_idempotent_and_owner_bound(
         service,
         maya,
         "alex",
+        enabled=True,
         memory_dir=root,
     )
     assert mismatch.skipped_reasons == ["character_owner_mismatch"]
@@ -168,6 +173,7 @@ def test_character_export_excludes_other_owners_session_records_and_feedback_loo
         service,
         maya,
         "maya",
+        enabled=True,
         memory_dir=root,
     )
     text = (root / "maya" / "CHARACTER.md").read_text(encoding="utf-8")

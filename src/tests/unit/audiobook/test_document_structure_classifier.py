@@ -38,7 +38,7 @@ def test_structure_classifier_is_low_cost_and_allows_unknown(monkeypatch) -> Non
         "region": [{"block_id": "b1", "text": "North Gate"}],
     })
 
-    assert '"content_role":"unknown"' in response
+    assert response["blocks"][0]["content_role"] == "unknown"
     assert details["version"] == DOCUMENT_STRUCTURE_CLASSIFIER_VERSION
     assert details["reasoning_effort"] == "low"
     assert details["model"] == "gpt-5.6-luna"

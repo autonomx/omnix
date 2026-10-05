@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import './RpgWorldCampaignCatalog.css';
 
 function text(value: unknown): string {
@@ -49,7 +49,7 @@ export function RpgWorldCard({ actions, children, facts, footer, world }: RpgWor
       <div
         className={image ? 'rpg-world-card-cover rpg-world-card-cover-image' : 'rpg-world-card-cover'}
         style={image ? {
-          backgroundImage: `linear-gradient(180deg, rgba(3, 7, 18, .04), rgba(3, 7, 18, .88)), url(${JSON.stringify(image)})`,
+          backgroundImage: `linear-gradient(180deg, color-mix(in srgb, var(--c-blue-130) 4%, transparent), color-mix(in srgb, var(--c-blue-130) 88%, transparent)), url(${JSON.stringify(image)})`,
         } : undefined}
       >
         <span className="rpg-world-card-genre">{displayWorldGenre(world.genre || 'World')}</span>

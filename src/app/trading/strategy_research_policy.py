@@ -21,6 +21,9 @@ class ResearchQualityDecision(BaseModel):
     adjusted_quality_score: int
     minimum_quality_score: int
     score_adjustment: int = 0
+    # What the research proposed, and whether the configuration let it apply.
+    proposed_score_adjustment: int = 0
+    score_adjustment_enabled: bool = False
 
 
 def apply_research_policy_to_quality(
@@ -28,17 +31,23 @@ def apply_research_policy_to_quality(
     *,
     base_quality_score: int,
     minimum_quality_score: int,
+    score_adjustment_enabled: bool = False,
 ) -> ResearchQualityDecision:
     """Apply a reviewed HTR score/gate decision to deterministic setup quality.
 
-    Direct hard-gate failures remain failures. Otherwise the reviewed score/soft
-    gate adjustment is applied to the existing 0-10 setup-quality scale, and the
-    same minimum-quality threshold is used in AUTO PAPER and backtests. Legacy
-    1.0/1.1 decisions are non-authoritative and therefore leave quality unchanged.
+    Direct hard-gate failures remain failures. Research changes the setup
+    score only when the strategy configuration opts in
+    (``research_score_adjustment_enabled``, WP-8.3); otherwise the proposed
+    adjustment is recorded and the score is unchanged. An applied adjustment
+    uses the existing 0-10 setup-quality scale, and the same minimum-quality
+    threshold is used in AUTO PAPER and backtests. Legacy 1.0/1.1 decisions are
+    non-authoritative and therefore leave quality unchanged.
     """
 
     base = max(0, min(10, int(base_quality_score)))
     minimum = max(0, min(10, int(minimum_quality_score)))
+    proposed = int(decision.score_adjustment) if decision.authoritative else 0
+    visibility = {"proposed_score_adjustment": proposed, "score_adjustment_enabled": score_adjustment_enabled}
 
     if not decision.authoritative:
         return ResearchQualityDecision(
@@ -50,9 +59,10 @@ def apply_research_policy_to_quality(
             adjusted_quality_score=base,
             minimum_quality_score=minimum,
             score_adjustment=0,
+            **visibility,
         )
 
-    adjustment = int(decision.score_adjustment)
+    adjustment = proposed if score_adjustment_enabled else 0
     adjusted = max(0, min(10, base + adjustment))
 
     if not decision.allowed:
@@ -65,6 +75,7 @@ def apply_research_policy_to_quality(
             adjusted_quality_score=adjusted,
             minimum_quality_score=minimum,
             score_adjustment=adjustment,
+            **visibility,
         )
 
     if adjusted < minimum:
@@ -77,6 +88,7 @@ def apply_research_policy_to_quality(
             adjusted_quality_score=adjusted,
             minimum_quality_score=minimum,
             score_adjustment=adjustment,
+            **visibility,
         )
 
     return ResearchQualityDecision(
@@ -88,6 +100,7 @@ def apply_research_policy_to_quality(
         adjusted_quality_score=adjusted,
         minimum_quality_score=minimum,
         score_adjustment=adjustment,
+        **visibility,
     )
 
 

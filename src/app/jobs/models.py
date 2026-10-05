@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, GetJsonSchemaHandler, model_validator
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, PrivateAttr
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema
 
@@ -121,40 +121,11 @@ class CreateJobRequest(BaseModel):
     input_payload: dict[str, Any] | None = None
     compat: dict[str, Any] = Field(default_factory=dict)
 
-    @model_validator(mode="before")
-    @classmethod
-    def apply_central_defaults(cls, value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
-        module = str(value.get("module") or "").strip()
-        raw_resource_class = value.get("resource_class")
-        resource_class = str(getattr(raw_resource_class, "value", raw_resource_class) or "").strip()
-        defaulted_modules = {
-            "storyteller",
-            "podcast",
-            "voice",
-            "voice-cloning",
-            "stt",
-            "image-generation",
-            "character-avatar",
-        }
-        if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
-            return value
-        routed_value = dict(value)
-        routed_value["resource_class"] = resource_class
-        if module == "voice-cloning":
-            from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
-
-            return apply_voice_cloning_defaults(routed_value)
-
-        from app.platform.effective_defaults import apply_job_defaults
-
-        return apply_job_defaults(routed_value)
-
 
 class ClaimJobRequest(BaseModel):
     worker_id: str
     resource_classes: list[ResourceClass] = Field(default_factory=list)
+    job_types: list[str] = Field(default_factory=list)
     lease_seconds: int = Field(default=30, ge=1, le=3600)
     cpu_limit: int = Field(default=2, ge=1, le=64)
 
@@ -166,15 +137,26 @@ class ClaimJobResponse(BaseModel):
 
 
 class CompleteJobRequest(BaseModel):
+    worker_id: str | None = Field(default=None, min_length=1)
+    lease_token: str | None = Field(default=None, min_length=1)
     output_refs: list[dict[str, Any]] = Field(default_factory=list)
     logs: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FailJobRequest(BaseModel):
+    worker_id: str | None = Field(default=None, min_length=1)
+    lease_token: str | None = Field(default=None, min_length=1)
     code: str = "job_failed"
     message: str
     retryable: bool = False
+    _retry_delay_seconds: int = PrivateAttr(default=0)
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleaseJobRequest(BaseModel):
+    worker_id: str = Field(min_length=1)
+    lease_token: str = Field(min_length=1)
+    reason: str = ""
 
 
 class CancelJobRequest(BaseModel):
@@ -182,6 +164,8 @@ class CancelJobRequest(BaseModel):
 
 
 class JobRecord(BaseModel):
+    _attempt_count: int = PrivateAttr(default=0)
+
     id: str
     owner_id: str | None = None
     module: str
@@ -203,10 +187,16 @@ class JobRecord(BaseModel):
     completed_at: str | None = None
     cancel: CancelState = Field(default_factory=CancelState)
     compat: dict[str, Any] = Field(default_factory=dict)
+    # The submitting request's id (WP-10.2); workers bind it to their log lines.
+    correlation_id: str | None = None
 
 
 class JobListResponse(BaseModel):
+    """A page of jobs, newest first (WP-5.5)."""
+
     jobs: list[JobRecord]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class JobEventRecord(BaseModel):

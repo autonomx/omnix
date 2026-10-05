@@ -1,7 +1,7 @@
 import type {
   RpgAuthoringDocumentBlock,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
+} from './api/rpgWorldAuthoringClient';
 
 export interface RpgWorldEditorRoute {
   worldId: string;

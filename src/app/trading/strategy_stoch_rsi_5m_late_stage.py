@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import datetime, time, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
@@ -19,11 +18,12 @@ from .strategy_stoch_rsi_5m import (
     StochRsi5mState,
     evaluate_stoch_rsi_5m,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 LATE_STAGE_ENTRY_START_ET = time(13, 0)
 LATE_STAGE_MINIMUM_OPEN_GAIN_PCT = Decimal("50")
-_ET = ZoneInfo("America/New_York")
 
 
 def _current_regular_bars(
@@ -37,7 +37,7 @@ def _current_regular_bars(
             and bar.session == "regular"
             and time(9, 30)
             <= bar.start_time.astimezone(_ET).time()
-            < time(16, 0)
+            < regular_close_time(bar.start_time.astimezone(_ET).date())
         ),
         key=lambda bar: bar.start_time,
     )
@@ -55,7 +55,7 @@ def _gate_snapshot(
     current_bars: list[MarketBar],
     *,
     reason_code: str,
-    state: StochRsiState = "waiting_data",
+    state: StochRsi5mState = "waiting_data",
 ) -> StochRsi5mSnapshot:
     last = current_bars[-1] if current_bars else None
     return StochRsi5mSnapshot(

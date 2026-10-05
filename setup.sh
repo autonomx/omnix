@@ -8,7 +8,7 @@ OMNIX_REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$OMNIX_REPO_ROOT"
 
 # Default conda root - adjust this path for your system
-CONDA_ROOT="$HOME/miniconda3"
+CONDA_ROOT="${CONDA_ROOT:-$HOME/miniconda3}"
 CONDA_EXE="$CONDA_ROOT/bin/conda"
 
 RPG_FLUX_ENV="rpg-flux"
@@ -60,7 +60,7 @@ fi
 
 if [ ! -f "$RPG_FLUX_PYTHON" ]; then
     echo "Creating conda environment: $RPG_FLUX_ENV"
-    "$CONDA_EXE" create -n $RPG_FLUX_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_FLUX_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_FLUX_ENV"
         error
@@ -69,7 +69,7 @@ fi
 
 if [ ! -f "$RPG_TTS_PYTHON" ]; then
     echo "Creating conda environment: $RPG_TTS_ENV"
-    "$CONDA_EXE" create -n $RPG_TTS_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_TTS_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_TTS_ENV"
         error
@@ -78,30 +78,34 @@ fi
 
 if [ ! -f "$RPG_STT_PYTHON" ]; then
     echo "Creating conda environment: $RPG_STT_ENV"
-    "$CONDA_EXE" create -n $RPG_STT_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_STT_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_STT_ENV"
         error
     fi
 fi
 
-if [ ! -f "scripts/requirements/requirements-rpg-flux.txt" ]; then
-    echo "ERROR: Runtime requirements file not found"
-    echo "Expected:"
-    echo "  scripts/requirements/requirements-rpg-flux.txt"
+if [ ! -f "requirements/image.linux.lock.txt" ]; then
+    echo "ERROR: Hashed image runtime lock not found"
+    echo "Expected: requirements/image.linux.lock.txt"
     error
 fi
 
-if [ ! -f "src/requirements-rpg-tts.txt" ]; then
-    echo "ERROR: TTS runtime requirements file not found"
-    echo "Expected:"
-    echo "  src/requirements-rpg-tts.txt"
+if [ ! -f "requirements/tts.linux.lock.txt" ]; then
+    echo "ERROR: Hashed TTS runtime lock not found"
+    echo "Expected: requirements/tts.linux.lock.txt"
+    error
+fi
+
+if [ ! -f "requirements/stt.linux.lock.txt" ]; then
+    echo "ERROR: Hashed STT runtime lock not found"
+    echo "Expected: requirements/stt.linux.lock.txt"
     error
 fi
 
 echo ""
 echo "[ENV CHECK] FLUX"
-"$RPG_FLUX_PYTHON" -c "import sys; print('FLUX Python:', sys.executable)"
+"$RPG_FLUX_PYTHON" -c "import sys; print('FLUX Python:', sys.executable); assert sys.version_info[:2] == (3, 11), sys.version"
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to verify $RPG_FLUX_ENV"
     error
@@ -109,9 +113,17 @@ fi
 
 echo ""
 echo "[ENV CHECK] STT"
-"$RPG_STT_PYTHON" -c "import sys; print('STT Python:', sys.executable)"
+"$RPG_STT_PYTHON" -c "import sys; print('STT Python:', sys.executable); assert sys.version_info[:2] == (3, 11), sys.version"
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to verify $RPG_STT_ENV"
+    error
+fi
+
+echo ""
+echo "[ENV CHECK] TTS"
+"$RPG_TTS_PYTHON" -c "import sys; print('TTS Python:', sys.executable); assert sys.version_info[:2] == (3, 11), sys.version"
+if [ $? -ne 0 ]; then
+    echo "ERROR: $RPG_TTS_ENV must use Python 3.11"
     error
 fi
 
@@ -134,33 +146,20 @@ if [ ! -f "src/app/providers/vendor/qwen_tts/__init__.py" ]; then
     error
 fi
 
-echo "[1/9][FLUX] Upgrading pip/setuptools/wheel..."
-"$RPG_FLUX_PYTHON" -m pip install --upgrade pip
-
-# Pin wheel to avoid packaging>=24 requirement (deepfilternet requires <24)
-"$RPG_FLUX_PYTHON" -m pip install wheel==0.43.0
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to pin wheel"
-    error
-fi
-
-# DO NOT upgrade setuptools/packaging here — breaks deepfilternet + torch constraints
+echo "[1/10][FLUX] Checking pip..."
+"$RPG_FLUX_PYTHON" -m pip --version
 
 echo ""
-echo "[2/9][FLUX] Removing conflicting torch packages..."
+echo "[2/10][FLUX] Removing conflicting torch packages..."
 "$RPG_FLUX_PYTHON" -m pip uninstall -y torch torchvision torchaudio
 "$RPG_FLUX_PYTHON" -m pip uninstall -y torchtext torchdata
 
 echo ""
-echo "[3/9][FLUX] Installing torch/vision/audio CUDA 12.4 trio..."
-"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 numpy==1.26.4 --index-url https://download.pytorch.org/whl/cu124
+echo "[3/10][FLUX] Installing the hashed image runtime lock..."
+"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/image.linux.lock.txt
 if [ $? -ne 0 ]; then
-    echo "WARNING: CUDA trio failed for $RPG_FLUX_ENV, falling back to CPU"
-    "$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 numpy==1.26.4
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to install torch trio into $RPG_FLUX_ENV"
-        error
-    fi
+    echo "ERROR: Failed to install the locked image runtime into $RPG_FLUX_ENV"
+    error
 fi
 
 echo ""
@@ -191,27 +190,19 @@ fi
 echo "[FLUX] Cleanup complete."
 
 echo ""
-echo "[4/9][FLUX] Installing main app requirements (excluding HF/FLUX stack)..."
-"$RPG_FLUX_PYTHON" -m pip install -r scripts/requirements/requirements-rpg-main-nohf.txt
-if [ $? -ne 0 ]; then
-    error
-fi
+echo "[4/10][FLUX] Gateway requirements are included in requirements/image.linux.lock.txt."
 
 echo ""
-echo "[5/9][FLUX] Installing centralized RPG-FLUX runtime requirements..."
-"$RPG_FLUX_PYTHON" -m pip install -r scripts/requirements/requirements-rpg-flux.txt
-if [ $? -ne 0 ]; then
-    error
-fi
+echo "[5/10][FLUX] FLUX requirements are included in requirements/image.linux.lock.txt."
 
 echo ""
-echo "[6/9][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
+echo "[6/10][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
 
 echo ""
-echo "[7/9][FLUX] Runtime dependency pins are managed by scripts/requirements/requirements-rpg-flux.txt"
+echo "[7/10][FLUX] Runtime dependency pins are managed by requirements/image.in and its hashed lock."
 
 echo ""
-echo "[8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."
+echo "[8/10][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."
 mkdir -p "$OMNIX_LLM_MODELS_DIR"
 "$RPG_FLUX_PYTHON" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir='$OMNIX_LLM_MODELS_DIR', local_dir_use_symlinks=False)" 2>/dev/null
 if [ $? -ne 0 ]; then
@@ -221,7 +212,14 @@ else
 fi
 
 echo ""
-echo "[9/9][FLUX] Verifying main app runtime..."
+echo "[9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)..."
+if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.assistant_memory_v2.embeddings download; then
+    echo "WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only."
+    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.assistant_memory_v2.embeddings download"
+fi
+
+echo ""
+echo "[10/10][FLUX] Verifying main app runtime..."
 export PYTHONPATH="$OMNIX_REPO_ROOT/src"
 "$RPG_FLUX_PYTHON" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
 "$RPG_FLUX_PYTHON" -c "import torch; print('torch:', torch.__version__)"
@@ -251,8 +249,8 @@ echo "Installing dedicated TTS service into $RPG_TTS_ENV"
 echo "============================================="
 
 echo ""
-echo "[1/7][TTS] Upgrading pip/setuptools/wheel..."
-"$RPG_TTS_PYTHON" -m pip install --upgrade pip wheel==0.43.0 setuptools==81.0.0
+echo "[1/7][TTS] Checking pip..."
+"$RPG_TTS_PYTHON" -m pip --version
 if [ $? -ne 0 ]; then
     error
 fi
@@ -263,15 +261,11 @@ echo "[2/7][TTS] Removing conflicting torch packages..."
 "$RPG_TTS_PYTHON" -m pip uninstall -y torchtext torchdata
 
 echo ""
-echo "[3/7][TTS] Installing torch/torchaudio CUDA 12.4..."
-"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+echo "[3/7][TTS] Installing the hashed TTS runtime lock..."
+"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/tts.linux.lock.txt
 if [ $? -ne 0 ]; then
-    echo "WARNING: CUDA torch install failed for $RPG_TTS_ENV, falling back to CPU"
-    "$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchaudio==2.5.1
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to install torch/torchaudio into $RPG_TTS_ENV"
-        error
-    fi
+    echo "ERROR: Failed to install the locked TTS runtime into $RPG_TTS_ENV"
+    error
 fi
 
 echo ""
@@ -282,15 +276,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[5/7][TTS] Installing dedicated TTS requirements..."
-"$RPG_TTS_PYTHON" -m pip install --force-reinstall -r src/requirements-rpg-tts.txt
-if [ $? -ne 0 ]; then
-    error
-fi
-
-echo ""
-echo "[5b/7][TTS] Re-locking torch/torchaudio CUDA 12.4 after dependency install..."
-"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+echo "[5/7][TTS] TTS requirements and torch pins are included in requirements/tts.linux.lock.txt."
 
 echo ""
 echo "============================================="
@@ -354,8 +340,8 @@ echo "============================================="
 echo "Installing Parakeet STT into $RPG_STT_ENV"
 echo "============================================="
 
-echo "[1/7][STT] Upgrading pip/setuptools/wheel..."
-"$RPG_STT_PYTHON" -m pip install --upgrade pip setuptools wheel
+echo "[1/7][STT] Checking pip..."
+"$RPG_STT_PYTHON" -m pip --version
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to upgrade pip tools in $RPG_STT_ENV"
     error
@@ -366,52 +352,15 @@ echo "[2/7][STT] Removing conflicting torch packages..."
 "$RPG_STT_PYTHON" -m pip uninstall -y torch torchvision torchaudio
 
 echo ""
-echo "[3/7][STT] Installing torch 2.6+ for NeMo compatibility..."
-"$RPG_STT_PYTHON" -m pip install --no-cache-dir torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+echo "[3/7][STT] Installing the hashed STT runtime lock..."
+"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/stt.linux.lock.txt
 if [ $? -ne 0 ]; then
-    echo "WARNING: CUDA trio failed for $RPG_STT_ENV, falling back to CPU"
-    "$RPG_STT_PYTHON" -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to install torch trio into $RPG_STT_ENV"
-        error
-    fi
-fi
-
-echo ""
-echo "[4/7][STT] Installing NeMo ASR..."
-"$RPG_STT_PYTHON" -m pip install "nemo_toolkit[asr]"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install nemo_toolkit[asr]"
+    echo "ERROR: Failed to install the locked STT runtime into $RPG_STT_ENV"
     error
 fi
 
 echo ""
-echo "[STT] Installing web server dependencies for parakeet_stt_server..."
-"$RPG_STT_PYTHON" -m pip install fastapi uvicorn python-multipart
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install FastAPI/Uvicorn/python-multipart in $RPG_STT_ENV"
-    error
-fi
-
-echo ""
-echo "[5/7][STT] Reinstalling exact torch/vision/audio trio after NeMo..."
-"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
-if [ $? -ne 0 ]; then
-    echo "WARNING: CUDA trio reinstall failed for $RPG_STT_ENV, falling back to CPU"
-    "$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to reassert torch trio in $RPG_STT_ENV"
-        error
-    fi
-fi
-
-echo ""
-echo "[6/7][STT] Installing STT transformers/tokenizers compatibility pins..."
-"$RPG_STT_PYTHON" -m pip install transformers==4.46.3 tokenizers==0.20.3 --force-reinstall
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install STT transformers/tokenizers compatibility pins"
-    error
-fi
+echo "[5/7][STT] Torch and Transformers pins are included in requirements/stt.linux.lock.txt."
 
 echo ""
 echo "[7/7][STT] Pre-downloading Parakeet model..."
@@ -458,6 +407,22 @@ chmod +x "$OMNIX_REPO_ROOT/scripts/setup_agent_tools.sh"
 if [ $? -ne 0 ]; then
     echo "ERROR: Governed browser/MCP tool setup failed"
     error
+fi
+
+echo ""
+echo "[PostgreSQL] Local database (docker-compose.postgres.yml)"
+OMNIX_POSTGRES_PORT="${OMNIX_POSTGRES_PORT:-5432}"
+if "$RPG_FLUX_PYTHON" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1', int('$OMNIX_POSTGRES_PORT'))) == 0 else 1)"; then
+    echo "PostgreSQL is already listening on 127.0.0.1:$OMNIX_POSTGRES_PORT; leaving it as it is."
+elif command -v docker >/dev/null 2>&1; then
+    # Only a machine without a database gets one; an existing install is never touched.
+    if docker compose -f "$OMNIX_REPO_ROOT/docker-compose.postgres.yml" up -d --wait; then
+        echo "PostgreSQL started. Set OMNIX_DATABASE_URL and run: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.persistence migrate"
+    else
+        echo "WARNING: Could not start PostgreSQL with Docker; see docs/SETUP.md (PostgreSQL)."
+    fi
+else
+    echo "WARNING: Docker not found and nothing listens on $OMNIX_POSTGRES_PORT; install PostgreSQL 17 (docs/SETUP.md)."
 fi
 
 echo ""

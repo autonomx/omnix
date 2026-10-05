@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.persistence.job_repository import PostgresJobRepository
+
 from .render_planner import load_chapter_units
 from .repository import PostgresAudiobookRepository
 
@@ -21,20 +23,21 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
     if not source_revision_id:
         result.blockers.append('Add a book: open "Book source", upload a file or choose one from the local library, then wait for quote extraction and review the spans.')
         return result
-    active = connection.execute(
-        """SELECT job_type FROM omnix_jobs
-            WHERE workspace_id = %s AND module = 'audiobook'
-              AND input_payload->>'project_id' = %s
-              AND job_type IN ('audiobook.ingest', 'audiobook.analyze',
-                               'audiobook.render-chapter', 'audiobook.assemble-chapter')
-              AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running',
-                             'paused', 'cancel_requested')
-              AND (job_type = 'audiobook.ingest'
-                   OR input_payload->>'source_revision_id' = %s)""",
-        (context.workspace_id, project_id, str(source_revision_id)),
-    ).fetchall()
+    active = PostgresJobRepository(connection).query_jobs(
+        context,
+        module="audiobook",
+        job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.render-chapter", "audiobook.assemble-chapter"),
+        input_fields=(("project_id", str(project_id)),),
+        statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+        limit=500,
+    )
+    active = [
+        job for job in active
+        if job["job_type"] == "audiobook.ingest"
+        or str((job["input_payload"] or {}).get("source_revision_id") or "") == str(source_revision_id)
+    ]
     if active:
-        job_types = {row[0] for row in active}
+        job_types = {job["job_type"] for job in active}
         if "audiobook.ingest" in job_types:
             result.blockers.append('Wait for quote extraction to finish, then go to "Span review" to review the quotes before clicking "Classify text".')
         elif "audiobook.analyze" in job_types:

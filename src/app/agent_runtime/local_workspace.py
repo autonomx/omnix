@@ -27,7 +27,17 @@ def validate_local_workspace_root(value: str) -> str:
         raise LocalWorkspaceSelectionError(
             f"local workspace is not a directory: {path}"
         )
-    return str(path)
+    # Agents change a selected folder in place, so it must be one the operator
+    # allows (WP-4.7).
+    from .request_policy import allowed_workspace_root
+
+    try:
+        return allowed_workspace_root(str(path))
+    except ValueError as exc:
+        raise LocalWorkspaceSelectionError(
+            f"local workspace {path} is outside the folders agents may change; "
+            "add it to OMNIX_AGENT_WORKSPACE_ROOTS"
+        ) from exc
 
 
 def local_workspace_repository_root(value: str) -> str | None:

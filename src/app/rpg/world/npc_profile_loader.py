@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -20,17 +20,6 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
-
-
-def _npc_file_slug(npc_id: str) -> str:
-    slug = _safe_str(npc_id).replace("npc:", "").strip()
-    out = []
-    for ch in slug:
-        if ch.isalnum():
-            out.append(ch.lower())
-        elif ch in {" ", "-", "_"}:
-            out.append("_")
-    return "".join(out).strip("_")
 
 
 def _validate_npc_profile(profile: Dict[str, Any], *, source_path: Path | None = None) -> Dict[str, Any]:
@@ -78,7 +67,7 @@ def _validate_npc_profile(profile: Dict[str, Any], *, source_path: Path | None =
     return normalized
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def load_all_file_npc_profiles() -> Dict[str, Dict[str, Any]]:
     profiles: Dict[str, Dict[str, Any]] = {}
     if not NPC_PROFILE_DIR.exists():
@@ -108,5 +97,3 @@ def get_file_npc_profile(npc_id: str) -> Dict[str, Any]:
     return {}
 
 
-def clear_npc_profile_cache() -> None:
-    load_all_file_npc_profiles.cache_clear()

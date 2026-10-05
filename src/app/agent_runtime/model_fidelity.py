@@ -1,6 +1,10 @@
 """Resolve the model/reasoning configuration that Pi actually receives."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
+from app.config.env import env_str, environment
+
 import os
 from typing import Any
 
@@ -12,9 +16,9 @@ _DISABLED = {"", "none", "off", "disabled"}
 
 def _provider_reasoning_effort(provider_id: str) -> str | None:
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        provider = shared.get_provider(str(provider_id or "").removeprefix("llm:"))
+        provider = get_provider(str(provider_id or "").removeprefix("llm:"))
         config = getattr(provider, "config", None)
         extra = getattr(config, "extra_params", None)
         if isinstance(extra, dict):
@@ -23,7 +27,8 @@ def _provider_reasoning_effort(provider_id: str) -> str | None:
                 return value
         value = str(getattr(provider, "reasoning_effort", "") or "").strip()
         return value or None
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("provider reasoning capability lookup", exc, level="DEBUG")
         return None
 
 
@@ -35,7 +40,7 @@ def resolve_model_ref(model: ModelRef) -> ModelRef:
     `none/off/disabled` is honored as an intentional worker override.
     """
     requested = str(model.reasoning_effort or "").strip()
-    operator = str(os.environ.get("OMNIX_AGENT_REASONING_EFFORT", "")).strip()
+    operator = str(environment().get("OMNIX_AGENT_REASONING_EFFORT", "")).strip()
     provider = _provider_reasoning_effort(model.provider_id)
 
     if operator:

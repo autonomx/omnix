@@ -1,11 +1,11 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 from datetime import datetime, timezone
 from typing import Any
 
-from requests import RequestException
+from httpx import HTTPError
 
 from app.trading.providers.errors import ProviderContractError, ProviderUnavailableError
 
@@ -34,7 +34,7 @@ class SecIssuerIdentityResolver:
     @staticmethod
     def _headers() -> dict[str, str]:
         return {
-            "User-Agent": os.environ.get(
+            "User-Agent": _env_str(
                 "OMNIX_SEC_USER_AGENT",
                 "OmnixTradingResearch/1.0 local-research contact=local@localhost",
             ),
@@ -47,7 +47,7 @@ class SecIssuerIdentityResolver:
             return self._mapping
         try:
             response = self.runtime.get(_SEC_TICKERS, headers=self._headers(), timeout=20)
-        except RequestException as exc:
+        except HTTPError as exc:
             raise ProviderUnavailableError(f"SEC issuer directory unavailable: {exc}") from exc
         try:
             payload = response.json()

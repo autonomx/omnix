@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { RpgAuthoringEntityCard } from '../../api/rpgWorldAuthoringClient';
+import type { RpgAuthoringEntityCard } from './api/rpgWorldAuthoringClient';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const characterClass: RpgAuthoringEntityCard = {
   id: 'class:ward_runner',
@@ -138,7 +139,7 @@ describe('RpgWorldEntityDetail', () => {
       },
     } as RpgAuthoringEntityCard;
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={createTestQueryClient()}>
         <RpgWorldEntityDetail
           entity={importedEntity}
           onClose={vi.fn()}

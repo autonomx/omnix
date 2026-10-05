@@ -4,9 +4,10 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
-from app.assistant_memory.models import MemoryRecord
+from app.memory_contracts import MemoryRecord
 from app.persistence.database import PostgresDatabase, default_database
 
 from .contracts import (
@@ -66,6 +67,11 @@ def _legacy_digest(space: MemorySpaceKey, record_id: str, revision: int) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def legacy_observation_id(space: MemorySpaceKey, record_id: str, revision: int) -> str:
+    """The observation id the importer gives one revision of a v1 record."""
+    return f"obs:legacy:{_legacy_digest(space, record_id, revision)[:40]}"
+
+
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
 
@@ -116,8 +122,10 @@ class LegacyMemoryV2Importer:
         *,
         principal_id: str,
         record: MemoryRecord,
+        include_inactive: bool = False,
     ) -> Observation | None:
-        if record.status != "active":
+        """Import one record revision; archived and superseded only with ``include_inactive``."""
+        if record.status != "active" and not include_inactive:
             return None
         space = self.space_for(principal_id, record)
         digest = _legacy_digest(space, record.id, record.revision)
@@ -139,7 +147,7 @@ class LegacyMemoryV2Importer:
                     trust_level=trust,
                 ),
                 idempotency_key=f"legacy-memory:{digest}",
-                observation_id=f"obs:legacy:{digest[:40]}",
+                observation_id=legacy_observation_id(space, record.id, record.revision),
                 payload=payload,
             )
         )
@@ -158,43 +166,90 @@ class LegacyMemoryV2Importer:
         return tuple(imported)
 
 
-def legacy_seed_projector(observations: tuple[Observation, ...]) -> tuple[GraphAssertion, ...]:
+_PROMPT_TRUST = {"user_approved", "system_trusted"}
+
+
+def _record_payload(observation: Observation) -> tuple[dict[str, Any], str] | None:
+    """The record an imported or curated observation holds, with its id prefix."""
+    if observation.event_type == "imported_legacy_memory":
+        value, prefix = observation.payload.get("legacy_record"), "legacy-seed"
+    elif observation.event_type == "curated_memory":
+        value, prefix = observation.payload.get("memory_record"), "curated"
+    else:
+        return None
+    return (value, prefix) if isinstance(value, dict) else None
+
+
+def curated_projector(observations: tuple[Observation, ...]) -> tuple[GraphAssertion, ...]:
+    """One assertion per record v1 would let reach a prompt; deterministic for replay.
+
+    Imported v1 records and curated records alike: only active, non-secret,
+    approved records are derived (the record-level rule of
+    ``app.memory_contracts.record_prompt_block_reason``); expiry becomes
+    ``valid_until`` instead of a clock check, so replay stays exact.
+    """
     assertions: list[GraphAssertion] = []
     for observation in observations:
-        if observation.event_type != "imported_legacy_memory":
+        found = _record_payload(observation)
+        if found is None:
             continue
-        legacy = observation.payload.get("legacy_record")
-        if not isinstance(legacy, dict):
-            continue
-        record_id = str(legacy.get("id", ""))
-        content = str(legacy.get("content", "")).strip()
-        kind = str(legacy.get("kind", "semantic_fact"))
+        record, prefix = found
+        record_id = str(record.get("id", ""))
+        content = str(record.get("content", "")).strip()
+        kind = str(record.get("kind", "semantic_fact"))
         if not record_id or not content:
             continue
-        revision = int(legacy.get("revision", 1))
-        digest = _legacy_digest(observation.space, record_id, revision)
+        if (
+            str(record.get("status", "active")) != "active"
+            or record.get("sensitivity") == "secret"
+            or str(record.get("trust_level", "user_approved")) not in _PROMPT_TRUST
+        ):
+            continue
+        revision = int(record.get("revision", 1))
+        digest = (
+            _legacy_digest(observation.space, record_id, revision)
+            if prefix == "legacy-seed"
+            else hashlib.sha256(
+                f"{observation.space.principal_id}\0{observation.space.owner_type}\0"
+                f"{observation.space.owner_id}\0{record_id}".encode("utf-8")
+            ).hexdigest()
+        )
         domain = _KIND_DOMAIN_MAP.get(kind, "fact")
+        # v1 stops serving a record at expires_at; the assertion ends there too.
+        expires_at = record.get("expires_at")
+        valid_until = (
+            max(_parse_timestamp(str(expires_at)), observation.occurred_at)
+            if expires_at
+            else None
+        )
         assertions.append(
             GraphAssertion(
-                assertion_id=f"legacy-seed:{digest[:48]}",
+                assertion_id=f"{prefix}:{digest[:48]}",
                 space=observation.space,
                 visibility_scopes=(observation.visibility_scope,),
                 subject=GraphEntityRef(
                     entity_id=observation.space.principal_id,
                     entity_type="profile",
                 ),
-                predicate=f"legacy_{kind}",
+                predicate=f"legacy_{kind}" if prefix == "legacy-seed" else f"memory_{kind}",
                 object=GraphValue(kind="literal", literal=content),
                 domain=domain,
                 assertion_type="seeded",
-                confidence=float(legacy.get("confidence", 1.0)),
+                confidence=float(record.get("confidence", 1.0)),
                 valid_from=observation.occurred_at,
+                valid_until=valid_until,
                 evidence_observation_ids=(observation.observation_id,),
-                derivation_version="memory-v2-legacy-seed@1",
+                derivation_version=(
+                    "memory-v2-legacy-seed@1" if prefix == "legacy-seed" else "memory-v2-curated@1"
+                ),
                 status="active",
             )
         )
     return tuple(sorted(assertions, key=lambda item: item.assertion_id))
+
+
+# The importer's original name; imported records are one case of curated records.
+legacy_seed_projector = curated_projector
 
 
 def compare_shadow_retrieval(
@@ -240,6 +295,79 @@ def compare_shadow_retrieval(
         precision=precision,
         mean_best_similarity=mean_best,
         similarity_threshold=similarity_threshold,
+        recall_threshold=required_recall,
+        precision_threshold=required_precision,
+        passed=recall >= required_recall and precision >= required_precision,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ShadowProbe:
+    """One v1 memory asked of v2 by its own words.
+
+    ``allowed_observation_ids`` is the evidence v2 may answer with: the active
+    imported v1 records visible under the probe's scopes.
+    """
+
+    target_observation_id: str
+    target_content: str
+    allowed_observation_ids: frozenset[str]
+    result: RetrievalResult
+
+
+def compare_shadow_probes(
+    *,
+    space: MemorySpaceKey,
+    probes: list[ShadowProbe],
+    observation_watermark: int,
+    graph_revision: int,
+    required_recall: float = 0.95,
+    required_precision: float = 1.0,
+) -> ShadowRetrievalQualityReport:
+    """Score v2 against v1 by evidence identity rather than text similarity.
+
+    Recall is the share of probes whose own record v2 returned. Precision is
+    the share of all returned candidates backed only by allowed evidence, so a
+    revoked, forgotten, expired or out-of-scope memory counts against it.
+    ``similarity_threshold`` is recorded as 1.0 (exact evidence match);
+    ``mean_best_similarity`` is 1.0 for a found probe, else the best word
+    overlap with what v2 returned.
+    """
+    if not 0.0 <= required_recall <= 1.0:
+        raise ValueError("required_recall must be between 0 and 1")
+    if not 0.0 <= required_precision <= 1.0:
+        raise ValueError("required_precision must be between 0 and 1")
+    found = 0
+    candidates = 0
+    backed = 0
+    best_scores: list[float] = []
+    for probe in probes:
+        returned = probe.result.candidates
+        hit = any(probe.target_observation_id in item.evidence_observation_ids for item in returned)
+        found += hit
+        best_scores.append(
+            1.0 if hit else max((_jaccard(probe.target_content, item.content) for item in returned), default=0.0)
+        )
+        candidates += len(returned)
+        backed += sum(
+            bool(item.evidence_observation_ids)
+            and set(item.evidence_observation_ids) <= probe.allowed_observation_ids
+            for item in returned
+        )
+    recall = found / len(probes) if probes else 1.0
+    precision = backed / candidates if candidates else 1.0
+    return ShadowRetrievalQualityReport(
+        evaluation_id=f"shadow-eval:{uuid4()}",
+        space=space,
+        observation_watermark=observation_watermark,
+        graph_revision=graph_revision,
+        v1_result_count=len(probes),
+        v2_result_count=candidates,
+        matched_v1_count=found,
+        recall=recall,
+        precision=precision,
+        mean_best_similarity=sum(best_scores) / len(best_scores) if best_scores else 1.0,
+        similarity_threshold=1.0,
         recall_threshold=required_recall,
         precision_threshold=required_precision,
         passed=recall >= required_recall and precision >= required_precision,

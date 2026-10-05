@@ -49,28 +49,6 @@ def campaign_creature_definition(
     return None
 
 
-def campaign_location_definition(
-    simulation_state: Mapping[str, Any],
-    location_ref: str,
-) -> dict[str, Any] | None:
-    locations = _mapping(
-        campaign_mechanics_catalog(simulation_state).get("locations")
-    )
-    wanted = _text(location_ref)
-    wanted_slug = _slug(wanted.removeprefix("location:"))
-    for definition_id, raw in locations.items():
-        definition = _mapping(raw)
-        names = {
-            _text(definition_id).casefold(),
-            _text(definition.get("definition_id")).casefold(),
-            _text(definition.get("name")).casefold(),
-            _slug(_text(definition.get("name"))),
-        }
-        if wanted.casefold() in names or wanted_slug in names:
-            return definition
-    return None
-
-
 def instantiate_campaign_creature(
     simulation_state: Mapping[str, Any],
     creature_ref: str,

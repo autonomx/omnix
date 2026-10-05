@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.assistant_memory.scope import resolve_session_memory_scope
+from app.assistant_memory.contracts import resolve_session_memory_scope
 from app.assistant_memory_v2.contracts import (
     MemorySpaceKey,
     ObservationProvenance,
@@ -20,7 +20,8 @@ from app.assistant_memory_v2.contracts import (
 )
 from app.assistant_memory_v2.observation_store import ObservationAppendRequest
 from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
-from app.chat import default_chat_store
+from app.chat.contracts import default_chat_store
+from app.runtime.tenant_context import current_tenant
 
 from .models import DesktopObservation
 from .observation import screen_prompt_injection_observed
@@ -70,8 +71,9 @@ class DesktopCompanionMemoryBridge:
         if authority.epoch.authority != "v2":
             return DesktopMemoryBridgeOutcome("skipped", "memory_v2_not_authoritative")
         context = resolve_session_memory_scope(session)
+        # Memory v2 spaces belong to the tenant workspace (as Chat reads them).
         space = MemorySpaceKey(
-            principal_id=context.profile_id,
+            principal_id=current_tenant().workspace_id,
             owner_type=context.owner_type,
             owner_id=context.owner_id,
         )

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loadStoryReadSettings, saveStoryReadSettings, type StoryReadSettings } from './storyReadSettings';
+import { loadStoryReadSettings, saveStoryReadSettings, type StoryReadSettings } from '../settings';
 
 const presets = ['Dramatic audiobook', 'Calm bedtime', 'Documentary', 'Fast draft', 'Character-forward'];
 

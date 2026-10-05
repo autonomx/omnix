@@ -2,7 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
-import { ImageModelControl, type ImageModelStatusPayload } from './ImageModelSelectorControl';
+import { ImageModelControl, type ImageModelStatusView } from './ImageModelSelectorControl';
 import {
   buildImageGenerateInput,
   imageRequestDefaultValues,
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function renderControl(
-  status: ImageModelStatusPayload,
+  status: ImageModelStatusView,
   overrides: Partial<Parameters<typeof ImageModelControl>[0]> = {},
 ) {
   const props = {
@@ -42,7 +42,7 @@ it('selects another image model without downloading or loading it', () => {
   const onSelect = vi.fn();
   const onDownload = vi.fn();
   const onLoad = vi.fn();
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: true,
     service: 'image',
     enabled: true,
@@ -84,15 +84,10 @@ it('selects another image model without downloading or loading it', () => {
 it('shows Download Model and starts the service automatically before downloading', async () => {
   const onRefresh = vi.fn();
   const onDownload = vi.fn();
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => ({ ok: true, state: 'unloaded' }),
-  } as Response);
+  const fetchMock = vi.fn(async () => Response.json({ ok: true, state: 'unloaded' }));
   vi.stubGlobal('fetch', fetchMock);
 
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: false,
     service: 'image',
     enabled: true,
@@ -122,7 +117,7 @@ it('shows Download Model and starts the service automatically before downloading
 
 it('passes a masked one-time token when downloading a gated model', () => {
   const onDownload = vi.fn();
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: false,
     service: 'image',
     enabled: true,
@@ -149,15 +144,10 @@ it('passes a masked one-time token when downloading a gated model', () => {
 it('shows Load Model and starts the service automatically for downloaded files', async () => {
   const onRefresh = vi.fn();
   const onLoad = vi.fn();
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => ({ ok: true, state: 'unloaded' }),
-  } as Response);
+  const fetchMock = vi.fn(async () => Response.json({ ok: true, state: 'unloaded' }));
   vi.stubGlobal('fetch', fetchMock);
 
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: false,
     service: 'image',
     enabled: true,
@@ -194,7 +184,7 @@ it('does not poll model status while no download is active', async () => {
   vi.useFakeTimers();
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: true,
     service: 'image',
     enabled: true,
@@ -213,7 +203,7 @@ it('does not poll model status while no download is active', async () => {
 });
 
 it('shows byte and percentage progress while a model downloads', () => {
-  const status: ImageModelStatusPayload = {
+  const status: ImageModelStatusView = {
     ok: false,
     service: 'image',
     enabled: true,

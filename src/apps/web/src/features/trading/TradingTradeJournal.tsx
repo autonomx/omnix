@@ -161,7 +161,7 @@ export function TradingTradeJournal({
         </label>
       ) : null}
 
-      <div className="trade-journal-list" aria-label="Journal trades">
+      <div role="group" className="trade-journal-list" aria-label="Journal trades">
         {visibleEntries.length ? visibleEntries.map((entry) => (
           <button
             key={entry.trade_id}

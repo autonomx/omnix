@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { syncAssistantPreferences } from './assistantPreferencesBridge';
+import { AgentRunLimitsSection } from './AgentRunLimitsSection';
 import { ResearchSettingsSection } from './ResearchSettingsSection';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
@@ -46,6 +47,7 @@ export function AssistantChatSettings() {
         </div>
       </SettingsSection>
       <ResearchSettingsSection />
+      <AgentRunLimitsSection />
       <SettingsSection title="Desktop Companion (experimental)" scope="module">
         <p>Continuous observation is opt-in. Shadow mode records redacted decisions without generating or delivering comments.</p>
         <div className="settings-form-grid">

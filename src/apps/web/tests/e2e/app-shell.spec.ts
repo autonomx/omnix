@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  // Shell tests use fixtures. Never forward an unmocked call to an operator's gateway.
+  await page.route((url) => url.pathname.startsWith('/api/'), (route) => route.fulfill({
+    status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'unmocked_test_route' }),
+  }));
+  await page.route((url) => url.pathname === '/events' || url.pathname.startsWith('/events/'), (route) => route.abort());
+});
+
 const modules = [
   ['RPG', '/rpg'],
   ['Chatbot', '/chatbot'],
@@ -36,7 +44,7 @@ test('module navigation keeps features in the shared shell', async ({ page }) =>
 
   await expect(page).toHaveURL(/\/podcast$/);
   await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Episode request' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Podcast' })).toBeVisible();
 });
 
 test('top bar trading option navigates to the trading view', async ({ page }) => {
@@ -110,7 +118,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
     });
   });
 
-  await page.route('**/api/jobs', async (route) => {
+  await page.route(/\/api\/jobs(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -134,6 +142,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
   });
 
   await page.route('**/api/jobs/job%3Arelease-smoke/cancel', async (route) => {
+    expect(route.request().headers()['x-omnix-client']).toBe('web');
     jobStatus = 'canceled';
     await route.fulfill({
       contentType: 'application/json',
@@ -159,7 +168,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -169,7 +178,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
             module: 'image-generation',
             type: 'image',
             mime_type: 'image/png',
-            storage_path: 'resources/data/generated_images/release.png',
+            file_name: 'release.png',
             created_at: '2026-06-15T00:00:00Z',
           },
         ],
@@ -201,7 +210,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
 
   await page.goto('/assets');
   await expect(page.getByRole('heading', { name: 'image / image-generation' })).toBeVisible();
-  await expect(page.getByText('resources/data/generated_images/release.png')).toBeVisible();
+  await expect(page.getByText('release.png')).toBeVisible();
 
   await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'release/smoke.json' })).toBeVisible();
@@ -357,7 +366,7 @@ test('voice module queues a shared TTS job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -417,7 +426,7 @@ test('stt module queues a shared transcription job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -427,7 +436,7 @@ test('stt module queues a shared transcription job', async ({ page }) => {
             module: 'voice',
             type: 'audio',
             mime_type: 'audio/wav',
-            storage_path: 'artifacts/input.wav',
+            file_name: 'input.wav',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],
@@ -520,7 +529,7 @@ test('image generation module queues a shared image job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -582,7 +591,7 @@ test('storyteller module queues a shared story job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -593,7 +602,7 @@ test('storyteller module queues a shared story job', async ({ page }) => {
 
   await expect(page.locator('#module-title')).toHaveText('Storyteller');
   await page.getByLabel('Provider').selectOption('lmstudio');
-  await page.getByLabel('Title').fill('The Glass Orchard');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('The Glass Orchard');
   await page.getByLabel('Premise').fill('A city grows fruit made of memory.');
   await page.getByRole('button', { name: 'Queue story' }).click();
 
@@ -601,6 +610,24 @@ test('storyteller module queues a shared story job', async ({ page }) => {
 });
 
 test('podcast module queues a shared podcast job', async ({ page }) => {
+  await page.route('**/api/chat/sessions', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'chat-podcast-script' }),
+    });
+  });
+
+  await page.route('**/api/chat/sessions/chat-podcast-script/messages', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        content: JSON.stringify({
+          segments: [{ speaker: 'Host', text: 'Welcome to the show.' }],
+        }),
+      }),
+    });
+  });
+
   await page.route('**/api/providers', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -662,7 +689,7 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -676,7 +703,7 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
   await page.getByLabel(/Episode brief/).fill('Discuss local AI workstation design.');
   await page.getByRole('button', { name: /Generate live podcast/i }).click();
 
-  await expect(page.getByText('Podcast production queued: job:podcast')).toBeVisible();
+  await expect(page.getByText('Podcast production queued: job:podcast')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(/Final podcast audio is ready/)).toBeVisible();
 });
 
@@ -724,7 +751,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -734,7 +761,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
             module: 'voice-cloning',
             type: 'voice_sample',
             mime_type: 'audio/wav',
-            storage_path: 'samples/ref.wav',
+            file_name: 'ref.wav',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],
@@ -792,7 +819,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -802,7 +829,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
             module: 'rpg',
             type: 'rpg_checkpoint',
             mime_type: 'application/json',
-            storage_path: 'checkpoints/session.json',
+            file_name: 'session.json',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],

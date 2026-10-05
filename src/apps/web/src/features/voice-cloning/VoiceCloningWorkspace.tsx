@@ -5,10 +5,12 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { voiceStudioDefaults } from '../settings/moduleDefaults';
-import { loadSettingsProfile } from '../settings/settingsApi';
-import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { voiceStudioDefaults } from '../settings';
+import { loadSettingsProfile } from '../settings';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { buildProfileInput, cloneFormDefaults, type CloneFormValues } from './cloneFormDefaults';
+import { jobProgressPercent } from '../../api/jobProgress';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -89,6 +91,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
       </div>
 
       <p className="workspace-summary">{module.summary}</p>
+      <GatewayErrorNotice label="Voice cloning data" errors={[providersQuery.error, jobsQuery.error, assetsQuery.error]} />
 
       <div className="feature-layout">
         <section className="feature-panel">
@@ -118,7 +121,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
                 <option value="">No sample selected</option>
                 {sampleAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
-                    {asset.storage_path}
+                    {asset.file_name}
                   </option>
                 ))}
               </select>
@@ -175,7 +178,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
                     <strong>{job.type}</strong>
                     <OmnixStatusPill>{job.status}</OmnixStatusPill>
                   </Group>
-                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
+                  <Progress value={jobProgressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
                 </article>
               ))}
@@ -192,7 +195,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
           {profileAssets.length ? (
             <div className="platform-grid">
               {profileAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.file_name} />
               ))}
             </div>
           ) : (
@@ -210,10 +213,3 @@ function voiceCloneCapableProviders(payload: ProviderFacadePayload | undefined) 
   return payload?.providers.filter((provider) => provider.capabilities.includes('voice_cloning') || provider.capabilities.includes('tts')) ?? [];
 }
 
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}

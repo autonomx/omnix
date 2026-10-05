@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_grid_contracts import GridMapDefinition
@@ -74,7 +74,7 @@ def observe_campaign_map(
     expected_knowledge_revision: int | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         snapshot, definition = _load_map(
             work,
@@ -155,7 +155,7 @@ def load_campaign_observer_projection(
     observer_actor_id: str,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         snapshot, definition = _load_map(work, context, map_instance_id)
         row = work.observers.get_knowledge(

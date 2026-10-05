@@ -2,9 +2,27 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, Field
+
+from app.runtime.ports import Port, implementations
+
+
+class ProviderCatalog(Protocol):
+    """A feature's provider list for the facade (ADR-0016)."""
+
+    family: Literal["image", "rpg_visual"]
+
+    def list_providers(self) -> list[dict[str, Any]]: ...
+
+
+PROVIDER_CATALOGS: Port[ProviderCatalog] = Port("providers.catalogs", ProviderCatalog, "many")
+
+
+def _catalog_providers(family: str) -> list[dict[str, Any]]:
+    return [info for catalog in implementations(PROVIDER_CATALOGS) if catalog.family == family
+            for info in catalog.list_providers()]
 
 
 ProviderFamily = Literal["llm", "tts", "stt", "image", "rpg_visual"]
@@ -254,7 +272,7 @@ class ProviderFacade:
     def _live_chatgpt_codex_models() -> list[ModelSummary]:
         """Expose the authenticated Codex catalog, falling back inside the provider."""
         try:
-            from app.shared import get_provider
+            from app.providers.service import get_provider
 
             provider = get_provider("chatgpt_codex")
             if provider is None:
@@ -308,21 +326,17 @@ class ProviderFacade:
     def _list_image(self) -> list[dict[str, Any]]:
         if self._image_lister:
             return self._image_lister()
-        from app.image.providers.registry import list_image_providers
-
-        return list_image_providers()
+        return _catalog_providers("image")
 
     def _list_visual(self) -> list[dict[str, Any]]:
         if self._visual_lister:
             return self._visual_lister()
-        from app.rpg.visual.providers.registry import list_visual_provider_options
-
-        return list_visual_provider_options()
+        return _catalog_providers("rpg_visual")
 
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_loader:
             return self._settings_loader()
-        from app.shared import load_settings
+        from app.settings.access import load_settings
 
         return load_settings()
 

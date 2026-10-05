@@ -1,7 +1,7 @@
 """Materialize approved Campaign Genesis into PostgreSQL and playable session state."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from typing import Any, Mapping
 
 from app.rpg.session.genesis.contract import CampaignGenesisContract
@@ -152,7 +152,7 @@ def persist_campaign_genesis(
     """
 
     required = (
-        os.environ.get("OMNIX_REQUIRE_POSTGRESQL_GENESIS", "").strip().casefold()
+        _env_str("OMNIX_REQUIRE_POSTGRESQL_GENESIS", "").strip().casefold()
         in {"1", "true", "yes", "on"}
         if required is None
         else required
@@ -165,15 +165,15 @@ def persist_campaign_genesis(
         raise ValueError("campaign genesis persistence requires a session id")
     certification = require_world_forge_commit_ready(world_forge)
     try:
-        from app.persistence.identity_service import bootstrap_local_tenant
-        from app.persistence.rpg_campaign_bible_repository import (
+        from app.security.tenant_context import current_tenant
+        from app.rpg.persistence.rpg_campaign_bible_repository import (
             CampaignBibleRevisionConflict,
             campaign_bible_hash,
         )
-        from app.persistence.rpg_repository import canonical_json, state_hash
+        from app.rpg.persistence.rpg_repository import canonical_json, state_hash
         from app.persistence.unit_of_work import unit_of_work
 
-        context = bootstrap_local_tenant(database)
+        context = current_tenant()
         with unit_of_work(database) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             if campaign is None:
@@ -333,11 +333,11 @@ def persist_campaign_expansion(
     certification = require_world_forge_commit_ready(world_forge)
     bible = dict(world_forge.compilation.document)
 
-    from app.persistence.identity_service import bootstrap_local_tenant
-    from app.persistence.rpg_repository import canonical_json
+    from app.security.tenant_context import current_tenant
+    from app.rpg.persistence.rpg_repository import canonical_json
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
         if campaign is None:

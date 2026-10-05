@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ def legacy_test_persistence(monkeypatch):
     from app.persistence.runtime import reset_persistence_mode_cache
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
     reset_persistence_mode_cache()
     yield
     reset_persistence_mode_cache()
@@ -23,7 +26,8 @@ def test_character_data_export_and_confirmed_archive(tmp_path: Path, monkeypatch
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_ASSISTANT_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite3"))
-    client = TestClient(create_gateway_app())
+    app = create_gateway_app()
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     created = client.post(
         "/api/characters",
         json={
@@ -36,7 +40,10 @@ def test_character_data_export_and_confirmed_archive(tmp_path: Path, monkeypatch
     assert created.status_code == 201
 
     exported = client.get("/api/characters/maya/data")
-    assert exported.status_code == 200
+    assert exported.status_code == 200, (
+        exported.text,
+        [route.path for route in effective_routes(app) if "characters" in (route.path or "")],
+    )
     assert exported.json()["character"]["id"] == "maya"
     assert exported.json()["versions"][0]["version"] == 1
 

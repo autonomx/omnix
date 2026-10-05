@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from .models import CoherenceState, EntityCoherenceView
+from .models import CoherenceState
 
 
 class CoherenceQueryAPI:
@@ -66,21 +66,6 @@ class CoherenceQueryAPI:
             return None
         return self.state.continuity_anchors[-1].to_dict()
 
-    def get_entity_view(self, entity_id: str) -> dict:
-        facts = self.get_known_facts(entity_id).get("facts", [])
-        commitments = self.get_actor_commitments(entity_id)
-        consequences = [
-            c.to_dict()
-            for c in self.state.recent_changes
-            if entity_id in c.entity_ids
-        ]
-        return EntityCoherenceView(
-            entity_id=entity_id,
-            facts=facts,
-            commitments=commitments,
-            recent_consequences=consequences,
-        ).to_dict()
-
     # ------------------------------------------------------------------
     # Phase 8.2 — Encounter seeding helpers
     # ------------------------------------------------------------------
@@ -91,29 +76,6 @@ class CoherenceQueryAPI:
         if not anchor:
             return []
         return list(anchor.present_actors)
-
-    def get_location_hazards(self) -> list[dict]:
-        """Return hazard facts for the current scene location."""
-        hazards: list[dict] = []
-        for key, fact in self.state.scene_facts.items():
-            if "hazard" in key.lower() or "danger" in key.lower():
-                hazards.append(fact.to_dict())
-        return hazards
-
-    def get_relevant_points_of_interest(self) -> list[dict]:
-        """Return points of interest in the current scene."""
-        pois: list[dict] = []
-        for key, fact in self.state.scene_facts.items():
-            if "poi" in key.lower() or "point_of_interest" in key.lower() or "clue" in key.lower():
-                pois.append(fact.to_dict())
-        return pois
-
-    def get_immediate_threats(self) -> list[dict]:
-        """Return active tensions / threats from the latest anchor."""
-        anchor = self.state.continuity_anchors[-1] if self.state.continuity_anchors else None
-        if not anchor:
-            return []
-        return [{"text": t} for t in anchor.active_tensions]
 
     # ------------------------------------------------------------------
     # Phase 8.3 — World simulation seeding helpers
@@ -131,16 +93,6 @@ class CoherenceQueryAPI:
         if scene_loc and scene_loc not in locations:
             locations.append(scene_loc)
         return sorted(set(locations))
-
-    def get_location_facts(self, location_id: str | None = None) -> dict:
-        """Return facts associated with a location."""
-        facts: list[dict] = []
-        for key, fact in self.state.stable_world_facts.items():
-            if location_id and fact.subject == location_id:
-                facts.append(fact.to_dict())
-            elif location_id and location_id in key:
-                facts.append(fact.to_dict())
-        return {"location_id": location_id, "facts": facts}
 
     def get_active_scene_location(self) -> str | None:
         """Return the current scene location ID, if any."""

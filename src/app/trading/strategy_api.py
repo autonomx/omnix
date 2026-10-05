@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
@@ -25,7 +23,7 @@ from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .research.fact_repository import default_fact_repository
 from .research.outcome_dataset import persist_backtest_trade_outcomes
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import (
     GapPullbackConfig,
     GapPullbackResult,
@@ -191,91 +189,70 @@ RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
 
-@dataclass
-class _RangeBacktestProgressState:
-    run_id: str
-    strategy_id: str
-    status: Literal["queued", "running", "completed", "failed"]
-    completed_sessions: int
-    total_sessions: int
-    current_session: date | None = None
-    error: str | None = None
-    result: StrategyRangeBacktestResult | None = None
+def _range_backtest_job_store(factory: Callable[[], object] | None):
+    if factory is None:
+        from app.jobs.store import default_job_store
+
+        store = default_job_store()
+    else:
+        store = factory()
+    if store is None:
+        raise RuntimeError("Trading range backtests require the durable job store")
+    return store
 
 
-_RANGE_BACKTEST_PROGRESS: dict[str, _RangeBacktestProgressState] = {}
-_RANGE_BACKTEST_PROGRESS_LOCK = threading.Lock()
-
-
-def _register_range_backtest(run_id: str, strategy_id: str, total_sessions: int) -> None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        _RANGE_BACKTEST_PROGRESS[run_id] = _RangeBacktestProgressState(
-            run_id=run_id,
-            strategy_id=strategy_id,
-            status="queued",
-            completed_sessions=0,
-            total_sessions=total_sessions,
+def _range_backtest_progress_response(job, strategy_id: str) -> StrategyRangeBacktestProgressResponse | None:
+    payload = job.input_payload or {}
+    if (
+        job.module != "trading"
+        or job.type != "trading.strategy.range-backtest"
+        or payload.get("strategy_id") != strategy_id
+    ):
+        return None
+    raw_status = getattr(job.status, "value", job.status)
+    status = str(raw_status)
+    if status in {"queued", "retrying", "waiting"}:
+        response_status = "queued"
+    elif status in {"leased", "running"}:
+        response_status = "running"
+    elif status == "completed":
+        response_status = "completed"
+    else:
+        response_status = "failed"
+    progress = job.progress
+    completed = max(0, int(progress.current or 0))
+    total = max(1, int(payload.get("total_sessions") or progress.total or 1))
+    percent = 100 if response_status == "completed" else min(99, int(completed * 100 / total))
+    current_session = None
+    try:
+        if progress.message:
+            current_session = date.fromisoformat(str(progress.message))
+    except ValueError:
+        current_session = None
+    result = None
+    if response_status == "completed":
+        result_ref = next(
+            (
+                item
+                for item in reversed(job.output_refs or [])
+                if item.get("kind") == "strategy_range_backtest_result"
+            ),
+            None,
         )
-
-
-def _update_range_backtest_progress(run_id: str, completed_sessions: int, total_sessions: int, session_date: date) -> None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
-        if state is None:
-            return
-        state.status = "running"
-        state.completed_sessions = completed_sessions
-        state.total_sessions = total_sessions
-        state.current_session = session_date
-
-
-def _mark_range_backtest_running(run_id: str) -> None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
-        if state is not None:
-            state.status = "running"
-
-
-def _mark_range_backtest_completed(run_id: str, result: StrategyRangeBacktestResult) -> None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
-        if state is not None:
-            state.status = "completed"
-            state.completed_sessions = state.total_sessions
-            state.current_session = None
-            state.result = result
-
-
-def _mark_range_backtest_failed(run_id: str, error: str) -> None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
-        if state is not None:
-            state.status = "failed"
-            state.current_session = None
-            state.error = error
-
-
-def _range_backtest_progress_response(run_id: str) -> StrategyRangeBacktestProgressResponse | None:
-    with _RANGE_BACKTEST_PROGRESS_LOCK:
-        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
-        if state is None:
-            return None
-        percent = 100 if state.status == "completed" else (
-            min(99, int(state.completed_sessions * 100 / state.total_sessions))
-            if state.total_sessions
-            else 0
-        )
-        return StrategyRangeBacktestProgressResponse(
-            run_id=state.run_id,
-            strategy_id=state.strategy_id,
-            status=state.status,
-            completed_sessions=state.completed_sessions,
-            total_sessions=state.total_sessions,
-            percent=percent,
-            current_session=state.current_session,
-            error=state.error,
-            result=state.result,
-        )
+        if result_ref is not None and isinstance(result_ref.get("result"), dict):
+            result = StrategyRangeBacktestResult.model_validate(result_ref["result"])
+    error = getattr(job, "error", None)
+    return StrategyRangeBacktestProgressResponse(
+        run_id=job.id,
+        strategy_id=strategy_id,
+        status=response_status,
+        completed_sessions=completed,
+        total_sessions=total,
+        percent=percent,
+        current_session=current_session,
+        error=getattr(error, "message", None),
+        result=result,
+    )
 
 
 def _validate_catalyst_provenance(snapshot: GapperUniverseSnapshot, catalyst_repository: TradingCatalystRepository) -> None:
@@ -505,6 +482,8 @@ async def _execute_range_backtest(
 def create_trading_strategy_router(
     repository_factory: RepositoryFactory = default_strategy_repository,
     catalyst_repository_factory: CatalystRepositoryFactory = default_catalyst_repository,
+    *,
+    job_store_factory: Callable[[], object] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/strategies", tags=["trading-strategies"])
 
@@ -854,11 +833,10 @@ def create_trading_strategy_router(
         response_model=StrategyRangeBacktestAcceptedResponse,
         status_code=202,
     )
-    async def backtest_strategy_range(
+    def backtest_strategy_range(
         strategy_id: str,
         request: StrategyRangeBacktestRequest,
     ) -> StrategyRangeBacktestAcceptedResponse:
-        run_id = _backtest_run_id("range", strategy_id, request.start_date, request.end_date)
         try:
             total_sessions = len(_trading_dates(request.start_date, request.end_date))
         except ValueError as exc:
@@ -869,42 +847,20 @@ def create_trading_strategy_router(
                 detail=f"backtest_session_limit_exceeded:{total_sessions}>{request.max_sessions}",
             )
 
-        _register_range_backtest(run_id, strategy_id, total_sessions)
+        from .strategy_range_backtest_jobs import create_strategy_range_backtest_request
 
-        async def execute() -> None:
-            _mark_range_backtest_running(run_id)
-            try:
-                result = await _execute_range_backtest(
+        try:
+            job = _range_backtest_job_store(job_store_factory).create_job(
+                create_strategy_range_backtest_request(
                     strategy_id,
                     request,
-                    run_id,
-                    repository_factory,
-                    catalyst_repository_factory,
-                    lambda completed, total, session_date: _update_range_backtest_progress(
-                        run_id,
-                        completed,
-                        total,
-                        session_date,
-                    ),
+                    total_sessions=total_sessions,
                 )
-            except Exception as exc:
-                trade_log(
-                    "backtest",
-                    "range_backtest_failed",
-                    run_id=run_id,
-                    strategy_id=strategy_id,
-                    start_date=request.start_date,
-                    end_date=request.end_date,
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                )
-                _mark_range_backtest_failed(run_id, str(exc))
-                return
-            _mark_range_backtest_completed(run_id, result)
-
-        asyncio.create_task(execute())
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="range_backtest_worker_unavailable") from exc
         return StrategyRangeBacktestAcceptedResponse(
-            run_id=run_id,
+            run_id=job.id,
             total_sessions=total_sessions,
         )
 
@@ -912,12 +868,16 @@ def create_trading_strategy_router(
         "/{strategy_id}/backtest/range/{run_id}",
         response_model=StrategyRangeBacktestProgressResponse,
     )
-    async def get_backtest_range_progress(
+    def get_backtest_range_progress(
         strategy_id: str,
         run_id: str,
     ) -> StrategyRangeBacktestProgressResponse:
-        progress = _range_backtest_progress_response(run_id)
-        if progress is None or progress.strategy_id != strategy_id:
+        try:
+            job = _range_backtest_job_store(job_store_factory).get_job(run_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="range_backtest_worker_unavailable") from exc
+        progress = _range_backtest_progress_response(job, strategy_id) if job is not None else None
+        if progress is None:
             raise HTTPException(status_code=404, detail="backtest_run_not_found")
         return progress
 

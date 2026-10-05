@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -7,6 +9,8 @@ try:
     from app.rpg.world.npc_biography_registry import get_npc_biography
 except Exception:
     get_npc_biography = None
+
+logger = logging.getLogger(__name__)
 
 MAX_SOCIAL_MEMORIES = 100
 
@@ -112,7 +116,7 @@ def _is_known_real_npc(owner_id: str, owner_name: str = "") -> bool:
                     if "no detailed biography" not in _safe_str(bio.get("short_bio")).lower():
                         return True
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_is_known_real_npc", exc_info=True)
 
     # Fallback allowlist for pre-biography projects.
     return owner_id in {
@@ -285,15 +289,6 @@ def _social_summary(resolved_result: Dict[str, Any], owner_name: str) -> str:
     if outcome:
         return f"The player had a {outcome} {action_type} interaction."
     return "The player had a social interaction."
-
-
-def apply_social_effects(
-    simulation_state: Dict[str, Any],
-    resolved_result: Dict[str, Any],
-    *,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    return apply_general_social_effects(simulation_state, resolved_result, tick=tick)
 
 
 def apply_general_social_effects(

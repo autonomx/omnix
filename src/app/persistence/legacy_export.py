@@ -13,6 +13,10 @@ from typing import Any
 
 from .cutover import LEGACY_BUNDLE_FORMAT, bundle_hash
 
+# The top-level settings keys that held LLM provider configuration in legacy
+# installs; a historical fact about the bundle format, not the live catalog.
+_LEGACY_LLM_SETTINGS_KEYS = frozenset({"lmstudio", "openrouter", "cerebras", "llamacpp"})
+
 
 def _json(value: Any, default: Any) -> Any:
     if value in (None, ""):
@@ -37,7 +41,11 @@ def _rows(path: Path | None, table: str) -> list[dict[str, Any]]:
         ).fetchone()
         if exists is None:
             return []
-        return [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"').fetchall()]
+        cursor = connection.execute(f'SELECT * FROM "{table}"')
+        rows: list[dict[str, Any]] = []
+        while batch := cursor.fetchmany(1000):
+            rows.extend(dict(row) for row in batch)
+        return rows
     finally:
         connection.close()
 
@@ -536,7 +544,7 @@ def _settings_and_providers(
         raw_config = payload.get(provider_id)
         if not isinstance(raw_config, dict):
             continue
-        if provider_id in {"lmstudio", "openrouter", "cerebras", "llamacpp"}:
+        if provider_id in _LEGACY_LLM_SETTINGS_KEYS:
             provider_type = "llm"
         elif provider_id == str(payload.get("audio_provider_stt") or ""):
             provider_type = "stt"

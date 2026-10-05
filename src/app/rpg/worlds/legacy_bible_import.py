@@ -5,7 +5,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .service import (
@@ -217,7 +217,7 @@ def import_campaign_bible_as_world(
     default_world_id, default_scenario_id = legacy_import_ids(campaign_id)
     target_world_id = world_id or default_world_id
     target_scenario_id = scenario_id or default_scenario_id
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
         if campaign is None:

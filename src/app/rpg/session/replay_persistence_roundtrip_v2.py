@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Callable, Dict, List
+from pathlib import Path
+from typing import Any, Callable
 
 from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.session.replay_checkpoint import build_session_checkpoint, compare_session_checkpoints
 from app.rpg.session.replay_turn_sequence import validate_replay_turn_sequence
 
 SOURCE = "deterministic_phase7_save_load_replay_roundtrip_gate"
-SaveSession = Callable[[Dict[str, Any]], Dict[str, Any]]
-LoadSession = Callable[[str], Dict[str, Any] | None]
+SaveSession = Callable[[dict[str, Any]], dict[str, Any]]
+LoadSession = Callable[[str], dict[str, Any] | None]
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -24,32 +25,32 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _session_id(session: Dict[str, Any]) -> str:
+def _session_id(session: dict[str, Any]) -> str:
     manifest = _safe_dict(session.get("manifest"))
     return _safe_str(manifest.get("session_id") or manifest.get("id") or "session:unknown")
 
 
-def _default_save(session: Dict[str, Any]) -> Dict[str, Any]:
+def _default_save(session: dict[str, Any]) -> dict[str, Any]:
     from app.rpg.session.durable_store import save_session_to_disk
 
     return save_session_to_disk(session, compact=True)
 
 
-def _default_load(session_id: str) -> Dict[str, Any] | None:
+def _default_load(session_id: str) -> dict[str, Any] | None:
     from app.rpg.session.durable_store import load_session_from_disk
 
     return load_session_from_disk(session_id)
 
 
-def _checkpoint(session: Dict[str, Any], label: str) -> Dict[str, Any]:
+def _checkpoint(session: dict[str, Any], label: str) -> dict[str, Any]:
     return build_session_checkpoint(session, label=label, turn_index=0)
 
 
-def _compare(label: str, before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+def _compare(label: str, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     return {"label": label, **compare_session_checkpoints(before, after), "source": SOURCE}
 
 
-def _package_session(session: Dict[str, Any]) -> Dict[str, Any]:
+def _package_session(session: dict[str, Any]) -> dict[str, Any]:
     result = package_to_session(session_to_package(session))
     if result.get("ok") is not True:
         return {}
@@ -57,13 +58,13 @@ def _package_session(session: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_save_load_replay_persistence_roundtrip(
-    session: Dict[str, Any],
-    commands: List[Dict[str, Any]],
+    session: dict[str, Any],
+    commands: list[dict[str, Any]],
     *,
     save_session: SaveSession | None = None,
     load_session: LoadSession | None = None,
     label: str = "phase7.3",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     session = deepcopy(_safe_dict(session))
     save_fn = save_session or _default_save
     load_fn = load_session or _default_load
@@ -125,7 +126,7 @@ def run_save_load_replay_persistence_roundtrip(
     }
 
 
-def build_save_load_replay_roundtrip_contract(result: Dict[str, Any]) -> Dict[str, Any]:
+def build_save_load_replay_roundtrip_contract(result: dict[str, Any]) -> dict[str, Any]:
     result = _safe_dict(result)
     return {
         "source": SOURCE,
@@ -143,7 +144,7 @@ def build_save_load_replay_roundtrip_contract(result: Dict[str, Any]) -> Dict[st
     }
 
 
-def assert_phase7_save_load_replay_roundtrip_ready() -> Dict[str, Any]:
+def assert_phase7_save_load_replay_roundtrip_ready() -> dict[str, Any]:
     import tempfile
 
     from app.rpg.locations.discovery import discover_location, discover_route, unblock_route
@@ -171,13 +172,22 @@ def assert_phase7_save_load_replay_roundtrip_ready() -> Dict[str, Any]:
         {"type": "travel", "command_text": "go to the old mill", "roll_encounter": False},
     ]
 
-    original_dir = durable_store._SESSION_DIR
     with tempfile.TemporaryDirectory() as tmpdir:
-        durable_store._SESSION_DIR = durable_store.Path(tmpdir)
-        try:
-            result = run_save_load_replay_persistence_roundtrip(session, commands, label="phase7.3")
-        finally:
-            durable_store._SESSION_DIR = original_dir
+        session_dir = Path(tmpdir)
+        result = run_save_load_replay_persistence_roundtrip(
+            session,
+            commands,
+            save_session=lambda value: durable_store.save_session_to_disk(
+                value,
+                compact=True,
+                session_dir=session_dir,
+            ),
+            load_session=lambda session_id: durable_store.load_session_from_disk(
+                session_id,
+                session_dir=session_dir,
+            ),
+            label="phase7.3",
+        )
 
     contract = build_save_load_replay_roundtrip_contract(result)
     blockers = list(_safe_list(result.get("blockers")))

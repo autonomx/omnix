@@ -155,33 +155,6 @@ def add_rumor_seed(
     return deepcopy(seed)
 
 
-def get_active_rumor_seeds(
-    simulation_state: Dict[str, Any],
-    *,
-    location_id: str = "",
-    current_tick: int = 0,
-    settings: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
-    """Return active (non-expired, mentions > 0) rumor seeds.
-
-    Optionally filtered by location_id.
-    """
-    state = ensure_rumor_propagation_state(simulation_state)
-    seeds = _safe_list(state.get("rumor_seeds"))
-    result = []
-    for seed in seeds:
-        seed = _safe_dict(seed)
-        expires = _safe_int(seed.get("expires_tick"), 0)
-        if expires and current_tick >= expires:
-            continue
-        if _safe_int(seed.get("mentions_remaining"), 0) <= 0:
-            continue
-        if location_id and _safe_str(seed.get("location_id")) != location_id:
-            continue
-        result.append(deepcopy(seed))
-    return result
-
-
 def expire_stale_signals(
     simulation_state: Dict[str, Any],
     *,
@@ -209,46 +182,3 @@ def expire_stale_signals(
     }
 
 
-def consume_rumor_seed_mention(
-    simulation_state: Dict[str, Any],
-    seed_id: str,
-) -> bool:
-    """Decrement mentions_remaining for a seed; remove it when exhausted.
-
-    Returns True if a mention was consumed, False if the seed was not found or
-    already exhausted.
-    """
-    state = ensure_rumor_propagation_state(simulation_state)
-    seeds = _safe_list(state.get("rumor_seeds"))
-    for seed in seeds:
-        if _safe_str(_safe_dict(seed).get("seed_id")) == _safe_str(seed_id):
-            remaining = _safe_int(_safe_dict(seed).get("mentions_remaining"), 0)
-            if remaining <= 0:
-                return False
-            seed["mentions_remaining"] = remaining - 1
-            state["rumor_seeds"] = seeds
-            return True
-    return False
-
-
-def get_conversation_rumor_context(
-    simulation_state: Dict[str, Any],
-    *,
-    location_id: str,
-    current_tick: int = 0,
-    settings: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    """Return active rumor context for a location (inspector / debug use)."""
-    active_seeds = get_active_rumor_seeds(
-        simulation_state,
-        location_id=location_id,
-        current_tick=current_tick,
-        settings=settings,
-    )
-    return {
-        "location_id": location_id,
-        "active_seed_count": len(active_seeds),
-        "active_seeds": active_seeds,
-        "current_tick": current_tick,
-        "source": "deterministic_rumor_propagation_runtime",
-    }

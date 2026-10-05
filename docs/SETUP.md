@@ -2,20 +2,55 @@
 
 ## Gateway roles and deployment inputs
 
-The normal development launcher can run `python scripts/run_omnix_gateway.py --api-replicas 2`, supervising one worker and two API processes. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative `OMNIX_DATABASE_URL` and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.
+The normal development launcher can run `python scripts/run_omnix_gateway.py --api-replicas 2`, supervising one gateway worker, two API processes, and one standalone job worker. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative `OMNIX_DATABASE_URL` and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.
 
 | Input | Meaning |
 | --- | --- |
-| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker` or `api` | Worker owns singleton background execution; API serves requests under durable chat ownership. Default is worker. |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker`, `api`, `scheduler`, or `job-worker` | Gateway worker owns the singleton scheduler/recovery runtime; scheduler runs independently locked tasks; API serves requests; job-worker runs lease-fenced resource pools and feature job loops without singleton scheduler ownership. Default is worker. |
 | `OMNIX_TTS_URL`, `OMNIX_STT_URL`, `OMNIX_IMAGE_URL` | HTTP(S) compute service endpoints without credentials/query/fragment. APIs use configured TTS remotely. |
 | `OMNIX_GATEWAY_TTS_HTTP=1` | Worker also uses HTTP TTS; requires a TTS endpoint. |
+| `OMNIX_TTS_MODEL_OWNER=gateway` or `tts-server` | Selects the sole process allowed to load local TTS. With `tts-server`, set `OMNIX_TTS_URL` for every gateway and job worker. |
+| `OMNIX_DEVICE_ID` | Stable device label shared by processes using the same physical device; defaults to `<hostname>:gpu0`. |
+| `OMNIX_DEVICE_{TTS,STT,IMAGE,LLM_LOCAL}_CAPACITY` and `..._REALTIME_RESERVED` | Per-device/model permit capacity and realtime reservation. Defaults to capacity 1 and reservation 0; configure identical values on all processes sharing the device. |
+| `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | Lease lifetime before a dead holder can be reclaimed; default 120 seconds. |
+| `OMNIX_LIVE_MAX_CALLS` | Maximum concurrent live-call WebSockets per gateway/API replica; defaults to the configured TTS permit capacity. Readiness reports the maximum, active and available slots. |
 | `OMNIX_GATEWAY_REQUIRED_WORKERS` | Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness. |
 | `OMNIX_GATEWAY_API_ORIGINS` | Up to eight distinct API origins, for diagnostics and local routing. |
 | `OMNIX_SOFTWARE_REVISION` | Build identifier in runtime diagnostics and durable node registration. |
+| `OMNIX_SERVICE_TOKEN` | Shared URL-safe service credential with at least 32 random bytes; the local launcher provisions protected storage when unset. Required on all non-health model-service routes and internal worker requests. |
+| `OMNIX_MAX_UPLOAD_BYTES` | Positive integer; streamed model-service request budget, default 52428800 bytes including multipart overhead. |
+| `VITE_ASSISTANT_STT_URL=/api/stt?authority=auto` | Browser speech routes through its gateway origin. The gateway sends the private credential to `OMNIX_STT_URL`. |
 
-Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
+Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. `OMNIX_SCHEDULER_THREAD_WORKERS` and `OMNIX_SCHEDULER_PROCESS_WORKERS` bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
+
+The local launcher starts one job worker with the default resource pools. Run `PYTHONPATH=src python -m app.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1` to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on `127.0.0.1:8090` by default.
+
+GPU/model calls use PostgreSQL device permits, not per-process semaphores. The gateway `/api/diagnostics` response lists configured capacity, active holders, queued priorities and the local TTS model owner. The first configured capacity for a device/model class is persisted; drain users before changing it and update `omnix_device_capacity` to the new value before restarting all processes. A live model-owner lease prevents a second process from loading local TTS; use `OMNIX_TTS_MODEL_OWNER` to choose the owner explicitly.
 
 This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.
+
+### Port map
+
+Every listener binds to loopback unless configured otherwise (see the listener policy in [OPERATIONS.md](OPERATIONS.md)).
+
+| Port | Service | Notes |
+| --- | --- | --- |
+| 5173 / 4173 | Vite dev server / preview | Development only |
+| 8000 | Gateway worker (control and background owner) | `scripts/run_omnix_gateway.py --port` |
+| 8001-8008 | Gateway API replicas | `--api-replicas N` takes the next N ports |
+| 8080 | Nginx ingress / `omnix-web` container | 8443 for the HTTPS variant |
+| 8090 | Job worker health and metrics | `OMNIX_JOB_WORKER_METRICS_PORT` |
+| 8101 | Standalone OpenAI-compatible server | [OPENAI_COMPATIBILITY.md](OPENAI_COMPATIBILITY.md) |
+| 8180 | llama.cpp `llama-server` | Was 8080, which the ingress uses |
+| 1234 | LM Studio | External application |
+| 5055 | Windows launcher dashboard | |
+| 5101 | TTS service | `OMNIX_TTS_PORT` |
+| 5201 | STT service | `OMNIX_STT_PORT` |
+| 5301 | Image service | |
+| 5432 | PostgreSQL | `OMNIX_POSTGRES_PORT` in Compose |
+| 55432 | Disposable test PostgreSQL | Compose `agent-tests` profile |
+| 8642 | Hermes sidecar | Optional |
+| 3000 / 9090 / 16686 / 4318 | Grafana / Prometheus / Jaeger / OTLP collector | Compose `observability` profile |
 
 ## 1. Prerequisites
 
@@ -155,14 +190,31 @@ python -m app.persistence --help
 Create/activate your environment, then install the base dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
 ```
 
-The requirements include FastAPI/Uvicorn/Pydantic, PostgreSQL drivers, audio/document-processing dependencies, optional image-model libraries, local Kasa support, and the Python test stack.
+Use Python 3.11. `requirements.txt` installs the gateway runtime from its
+hash-locked dependency set. Install test tools from `requirements/dev.lock.txt`;
+the image, TTS, and STT runtimes have separate locks and isolated environments.
+
+`setup.bat` / `setup.sh` also download Memory v2's embedding model
+(`intfloat/multilingual-e5-small`, about 490 MB, pinned and SHA-256 checked)
+into `resources/models/multilingual-e5-small`. Rerunning setup skips files that
+already match their checksum. If the download fails, setup warns and continues,
+and memory retrieval matches words only until the model is present. On a host
+installed by hand, run it once after the dependency install:
+
+```bash
+PYTHONPATH=src python -m app.assistant_memory_v2.embeddings download
+PYTHONPATH=src python -m app.assistant_memory_v2.embeddings status
+```
 
 ### GPU/PyTorch note
 
-`requirements.txt` intentionally does not pin/install the repository's CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through `scripts/requirements/bootstrap_omnix_flux_env.ps1`.
+`requirements.txt` intentionally does not install the repository's CUDA
+PyTorch build. The image, TTS, and STT locks target CUDA 12.4 and keep each
+Torch runtime isolated. The Windows image environment can be installed with
+`scripts/requirements/bootstrap_omnix_flux_env.ps1`.
 
 For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:
 
@@ -340,28 +392,53 @@ hermes model
 
 Only set `HERMES_ENABLED=true` after the sidecar is reachable. See [HERMES_SIDECAR_SETUP.md](HERMES_SIDECAR_SETUP.md) for the runtime boundary and skip-install options.
 
-## 11. Windows launcher dashboard
+## 11. Launcher dashboard
 
-`start_all.bat` is the repository's integrated Windows operator launcher. It:
+`python -m app.launcher start` starts Omnix on every platform; `start_all.bat`
+and `start_all.sh` are thin wrappers around it. The launcher:
 
-- checks Docker and the `omnix-postgres` container;
-- loads the protected PostgreSQL credential;
-- verifies persistence connectivity;
-- configures the launcher/gateway and worker URLs;
-- configures live-agent/Hermes, Kasa, image-service, and diagnostic defaults;
-- starts the launcher dashboard on port `5055`;
-- asks the launcher to start the gateway and waits for gateway health;
-- can open the application/launcher pages in a browser.
+- refuses to start while another launcher answers on port `5055`;
+- checks that the TTS and STT runtimes run Python 3.11 (a missing one is a
+  warning: that voice service does not start);
+- sets the service URLs and the live-agent/Hermes, Kasa, image-service and
+  diagnostic defaults (a variable you set first wins);
+- starts the existing PostgreSQL container named by `--postgres-container` and
+  waits until it is healthy (the Windows wrapper passes `omnix-postgres`, or
+  `OMNIX_POSTGRES_CONTAINER`);
+- verifies database connectivity, then applies pending migrations;
+- serves the launcher dashboard on port `5055`, asks it to start the gateway,
+  and starts the web app once the gateway is healthy;
+- opens the dashboard in a browser when `OMNIX_LAUNCHER_OPEN_BROWSER=1`.
 
-Run:
+On Windows, `start_all.bat` first loads the protected PostgreSQL credential
+(section 3) and then calls the launcher:
 
 ```powershell
-.\start_all.bat
+.\start_all.bat                                        # start Omnix
+.\start_all.bat --postgres-only                        # only start the PostgreSQL container
+.\start_all.bat --database-credential-injected-check   # check without starting services
 ```
 
-### Important portability note
+### Interpreters and POSIX
 
-The current batch file contains workstation-specific absolute Python/Conda paths for the `rpg-flux`, `rpg-tts`, and `rpg-stt` environments. Treat it as an operator configuration template unless your workstation matches those paths. Update or replace those paths for your machine rather than assuming the batch file is portable unchanged.
+Neither launcher contains workstation paths. Each interpreter resolves from its
+environment variable (`RPG_FLUX_PYTHON`, `RPG_TTS_PYTHON`, `RPG_STT_PYTHON`),
+then `resources/config/launcher.toml` (copy `launcher.example.toml`; the local
+file is ignored by git), then the `rpg-flux`, `rpg-tts` and `rpg-stt` Conda
+environments under `CONDA_ROOT` (default `~/miniconda3`).
+
+On Linux and macOS, `./start_all.sh` runs the same `python -m app.launcher start`
+(add `--postgres-container <name>` to have it start a Docker container). A
+service whose interpreter or tool (for example `npm`) is missing shows as
+failed in the dashboard with the reason in its log.
+
+`setup.sh` installs the Linux GPU locks (`requirements/*.linux.lock.txt`).
+Both setup scripts start `docker-compose.postgres.yml` only when Docker is
+available and nothing already listens on `OMNIX_POSTGRES_PORT` (5432), so an
+existing database is never touched.
+
+For local HTTPS, `python src/generate_certs.py --host <name> --ip <address> --out <dir>`
+writes a self-signed `cert.pem` and `key.pem` for the names given.
 
 Useful launcher-related environment values include:
 
@@ -375,13 +452,12 @@ OMNIX_BLOB_ROOT
 ```
 
 `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` defaults to 420 seconds. The launcher
-uses it for gateway readiness checks, and the Windows startup watchdog retries
-the web service after gateway health succeeds. Increase it for unusually slow
+waits that long for the gateway to become healthy and the web app to answer. Increase it for unusually slow
 first boots that import or warm large local runtime dependencies.
 
 ## 12. Optional Kasa/Tapo smart-home integration
 
-The Windows launcher defines local defaults for TP-Link Kasa discovery/control:
+The launcher defines local defaults for TP-Link Kasa discovery/control:
 
 ```text
 OMNIX_KASA_ENABLED=1
@@ -541,3 +617,24 @@ Omnix is designed local-first, but the same rules apply when services are split 
 - keep destructive tool actions behind explicit approval and scope controls.
 
 For the deeper component model, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Listener defaults
+
+Omnix-managed listeners bind to `127.0.0.1`. `OMNIX_BIND_HOST` selects the address;
+any non-loopback address also requires `OMNIX_ALLOW_LAN=true`. The launcher
+passes the validated address to gateway, web, STT, TTS and image services.
+Legacy `OMNIX_TTS_HOST` and `OMNIX_GATEWAY_HOST` listener settings are replaced
+by `OMNIX_BIND_HOST`.
+
+For an explicitly exposed Vite listener, set `OMNIX_BIND_HOST=0.0.0.0` and
+`OMNIX_ALLOW_LAN=true` before running `npm --prefix src/apps/web run dev:lan`
+or `npm --prefix src/apps/web run preview:lan`. Add the browser's exact origin
+to `OMNIX_ALLOWED_ORIGINS` and hostname to `OMNIX_ALLOWED_HOSTS`. Allowed CORS
+origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards
+are rejected. Configure an authenticated ingress before exposing a deployment.
+
+The gateway, launcher and model services validate `Host` for every request.
+`OMNIX_ALLOWED_HOSTS` extends the default localhost and loopback allow-list.
+Every POST, PUT, PATCH and DELETE requires `X-Omnix-Client` (for example `web`,
+`gateway` or `cli`); browser mutation and WebSocket origins must be explicitly
+allowed. The web client and launcher UI add the header automatically.

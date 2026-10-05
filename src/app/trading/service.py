@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from collections.abc import AsyncIterator
 from datetime import date, datetime, time, timedelta, timezone
-from pathlib import Path
 from threading import Lock
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
@@ -34,8 +33,10 @@ from .providers.alpaca_iex_status import default_alpaca_iex_status_cache
 from .providers.bar_semantics import interval_duration
 from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
-from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
+from .streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
+from app.trading.us_equity_calendar import EASTERN
+from app.trading.us_equity_calendar import regular_close_time
 
 
 def _coalesced_gap_ranges(starts: set[datetime], step):
@@ -66,16 +67,18 @@ class TradingMarketDataService:
         yahoo_evidence_store: YahooEvidenceStore | None = None,
         ibkr_evidence_store: IbkrEvidenceStore | None = None,
     ) -> None:
-        self.cache = cache or TradingMarketDataCache(
-            max_entries=256,
-            cache_dir=Path("resources/cache/trading"),
-        )
+        self.cache = cache or TradingMarketDataCache(max_entries=256)
         self.registry = registry or ProviderRegistry(cache=self.cache)
         if provider is not None:
             self.registry._providers["binance"] = provider
         self.provider = self.registry.provider("binance")
         self.subscriptions = subscriptions or SharedSubscriptionManager()
         self.stream = stream or BinanceWebSocketStream()
+        self.bar_streams = SharedBarStreamHub(
+            self.subscriptions,
+            open_upstream=self.stream.messages,
+            recover_gap=self._recover_stream_gap,
+        )
         self.yahoo_evidence_store = yahoo_evidence_store or default_yahoo_evidence_store()
         self.ibkr_evidence_store = ibkr_evidence_store or default_ibkr_evidence_store()
 
@@ -206,12 +209,12 @@ class TradingMarketDataService:
         yahoo_repair_attempted = False
         yahoo_repaired_count = 0
         if yahoo_intraday:
-            et = ZoneInfo("America/New_York")
+            et = EASTERN
             session_open = datetime.combine(
                 session_date, time(9, 30), tzinfo=et
             ).astimezone(timezone.utc)
             session_close = datetime.combine(
-                session_date, time(16, 0), tzinfo=et
+                session_date, regular_close_time(session_date), tzinfo=et
             ).astimezone(timezone.utc)
             bounded_end = min(observed, session_close)
             if bounded_end > session_open:
@@ -776,13 +779,46 @@ class TradingMarketDataService:
             raise ValueError(
                 f"binding does not support Omnix live streaming: {binding.binding_id}"
             )
-        async for update in self.stream.messages(
+        async with self.bar_streams.listen(
             provider_symbol=binding.provider_symbol,
             binding_id=binding.binding_id,
             instrument_id=instrument_id,
             interval=interval,
-        ):
-            yield update
+        ) as updates:
+            while True:
+                yield await updates.get()
+
+    async def _recover_stream_gap(
+        self,
+        binding_id: str,
+        instrument_id: str,
+        interval: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[StreamingBarUpdate]:
+        """Finalized bars that closed while the upstream was down, from REST."""
+        missing = int((end - start) / interval_duration(interval)) + 2
+        response = await asyncio.to_thread(self.bars, instrument_id, interval, min(1_000, missing), binding_id)
+        return [
+            StreamingBarUpdate(
+                binding_id=binding_id,
+                instrument_id=instrument_id,
+                interval=interval,
+                start_time=bar.start_time,
+                end_time=bar.end_time,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                volume=bar.volume,
+                is_final=True,
+                provider_event_id=bar.provider_event_id,
+                provider_sequence=bar.provider_sequence,
+                ingestion_revision=bar.ingestion_revision,
+            )
+            for bar in response.bars
+            if bar.is_final and start <= bar.start_time < end
+        ]
 
     def provider_descriptors(self) -> list[dict[str, object]]:
         return self.registry.descriptors()
@@ -817,6 +853,7 @@ class TradingMarketDataService:
             "yahoo_hardening": self.yahoo_evidence_store.diagnostics(),
             "streams": self.subscriptions.status(),
             "upstream_subscription_count": self.subscriptions.upstream_subscription_count,
+            "shared_upstream_streams": self.bar_streams.upstream_count(),
         }
 
 

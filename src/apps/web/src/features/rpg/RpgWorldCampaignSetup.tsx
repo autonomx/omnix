@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { omnixApiClient } from '../../api/client';
+import { rpgSessionClient } from './api/rpgSessionClient';
 import {
   rpgWorldLibraryClient,
   type RpgScenarioRevision,
   type RpgWorldRelease,
-} from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldLibraryClient';
 import './RpgWorldCampaignSetup.css';
 
 interface RpgWorldCampaignSetupProps {
@@ -182,7 +182,7 @@ export function RpgWorldCampaignSetup({
   };
 
   const continueCampaign = useMutation({
-    mutationFn: (campaignId: string) => omnixApiClient.continueRpgSession(campaignId),
+    mutationFn: (campaignId: string) => rpgSessionClient.continueRpgSession(campaignId),
     onSuccess: (result) => {
       if (!result.ok || !result.session_id) {
         throw new Error(result.error ?? 'Campaign could not be continued.');

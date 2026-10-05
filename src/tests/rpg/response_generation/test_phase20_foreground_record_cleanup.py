@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
-from app.gateway.rpg_foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
-from app.gateway.rpg_turn_job_mirror import (
+from app.rpg.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
+from app.rpg.jobs.turn_job_mirror import (
     _apply_turn_with_job_mirror,
-    _submission_lock_count,
 )
-from app.jobs.rpg_last10_report_debug import build_turn_debug_payload
-from app.jobs.store import InMemoryJobStore
+from app.rpg.jobs.last10_report_debug import build_turn_debug_payload
 from app.rpg.presentation.turn_response import build_turn_response_v2
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 _FORBIDDEN_GRAPH_KEYS = {
     "session",
@@ -130,58 +127,3 @@ def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -
     assert projected["state"]["changed_domains"] == ["conversation", "inventory", "currency"]
     assert projected["result"]["stateful"] is True
     assert "Bran" in projected["visible_response"]["plain_text"]
-
-
-def test_submission_lock_entries_are_released_after_concurrent_replay(
-    monkeypatch: Any,
-    tmp_path: Path,
-) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
-    calls = 0
-    calls_guard = Lock()
-
-    def apply_turn(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
-        nonlocal calls
-        with calls_guard:
-            calls += 1
-        return _turn_result(7)
-
-    def submit(_: int) -> dict[str, Any]:
-        return _apply_turn_with_job_mirror(
-            apply_turn,
-            "session:record",
-            "I ask Bran about the road.",
-            submission_id="submit:shared-lock",
-        )
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(submit, range(24)))
-
-    assert calls == 1
-    assert {result["interaction_id"] for result in results} == {"interaction:7"}
-    assert _submission_lock_count() == 0
-
-
-def test_unique_submission_locks_do_not_accumulate(monkeypatch: Any, tmp_path: Path) -> None:
-    store = InMemoryJobStore(tmp_path / "jobs")
-    monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
-
-    for index in range(20):
-        _apply_turn_with_job_mirror(
-            lambda *_args, current=index, **_kwargs: _turn_result(current + 1),
-            "session:record",
-            f"Unique command {index}",
-            submission_id=f"submit:unique:{index}",
-        )
-
-    assert len(store.list_jobs()) == 20
-    assert _submission_lock_count() == 0
-
-
-def test_source_no_longer_writes_synthetic_or_raw_turn_graphs() -> None:
-    source = Path("src/app/gateway/rpg_turn_job_mirror.py").read_text(encoding="utf-8")
-
-    assert "synthetic_job_mirror" not in source
-    assert "raw_turn_result" not in source
-    assert '"turn_response": turn_record' in source

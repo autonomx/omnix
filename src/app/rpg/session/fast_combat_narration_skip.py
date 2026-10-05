@@ -1,28 +1,24 @@
 from __future__ import annotations
 
+import logging
+
 import contextvars
-import importlib.abc
-import importlib.machinery
-import sys
-from types import ModuleType
-from typing import Any, Dict
+from contextlib import contextmanager
+from typing import Any, Iterator
+
+logger = logging.getLogger(__name__)
 
 _FAST_DIRECT_SOURCES = {
     "ce211_fast_direct_runtime_budget_v1",
     "ce212_fast_direct_runtime_budget_v1",
 }
-_RUNTIME_MODULE = "app.rpg.session.runtime"
-_POST_IMPORT_FINDER_ATTR = "_ce212_fast_combat_post_import_finder_installed"
-_PATCH_ATTR = "_ce212_fast_combat_narration_skip_installed"
-_ORIGINAL_ATTR = "_ce212_original_apply_combat_narration_if_needed"
-_ORIGINAL_APPLY_TURN_ATTR = "_ce212_original_apply_turn_for_fast_combat_skip"
 _FAST_COMBAT_SKIP_CONTEXT: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "ce212_fast_combat_skip_context",
     default=False,
 )
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
@@ -48,6 +44,7 @@ def _first_present_int(*values: Any) -> int | None:
             try:
                 return int(value.strip())
             except Exception:
+                logger.debug("suppressed error in %s", "_first_present_int", exc_info=True)
                 continue
     return None
 
@@ -80,7 +77,7 @@ def _contains_fast_direct_marker(value: Any, *, depth: int = 0) -> bool:
     return False
 
 
-def _is_combat_action(action: Dict[str, Any]) -> bool:
+def _is_combat_action(action: dict[str, Any]) -> bool:
     action_type = _safe_str(action.get("action_type") or action.get("type")).strip().lower()
     if action_type == "combat":
         return True
@@ -99,7 +96,7 @@ def _action_requests_fast_combat_skip(action: Any, performance_override: Any = N
     return _safe_bool(performance.get("fast_turn_mode")) and _is_combat_action(action_dict)
 
 
-def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
+def _should_skip(payload: dict[str, Any], combat_state: dict[str, Any]) -> bool:
     if _FAST_COMBAT_SKIP_CONTEXT.get(False):
         return True
     payload = _safe_dict(payload)
@@ -115,7 +112,7 @@ def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
     return _contains_fast_direct_marker(payload) or _contains_fast_direct_marker(combat_state)
 
 
-def _combat_delta_contract(combat_result: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+def _combat_delta_contract(combat_result: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
     delta = {
@@ -162,7 +159,7 @@ def _combat_delta_contract(combat_result: Dict[str, Any], combat_state: Dict[str
     return {key: value for key, value in delta.items() if value not in (None, "")}
 
 
-def _fallback_summary(combat_result: Dict[str, Any], combat_state: Dict[str, Any] | None = None) -> str:
+def _fallback_summary(combat_result: dict[str, Any], combat_state: dict[str, Any] | None = None) -> str:
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
     delta = _combat_delta_contract(combat_result, combat_state)
@@ -186,8 +183,9 @@ def _fallback_summary(combat_result: Dict[str, Any], combat_state: Dict[str, Any
     return "Result: combat_action_resolved"
 
 
-def _build_contract(runtime_module: Any, combat_result: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
-    builder = getattr(runtime_module, "build_combat_narration_contract", None)
+def _build_contract(builder: Any, combat_result: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
+    if not callable(builder):
+        builder = getattr(builder, "build_combat_narration_contract", None)
     if callable(builder):
         try:
             return _safe_dict(builder(combat_result=combat_result, combat_state=combat_state))
@@ -196,7 +194,7 @@ def _build_contract(runtime_module: Any, combat_result: Dict[str, Any], combat_s
     return {}
 
 
-def _deterministic_payload(narration: str, combat_delta: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _deterministic_payload(narration: str, combat_delta: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "source": "deterministic_combat_fast_summary",
         "narration": narration,
@@ -211,12 +209,12 @@ def _stale_or_empty_fast_combat_text(value: Any) -> bool:
 
 
 def _apply_fast_skip(
-    runtime_module: Any,
-    payload: Dict[str, Any],
+    contract_builder: Any,
+    payload: dict[str, Any],
     *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+) -> dict[str, Any]:
     payload = _safe_dict(payload)
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
@@ -231,7 +229,7 @@ def _apply_fast_skip(
     payload["llm_called"] = False
     payload["llm_purpose"] = "deterministic_combat_fast_summary"
     payload["combat_narration_error"] = ""
-    payload["combat_narration_contract"] = _build_contract(runtime_module, combat_result, combat_state)
+    payload["combat_narration_contract"] = _build_contract(contract_builder, combat_result, combat_state)
     payload["combat_narration_validation"] = {
         "ok": False,
         "warnings": ["combat_narration_skipped_for_fast_mode"],
@@ -263,11 +261,11 @@ def _apply_fast_skip(
 
 def _with_fast_combat_flags(
     args: tuple[Any, ...],
-    kwargs: Dict[str, Any],
+    kwargs: dict[str, Any],
     *,
     action: Any,
     performance_override: Any,
-) -> tuple[tuple[Any, ...], Dict[str, Any]]:
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
     patched_kwargs = dict(kwargs)
     patched_performance = _safe_dict(performance_override)
     patched_performance["skip_sync_combat_narration"] = True
@@ -292,116 +290,42 @@ def _with_fast_combat_flags(
     return args, patched_kwargs
 
 
-def _patch_runtime_module(runtime_module: ModuleType) -> bool:
-    if getattr(runtime_module, _PATCH_ATTR, False):
-        return False
-
-    original = getattr(runtime_module, "_apply_combat_narration_if_needed", None)
-    original_apply_turn = getattr(runtime_module, "apply_turn", None)
-    if not callable(original):
-        return False
-
-    def _wrapped_apply_combat_narration_if_needed(
-        payload: Dict[str, Any],
-        *,
-        combat_result: Dict[str, Any],
-        combat_state: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        if _should_skip(_safe_dict(payload), _safe_dict(combat_state)):
-            return _apply_fast_skip(
-                runtime_module,
-                payload,
-                combat_result=combat_result,
-                combat_state=combat_state,
-            )
-        return original(payload, combat_result=combat_result, combat_state=combat_state)
-
-    setattr(runtime_module, _ORIGINAL_ATTR, original)
-    setattr(runtime_module, "_apply_combat_narration_if_needed", _wrapped_apply_combat_narration_if_needed)
-
-    if callable(original_apply_turn):
-
-        def _wrapped_apply_turn(*args: Any, **kwargs: Any) -> Any:
-            action = kwargs.get("action")
-            if action is None and len(args) >= 3:
-                action = args[2]
-            performance_override = kwargs.get("performance_override")
-            should_skip = _action_requests_fast_combat_skip(action, performance_override)
-            if not should_skip:
-                return original_apply_turn(*args, **kwargs)
-            patched_args, patched_kwargs = _with_fast_combat_flags(
-                args,
-                kwargs,
-                action=action,
-                performance_override=performance_override,
-            )
-            token = _FAST_COMBAT_SKIP_CONTEXT.set(True)
-            try:
-                return original_apply_turn(*patched_args, **patched_kwargs)
-            finally:
-                _FAST_COMBAT_SKIP_CONTEXT.reset(token)
-
-        setattr(runtime_module, _ORIGINAL_APPLY_TURN_ATTR, original_apply_turn)
-        setattr(runtime_module, "apply_turn", _wrapped_apply_turn)
-
-    setattr(runtime_module, _PATCH_ATTR, True)
-    return True
-
-
-class _RuntimePostImportLoader(importlib.abc.Loader):
-    def __init__(self, wrapped_loader: importlib.abc.Loader):
-        self._wrapped_loader = wrapped_loader
-
-    def create_module(self, spec):  # type: ignore[no-untyped-def]
-        create_module = getattr(self._wrapped_loader, "create_module", None)
-        if callable(create_module):
-            return create_module(spec)
+def apply_fast_combat_narration_skip(
+    payload: dict[str, Any],
+    *,
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+    contract_builder: Any,
+) -> dict[str, Any] | None:
+    """Return a deterministic payload when fast combat skips provider narration."""
+    if not _should_skip(_safe_dict(payload), _safe_dict(combat_state)):
         return None
-
-    def exec_module(self, module):  # type: ignore[no-untyped-def]
-        self._wrapped_loader.exec_module(module)  # type: ignore[attr-defined]
-        if module.__name__ == _RUNTIME_MODULE:
-            _patch_runtime_module(module)
-
-
-class _RuntimePostImportFinder(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):  # type: ignore[no-untyped-def]
-        if fullname != _RUNTIME_MODULE:
-            return None
-        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
-        if spec is None or spec.loader is None or isinstance(spec.loader, _RuntimePostImportLoader):
-            return spec
-        spec.loader = _RuntimePostImportLoader(spec.loader)
-        return spec
+    return _apply_fast_skip(
+        contract_builder,
+        payload,
+        combat_result=combat_result,
+        combat_state=combat_state,
+    )
 
 
-def _install_post_import_finder() -> bool:
-    if getattr(sys, _POST_IMPORT_FINDER_ATTR, False):
-        return False
-    sys.meta_path.insert(0, _RuntimePostImportFinder())
-    setattr(sys, _POST_IMPORT_FINDER_ATTR, True)
-    return True
+@contextmanager
+def fast_combat_narration_scope(
+    action: Any,
+    performance_override: Any,
+) -> Iterator[tuple[Any, Any]]:
+    """Bind fast-direct combat metadata for one explicitly composed turn call."""
+    if not _action_requests_fast_combat_skip(action, performance_override):
+        yield action, performance_override
+        return
 
-
-def install_fast_combat_narration_skip() -> bool:
-    """Install a narrow runtime hook that skips blocking combat LLM narration in fast-direct mode."""
-    runtime_module = sys.modules.get(_RUNTIME_MODULE)
-    if isinstance(runtime_module, ModuleType) and _patch_runtime_module(runtime_module):
-        return True
-    return _install_post_import_finder()
-
-
-# Keep a direct callable for tests and explicit reinstallation.
-def force_install_fast_combat_narration_skip_for_tests() -> bool:
-    runtime_module = sys.modules.get(_RUNTIME_MODULE)
-    if isinstance(runtime_module, ModuleType):
-        original = getattr(runtime_module, _ORIGINAL_ATTR, None)
-        if callable(original):
-            setattr(runtime_module, "_apply_combat_narration_if_needed", original)
-        original_apply_turn = getattr(runtime_module, _ORIGINAL_APPLY_TURN_ATTR, None)
-        if callable(original_apply_turn):
-            setattr(runtime_module, "apply_turn", original_apply_turn)
-        if hasattr(runtime_module, _PATCH_ATTR):
-            setattr(runtime_module, _PATCH_ATTR, False)
-        return _patch_runtime_module(runtime_module)
-    return install_fast_combat_narration_skip()
+    _, patched_kwargs = _with_fast_combat_flags(
+        (),
+        {"action": action},
+        action=action,
+        performance_override=performance_override,
+    )
+    token = _FAST_COMBAT_SKIP_CONTEXT.set(True)
+    try:
+        yield patched_kwargs.get("action", action), patched_kwargs["performance_override"]
+    finally:
+        _FAST_COMBAT_SKIP_CONTEXT.reset(token)

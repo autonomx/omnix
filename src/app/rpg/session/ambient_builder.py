@@ -5,7 +5,8 @@ All logic is deterministic and bounded.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.runtime.clock import utc_now
+
 from typing import Any, Dict, List
 
 from app.rpg.social.conversation_presentation import build_conversation_payload
@@ -113,7 +114,7 @@ def _is_low_value_internal_npc_event(event: Dict[str, Any], player_loc: str) -> 
     return False
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 
 # ── Ambient update contract (Phase 0.4) ───────────────────────────────────
@@ -673,12 +674,3 @@ def get_pending_ambient_updates(session: Dict[str, Any], after_seq: int = 0, lim
     return result
 
 
-def acknowledge_ambient_updates(session: Dict[str, Any], up_to_seq: int) -> Dict[str, Any]:
-    """Acknowledge ambient updates up to a given seq, updating subscription state."""
-    session = _safe_dict(session)
-    runtime = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
-    sub = _safe_dict(runtime.get("subscription_state"))
-    sub["last_polled_seq"] = max(int(sub.get("last_polled_seq", 0) or 0), int(up_to_seq))
-    runtime["subscription_state"] = sub
-    session["runtime_state"] = runtime
-    return session

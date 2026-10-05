@@ -236,29 +236,6 @@ def build_turn_plan(
     }
 
 
-def build_presentation_envelope(
-    *,
-    truth_source: str,
-    intent_result: dict[str, Any] | None = None,
-    world_assessment: dict[str, Any] | None = None,
-    response_authority: dict[str, Any] | None = None,
-    turn_plan: dict[str, Any] | None = None,
-    visible_response: dict[str, Any] | None = None,
-    presentation_constraints: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return {
-        "format_version": "presentation_envelope_v1",
-        "truth_source": normalize_authority_source(truth_source, default="system"),
-        "intent_result": deepcopy(_d(intent_result)),
-        "world_assessment": deepcopy(_d(world_assessment)),
-        "response_authority": deepcopy(_d(response_authority)),
-        "turn_plan": deepcopy(_d(turn_plan)),
-        "visible_response": deepcopy(_d(visible_response)),
-        "presentation_constraints": deepcopy(_d(presentation_constraints)),
-        "narrative_renderer_may_decide_truth": False,
-    }
-
-
 def build_reasoning_trace(
     *,
     intent_result: dict[str, Any] | None = None,

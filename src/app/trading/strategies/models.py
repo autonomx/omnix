@@ -107,6 +107,11 @@ class GapPullbackConfig(BaseModel):
     breakout_hold_bars: int = Field(default=1, ge=1, le=5)
     breakout_hold_tolerance_bps: Decimal = Field(default=Decimal("25"), ge=0, le=1000)
     minimum_quality_score: int = Field(default=0, ge=0, le=10)
+    # 1.2.0 only: let reviewed research change the setup score. Off, research
+    # may still block an entry through its hard gates but never raises or
+    # lowers the score. Changing it is a strategy update: it needs
+    # trading:strategies:admin and is audited (WP-8.3).
+    research_score_adjustment_enabled: bool = False
 
     # 2.0.0-only causal failed-selloff geometry/management. These defaults are
     # the V11 prospective profile selected before the external April/May check.
@@ -209,6 +214,10 @@ class StochRsi5mConfig(BaseModel):
     # close below the 5-period 5m EMA, or a finalized %K/%D cross down while
     # %K is below 80. After an exit, a fresh setup may produce another
     # sequential trade during the same session.
+    #
+    # ``early_single`` keeps only the first current-session trade per symbol
+    # and vetoes it when the pre-entry regular-session range exceeds 150%.
+    trade_selection: Literal["sequential", "early_single"] = "sequential"
     oversold_threshold: Decimal = Field(default=Decimal("18"), gt=0, lt=100)
     recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)

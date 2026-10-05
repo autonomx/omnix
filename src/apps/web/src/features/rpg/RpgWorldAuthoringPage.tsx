@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -5,9 +6,9 @@ import type {
   RpgAuthoringEntityCard,
   RpgAuthoringPage,
   RpgAuthoringSection,
-} from '../../api/rpgWorldAuthoringClient';
-import { rpgWorldImageClient } from '../../api/rpgWorldImageClient';
-import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
+} from './api/rpgWorldAuthoringClient';
+import { rpgWorldImageClient } from './api/rpgWorldImageClient';
+import type { RpgWorldSummary } from './api/rpgWorldLibraryClient';
 import {
   documentAnchors,
   presentLoreBlocks,
@@ -338,7 +339,7 @@ export function RpgWorldAuthoringPage({
               <option value="featured">Featured first</option>
               <option value="type">Sort by type</option>
             </select>
-            <div className="rpg-authoring-collection-view-toggle" aria-label="Collection view">
+            <div role="group" className="rpg-authoring-collection-view-toggle" aria-label="Collection view">
               <button className={collectionView === 'grid' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('grid')}>Grid</button>
               <button className={collectionView === 'list' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('list')}>List</button>
             </div>

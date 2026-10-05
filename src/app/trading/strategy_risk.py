@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .paper import PaperAccountSnapshot
 from .strategies.models import StrategyRiskProfile, StrategySignal
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 class StrategyRiskDecision(BaseModel):

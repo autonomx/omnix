@@ -1,19 +1,22 @@
 """Pure safety and scope policy for Chat memory."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
-from .models import (
+from app.memory_contracts import (
+    PROMPT_TRUST_LEVELS,
     MemoryCandidate,
     MemoryPolicyDecision,
     MemoryRecord,
     MemoryScope,
     MemoryScopeContext,
     MemorySource,
+    record_is_expired,
+    record_prompt_block_reason,
 )
 from .scope import scope_id_for
 
-_PROMPT_TRUST_LEVELS = {"user_approved", "system_trusted"}
+_PROMPT_TRUST_LEVELS = PROMPT_TRUST_LEVELS
 _APPROVAL_REQUIRED_SOURCES: set[MemorySource] = {
     "assistant_suggested",
     "imported",
@@ -30,18 +33,8 @@ def is_visible_in_scope(record: MemoryRecord, context: MemoryScopeContext) -> bo
     return expected_scope_id is not None and record.scope_id == expected_scope_id
 
 
-def _parse_time(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def is_expired(record: MemoryRecord, now: datetime | None = None) -> bool:
-    if not record.expires_at:
-        return False
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    return _parse_time(record.expires_at) <= current
+    return record_is_expired(record, now)
 
 
 def prompt_eligibility(
@@ -54,12 +47,9 @@ def prompt_eligibility(
         return MemoryPolicyDecision(allowed=False, reason=f"record_{record.status}")
     if not is_visible_in_scope(record, context):
         return MemoryPolicyDecision(allowed=False, reason="scope_mismatch")
-    if is_expired(record, now):
-        return MemoryPolicyDecision(allowed=False, reason="record_expired")
-    if record.sensitivity == "secret":
-        return MemoryPolicyDecision(allowed=False, reason="secret_content_blocked")
-    if record.trust_level not in _PROMPT_TRUST_LEVELS:
-        return MemoryPolicyDecision(allowed=False, reason="trust_not_approved")
+    reason = record_prompt_block_reason(record, now)
+    if reason is not None:
+        return MemoryPolicyDecision(allowed=False, reason=reason)
     return MemoryPolicyDecision(allowed=True, reason="approved_memory")
 
 

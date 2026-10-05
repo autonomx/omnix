@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -13,6 +15,8 @@ from .strategy_v2_qualification import (
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProspectiveSignalOutcomeRow(BaseModel):
@@ -42,6 +46,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

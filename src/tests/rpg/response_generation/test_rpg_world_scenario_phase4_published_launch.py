@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
@@ -18,9 +18,7 @@ from app.rpg.worlds.service import (
 )
 
 
-def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
-    monkeypatch,
-) -> None:
+def _published_resources() -> tuple[Any, Any, Any, Any]:
     definition = with_grid_definition_hashes(
         GridMapDefinition(
             map_id="map:rusty_flagon",
@@ -101,46 +99,10 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         compatible_release=1,
         starting_location_id="rusty_flagon_tavern",
     )
-    captured: dict[str, Any] = {}
+    return definition, world_revision, release, scenario
 
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.load_published_resources",
-        lambda **_kwargs: (world_revision, release, scenario),
-    )
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.load_release_definitions",
-        lambda *_args, **_kwargs: {definition.map_id: definition},
-    )
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.require_scenario_writable",
-        lambda *_args, **_kwargs: {"status": "published"},
-    )
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.bootstrap_local_tenant",
-        lambda _database: object(),
-    )
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.create_new_game_session",
-        lambda _request: {
-            "ok": True,
-            "session_id": "campaign:published",
-            "session": {
-                "manifest": {
-                    "id": "campaign:published",
-                    "session_id": "campaign:published",
-                    "schema_version": "rpg-session-v1",
-                },
-                "state": {"title": "Published Campaign"},
-                "runtime_state": {},
-                "setup_payload": {},
-            },
-        },
-    )
-    monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.save_session",
-        lambda session, **_kwargs: session,
-    )
 
+def _fake_unit_of_work(captured: dict[str, Any]) -> Any:
     class FakeRpg:
         def get_campaign(self, *_args, **_kwargs):
             return None
@@ -200,6 +162,50 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         def rollback(self):
             captured["rolled_back"] = True
 
+    return FakeWork()
+
+
+def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
+    monkeypatch,
+) -> None:
+    definition, world_revision, release, scenario = _published_resources()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.load_published_resources",
+        lambda **_kwargs: (world_revision, release, scenario),
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.load_release_definitions",
+        lambda *_args, **_kwargs: {definition.map_id: definition},
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.require_scenario_writable",
+        lambda *_args, **_kwargs: {"status": "published"},
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.create_new_game_session",
+        lambda _request: {
+            "ok": True,
+            "session_id": "campaign:published",
+            "session": {
+                "manifest": {
+                    "id": "campaign:published",
+                    "session_id": "campaign:published",
+                    "schema_version": "rpg-session-v1",
+                },
+                "state": {"title": "Published Campaign"},
+                "runtime_state": {},
+                "setup_payload": {},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.published_launch.save_session",
+        lambda session, **_kwargs: session,
+    )
+
+
     def fake_schedule(campaign_id: str, **kwargs):
         captured["materialization_signal"] = {
             "campaign_id": campaign_id,
@@ -214,7 +220,7 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
 
     monkeypatch.setattr(
         "app.rpg.worlds.published_launch.unit_of_work",
-        lambda _database: FakeWork(),
+        lambda _database: _fake_unit_of_work(captured),
     )
     monkeypatch.setattr(
         "app.rpg.worlds.published_launch.schedule_campaign_predictive_materialization",

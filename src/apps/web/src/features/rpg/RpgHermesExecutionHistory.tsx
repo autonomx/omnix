@@ -1,4 +1,5 @@
-import type { HermesRpgExecutionLedgerItem } from '../../api/hermesRpgApprovedFlowClient';
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+import type { HermesRpgExecutionLedgerItem } from './api/hermesRpgApprovedFlowClient';
 
 interface RpgHermesExecutionHistoryProps {
   items?: HermesRpgExecutionLedgerItem[];
