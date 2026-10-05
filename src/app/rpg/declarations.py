@@ -5,7 +5,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.declarations import CapacityCount, LegacyImport, RetentionDeclaration, SettingsSection
+from app.persistence.declarations import (
+    CapacityCount,
+    LegacyImport,
+    RecordOnlyJobGuard,
+    RetentionDeclaration,
+    SettingsSection,
+)
 
 
 def _delete_narration_events(connection: Any, retention_days: int, batch_size: int) -> int:
@@ -244,4 +250,23 @@ def _restore_history(work: Any, context: Any, campaign_id: str, item: dict[str, 
 LEGACY_IMPORTS = (
     LegacyImport("rpg.campaign", _restore_campaign),
     LegacyImport("rpg.history", _restore_history),
+)
+
+# Only the session's claimed foreground submission may move its record-only turn job.
+RECORD_ONLY_JOB_GUARDS = (
+    RecordOnlyJobGuard(
+        "rpg.turn.foreground_record",
+        """        AND module = 'rpg'
+        AND metadata #> '{compat_contract,compat,record_only}' = 'true'::jsonb
+        AND EXISTS (
+            SELECT 1 FROM omnix_rpg_foreground_submissions AS submission
+             WHERE submission.workspace_id = {job}.workspace_id
+               AND submission.job_id = {job}.id
+               AND submission.session_id = {job}.metadata #>> '{compat_contract,input_ref,session_id}'
+               AND submission.submission_id = {job}.input_payload ->> 'submission_id'
+               AND submission.claim_token = %s
+               AND submission.status = 'claimed'
+               AND submission.execution_started_at IS NOT NULL
+        )""",
+    ),
 )

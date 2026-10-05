@@ -98,6 +98,24 @@ class LegacyImport:
     restore: LegacyRestore
 
 
+@dataclass(frozen=True)
+class RecordOnlyJobGuard:
+    """Who may move a module's record-only job (one that runs without a worker lease), PA-2.2.
+
+    ``predicate`` is an SQL condition on the job row, written ``{job}``, with
+    exactly one ``%s``, bound to the caller's submission claim token. The kernel ANDs it
+    with the job type inside the statement that moves the job, so the fence
+    stays atomic.
+    """
+
+    job_type: str
+    predicate: str
+
+    def __post_init__(self) -> None:
+        if self.predicate.count("%s") != 1:
+            raise ValueError(f"record-only job guard for {self.job_type} needs exactly one %s")
+
+
 def _declaration_files() -> list[tuple[str, Path]]:
     """Every module's ``declarations.py`` next to its ``feature.py``, then every retired module's tombstone."""
     app_root = Path(__file__).resolve().parents[1]
@@ -170,6 +188,12 @@ def legacy_import(name: str) -> LegacyRestore:
     if step is None:
         raise LookupError(f"no module declares the legacy import step {name!r}")
     return step.restore
+
+
+def record_only_job_guards() -> tuple[RecordOnlyJobGuard, ...]:
+    """Every module's record-only job guards, by job type."""
+    guards = _unique("RECORD_ONLY_JOB_GUARDS", lambda item: item.job_type)
+    return tuple(guards[job_type] for job_type in sorted(guards))
 
 
 def retired_job_types() -> frozenset[str]:

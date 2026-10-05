@@ -8,14 +8,14 @@ from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 from .execution_repositories import JobClaimConflict
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
 from .execution_repositories import (
-    _FOREGROUND_OWNER_GUARD as _BASE_FOREGROUND_OWNER_GUARD,
+    foreground_guard_credentials,
+    foreground_owner_guard,
     _job,
     _json,
 )
 from .tenant import TenantContext
 
 
-_FOREGROUND_OWNER_GUARD = _BASE_FOREGROUND_OWNER_GUARD.replace("omnix_jobs.", "jobs.")
 
 
 def _job_log_compat_entry(level: Any, message: Any, data: Any) -> dict[str, Any]:
@@ -324,8 +324,8 @@ class PostgresJobRepository(_BaseJobRepository):
                              AND jobs.lease_expires_at > clock_timestamp()"""
             credentials: tuple[Any, ...] = (worker_id, lease_token)
         else:
-            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
-            credentials = (execution_owner, submission_claim_token)
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + foreground_owner_guard("jobs")
+            credentials = foreground_guard_credentials(execution_owner, submission_claim_token)
         row = self.connection.execute(
             f"""UPDATE omnix_jobs AS jobs
                   SET progress = %s::jsonb, updated_at = clock_timestamp()
@@ -355,8 +355,8 @@ class PostgresJobRepository(_BaseJobRepository):
                              AND jobs.lease_expires_at > clock_timestamp()"""
             credentials: tuple[Any, ...] = (worker_id, lease_token)
         else:
-            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
-            credentials = (execution_owner, submission_claim_token)
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + foreground_owner_guard("jobs")
+            credentials = foreground_guard_credentials(execution_owner, submission_claim_token)
         compat_patch = _json(compat or {})
         row = self.connection.execute(
             f"""UPDATE omnix_jobs AS jobs
@@ -433,8 +433,8 @@ class PostgresJobRepository(_BaseJobRepository):
                              AND jobs.lease_expires_at > clock_timestamp()"""
             credentials: tuple[Any, ...] = (worker_id, lease_token)
         else:
-            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
-            credentials = (execution_owner, submission_claim_token)
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + foreground_owner_guard("jobs")
+            credentials = foreground_guard_credentials(execution_owner, submission_claim_token)
         row = self.connection.execute(
             f"""UPDATE omnix_jobs AS jobs
                   SET metadata = jsonb_set(
@@ -468,8 +468,8 @@ class PostgresJobRepository(_BaseJobRepository):
                              AND jobs.lease_expires_at > clock_timestamp()"""
             credentials: tuple[Any, ...] = (worker_id, lease_token)
         else:
-            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
-            credentials = (execution_owner, submission_claim_token)
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + foreground_owner_guard("jobs")
+            credentials = foreground_guard_credentials(execution_owner, submission_claim_token)
         row = self.connection.execute(
             f"""UPDATE omnix_jobs AS jobs
                   SET status = 'canceled',
@@ -520,8 +520,8 @@ class PostgresJobRepository(_BaseJobRepository):
                              AND jobs.lease_expires_at > clock_timestamp()"""
             credentials: tuple[Any, ...] = (worker_id, lease_token)
         else:
-            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
-            credentials = (execution_owner, submission_claim_token)
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + foreground_owner_guard("jobs")
+            credentials = foreground_guard_credentials(execution_owner, submission_claim_token)
         row = self.connection.execute(
             f"""UPDATE omnix_jobs AS jobs
                    SET updated_at = clock_timestamp()

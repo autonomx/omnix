@@ -2500,13 +2500,10 @@
       "app_to_app_imports": [],
       "composition_imports_outside_composition": [],
       "cross_module_sql": [
-        "src/app/assistant_memory/persistence/owner_memory_store.py:38:PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions",
-        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions"
+        "src/app/assistant_memory/persistence/owner_memory_store.py:38:PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions"
       ],
       "historical_owner_map_additions": [],
-      "kernel_named_module_tables": [
-        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions"
-      ],
+      "kernel_named_module_tables": [],
       "kernel_tools_naming_apps": [],
       "module_repositories_in_kernel": [],
       "platform_feature_specific_files": [],
@@ -3917,6 +3914,20 @@
         "path": "src/app/persistence/document_schemas.py",
         "reason": "Remembers which unregistered document kinds this process already warned about, so the warning is logged once per kind; bounded by the kinds the code writes.",
         "symbol": "_WARNED"
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "foreground_owner_guard.cache_clear",
+        "kind": "function_cache",
+        "line": 101,
+        "max_entries": 4,
+        "maxsize": 4,
+        "path": "src/app/persistence/execution_repositories.py",
+        "reason": "The record-only job fence composed once from the modules' declarations (kernel-only files in the release); it holds SQL text, never data.",
+        "symbol": "foreground_owner_guard.__cache__",
+        "ttl_seconds": 3600.0
       },
       {
         "approved": true,
@@ -5373,6 +5384,11 @@
       },
       {
         "approved": true,
+        "path": "src/app/persistence/execution_repositories.py",
+        "symbol": "foreground_owner_guard.__cache__"
+      },
+      {
+        "approved": true,
         "path": "src/app/persistence/module_states.py",
         "symbol": "cached_module_state.__cache__"
       },
@@ -6560,7 +6576,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 2
+      "value": 1
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6620,7 +6636,7 @@
     "kernel_named_module_tables": {
       "direction": "lower",
       "target": 0,
-      "value": 1
+      "value": 0
     },
     "kernel_tools_naming_apps": {
       "direction": "lower",
@@ -6845,5 +6861,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "f61d0ba747daa7db7f94405e7765da608928f9b1ed8b6704b661e2583493f1ce"
+  "source_digest": "50282d98d950786539e64981b89f0b4d5c57a5dd7a5c5729db77521a38b878d5"
 }

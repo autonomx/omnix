@@ -195,15 +195,6 @@
       ],
       "path": "src/app/assistant_memory/persistence/owner_memory_store.py",
       "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:omnix_rpg_foreground_submissions",
-      "lines": [
-        79
-      ],
-      "path": "src/app/persistence/execution_repositories.py",
-      "rule": "AL016"
     }
   ]
 }

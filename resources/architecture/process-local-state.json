@@ -1484,6 +1484,15 @@
       "max_entries": 64,
       "ttl_seconds": 5.0,
       "invalidation": "cached_module_state.cache_clear"
+    },
+    {
+      "path": "src/app/persistence/execution_repositories.py",
+      "symbol": "foreground_owner_guard.__cache__",
+      "category": "cache",
+      "reason": "The record-only job fence composed once from the modules' declarations (kernel-only files in the release); it holds SQL text, never data.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "foreground_owner_guard.cache_clear"
     }
   ]
 }

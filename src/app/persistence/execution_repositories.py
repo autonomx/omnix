@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Iterable, Iterator
 from typing import Any
 
+from app.caching.bounded_cache import bounded_lru_cache
 from app.jobs.errors import JobClaimConflict
 from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
@@ -76,7 +77,11 @@ max_attempts, available_at, lease_owner, lease_token, lease_expires_at,
 cancel_requested_at, started_at, completed_at, created_at, updated_at, metadata,
 correlation_id
 """
-_FOREGROUND_OWNER_GUARD = """
+# Record-only jobs run without a worker lease; only their foreground owner may move them.
+# Chat's inline generation is fenced by the gateway node that owns it; a module's own
+# record-only job types are fenced by the predicate it declares (RECORD_ONLY_JOB_GUARDS in
+# its declarations.py, PA-2.2), each with one placeholder bound to the submission claim token.
+_GUARD_HEAD = """
 AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL
 AND (
     (job_type = 'chat.generate'
@@ -89,22 +94,26 @@ AND (
            AND execution_owner.status IN ('active', 'draining')
            AND execution_owner.lease_expires_at > clock_timestamp()
            AND execution_owner.metadata ->> 'workspace_id' = omnix_jobs.workspace_id
-    ))
-    OR (job_type = 'rpg.turn.foreground_record'
-        AND module = 'rpg'
-        AND metadata #> '{compat_contract,compat,record_only}' = 'true'::jsonb
-        AND EXISTS (
-            SELECT 1 FROM omnix_rpg_foreground_submissions AS submission
-             WHERE submission.workspace_id = omnix_jobs.workspace_id
-               AND submission.job_id = omnix_jobs.id
-               AND submission.session_id = omnix_jobs.metadata #>> '{compat_contract,input_ref,session_id}'
-               AND submission.submission_id = omnix_jobs.input_payload ->> 'submission_id'
-               AND submission.claim_token = %s
-               AND submission.status = 'claimed'
-               AND submission.execution_started_at IS NOT NULL
-        ))
-)
-"""
+    ))"""
+
+
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
+def foreground_owner_guard(job: str = "omnix_jobs") -> str:
+    """The fence for moving a record-only job, with the job row named ``job`` (composed on first use)."""
+    from .declarations import record_only_job_guards
+
+    branches = "".join(
+        f"\n    OR (job_type = '{guard.job_type}'\n{guard.predicate.replace('{job}', 'omnix_jobs')})"
+        for guard in record_only_job_guards()
+    )
+    guard = _GUARD_HEAD + branches + "\n)\n"
+    return guard if job == "omnix_jobs" else guard.replace("omnix_jobs.", f"{job}.")
+
+
+def foreground_guard_credentials(execution_owner: Any, submission_claim_token: Any) -> tuple[Any, ...]:
+    """The guard's parameters: the execution owner, then the claim token for each declared module guard."""
+    slots = foreground_owner_guard().count("%s") - 1
+    return (execution_owner, *([submission_claim_token] * slots))
 
 
 
@@ -610,7 +619,7 @@ class PostgresJobRepository:
                   FROM omnix_jobs
                  WHERE id = %s AND workspace_id = %s
                    AND status IN ('queued', 'running')
-                   {_FOREGROUND_OWNER_GUARD}
+                   {foreground_owner_guard()}
                  FOR UPDATE
             )
             UPDATE omnix_jobs
@@ -621,7 +630,7 @@ class PostgresJobRepository:
              WHERE omnix_jobs.id = candidate.candidate_id
             RETURNING {_JOB_COLUMNS}, candidate.old_status
             """,
-            (job_id, context.workspace_id, execution_owner, submission_claim_token),
+            (job_id, context.workspace_id, *foreground_guard_credentials(execution_owner, submission_claim_token)),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
@@ -649,7 +658,7 @@ class PostgresJobRepository:
                    completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND status IN ('queued', 'running')
-            {_FOREGROUND_OWNER_GUARD}
+            {foreground_owner_guard()}
             RETURNING {_JOB_COLUMNS}
             """,
             (
@@ -657,8 +666,7 @@ class PostgresJobRepository:
                 _json(progress or {"current": 1, "total": 1, "message": "completed"}),
                 job_id,
                 context.workspace_id,
-                execution_owner,
-                submission_claim_token,
+                *foreground_guard_credentials(execution_owner, submission_claim_token),
             ),
         ).fetchone()
         if row is None:
@@ -684,10 +692,11 @@ class PostgresJobRepository:
                    completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND status IN ('queued', 'running')
-            {_FOREGROUND_OWNER_GUARD}
+            {foreground_owner_guard()}
             RETURNING {_JOB_COLUMNS}
             """,
-            (_json(error), job_id, context.workspace_id, execution_owner, submission_claim_token),
+            (_json(error), job_id, context.workspace_id,
+             *foreground_guard_credentials(execution_owner, submission_claim_token)),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job failure rejected: {job_id}")
