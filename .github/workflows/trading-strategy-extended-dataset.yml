@@ -49,7 +49,7 @@ jobs:
           echo "key=trading-liquidity-datasets-v1-${RUNNER_OS}-extended-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore existing frozen datasets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .cache/trading-liquidity-datasets
           key: ${{ steps.dataset-cache-key.outputs.key }}
@@ -81,7 +81,7 @@ jobs:
 
       - name: Save extended frozen datasets
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .cache/trading-liquidity-datasets
           key: ${{ steps.dataset-cache-key.outputs.key }}
