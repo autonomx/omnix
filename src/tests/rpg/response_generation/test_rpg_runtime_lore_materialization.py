@@ -406,3 +406,25 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
 
     assert report["mode"] == "postgresql_authority"
     assert gateway.seen_open and set(gateway.seen_open) == {0}
+
+
+def test_documents_named_with_entity_id_and_body_still_document_the_target() -> None:
+    # Claude names a dossier document's reference ``entity_id`` and its text ``body``.
+    class Gateway:
+        def generate(self, *_args, **_kwargs):
+            return """{
+              "entities": [{"id": "location:grayhaven", "kind": "location", "name": "Grayhaven",
+                            "description": "A walled river town of slate roofs and busy wharves."}],
+              "documents": [{"document_id": "doc:grayhaven:overview", "title": "Grayhaven: Overview",
+                             "entity_id": "location:grayhaven", "body": "Grayhaven guards the ford."}],
+              "facts": [{"id": "fact:grayhaven:1", "text": "Grayhaven has a ferry."}],
+              "relationships": []
+            }"""
+
+    bible, _ = materialize_scene_lore({}, _new_town_session(), {"scene": {"location_id": "location:grayhaven"}},
+                                      campaign_id="campaign:new-town", llm_gateway=Gateway())
+
+    document = next(row for row in bible["documents"] if row["document_id"] == "doc:grayhaven:overview")
+    assert document["entity_refs"] == ["location:grayhaven"]
+    assert document["full_text"] == "Grayhaven guards the ford."
+    assert any(row["content"] == "Grayhaven has a ferry." for row in bible["facts"])

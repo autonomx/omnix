@@ -880,7 +880,12 @@ def _merge_bundle(
         if not isinstance(raw, Mapping):
             continue
         row = deepcopy(dict(raw))
-        refs = [_text(value) for value in row.get("entity_refs") or () if _text(value)]
+        # Models name these fields differently (Claude: ``entity_id`` and ``body``).
+        refs = [
+            _text(value)
+            for value in (*(row.get("entity_refs") or ()), *(row.get("entity_ids") or ()), row.get("entity_id"))
+            if _text(value)
+        ]
         title = _text(row.get("title")) or source_target.name
         topic_id = _text(row.get("topic_id")) or f"{source_target.kind}s"
         if _document_duplicate(documents, title=title, topic_id=topic_id, refs=refs):
@@ -891,7 +896,8 @@ def _merge_bundle(
         if document_id in occupied:
             document_id = f"{document_id}:{index}"
         full_text = _text(
-            row.get("full_text") or row.get("content") or row.get("summary")
+            row.get("full_text") or row.get("content") or row.get("body") or row.get("text")
+            or row.get("summary")
         )
         if not full_text:
             continue
@@ -929,7 +935,7 @@ def _merge_bundle(
         fact_id = _text(row.get("id") or row.get("evidence_id")) or (
             f"fact:{_slug(source_target.entity_id)}:{index}"
         )
-        content = _text(row.get("content") or row.get("statement"))
+        content = _text(row.get("content") or row.get("statement") or row.get("text") or row.get("fact"))
         if fact_id in fact_ids or not content:
             continue
         row.update(
