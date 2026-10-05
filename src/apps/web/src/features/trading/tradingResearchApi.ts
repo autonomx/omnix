@@ -1,5 +1,6 @@
-import { api, unwrapLabelled } from '../../api/http';
+import { unwrapLabelled } from '../../api/http';
 import type { MarketResearchRequest, MarketResearchResult } from './researchTypes';
+import { api } from './api/gateway';
 
 export const tradingResearchApi = {
   generate: (request: MarketResearchRequest): Promise<MarketResearchResult> =>

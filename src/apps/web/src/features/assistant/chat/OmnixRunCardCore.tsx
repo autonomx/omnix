@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { omnixApiClient, type AgentRunSnapshot, type TaskGraphRunSnapshot } from '../../../api/client';
 import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
+import { assistantApiClient, type AgentRunSnapshot, type TaskGraphRunSnapshot } from '../api/assistantClient';
 
 type Metadata = Record<string, unknown>;
 
@@ -562,7 +562,7 @@ async function listAllAgentRunEvents(runId: string) {
   let afterSequence = 0;
 
   while (true) {
-    const page = await omnixApiClient.listAgentRunEvents(runId, afterSequence);
+    const page = await assistantApiClient.listAgentRunEvents(runId, afterSequence);
     allEvents.push(...page);
     if (page.length < AGENT_EVENT_PAGE_SIZE) return allEvents;
 
@@ -637,7 +637,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const [showAllActivity, setShowAllActivity] = useState(false);
   const query = useQuery<AgentRunView>({
     queryKey: ['agent-run', id],
-    queryFn: () => omnixApiClient.getAgentRun(id),
+    queryFn: () => assistantApiClient.getAgentRun(id),
     initialData: {
       run_id: id,
       status: String(initial.status ?? 'starting'),
@@ -662,33 +662,33 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   });
   const artifacts = useQuery({
     queryKey: ['agent-run', id, 'artifacts'],
-    queryFn: () => omnixApiClient.listAgentArtifacts(id),
+    queryFn: () => assistantApiClient.listAgentArtifacts(id),
     refetchInterval: live ? 2000 : false,
   });
   const revisions = useQuery({
     queryKey: ['agent-run', id, 'task-revisions'],
-    queryFn: () => omnixApiClient.listAgentTaskRevisions(id),
+    queryFn: () => assistantApiClient.listAgentTaskRevisions(id),
     refetchInterval: live ? 2000 : false,
   });
   const evidence = useQuery({
     queryKey: ['agent-run', id, 'evidence'],
-    queryFn: () => omnixApiClient.getAgentEvidenceSet(id),
+    queryFn: () => assistantApiClient.getAgentEvidenceSet(id),
     refetchInterval: live ? 2000 : false,
   });
   const receipts = useQuery({
     queryKey: ['agent-run', id, 'evidence', 'receipts'],
-    queryFn: () => omnixApiClient.listAgentEvidenceReceipts(id),
+    queryFn: () => assistantApiClient.listAgentEvidenceReceipts(id),
     refetchInterval: live ? 2000 : false,
   });
   const approvals = useQuery({
     queryKey: ['agent-run', id, 'approvals'],
-    queryFn: () => omnixApiClient.listAgentApprovals(id, 'pending'),
+    queryFn: () => assistantApiClient.listAgentApprovals(id, 'pending'),
     enabled: status === 'waiting_for_approval',
     refetchInterval: status === 'waiting_for_approval' ? 1500 : false,
   });
   const command = useMutation({
     mutationFn: (input: { type: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; payload?: Record<string, unknown> }) =>
-      omnixApiClient.commandAgentRun(id, input.type, input.payload),
+      assistantApiClient.commandAgentRun(id, input.type, input.payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id] });
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id, 'approvals'] });
@@ -1109,7 +1109,7 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
   const initialStates = Array.isArray(initial.node_states) ? initial.node_states : [];
   const query = useQuery<TaskGraphRunView>({
     queryKey: ['task-graph-run', id],
-    queryFn: () => omnixApiClient.getTaskGraphRun(id),
+    queryFn: () => assistantApiClient.getTaskGraphRun(id),
     initialData: {
       run_id: id,
       status: String(initial.status ?? 'running'),
@@ -1146,7 +1146,7 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
   });
   const command = useMutation({
     mutationFn: (input: { type: 'cancel' | 'approve' | 'reject'; nodeId?: string; approvalId?: string }) =>
-      omnixApiClient.commandTaskGraphRun(
+      assistantApiClient.commandTaskGraphRun(
         id,
         input.type,
         input.nodeId,
@@ -1243,7 +1243,7 @@ function WorkflowRunCard({ initial }: { initial: Metadata }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['workflow-run', id],
-    queryFn: () => omnixApiClient.getWorkflowRun(id),
+    queryFn: () => assistantApiClient.getWorkflowRun(id),
     initialData: {
       run_id: id,
       workflow_id: String(initial.workflow_id ?? 'workflow'),
@@ -1257,7 +1257,7 @@ function WorkflowRunCard({ initial }: { initial: Metadata }) {
   });
   const command = useMutation({
     mutationFn: (input: { type: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; stepId?: string }) =>
-      omnixApiClient.commandWorkflowRun(id, input.type, input.stepId),
+      assistantApiClient.commandWorkflowRun(id, input.type, input.stepId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['workflow-run', id] }),
   });
   const status = query.data.status;

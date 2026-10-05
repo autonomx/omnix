@@ -2,7 +2,7 @@ import { Button, Text } from '@mantine/core';
 import { useRef, useState } from 'react';
 import './ImageReferenceControl.css';
 import { imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 import { ApiError } from '../../api/errors';
 import { uploadBinary } from '../../api/transport';
 

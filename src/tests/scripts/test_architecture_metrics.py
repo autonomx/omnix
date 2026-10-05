@@ -718,7 +718,8 @@ def test_tracked_scope_excludes_untracked_vendor_generated_and_deleted_files(tmp
     from architecture_analysis import tracked_sources
 
     tracked = {"src/app/a.py": "print('tracked')", "src/app/deleted.py": "",
-               "src/vendor/a.py": "print('vendor')", WEB + "api/generated/types.ts": "window.fetch = x;"}
+               "src/vendor/a.py": "print('vendor')", WEB + "api/generated/core.ts": "window.fetch = x;",
+               WEB + "features/trading/api/generated.ts": "window.fetch = x;", WEB + "features/trading/api/gateway.ts": "export {};"}
     for path, source in tracked.items():
         file = tmp_path / path
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -727,4 +728,4 @@ def test_tracked_scope_excludes_untracked_vendor_generated_and_deleted_files(tmp
     subprocess.run(["git", "-C", str(tmp_path), "add", "--", *tracked], check=True, capture_output=True)
     (tmp_path / "src/app/untracked.py").write_text("print('untracked')")
     (tmp_path / "src/app/deleted.py").unlink()
-    assert tracked_sources(tmp_path) == {"src/app/a.py": "print('tracked')"}
+    assert tracked_sources(tmp_path) == {"src/app/a.py": "print('tracked')", WEB + "features/trading/api/gateway.ts": "export {};"}

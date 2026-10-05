@@ -7,6 +7,7 @@ export const podcastModule = defineModule({
   summary: 'Script planning, multi-speaker synthesis, mixing, and podcast exports.',
   route: '/podcast',
   icon: '◉',
+  backendModules: [],
   apiPrefixes: [
     '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent',
     '/api/prompts',

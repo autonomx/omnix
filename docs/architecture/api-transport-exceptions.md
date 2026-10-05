@@ -60,7 +60,7 @@ A route must not use `include_in_schema=False` merely because it is experimental
 
 ## Web client types outside the gateway contract
 
-Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src/api/generated/types.ts`), and stream messages with the Zod schemas in `src/apps/web/src/api/schemas/` and next to each protocol's types. The declarations below have names that look like API contracts but describe something else: another service's protocol, a browser-internal message, or a document the web client owns. The `web_handwritten_api_types` metric skips them. Each row must match at least one declaration (the metric refuses stale rows), and a pattern covers only the files and names it states.
+Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src/api/generated/core.ts` and each feature's `api/generated.ts`), and stream messages with the Zod schemas in `src/apps/web/src/api/schemas/` and next to each protocol's types. The declarations below have names that look like API contracts but describe something else: another service's protocol, a browser-internal message, or a document the web client owns. The `web_handwritten_api_types` metric skips them. Each row must match at least one declaration (the metric refuses stale rows), and a pattern covers only the files and names it states.
 
 | Web source | Type | What it describes |
 |---|---|---|

@@ -1,4 +1,4 @@
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 export type LiveConversationRepairKind =
   | 'acknowledge_correction'
   | 'clarify_number'

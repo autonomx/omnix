@@ -7,6 +7,7 @@ export const tradingModule = defineModule({
   summary: 'Multi-chart crypto and stock research, drawings, indicators, alerts, replay, backtests, and paper simulation.',
   route: '/trading',
   icon: '⌁',
+  backendModules: ['trading'],
   apiPrefixes: ['/api/trading'],
   modeLabel: 'Trading',
   loadWorkspace: () => import('./TradingWorkspace').then((module) => module.TradingWorkspace),

@@ -8,9 +8,9 @@ import {
   loadDesktopCompanionBuildIdentity,
 } from './desktop-companion-build-identity';
 import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
-import { api } from '../../../api/http';
 import { DESKTOP_COMPANION_DELIVERY_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT } from '../../../events/bus';
 import { startTicker } from '../../../shared/timers';
+import { api } from '../api/gateway';
 
 let desktopCompanionShadowEvaluationInstalled = false;
 

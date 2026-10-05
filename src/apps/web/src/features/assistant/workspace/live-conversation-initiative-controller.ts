@@ -4,11 +4,12 @@ import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
 import { openStream } from '../../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../../events/bus';
 import { startTicker } from '../../../shared/timers';
+import { api } from '../api/gateway';
 
 let liveConversationInitiativeInstalled = false;
 

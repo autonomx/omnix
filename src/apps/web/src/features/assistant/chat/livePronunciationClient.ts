@@ -1,6 +1,7 @@
-import type { components } from '../../../api/generated/types';
-import { api, unwrapAs } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrapAs } from '../../../api/http';
 import { emitOmnixEvent, LIVE_CONVERSATION_PRONUNCIATIONS_CHANGED_EVENT } from '../../../events/bus';
+import { api } from '../api/gateway';
 export type PronunciationEntry = components['schemas']['PronunciationEntry'];
 
 export type PronunciationListResponse = components['schemas']['PronunciationListResponse'];

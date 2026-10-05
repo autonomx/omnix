@@ -1,7 +1,8 @@
 import type { PaperAccountSnapshot, PaperOrder, PaperOrderInput } from './paperTypes';
 import type { BacktestRunResult, FrozenDatasetSnapshot } from './replayTypes';
 import type { MarketBar } from './tradingTypes';
-import { api, unwrapLabelled } from '../../api/http';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
 const replay = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading replay');
 

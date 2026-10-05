@@ -7,6 +7,7 @@ export const imageGenerationModule = defineModule({
   summary: 'Portraits, scenes, covers, image assets, and visual provider status.',
   route: '/image-generation',
   icon: '▧',
+  backendModules: ['image'],
   apiPrefixes: [
     '/api/image-generation', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/workers',
     '/api/agent', '/api/prompts',

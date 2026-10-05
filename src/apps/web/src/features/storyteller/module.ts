@@ -7,6 +7,7 @@ export const storytellerModule = defineModule({
   summary: 'Long-form story generation, outlines, branches, and exports.',
   route: '/storyteller',
   icon: '✍',
+  backendModules: ['story'],
   apiPrefixes: [
     '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent',
     '/api/prompts',

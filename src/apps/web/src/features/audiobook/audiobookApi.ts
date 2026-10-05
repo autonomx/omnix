@@ -1,6 +1,7 @@
-import type { components } from '../../api/generated/types';
-import { api, unwrap } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
 import type { Chapter, ExportRecord, ProjectDetail, ProjectSummary, SourceLibrary, VoiceRecord } from './audiobookTypes';
+import { api } from './api/gateway';
 
 /**
  * The audiobook routes (WP-9.3). Paths, parameters and bodies are checked

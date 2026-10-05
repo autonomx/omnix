@@ -1,8 +1,8 @@
 import type { LiveVoiceCueId } from './live-voice-cue-bank';
 import { ApiError } from '../../../api/errors';
-import { api } from '../../../api/http';
 import { fetchBytes } from '../../../api/transport';
 import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, emitOmnixEvent, VOICE_CUE_ASSETS_CLEAR_EVENT, VOICE_CUE_ASSETS_READY_EVENT, VOICE_CUE_PACK_STATUS_EVENT } from '../../../events/bus';
+import { api } from '../api/gateway';
 
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const MAX_ASSETS_PER_PACK = 32;

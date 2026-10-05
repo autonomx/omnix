@@ -15,6 +15,7 @@ vi.mock('./modulesManifest', async (importOriginal) => {
     summary: 'A scaffolded module for the registration recipe.',
     route: '/fake',
     icon: 'F',
+    backendModules: [],
     apiPrefixes: ['/api/fake'],
     loadWorkspace: async () => function FakeWorkspace() {
       return <p>Fake workspace</p>;

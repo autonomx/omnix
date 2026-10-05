@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
 import { chatImageDataUrls, chatTextAttachment, formatMessageTime } from './chatMessageModel';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';

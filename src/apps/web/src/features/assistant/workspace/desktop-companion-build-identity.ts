@@ -1,5 +1,6 @@
 import type { DesktopCompanionRolloutEvidenceIdentity } from './desktop-companion-rollout';
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
+import { api } from '../api/gateway';
 
 type BuildIdentity = {
   exact_commit_sha: string;

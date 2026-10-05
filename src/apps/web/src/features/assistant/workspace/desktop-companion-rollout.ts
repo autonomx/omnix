@@ -1,6 +1,7 @@
 import type { AssistantSettings, DesktopCompanionRolloutStage } from '../../settings';
-import type { components } from '../../../api/generated/types';
-import { api, unwrap } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrap } from '../../../api/http';
+import { api } from '../api/gateway';
 
 export type DesktopCompanionRolloutStatus = components['schemas']['DesktopCompanionRolloutStatus'];
 

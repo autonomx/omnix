@@ -1,5 +1,6 @@
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { api } from '../api/gateway';
 
 
 export type LiveTtsCapabilities = {

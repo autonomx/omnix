@@ -14,10 +14,11 @@ import {
 import { DesktopCompanionRuntime, type DesktopCompanionSnapshot } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
-import type { components } from '../../../api/generated/types';
-import { api, unwrap } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrap } from '../../../api/http';
 import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../../events/bus';
 import { startTicker } from '../../../shared/timers';
+import { api } from '../api/gateway';
 
 let desktopCompanionWatchInstalled = false;
 

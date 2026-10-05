@@ -1,7 +1,7 @@
 import { audiobookApi } from './audiobookApi';
-import { api } from '../../api/http';
 import { audiobook, base, reclassifyAudiobook } from './audiobookWorkspaceModel';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
+import { api } from './api/gateway';
 
 /** The manuscript review: source text and characterization spans. */
 export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel }) {

@@ -1,6 +1,6 @@
 import { observeAssistantDiagnostic } from './live-conversation-assistant-summary';
-import { api } from '../../../api/http';
 import { emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT } from '../../../events/bus';
+import { api } from '../api/gateway';
 
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
 const FLUSH_DELAY_MS = 250;

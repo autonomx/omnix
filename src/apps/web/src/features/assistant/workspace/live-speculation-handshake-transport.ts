@@ -1,5 +1,5 @@
 import { registerFetchMiddleware } from '../../../api/fetchPipeline';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
 
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;

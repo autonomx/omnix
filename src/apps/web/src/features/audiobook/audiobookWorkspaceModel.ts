@@ -2,8 +2,9 @@
 import { audiobookApi } from './audiobookApi';
 import type { ProjectSummary, AudiobookJobView } from './audiobookTypes';
 import { ApiError } from '../../api/errors';
-import { api, unwrapAs } from '../../api/http';
+import { unwrapAs } from '../../api/http';
 import { uploadBinary } from '../../api/transport';
+import { api } from './api/gateway';
 
 export const ACTIVE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'cancel_requested', 'paused']);
 export const CONTROLLABLE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'paused']);

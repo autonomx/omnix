@@ -1,5 +1,6 @@
-import type { components } from '../../api/generated/types';
-import { api, unwrapLabelled } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
 export type AnalyticsNumeric = string | number;
 export type PaperAnalyticsMode = 'all' | 'shadow' | 'auto_paper';

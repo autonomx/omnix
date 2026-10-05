@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 
 // Paper trading payloads as the gateway sends them (WP-9.3).
 export type PaperAccount = components['schemas']['PaperAccount-Output'];

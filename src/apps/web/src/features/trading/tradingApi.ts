@@ -11,9 +11,10 @@ import type {
   MarketBar,
 } from './tradingTypes';
 import { decodeTradingFormula, evaluateTradingFormula, parseTradingFormula } from './tradingFormula';
-import type { components } from '../../api/generated/types';
-import { api, unwrapLabelled } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
 import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
+import { api } from './api/gateway';
 
 export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
 

@@ -66,18 +66,3 @@ test('a failed call keeps the gateway request id for error reports', async () =>
     'Omnix API request failed with status 503: model_unavailable (request id gateway-req-0001)',
   );
 });
-
-test('Voice Studio lists its bounded voice job summaries', async () => {
-  const requested: string[] = [];
-  const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input), 'http://localhost');
-    requested.push(`${url.pathname}${url.search}`);
-    return Response.json({ jobs: [{ id: 'job:voice', module: 'voice' }], has_more: false });
-  });
-  const client = new OmnixApiClient({ fetchImpl: fetchImpl as typeof fetch });
-
-  const response = await client.listVoiceJobSummaries();
-
-  expect(response.jobs.map((job) => job.id)).toEqual(['job:voice']);
-  expect(requested).toEqual(['/api/jobs/voice-summaries?limit=40']);
-});

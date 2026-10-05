@@ -7,6 +7,7 @@ export const voiceModule = defineModule({
   summary: 'Text-to-speech generation, previews, playback, and voice provider diagnostics.',
   route: '/voice',
   icon: '◍',
+  backendModules: ['voice'],
   apiPrefixes: [
     '/api/voice', '/api/voice-cloning', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers',
     '/api/settings', '/api/tts', '/api/agent', '/api/prompts',

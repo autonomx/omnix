@@ -1,15 +1,17 @@
 import createClient, { type Client } from 'openapi-fetch';
 import { ApiError, ApiTimeoutError } from './errors';
 import { pipelineFetch } from './fetchPipeline';
-import type { paths } from './generated/types';
+import type { paths as CorePaths } from './generated/core';
 
 /**
  * The typed gateway client (WP-9.3): paths, parameters, bodies and responses
- * are checked against the generated OpenAPI types.
+ * are checked against the generated OpenAPI types. `api` knows the kernel's
+ * operations; a feature makes its own client from its generated paths (PA-2.4):
  *
  *   const jobs = await unwrap(api.GET('/api/jobs', { params: { query: { limit: 50 } } }));
+ *   export const tradingApi = createGatewayClient<paths>();  // features/trading/api/gateway.ts
  */
-export type GatewayClient = Client<paths>;
+export type GatewayClient<Paths extends object = CorePaths> = Client<Paths>;
 
 /** A Request that remembers its init, so the original body (a string or FormData) is sent unchanged. */
 class GatewayRequest extends Request {
@@ -51,9 +53,9 @@ function gatewayFetch(fetchImpl: () => typeof fetch) {
   };
 }
 
-export function createGatewayClient(options: { baseUrl?: string; fetchImpl?: typeof fetch } = {}): GatewayClient {
+export function createGatewayClient<Paths extends object = CorePaths>(options: { baseUrl?: string; fetchImpl?: typeof fetch } = {}): GatewayClient<Paths> {
   const fetchImpl = () => options.fetchImpl ?? pipelineFetch;
-  return createClient<paths>({
+  return createClient<Paths>({
     baseUrl: options.baseUrl ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost'),
     fetch: gatewayFetch(fetchImpl),
     Request: GatewayRequest,
@@ -72,6 +74,22 @@ export async function unwrap<T>(call: Promise<GatewayResult<T>>): Promise<T> {
     throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined);
   }
   return data as T;
+}
+
+/** Sends one typed call, optionally with a timeout, and returns its body (WP-9.3). */
+export async function sendGatewayCall<T>(
+  send: (signal?: AbortSignal) => Promise<GatewayResult<T>>,
+  options: { timeoutMs?: number; timeoutMessage?: string } = {},
+): Promise<T> {
+  if (!options.timeoutMs) return unwrap(send());
+  const timeout = requestTimeout(options.timeoutMs, options.timeoutMessage);
+  try {
+    return await unwrap(send(timeout.signal));
+  } catch (error) {
+    throw timeout.timedOut(error);
+  } finally {
+    timeout.clear();
+  }
 }
 
 /** unwrap() that turns a failed call into an Error with the caller's message. */

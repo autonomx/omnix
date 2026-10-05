@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 export type StrategyMode = 'off' | 'shadow' | 'auto_paper';
 export type FloatPreferenceMode = 'ignore' | 'score' | 'require';
 export type StrategyBarInterval = '1m' | '5m';

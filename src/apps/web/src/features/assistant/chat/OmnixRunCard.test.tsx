@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { omnixApiClient } from '../../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
 import { createTestQueryClient } from '../../../test/renderWithProviders';
+import { assistantApiClient } from '../api/assistantClient';
 
 // Fixtures carry only the fields each test reads.
 function fixture<T>(value: unknown): T {
@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('OmnixRunCard', () => {
   it('shows the Pi-native coding lifecycle without internal orchestration phases', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-short-quality',
       status: 'running',
       desired_state: 'running',
@@ -31,10 +31,10 @@ describe('OmnixRunCard', () => {
       quality_attempt: 1,
       spec: { profile: 'coding', quality_policy: 'strict', task: 'Fix the editor' },
     } as never);
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-short-quality',
       evaluated_at: '2026-09-12T00:00:00Z',
       requirements: [],
@@ -46,7 +46,7 @@ describe('OmnixRunCard', () => {
       attribution_refs: [],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
 
     renderCard({
       agent_run: {
@@ -69,14 +69,14 @@ describe('OmnixRunCard', () => {
   });
 
   it('offers explicit interruption when a coding run has an unresolved stall advisory', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-stall-warning',
       status: 'running',
       desired_state: 'running',
       revision: 2,
       spec: { profile: 'coding', task: 'Fix the editor' },
     } as never);
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
       event_id: 'stall-1',
       run_id: 'run-stall-warning',
       sequence: 9,
@@ -87,9 +87,9 @@ describe('OmnixRunCard', () => {
       },
       created_at: '2026-09-12T01:00:00Z',
     })]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-stall-warning',
       evaluated_at: '2026-09-12T01:00:00Z',
       requirements: [],
@@ -101,8 +101,8 @@ describe('OmnixRunCard', () => {
       attribution_refs: [],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
-    const command = vi.spyOn(omnixApiClient, 'commandAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    const command = vi.spyOn(assistantApiClient, 'commandAgentRun').mockResolvedValue({
       run_id: 'run-stall-warning',
       status: 'running',
       desired_state: 'running',
@@ -131,14 +131,14 @@ describe('OmnixRunCard', () => {
   });
 
   it('keeps a warning on a run that went unsandboxed', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-unsandboxed',
       status: 'running',
       desired_state: 'running',
       revision: 2,
       spec: { profile: 'coding', task: 'Fix the editor' },
     } as never);
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
       event_id: 'unsandboxed-1',
       run_id: 'run-unsandboxed',
       sequence: 2,
@@ -146,9 +146,9 @@ describe('OmnixRunCard', () => {
       payload: { reason: 'the agent sandbox needs Docker, which is not running', commands_need_approval: true },
       created_at: '2026-10-03T01:00:00Z',
     })]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
 
     renderCard({ agent_run: { run_id: 'run-unsandboxed', status: 'running', profile: 'coding', task: 'Fix the editor', revision: 2 } });
 
@@ -165,7 +165,7 @@ describe('OmnixRunCard', () => {
   });
 
   it('steers an active coding run without sending a chat command or cancelling it', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-steer',
       status: 'running',
       desired_state: 'running',
@@ -173,7 +173,7 @@ describe('OmnixRunCard', () => {
       last_error: null,
       spec: { profile: 'coding', task: 'Fix the editor' },
     } as never);
-    const command = vi.spyOn(omnixApiClient, 'commandAgentRun').mockResolvedValue({
+    const command = vi.spyOn(assistantApiClient, 'commandAgentRun').mockResolvedValue({
       run_id: 'run-steer',
       status: 'running',
       desired_state: 'running',
@@ -203,7 +203,7 @@ describe('OmnixRunCard', () => {
   });
 
   it('shows when an Agent is waiting for the user to answer a clarification', async () => {
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([
       fixture({
         event_id: 'event-clarification',
         run_id: 'run-waiting',
@@ -342,14 +342,14 @@ describe('OmnixRunCard', () => {
   });
 
   it('shows thinking inline while tool details stay collapsible', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-repair',
       status: 'running',
       desired_state: 'running',
       revision: 3,
       spec: { profile: 'coding', task: 'Fix the issue in code', evidence_policy: { requirements: [] } },
     }));
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([
       fixture({
         event_id: 'activity-1',
         run_id: 'run-repair',
@@ -429,8 +429,8 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-29T00:00:04Z',
       }),
     ]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-repair',
       evaluated_at: '2026-08-29T00:00:04Z',
       requirements: [],
@@ -442,8 +442,8 @@ describe('OmnixRunCard', () => {
       attribution_refs: [],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
 
     renderCard({
       agent_run: {
@@ -475,14 +475,14 @@ describe('OmnixRunCard', () => {
   });
 
   it('keeps an in-flight Pi tool inspectable directly under Thinking', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-thinking',
       status: 'running',
       desired_state: 'running',
       revision: 1,
       spec: { profile: 'coding', task: 'Inspect the repository', evidence_policy: { requirements: [] } },
     }));
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([
       fixture({
         event_id: 'thinking-tool-1',
         run_id: 'run-thinking',
@@ -508,8 +508,8 @@ describe('OmnixRunCard', () => {
         created_at: '2026-09-03T00:00:01Z',
       }),
     ]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-thinking',
       evaluated_at: '2026-09-03T00:00:00Z',
       requirements: [],
@@ -521,8 +521,8 @@ describe('OmnixRunCard', () => {
       attribution_refs: [],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
 
     renderCard({
       agent_run: {
@@ -552,7 +552,7 @@ describe('OmnixRunCard', () => {
   });
 
   it('shows durable progress, tests, and diff evidence', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-evidence',
       status: 'completed',
       desired_state: 'running',
@@ -562,7 +562,7 @@ describe('OmnixRunCard', () => {
       usage: { input_tokens: 1234, output_tokens: 567, input_tokens_reported: true, output_tokens_reported: true },
       spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
     }));
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([
       fixture({
         event_id: 'event-plan',
         run_id: 'run-evidence',
@@ -632,7 +632,7 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-27T00:01:37Z',
       }),
     ]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue(fixture([{
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue(fixture([{
       revision_id: 'revision-1',
       run_id: 'run-evidence',
       sequence: 1,
@@ -645,7 +645,7 @@ describe('OmnixRunCard', () => {
       acceptance_checks: ['successful_test_command'],
       created_at: '2026-08-27T00:00:00Z',
     }]));
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-evidence',
       evaluated_at: '2026-08-27T00:00:02Z',
       requirements: [],
@@ -657,8 +657,8 @@ describe('OmnixRunCard', () => {
       attribution_refs: ['manifest:run-evidence'],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([
       {
         artifact_id: 'artifact-1',
         run_id: 'run-evidence',
@@ -710,14 +710,14 @@ describe('OmnixRunCard', () => {
   });
 
   it('falls back to a task summary when the implementation response is missing', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-fallback-summary',
       status: 'completed',
       desired_state: 'running',
       revision: 2,
       spec: { profile: 'coding', task: 'Add the sidebar collapse control' },
     } as never);
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+    vi.spyOn(assistantApiClient, 'listAgentRunEvents').mockResolvedValue([
       fixture({
         event_id: 'fallback-plan',
         run_id: 'run-fallback-summary',
@@ -755,8 +755,8 @@ describe('OmnixRunCard', () => {
         created_at: '2026-09-09T00:00:03Z',
       }),
     ]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+    vi.spyOn(assistantApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-fallback-summary',
       evaluated_at: '2026-09-09T00:00:03Z',
       requirements: [],
@@ -768,8 +768,8 @@ describe('OmnixRunCard', () => {
       attribution_refs: [],
       passed: true,
     });
-    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
-    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(assistantApiClient, 'listAgentArtifacts').mockResolvedValue([]);
 
     renderCard({
       agent_run: {

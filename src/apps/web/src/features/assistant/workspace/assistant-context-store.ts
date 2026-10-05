@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import { createGatewayClient } from '../../../api/http';
+import { createApi } from '../api/gateway';
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { emitOmnixEvent } from '../../../events/bus';
 
 /**
@@ -78,7 +78,7 @@ function update(change: Partial<AssistantContextState>): void {
 }
 
 function client() {
-  return createGatewayClient();
+  return createApi();
 }
 
 export const assistantContextStore = {

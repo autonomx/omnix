@@ -4,6 +4,7 @@ import { omnixApiClient } from '../../../api/client';
 import { characterClient } from './characterClient';
 import { chatCapableModels, chatCapableProviders, getVoiceProfileAssets, type AssistantView } from './chatbotWorkspaceModel';
 import type { ChatSessionListEntry } from './useChatSessions';
+import { voiceApiClient } from '../../voice';
 
 type ChatCatalogOptions = {
   activeView: AssistantView;
@@ -21,7 +22,7 @@ export function useChatCatalog({ activeView, sessionsPending, selectedSessionId,
     queryKey: ['feature', 'chatbot', 'voice-library'],
     queryFn: async () => {
       try {
-        return await omnixApiClient.listVoiceLibrary();
+        return await voiceApiClient.listVoiceLibrary();
       } catch {
         // Older gateways do not expose the narrow route yet. Preserve the
         // compatibility path without making the aggregate catalog part of

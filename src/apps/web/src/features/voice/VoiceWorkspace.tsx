@@ -18,6 +18,7 @@ import './VoiceStudioWorkspace.css';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { isFallbackOutputRef, jobOutputRefs, type JobOutputRef } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
+import { voiceApiClient } from './api/voiceClient';
 
 interface VoiceFormValues {
   text: string;
@@ -60,7 +61,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const appliedSettingsRevision = useRef('');
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   // Under ['platform', 'jobs'] so job invalidations refresh it; bounded to voice jobs.
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs', 'voice-summaries'], queryFn: () => omnixApiClient.listVoiceJobSummaries() });
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs', 'voice-summaries'], queryFn: () => voiceApiClient.listVoiceJobSummaries() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
   const moduleDefaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);

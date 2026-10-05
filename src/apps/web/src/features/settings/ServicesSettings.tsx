@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import { SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
-import type { components } from '../../api/generated/types';
-import { api, unwrap } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
 export type HermesStatus = components['schemas']['HermesStatusResponse'];
 

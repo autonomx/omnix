@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsField } from './SettingsPrimitives';
-import { api, unwrap } from '../../api/http';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
 type CredentialProvider = 'brave' | 'tavily';
 

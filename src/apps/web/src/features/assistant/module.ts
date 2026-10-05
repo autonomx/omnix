@@ -9,6 +9,7 @@ export const chatbotModule = defineModule({
   summary: 'Text chat using the shared provider and model registry.',
   route: '/chatbot',
   icon: '▣',
+  backendModules: ['agent-runtime', 'assistant-memory', 'assistant-tools', 'character-interactions', 'characters', 'chat', 'desktop-companion', 'live-voice', 'research'],
   apiPrefixes: [
     '/api/chat', '/api/assistant', '/api/characters', '/api/character-avatar-generations',
     '/api/character-avatar-visemes', '/api/character-live2d', '/api/image-generation', '/api/live', '/api/live-chat',

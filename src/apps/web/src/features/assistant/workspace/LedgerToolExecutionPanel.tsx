@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ToolExecutionPanel as BaseToolExecutionPanel, type ToolExecutionPanelProps } from './ToolExecutionPanel';
 import type { ToolExecutionRow } from './tool-execution-view';
-import type { components } from '../../../api/generated/types';
-import { api } from '../../../api/http';
+import type { components } from '../api/generated';
+import { api } from '../api/gateway';
 
 type AssistantToolLedgerEntry = components['schemas']['AssistantToolLedgerEntry'];
 

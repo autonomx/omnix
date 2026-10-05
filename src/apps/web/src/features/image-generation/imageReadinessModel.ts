@@ -1,5 +1,5 @@
 import type { ProviderFacadePayload } from '../../api/client';
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 
 export interface WorkerHealthRecord {
   id: string;

@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 export interface FrozenReplayBar {
   instrument_id: string;
   interval: string;

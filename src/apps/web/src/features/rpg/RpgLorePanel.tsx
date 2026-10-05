@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../api/http';
+import { api } from './api/gateway';
 
 interface LoreDocumentSummary {
   document_id: string;

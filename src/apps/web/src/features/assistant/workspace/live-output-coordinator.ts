@@ -12,7 +12,7 @@ import {
   type LiveVoicePcmSessionOptions,
 } from './live-voice-pcm-session';
 import { liveStreamFetch } from '../../../api/transport';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent, LIVE_OBSERVATION_CANDIDATE_EVENT, LIVE_OBSERVATION_SUPERSEDED_EVENT } from '../../../events/bus';
 
 

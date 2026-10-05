@@ -1,6 +1,6 @@
-import type { components, paths } from './generated/types';
+import type { components, paths } from './generated/core';
 import { ApiError, ApiTimeoutError } from './errors';
-import { createGatewayClient, requestTimeout, unwrap, type GatewayClient } from './http';
+import { createGatewayClient, sendGatewayCall, type GatewayClient } from './http';
 import { pipelineFetch } from './fetchPipeline';
 
 export { ApiError, ApiTimeoutError } from './errors';
@@ -33,35 +33,11 @@ export type ReportListResponse = components['schemas']['ReportListResponse'];
 export type SendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
 export type CodingApprovalPolicy = NonNullable<SendChatMessageRequest['coding_approval_policy']>;
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
-export type AssistantContextChatRequest = components['schemas']['AssistantContextChatRequest'];
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
-export type AgentRunSnapshot = components['schemas']['AgentRunSnapshot'];
-export type AgentRunEvent = components['schemas']['AgentEvent'];
-export type AgentArtifact = components['schemas']['AgentArtifact'];
-export type AgentApproval = components['schemas']['AgentApproval'];
-export type AgentTaskRevision = components['schemas']['TaskRevision'];
-export type AgentEvidenceReceipt = components['schemas']['EvidenceReceipt'];
-export type AgentEvidenceSet = components['schemas']['EvidenceSet'];
-export type TaskGraphRunSnapshot = components['schemas']['TaskGraphRunSnapshot'];
-export type TaskGraphEvent = components['schemas']['TaskGraphEvent'];
 export type DeleteChatSessionResponse = components['schemas']['DeleteChatSessionResponse'];
-export type DeepResearchPlanUpdateRequest = components['schemas']['DeepResearchPlanUpdateRequest'];
 export type AssetContentResponse = components['schemas']['AssetContentResponse'];
-export type SaveStoryAssetRequest = components['schemas']['SaveStoryAssetRequest'];
-export type SavedStoryAssetResponse = components['schemas']['SavedStoryAssetResponse'];
-
-/** `/api/workflow-runs/{run_id}` returns an untyped object; the fields the UI reads. */
-export interface WorkflowRunSnapshot {
-  run_id: string;
-  workflow_id: string;
-  workflow_version: number;
-  status: string;
-  current_step_id?: string | null;
-  input_payload: Record<string, unknown>;
-  revision: number;
-}
 
 export interface ApiClientOptions {
   baseUrl?: string;
@@ -94,15 +70,7 @@ export class OmnixApiClient {
     send: (signal?: AbortSignal) => Promise<{ data?: T; error?: unknown; response: Response }>,
     options: ApiRequestOptions = {},
   ): Promise<T> {
-    if (!options.timeoutMs) return unwrap(send());
-    const timeout = requestTimeout(options.timeoutMs, options.timeoutMessage);
-    try {
-      return await unwrap(send(timeout.signal));
-    } catch (error) {
-      throw timeout.timedOut(error);
-    } finally {
-      timeout.clear();
-    }
+    return sendGatewayCall(send, options);
   }
 
   async get<T>(path: `/api/${string}`): Promise<T> {
@@ -162,105 +130,6 @@ export class OmnixApiClient {
     );
   }
 
-  /** Sends a chat message with the context tools' fields (research, agent mode, desktop, local folder). */
-  async sendAssistantContextChatMessage(sessionId: string, request: AssistantContextChatRequest): Promise<SendChatMessageResponse> {
-    return this.call(
-      (signal) => this.api.POST('/api/assistant/context/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
-      { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
-    );
-  }
-
-  async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}', { params: { path: { run_id: runId } } }));
-  }
-
-  async listAgentRunEvents(runId: string, afterSequence = 0): Promise<AgentRunEvent[]> {
-    const query = afterSequence > 0 ? { after_sequence: afterSequence } : {};
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/events', { params: { path: { run_id: runId }, query } }));
-  }
-
-  async listAgentArtifacts(runId: string): Promise<AgentArtifact[]> {
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/artifacts', { params: { path: { run_id: runId } } }));
-  }
-
-  async listAgentTaskRevisions(runId: string): Promise<AgentTaskRevision[]> {
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/task-revisions', { params: { path: { run_id: runId } } }));
-  }
-
-  async listAgentEvidenceReceipts(runId: string): Promise<AgentEvidenceReceipt[]> {
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/evidence/receipts', { params: { path: { run_id: runId } } }));
-  }
-
-  async getAgentEvidenceSet(runId: string): Promise<AgentEvidenceSet> {
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/evidence', { params: { path: { run_id: runId } } }));
-  }
-
-  async commandAgentRun(
-    runId: string,
-    commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
-    payload: Record<string, unknown> = {},
-  ): Promise<AgentRunSnapshot> {
-    return this.call(() => this.api.POST('/api/agent-runs/{run_id}/commands', {
-      params: { path: { run_id: runId } },
-      body: { command_type: commandType, payload },
-    }));
-  }
-
-  async listAgentApprovals(runId: string, state?: string): Promise<AgentApproval[]> {
-    const query = state ? { state } : {};
-    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/approvals', { params: { path: { run_id: runId }, query } }));
-  }
-
-  async getTaskGraphRun(runId: string): Promise<TaskGraphRunSnapshot> {
-    return this.call(() => this.api.GET('/api/task-graph-runs/{run_id}', { params: { path: { run_id: runId } } }));
-  }
-
-  async listTaskGraphEvents(runId: string, afterSequence = 0): Promise<TaskGraphEvent[]> {
-    const query = afterSequence > 0 ? { after_sequence: afterSequence } : {};
-    return this.call(() => this.api.GET('/api/task-graph-runs/{run_id}/events', { params: { path: { run_id: runId }, query } }));
-  }
-
-  async commandTaskGraphRun(
-    runId: string,
-    command: 'advance' | 'recover' | 'cancel' | 'approve' | 'reject',
-    nodeId?: string,
-    approvalId?: string,
-  ): Promise<TaskGraphRunSnapshot> {
-    return this.call(() => this.api.POST('/api/task-graph-runs/{run_id}/commands', {
-      params: { path: { run_id: runId } },
-      body: {
-        command,
-        ...(nodeId ? { node_id: nodeId } : {}),
-        ...(approvalId ? { approval_id: approvalId } : {}),
-      },
-    }));
-  }
-
-  async getWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
-    const run = await this.call(() => this.api.GET('/api/workflow-runs/{run_id}', { params: { path: { run_id: runId } } }));
-    return run as unknown as WorkflowRunSnapshot;
-  }
-
-  async commandWorkflowRun(
-    runId: string,
-    command: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
-    stepId?: string,
-  ): Promise<WorkflowRunSnapshot> {
-    const run = await this.call(() => this.api.POST('/api/workflow-runs/{run_id}/commands', {
-      params: { path: { run_id: runId } },
-      body: { command, ...(stepId ? { step_id: stepId } : {}) },
-    }));
-    return run as unknown as WorkflowRunSnapshot;
-  }
-
-  async updateDeepResearchPlan(jobId: string, request: DeepResearchPlanUpdateRequest): Promise<JobRecord> {
-    return this.call(() => this.api.PATCH('/api/assistant/context/research/jobs/{job_id}/plan', { params: { path: { job_id: jobId } }, body: request }));
-  }
-
-  async startDeepResearchPlan(jobId: string): Promise<JobRecord> {
-    return this.call(() => this.api.POST('/api/assistant/context/research/jobs/{job_id}/start', { params: { path: { job_id: jobId } } }));
-  }
-
   async listProviders(): Promise<ProviderFacadePayload> {
     return this.call(() => this.api.GET('/api/providers'));
   }
@@ -306,11 +175,6 @@ export class OmnixApiClient {
     return this.call(() => this.api.GET('/api/jobs', { params: { query } }));
   }
 
-  /** Voice Studio's bounded job history: recent voice and voice-cloning jobs only. */
-  async listVoiceJobSummaries(limit = 40): Promise<JobListResponse> {
-    return this.call(() => this.api.GET('/api/jobs/voice-summaries', { params: { query: { limit } } }));
-  }
-
   async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
     return this.call((signal) => this.api.POST('/api/jobs', { body: request, signal }), options);
   }
@@ -350,10 +214,6 @@ export class OmnixApiClient {
     return this.call(() => this.api.GET('/api/assets', { params: { query } }));
   }
 
-  async listVoiceLibrary(): Promise<AssetListResponse> {
-    return this.call(() => this.api.GET('/api/voice-library'));
-  }
-
   async getAssetContent(assetId: string): Promise<AssetContentResponse> {
     return this.call(() => this.api.GET('/api/assets/{asset_id}/content', { params: { path: { asset_id: assetId } } }));
   }
@@ -361,10 +221,6 @@ export class OmnixApiClient {
   async deleteVoiceAsset(assetId: string): Promise<{ ok: boolean; asset_id: string; deleted: boolean; file_deleted: boolean }> {
     const result = await this.call(() => this.api.DELETE('/api/voice-cloning/assets/{asset_id}', { params: { path: { asset_id: assetId } } }));
     return result as unknown as { ok: boolean; asset_id: string; deleted: boolean; file_deleted: boolean };
-  }
-
-  async saveStoryAsset(request: SaveStoryAssetRequest): Promise<SavedStoryAssetResponse> {
-    return this.call(() => this.api.POST('/api/assets/story', { body: request }));
   }
 
   async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {

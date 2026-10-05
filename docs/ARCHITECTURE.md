@@ -140,7 +140,7 @@ Chat history critical path when `/api/voice-library` is available.
 
 ## Typed API boundary
 
-The web app uses a shared API client under `src/apps/web/src/api`. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:
+The web app's transport and kernel client live under `src/apps/web/src/api`; each feature owns its gateway calls under `features/<name>/api/` (PA-2.4). `api:schema` exports the gateway OpenAPI document and `route-owners.json` (which feature mounted each operation). `api:types` (`scripts/generate-api-types.mjs`) writes `api/generated/core.ts` (kernel operations and schemas shared by several features) and, for each feature, `features/<name>/api/generated.ts` (the operations of the backend modules its manifest lists in `backendModules`, its own schemas, and every core schema re-exported). Feature code reads schemas only from its own `generated.ts` and calls its operations through `features/<name>/api/gateway.ts`:
 
 ```bash
 npm --workspace @omnix/web run api:schema

@@ -1,6 +1,6 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { JobRecord } from '../../../api/client';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import {
   arrayRecords,
   asRecord,

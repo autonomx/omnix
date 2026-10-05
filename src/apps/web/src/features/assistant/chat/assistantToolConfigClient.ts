@@ -1,7 +1,8 @@
  
 import { executeToolProposal } from '../workspace/tool-proposal-client';
-import type { components } from '../../../api/generated/types';
-import { api, unwrap } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrap } from '../../../api/http';
+import { api } from '../api/gateway';
 
 export type AssistantActionConfigRecord = components['schemas']['AssistantActionConfigRecord'];
 

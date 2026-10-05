@@ -1,5 +1,6 @@
-import type { components } from '../../../api/generated/types';
-import { api, unwrapAs } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrapAs } from '../../../api/http';
+import { api } from '../api/gateway';
 
 export type CharacterHermesSyncStatus = components['schemas']['CharacterHermesSyncStatus'];
 

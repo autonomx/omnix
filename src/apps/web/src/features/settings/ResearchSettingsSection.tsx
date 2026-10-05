@@ -3,8 +3,9 @@ import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 import { SettingsAdvanced, SettingsField, SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 import type { ResearchProvider } from './settingsDocumentTypes';
-import type { components } from '../../api/generated/types';
-import { api, unwrap } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
 
 type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];

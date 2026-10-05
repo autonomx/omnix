@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 export type MarketResearchRequest = components['schemas']['MarketResearchRequest'];
 
 export type ResearchSource = components['schemas']['ResearchSource'];

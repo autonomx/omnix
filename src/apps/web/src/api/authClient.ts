@@ -1,4 +1,4 @@
-import type { components } from './generated/types';
+import type { components } from './generated/core';
 import { pipelineFetch } from './fetchPipeline';
 
 export type AuthSession = components['schemas']['AuthSessionResponse'];

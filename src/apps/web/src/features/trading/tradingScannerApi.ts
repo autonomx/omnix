@@ -1,10 +1,11 @@
-import { api, unwrapLabelled } from '../../api/http';
+import { unwrapLabelled } from '../../api/http';
 import type {
   TradingScannerDefinition,
   TradingScannerDefinitionInput,
   TradingScannerResult,
   TradingScannerRun,
 } from './scannerTypes';
+import { api } from './api/gateway';
 
 const scanner = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading scanner');
 

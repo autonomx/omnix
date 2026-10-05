@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 
 type RequiredField<T, K extends keyof T> = T & Required<Pick<T, K>>;
 

@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { omnixApiClient } from '../../api/client';
 import { downloadBlob } from '../../shared/download';
 import { libraryAssetId, persistTrashedStoryLibraryItems, upsertTrashedStoryLibraryItem } from './storyLibraryModel';
 import { SaveFeedback, SavedStoryDraft, StoryLibrarySection, TrashedStoryLibraryItem, slugify, storyDraftStorageKey, StoryLibraryItem } from './storyModel';
 import { formatStoryMarkdown } from './storyTextModel';
+import { storyApiClient } from './api/storyClient';
 
 type StoryPersistenceOptions = {
   story: {
@@ -102,7 +102,7 @@ export function useStoryPersistence({
     const draft = draftForActiveStory();
     try {
       persistLocalDraft(draft);
-      const saved = await omnixApiClient.saveStoryAsset({
+      const saved = await storyApiClient.saveStoryAsset({
         title: storyTitle,
         content: activeStoryText,
         premise,

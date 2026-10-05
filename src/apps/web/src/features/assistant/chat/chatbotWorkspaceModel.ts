@@ -2,7 +2,7 @@
 import { ApiError, type AssetListResponse, type ChatSession as ApiChatSession, type CodingApprovalPolicy, type JobRecord, type ProviderFacadePayload } from '../../../api/client';
 import { fetchBytes, statusError } from '../../../api/transport';
 import { createInMemoryAssistantWorkspaceEventStore, createStoredAssistantWorkspaceEventStore, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStore, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceEventStorage, type AssistantWorkspaceRuntimeConfig, type TtsSynthesisResponse, isLiveVoiceControllerInstalled, isLiveVoiceUnifiedAudioInstalled } from '../workspace';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../../api/schemas/streams';
 
 export interface ChatbotFormValues {

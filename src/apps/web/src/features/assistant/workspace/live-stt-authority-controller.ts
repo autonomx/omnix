@@ -1,4 +1,4 @@
-import type { components } from '../../../api/generated/types';
+import type { STTProxyResponse } from '../../voice';
 import { speechOrigin, streamingSttUrl, type SpeechLocation } from './stt-url';
 
 
@@ -7,7 +7,6 @@ const DEFAULT_ENDPOINT_THRESHOLD = 0.75;
 export type AuthorityMode = 'observational' | 'test' | 'auto';
 
 // The speech service's authority probe; the gateway proxies it as /api/stt/authorityz.
-type AuthorityResponse = components['schemas']['STTProxyResponse'];
 
 export type AuthoritySelection = {
   websocketUrl: string;
@@ -56,7 +55,7 @@ export async function resolveAuthoritySelection(
   authorityUrl.searchParams.set('language', language);
   authorityUrl.searchParams.set('mode', mode);
 
-  let response: Partial<AuthorityResponse> = {};
+  let response: Partial<STTProxyResponse> = {};
   let probeSucceeded = false;
   let reasons: string[] = [];
   try {
@@ -65,7 +64,7 @@ export async function resolveAuthoritySelection(
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
-    response = await authorityResponse.json() as AuthorityResponse;
+    response = await authorityResponse.json() as STTProxyResponse;
     probeSucceeded = authorityResponse.ok;
     if (!authorityResponse.ok) {
       reasons.push(`authority_http_${authorityResponse.status}`);

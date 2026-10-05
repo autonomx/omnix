@@ -1,7 +1,7 @@
 import type { MarketBar } from '../tradingTypes';
 import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
-import type { components } from '../../../api/generated/types';
-import { api } from '../../../api/http';
+import type { components } from '../api/generated';
+import { api } from '../api/gateway';
 
 export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin';
 export type ExternalIndicatorDefinition = {

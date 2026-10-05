@@ -1,4 +1,4 @@
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 export type LiveMaterialResponsePolicy = 'none' | 'observe' | 'respond';
 export type LiveMaterialRetention = 'ephemeral_session' | 'visible_transcript' | 'durable_conversation';

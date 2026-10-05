@@ -38,7 +38,7 @@ import {
   parseJobEvent,
   selectLatestImageAsset,
 } from './imageWorkspaceModel';
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 
 const DEFAULT_IMAGE_MODEL = 'flux_klein';
 const IMAGE_MODEL_QUERY_ROOT = ['image-generation', 'model-status'] as const;

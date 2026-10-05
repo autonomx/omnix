@@ -216,6 +216,34 @@ const omnixBoundaryPlugin = {
         };
       },
     },
+    'own-generated-api-types': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'feature code reads gateway types from its own api/generated.ts' },
+        schema: [],
+        messages: {
+          sharedGenerated: "Import gateway types from this feature's api/generated.ts; it re-exports the shared schemas.",
+        },
+      },
+      create(context) {
+        const filename = context.filename ?? context.getFilename();
+        const sharedGenerated = path.join(webRoot, 'src', 'api', 'generated');
+        const check = (node) => {
+          const specifier = node.source?.type === 'Literal' ? node.source.value : null;
+          if (typeof specifier !== 'string' || !specifier.startsWith('.')) return;
+          const target = path.resolve(path.dirname(filename), specifier);
+          if (target === sharedGenerated || target.startsWith(`${sharedGenerated}${path.sep}`)) {
+            context.report({ node, messageId: 'sharedGenerated' });
+          }
+        };
+        return {
+          ImportDeclaration: check,
+          ExportNamedDeclaration: check,
+          ExportAllDeclaration: check,
+          ImportExpression: check,
+        };
+      },
+    },
     'no-app-direct-feature-dynamic-import': {
       meta: {
         type: 'problem',
@@ -375,6 +403,14 @@ export default [
     files: ['src/features/**/*.{js,jsx,ts,tsx}'],
     rules: {
       'omnix/no-cross-feature-dynamic-import': 'error',
+    },
+  },
+  {
+    // PA-2.4: only a feature's typed gateway client combines its paths with the kernel's.
+    files: ['src/features/**/*.{js,jsx,ts,tsx}'],
+    ignores: ['src/features/*/api/gateway.ts', 'src/features/*/api/generated.ts'],
+    rules: {
+      'omnix/own-generated-api-types': 'error',
     },
   },
   {

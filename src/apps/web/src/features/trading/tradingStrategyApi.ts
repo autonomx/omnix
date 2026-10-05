@@ -17,8 +17,9 @@ import type {
   V2ProspectiveQualification,
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
-import type { components } from '../../api/generated/types';
-import { api, unwrapLabelled } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
 const DEEP_RECOVERY_EVENT_TYPES = new Set(['deep_recovery_state', 'deep_recovery_shadow']);
 const PROSPECTIVE_ECONOMIC_EVENT_TYPES = new Set([

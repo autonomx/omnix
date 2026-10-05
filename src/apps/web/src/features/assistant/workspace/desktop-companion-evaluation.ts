@@ -1,6 +1,7 @@
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import type { DesktopCompanionRolloutStage } from '../../settings';
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
+import { api } from '../api/gateway';
 
 export type DesktopCompanionEvaluationPayload = components['schemas']['DesktopCompanionEvaluationCreate'];
 

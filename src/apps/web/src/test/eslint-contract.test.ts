@@ -59,6 +59,25 @@ describe('web ESLint architecture rules', () => {
     expect(coreRuleIds).not.toContain('omnix/no-core-feature-import');
   });
 
+  it("keeps feature code on its own generated gateway types", async () => {
+    const sharedRuleIds = await lintSource(
+      "import type { components } from '../../api/generated/core';",
+      'src/features/trading/eslint-contract-fixture.ts',
+    );
+    const ownRuleIds = await lintSource(
+      "import type { components } from './api/generated';",
+      'src/features/trading/eslint-contract-fixture.ts',
+    );
+    const gatewayRuleIds = await lintSource(
+      "import type { paths } from '../../../api/generated/core';",
+      'src/features/trading/api/gateway.ts',
+    );
+
+    expect(sharedRuleIds).toContain('omnix/own-generated-api-types');
+    expect(ownRuleIds).not.toContain('omnix/own-generated-api-types');
+    expect(gatewayRuleIds).not.toContain('omnix/own-generated-api-types');
+  });
+
   it('allows the ModuleWorkspace shell and rejects direct application imports', async () => {
     const workspaceRuleIds = await lintSource(
       "import { ModuleWorkspace } from '../features/ModuleWorkspace';",

@@ -1,8 +1,9 @@
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
 import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
 import { DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../../events/bus';
 import { POLL_INTERVALS_MS, startPolling } from '../../../shared/timers';
+import { api } from '../api/gateway';
 
 let desktopCompanionOperationalGuardInstalled = false;
 

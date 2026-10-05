@@ -106,9 +106,9 @@ jobs:
         with:
           name: trading-generated-api
           path: |
-            src/apps/web/src/api/generated/openapi.json
-            src/apps/web/src/api/generated/types.ts
+            src/apps/web/src/api/generated
+            src/apps/web/src/features/*/api/generated.ts
           if-no-files-found: error
           retention-days: 7
       - name: Verify generated API contract is committed
-        run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
+        run: git diff --exit-code -- src/apps/web/src/api/generated "src/apps/web/src/features/*/api/generated.ts"

@@ -1,9 +1,9 @@
 import { Button, PasswordInput, Progress, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
-import type { components } from '../../api/generated/types';
-import { api } from '../../api/http';
+import type { components } from './api/generated';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { api } from './api/gateway';
 
 export type ImageLocalModelStatus = components['schemas']['ImageModelLocalStatus'];
 export type ImageDownloadProgress = components['schemas']['ImageModelDownloadProgress'];

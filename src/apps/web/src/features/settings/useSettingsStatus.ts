@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
-import { api, unwrap } from '../../api/http';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
 
 export type SettingsStatusSnapshot = {
   gateway: string;

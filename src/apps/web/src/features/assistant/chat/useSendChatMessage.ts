@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { UseFormReset } from 'react-hook-form';
-import { ApiError, omnixApiClient, type AssistantContextChatRequest, type SendChatMessageRequest } from '../../../api/client';
+import { ApiError, omnixApiClient, type SendChatMessageRequest } from '../../../api/client';
 import { assistantContextStore, createChatbotFailureEvent, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceRuntimeConfig, sendChatWithAssistantContext } from '../workspace';
 import { noteChatMessageSent } from './researchProgressController';
 import {
@@ -15,6 +15,7 @@ import {
   type PastedChatImage,
   type PastedChatTextFile,
 } from './chatbotWorkspaceModel';
+import { assistantApiClient, type AssistantContextChatRequest } from '../api/assistantClient';
 
 type SendChatMessageOptions = {
   runtimeConfig: AssistantWorkspaceRuntimeConfig;
@@ -93,7 +94,7 @@ export function useSendChatMessage({
       const chatSessionId = sessionId;
       return noteChatMessageSent(sessionId, await sendChatWithAssistantContext(chatSessionId, message, (route, body) => (
         route === 'context'
-          ? omnixApiClient.sendAssistantContextChatMessage(chatSessionId, body as AssistantContextChatRequest)
+          ? assistantApiClient.sendAssistantContextChatMessage(chatSessionId, body as AssistantContextChatRequest)
           : omnixApiClient.sendChatMessage(chatSessionId, body as SendChatMessageRequest)
       )));
     },

@@ -3,9 +3,10 @@ import {
   readLiveConversationSettings,
   updateLiveConversationSettings,
 } from '../workspace/live-voice-conversation-settings';
-import type { components } from '../../../api/generated/types';
-import { api, unwrapAs } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrapAs } from '../../../api/http';
 import { emitOmnixEvent, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../../events/bus';
+import { api } from '../api/gateway';
 
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ConversationStance = 'automatic' | 'listen' | 'discuss' | 'advise' | 'brainstorm' | 'teach';

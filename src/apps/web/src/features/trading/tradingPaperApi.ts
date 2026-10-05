@@ -12,7 +12,8 @@ import type {
   PaperRiskPreviewInput,
 } from './paperTypes';
 
-import { api, unwrapLabelled } from '../../api/http';
+import { unwrapLabelled } from '../../api/http';
+import { api } from './api/gateway';
 
 const paper = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Paper Trading');
 const orderManagement = { 'X-Omnix-Paper-Order-Management': 'v2' } as const;

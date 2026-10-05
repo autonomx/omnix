@@ -7,6 +7,7 @@ export const voiceCloningModule = defineModule({
   summary: 'Voice profile creation, sample ingestion, previews, and profile metadata.',
   route: '/voice-cloning',
   icon: '◎',
+  backendModules: [],
   apiPrefixes: [
     '/api/voice-cloning', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers', '/api/settings',
     '/api/tts', '/api/agent', '/api/prompts',

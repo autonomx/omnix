@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { omnixApiClient } from '../../../api/client';
 import { HtmlArtifactPreviews } from './HtmlArtifactPreview';
 import { OmnixRunCard as OmnixRunCardCore } from './OmnixRunCardCore';
 import './OmnixRunCardQuality.css';
+import { assistantApiClient } from '../api/assistantClient';
 
 type Metadata = Record<string, unknown>;
 
@@ -108,7 +108,7 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const id = initialAgentRunId(metadata);
   const query = useQuery({
     queryKey: ['agent-run', id],
-    queryFn: () => omnixApiClient.getAgentRun(id),
+    queryFn: () => assistantApiClient.getAgentRun(id),
     enabled: Boolean(id),
     refetchInterval: (state) => {
       const run = state.state.data as QualityAwareAgentRun | undefined;
@@ -126,7 +126,7 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const status = String(run?.status ?? '');
   const artifacts = useQuery({
     queryKey: ['agent-run', id, 'artifacts', 'html-previews'],
-    queryFn: () => omnixApiClient.listAgentArtifacts(id),
+    queryFn: () => assistantApiClient.listAgentArtifacts(id),
     enabled: Boolean(id) && status === 'completed' && profile === 'coding',
   });
   const htmlPaths = artifactHtmlPaths(artifacts.data);

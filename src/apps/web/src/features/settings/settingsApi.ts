@@ -1,7 +1,8 @@
-import type { components } from '../../api/generated/types';
-import { api, createGatewayClient } from '../../api/http';
+import type { components } from './api/generated';
+import { createGatewayClient } from '../../api/http';
 import { migrateSettingsDocument, settingsPatch } from './settingsMerge';
 import type { SettingsDocument } from './settingsDocumentTypes';
+import { api } from './api/gateway';
 
 export type SettingsApiPayload = components['schemas']['SettingsPayload'];
 

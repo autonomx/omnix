@@ -1,4 +1,4 @@
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 export const SPEECH_PERFORMANCE_SCHEMA_VERSION = 1 as const;
 
 export type SpeechAct =

@@ -1,4 +1,5 @@
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
+import { api } from './gateway';
 
 export type HermesStatusResponse = Record<string, unknown>;
 

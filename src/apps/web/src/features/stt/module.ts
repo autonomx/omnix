@@ -7,6 +7,7 @@ export const sttModule = defineModule({
   summary: 'Speech-to-text transcription, alignment, transcript assets, and diagnostics.',
   route: '/stt',
   icon: '⌁',
+  backendModules: [],
   apiPrefixes: [
     '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/voice', '/api/tts', '/api/agent',
     '/api/prompts',

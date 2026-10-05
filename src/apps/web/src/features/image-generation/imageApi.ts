@@ -1,8 +1,9 @@
 import type { AssetListResponse, JobListResponse, JobRecord } from '../../api/client';
-import type { components } from '../../api/generated/types';
-import { api, unwrap } from '../../api/http';
+import type { components } from './api/generated';
+import { unwrap } from '../../api/http';
 import { toImageModelStatusView, type ImageModelStatusView } from './ImageModelSelectorControl';
 import type { WorkerHealthPayload } from './imageReadinessModel';
+import { api } from './api/gateway';
 
 type ImageModelDownloadRequest = components['schemas']['ImageModelDownloadRequest'];
 export type ImageAssetDeleteResponse = components['schemas']['ImageAssetDeleteResponse'];

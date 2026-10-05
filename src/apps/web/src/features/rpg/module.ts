@@ -7,6 +7,7 @@ export const rpgModule = defineModule({
   summary: 'Deterministic AI role-playing engine, turn contracts, journal, party, combat, and reports.',
   route: '/rpg',
   icon: '✦',
+  backendModules: ['hermes', 'rpg'],
   apiPrefixes: [
     '/api/rpg', '/api/assets', '/api/jobs', '/api/reports', '/api/replay', '/api/hermes', '/api/agent',
     '/api/prompts',

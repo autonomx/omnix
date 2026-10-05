@@ -2,7 +2,7 @@ import { omnixApiClient } from '../../../api/client';
 import type { ChatSession, CreateChatSessionRequest } from '../../../api/client';
 import './chat-response-metrics-controller.css';
 import { characterClient, type SessionInteraction } from './characterClient';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { ASSISTANT_LIVE_VOICE_STOP_EVENT, CHAT_SESSION_CREATED_EVENT, CHAT_SESSION_SELECTED_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT } from '../../../events/bus';
 
 let chatSessionToolsInstalled = false;

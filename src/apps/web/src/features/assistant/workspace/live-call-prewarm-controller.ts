@@ -1,5 +1,5 @@
-import type { components } from '../../../api/generated/types';
-import { createGatewayClient, type GatewayClient } from '../../../api/http';
+import type { components } from '../api/generated';
+import { createApi } from '../api/gateway';
 import { liveConversationStore } from './live-conversation-store';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 import { ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent } from '../../../events/bus';
@@ -65,7 +65,7 @@ async function runPrewarm(
   const startedAt = now();
   dispatchPerformance('live_call_prewarm_started', { sessionId });
   try {
-    const client = createGatewayClient({ fetchImpl });
+    const client = createApi({ fetchImpl });
     const speaker = resolveSpeaker(await fetchRuntime(client, sessionId));
     const language = PREWARM_LANGUAGE;
     const { data, error, response } = await client.POST('/api/live-call/sessions/{session_id}/prewarm', {
@@ -113,7 +113,7 @@ async function runPrewarm(
   }
 }
 
-async function fetchRuntime(client: GatewayClient, sessionId: string): Promise<LiveCallRuntime | null> {
+async function fetchRuntime(client: ReturnType<typeof createApi>, sessionId: string): Promise<LiveCallRuntime | null> {
   try {
     const { data } = await client.GET('/api/chat/sessions/{session_id}/live-call/runtime', {
       params: { path: { session_id: sessionId } },

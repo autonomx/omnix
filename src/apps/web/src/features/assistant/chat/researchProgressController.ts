@@ -5,10 +5,11 @@ import {
   type JobRecord,
   type SendChatMessageResponse,
 } from '../../../api/client';
-import type { components } from '../../../api/generated/types';
+import type { components } from '../api/generated';
 import { downloadBlob } from '../../../shared/download';
 import { emitOmnixEvent } from '../../../events/bus';
 import { POLL_INTERVALS_MS, startPolling } from '../../../shared/timers';
+import { assistantApiClient } from '../api/assistantClient';
 
 let researchProgressControllerInstalled = false;
 
@@ -77,14 +78,14 @@ export async function cancelResearchJob(job: JobRecord, reason: string): Promise
 /** Saves a changed page limit on a plan awaiting approval. */
 export async function updateResearchPlanPages(job: JobRecord, pages: number): Promise<JobRecord> {
   if (pages === researchMaxPages(job)) return job;
-  activeJob = await omnixApiClient.updateDeepResearchPlan(job.id, { max_pages: pages });
+  activeJob = await assistantApiClient.updateDeepResearchPlan(job.id, { max_pages: pages });
   publish();
   return activeJob;
 }
 
 /** Starts an approved plan (or restarts a stalled one) and follows it. */
 export async function startResearchJob(job: JobRecord): Promise<void> {
-  activeJob = await omnixApiClient.startDeepResearchPlan(job.id);
+  activeJob = await assistantApiClient.startDeepResearchPlan(job.id);
   watchResearchJob(activeJob.id);
   publish();
 }

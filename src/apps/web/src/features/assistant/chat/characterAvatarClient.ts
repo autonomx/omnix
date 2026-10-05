@@ -1,8 +1,10 @@
 import type { CharacterAvatarPack } from './characterClient';
-import type { components } from '../../../api/generated/types';
+import type { ImageReferenceUploadResponse } from '../../image-generation';
+import type { components } from '../api/generated';
 import { ApiError } from '../../../api/errors';
-import { api, unwrapAs } from '../../../api/http';
+import { unwrapAs } from '../../../api/http';
 import { uploadBinary } from '../../../api/transport';
+import { api } from '../api/gateway';
 
 export type AvatarGenerationStatus = 'queued' | 'generating_base' | 'generating_variants' | 'completed' | 'failed';
 export type VisemeGenerationStatus = 'generating' | 'completed' | 'failed';
@@ -17,7 +19,7 @@ export type ClonedVoiceBackfillItem = ClonedVoiceBackfillResponse['items'][numbe
 
 export type ClonedVoiceBackfillResponse = components['schemas']['BackfillClonedVoiceCharactersResponse'];
 
-export type UploadedAvatarSourceAsset = components['schemas']['ImageReferenceUploadResponse']['asset'];
+export type UploadedAvatarSourceAsset = ImageReferenceUploadResponse['asset'];
 
 export type Live2DModelCatalogItem = components['schemas']['Live2DModelCatalogItem'];
 
@@ -38,7 +40,7 @@ export const characterAvatarClient = {
   },
   async uploadSourceImage(file: File): Promise<UploadedAvatarSourceAsset> {
     try {
-      const payload = await uploadBinary<components['schemas']['ImageReferenceUploadResponse']>('/api/image-generation/references', file, {
+      const payload = await uploadBinary<ImageReferenceUploadResponse>('/api/image-generation/references', file, {
         query: { filename: file.name || 'avatar-source' },
       });
       return payload.asset;

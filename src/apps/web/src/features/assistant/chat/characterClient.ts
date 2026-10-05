@@ -1,6 +1,7 @@
 import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
-import type { components } from '../../../api/generated/types';
-import { api, unwrapAs } from '../../../api/http';
+import type { components } from '../api/generated';
+import { unwrapAs } from '../../../api/http';
+import { api } from '../api/gateway';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
 export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';

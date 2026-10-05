@@ -1,4 +1,4 @@
-import type { components } from '../../api/generated/types';
+import type { components } from './api/generated';
 export type TradingScannerDefinition = components['schemas']['TradingScannerDefinition-Output'];
 /** A definition as the UI sends it; the gateway fills defaults. */
 export type TradingScannerDefinitionInput = components['schemas']['TradingScannerDefinition-Input'];

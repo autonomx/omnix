@@ -1,6 +1,6 @@
 import { fetchBelow, registerFetchMiddleware } from '../../../api/fetchPipeline';
-import type { components } from '../../../api/generated/types';
-import { createGatewayClient } from '../../../api/http';
+import type { components } from '../api/generated';
+import { createApi } from '../api/gateway';
 import { assistantContextStore, type ReleaseAvailability, type ResearchMode } from './assistant-context-store';
 
 type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];
@@ -17,7 +17,7 @@ const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const ENHANCED_MESSAGE_PATH = /^\/api\/assistant\/context\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const MIDDLEWARE = 'research-release';
-const ownClient = createGatewayClient({ fetchImpl: fetchBelow(MIDDLEWARE) });
+const ownClient = createApi({ fetchImpl: fetchBelow(MIDDLEWARE) });
 
 let activeSessionId: string | null = null;
 let disposeController: (() => void) | null = null;

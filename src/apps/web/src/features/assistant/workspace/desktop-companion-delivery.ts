@@ -1,9 +1,10 @@
 import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import { liveConversationStore, type LiveConversationRuntimeState } from './live-conversation-store';
-import { api, unwrap } from '../../../api/http';
+import { unwrap } from '../../../api/http';
 import { openStream } from '../../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, DESKTOP_COMPANION_DELIVERY_EVENT, DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_EXPRESSION_EVENT, DESKTOP_COMPANION_TEXT_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { api } from '../api/gateway';
 
 let desktopCompanionDeliveryInstalled = false;
 
