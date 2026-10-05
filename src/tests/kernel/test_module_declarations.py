@@ -49,9 +49,14 @@ def test_stored_settings_documents_are_unchanged() -> None:
 
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
 
-    assert json.dumps(SettingsProfile().model_dump(mode="json", by_alias=True)) == fixture["default"]
+    def existing(document: dict) -> str:
+        # A module added later appends its own section; the sections stored before stay byte-identical.
+        known = json.loads(fixture["default"])
+        return json.dumps({key: value for key, value in document.items() if key in known})
+
+    assert existing(SettingsProfile().model_dump(mode="json", by_alias=True)) == fixture["default"]
     sample = SettingsProfile.model_validate(fixture["sample_input"]).model_dump(mode="json", by_alias=True)
-    assert json.dumps(sample) == fixture["sample"]
+    assert existing(sample) == fixture["sample"]
 
 
 def test_every_declared_section_is_in_the_profile_whatever_is_enabled() -> None:
@@ -59,7 +64,7 @@ def test_every_declared_section_is_in_the_profile_whatever_is_enabled() -> None:
 
     fields = set(SettingsProfile.model_fields)
 
-    assert {section.field for section in module_settings_sections()} == {"voice", "storyteller", "podcast", "rpg"}
+    assert {section.field for section in module_settings_sections()} >= {"voice", "storyteller", "podcast", "rpg"}
     assert {section.field for section in module_settings_sections()} <= fields
 
 

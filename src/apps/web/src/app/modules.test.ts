@@ -22,15 +22,17 @@ const canonicalModuleIds = [
 ];
 
 describe('omnixModules', () => {
-  it('matches the canonical platform module order', () => {
-    expect(omnixModules.map((module) => module.id)).toEqual(canonicalModuleIds);
+  it('keeps the canonical modules in their order', () => {
+    // A module added later (scripts/new_module.py, PA-4.2) joins the list without editing this test.
+    const ids = omnixModules.map((module) => module.id);
+    expect(ids.filter((id) => (canonicalModuleIds as readonly string[]).includes(id))).toEqual(canonicalModuleIds);
   });
 
   it('defines a unique route for every module', () => {
     const routes = omnixModules.map((module) => module.route);
 
-    expect(new Set(routes).size).toBe(canonicalModuleIds.length);
-    expect(routes).toHaveLength(canonicalModuleIds.length);
+    expect(new Set(routes).size).toBe(routes.length);
+    expect(routes.length).toBeGreaterThanOrEqual(canonicalModuleIds.length);
     expect(routes.every((route) => route.startsWith('/'))).toBe(true);
   });
 });

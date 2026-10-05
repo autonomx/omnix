@@ -12,8 +12,11 @@ from scripts import module_conformance as conformance
 
 
 def test_static_gaps_match_the_baseline_exactly() -> None:
-    # A new gap fails; a fixed gap fails until its baseline entry is deleted.
-    assert conformance.static_gaps() == conformance.load_baseline()["modules"]
+    # A new gap fails; a fixed gap fails until its baseline entry is deleted. A
+    # conforming module needs no entry, so adding one never touches the baseline.
+    gaps = {module: failed for module, failed in conformance.static_gaps().items() if failed}
+    baseline = {module: failed for module, failed in conformance.load_baseline()["modules"].items() if failed}
+    assert gaps == baseline
 
 
 def _status(**tables: dict) -> dict[str, dict]:

@@ -2124,7 +2124,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8287,
+      "collected_tests": 8296,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2940,7 +2940,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T06:39:17.947746+00:00",
+  "measured_at": "2026-10-05T07:06:48.910132+00:00",
   "metrics": {
     "boot_imported_modules": 2076,
     "collection_errors": 0,
@@ -2949,5 +2949,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "25a806f57849452a734be30943560e25d89ffd8ceae3370ccb529f8277faf784"
+  "source_digest": "a4fe738b6ef9811963a25e82bb3001b53aa096dccc2d7e2ff0b2fdab4110e565"
 }
