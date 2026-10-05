@@ -76,3 +76,34 @@ def test_saving_one_section_keeps_another_modules_section_exactly() -> None:
 
     assert settings[SETTINGS_PROFILE_KEY]["voice"]["language"] == "German"
     assert json.dumps(settings[SETTINGS_PROFILE_KEY]["rpg"]) == stored_rpg
+
+
+def test_a_module_declares_its_route_permissions(monkeypatch) -> None:
+    from app.persistence import declarations
+    from app.persistence.declarations import FeaturePermissions, PermissionDeclaration
+    from app.security import permissions
+
+    declared = FeaturePermissions(
+        "example-app",
+        read=PermissionDeclaration("example:read", "Example (read)", member=True),
+        write=PermissionDeclaration("example:write", "Example (write)"),
+    )
+    monkeypatch.setattr(declarations, "module_permissions", lambda: (declared,))
+
+    catalog, defaults, member = permissions._declared_module_permissions()
+
+    assert catalog == {"example:read": "Example (read)", "example:write": "Example (write)"}
+    assert defaults == {"example_app": ("example:read", "example:write")}
+    assert member == {"example:read"}
+
+
+def test_a_module_cannot_redefine_a_catalog_permission(monkeypatch) -> None:
+    from app.persistence import declarations
+    from app.persistence.declarations import FeaturePermissions, PermissionDeclaration
+    from app.security import permissions
+
+    taken = PermissionDeclaration("chat:write", "Chat (write)", member=True)
+    monkeypatch.setattr(declarations, "module_permissions", lambda: (FeaturePermissions("example", taken, taken),))
+
+    with pytest.raises(RuntimeError, match="already defined"):
+        permissions._declared_module_permissions()

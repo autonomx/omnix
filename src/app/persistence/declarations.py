@@ -61,6 +61,30 @@ class SettingsSection:
     alias: str | None = None
 
 
+@dataclass(frozen=True)
+class PermissionDeclaration:
+    """One permission a module defines: ``<domain>:<action>`` and its description."""
+
+    name: str
+    description: str
+    # Granted to the default ``member`` role; owners always hold it, admins and
+    # viewers get it by the catalog rules every permission follows.
+    member: bool = False
+
+
+@dataclass(frozen=True)
+class FeaturePermissions:
+    """A module's route permissions: reads need ``read``, every other method ``write`` (PA-4.2).
+
+    Modules created before PA-4.2 keep theirs in ``app.security.permissions``;
+    a name already in that catalog is refused.
+    """
+
+    feature_id: str
+    read: PermissionDeclaration
+    write: PermissionDeclaration
+
+
 def _declaration_files() -> list[tuple[str, Path]]:
     app_root = Path(__file__).resolve().parents[1]
     found = sorted(
@@ -108,6 +132,11 @@ def module_retention() -> Mapping[str, RetentionDeclaration]:
 
 def module_capacity_counts() -> Mapping[str, CapacityCount]:
     return MappingProxyType(_unique("CAPACITY", lambda item: item.name))
+
+
+def module_permissions() -> tuple[FeaturePermissions, ...]:
+    """Every module's declared route permissions, enabled or not (PA-4.2)."""
+    return tuple(_unique("PERMISSIONS", lambda item: item.feature_id).values())
 
 
 def module_settings_sections() -> tuple[SettingsSection, ...]:

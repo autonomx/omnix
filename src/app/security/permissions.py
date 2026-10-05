@@ -13,10 +13,11 @@ local tenant holds ``owner``, so local installs keep full access.
 """
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 import functools
 import json
 import logging
+from types import MappingProxyType
 from typing import Any, Literal
 
 import anyio
@@ -34,7 +35,7 @@ ALL = "*"
 
 # Appendix C of the roadmap, plus the read/run permissions the starter
 # catalog implies for every feature.
-CATALOG: dict[str, str] = {
+_KERNEL_CATALOG: dict[str, str] = {
     "chat:read": "Chat sessions and messages (read)",
     "chat:write": "Chat sessions and messages (write)",
     "characters:read": "Character profiles (read)",
@@ -96,6 +97,29 @@ CATALOG: dict[str, str] = {
     "client:report": "Report browser errors",
 }
 
+def _declared_module_permissions() -> tuple[dict[str, str], dict[str, tuple[str, str]], frozenset[str]]:
+    """Permissions modules declare in their declarations.py (PA-4.2): catalog entries,
+    feature defaults and the ones the member role holds. A name already defined is refused."""
+    from app.persistence.declarations import module_permissions
+
+    catalog: dict[str, str] = {}
+    defaults: dict[str, tuple[str, str]] = {}
+    member: set[str] = set()
+    for declared in module_permissions():
+        for permission in (declared.read, declared.write):
+            if permission.name in _KERNEL_CATALOG or catalog.get(permission.name, permission.description) != permission.description:
+                raise RuntimeError(f"module permission {permission.name!r} is already defined")
+            catalog[permission.name] = permission.description
+            if permission.member:
+                member.add(permission.name)
+        defaults[declared.feature_id.replace("-", "_")] = (declared.read.name, declared.write.name)
+    return catalog, defaults, frozenset(member)
+
+
+_module_catalog, _module_defaults, _MODULE_MEMBER = _declared_module_permissions()
+# Every permission: the kernel catalog above and the ones modules declare (PA-4.2).
+CATALOG: Mapping[str, str] = MappingProxyType({**_KERNEL_CATALOG, **_module_catalog})
+
 _ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service"})
 _MEMBER = frozenset({
     "chat:read", "chat:write", "characters:read", "characters:write",
@@ -110,7 +134,7 @@ _MEMBER = frozenset({
 })
 DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(CATALOG) - _ADMIN_EXCLUDED,
-    "member": _MEMBER,
+    "member": _MEMBER | _MODULE_MEMBER,
     "approver": frozenset(name for name in CATALOG if name.endswith(":approve")),
     "viewer": frozenset(name for name in CATALOG if name.endswith(":read") and name != "settings:read") | {"client:report"},
     "service": frozenset({"internal:service"}),
@@ -122,7 +146,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 }
 
 # Feature id -> (read permission, write permission).
-FEATURE_DEFAULTS: dict[str, tuple[str, str]] = {
+_KERNEL_FEATURE_DEFAULTS: dict[str, tuple[str, str]] = {
     "agent_runtime": ("agent:read", "agent:run"),
     "assistant_memory": ("memory:read", "memory:write"),
     "assistant_tools": ("tools:read", "tools:propose"),
@@ -143,6 +167,10 @@ FEATURE_DEFAULTS: dict[str, tuple[str, str]] = {
     "trading": ("trading:read", "trading:control"),
     "voice": ("voice:read", "voice:write"),
 }
+if set(_module_defaults) & set(_KERNEL_FEATURE_DEFAULTS):
+    raise RuntimeError(f"features declare permissions but already have central defaults: {sorted(set(_module_defaults) & set(_KERNEL_FEATURE_DEFAULTS))}")
+FEATURE_DEFAULTS: Mapping[str, tuple[str, str]] = MappingProxyType({**_KERNEL_FEATURE_DEFAULTS, **_module_defaults})
+del _module_catalog, _module_defaults
 
 # Kernel routes by path prefix (longest match wins). None means public.
 KERNEL_DEFAULTS: tuple[tuple[str, tuple[str, str] | None], ...] = (
