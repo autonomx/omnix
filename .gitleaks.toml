@@ -15,7 +15,7 @@ regexes = ['''^[0-9a-f]{64}$''']
 description = "SHA-256 checksums of the pinned embedding model files (WP-8.5), not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/app/assistant_memory_v2/embeddings\.py$''']
+paths = ['''(?:^|/)src/app/assistant_memory/v2/embeddings\.py$''']
 regexTarget = "secret"
 regexes = ['''^[0-9a-f]{64}$''']
 

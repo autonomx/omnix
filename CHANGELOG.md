@@ -46,8 +46,8 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   makes every command ask for approval. At most
   `OMNIX_AGENT_MAX_CONCURRENT_RUNS` (default 2) agents run at once.
 - Memory v2 switch: curated memory can move from Memory v1 to Memory v2
-  (`python -m app.assistant_memory_v2.shadow_runner`, then
-  `python -m app.assistant_memory_v2.cutover activate`). After the switch,
+  (`python -m app.assistant_memory.v2.shadow_runner`, then
+  `python -m app.assistant_memory.v2.cutover activate`). After the switch,
   saving, approving, editing, pinning, archiving and forgetting memories work
   as before but live in v2; Chat puts pinned memories first and then the
   memories most relevant to the turn. Rollback is possible until the first
