@@ -151,3 +151,24 @@ class PostgresCapabilityApprovalRepository:
              json.dumps(ledger_payload, ensure_ascii=False, allow_nan=False)),
         )
         return self._record(row)
+
+    def open_count(self, capability_ids: list[str]) -> int:
+        """Pending or approved, unconsumed proposals for these capabilities in every workspace the session sees."""
+        row = self.connection.execute(
+            """SELECT count(*) FROM omnix_capability_approvals
+                WHERE capability_id = ANY(%s) AND decision IN ('pending', 'approved')""",
+            (sorted(set(capability_ids)),),
+        ).fetchone()
+        return int(row[0])
+
+    def expire_for_capabilities(self, context: TenantContext, capability_ids: list[str], *, reason: str) -> int:
+        """Expire this workspace's open proposals for these capabilities, approved or not (PA-4.3: a retired tool)."""
+        if not capability_ids:
+            return 0
+        cursor = self.connection.execute(
+            """UPDATE omnix_capability_approvals
+                  SET decision = 'expired', reason = %s, decided_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND capability_id = ANY(%s) AND decision IN ('pending', 'approved')""",
+            (reason, context.workspace_id, sorted(set(capability_ids))),
+        )
+        return int(cursor.rowcount)

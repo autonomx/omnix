@@ -369,8 +369,9 @@ class PostgresOutboxConsumerRepository:
         ).fetchone()
         if existing is None:
             raise OutboxDeliveryConflict("consumer inbox reservation disappeared")
+        states = {"completed": "duplicate_completed", "dead_letter": "dead_lettered"}
         return {
-            "state": "duplicate_completed" if str(existing[0]) == "completed" else "busy",
+            "state": states.get(str(existing[0]), "busy"),
             "claim_token": None,
             "claim_expires_at": existing[2].isoformat() if existing[2] is not None else None,
             "attempt_count": int(existing[3]),
@@ -460,6 +461,51 @@ class PostgresOutboxConsumerRepository:
             (consumer_id, event_key),
         )
         return cursor.rowcount == 1
+
+    def undelivered(self, *, consumer_id: str, aggregate_types: list[str], after_id: int = 0, limit: int = 200) -> list[dict[str, Any]]:
+        """Unpublished events of these aggregate types this consumer has not completed or dead-lettered, by id."""
+        rows = self.connection.execute(
+            """SELECT events.id, events.event_key, events.event_type
+                 FROM omnix_outbox_events AS events
+                WHERE events.aggregate_type = ANY(%s) AND events.status IN ('pending', 'retrying', 'claimed')
+                  AND events.id > %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM omnix_outbox_consumer_inbox AS inbox
+                       WHERE inbox.consumer_id = %s AND inbox.event_key = events.event_key
+                         AND inbox.status IN ('completed', 'dead_letter'))
+                ORDER BY events.id
+                LIMIT %s""",
+            (sorted(set(aggregate_types)), int(after_id), consumer_id, max(1, min(int(limit), 500))),
+        ).fetchall()
+        return [{"id": int(row[0]), "event_key": str(row[1]), "event_type": str(row[2])} for row in rows]
+
+    def dead_letter(self, *, consumer_id: str, event_key: str, reason: str) -> bool:
+        """Close one consumer's delivery of an event as dead-lettered, unless it is being processed (PA-4.3).
+
+        Only this consumer's delivery ends: the event still reaches its other
+        consumers, and the relay skips a dead-lettered delivery.
+        """
+        row = self.connection.execute(
+            """INSERT INTO omnix_outbox_consumer_inbox AS inbox (consumer_id, event_key, status, last_error)
+               VALUES (%s, %s, 'dead_letter', %s)
+               ON CONFLICT (consumer_id, event_key) DO UPDATE
+                  SET status = 'dead_letter', last_error = EXCLUDED.last_error,
+                      claim_token = NULL, claim_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE inbox.status = 'failed'
+                   OR (inbox.status = 'processing' AND inbox.claim_expires_at <= CURRENT_TIMESTAMP)
+               RETURNING attempt_count""",
+            (consumer_id, event_key, reason[:2000]),
+        ).fetchone()
+        if row is None:
+            return False
+        self.connection.execute(
+            """INSERT INTO omnix_outbox_dead_letters (workspace_id, consumer_id, event_key, reason, payload, attempt_count)
+               SELECT workspace_id, %s, event_key, %s, payload, GREATEST(%s, 1) FROM omnix_outbox_events WHERE event_key = %s
+               ON CONFLICT (consumer_id, event_key) DO UPDATE
+                  SET reason = EXCLUDED.reason, attempt_count = EXCLUDED.attempt_count, resolved_at = NULL""",
+            (consumer_id, reason[:2000], int(row[0]), event_key),
+        )
+        return True
 
 
 class PostgresSideEffectRepository:

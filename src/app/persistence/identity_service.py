@@ -200,12 +200,15 @@ def ensure_local_identity(
 SYSTEM_ROLE = "system"
 
 
-def list_active_workspace_contexts(database: PostgresDatabase, *, limit: int = 1000) -> list[TenantContext]:
+def list_active_workspace_contexts(
+    database: PostgresDatabase, *, limit: int = 1000, include_inactive: bool = False,
+) -> list[TenantContext]:
     """System contexts for per-workspace background work (WP-4.2).
 
     Job workers and scheduled tasks iterate these instead of assuming the
     local workspace. The context acts as the workspace's creator with only
-    the ``system`` role; it is never a request principal.
+    the ``system`` role; it is never a request principal. Retiring a module
+    (PA-4.3) asks for inactive workspaces too: their jobs are in flight as well.
     """
     from .tenant_scope import system_scope
     from .unit_of_work import unit_of_work
@@ -215,8 +218,8 @@ def list_active_workspace_contexts(database: PostgresDatabase, *, limit: int = 1
     ) as work:
         rows = work.connection.execute(
             """SELECT id, created_by FROM omnix_workspaces
-                WHERE status = 'active' ORDER BY id LIMIT %s""",
-            (limit,),
+                WHERE status = 'active' OR %s ORDER BY id LIMIT %s""",
+            (include_inactive, limit),
         ).fetchall()
         work.rollback()
     return [

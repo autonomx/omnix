@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.settings.profile_core import ProviderConfigs, SETTINGS_PROFILE_KEY, SETTINGS_SCHEMA_VERSION
 from app.settings.profile_models import SettingsProfile
@@ -66,11 +66,18 @@ _PROFILE_KEY_ALIASES = {
     "live_captions": "liveCaptions",
     "text_scale": "textScale",
 }
-_OPEN_RECORD_PATHS = {
+_OPEN_RECORD_PATHS = frozenset({
     ("global", "routing", "taskOverrides"),
     ("storyteller", "pronunciation"),
     ("rpg", "campaignDefaults"),
-}
+    # A section whose model keeps unknown keys: a retired module's tombstone stub
+    # keeps the values stored before its retirement (PA-4.3).
+    *(
+        (field.alias or name,) for name, field in SettingsProfile.model_fields.items()
+        if isinstance(field.annotation, type) and issubclass(field.annotation, BaseModel)
+        and field.annotation.model_config.get("extra") == "allow"
+    ),
+})
 
 
 def _copy(value: Any) -> Any:

@@ -82,6 +82,17 @@ def test_an_old_job_nobody_here_can_claim_is_reported_not_failed(database) -> No
     with database.connection() as connection:
         assert connection.execute("SELECT status FROM omnix_jobs WHERE id = %s", (waiting,)).fetchone()[0] == "queued"
 
+    # A worker claims only the types it handles; once one handles the type (re-enabled, upgraded), the job runs.
+    def claim(job_types: list[str]) -> str | None:
+        with unit_of_work(database) as work:
+            claimed = work.jobs.claim_next(current_tenant(), worker_id="w", resource_classes=["cpu"], job_types=job_types)
+            work.commit()
+        return claimed["id"] if claimed else None
+
+    assert claim([known]) == local
+    assert claim([known]) is None
+    assert claim([unknown]) == waiting
+
 
 def test_retired_job_types_come_from_tombstones(monkeypatch) -> None:
     tombstone = type("Tombstone", (), {"JOB_TYPES": ("gone.work", "gone.other")})

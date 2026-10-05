@@ -1,6 +1,7 @@
 """Table ownership for ADR-0016 (PA-2.2).
 
-Every table has one owner: a feature id, ``kernel`` or ``shared``. Tables
+Every table has one owner: a feature id, ``kernel``, ``shared`` or, once its
+module is retired, ``retired:<module id>``. Tables
 created by the migrations in the kernel folder are listed in the frozen
 historical map (``resources/architecture/historical-table-owners.json``),
 reviewed once by hand; a table created by a migration inside a module's own
@@ -36,6 +37,9 @@ TABLE_OWNERS = {
     "omnix_prompt_templates": "shared", "omnix_provider_configs": "shared",
     "omnix_provider_status_projections": "shared", "omnix_reports": "research",
 }
+# A retired module's migrations stay in its tombstone folder (PA-4.3); its tables keep an owner.
+_RETIRED = re.compile(r"src/app/persistence/retired/([a-z0-9_]+)/migrations/")
+_TOMBSTONE_ID = re.compile(r'^MODULE_ID\s*(?::\s*\w+\s*)?=\s*"([^"]+)"', re.M)
 _CREATE = re.compile(r"create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)", re.I)
 _DROP = re.compile(r"drop\s+table\s+(?:if\s+exists\s+)?([a-z_][a-z0-9_]*)", re.I)
 
@@ -67,6 +71,15 @@ def module_owner(path: str, feature_packages: dict[str, str]) -> str | None:
     return feature_packages.get(folder)
 
 
+def retired_owner(path: str, sources: dict[str, str]) -> str | None:
+    """``retired:<module id>`` for a migration in a retired module's tombstone folder."""
+    match = _RETIRED.match(path)
+    if match is None:
+        return None
+    found = _TOMBSTONE_ID.search(sources.get(f"src/app/persistence/retired/{match[1]}/tombstone.py", ""))
+    return f"retired:{found[1] if found else match[1]}"
+
+
 def frozen_after(sources: dict[str, str]) -> str:
     """The last kernel-folder migration the frozen historical map covers."""
     text = sources.get(HISTORICAL)
@@ -85,7 +98,7 @@ def table_owners(sources: dict[str, str], historical: dict[str, dict], feature_p
                 # A kernel table added after the map was frozen (PA-4.3): the kernel folder holds only kernel tables now.
                 owners[table] = "kernel"
         else:
-            owner = module_owner(path, feature_packages)
+            owner = module_owner(path, feature_packages) or retired_owner(path, sources)
             if owner is not None:
                 owners[table] = owner
     return owners

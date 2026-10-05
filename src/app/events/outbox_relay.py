@@ -186,7 +186,8 @@ class OutboxRelayWorker:
             reservation = PostgresOutboxConsumerRepository(connection).begin(
                 consumer_id=name, event_key=key, lease_seconds=self.lease_seconds,
             )
-        if reservation["state"] == "duplicate_completed":
+        # A delivery already dead-lettered for this consumer (a retired module's, PA-4.3) is final.
+        if reservation["state"] in {"duplicate_completed", "dead_lettered"}:
             return "duplicate", ""
         if reservation["state"] == "busy":
             return "busy", ""

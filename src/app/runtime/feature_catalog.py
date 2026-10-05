@@ -1,8 +1,10 @@
 """Lazy catalog for features migrated to the FeatureModule contract."""
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from importlib import import_module
+from pathlib import Path
 from types import MappingProxyType
 
 from .config import RuntimeConfig
@@ -30,6 +32,8 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
 })
 
 
+_TOMBSTONE_ID = re.compile(r'^MODULE_ID\s*=\s*"([^"]+)"', re.M)
+
 # Not part of "all": enabled only when named. live-speech serves the
 # /v1/realtime protocol stub with offline echo engines (WP-7.3); it stays out of
 # production until it has real STT/TTS behind it.
@@ -47,10 +51,21 @@ def load_feature(feature_id: str) -> FeatureModule:
     return feature
 
 
+def retired_module_ids() -> frozenset[str]:
+    """Ids of retired modules: ``MODULE_ID`` in each ``app/persistence/retired/<package>/tombstone.py`` (PA-4.3)."""
+    retired = Path(__file__).resolve().parents[1] / "persistence" / "retired"
+    found = (_TOMBSTONE_ID.search(path.read_text(encoding="utf-8")) for path in sorted(retired.glob("*/tombstone.py")))
+    return frozenset(match[1] for match in found if match)
+
+
 def enabled_feature_ids(config: RuntimeConfig) -> tuple[str, ...]:
     requested = set(config.enabled_features)
     disabled = set(config.disabled_features)
     unknown = (requested - {"all"} - set(FEATURE_CATALOG)) | (disabled - set(FEATURE_CATALOG))
+    if unknown:
+        # A retired module (PA-4.3) is off whatever a configuration written before its retirement says.
+        retired = retired_module_ids() & unknown
+        requested, disabled, unknown = requested - retired, disabled - retired, unknown - retired
     if unknown:
         raise ValueError(f"Unknown feature ids: {sorted(unknown)}")
     if "all" in requested:

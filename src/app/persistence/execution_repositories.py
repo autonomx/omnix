@@ -336,6 +336,50 @@ class PostgresJobRepository:
             )
         return results
 
+    def cancel_jobs_of_types(self, context: TenantContext, job_types: Iterable[str], *, reason: str) -> list[dict[str, Any]]:
+        """Cancel this workspace's unfinished jobs of these types, a batch at a time (PA-4.3: retiring a module).
+
+        Waiting jobs become ``canceled`` with ``reason`` as their error code;
+        leased and running ones become ``cancel_requested``, for their
+        handler to stop. Returns the jobs changed; call again until empty.
+        """
+        types = sorted(set(job_types))
+        if not types:
+            return []
+        rows = self.connection.execute(
+            f"""UPDATE omnix_jobs
+                   SET status = CASE WHEN status IN ('leased', 'running') THEN 'cancel_requested' ELSE 'canceled' END,
+                       error = CASE WHEN status IN ('leased', 'running') THEN error ELSE %s::jsonb END,
+                       completed_at = CASE WHEN status IN ('leased', 'running') THEN completed_at ELSE clock_timestamp() END,
+                       cancel_requested_at = COALESCE(cancel_requested_at, clock_timestamp()),
+                       updated_at = clock_timestamp()
+                 WHERE id IN (
+                       SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND job_type = ANY(%s)
+                          AND status IN ('queued', 'retrying', 'waiting', 'paused', 'leased', 'running')
+                        ORDER BY created_at, id
+                        LIMIT %s
+                        FOR UPDATE SKIP LOCKED)
+                RETURNING {_JOB_COLUMNS}""",
+            (_json({"code": reason, "retryable": False}), context.workspace_id, types, EXPIRED_LEASE_BATCH),
+        ).fetchall()
+        results = [_job(row) for row in rows]
+        for result in results:
+            self._event(context, result["id"], "job.cancel_requested", {"status": result["status"], "reason": reason})
+        return results
+
+    def unfinished_counts(self, job_types: Iterable[str]) -> tuple[int, int]:
+        """``(leased or running, waiting)`` jobs of these types in every workspace the session sees (PA-4.3)."""
+        active = ["leased", "running", "cancel_requested"]
+        row = self.connection.execute(
+            """SELECT count(*) FILTER (WHERE status = ANY(%s)), count(*) FILTER (WHERE NOT status = ANY(%s))
+                 FROM omnix_jobs
+                WHERE job_type = ANY(%s)
+                  AND status IN ('queued', 'retrying', 'waiting', 'paused', 'leased', 'running', 'cancel_requested')""",
+            (active, active, sorted(set(job_types))),
+        ).fetchone()
+        return int(row[0]), int(row[1])
+
     def unclaimed_job_types(
         self, context: TenantContext, *, older_than_seconds: float, known_types: Iterable[str],
     ) -> dict[str, float]:
