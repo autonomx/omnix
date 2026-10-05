@@ -10,6 +10,7 @@ RUNTIME = Path(__file__).parents[2] / "app" / "agent_runtime"
 # never hand a statement to a connection themselves.
 REPOSITORY_MODULES = {
     "coding_quality_repository.py",
+    "declarations.py",  # the retention delete the kernel runs (PA-2.2)
     "planning_repository.py",
     "repository.py",
     "resource_grants.py",

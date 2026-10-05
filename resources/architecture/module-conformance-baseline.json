@@ -51,15 +51,13 @@
       "contract"
     ],
     "story": [
-      "contract",
-      "declarations"
+      "contract"
     ],
     "trading": [
       "contract"
     ],
     "voice": [
-      "contract",
-      "declarations"
+      "contract"
     ]
   },
   "tenant_isolation": {

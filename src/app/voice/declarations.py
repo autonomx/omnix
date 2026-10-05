@@ -1,5 +1,9 @@
-"""Voice settings profile model."""
+"""What the kernel reads about the voice module without loading it (ADR-0016, PA-2.1)."""
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.persistence.declarations import SettingsSection
 
 
 class VoiceSettingsProfile(BaseModel):
@@ -16,3 +20,6 @@ class VoiceSettingsProfile(BaseModel):
     streaming: bool = True
     cloning_language: str = Field("English", alias="cloningLanguage")
     cloning_quality: str = Field("High", alias="cloningQuality")
+
+
+SETTINGS = (SettingsSection("voice", VoiceSettingsProfile, order=10),)

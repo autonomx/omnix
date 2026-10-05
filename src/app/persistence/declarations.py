@@ -1,19 +1,21 @@
-"""Module declarations the kernel reads by convention (ADR-0016, PA-2.2).
+"""Module declarations the kernel reads by convention (ADR-0016, PA-2.1, PA-2.2).
 
 A module's ``declarations.py`` sits next to its ``feature.py`` and imports only
 kernel modules, so the kernel reads it without loading the module. The
-retention worker and the capacity report find each module's record types
-there, whether or not its feature is enabled, the way migrations are found
-(PA-2.3)::
+retention worker, the capacity report and the settings profile find each
+module's declarations there, whether or not its feature is enabled, the way
+migrations are found (PA-2.3)::
 
     RETENTION = (RetentionDeclaration("rpg_narration_events", delete=_delete_events, capacity_cleanup=True),)
     CAPACITY = (CapacityCount("rpg_turns", count=_count_turns),)
+    SETTINGS = (SettingsSection("rpg", RpgSettingsProfile, order=40),)
 
 A declared record type's ``omnix_retention_policies`` row is seeded by a
 migration; without one the type is never run.
 """
 from __future__ import annotations
 
+import ast
 import importlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -44,35 +46,71 @@ class CapacityCount:
     count: RowCount
 
 
-def declaration_modules() -> tuple[str, ...]:
-    """Every module's declarations: ``app/<package>/declarations.py`` or one level deeper, next to a feature.py."""
+@dataclass(frozen=True)
+class SettingsSection:
+    """A module's section of the settings profile: its field, model (a pydantic model) and place.
+
+    ``order`` fixes the section's position in the stored document, so documents
+    keep their key order whichever modules exist; ``alias`` is its document key
+    when that differs from the field name.
+    """
+
+    field: str
+    model: type[Any]
+    order: int
+    alias: str | None = None
+
+
+def _declaration_files() -> list[tuple[str, Path]]:
     app_root = Path(__file__).resolve().parents[1]
     found = sorted(
         path for pattern in ("*/declarations.py", "*/*/declarations.py") for path in app_root.glob(pattern)
         if (path.parent / "feature.py").is_file()
     )
-    return tuple("app." + ".".join(path.relative_to(app_root).with_suffix("").parts) for path in found)
+    return [("app." + ".".join(path.relative_to(app_root).with_suffix("").parts), path) for path in found]
 
 
-def _declared() -> tuple[Mapping[str, RetentionDeclaration], Mapping[str, CapacityCount]]:
-    retention: dict[str, RetentionDeclaration] = {}
-    capacity: dict[str, CapacityCount] = {}
-    for name in declaration_modules():
-        module = importlib.import_module(name)
-        for declaration in getattr(module, "RETENTION", ()):
-            if declaration.record_type in retention:
-                raise ValueError(f"retention record type {declaration.record_type} is declared twice")
-            retention[declaration.record_type] = declaration
-        for counter in getattr(module, "CAPACITY", ()):
-            if counter.name in capacity:
-                raise ValueError(f"capacity count {counter.name} is declared twice")
-            capacity[counter.name] = counter
-    return MappingProxyType(retention), MappingProxyType(capacity)
+def declaration_modules() -> tuple[str, ...]:
+    """Every module's declarations: ``app/<package>/declarations.py`` or one level deeper, next to a feature.py."""
+    return tuple(name for name, _ in _declaration_files())
+
+
+def _modules_declaring(kind: str) -> list[Any]:
+    """The declarations modules that assign ``kind`` at top level, read first without importing the others.
+
+    Building the settings profile at startup then imports only the modules
+    with a settings section, not every module's retention declarations.
+    """
+    modules = []
+    for name, path in _declaration_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(isinstance(node, (ast.Assign, ast.AnnAssign)) and kind in {
+            target.id for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+            if isinstance(target, ast.Name)
+        } for node in tree.body):
+            modules.append(importlib.import_module(name))
+    return modules
+
+
+def _unique(kind: str, key: Callable[[Any], str]) -> dict[str, Any]:
+    found: dict[str, Any] = {}
+    for module in _modules_declaring(kind):
+        for item in getattr(module, kind):
+            if key(item) in found:
+                raise ValueError(f"{kind.lower()} declaration {key(item)} is declared twice")
+            found[key(item)] = item
+    return found
 
 
 def module_retention() -> Mapping[str, RetentionDeclaration]:
-    return _declared()[0]
+    return MappingProxyType(_unique("RETENTION", lambda item: item.record_type))
 
 
 def module_capacity_counts() -> Mapping[str, CapacityCount]:
-    return _declared()[1]
+    return MappingProxyType(_unique("CAPACITY", lambda item: item.name))
+
+
+def module_settings_sections() -> tuple[SettingsSection, ...]:
+    """Every module's settings section, enabled or not, in document order (PA-2.1)."""
+    sections = _unique("SETTINGS", lambda item: item.field).values()
+    return tuple(sorted(sections, key=lambda section: (section.order, section.field)))

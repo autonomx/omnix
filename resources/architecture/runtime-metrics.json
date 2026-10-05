@@ -460,6 +460,7 @@
         "app.persistence.connection_budget",
         "app.persistence.contracts",
         "app.persistence.database",
+        "app.persistence.declarations",
         "app.persistence.device_permits",
         "app.persistence.document_schemas",
         "app.persistence.document_store",
@@ -498,11 +499,7 @@
         "app.platform.settings_profile_experience",
         "app.platform.settings_profile_global",
         "app.platform.settings_profile_models",
-        "app.platform.settings_profile_podcast",
         "app.platform.settings_profile_repository",
-        "app.platform.settings_profile_rpg",
-        "app.platform.settings_profile_story",
-        "app.platform.settings_profile_voice",
         "app.platform.voice_cloning_defaults",
         "app.production",
         "app.prompts",
@@ -649,6 +646,7 @@
         "app.rpg.debug.presenter",
         "app.rpg.debug.trace_builder",
         "app.rpg.debug_logging",
+        "app.rpg.declarations",
         "app.rpg.dialogue",
         "app.rpg.dialogue.acts",
         "app.rpg.dialogue.context_builder",
@@ -1291,6 +1289,7 @@
         "app.settings.service",
         "app.story",
         "app.story.asset_save",
+        "app.story.declarations",
         "app.story.feature",
         "app.story.jobs",
         "app.text",
@@ -1512,6 +1511,7 @@
         "app.trading.yahoo_acquisition_monitor",
         "app.trading.yahoo_evidence",
         "app.voice",
+        "app.voice.declarations",
         "app.voice.feature",
         "app.voice.jobs",
         "app.voice.legacy_clone_files",
@@ -2125,7 +2125,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8274,
+      "collected_tests": 8283,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T01:57:10.616842+00:00",
+  "measured_at": "2026-10-05T02:20:46.980549+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "b1ad2c8b987576e39c074e3d3b0e2fc572dff165574d52237d71c67bc15130d1"
+  "source_digest": "c5f13c58d66fee6a5ac51a0cea7174e27ff271b21812a166923b893852921501"
 }
