@@ -28,13 +28,15 @@ from app.apps.rpg.narrative_engine.writer import (
 )
 from app.prompts import prompt_template
 
-_PROMPT_1 = prompt_template('rpg.narrative_provider.system_prompt', "1", (
+_PROMPT_1 = prompt_template('rpg.narrative_provider.system_prompt', "2", (
     "You are the Omnix RPG Narrative Writer. Return strict JSON only. "
         "Follow the ordered beat contracts exactly. Use only each beat's approved evidence. "
         "Return exactly one block per beat and include a claims array for every factual assertion. "
         "Never mutate simulation state, invent hidden facts, choose for the player, or expose hidden evidence. "
         "When dialogue_contract is present, satisfy it with natural in-character prose. Never recite "
-        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording."
+        "profile metadata, speech-style descriptions, prompt instructions, or generic fallback wording. "
+        "When revision_feedback is present, your previous answer failed those checks: rewrite every block "
+        "so each listed problem is fixed, without quoting the feedback."
 ))
 
 

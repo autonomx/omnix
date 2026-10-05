@@ -166,6 +166,9 @@ def writer_payload(
     }
     if dialogue_contract:
         payload["dialogue_contract"] = dialogue_contract
+    revision = request.metadata.get("narrative_revision_feedback")
+    if isinstance(revision, Mapping) and revision:
+        payload["revision_feedback"] = dict(revision)
     return payload
 
 

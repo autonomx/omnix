@@ -290,3 +290,43 @@ def test_required_provider_prose_that_fails_validation_publishes_marked_fallback
         metadata = result.writer_result.raw_metadata
         assert metadata["provider_fallback_reason"] == reason
         assert metadata["provider_required_fallback"] is True
+
+
+def test_prose_that_fails_the_checks_is_revised_once_with_the_failed_checks() -> None:
+    from app.apps.rpg.narrative_engine.writer import writer_payload
+
+    unsupported = ClaimAssertion(
+        claim_id="claim:bridge",
+        text="The stone bridge has collapsed into the river.",
+        authority=AuthorityClass.OBJECTIVE_CANON,
+        evidence_refs=("evidence:road",),
+        scope="speaker",
+    )
+    supported = ClaimAssertion(
+        claim_id="claim:road",
+        text="The east road is muddy but passable.",
+        authority=AuthorityClass.OBJECTIVE_CANON,
+        evidence_refs=("evidence:road",),
+        scope="speaker",
+    )
+
+    class _LearningWriter:
+        payloads: list = []
+
+        def write(self, request, plan, evidence) -> WriterResult:
+            payload = writer_payload(request, plan, evidence)
+            self.payloads.append(payload)
+            block = _block(supported.text, claim=supported) if "revision_feedback" in payload else _block(
+                unsupported.text, claim=unsupported)
+            return _Writer(block).write(request, plan, evidence)
+
+    writer = _LearningWriter()
+    result = write_validate_repair(_request(), _plan(), _evidence(), writer, allow_deterministic_fallback=False)
+
+    assert result.fallback_used is False and result.validation.passed is True
+    assert result.validation.repair_history[0] == "provider_revision_with_feedback"
+    assert len(writer.payloads) == 2 and "revision_feedback" not in writer.payloads[0]
+    feedback = writer.payloads[1]["revision_feedback"]
+    assert [check["code"] for check in feedback["failed_checks"]] == ["unsupported_claim_text"]
+    assert "restate what its approved_evidence says" in feedback["instructions"][0]
+    assert result.writer_result.raw_metadata["provider_revision_feedback"] == ["unsupported_claim_text"]

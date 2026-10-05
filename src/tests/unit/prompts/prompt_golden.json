@@ -384,8 +384,8 @@
     "version": "1"
   },
   "rpg.narrative_provider.system_prompt": {
-    "sha256": "91f379b0385411e85d035ebcf09c7293ac15599373d1a32e35e47c6fc75467f7",
-    "version": "1"
+    "sha256": "72738b24980cf193c45ff61e513782b57ba1a25b203c08ca69cf44ba23ca21d1",
+    "version": "2"
   },
   "rpg.npc_dialogue_intelligence.system": {
     "sha256": "43159871a9f6453a0ed96f6e94ddf1b6b2f4ac88ddd0d30fc18f5e814c2aea48",

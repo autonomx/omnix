@@ -286,6 +286,106 @@ def _validated_fallback(
     )
 
 
+_REVISION_GUIDANCE = {
+    "unsupported_claim_text": (
+        "A claim's text is not supported by its cited evidence. Each claim must restate what its "
+        "approved_evidence says, close to its wording; mood and gesture may color the prose but are "
+        "not claims, and no new facts may appear."
+    ),
+    "claim_scope_mismatch": "Each claim's scope must equal its beat's evidence_scope.",
+    "missing_semantic_claim": "Include a claim for every required_claim_id in the beat's claim_contract.",
+    "missing_claim_ref": "Include a claim for every required_claim_id in the beat's claim_contract.",
+    "claim_unknown_evidence": "Cite only evidence IDs from that beat's approved_evidence.",
+    "claim_unplanned_evidence": "Cite only evidence IDs from that beat's approved_evidence.",
+    "unknown_evidence": "Cite only evidence IDs from that beat's approved_evidence.",
+    "unplanned_evidence": "Cite only evidence IDs from that beat's approved_evidence.",
+    "claim_authority_unsupported": "Give each claim the authority its evidence carries.",
+    "duplicate_text": "Do not repeat a sentence in more than one block.",
+}
+
+
+def revision_feedback(report: ValidationReport) -> dict[str, object]:
+    """What the writer is told after its prose failed validation (one revision per turn)."""
+    issues = [
+        {"code": issue.code, "problem": issue.message, "block_id": issue.block_id}
+        for issue in report.issues
+    ]
+    guidance = list(dict.fromkeys(_REVISION_GUIDANCE.get(issue.code, issue.message) for issue in report.issues))
+    return {"reason": "validation_failed", "failed_checks": issues, "instructions": guidance}
+
+
+def _validate_and_repair(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+    result: WriterResult,
+    validator: NarrativeValidator,
+    repairer: NarrativeRepairer,
+) -> tuple[ValidatedWriterResult | None, ValidationReport]:
+    """The validated result after deterministic and claim repair, or the last failing report."""
+    report = validator.validate(request, plan, evidence, result.blocks)
+    if report.passed:
+        return ValidatedWriterResult(result, report, False), report
+    repaired, history = repairer.repair(plan, result.blocks)
+    repaired = infer_claims(request, plan, evidence, repaired)
+    repaired_report = validator.validate(request, plan, evidence, repaired)
+    if repaired_report.passed:
+        return ValidatedWriterResult(
+            replace(result, blocks=repaired),
+            replace(repaired_report, repair_history=history),
+            False,
+        ), repaired_report
+    claim_repair = _repair_provider_claims(request, plan, evidence, repaired, repaired_report, validator)
+    if claim_repair is not None:
+        claim_repaired, claim_report = claim_repair
+        if claim_report.passed:
+            return ValidatedWriterResult(
+                replace(result, blocks=claim_repaired),
+                replace(claim_report, repair_history=(*history, "repaired_provider_claims")),
+                False,
+            ), claim_report
+    return None, repaired_report
+
+
+def _revise_with_feedback(
+    request: TurnPresentationRequest,
+    plan: NarrativePlan,
+    evidence: Sequence[EvidenceRecord],
+    writer: NarrativeWriter,
+    validator: NarrativeValidator,
+    repairer: NarrativeRepairer,
+    failed: ValidationReport,
+) -> ValidatedWriterResult | None:
+    """Ask the provider once more, telling it which checks failed; None if that fails too."""
+    feedback = revision_feedback(failed)
+    revised_request = replace(
+        request,
+        metadata={**dict(request.metadata), "narrative_revision_feedback": feedback},
+    )
+    try:
+        revised = _prepare(revised_request, plan, evidence, writer.write(revised_request, plan, evidence))
+    except Exception:
+        logger.warning("rpg narrative revision call failed", exc_info=True)
+        return None
+    validated, still_failing = _validate_and_repair(request, plan, evidence, revised, validator, repairer)
+    if validated is None:
+        logger.info(
+            "rpg narrative revision still failed validation (%s)",
+            ",".join(sorted({issue.code for issue in still_failing.issues})),
+        )
+        return None
+    metadata = dict(validated.writer_result.raw_metadata or {})
+    metadata["provider_revision_feedback"] = sorted({str(issue["code"]) for issue in feedback["failed_checks"]})
+    return replace(
+        validated,
+        writer_result=replace(validated.writer_result, raw_metadata=metadata),
+        validation=replace(
+            validated.validation,
+            repair_history=("provider_revision_with_feedback", *validated.validation.repair_history),
+        ),
+    )
+
+
 def write_validate_repair(
     request: TurnPresentationRequest,
     plan: NarrativePlan,
@@ -328,37 +428,14 @@ def write_validate_repair(
             "LLM-authored dialogue is required; deterministic prose is not publishable"
         )
 
-    report = validator.validate(request, plan, evidence, result.blocks)
-    if report.passed:
-        return ValidatedWriterResult(result, report, False)
-    repaired, history = repairer.repair(plan, result.blocks)
-    repaired = infer_claims(request, plan, evidence, repaired)
-    repaired_report = validator.validate(request, plan, evidence, repaired)
-    if repaired_report.passed:
-        return ValidatedWriterResult(
-            replace(result, blocks=repaired),
-            replace(repaired_report, repair_history=history),
-            False,
-        )
-    claim_repair = _repair_provider_claims(
-        request,
-        plan,
-        evidence,
-        repaired,
-        repaired_report,
-        validator,
-    )
-    if claim_repair is not None:
-        claim_repaired, claim_report = claim_repair
-        if claim_report.passed:
-            return ValidatedWriterResult(
-                replace(result, blocks=claim_repaired),
-                replace(
-                    claim_report,
-                    repair_history=(*history, "repaired_provider_claims"),
-                ),
-                False,
-            )
+    validated, failed = _validate_and_repair(request, plan, evidence, result, validator, repairer)
+    if validated is not None:
+        return validated
+    if result.source == "structured_provider":
+        revised = _revise_with_feedback(request, plan, evidence, writer, validator, repairer, failed)
+        if revised is not None:
+            return revised
+    repaired_report = failed
     if not allow_deterministic_fallback:
         logger.warning(
             "rpg narrative prose failed validation after repair (%s); publishing validated fallback prose",
