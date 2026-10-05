@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping
 
-from app.rpg.survival import survival_pressure, survival_state_snapshot
+from app.apps.rpg.survival import survival_pressure, survival_state_snapshot
 
 SURVIVAL_CONTEXT_SOURCE = "runtime_survival_action_context"
 SURVIVAL_CONTEXT_VERSION = "survival_action_context_v1"

@@ -12,7 +12,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_choice_trace_ids_are_deterministic(self):
         """Choice trace IDs must be identical for the same inputs."""
-        from app.rpg.debug.trace_builder import DebugTraceBuilder
+        from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
 
         builder = DebugTraceBuilder()
         control_output = {
@@ -35,7 +35,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_choice_trace_ids_differ_by_tick(self):
         """Choice trace IDs must differ when tick differs."""
-        from app.rpg.debug.trace_builder import DebugTraceBuilder
+        from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
 
         builder = DebugTraceBuilder()
         control_output = {
@@ -54,7 +54,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_action_trace_ids_are_deterministic(self):
         """Action trace IDs must be identical for the same inputs."""
-        from app.rpg.debug.trace_builder import DebugTraceBuilder
+        from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
 
         builder = DebugTraceBuilder()
         action_result = {
@@ -79,7 +79,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_gm_bundle_id_is_deterministic(self):
         """GM bundle_id must be identical for the same inputs."""
-        from app.rpg.debug.core import DebugCore
+        from app.apps.rpg.debug.core import DebugCore
 
         core = DebugCore()
         kwargs = {
@@ -109,7 +109,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_debug_payload_is_fully_stable_for_same_inputs(self):
         """Full GM inspection bundle must be identical across replays."""
-        from app.rpg.debug.core import DebugCore
+        from app.apps.rpg.debug.core import DebugCore
 
         core = DebugCore()
         kwargs = {
@@ -145,7 +145,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_trace_id_format_is_stable_prefix(self):
         """Trace IDs should use a stable prefix format."""
-        from app.rpg.debug.trace_builder import DebugTraceBuilder
+        from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
 
         builder = DebugTraceBuilder()
         control_output = {
@@ -164,7 +164,7 @@ class TestPhase84DeterministicDebugIds:
 
     def test_node_id_format_is_stable_prefix(self):
         """Node IDs should use a stable prefix format."""
-        from app.rpg.debug.trace_builder import DebugTraceBuilder
+        from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
 
         builder = DebugTraceBuilder()
         control_output = {

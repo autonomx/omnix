@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.map_repository import MapDefinitionRepository
+from app.apps.rpg.map_repository import MapDefinitionRepository
 
 _OVERLAY_KEYS = (
     "discovered_object_ids",

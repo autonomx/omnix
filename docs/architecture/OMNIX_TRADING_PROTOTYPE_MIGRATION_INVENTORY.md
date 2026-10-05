@@ -4,11 +4,11 @@ Reference: `autonomxDeveloper/tradingview-mcp`
 
 | Prototype area | Decision | Omnix destination | Notes |
 |---|---|---|---|
-| Yahoo/yfinance chart service | Rewrite with attribution | `src/app/trading/providers/yahoo.py` | Retain normalization and fallback lessons; add provider policy, canonical instruments, sessions, adjustments, cancellation, and typed errors. Not part of Charting Beta. |
-| Stooq daily fallback | Rewrite with attribution | `src/app/trading/providers/stooq.py` | Whole-dataset fallback only. Never splice with Yahoo. |
-| Binance candle pagination | Migrate selectively with attribution | `src/app/trading/providers/binance.py` | Preserve pagination tests; separate REST and WebSocket bindings from canonical instrument identity. |
+| Yahoo/yfinance chart service | Rewrite with attribution | `src/app/apps/trading/providers/yahoo.py` | Retain normalization and fallback lessons; add provider policy, canonical instruments, sessions, adjustments, cancellation, and typed errors. Not part of Charting Beta. |
+| Stooq daily fallback | Rewrite with attribution | `src/app/apps/trading/providers/stooq.py` | Whole-dataset fallback only. Never splice with Yahoo. |
+| Binance candle pagination | Migrate selectively with attribution | `src/app/apps/trading/providers/binance.py` | Preserve pagination tests; separate REST and WebSocket bindings from canonical instrument identity. |
 | Coinbase/Kraken adapters | Rewrite later | provider modules | Add only after crypto-only Beta qualification. |
-| Market-data file cache | Reference only | `src/app/trading/cache.py` | New cache is bounded, disposable and in-process (no disk copy since WP-8.3); no user authority. |
+| Market-data file cache | Reference only | `src/app/apps/trading/cache.py` | New cache is bounded, disposable and in-process (no disk copy since WP-8.3); no user authority. |
 | Symbol suffix inference | Reject as authority | instrument resolver | `BTCUSDT` is an alias, not a canonical ID. |
 | Workstation FastAPI app | Reject | Omnix gateway | No second server or static app owner. |
 | MCP tools/server | Reject | none | No MCP runtime dependency. |

@@ -7,10 +7,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.audiobook import extraction
-from app.audiobook import routes as audiobook_routes
-from app.audiobook.extraction import UnsupportedSource
-from app.audiobook.service import AudiobookService
+from app.apps.audiobook import extraction
+from app.apps.audiobook import routes as audiobook_routes
+from app.apps.audiobook.extraction import UnsupportedSource
+from app.apps.audiobook.service import AudiobookService
 from app.persistence.blob_store import LocalBlobStore
 
 
@@ -101,8 +101,8 @@ def _submit(monkeypatch, blobs, content):
             jobs=SimpleNamespace(create_job=lambda _context, job: queued.append(job)),
         )
 
-    monkeypatch.setattr("app.audiobook.service.unit_of_work", unit_of_work)
-    monkeypatch.setattr("app.audiobook.service.PostgresAudiobookRepository.get_project",
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", unit_of_work)
+    monkeypatch.setattr("app.apps.audiobook.service.PostgresAudiobookRepository.get_project",
                         lambda *_args: {"id": "book"})
     service = AudiobookService(None, blobs)
     result = service.submit_source(

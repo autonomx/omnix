@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat import ChatMessage, ChatSession
-from app.chat import live_chat_speculation as speculation
-from app.chat import live_chat_speculation_handshake as handshake
-from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.platform.chat import ChatMessage, ChatSession
+from app.platform.chat import live_chat_speculation as speculation
+from app.platform.chat import live_chat_speculation_handshake as handshake
+from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import service as provider_service
 from tests.support.routers import include_router_registrar
 

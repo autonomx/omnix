@@ -34,10 +34,10 @@ The application declares `SCHEMA_MIN_CONTRACT` and `SCHEMA_KNOWN`. Unknown newer
 Migrations are read from exactly three places (ADR-0016, PA-2.3), found by convention so the persistence kernel never reads the feature catalog:
 
 1. the kernel folder `src/app/persistence/migrations/`, for kernel tables and the historical migrations that touch several owners;
-2. a `migrations/` folder next to a module's `feature.py` (for example `src/app/trading/migrations/`), for the tables that module owns;
+2. a `migrations/` folder next to a module's `feature.py` (for example `src/app/apps/trading/migrations/`), for the tables that module owns;
 3. `src/app/persistence/retired/<package>/migrations/`, the tombstone of a retired module.
 
-Every module's migrations run whether or not its feature is enabled: the schema is a release artifact, not a feature flag. A `.sql` file in any other `migrations/` folder is an architecture-lint error (AL014), so a save-format folder such as `src/app/rpg/persistence/migrations/` can never become schema by accident. A migration's version is its file stem, unique across all three places; moving a file between them is not a change. `SCHEMA_KNOWN` is the newest version found, never a hand-edited constant. Which module owns each table is recorded in `resources/architecture/historical-table-owners.json` (frozen) and derived for tables a module's own migrations create; AL016 rejects a migration that changes another module's table.
+Every module's migrations run whether or not its feature is enabled: the schema is a release artifact, not a feature flag. A `.sql` file in any other `migrations/` folder is an architecture-lint error (AL014), so a save-format folder such as `src/app/apps/rpg/persistence/migrations/` can never become schema by accident. A migration's version is its file stem, unique across all three places; moving a file between them is not a change. `SCHEMA_KNOWN` is the newest version found, never a hand-edited constant. Which module owns each table is recorded in `resources/architecture/historical-table-owners.json` (frozen) and derived for tables a module's own migrations create; AL016 rejects a migration that changes another module's table.
 
 ## Ordering
 

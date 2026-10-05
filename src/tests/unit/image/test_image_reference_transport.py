@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import app.image.reference_transport as reference_transport
-import app.image.service as image_service
-import app.image.image_http_client as image_http_client
+import app.platform.image.reference_transport as reference_transport
+import app.platform.image.service as image_service
+import app.platform.image.image_http_client as image_http_client
 import pytest
-from app.image.providers.base import ImageGenerationResult
+from app.platform.image.providers.base import ImageGenerationResult
 
 Image = pytest.importorskip("PIL.Image")
 

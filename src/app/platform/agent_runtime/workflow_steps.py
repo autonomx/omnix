@@ -16,7 +16,7 @@ from .workflow_runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
+    from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
 
 
 def _step_state(workflow: PostgresWorkflowRuntime, run_id: str, step_id: str) -> dict[str, Any] | None:

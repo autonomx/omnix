@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 
-from app.gateway.main import create_gateway_app
-from app.rpg.worlds.generation_recovery_evidence import _DiagnosticsWithRawEvidence
+from app.composition.gateway.main import create_gateway_app
+from app.apps.rpg.worlds.generation_recovery_evidence import _DiagnosticsWithRawEvidence
 
 
 _RETIRED_PATHS = {

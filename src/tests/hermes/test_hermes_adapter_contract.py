@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
+from app.apps.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
 
 
 def test_hermes_adapter_preview_uses_router_policy_for_rpg() -> None:

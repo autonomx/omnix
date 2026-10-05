@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.execution import ExecutionObservation
-from app.trading.execution_observation_plane import (
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.execution_observation_plane import (
     ExecutionObservationPlane,
     clear_default_execution_observation_plane,
     default_execution_observation_plane,

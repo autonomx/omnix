@@ -232,14 +232,14 @@ PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
 Bash, Linux, macOS, or WSL:
 
 ```bash
 export PYTHONPATH=src
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
 Verify `http://127.0.0.1:8000/api/health` before diagnosing feature-specific failures.
@@ -376,7 +376,7 @@ root or another working directory:
 
 The root `setup.bat`/`setup.sh`, `start_all.bat`/`start_all.sh` and
 `start_llama_server.sh` (llama.cpp on port 8180) remain at the root because they
-are the primary launch entrypoints. `start_all.sh` wraps `python -m app.launcher
+are the primary launch entrypoints. `start_all.sh` wraps `python -m app.composition.launcher
 start`; container images and Compose profiles live in `deploy/docker/` and
 `docker-compose.yml` (see [OPERATIONS.md](docs/OPERATIONS.md#containers)).
 
@@ -415,13 +415,13 @@ Screenshots belong under `docs/images` and should be referenced with repository-
 
 ```text
 web/           React workspaces, routing, API clients, state, events, tests
-src/app/gateway/        FastAPI browser/API boundary
+src/app/composition/gateway/        FastAPI browser/API boundary
 src/app/providers/      Provider and model integration layer
 src/app/jobs/           Shared job/run contracts and stores
 src/app/assets/         Shared asset/artifact handling
-src/app/rpg/            Deterministic RPG domain and APIs
-src/app/trading/        Market data, research, replay, alerts, strategies, paper state
-src/app/agent_runtime/  Planning, grants, execution, evidence, review, recovery
+src/app/apps/rpg/            Deterministic RPG domain and APIs
+src/app/apps/trading/        Market data, research, replay, alerts, strategies, paper state
+src/app/platform/agent_runtime/  Planning, grants, execution, evidence, review, recovery
 src/app/persistence/    PostgreSQL runtime, migrations, repositories, blob storage
 scripts/requirements/   Optional RPG/image manifests and setup/download helpers
 docs/                   Human-maintained guides and generated HTML references

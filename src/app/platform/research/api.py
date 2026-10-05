@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.errors import LegacyPersistenceRetired
 from app.security import provider_secret_store as secret_store
-from app.chat.contracts import ResearchTurn, SendChatMessageResponse, link_user_message_to_research_job
+from app.platform.chat.contracts import ResearchTurn, SendChatMessageResponse, link_user_message_to_research_job
 from app.jobs import JobRecord
 
 from .evidence import citation_labels, prepare_evidence_context_items, render_answer_with_compatibility_fallback, source_manifest_id

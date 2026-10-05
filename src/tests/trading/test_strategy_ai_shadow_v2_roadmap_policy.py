@@ -4,10 +4,10 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.models import MarketBar
-from app.trading.research.contracts import TradingEvidence
-from app.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision, build_market_structure_snapshot
-from app.trading.strategy_ai_shadow_v2_roadmap_policy import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.research.contracts import TradingEvidence
+from app.apps.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision, build_market_structure_snapshot
+from app.apps.trading.strategy_ai_shadow_v2_roadmap_policy import (
     AI_SHADOW_V2_POLICY_VERSION,
     _causal_evidence,
     _cohort_context,
@@ -20,7 +20,7 @@ from app.trading.strategy_ai_shadow_v2_roadmap_policy import (
     _recent_primary_catalyst_evidence,
     _stable_snapshot_id,
 )
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_repository import StrategyEvent
 
 INSTRUMENT = "equity:NASDAQ:TEST"
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)

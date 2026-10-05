@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.agent_runtime import review_orchestration
-from app.agent_runtime.candidate_test_validation import missing_candidate_test_execution
-from app.agent_runtime.contracts import ValidationResult
+from app.platform.agent_runtime import review_orchestration
+from app.platform.agent_runtime.candidate_test_validation import missing_candidate_test_execution
+from app.platform.agent_runtime.contracts import ValidationResult
 
 
 def _validation(command: str, *, state: str = "state-final") -> ValidationResult:

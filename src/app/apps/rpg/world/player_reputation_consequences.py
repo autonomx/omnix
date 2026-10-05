@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.world.npc_reputation_state import update_npc_reputation
+from app.apps.rpg.world.npc_reputation_state import update_npc_reputation
 
 
 def _safe_str(value: Any) -> str:

@@ -20,7 +20,7 @@ from .strategy_v2_qualification import (
     V2ProspectiveQualification,
     evaluate_v2_prospective_qualification,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
 

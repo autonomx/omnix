@@ -213,7 +213,7 @@ class OwnerMemoryRowSupport:
             """
         ).fetchone()
         if row is not None and str(row[0]) != "v1":
-            from app.assistant_memory.service import LegacyMemoryReadOnlyError
+            from app.platform.assistant_memory.service import LegacyMemoryReadOnlyError
 
             raise LegacyMemoryReadOnlyError(
                 "legacy assistant_memory is read-only while Memory v2 is authoritative"

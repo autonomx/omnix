@@ -33,7 +33,7 @@ from .research import _provider_identity, default_research_provider
 from .strategy_ai_shadow_v2 import build_market_structure_snapshot
 from .structured_llm import TradingModelOutputError, trading_model_call
 from .trigger_plan import AuthoritativeTradeGeometry, TriggerCondition
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 

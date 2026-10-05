@@ -17,35 +17,35 @@ class RpgReplayPersistenceAdapter:
             primitives=[
                 ReplayPrimitive(
                     kind="provider_recording",
-                    source="src/app/rpg/core/llm_recording.py",
+                    source="src/app/apps/rpg/core/llm_recording.py",
                     owner_module="rpg",
                     behavior="Records provider outputs by stable prompt/context/config keys and refuses missing replay records.",
                     compatibility_policy="Expose as platform metadata only; do not change recording keys without replay tests.",
                 ),
                 ReplayPrimitive(
                     kind="state_hash",
-                    source="src/app/rpg/validation/state_hash.py",
+                    source="src/app/apps/rpg/validation/state_hash.py",
                     owner_module="rpg",
                     behavior="Computes deterministic state fingerprints with stable serialization.",
                     compatibility_policy="Use as the first shared hash delegate; RPG keeps hash semantics.",
                 ),
                 ReplayPrimitive(
                     kind="checkpoint",
-                    source="src/app/rpg/interactive_cli_state_checkpoint.py",
+                    source="src/app/apps/rpg/interactive_cli_state_checkpoint.py",
                     owner_module="rpg",
                     behavior="Creates checksum-backed interactive CLI checkpoint envelopes and verifies restore.",
                     compatibility_policy="Shared wrapper must preserve version and checksum behavior.",
                 ),
                 ReplayPrimitive(
                     kind="session_persistence",
-                    source="src/app/rpg/session/durable_store.py",
+                    source="src/app/apps/rpg/session/durable_store.py",
                     owner_module="rpg",
                     behavior="Reads, migrates, normalizes, atomically writes, and quarantines corrupt RPG sessions.",
                     compatibility_policy="Delegate first; do not move saved sessions or alter quarantine behavior.",
                 ),
                 ReplayPrimitive(
                     kind="migration",
-                    source="src/app/rpg/persistence/migration_manager.py",
+                    source="src/app/apps/rpg/persistence/migration_manager.py",
                     owner_module="rpg",
                     behavior="Versioned save-package migration with explicit version advancement.",
                     compatibility_policy="Use migration reports as diagnostics before any storage move.",
@@ -54,7 +54,7 @@ class RpgReplayPersistenceAdapter:
         )
 
     def state_hash(self, state: dict[str, Any]) -> StateHashResponse:
-        from app.rpg.validation.state_hash import stable_serialize
+        from app.apps.rpg.validation.state_hash import stable_serialize
         import hashlib
         import json
 
@@ -64,33 +64,33 @@ class RpgReplayPersistenceAdapter:
         ).hexdigest()
         return StateHashResponse(
             hash=digest,
-            source="app.rpg.validation.state_hash.stable_serialize",
+            source="app.apps.rpg.validation.state_hash.stable_serialize",
             format_version=RPG_REPLAY_ADAPTER_VERSION,
         )
 
     def create_checkpoint(self, bundle: dict[str, Any], *, checkpoint_id: str | None = None) -> CheckpointEnvelope:
-        from app.rpg.interactive_cli_state_checkpoint import create_interactive_cli_state_checkpoint
+        from app.apps.rpg.interactive_cli_state_checkpoint import create_interactive_cli_state_checkpoint
 
         checkpoint = create_interactive_cli_state_checkpoint(bundle, checkpoint_id=checkpoint_id)
         return self._checkpoint_to_envelope(checkpoint)
 
     def restore_checkpoint(self, checkpoint: dict[str, Any]) -> dict[str, Any]:
-        from app.rpg.interactive_cli_state_checkpoint import restore_interactive_cli_state_bundle_from_checkpoint
+        from app.apps.rpg.interactive_cli_state_checkpoint import restore_interactive_cli_state_bundle_from_checkpoint
 
         return restore_interactive_cli_state_bundle_from_checkpoint(checkpoint)
 
     def save_checkpoint_file(self, checkpoint: dict[str, Any], path: str) -> str:
-        from app.rpg.interactive_cli_state_checkpoint import save_interactive_cli_state_checkpoint_file
+        from app.apps.rpg.interactive_cli_state_checkpoint import save_interactive_cli_state_checkpoint_file
 
         return str(save_interactive_cli_state_checkpoint_file(checkpoint, path))
 
     def load_checkpoint_file(self, path: str) -> CheckpointEnvelope:
-        from app.rpg.interactive_cli_state_checkpoint import load_interactive_cli_state_checkpoint_file
+        from app.apps.rpg.interactive_cli_state_checkpoint import load_interactive_cli_state_checkpoint_file
 
         return self._checkpoint_to_envelope(load_interactive_cli_state_checkpoint_file(path))
 
     def list_sessions(self) -> PersistenceInventory:
-        from app.rpg.session.durable_store import list_sessions_from_disk
+        from app.apps.rpg.session.durable_store import list_sessions_from_disk
 
         sessions: list[dict[str, Any]] = []
         diagnostics: list[dict[str, Any]] = []

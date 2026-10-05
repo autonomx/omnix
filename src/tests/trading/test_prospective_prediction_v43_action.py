@@ -3,26 +3,26 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.prospective_prediction_v4 import (
     GrossReturnDistribution,
     NetReturnDistribution,
 )
-from app.trading.prospective_prediction_v42 import (
+from app.apps.trading.prospective_prediction_v42 import (
     V42Forecast,
     V42MechanismHeads,
     V42ReturnDistribution,
     V42RiskInteractions,
 )
-from app.trading.prospective_prediction_v42_action import (
+from app.apps.trading.prospective_prediction_v42_action import (
     V42ActionSnapshot,
     V42AuthorizationReceipt,
 )
-from app.trading.prospective_prediction_v43 import (
+from app.apps.trading.prospective_prediction_v43 import (
     V43CohortRegime,
     V43ExtensionExhaustionOverlay,
     V43Forecast,
 )
-from app.trading.prospective_prediction_v43_action import (
+from app.apps.trading.prospective_prediction_v43_action import (
     authorize_v43_action,
     build_portfolio_g,
     classify_v43_watch,

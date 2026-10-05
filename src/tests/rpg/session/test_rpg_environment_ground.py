@@ -1,9 +1,9 @@
-from app.rpg.session.environment_memory import (
+from app.apps.rpg.session.environment_memory import (
     advance_environment_memory,
     derive_terrain_condition,
     normalize_recent_conditions,
 )
-from app.rpg.session.environment_snapshot import derive_environment_snapshot
+from app.apps.rpg.session.environment_snapshot import derive_environment_snapshot
 
 
 def test_ground_memory_defaults_are_available() -> None:

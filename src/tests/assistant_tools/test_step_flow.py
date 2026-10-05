@@ -1,5 +1,5 @@
-from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
-from app.assistant_tools.step_flow import (
+from app.platform.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from app.platform.assistant_tools.step_flow import (
     AssistantToolStep,
     approve_assistant_tool_step,
     create_assistant_tool_flow,

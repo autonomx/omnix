@@ -10,11 +10,11 @@ from typing import Sequence
 
 from app.config.env import environment, env_int, env_str
 from app.runtime.config import GatewayRole, RuntimeConfig, install_runtime_config
-from app.worker_runtime.pool_runtime import JobWorkerPoolRuntime
-from app.worker_runtime.pools import DEFAULT_POOLS, parse_pools
+from app.composition.worker_runtime.pool_runtime import JobWorkerPoolRuntime
+from app.composition.worker_runtime.pools import DEFAULT_POOLS, parse_pools
 
 
-logger = logging.getLogger("app.worker")
+logger = logging.getLogger("app.composition.worker")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,9 +48,9 @@ def _worker_runtime_config() -> RuntimeConfig:
 async def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
-    from app.production import create_production_app
+    from app.composition.production import create_production_app
     from app.runtime.process_control import wait_for_parent_control
-    from app.worker.health import create_worker_health_app
+    from app.composition.worker.health import create_worker_health_app
 
     pools = parse_pools(args.pools)
     config = _worker_runtime_config()

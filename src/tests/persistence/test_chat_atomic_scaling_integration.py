@@ -8,12 +8,12 @@ import uuid
 
 import pytest
 
-from app.chat.generation_jobs import (
+from app.platform.chat.generation_jobs import (
     chat_submission_lock,
     find_chat_generation_job,
     _run_chat_generation_job,
 )
-from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
+from app.platform.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.runtime.background import (
     GatewayBackgroundRuntime,
     BackgroundOwnershipUnavailable,
@@ -24,9 +24,9 @@ from app.jobs.models import (
     ResourceClass,
     JobStatus,
 )
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.persistence.execution_repositories import JobClaimConflict
-from app.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
 from src.tests.persistence import test_chat_execution_ownership_integration as ownership
@@ -41,7 +41,7 @@ def scaling_runtime():
 
 
 def chat_store(database, store, monkeypatch):
-    from app.chat.persistence import chat_runtime as fast
+    from app.platform.chat.persistence import chat_runtime as fast
     monkeypatch.setattr(
         fast,
         "default_assistant_turn_coordinator",
@@ -57,7 +57,7 @@ def chat_store(database, store, monkeypatch):
     )
     chat._repository = PostgresChatRepositoryAdapter(database)
     chat._repository.context = store.context
-    from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+    from app.platform.assistant_memory.settings import AssistantMemoryRuntimeSettings
 
     chat.memory_settings_factory = AssistantMemoryRuntimeSettings
     chat._run_post_turn_maintenance = lambda *args: None
@@ -226,7 +226,7 @@ def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
     now = '2026-09-26T00:00:00+00:00'
     value = ChatSession(id=f'chat:{uuid.uuid4().hex}', title='Rollback', created_at=now,
                         updated_at=now, messages=[ChatMessage(id='msg:test', role='system', content='hello', created_at=now)])
-    from app.chat.persistence.repository import PostgresChatRepository
+    from app.platform.chat.persistence.repository import PostgresChatRepository
 
     monkeypatch.setattr(PostgresChatRepository, 'append_message', lambda *args: (_ for _ in ()).throw(RuntimeError('greeting failed')))
     with pytest.raises(RuntimeError, match='greeting failed'):
@@ -256,7 +256,7 @@ def test_runtime_schema_verification_does_not_acquire_migration_lock_in_chat_tra
 
 
 def test_independent_turn_records_are_atomic_with_chat_transaction(runtime, monkeypatch):
-    from app.chat.persistence import assistant_turn_store
+    from app.platform.chat.persistence import assistant_turn_store
     from app.persistence.document_store import PostgresDocumentStore
 
     database, store, _ = runtime
@@ -550,7 +550,7 @@ def test_background_connection_termination_revokes_execution_and_releases_cohort
 
 
 def test_rolled_back_admission_does_not_interrupt_previous_provider(runtime, monkeypatch):
-    from app.chat import generation_jobs as jobs
+    from app.platform.chat import generation_jobs as jobs
     from app.jobs.models import CancelJobRequest
 
     database, store, _ = runtime

@@ -28,8 +28,8 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.strategy_leader_momentum_diagnostics import (
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.strategy_leader_momentum_diagnostics import (
     LeaderMomentumDiagnosticTrace,
     LeaderScoreBreakdown,
     SetupCandidateDiagnostic,
@@ -121,7 +121,7 @@ CANDIDATE_FIELDS = (
 
 
 def _strategy_path() -> Path:
-    return Path("src/app/trading/strategy_leader_momentum_continuation.py")
+    return Path("src/app/apps/trading/strategy_leader_momentum_continuation.py")
 
 
 def _file_sha256(path: Path) -> str:

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 def _store_with_asset(tmp_path, asset: AssetRecord) -> SharedAssetStore:

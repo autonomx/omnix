@@ -94,10 +94,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.research.contracts import RESEARCH_JOB_TYPE
-from app.research.deep_research_diagnostics import deep_research_log
-from app.research.executor import DeepResearchExecutor, ResearchExecutionCheckpoint
-from app.research.synthesis import DeepResearchSynthesizer
+from app.platform.research.contracts import RESEARCH_JOB_TYPE
+from app.platform.research.deep_research_diagnostics import deep_research_log
+from app.platform.research.executor import DeepResearchExecutor, ResearchExecutionCheckpoint
+from app.platform.research.synthesis import DeepResearchSynthesizer
 
 from app.jobs.models import (
     CancelJobRequest,
@@ -500,12 +500,12 @@ def _default_workflow(
     checkpoint: ResearchExecutionCheckpoint | None = None,
     save_checkpoint: Callable[[str, ResearchExecutionCheckpoint], None] | None = None,
 ) -> DeepResearchWorkflowResult:
-    from app.research.web_search import WebSearchClient
-    from app.research.extraction import ReadablePageExtractor
-    from app.research.planner import ResearchPlanner
-    from app.research.policy import research_policy_from_env
-    from app.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
-    from app.research.quick_search import QuickSearchService
+    from app.platform.research.web_search import WebSearchClient
+    from app.platform.research.extraction import ReadablePageExtractor
+    from app.platform.research.planner import ResearchPlanner
+    from app.platform.research.policy import research_policy_from_env
+    from app.platform.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
+    from app.platform.research.quick_search import QuickSearchService
 
     policy = replace(
         research_policy_from_env(),

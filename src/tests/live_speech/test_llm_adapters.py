@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.live_speech.llm import EchoTextGenerator, OpenAICompatibleTextGenerator, create_text_generator_from_env
-from app.live_speech.realtime import LiveSpeechRealtimeService
+from app.platform.live_speech.llm import EchoTextGenerator, OpenAICompatibleTextGenerator, create_text_generator_from_env
+from app.platform.live_speech.realtime import LiveSpeechRealtimeService
 
 
 def test_echo_generator_streams_prompt_text() -> None:

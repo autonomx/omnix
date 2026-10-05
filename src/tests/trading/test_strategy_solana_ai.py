@@ -9,13 +9,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.models import MarketBar
-from app.trading.strategy_solana_ai import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_solana_ai import (
     SOLANA_INSTRUMENT_ID,
     SolanaAIDecision,
     SolanaAIAnalyzer,
 )
-from app.trading.strategy_solana_ai_monitor import (
+from app.apps.trading.strategy_solana_ai_monitor import (
     SCHEDULED_TASK_ID,
     TradingSolanaAIMonitor,
     create_trading_solana_ai_control_router,

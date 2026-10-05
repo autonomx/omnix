@@ -38,7 +38,7 @@ def _safe_int(value: Any, *, default: int) -> int:
 
 
 def _load_mutable_session(session_id: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    from app.rpg.session.service import load_session
+    from app.apps.rpg.session.service import load_session
 
     session = load_session(session_id)
     if not session:
@@ -74,8 +74,8 @@ def _item_action_request_from_payload(payload: dict[str, Any]) -> dict[str, Any]
 
 def list_rpg_sessions_payload() -> dict[str, Any]:
     """Return the legacy RPG session list envelope plus launch presets."""
-    from app.rpg.session.new_game import list_rpg_presets
-    from app.rpg.session.service import list_sessions
+    from app.apps.rpg.session.new_game import list_rpg_presets
+    from app.apps.rpg.session.service import list_sessions
 
     presets_payload = list_rpg_presets()
     return {
@@ -112,19 +112,19 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     action = _safe_str(payload.get("action")).strip()
 
     if action == "new_game":
-        from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+        from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 
         request = RpgNewGameRequest.model_validate(payload.get("request") or payload)
         return create_new_game_session(request)
 
     if action == "start_preset":
-        from app.rpg.session.new_game import start_rpg_preset
+        from app.apps.rpg.session.new_game import start_rpg_preset
 
         preset_id = _safe_str(payload.get("preset_id")).strip()
         return start_rpg_preset(preset_id)
 
     if action == "continue":
-        from app.rpg.session.new_game import continue_rpg_session
+        from app.apps.rpg.session.new_game import continue_rpg_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -132,7 +132,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return continue_rpg_session(session_id)
 
     if action == "rename":
-        from app.rpg.session.new_game import rename_rpg_session
+        from app.apps.rpg.session.new_game import rename_rpg_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         name = _safe_str(payload.get("name")).strip()
@@ -143,7 +143,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return rename_rpg_session(session_id, name)
 
     if action == "delete":
-        from app.rpg.session.new_game import delete_rpg_session
+        from app.apps.rpg.session.new_game import delete_rpg_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -151,8 +151,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return delete_rpg_session(session_id)
 
     if action == "loadout_action":
-        from app.rpg.session.loadout import RpgLoadoutActionRequest
-        from app.rpg.session.loadout_with_hooks import apply_loadout_action_with_item_hooks
+        from app.apps.rpg.session.loadout import RpgLoadoutActionRequest
+        from app.apps.rpg.session.loadout_with_hooks import apply_loadout_action_with_item_hooks
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -170,8 +170,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         )
 
     if action == "item_action":
-        from app.rpg.session.item_session_with_hooks import apply_item_session_action_with_hooks
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.item_session_with_hooks import apply_item_session_action_with_hooks
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -207,8 +207,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_command":
-        from app.rpg.session.item_session_with_hooks import apply_item_command_with_hooks
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.item_session_with_hooks import apply_item_command_with_hooks
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -246,7 +246,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_detail":
-        from app.rpg.session.item_detail import generate_item_detail
+        from app.apps.rpg.session.item_detail import generate_item_detail
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -265,7 +265,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return {"session_id": session_id, **result}
 
     if action == "ability_detail":
-        from app.rpg.session.ability_detail import generate_ability_detail
+        from app.apps.rpg.session.ability_detail import generate_ability_detail
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -284,8 +284,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return {"session_id": session_id, **result}
 
     if action == "item_resolve":
-        from app.rpg.session.item_action_resolution import apply_item_action_input
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.item_action_resolution import apply_item_action_input
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -330,11 +330,11 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_diagnostics":
-        from app.rpg.session.item_diagnostics import (
+        from app.apps.rpg.session.item_diagnostics import (
             build_item_diagnostics,
             record_item_diagnostics,
         )
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -379,11 +379,11 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_maintenance":
-        from app.rpg.session.item_state_maintenance import (
+        from app.apps.rpg.session.item_state_maintenance import (
             build_item_state_maintenance_plan,
             run_item_state_maintenance,
         )
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -425,7 +425,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_objectives":
-        from app.rpg.session.item_objectives import build_item_objectives
+        from app.apps.rpg.session.item_objectives import build_item_objectives
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -446,8 +446,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_scenario":
-        from app.rpg.session.item_scenarios import build_item_scenario_plan, run_item_scenario
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.item_scenarios import build_item_scenario_plan, run_item_scenario
+        from app.apps.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
@@ -498,10 +498,10 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
 
-    from app.rpg.session.action_execution import (
+    from app.apps.rpg.session.action_execution import (
         build_frontend_bootstrap_payload as build_frontend_bootstrap_payload,
     )
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         load_runtime_session as load_runtime_session,
     )
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.audiobook import model_identity
+from app.apps.audiobook import model_identity
 from app.providers import tts_artifacts
 
 

@@ -4,9 +4,9 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from app.rpg.session.package_bridge import package_to_session, session_to_package
-from app.rpg.session.replay_checkpoint import build_session_checkpoint, compare_session_checkpoints
-from app.rpg.session.replay_turn_sequence import validate_replay_turn_sequence
+from app.apps.rpg.session.package_bridge import package_to_session, session_to_package
+from app.apps.rpg.session.replay_checkpoint import build_session_checkpoint, compare_session_checkpoints
+from app.apps.rpg.session.replay_turn_sequence import validate_replay_turn_sequence
 
 SOURCE = "deterministic_phase7_save_load_replay_roundtrip_gate"
 SaveSession = Callable[[dict[str, Any]], dict[str, Any]]
@@ -31,13 +31,13 @@ def _session_id(session: dict[str, Any]) -> str:
 
 
 def _default_save(session: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.session.durable_store import save_session_to_disk
+    from app.apps.rpg.session.durable_store import save_session_to_disk
 
     return save_session_to_disk(session, compact=True)
 
 
 def _default_load(session_id: str) -> dict[str, Any] | None:
-    from app.rpg.session.durable_store import load_session_from_disk
+    from app.apps.rpg.session.durable_store import load_session_from_disk
 
     return load_session_from_disk(session_id)
 
@@ -147,8 +147,8 @@ def build_save_load_replay_roundtrip_contract(result: dict[str, Any]) -> dict[st
 def assert_phase7_save_load_replay_roundtrip_ready() -> dict[str, Any]:
     import tempfile
 
-    from app.rpg.locations.discovery import discover_location, discover_route, unblock_route
-    from app.rpg.session import durable_store
+    from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route
+    from app.apps.rpg.session import durable_store
 
     session = {
         "manifest": {"id": "phase7:roundtrip", "session_id": "phase7:roundtrip", "title": "Phase 7.3 Roundtrip"},

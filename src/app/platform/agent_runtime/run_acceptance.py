@@ -31,7 +31,7 @@ from .service_core import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.service_core import AgentRunService
+    from app.platform.agent_runtime.service_core import AgentRunService
 
 
 def _maybe_finalize_parent_in_repository(

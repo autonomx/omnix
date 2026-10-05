@@ -232,7 +232,7 @@ python -m pip install --require-hashes -r requirements.txt
 npm install
 
 # Start the FastAPI web gateway
-PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
 # In another terminal, start the browser app
 npm run web:dev</code></pre></div>
@@ -253,14 +253,14 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <ul>
 <li><code>web/src/app/modules.ts</code> — routed application module catalog.</li>
 <li><code>web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
-<li><code>src/app/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
-<li><code>src/app/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
-<li><code>src/app/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
+<li><code>src/app/composition/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
+<li><code>src/app/platform/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
+<li><code>src/app/platform/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
 <li><code>src/app/providers/</code> — provider/model integration layer.</li>
 <li><code>src/app/jobs/</code> — shared job/run contracts and stores.</li>
 <li><code>src/app/assets/</code> — shared asset/artifact system.</li>
-<li><code>src/app/rpg/</code> — deterministic RPG domain and APIs.</li>
-<li><code>src/app/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
+<li><code>src/app/apps/rpg/</code> — deterministic RPG domain and APIs.</li>
+<li><code>src/app/apps/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
 <li><code>src/app/persistence/</code> — PostgreSQL persistence contracts and transaction policy.</li>
 <li><code>scripts/requirements/</code> — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in <code>requirements.txt</code>.</li>
 <li><code>resources/</code> — models, data, logs, and generated/runtime resources.</li>

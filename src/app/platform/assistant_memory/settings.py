@@ -178,7 +178,7 @@ def effective_memory_settings(
 
 
 def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
-    from app.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
+    from app.platform.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
     from app.settings.access import current_settings_service
 
     if ASSISTANT_MEMORY_SETTINGS_KEY not in current_settings_service().specs:
@@ -190,7 +190,7 @@ def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
 
 
 def default_memory_settings_store():
-    from app.assistant_memory.persistence.settings_store import (
+    from app.platform.assistant_memory.persistence.settings_store import (
         SettingsServiceAssistantMemorySettingsStore,
     )
     from app.settings.access import current_settings_service

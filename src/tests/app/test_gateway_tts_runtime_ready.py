@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.voice import tts_runtime_actions, tts_runtime_routes, tts_runtime_state
+from app.platform.voice import tts_runtime_actions, tts_runtime_routes, tts_runtime_state
 from tests.support.routers import include_router_registrar, effective_routes
 
 

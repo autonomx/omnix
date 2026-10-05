@@ -17,13 +17,13 @@ function resolveRepositoryRoot(): string {
 const REPOSITORY_ROOT = resolveRepositoryRoot();
 
 const LIVE_VOICE_CRITICAL_PATHS = [
-  'src/app/live_voice/speech/speculative_tts.py',
-  'src/app/live_voice/speech/tts_lane.py',
-  'src/app/live_voice/speech/chat_speculative_tts.py',
-  'src/app/chat/live_chat_speculation.py',
-  'src/app/chat/live_chat_speculation_inline_stream.py',
-  'src/app/live_voice/transport/websocket.py',
-  'src/app/live_voice/speech/startup_frame_policy.py',
+  'src/app/platform/live_voice/speech/speculative_tts.py',
+  'src/app/platform/live_voice/speech/tts_lane.py',
+  'src/app/platform/live_voice/speech/chat_speculative_tts.py',
+  'src/app/platform/chat/live_chat_speculation.py',
+  'src/app/platform/chat/live_chat_speculation_inline_stream.py',
+  'src/app/platform/live_voice/transport/websocket.py',
+  'src/app/platform/live_voice/speech/startup_frame_policy.py',
   'src/app/conversation/tts_stream_contract.py',
   'src/app/providers/faster_qwen3_tts_provider.py',
   'src/app/providers/nemotron_eou_live_websocket.py',

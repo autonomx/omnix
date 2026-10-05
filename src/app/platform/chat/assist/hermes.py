@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from app.capabilities import default_capability_registry
-from app.chat.assist.models import AssistantRequest, ToolCall, ToolRiskLevel, AssistantResult
+from app.platform.chat.assist.models import AssistantRequest, ToolCall, ToolRiskLevel, AssistantResult
 from app.prompts import prompt_template
 from app.providers import ChatMessage
 from app.providers.hermes_client import HermesSidecarClient, JsonObject

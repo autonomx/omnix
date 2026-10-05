@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-from app.agent_runtime.model_gateway import (
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.platform.agent_runtime.model_gateway import (
     AgentChatCompletionRequest,
     AgentModelMessage,
     _authoritative_run_context,

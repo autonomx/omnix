@@ -4,13 +4,13 @@ from copy import deepcopy
 import re
 from typing import Any, Dict, List
 
-from app.rpg.economy.service_resolver import resolve_service_turn
-from app.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
-from app.rpg.session.survival_actions import (
+from app.apps.rpg.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
+from app.apps.rpg.session.survival_actions import (
     build_survival_suggested_actions,
     resolve_survival_action,
 )
-from app.rpg.world.travel_graph import list_available_routes
+from app.apps.rpg.world.travel_graph import list_available_routes
 
 
 def safe_dict(v: Any) -> Dict[str, Any]:

@@ -8,13 +8,13 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime import broker_api
-from app.agent_runtime.broker_api import BrokerCapabilityRequest, execute_agent_capability
-from app.agent_runtime.budget import AgentBudgetManager
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
-from app.agent_runtime.repository import PostgresAgentRunRepository
-from app.agent_runtime.service import AgentRunService
-from app.assistant_tools.models import AssistantToolResult, AssistantToolReviewDecision
+from app.platform.agent_runtime import broker_api
+from app.platform.agent_runtime.broker_api import BrokerCapabilityRequest, execute_agent_capability
+from app.platform.agent_runtime.budget import AgentBudgetManager
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.service import AgentRunService
+from app.platform.assistant_tools.models import AssistantToolResult, AssistantToolReviewDecision
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

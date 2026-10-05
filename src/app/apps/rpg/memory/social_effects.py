@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 try:
-    from app.rpg.world.npc_biography_registry import get_npc_biography
+    from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 except Exception:
     get_npc_biography = None
 

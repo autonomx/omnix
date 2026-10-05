@@ -654,14 +654,14 @@ accept, independently review, recover, or stop</pre></div>
           <div class="repo-map">
             <h3>Where to look in the repository</h3>
             <div class="code-shell"><button class="copy-button" type="button" data-copy-target="repo-map-code">Copy</button><pre id="repo-map-code">web/src/        React workspaces, routing, API clients, state, tests
-src/app/gateway/         FastAPI browser/API boundary and compatibility handoff
-src/app/agent_runtime/   Planning, grants, execution, evidence, review, recovery
-src/app/assistant_tools/  Governed capability adapters and policy projection
+src/app/composition/gateway/         FastAPI browser/API boundary and compatibility handoff
+src/app/platform/agent_runtime/   Planning, grants, execution, evidence, review, recovery
+src/app/platform/assistant_tools/  Governed capability adapters and policy projection
 src/app/providers/       Provider and model integration layer
 src/app/jobs/            Shared job/run contracts, queueing, and stores
 src/app/assets/          Shared asset/artifact handling
-src/app/rpg/             Deterministic RPG domain and APIs
-src/app/trading/         Market data, research, replay, alerts, strategies, paper state
+src/app/apps/rpg/             Deterministic RPG domain and APIs
+src/app/apps/trading/         Market data, research, replay, alerts, strategies, paper state
 src/app/persistence/     PostgreSQL runtime, migrations, repositories, blob storage
 resources/               Models, examples, logs, and generated/runtime resources
 docs/                    Human-maintained product and engineering documentation</pre></div>
@@ -685,7 +685,7 @@ python -m app.persistence verify
 npm install
 
 # Terminal 1: gateway
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
 # Terminal 2: web app
 npm run web:dev</pre></div><p class="muted">Open <code>http://localhost:5173/</code>. The Vite server proxies <code>/api</code> and <code>/events</code> to the gateway.</p></div>

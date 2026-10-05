@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_tools.contracts import (
+from app.platform.assistant_tools.contracts import (
     AssistantCapabilityDashboard,
     build_assistant_capability_dashboard,
 )

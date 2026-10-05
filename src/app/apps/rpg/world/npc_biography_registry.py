@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 try:
-    from app.rpg.world.npc_profile_loader import get_file_npc_profile
+    from app.apps.rpg.world.npc_profile_loader import get_file_npc_profile
 except Exception:
     get_file_npc_profile = None  # type: ignore[assignment]
 

@@ -6,8 +6,8 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item
-from app.rpg.session.item_signals import apply_item_signal, normalize_item_signals
+from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item
+from app.apps.rpg.session.item_signals import apply_item_signal, normalize_item_signals
 
 ITEM_EFFECT_SESSION_SOURCE = "engine_item_effect_session_v1"
 

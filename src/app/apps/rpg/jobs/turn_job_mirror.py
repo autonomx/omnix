@@ -9,14 +9,14 @@ from contextlib import ExitStack
 from copy import deepcopy
 from typing import Any, Callable
 
-from app.rpg.foreground_turn_record import (
+from app.apps.rpg.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_VERSION,
     build_foreground_turn_record,
 )
-from app.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
-from app.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID as _DIRECT_RPG_SUBMISSION_ID
-from app.rpg.performance_trace import rpg_pipeline_span
-from app.rpg.presentation.visible_response import visible_response_text
+from app.apps.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.apps.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID as _DIRECT_RPG_SUBMISSION_ID
+from app.apps.rpg.performance_trace import rpg_pipeline_span
+from app.apps.rpg.presentation.visible_response import visible_response_text
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def execute_turn_with_job_mirror(
     **kwargs: Any,
 ) -> dict[str, Any]:
     from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
-    from app.rpg.jobs.foreground_submission_store import submission_store_for_job_store
+    from app.apps.rpg.jobs.foreground_submission_store import submission_store_for_job_store
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()

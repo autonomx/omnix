@@ -1,6 +1,6 @@
 """The agent sandbox network reaches the broker relay and nothing else (WP-4.7).
 
-Needs Docker and the sandbox image (`python -m app.agent_runtime.sandbox build`);
+Needs Docker and the sandbox image (`python -m app.platform.agent_runtime.sandbox build`);
 skipped where either is missing.
 """
 from __future__ import annotations
@@ -10,8 +10,8 @@ import subprocess
 
 import pytest
 
-from app.agent_runtime.isolation import DockerStrongIsolation
-from app.agent_runtime.sandbox import check_egress
+from app.platform.agent_runtime.isolation import DockerStrongIsolation
+from app.platform.agent_runtime.sandbox import check_egress
 from tests.support.waiting import wait_until
 
 
@@ -48,8 +48,8 @@ def test_a_preview_runs_in_the_sandbox_and_answers_on_loopback(tmp_path, monkeyp
     import socket
     import urllib.request
 
-    from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-    from app.agent_runtime.isolation import remove_containers, start_sandboxed_preview
+    from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+    from app.platform.agent_runtime.isolation import remove_containers, start_sandboxed_preview
 
     monkeypatch.delenv("OMNIX_AGENT_DOCKER_NETWORK", raising=False)
     package = tmp_path / "web"

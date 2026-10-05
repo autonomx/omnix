@@ -3,31 +3,31 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.combat.runtime import (
+from app.apps.rpg.combat.runtime import (
     advance_combat_turn,
     gate_combat_action,
     is_combat_active,
     resolve_combat_attack,
     start_combat_encounter,
 )
-from app.rpg.combat.campaign_mechanics import (
+from app.apps.rpg.combat.campaign_mechanics import (
     apply_campaign_vulnerability_trigger,
     campaign_vulnerability_trigger,
     instantiate_campaign_creature,
 )
-from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
-from app.rpg.interactions.container_runtime import apply_container_interaction
-from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
-from app.rpg.interactions.inventory_runtime import apply_inventory_interaction
-from app.rpg.interactions.merchant_runtime import apply_merchant_interaction
-from app.rpg.interactions.repair_runtime import apply_repair_interaction
-from app.rpg.interactions.semantic_actions import (
+from app.apps.rpg.interactions.consumable_runtime import apply_consumable_interaction
+from app.apps.rpg.interactions.container_runtime import apply_container_interaction
+from app.apps.rpg.interactions.crafting_runtime import apply_crafting_interaction
+from app.apps.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.apps.rpg.interactions.inventory_runtime import apply_inventory_interaction
+from app.apps.rpg.interactions.merchant_runtime import apply_merchant_interaction
+from app.apps.rpg.interactions.repair_runtime import apply_repair_interaction
+from app.apps.rpg.interactions.semantic_actions import (
     resolve_semantic_action_v2,
     semantic_action_kind,
 )
-from app.rpg.interactions.survival_action_runtime import resolve_survival_action
-from app.rpg.interactions.target_resolver import (
+from app.apps.rpg.interactions.survival_action_runtime import resolve_survival_action
+from app.apps.rpg.interactions.target_resolver import (
     expected_target_types_for_action,
     resolve_target_ref,
 )

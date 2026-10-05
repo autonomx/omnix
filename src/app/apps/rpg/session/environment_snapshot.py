@@ -4,10 +4,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from app.rpg.session.climate_profiles import resolve_climate_profile
-from app.rpg.session.environment_calendar import derive_calendar_state
-from app.rpg.session.environment_memory import derive_terrain_condition
-from app.rpg.session.environment_signals import derive_environment_signals
+from app.apps.rpg.session.climate_profiles import resolve_climate_profile
+from app.apps.rpg.session.environment_calendar import derive_calendar_state
+from app.apps.rpg.session.environment_memory import derive_terrain_condition
+from app.apps.rpg.session.environment_signals import derive_environment_signals
 
 EnvironmentSnapshot = dict[str, Any]
 

@@ -4,23 +4,23 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime.chat_bridge import (
+from app.platform.agent_runtime.chat_bridge import (
     _continue_agent_run,
     _direct_request,
     _select_profile,
 )
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-from app.agent_runtime.router import OmnixRouteDecision, route_omnix_request
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-import app.chat.character_store as character_store
-from app.chat.assistant_turns import AssistantTurnCoordinator
-from app.characters.repository import InMemoryCharacterRepository
-from app.characters.service import CharacterService
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.platform.agent_runtime.router import OmnixRouteDecision, route_omnix_request
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+import app.platform.chat.character_store as character_store
+from app.platform.chat.assistant_turns import AssistantTurnCoordinator
+from app.platform.characters.repository import InMemoryCharacterRepository
+from app.platform.characters.service import CharacterService
 
 
 def _use_memory_character_service(tmp_path, monkeypatch) -> None:
     service = CharacterService(InMemoryCharacterRepository(tmp_path / "characters.sqlite3"))
-    monkeypatch.setattr("app.characters.service.default_character_service", lambda: service)
+    monkeypatch.setattr("app.platform.characters.service.default_character_service", lambda: service)
     monkeypatch.setattr(
         character_store,
         "default_assistant_turn_coordinator",
@@ -219,7 +219,7 @@ def test_cancel_rejects_single_pending_approval_before_run_control() -> None:
 
 
 def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monkeypatch, tmp_path) -> None:
-    from app.agent_runtime import chat_bridge
+    from app.platform.agent_runtime import chat_bridge
     from types import SimpleNamespace
 
     started = []
@@ -247,7 +247,7 @@ def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monke
         content="implement a small improvement to the router",
         metadata={},
     )
-    from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
+    from app.platform.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
 
     class Parser:
         def parse(self, _content):
@@ -273,8 +273,8 @@ def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monke
 
 
 def test_semantic_parser_owns_terse_ui_meaning_over_legacy_regex(monkeypatch, tmp_path) -> None:
-    from app.agent_runtime import chat_bridge
-    from app.agent_runtime.semantic_classifier import SemanticIntentDecision
+    from app.platform.agent_runtime import chat_bridge
+    from app.platform.agent_runtime.semantic_classifier import SemanticIntentDecision
 
     selected = tmp_path / "omnix"
     selected.mkdir()
@@ -330,7 +330,7 @@ def test_semantic_parser_owns_terse_ui_meaning_over_legacy_regex(monkeypatch, tm
 
 
 def test_turn_deep_research_outranks_persistent_agent_mode() -> None:
-    from app.agent_runtime import chat_bridge
+    from app.platform.agent_runtime import chat_bridge
     from types import SimpleNamespace
 
     session = SimpleNamespace(id="chat-deep", provider_id="test", model_id="model", messages=[])
@@ -374,7 +374,7 @@ def test_explicit_research_commands_normalize_to_existing_research_lane(
 
 
 def test_explicit_research_request_mode_outranks_persistent_agent() -> None:
-    from app.agent_runtime.evidence import resolve_request_mode
+    from app.platform.agent_runtime.evidence import resolve_request_mode
 
     selected = resolve_request_mode(
         "/research current database releases",

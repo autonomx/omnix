@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime.contracts import AgentArtifact, AgentRunSnapshot, AgentRunSpec, ModelRef, RunChangeSet, WorkspaceSpec
-from app.agent_runtime.service import AgentRunService
-from app.agent_runtime.workspace import WorkspaceAuthority
-from app.agent_runtime.workspace_promotion import WorkspacePromotionError, _normalize_patch_path, promote_change_set
+from app.platform.agent_runtime.contracts import AgentArtifact, AgentRunSnapshot, AgentRunSpec, ModelRef, RunChangeSet, WorkspaceSpec
+from app.platform.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.workspace import WorkspaceAuthority
+from app.platform.agent_runtime.workspace_promotion import WorkspacePromotionError, _normalize_patch_path, promote_change_set
 from app.persistence.blob_store import LocalBlobStore
 
 

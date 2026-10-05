@@ -15,9 +15,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, SecretStr
 from starlette.concurrency import run_in_threadpool
 
-from app.image.downloads import get_image_local_model_status
-from app.image.providers.registry import get_image_provider_definition, list_image_providers
-from app.image.image_http_client import (
+from app.platform.image.downloads import get_image_local_model_status
+from app.platform.image.providers.registry import get_image_provider_definition, list_image_providers
+from app.platform.image.image_http_client import (
     download_image_model_via_service,
     get_image_service_status,
     is_image_generation_enabled,

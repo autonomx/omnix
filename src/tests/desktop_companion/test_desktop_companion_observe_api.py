@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.desktop_companion.build_identity import DesktopCompanionBuildIdentity
-from app.desktop_companion.preflight import DesktopCompanionPreflightResult
-from app.desktop_companion.routes import register_desktop_companion_routes
-from app.desktop_companion.runtime import DesktopCompanionObserveResponse
+from app.apps.desktop_companion.build_identity import DesktopCompanionBuildIdentity
+from app.apps.desktop_companion.preflight import DesktopCompanionPreflightResult
+from app.apps.desktop_companion.routes import register_desktop_companion_routes
+from app.apps.desktop_companion.runtime import DesktopCompanionObserveResponse
 
 
 class FakeOrchestrator:

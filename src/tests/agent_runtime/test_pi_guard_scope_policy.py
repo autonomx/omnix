@@ -7,7 +7,7 @@ def test_pi_guard_enforces_scope_and_durable_budget_before_tools() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "pi_guard_extension.ts"
     ).read_text(encoding="utf-8")
     assert "OMNIX_AGENT_ALLOWED_PATHS" in source
@@ -21,7 +21,7 @@ def test_pi_guard_checks_option_embedded_paths_before_command_execution() -> Non
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "pi_guard_extension.ts"
     ).read_text(encoding="utf-8")
     assert 'const equalsIndex = token.indexOf("=");' in source
@@ -34,7 +34,7 @@ def test_pi_guard_does_not_misclassify_inline_python_code_as_a_path() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "pi_guard_extension.ts"
     ).read_text(encoding="utf-8")
     assert "const inlinePythonCommand" in source
@@ -45,7 +45,7 @@ def test_pi_guard_resolves_symlinks_before_authorizing_paths() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "pi_guard_extension.ts"
     ).read_text(encoding="utf-8")
     assert 'import fs from "node:fs";' in source

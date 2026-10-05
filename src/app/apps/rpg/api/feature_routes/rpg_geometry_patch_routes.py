@@ -7,8 +7,8 @@ from typing import Any, Mapping
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
 
-from app.rpg.map_geometry_patch import ApplyGeometryPatchCommand
-from app.rpg.map_geometry_patch_service import apply_campaign_geometry_patch
+from app.apps.rpg.map_geometry_patch import ApplyGeometryPatchCommand
+from app.apps.rpg.map_geometry_patch_service import apply_campaign_geometry_patch
 
 RpgApplyGeometryPatchRequestBody = ApplyGeometryPatchCommand
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     AuthorityClass,
     BeatKind,
     BeatPurpose,
@@ -20,8 +20,8 @@ from app.rpg.narrative_engine import (
     VisibilityClass,
     canonical_response_from_dict,
 )
-from app.rpg.narrative_engine.validation import write_validate_repair
-from app.rpg.narrative_engine.writer import WriterResult
+from app.apps.rpg.narrative_engine.validation import write_validate_repair
+from app.apps.rpg.narrative_engine.writer import WriterResult
 
 
 class _Writer:

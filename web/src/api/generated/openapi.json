@@ -9219,7 +9219,7 @@
             "type": "string"
           },
           "existing_fastapi_app": {
-            "default": "app.gateway.main:app",
+            "default": "app.composition.gateway.main:app",
             "title": "Existing Fastapi App",
             "type": "string"
           },
@@ -40305,7 +40305,7 @@
           "memory_candidates": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/app__companion_activity__cognition__MemoryCandidate"
+              "$ref": "#/components/schemas/app__platform__companion_activity__cognition__MemoryCandidate"
             },
             "title": "Memory Candidates",
             "type": "array"
@@ -50982,86 +50982,6 @@
         "title": "YahooGapperDiscoveryRequest",
         "type": "object"
       },
-      "app__companion_activity__cognition__MemoryCandidate": {
-        "additionalProperties": false,
-        "properties": {
-          "candidate_id": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Candidate Id",
-            "type": "string"
-          },
-          "confidence": {
-            "maximum": 1,
-            "minimum": 0,
-            "title": "Confidence",
-            "type": "number"
-          },
-          "importance": {
-            "maximum": 1,
-            "minimum": 0,
-            "title": "Importance",
-            "type": "number"
-          },
-          "kind": {
-            "enum": [
-              "episode",
-              "goal",
-              "open_loop",
-              "correction",
-              "progress"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "proposition_ids": {
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1,
-            "title": "Proposition Ids",
-            "type": "array"
-          },
-          "reason": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          },
-          "sensitivity": {
-            "enum": [
-              "normal",
-              "sensitive",
-              "secret"
-            ],
-            "title": "Sensitivity",
-            "type": "string"
-          },
-          "trust_level": {
-            "enum": [
-              "user_explicit",
-              "system_trusted",
-              "assistant_inference",
-              "external_untrusted",
-              "imported_unverified"
-            ],
-            "title": "Trust Level",
-            "type": "string"
-          }
-        },
-        "required": [
-          "candidate_id",
-          "kind",
-          "proposition_ids",
-          "trust_level",
-          "sensitivity",
-          "confidence",
-          "importance",
-          "reason"
-        ],
-        "title": "MemoryCandidate",
-        "type": "object"
-      },
       "app__conversation__memory_contracts__MemoryCandidate": {
         "additionalProperties": false,
         "description": "Non-prompt-eligible proposal awaiting an explicit resolution.",
@@ -51262,6 +51182,86 @@
           "trust_level",
           "sensitivity",
           "status"
+        ],
+        "title": "MemoryCandidate",
+        "type": "object"
+      },
+      "app__platform__companion_activity__cognition__MemoryCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "importance": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Importance",
+            "type": "number"
+          },
+          "kind": {
+            "enum": [
+              "episode",
+              "goal",
+              "open_loop",
+              "correction",
+              "progress"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "proposition_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Proposition Ids",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "sensitivity": {
+            "enum": [
+              "normal",
+              "sensitive",
+              "secret"
+            ],
+            "title": "Sensitivity",
+            "type": "string"
+          },
+          "trust_level": {
+            "enum": [
+              "user_explicit",
+              "system_trusted",
+              "assistant_inference",
+              "external_untrusted",
+              "imported_unverified"
+            ],
+            "title": "Trust Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "kind",
+          "proposition_ids",
+          "trust_level",
+          "sensitivity",
+          "confidence",
+          "importance",
+          "reason"
         ],
         "title": "MemoryCandidate",
         "type": "object"

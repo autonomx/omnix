@@ -6,7 +6,7 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridPortal,
     GridPortalEndpoint,

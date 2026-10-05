@@ -12,10 +12,10 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.evidence_import import ImportLedger, import_ibkr, import_yahoo
-from app.trading.evidence_storage import PostgresEvidenceBackend, PostgresIbkrSessionEvidence
-from app.trading.ibkr_evidence import IbkrEvidenceStore
-from app.trading.yahoo_evidence import YahooEvidenceStore
+from app.apps.trading.evidence_import import ImportLedger, import_ibkr, import_yahoo
+from app.apps.trading.evidence_storage import PostgresEvidenceBackend, PostgresIbkrSessionEvidence
+from app.apps.trading.ibkr_evidence import IbkrEvidenceStore
+from app.apps.trading.yahoo_evidence import YahooEvidenceStore
 
 pytestmark = [
     pytest.mark.postgres,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.coding_quality import diff_review_command_is_complete, validation_result_from_tool_event
-from app.agent_runtime.contracts import AgentEvent, TaskRevision, ValidationSpec
+from app.platform.agent_runtime.coding_quality import diff_review_command_is_complete, validation_result_from_tool_event
+from app.platform.agent_runtime.contracts import AgentEvent, TaskRevision, ValidationSpec
 
 
 def _revision() -> TaskRevision:

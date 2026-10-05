@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.world_reasoning_contracts import build_intent_result, build_world_assessment
+from app.apps.rpg.session.world_reasoning_contracts import build_intent_result, build_world_assessment
 
 _CLAIM_INTENTS = {
     "unverified_player_claim",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.launcher.runtime_control_app import build_runtime_service_specs
+from app.composition.launcher.runtime_control_app import build_runtime_service_specs
 
 
 def test_runtime_dashboard_uses_hybrid_stt(monkeypatch) -> None:

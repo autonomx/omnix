@@ -85,7 +85,7 @@ from types import SimpleNamespace
 
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
-from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 from app.persistence.database import default_database
 from app.security.tenant_context import TenantProvider
 from app.settings.access import install_settings_service
@@ -100,16 +100,16 @@ install_settings_service(settings_service)
 
 # The composition root binds its exactly-one ports (the chat store factory, ADR-0016).
 from app.runtime.ports import PortBindings, install_port_bindings
-from app.runtime_composition import composition_port_bindings
+from app.composition.runtime_composition import composition_port_bindings
 install_port_bindings(PortBindings.build(composition_port_bindings()))
 
-from app.characters import service as character_service
+from app.platform.characters import service as character_service
 assert character_service.CharacterRepository.__name__ == "InMemoryCharacterRepository"
 assert character_service.default_character_service().repository.__class__.__name__ == "PostgresCharacterRepositoryAdapter"
 
-from app.characters.management import CharacterManagementService
-from app.assistant_memory.owner_defaults import default_memory_service
-from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
+from app.platform.characters.management import CharacterManagementService
+from app.platform.assistant_memory.owner_defaults import default_memory_service
+from app.platform.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 from app.conversation.memory_contracts import MemoryScopeContext
 management = CharacterManagementService(
     character_service.default_character_service(),
@@ -127,9 +127,9 @@ assert management.memory_repository.get_record(memory.id).content == memory.cont
 assert management.memory_repository.delete_owner(owner_type="character", owner_id="character:factory") == (1, 0, 0)
 assert default_memory_service().repository.get_record(memory.id) is None
 
-from app.characters import avatar_service
-from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
-from app.characters.repository import CharacterConflictError
+from app.platform.characters import avatar_service
+from app.platform.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
+from app.platform.characters.repository import CharacterConflictError
 assert avatar_service.CharacterAvatarRepository.__name__ == "CharacterAvatarRepository"
 avatar_repository = avatar_service.default_character_avatar_service().repository
 assert avatar_repository.__class__.__name__ == "PostgresCharacterAvatarRepositoryAdapter"
@@ -176,22 +176,22 @@ except CharacterConflictError:
 else:
     raise AssertionError("non-identical avatar import replacement was not rejected")
 
-from app.chat.assist import review as policy_store
+from app.platform.chat.assist import review as policy_store
 policy_store.write_pending({"confirmation:1": {
     "confirmation_id": "confirmation:1", "tool_call": {"name": "house.lights", "args": {}},
     "created_at": "2026-07-01T00:00:00Z", "status": "pending",
 }})
 assert policy_store.read_pending()["confirmation:1"]["status"] == "pending"
 
-from app.assistant_tools import config_store
+from app.platform.assistant_tools import config_store
 config = config_store.load_assistant_tools_config()
 saved = config_store.save_assistant_tools_config(config)
 assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 
-from app.chat import evaluation_store as evaluations
+from app.platform.chat import evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
-from app.chat import live_chat_evaluation_routes as evaluation_routes
+from app.platform.chat import live_chat_evaluation_routes as evaluation_routes
 assert evaluation_routes.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 assert evaluation_routes.default_live_chat_evaluation_store().__class__.__name__ == "PostgresLiveChatEvaluationStore"
 record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
@@ -207,7 +207,7 @@ record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
 ))
 assert store.get(record.evaluation_id) is not None
 
-from app.research import source_store as research
+from app.platform.research import source_store as research
 assert research.ResearchSourceStore.__name__ == "ResearchSourceStore"
 research_store = research.default_research_source_store()
 item = SimpleNamespace(
@@ -219,7 +219,7 @@ item = SimpleNamespace(
 recorded = research_store.record_quick_search("PostgreSQL", "test", [item])
 assert research_store.get_manifest(recorded.manifest.manifest_id) is not None
 
-from app.image import asset_store as images
+from app.platform.image import asset_store as images
 path = images.save_image_asset_bytes(
     b"not-a-real-png-but-stable",
     "image/png",
@@ -253,7 +253,7 @@ snapshot = refresh_store.record_snapshot(
 )
 assert refresh_store.latest_snapshot().id == snapshot.id
 
-from app.rpg.npc_evolution import profile_store
+from app.apps.rpg.npc_evolution import profile_store
 runtime_state = {
     "npc_evolution": {
         "arcs": {"npc:bran": {"arc_stage": "warming", "axes": {"trust": 1}}},
@@ -265,10 +265,10 @@ assert persisted["ok"] is True
 loaded = profile_store.load_npc_evolution_profiles_for_runtime(npc_ids=["npc:bran"])
 assert loaded["loaded_count"] == 1, (persisted, loaded)
 
-from app.chat import compaction, history_search
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
-from app.chat.compaction import ConversationSummary
+from app.platform.chat import compaction, history_search
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.compaction import ConversationSummary
 
 now = datetime.now(timezone.utc).isoformat()
 PostgresChatRepositoryAdapter().create_session(
@@ -314,22 +314,22 @@ search = history_search.default_history_search_service().search(
 )
 assert search.items and search.items[0].message_id == "message:factory"
 
-import app.chat as chat_package
+import app.platform.chat as chat_package
 assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacterChatSessionStore"
 
 from app.jobs import default_job_store
 from app.jobs.store import install_default_job_store_factory
-from app.runtime_composition import production_job_store
+from app.composition.runtime_composition import production_job_store
 install_default_job_store_factory(production_job_store)
 default_job_store()
-from app.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 assert getattr(PostgresJobStoreAdapter, "_omnix_voice_studio_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_image_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_research_jobs_installed", False) is False
 from app.runtime.feature_catalog import load_feature
 from app.jobs.handlers import registry_from_features
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
+from app.apps.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
 rpg_registry = registry_from_features((load_feature("rpg"),))
 rpg_turn_policy = rpg_registry.require("rpg.turn").submission_policy
 assert callable(rpg_turn_policy)

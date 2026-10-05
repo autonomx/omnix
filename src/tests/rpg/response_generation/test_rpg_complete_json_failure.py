@@ -4,7 +4,7 @@ import pytest
 
 from app.providers.base import ChatResponse, ProviderConfig
 from app.providers.structured import StructuredDecodeError
-from app.rpg.llm_app_gateway import AppLLMGateway
+from app.apps.rpg.llm_app_gateway import AppLLMGateway
 
 
 class _Provider:

@@ -277,7 +277,7 @@ class SharedAssetStore:
                 metadata=dict((payload or {}).get("metadata") or {}),
                 created_at=_utcnow(),
                 compat={
-                    "legacy_system": "src/app/image/asset_store.py",
+                    "legacy_system": "src/app/platform/image/asset_store.py",
                     "legacy_asset_id": asset_id,
                     "legacy_hash": (payload or {}).get("hash") or "",
                 },
@@ -287,7 +287,7 @@ class SharedAssetStore:
                 missing.append({"asset_id": asset_id, "path": path, "reason": "file_missing"})
 
         return AssetMigrationPreview(
-            source="src/app/image/asset_store.py",
+            source="src/app/platform/image/asset_store.py",
             would_import=len(records),
             missing_files=missing,
             assets=records,

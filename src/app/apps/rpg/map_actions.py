@@ -6,9 +6,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
-from app.rpg.map_hierarchy import switch_active_map
-from app.rpg.map_projection import increment_map_overlay_revision, project_session_map_overlay
-from app.rpg.map_repository import MapDefinitionRepository, default_map_repository
+from app.apps.rpg.map_hierarchy import switch_active_map
+from app.apps.rpg.map_projection import increment_map_overlay_revision, project_session_map_overlay
+from app.apps.rpg.map_repository import MapDefinitionRepository, default_map_repository
 
 MapActionType = Literal["travel", "inspect", "enter", "talk", "trade"]
 

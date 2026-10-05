@@ -23,7 +23,7 @@ from typing import Any
 
 from scripts.trade import run_interday_winner_shadow_replay_dependency_base as _dep
 
-from app.trading.market_data_recovery import finalized_session_bars
+from app.apps.trading.market_data_recovery import finalized_session_bars
 
 
 _core = _dep._core

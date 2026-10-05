@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import (
+from app.platform.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _reserve_evidence_retrieval_budget,
 )
-from app.agent_runtime.contracts import EvidencePolicy, RetrievalPolicy
+from app.platform.agent_runtime.contracts import EvidencePolicy, RetrievalPolicy
 
 
 def _policy(**updates):

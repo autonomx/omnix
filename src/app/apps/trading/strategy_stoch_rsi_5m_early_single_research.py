@@ -21,7 +21,7 @@ from .strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
 from .strategy_stoch_rsi_5m_early_single_loss_controls import (
     evaluate_stoch_rsi_5m_early_single_loss_control,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _ATR_PERIOD_1M = 14

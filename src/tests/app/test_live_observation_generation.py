@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> None:
     from fastapi import FastAPI
 
-    from app.chat import live_observation_generation
-    from app.chat.live_material_context import (
+    from app.platform.chat import live_observation_generation
+    from app.platform.chat.live_material_context import (
         create_live_material_context_router,
         live_material_store,
     )
-    from app.chat.live_observation_generation import create_live_observation_generation_router
+    from app.platform.chat.live_observation_generation import create_live_observation_generation_router
 
     session_id = "observation-contract-test"
     live_material_store.clear(session_id)
@@ -84,12 +84,12 @@ def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> 
 def test_live_observation_generation_rejects_stale_context(monkeypatch) -> None:
     from fastapi import FastAPI
 
-    from app.chat import live_observation_generation
-    from app.chat.live_material_context import (
+    from app.platform.chat import live_observation_generation
+    from app.platform.chat.live_material_context import (
         create_live_material_context_router,
         live_material_store,
     )
-    from app.chat.live_observation_generation import create_live_observation_generation_router
+    from app.platform.chat.live_observation_generation import create_live_observation_generation_router
 
     session_id = "observation-stale-test"
     live_material_store.clear(session_id)

@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.assist.models import ActionLogEntry, ConfirmationRequest, ToolCall, ToolResult, AssistantRequest, AssistantResult, ToolRiskLevel
+from app.platform.chat.assist.models import ActionLogEntry, ConfirmationRequest, ToolCall, ToolResult, AssistantRequest, AssistantResult, ToolRiskLevel
 from app.persistence.document_schemas import register_document_schema
 from app.persistence.document_store import PostgresDocumentStore
 from app.runtime.paths import resources_data_root

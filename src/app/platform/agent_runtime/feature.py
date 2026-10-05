@@ -1,8 +1,8 @@
 """Agent runtime feature declaration."""
 from app.runtime.background import BackgroundWorker
 from app.runtime.capabilities import RuntimeCapability
-from app.assistant_tools.contracts import AGENT_RUN_WORKSPACES
-from app.chat.contracts import TYPED_TURN_ROUTER
+from app.platform.assistant_tools.contracts import AGENT_RUN_WORKSPACES
+from app.platform.chat.contracts import TYPED_TURN_ROUTER
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 from .routes import create_agent_runtime_router

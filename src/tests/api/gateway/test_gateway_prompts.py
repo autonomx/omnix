@@ -49,7 +49,7 @@ def test_prompt_renderer_rejects_missing_variables() -> None:
 
 
 def test_gateway_prompt_render_endpoint() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     client = TestClient(create_gateway_app(), raise_server_exceptions=False, headers={"X-Omnix-Client": "test"})
 
@@ -74,7 +74,7 @@ def test_gateway_prompt_render_endpoint() -> None:
 
 
 def test_gateway_prompt_render_endpoint_reports_missing_variables() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     client = TestClient(create_gateway_app(), raise_server_exceptions=False, headers={"X-Omnix-Client": "test"})
 

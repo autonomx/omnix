@@ -18,7 +18,7 @@ from .repository import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.repository import PostgresAgentRunRepository
+    from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 def add_task_revision(repo: PostgresAgentRunRepository, revision: TaskRevision) -> TaskRevision:

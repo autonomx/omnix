@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from app.live_voice.release_gate import (
+from app.platform.live_voice.release_gate import (
     REQUIRED_LIVE_VOICE_SCENARIOS,
     LiveVoiceReleaseThresholds,
     evaluate_live_voice_log,
     evaluate_live_voice_release_gate,
 )
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 class EmptyJobStore:
@@ -167,7 +167,7 @@ def test_release_gate_route_evaluates_supplied_evidence() -> None:
 
 
 def test_release_gate_route_reads_current_log(monkeypatch, tmp_path) -> None:
-    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
+    from app.platform.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     path = tmp_path / "live-call-streaming.log"
     path.write_text("", encoding="utf-8")

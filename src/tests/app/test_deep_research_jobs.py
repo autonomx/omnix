@@ -6,25 +6,25 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat.assistant_context.routes import register_assistant_context_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat.assistant_context.routes import register_assistant_context_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
 from app.jobs import CancelJobRequest
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.research.jobs import (
+from app.platform.research.jobs import (
     DeepResearchWorkflowResult,
     execute_research_job,
     load_research_checkpoint,
     save_research_checkpoint,
 )
-from app.research.adversarial_gate import (
+from app.platform.research.adversarial_gate import (
     adversarial_case_manifest,
     run_research_adversarial_gate,
 )
-from app.research.executor import ResearchExecutionCheckpoint
-from app.research.planner import ResearchOperation, ResearchPlan
-from app.research.policy import ResearchPolicy
-from app.research.release_policy import ResearchReleasePolicy
-from app.research.settings import ResearchRuntimeSettings
+from app.platform.research.executor import ResearchExecutionCheckpoint
+from app.platform.research.planner import ResearchOperation, ResearchPlan
+from app.platform.research.policy import ResearchPolicy
+from app.platform.research.release_policy import ResearchReleasePolicy
+from app.platform.research.settings import ResearchRuntimeSettings
 import pytest
 
 pytestmark = pytest.mark.usefixtures("legacy_test_persistence")

@@ -164,7 +164,7 @@ class OwnerMemorySnapshotMixin(OwnerMemoryRowSupport):
                 (status, snapshot_id, self.workspace_id),
             ).fetchone()
             if row is None:
-                from app.assistant_memory.repository import MemoryNotFoundError
+                from app.platform.assistant_memory.repository import MemoryNotFoundError
 
                 raise MemoryNotFoundError(snapshot_id)
             items = self.snapshot_items(connection, snapshot_id)

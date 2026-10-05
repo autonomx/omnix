@@ -50,7 +50,7 @@ def mcporter_command() -> str:
     configured = environment().get("OMNIX_AGENT_MCPORTER_COMMAND", "").strip()
     if configured:
         return configured
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     local_bin = repo_root / ".tools" / "npm-global"
     candidates = (
         local_bin / "mcporter.cmd",

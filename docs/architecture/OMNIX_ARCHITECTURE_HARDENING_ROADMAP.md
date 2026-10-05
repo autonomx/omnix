@@ -51,18 +51,18 @@ The branch currently contains the following important foundations and they shoul
 
 ### Production composition
 
-- `src/app/production.py`
-- `src/app/gateway/main.py`
-- `src/app/gateway/runtime_app.py`
-- `src/app/gateway/lifecycle.py`
-- `src/app/gateway/runtime_hooks.py`
-- `src/app/gateway/feature_registry.py`
+- `src/app/composition/production.py`
+- `src/app/composition/gateway/main.py`
+- `src/app/composition/gateway/runtime_app.py`
+- `src/app/composition/gateway/lifecycle.py`
+- `src/app/composition/gateway/runtime_hooks.py`
+- `src/app/composition/gateway/feature_registry.py`
 
 Production assembly already separates import-safe ASGI startup from PostgreSQL-authoritative runtime initialization.
 
 ### Background execution ownership
 
-- `src/app/gateway/background_runtime.py`
+- `src/app/composition/gateway/background_runtime.py`
 - `src/app/persistence/background_authority.py`
 
 The worker role owns singleton/background execution using PostgreSQL advisory-lock authority. API replicas intentionally do not own background workers.
@@ -74,14 +74,14 @@ The worker role owns singleton/background execution using PostgreSQL advisory-lo
 - `src/app/persistence/chat_execution.py`
 - `src/app/persistence/gateway_runtime.py`
 - `src/app/persistence/memory_job_execution.py`
-- `src/app/chat/generation_jobs.py`
+- `src/app/platform/chat/generation_jobs.py`
 
 The branch already has lease ownership, fencing, recovery, cancellation, chat ownership, and transaction-aware memory execution.
 
 ### GPU service separation
 
 - `src/app/providers/qwen_http_gateway.py`
-- `src/app/gateway/live_voice_runtime_offload.py`
+- `src/app/composition/gateway/live_voice_runtime_offload.py`
 - `src/app/shared.py`
 
 API replicas are now prevented from accidentally instantiating local Qwen TTS when they should use a shared TTS service.
@@ -282,10 +282,10 @@ Exact shape may differ, but configuration must be:
 
 Remove direct deployment-policy reads from:
 
-- `src/app/production.py`
+- `src/app/composition/production.py`
 - `src/app/shared.py` for process-role decisions;
-- `src/app/gateway/live_voice_runtime_offload.py`;
-- `src/app/gateway/background_runtime.py`;
+- `src/app/composition/gateway/live_voice_runtime_offload.py`;
+- `src/app/composition/gateway/background_runtime.py`;
 - `scripts/gateway_cluster.py` where practical.
 
 Provider-specific settings may still come from Omnix settings. The point is to centralize **process topology and ownership**, not all application settings.

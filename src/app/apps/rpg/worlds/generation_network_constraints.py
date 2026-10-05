@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_network_constraints import (
+from app.apps.rpg.session.genesis.world_forge_network_constraints import (
     network_constraint_components,
 )
 

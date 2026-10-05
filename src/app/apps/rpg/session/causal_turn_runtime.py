@@ -4,11 +4,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, Mapping
 
-from app.rpg.world.causal_runtime import (
+from app.apps.rpg.world.causal_runtime import (
     advance_installed_causal_runtime,
     initialize_causal_runtime,
 )
-from app.rpg.world.causal_runtime_projection import (
+from app.apps.rpg.world.causal_runtime_projection import (
     project_causal_runtime_to_subsystems,
 )
 

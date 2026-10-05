@@ -5,7 +5,7 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.rpg.combat.conditions import (
+from app.apps.rpg.combat.conditions import (
     add_status_effect_to_participant,
     build_condition_effect,
 )

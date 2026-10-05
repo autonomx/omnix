@@ -45,21 +45,21 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AcceptancePlan,
     AgentRunSpec,
     ModelRef,
     SuccessCriterion,
     WorkspaceSpec,
 )
-from app.agent_runtime.quality_evaluation import (
+from app.platform.agent_runtime.quality_evaluation import (
     CodingQualitySample,
     SeededQualityProbe,
     compare_quality_baseline,
     evaluate_rollout_policy,
     write_evaluation_report,
 )
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.service import AgentRunService
 
 
 _TRUE = {"1", "true", "yes", "on"}

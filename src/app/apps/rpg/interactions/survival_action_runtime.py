@@ -4,14 +4,14 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
-from app.rpg.interactions.merchant_runtime import apply_merchant_interaction
-from app.rpg.survival import apply_survival_effect, ensure_survival_state
+from app.apps.rpg.interactions.merchant_runtime import apply_merchant_interaction
+from app.apps.rpg.survival import apply_survival_effect, ensure_survival_state
 
 _SURVIVAL_SOURCE = "runtime_action_resolver"
 _RUNTIME_SOURCE = "deterministic_survival_action_runtime"

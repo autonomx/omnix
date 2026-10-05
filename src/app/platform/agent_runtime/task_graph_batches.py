@@ -27,7 +27,7 @@ from .task_graph_runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
+    from app.platform.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
 def _batch_policy_signature(node: TaskNode) -> str:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.compat.character_cards import import_external_character_card
-from app.rpg.presentation.visual_state import ensure_visual_state
+from app.apps.rpg.compat.character_cards import import_external_character_card
+from app.apps.rpg.presentation.visual_state import ensure_visual_state
 
 _MAX_PACKS = 32
 _MAX_PACK_CHARACTERS = 64

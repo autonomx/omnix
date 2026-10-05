@@ -5,9 +5,9 @@ import logging
 import json
 from typing import Any, Callable, Dict
 
-from app.rpg.narration.combat_contract import build_combat_narration_contract
-from app.rpg.narration.combat_prompt import build_combat_narration_prompt
-from app.rpg.narration.combat_validator import validate_combat_narration
+from app.apps.rpg.narration.combat_contract import build_combat_narration_contract
+from app.apps.rpg.narration.combat_prompt import build_combat_narration_prompt
+from app.apps.rpg.narration.combat_validator import validate_combat_narration
 
 logger = logging.getLogger(__name__)
 

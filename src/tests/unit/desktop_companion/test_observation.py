@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.desktop_companion.observation import (
+from app.apps.desktop_companion.observation import (
     observation_fingerprint,
     parse_desktop_observation,
     redact_observation_diagnostics,

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -13,12 +13,12 @@ from app.assistant_memory.v2 import (
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory.v2.graph_store import (
+from app.platform.assistant_memory.v2.graph_store import (
     GraphEvidenceError,
     GraphReplayValidator,
     PostgresMemoryV2GraphStore,
 )
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )

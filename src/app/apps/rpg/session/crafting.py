@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import (
+from app.apps.rpg.session.inventory_items import (
     consume_inventory_item,
     display_item_name,
     inventory_quantity,

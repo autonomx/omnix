@@ -74,7 +74,7 @@ INITIAL_PROMPT_3_TEMPLATE = prompt_template(
 )
 
 INITIAL_PROMPT_2_TEMPLATE = prompt_template(
-    'agent_runtime.pi_runtime_core.initial_prompt_2', "1",
+    'agent_runtime.pi_runtime_core.initial_prompt_2', "2",
     (
         'Task: {task}\n'
         'Objective: {objective}\n'
@@ -106,7 +106,7 @@ INITIAL_PROMPT_2_TEMPLATE = prompt_template(
         'Permission requests apply only to one safe, workspace-scoped command outside the '
         'built-in prefix list. Validation must exercise the changed area; an unrelated passing '
         'test is not completion evidence. Workspace command tools start at the repository root; '
-        'for a web package under `web`, use `npm --prefix web run build` or '
+        'for the web package under `web/`, use `npm --prefix web run build` or '
         '`npm --prefix web run test -- <focused-test>` rather than Set-Location or '
         'another shell directory change. UI Playwright commands are limited to exactly one test: '
         'select it with a relative spec path and source line such as '

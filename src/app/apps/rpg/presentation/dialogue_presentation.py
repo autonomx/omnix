@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.party import (
+from app.apps.rpg.party import (
     build_companion_dialogue_context,
     build_companion_presence_summary,
 )

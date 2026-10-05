@@ -34,39 +34,39 @@ def observed(sources, *, openapi=None):
 
 
 CASES = [
-    ("package_cycles", {APP + "jobs/a.py": "import app.chat.b", APP + "chat/b.py": "import app.jobs.a"}, 1),
-    ("layer_violations", {APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": "",
-                          APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')"}, 1),
-    ("foreign_attribute_assignments", {APP + "gateway/a.py": "import another\nanother.method = replacement"}, 1),
-    ("install_hook_functions", {APP + "gateway/a.py": "import another\ndef install_hook():\n    another.method = replacement"}, 1),
-    ("fastapi_init_patchers", {APP + "gateway/a.py": "from fastapi import FastAPI as App\nApp.__init__ = wrapper\nApp.__init__ = second"}, 1),
-    ("async_handlers_without_await", {APP + "gateway/a.py": "@app.get('/api/a')\nasync def route():\n    return {}"}, 1),
-    ("schema_excluded_routes", {APP + "gateway/a.py": "@app.get('/api/a', include_in_schema=False)\ndef route():\n    return {}"}, 1),
-    ("untyped_body_routes", {APP + "gateway/a.py": "@app.post('/api/a')\ndef route(body: dict[str, int]):\n    return body"}, 1),
-    ("routes_without_permission", {APP + "gateway/a.py": "@app.get('/api/a')\ndef route():\n    return {}"}, 1),
-    ("bootstrap_calls_outside_startup", {APP + "chat/a.py": "from app.persistence.identity_service import bootstrap_local_tenant as bootstrap\nbootstrap()"}, 1),
-    ("env_reads_outside_config", {APP + "chat/a.py": "import os\nvalue = os.environ['X']\nos.environ['Y'] = 'write-only'"}, 1),
-    ("print_calls", {APP + "chat/a.py": "print('debug')"}, 1),
-    ("silent_broad_excepts", {APP + "chat/a.py": "try:\n    call()\nexcept Exception:\n    pass"}, 1),
-    ("star_imports", {APP + "chat/a.py": "from another import *"}, 1),
-    ("platform_table_sql_outside_owner", {APP + "chat/a.py": "connection.execute('SELECT id FROM omnix_jobs WHERE id = %s')"}, 1),
-    ("direct_requests_calls", {APP + "chat/a.py": "import requests as http\nhttp.post('/api/a')"}, 1),
-    ("local_blob_store_constructions", {APP + "chat/a.py": "from app.persistence.blob_store import LocalBlobStore as Store\nStore()"}, 1),
-    ("absolute_storage_path_reads", {APP + "chat/a.py": "a.storage_path\nb.storage_path"}, 1),
+    ("package_cycles", {APP + "jobs/a.py": "import app.platform.chat.b", APP + "platform/chat/b.py": "import app.jobs.a"}, 1),
+    ("layer_violations", {APP + "jobs/a.py": "def work():\n    import app.platform.chat.b", APP + "platform/chat/b.py": "",
+                          APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')"}, 1),
+    ("foreign_attribute_assignments", {APP + "composition/gateway/a.py": "import another\nanother.method = replacement"}, 1),
+    ("install_hook_functions", {APP + "composition/gateway/a.py": "import another\ndef install_hook():\n    another.method = replacement"}, 1),
+    ("fastapi_init_patchers", {APP + "composition/gateway/a.py": "from fastapi import FastAPI as App\nApp.__init__ = wrapper\nApp.__init__ = second"}, 1),
+    ("async_handlers_without_await", {APP + "composition/gateway/a.py": "@app.get('/api/a')\nasync def route():\n    return {}"}, 1),
+    ("schema_excluded_routes", {APP + "composition/gateway/a.py": "@app.get('/api/a', include_in_schema=False)\ndef route():\n    return {}"}, 1),
+    ("untyped_body_routes", {APP + "composition/gateway/a.py": "@app.post('/api/a')\ndef route(body: dict[str, int]):\n    return body"}, 1),
+    ("routes_without_permission", {APP + "composition/gateway/a.py": "@app.get('/api/a')\ndef route():\n    return {}"}, 1),
+    ("bootstrap_calls_outside_startup", {APP + "platform/chat/a.py": "from app.persistence.identity_service import bootstrap_local_tenant as bootstrap\nbootstrap()"}, 1),
+    ("env_reads_outside_config", {APP + "platform/chat/a.py": "import os\nvalue = os.environ['X']\nos.environ['Y'] = 'write-only'"}, 1),
+    ("print_calls", {APP + "platform/chat/a.py": "print('debug')"}, 1),
+    ("silent_broad_excepts", {APP + "platform/chat/a.py": "try:\n    call()\nexcept Exception:\n    pass"}, 1),
+    ("star_imports", {APP + "platform/chat/a.py": "from another import *"}, 1),
+    ("platform_table_sql_outside_owner", {APP + "platform/chat/a.py": "connection.execute('SELECT id FROM omnix_jobs WHERE id = %s')"}, 1),
+    ("direct_requests_calls", {APP + "platform/chat/a.py": "import requests as http\nhttp.post('/api/a')"}, 1),
+    ("local_blob_store_constructions", {APP + "platform/chat/a.py": "from app.persistence.blob_store import LocalBlobStore as Store\nStore()"}, 1),
+    ("absolute_storage_path_reads", {APP + "platform/chat/a.py": "a.storage_path\nb.storage_path"}, 1),
     ("unbounded_fetchall", {APP + "persistence/custom_repository.py": "connection.execute('SELECT id FROM things').fetchall()"}, 1),
     ("capped_500_queries", {APP + "persistence/custom_repository.py": "connection.execute('SELECT id FROM things LIMIT 500').fetchall()"}, 1),
-    ("rpg_nondeterminism", {APP + "rpg/core/a.py": "import random\nrandom.Random()"}, 1),
-    ("files_over_1200_lines", {APP + "chat/a.py": "# source\n" * 1201}, 1),
-    ("functions_over_150_lines", {APP + "chat/a.py": "def large():\n" + "    pass\n" * 151}, 1),
-    ("largest_class_lines", {APP + "chat/a.py": "class Large:\n" + "    pass\n" * 160}, 161),
+    ("rpg_nondeterminism", {APP + "apps/rpg/core/a.py": "import random\nrandom.Random()"}, 1),
+    ("files_over_1200_lines", {APP + "platform/chat/a.py": "# source\n" * 1201}, 1),
+    ("functions_over_150_lines", {APP + "platform/chat/a.py": "def large():\n" + "    pass\n" * 151}, 1),
+    ("largest_class_lines", {APP + "platform/chat/a.py": "class Large:\n" + "    pass\n" * 160}, 161),
     ("quarantined_tests", {"src/tests/quarantine.toml": '[[tests]]\nnodeid = "test_missing"\nreason = "broken fixture"\n'}, 1),
     ("fixed_sleeps_in_tests", {"src/tests/test_a.py": "from time import sleep\nsleep(1)"}, 1),
     ("mypy_ignored_modules", {"pyproject.toml": '[[tool.mypy.overrides]]\nmodule = ["app.old.*", "app.other.*"]\nignore_errors = true\n', APP + "old/a.py": "", APP + "old/b.py": "", APP + "other/a.py": ""}, 2),
-    ("compat_modules", {APP + "chat/old_compat.py": ""}, 1),
-    ("process_local_state_unapproved", {APP + "chat/a.py": "cache = {}"}, 1),
-    ("unbounded_module_caches", {APP + "chat/a.py": "from functools import lru_cache\n@lru_cache(maxsize=None)\ndef parse(value):\n    return value"}, 1),
-    ("unreachable_rpg_modules", {APP + "production.py": "import app.rpg.live", APP + "rpg/live.py": "", APP + "rpg/dead.py": "",
-                                 APP + "rpg/feature.py": "", APP + "rpg/declarations.py": ""}, 2),
+    ("compat_modules", {APP + "platform/chat/old_compat.py": ""}, 1),
+    ("process_local_state_unapproved", {APP + "platform/chat/a.py": "cache = {}"}, 1),
+    ("unbounded_module_caches", {APP + "platform/chat/a.py": "from functools import lru_cache\n@lru_cache(maxsize=None)\ndef parse(value):\n    return value"}, 1),
+    ("unreachable_rpg_modules", {APP + "composition/production.py": "import app.apps.rpg.live", APP + "apps/rpg/live.py": "", APP + "apps/rpg/dead.py": "",
+                                 APP + "apps/rpg/feature.py": "", APP + "apps/rpg/declarations.py": ""}, 2),
     ("web_fetch_assignment_files", {WEB + "app/a.ts": "window.fetch = one; window.fetch = two;"}, 1),
     ("web_omnix_window_flags", {WEB + "app/a.ts": "window.__omnixFlag = true; window.__omnixFlag;"}, 1),
     ("web_raw_fetch_outside_api", {WEB + "app/a.ts": "fetch('/api/a');"}, 1),
@@ -81,36 +81,36 @@ CASES = [
     ("web_global_css_files", {WEB + "main.tsx": "import './a.css';\nimport 'pkg/x.css';\nimport './app';", WEB + "a.css": "@import './b.css';", WEB + "b.css": "", WEB + "app.tsx": "import './c.css';", WEB + "c.css": ""}, 3),
     ("web_error_boundaries", {WEB + "app/router.tsx": "createRoute({ errorComponent: ErrorPage });"}, 1),
     ("eslint_baseline_disables", {WEB + "app/a.ts": "// eslint-disable-next-line no-console\nconsole.log('x');"}, 1),
-    ("inline_prompt_strings", {APP + "chat/a.py": "SYSTEM_PROMPT = " + repr("You are a careful assistant. Answer only using the evidence in this conversation.")}, 1),
+    ("inline_prompt_strings", {APP + "platform/chat/a.py": "SYSTEM_PROMPT = " + repr("You are a careful assistant. Answer only using the evidence in this conversation.")}, 1),
     # Platform architecture roadmap (ADR-0016), PA-0.3.
-    ("reverse_contract_imports", {**{APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
-                                     APP + "characters/feature.py": "FEATURE = FeatureModule(id='characters', title='Characters', tier='platform', depends_on=('chat',))"},
-                                  APP + "characters/contracts.py": "", APP + "chat/a.py": "from app.characters.contracts import Port"}, 1),
-    ("any_scope_package_cycles", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
-                                  APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": "def work():\n    import app.jobs.a"}, 1),
-    ("app_to_app_imports", {APP + "trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
-                            APP + "story/feature.py": "FEATURE = FeatureModule(id='story', title='Story', tier='app')",
-                            APP + "story/a.py": "import app.trading.b", APP + "trading/b.py": ""}, 1),
+    ("reverse_contract_imports", {**{APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                     APP + "platform/characters/feature.py": "FEATURE = FeatureModule(id='characters', title='Characters', tier='platform', depends_on=('chat',))"},
+                                  APP + "platform/characters/contracts.py": "", APP + "platform/chat/a.py": "from app.platform.characters.contracts import Port"}, 1),
+    ("any_scope_package_cycles", {APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                  APP + "jobs/a.py": "def work():\n    import app.platform.chat.b", APP + "platform/chat/b.py": "def work():\n    import app.jobs.a"}, 1),
+    ("app_to_app_imports", {APP + "apps/trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
+                            APP + "apps/story/feature.py": "FEATURE = FeatureModule(id='story', title='Story', tier='app')",
+                            APP + "apps/story/a.py": "import app.apps.trading.b", APP + "apps/trading/b.py": ""}, 1),
     ("uncovered_app_modules", {APP + "loose_helper.py": "VALUE = 1"}, 1),
-    ("composition_imports_outside_composition", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
-                                                 APP + "chat/a.py": "def work():\n    import app.gateway.b", APP + "gateway/b.py": ""}, 1),
-    ("string_runtime_hooks", {APP + "chat/a.py": "from app.runtime.hooks import RuntimeHookSpec\nHOOK = RuntimeHookSpec('name', handler)"}, 1),
-    ("kernel_tools_naming_apps", {APP + "trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
+    ("composition_imports_outside_composition", {APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+                                                 APP + "platform/chat/a.py": "def work():\n    import app.composition.gateway.b", APP + "composition/gateway/b.py": ""}, 1),
+    ("string_runtime_hooks", {APP + "platform/chat/a.py": "from app.runtime.hooks import RuntimeHookSpec\nHOOK = RuntimeHookSpec('name', handler)"}, 1),
+    ("kernel_tools_naming_apps", {APP + "apps/trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
                                   APP + "capabilities/registry.py": "_cap('trading.quote', 'Quote', 'd', category='trading')\n_cap('market.status', 'Status', 'd', category='trading')\n_cap('hermes.get_status', 'Status', 'd', category='platform')\n_cap('calendar.read', 'Read', 'd', category='productivity')"}, 2),
-    ("platform_feature_specific_files", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+    ("platform_feature_specific_files", {APP + "apps/rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
                                          APP + "settings/profile_rpg.py": "", APP + "settings/profile_core.py": ""}, 1),
-    ("module_repositories_in_kernel", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+    ("module_repositories_in_kernel", {APP + "apps/rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
                                        APP + "persistence/rpg_turn_repository.py": "", APP + "persistence/job_repository.py": ""}, 1),
-    ("web_feature_clients_in_shared_api", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
+    ("web_feature_clients_in_shared_api", {APP + "apps/rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
                                            WEB + "api/rpgMapClient.ts": "export const map = 1;", WEB + "api/rpgMapClient.test.ts": "",
                                            WEB + "api/http.ts": "export const http = 1;"}, 1),
     ("src_root_service_entrypoints", {"src/tts_server.py": "", "src/launch.py": ""}, 1),
     ("tracked_runtime_data_in_src", {APP + "data/sessions.json": "{}"}, 1),
     # PA-2.2: table ownership (AL016).
-    ("cross_module_sql", {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
+    ("cross_module_sql", {APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')",
                           APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);",
                           "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}',
-                          APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'"}, 1),
+                          APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'"}, 1),
     ("kernel_named_module_tables", {APP + "persistence/migrations/0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);",
                                     "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}',
                                     APP + "persistence/retention.py": "SQL = 'DELETE FROM omnix_rpg_turns'"}, 1),
@@ -133,7 +133,7 @@ def test_docstrings_and_sql_in_prompt_functions_are_not_prompts():
         "    connection.execute(" + repr("SELECT id, content FROM omnix_prompt_templates WHERE id = %s") + ")\n"
         "    return " + repr("You are a careful assistant. Answer only using the evidence given.") + "\n"
     )
-    assert observed({APP + "chat/a.py": source})["metrics"]["inline_prompt_strings"]["value"] == 1
+    assert observed({APP + "platform/chat/a.py": source})["metrics"]["inline_prompt_strings"]["value"] == 1
 
 
 @pytest.mark.parametrize("key,sources,expected", CASES, ids=[case[0] for case in CASES])
@@ -145,11 +145,11 @@ def test_each_source_metric_detector(key, sources, expected):
 
 def test_only_exact_documented_stream_route_is_exempt_from_schema_metric():
     source = {
-        APP + "gateway/events.py": "@app.get('/events', include_in_schema=False)\ndef events():\n    return response",
+        APP + "composition/gateway/events.py": "@app.get('/events', include_in_schema=False)\ndef events():\n    return response",
         "docs/architecture/api-transport-exceptions.md": (
             "| Source | Method | Route path | Transport |\n"
             "|---|---|---|---|\n"
-            "| `src/app/gateway/events.py` | GET | `/events` | Server-Sent Events |\n"
+            "| `src/app/composition/gateway/events.py` | GET | `/events` | Server-Sent Events |\n"
         ),
     }
     result = observed(source)
@@ -171,7 +171,7 @@ def test_tracked_transport_inventory_is_loaded_for_the_working_tree_scan():
 
 def test_raw_request_body_parsing_is_not_a_typed_body_contract():
     result = observed({
-        APP + "gateway/a.py": (
+        APP + "composition/gateway/a.py": (
             "from fastapi import Request\n"
             "@app.post('/api/a')\n"
             "async def route(request: Request):\n"
@@ -181,7 +181,7 @@ def test_raw_request_body_parsing_is_not_a_typed_body_contract():
     assert result["metrics"]["untyped_body_routes"]["value"] == 1
 
     result = observed({
-        APP + "gateway/a.py": (
+        APP + "composition/gateway/a.py": (
             "from fastapi import Request\n"
             "from pydantic import BaseModel\n"
             "class Payload(BaseModel):\n"
@@ -217,7 +217,7 @@ def test_semantically_invalid_python_cannot_be_certified_even_when_ast_parse_acc
 
 
 def test_lint_report_is_excluded_from_runtime_source_digest():
-    sources = {APP + "chat/a.py": "value = 1"}
+    sources = {APP + "platform/chat/a.py": "value = 1"}
     before = metrics.source_digest(sources)
     sources["resources/architecture/lint-baseline.json"] = '{"violations": []}'
     assert metrics.source_digest(sources) == before
@@ -225,7 +225,7 @@ def test_lint_report_is_excluded_from_runtime_source_digest():
 
 def test_roadmap_changes_do_not_invalidate_runtime_evidence_but_markdown_inputs_do():
     sources = {
-        APP + "chat/a.py": "value = 1",
+        APP + "platform/chat/a.py": "value = 1",
         "docs/roadmap/PROGRESS.md": "WP-1.1 is in progress",
         "resources/examples/voice/prompt.md": "Speak clearly.",
     }
@@ -234,28 +234,28 @@ def test_roadmap_changes_do_not_invalidate_runtime_evidence_but_markdown_inputs_
     assert metrics.source_digest(sources) == before
     sources["resources/examples/voice/prompt.md"] = "Speak naturally."
     assert metrics.source_digest(sources) != before
-    sources[APP + "chat/a.py"] = "value = 2"
+    sources[APP + "platform/chat/a.py"] = "value = 2"
     assert metrics.source_digest(sources) != before
 
 
 def test_feature_catalog_module_attribute_is_a_reachability_root():
     result = observed({
-        APP + "production.py": "FEATURE = 'app.rpg.feature:FEATURE'",
-        APP + "rpg/feature.py": "from app.rpg.live import launch",
-        APP + "rpg/live.py": "",
-        APP + "rpg/dead.py": "",
+        APP + "composition/production.py": "FEATURE = 'app.apps.rpg.feature:FEATURE'",
+        APP + "apps/rpg/feature.py": "from app.apps.rpg.live import launch",
+        APP + "apps/rpg/live.py": "",
+        APP + "apps/rpg/dead.py": "",
     })
     assert result["metrics"]["unreachable_rpg_modules"]["value"] == 1
-    assert result["evidence"]["unreachable_rpg_modules"] == [APP + "rpg/dead.py"]
+    assert result["evidence"]["unreachable_rpg_modules"] == [APP + "apps/rpg/dead.py"]
 
 
 def test_all_export_list_is_not_counted_as_process_local_state():
     result = observed({
-        APP + "chat/a.py": "__all__ = ['PublicType']\ncache = {}",
+        APP + "platform/chat/a.py": "__all__ = ['PublicType']\ncache = {}",
     })
     assert result["metrics"]["process_local_state_unapproved"]["value"] == 1
     assert result["evidence"]["process_local_state_candidates"] == [{
-        "path": APP + "chat/a.py",
+        "path": APP + "platform/chat/a.py",
         "symbol": "cache",
         "approved": False,
     }]
@@ -263,7 +263,7 @@ def test_all_export_list_is_not_counted_as_process_local_state():
 
 def test_process_state_inventory_requires_reviewed_cache_policy():
     source = {
-        APP + "chat/a.py": (
+        APP + "platform/chat/a.py": (
             "_MAX_CACHE_ENTRIES = 8\n_CACHE_TTL_SECONDS = 30.0\ncache = {}\n"
             "def put(key, value, now):\n"
             "    if len(cache) >= _MAX_CACHE_ENTRIES:\n"
@@ -272,7 +272,7 @@ def test_process_state_inventory_requires_reviewed_cache_policy():
             "def invalidate_cache():\n    cache.clear()\n"
         ),
         "resources/architecture/process-local-state.json": json.dumps({"entries": [{
-            "path": APP + "chat/a.py",
+            "path": APP + "platform/chat/a.py",
             "symbol": "cache",
             "category": "cache",
             "reason": "Small derived response cache.",
@@ -286,7 +286,7 @@ def test_process_state_inventory_requires_reviewed_cache_policy():
     assert report["metrics"]["unbounded_module_caches"]["value"] == 0
 
     source["resources/architecture/process-local-state.json"] = json.dumps({"entries": [{
-        "path": APP + "chat/a.py",
+        "path": APP + "platform/chat/a.py",
         "symbol": "cache",
         "category": "cache",
         "reason": "Small derived response cache.",
@@ -299,7 +299,7 @@ def test_process_state_inventory_requires_reviewed_cache_policy():
 
 def test_process_state_cache_policy_reads_arithmetic_ttl_constants():
     source = {
-        APP + "chat/a.py": (
+        APP + "platform/chat/a.py": (
             "_MAX_CACHE_ENTRIES = 8\n_CACHE_TTL_SECONDS = 5 * 60\ncache = {}\n"
             "def put(key, value, now):\n"
             "    if len(cache) >= _MAX_CACHE_ENTRIES:\n"
@@ -308,7 +308,7 @@ def test_process_state_cache_policy_reads_arithmetic_ttl_constants():
             "def invalidate_cache():\n    cache.clear()\n"
         ),
         "resources/architecture/process-local-state.json": json.dumps({"entries": [{
-            "path": APP + "chat/a.py",
+            "path": APP + "platform/chat/a.py",
             "symbol": "cache",
             "category": "cache",
             "reason": "The parsed value is reconstructible.",
@@ -324,7 +324,7 @@ def test_process_state_cache_policy_reads_arithmetic_ttl_constants():
 
 def test_bounded_lru_cache_without_ttl_and_invalidation_is_unbounded():
     report = observed({
-        APP + "chat/a.py": (
+        APP + "platform/chat/a.py": (
             "from functools import lru_cache\n"
             "@lru_cache(maxsize=32)\n"
             "def lookup(value):\n    return value\n"
@@ -337,13 +337,13 @@ def test_bounded_lru_cache_without_ttl_and_invalidation_is_unbounded():
 
 def test_expiring_function_cache_requires_matching_invalidation_and_inventory():
     source = {
-        APP + "chat/a.py": (
+        APP + "platform/chat/a.py": (
             "from app.caching.bounded_cache import bounded_lru_cache\n"
             "@bounded_lru_cache(max_entries=8, ttl_seconds=30.0)\n"
             "def parse(value):\n    return value\n"
         ),
         "resources/architecture/process-local-state.json": json.dumps({"entries": [{
-            "path": APP + "chat/a.py",
+            "path": APP + "platform/chat/a.py",
             "symbol": "parse.__cache__",
             "category": "cache",
             "reason": "Pure parse result is process-local and disposable.",
@@ -359,7 +359,7 @@ def test_expiring_function_cache_requires_matching_invalidation_and_inventory():
 
 
 def test_process_state_scan_ignores_immutable_data_tables():
-    source = APP + "chat/a.py"
+    source = APP + "platform/chat/a.py"
     report = observed({source: "CATALOG = {'one': 1, 'two': 2}\n"})
     assert report["metrics"]["process_local_state_unapproved"]["value"] == 0
     assert report["evidence"]["process_local_state"] == []
@@ -382,7 +382,7 @@ def test_process_state_scan_ignores_immutable_data_tables():
     ("from fastapi import FastAPI\ndel FastAPI.__init__", 1, 1),
 ])
 def test_patch_metrics_share_lexical_provenance_with_lint(source, foreign, patchers):
-    result = observed({APP + "gateway/a.py": source})
+    result = observed({APP + "composition/gateway/a.py": source})
     assert not result["errors"]
     assert result["metrics"]["foreign_attribute_assignments"]["value"] == foreign
     assert result["metrics"]["fastapi_init_patchers"]["value"] == patchers
@@ -413,7 +413,7 @@ def test_web_api_coverage_skips_prefixes_and_reads_templates_queries_and_documen
             "fetch(`/api/research/status${query}`); new WebSocket('/api/tts/stream/websocket');"
         ),
         "docs/architecture/api-transport-exceptions.md": (
-            "| Source | Route path |\n|---|---|\n| `src/app/voice/tts.py` | `/api/tts/stream/websocket` |\n"
+            "| Source | Route path |\n|---|---|\n| `src/app/platform/voice/tts.py` | `/api/tts/stream/websocket` |\n"
         ),
     }
     schema = {"paths": {
@@ -450,10 +450,10 @@ def test_negative_cases_do_not_count_compliant_code():
         APP + "runtime/net.py": "import os\nos.getenv('X')",
         APP + "persistence/job_repository.py": "connection.execute('SELECT * FROM omnix_jobs')",
         APP + "persistence/blob_store.py": "LocalBlobStore(); asset.storage_path",
-        APP + "production.py": "bootstrap_local_tenant()",
-        APP + "chat/a.py": "class Local:\n    pass\nLocal.attribute = 1\ntry:\n    call()\nexcept Exception:\n    logger.exception('failed')",
-        APP + "rpg/core/a.py": "import random\nrandom.Random(42)",
-        APP + "gateway/a.py": "router = APIRouter(prefix='/internal')\n@router.get('/secret', include_in_schema=False)\nasync def route():\n    await work()\n@app.get('/health')\ndef health():\n    return {}\n",
+        APP + "composition/production.py": "bootstrap_local_tenant()",
+        APP + "platform/chat/a.py": "class Local:\n    pass\nLocal.attribute = 1\ntry:\n    call()\nexcept Exception:\n    logger.exception('failed')",
+        APP + "apps/rpg/core/a.py": "import random\nrandom.Random(42)",
+        APP + "composition/gateway/a.py": "router = APIRouter(prefix='/internal')\n@router.get('/secret', include_in_schema=False)\nasync def route():\n    await work()\n@app.get('/health')\ndef health():\n    return {}\n",
         WEB + "api/a.ts": "fetch('/api/a'); // window.fetch = replacement;\nconst text = '/* not a comment */';",
     }
     result = observed(sources)
@@ -462,24 +462,24 @@ def test_negative_cases_do_not_count_compliant_code():
 
 
 def test_nested_await_does_not_hide_a_blocking_async_handler():
-    result = observed({APP + "gateway/a.py": "@app.get('/api/a')\nasync def route():\n    async def unused():\n        await work()\n    return {}"})
+    result = observed({APP + "composition/gateway/a.py": "@app.get('/api/a')\nasync def route():\n    async def unused():\n        await work()\n    return {}"})
     assert result["metrics"]["async_handlers_without_await"]["value"] == 1
 
 
 def test_lazy_imports_are_layer_checked_but_do_not_form_module_level_cycles():
-    result = observed({APP + "jobs/a.py": "def work():\n    import app.chat.b", APP + "chat/b.py": "import app.jobs.a"})
+    result = observed({APP + "jobs/a.py": "def work():\n    import app.platform.chat.b", APP + "platform/chat/b.py": "import app.jobs.a"})
     assert result["metrics"]["package_cycles"]["value"] == 0
     assert result["metrics"]["layer_violations"]["value"] == 1
 
 
 def test_same_feature_imports_are_allowed_but_other_features_are_not():
-    result = observed({APP + "chat/a.py": "from app.chat import b\nimport app.chat.c\nfrom app.rpg import core"})
+    result = observed({APP + "platform/chat/a.py": "from app.platform.chat import b\nimport app.platform.chat.c\nfrom app.apps.rpg import core"})
     assert result["metrics"]["layer_violations"]["value"] == 1
 
 
 def test_whole_environment_reads_and_collection_methods_are_detected_once():
     source = "import os\nfrom os import environ\na = dict(os.environ)\nb = environ.copy()\nc = os.environ['C']\nd = os.environ.get('D')\nos.environ['WRITE_ONLY'] = 'value'"
-    assert observed({APP + "chat/a.py": source})["metrics"]["env_reads_outside_config"]["value"] == 4
+    assert observed({APP + "platform/chat/a.py": source})["metrics"]["env_reads_outside_config"]["value"] == 4
 
 
 def test_model_servers_and_python_startup_hooks_are_production_source():
@@ -490,7 +490,7 @@ def test_model_servers_and_python_startup_hooks_are_production_source():
 
 
 def test_scoped_queries_and_seeded_random_are_not_unbounded_or_nondeterministic():
-    result = observed({APP + "persistence/custom_repository.py": "def list_items():\n    sql = 'SELECT id FROM things LIMIT %s'\n    return connection.execute(sql, (limit,)).fetchall()", APP + "rpg/core/a.py": "import random as rng\nrng.Random(seed)"})
+    result = observed({APP + "persistence/custom_repository.py": "def list_items():\n    sql = 'SELECT id FROM things LIMIT %s'\n    return connection.execute(sql, (limit,)).fetchall()", APP + "apps/rpg/core/a.py": "import random as rng\nrng.Random(seed)"})
     assert result["metrics"]["unbounded_fetchall"]["value"] == 0
     assert result["metrics"]["rpg_nondeterminism"]["value"] == 0
 
@@ -581,18 +581,18 @@ def test_web_workers_loaded_by_url_are_reachable():
 
 
 def test_process_state_inventory_approval_requires_category_and_reason():
-    sources = {APP + "chat/a.py": "import threading\nlock = threading.Lock()\nother = threading.Lock()",
+    sources = {APP + "platform/chat/a.py": "import threading\nlock = threading.Lock()\nother = threading.Lock()",
                "resources/architecture/process-local-state.json": json.dumps({"entries": [
-                   {"path": APP + "chat/a.py", "symbol": "lock", "category": "coordination",
+                   {"path": APP + "platform/chat/a.py", "symbol": "lock", "category": "coordination",
                     "reason": "serializes the local writer"},
-                   {"path": APP + "chat/a.py", "symbol": "other", "category": "coordination"},
+                   {"path": APP + "platform/chat/a.py", "symbol": "other", "category": "coordination"},
                ]})}
     assert observed(sources)["metrics"]["process_local_state_unapproved"]["value"] == 1
 
 
 def test_stale_process_state_inventory_entries_fail_closed():
-    sources = {APP + "chat/a.py": "provider = None", "resources/architecture/process-local-state.json": json.dumps({"entries": [
-        {"path": APP + "chat/a.py", "symbol": "provider", "category": "coordination", "reason": "gone"},
+    sources = {APP + "platform/chat/a.py": "provider = None", "resources/architecture/process-local-state.json": json.dumps({"entries": [
+        {"path": APP + "platform/chat/a.py", "symbol": "provider", "category": "coordination", "reason": "gone"},
     ]})}
     with pytest.raises(metrics.AnalysisError, match="stale process-state inventory entries"):
         observed(sources)
@@ -602,22 +602,22 @@ def test_mypy_reports_override_pattern_count_and_effective_matching_modules():
     sources = {
         "pyproject.toml": (
             "[[tool.mypy.overrides]]\n"
-            'module = ["app.chat.*", "app.missing.*"]\n'
+            'module = ["app.platform.chat.*", "app.missing.*"]\n'
             "ignore_errors = true\n"
             "[[tool.mypy.overrides]]\n"
-            'module = ["app.chat.strict"]\n'
+            'module = ["app.platform.chat.strict"]\n'
             "ignore_errors = false\n"
         ),
-        APP + "chat/a.py": "",
-        APP + "chat/strict.py": "",
-        APP + "chat/c.py": "",
+        APP + "platform/chat/a.py": "",
+        APP + "platform/chat/strict.py": "",
+        APP + "platform/chat/c.py": "",
         APP + "jobs/a.py": "",
     }
     result = observed(sources)
     assert result["metrics"]["mypy_ignored_modules"]["value"] == 2
-    assert result["evidence"]["mypy_ignored_modules"] == ["app.chat.a", "app.chat.c"]
-    assert result["evidence"]["mypy_ignored_patterns"] == ["app.chat.*", "app.missing.*"]
-    assert result["evidence"]["mypy_strict_patterns"] == ["app.chat.strict"]
+    assert result["evidence"]["mypy_ignored_modules"] == ["app.platform.chat.a", "app.platform.chat.c"]
+    assert result["evidence"]["mypy_ignored_patterns"] == ["app.missing.*", "app.platform.chat.*"]
+    assert result["evidence"]["mypy_strict_patterns"] == ["app.platform.chat.strict"]
 
 
 def test_web_modules_imported_with_a_vite_query_are_reachable():

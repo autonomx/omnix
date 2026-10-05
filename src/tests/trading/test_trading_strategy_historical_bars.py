@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading import strategy_historical_bars as historical
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading import strategy_historical_bars as historical
 
 
 class FakeResponse:

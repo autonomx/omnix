@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.chat import live_call_prewarm as prewarm
-from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
-from app.live_voice.llm.routing import (
+from app.platform.chat import live_call_prewarm as prewarm
+from app.platform.chat.models import CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.live_voice.llm.routing import (
     ROUTE_METADATA_KEY,
     _live_voice_affinity_for_current_provider,
     resolve_effective_provider_id,
@@ -66,7 +66,7 @@ def test_default_provider_resolves_to_its_configured_instance(monkeypatch) -> No
 
 
 def test_generation_worker_resolves_cancellation_provider_from_turn_route(monkeypatch) -> None:
-    from app.chat.generation_jobs import _resolve_chat_provider
+    from app.platform.chat.generation_jobs import _resolve_chat_provider
 
     provider = SimpleNamespace(provider_name="lmstudio")
     requested: list[str | None] = []
@@ -91,14 +91,14 @@ def test_generation_worker_resolves_cancellation_provider_from_turn_route(monkey
 
 
 def test_begin_persists_the_resolved_route_for_later_workers(tmp_path, monkeypatch) -> None:
-    from app.chat.prompt_store import ChatSessionStore
+    from app.platform.chat.prompt_store import ChatSessionStore
 
     monkeypatch.setattr(
         settings_access,
         "load_settings",
         lambda **_kwargs: {"provider": "lmstudio"},
     )
-    from app.live_voice.chat_integration import create_live_voice_chat_port
+    from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 
     store = ChatSessionStore(
         tmp_path / "sessions.json",

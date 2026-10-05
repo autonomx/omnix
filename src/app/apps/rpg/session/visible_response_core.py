@@ -350,7 +350,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
 
     # Preferred: use the same central gateway normal RPG narration uses.
     try:
-        from app.rpg.provider_access import chat_completion
+        from app.apps.rpg.provider_access import chat_completion
 
         raw = chat_completion(
             messages=[
@@ -366,7 +366,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
 
     # Fallback: use the process provider service directly.
     try:
-        from app.rpg.provider_access import get_provider
+        from app.apps.rpg.provider_access import get_provider
 
         provider = get_provider()
     except Exception as exc:
@@ -474,7 +474,7 @@ def _apply_combat_narration_if_needed(
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
 
-    from app.rpg.session.fast_combat_narration_skip import (
+    from app.apps.rpg.session.fast_combat_narration_skip import (
         apply_fast_combat_narration_skip,
     )
 
@@ -565,12 +565,12 @@ def _apply_combat_narration_if_needed(
     return payload
 
 
-from app.rpg.narration.combat_contract import (
+from app.apps.rpg.narration.combat_contract import (
     build_combat_narration_contract,
     combat_contract_requires_llm,
 )
-from app.rpg.narration.combat_service import generate_combat_narration_sync
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.narration.combat_service import generate_combat_narration_sync
+from app.apps.rpg.session.state_normalization import (
     _safe_dict,
     _safe_list,
     _safe_str,

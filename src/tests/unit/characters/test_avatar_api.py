@@ -6,11 +6,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_api import register_character_avatar_routes
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.service import CharacterService
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_api import register_character_avatar_routes
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.service import CharacterService
 
 
 def test_character_avatar_routes_round_trip(tmp_path: Path) -> None:

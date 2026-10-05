@@ -23,7 +23,7 @@ SETTLE_SECONDS = 2.0
 
 
 async def _before(store, subscribers: int, seconds: float) -> int:
-    from app.gateway.kernel_routes import live_event_stream
+    from app.composition.gateway.kernel_routes import live_event_stream
 
     calls = 0
     original = store.list_events
@@ -53,7 +53,7 @@ async def _before(store, subscribers: int, seconds: float) -> int:
 
 async def _after(database, tenant, subscribers: int, seconds: float) -> int:
     from app.events.event_reader import EventReader
-    from app.gateway.kernel_routes.live_event_stream import committed_event_stream
+    from app.composition.gateway.kernel_routes.live_event_stream import committed_event_stream
 
     reader = EventReader(database, tenant)
 
@@ -85,7 +85,7 @@ def main() -> int:
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import ensure_local_identity
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.runtime.tenant_context import install_process_tenant
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=20))

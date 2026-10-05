@@ -7,10 +7,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import MemorySpaceKey
-from app.assistant_memory.v2.legacy_shadow import legacy_observation_id
-from app.assistant_memory.v2.shadow_report import build_shadow_report
-from app.assistant_memory.v2.shadow_runner import (
+from app.platform.assistant_memory.v2 import MemorySpaceKey
+from app.platform.assistant_memory.v2.legacy_shadow import legacy_observation_id
+from app.platform.assistant_memory.v2.shadow_report import build_shadow_report
+from app.platform.assistant_memory.v2.shadow_runner import (
     MemoryV2ShadowRunner,
     ShadowRunnerError,
     run_shadow,

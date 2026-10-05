@@ -4,17 +4,17 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.assistant_turns import AssistantTurnCoordinator
-from app.chat.character_store import _start_assistant_turn
-from app.chat.compaction import build_deterministic_summary
-from app.chat.models import (
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.assistant_turns import AssistantTurnCoordinator
+from app.platform.chat.character_store import _start_assistant_turn
+from app.platform.chat.compaction import build_deterministic_summary
+from app.platform.chat.models import (
     ChatMessage,
     ChatSession,
     MessageContentPurpose,
     project_message_content,
 )
-from app.chat.prompt_assembly import build_prompt_assembly
+from app.platform.chat.prompt_assembly import build_prompt_assembly
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -65,7 +65,7 @@ def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(mon
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
-        "app.chat.character_store.default_assistant_turn_coordinator",
+        "app.platform.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
 
@@ -122,7 +122,7 @@ def test_streaming_user_message_starts_running_in_initial_store_write(
 ) -> None:
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
     monkeypatch.setattr(
-        "app.chat.character_store.default_assistant_turn_coordinator",
+        "app.platform.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
     now = datetime.now(timezone.utc).isoformat()
@@ -160,7 +160,7 @@ def test_streaming_user_message_starts_running_in_initial_store_write(
 def test_completed_audio_turn_still_persists_assistant_transcript(monkeypatch, tmp_path) -> None:
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
     monkeypatch.setattr(
-        "app.chat.character_store.default_assistant_turn_coordinator",
+        "app.platform.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
 
@@ -201,7 +201,7 @@ def test_client_disconnect_persists_generated_interrupted_transcript(monkeypatch
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
-        "app.chat.character_store.default_assistant_turn_coordinator",
+        "app.platform.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
 

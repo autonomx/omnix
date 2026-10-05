@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 
-_LOGGER = logging.getLogger("app.agent_runtime")
+_LOGGER = logging.getLogger("app.platform.agent_runtime")
 
 
 def log_recovered_exception(

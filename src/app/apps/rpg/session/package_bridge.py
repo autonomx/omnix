@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.session.survival_persistence import normalize_survival_for_persistence
-from app.rpg.validation.integrity import validate_package_integrity
+from app.apps.rpg.session.survival_persistence import normalize_survival_for_persistence
+from app.apps.rpg.validation.integrity import validate_package_integrity
 
 _PACKAGE_SCHEMA_VERSION = 1
 

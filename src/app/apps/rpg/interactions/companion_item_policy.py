@@ -4,7 +4,7 @@ import logging
 
 from typing import Any, Dict, List
 
-from app.rpg.interactions.item_model import normalize_item_instance
+from app.apps.rpg.interactions.item_model import normalize_item_instance
 
 logger = logging.getLogger(__name__)
 

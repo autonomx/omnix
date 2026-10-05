@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.config.env import env_str as _env_str
-from app.chat.contracts import PromptBudget, prompt_budget_from_env
+from app.platform.chat.contracts import PromptBudget, prompt_budget_from_env
 
 
 _DEFAULT_RECENT_MESSAGE_LIMIT = 12

@@ -17,8 +17,8 @@ from app.runtime.features import FeatureContext
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _STATE_KEY = "_omnix_prospective_gap_monitor"

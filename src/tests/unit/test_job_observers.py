@@ -5,7 +5,7 @@ from app.jobs.models import JobRecord, JobStatus, ResourceClass
 from app.persistence import job_store
 from app.persistence.job_store import PostgresJobStoreAdapter
 from app.runtime.feature_catalog import load_feature
-from app.runtime_composition import production_job_store
+from app.composition.runtime_composition import production_job_store
 from app.runtime.tenant_context import local_tenant_context
 
 
@@ -68,11 +68,11 @@ def test_rpg_feature_registers_debug_observer_only_when_enabled(monkeypatch) -> 
 
 
 def test_rpg_debug_observer_logs_safe_lifecycle_identity(monkeypatch) -> None:
-    from app.rpg.jobs.debug_observer import RpgJobDebugObserver
+    from app.apps.rpg.jobs.debug_observer import RpgJobDebugObserver
 
     records: list[dict] = []
     monkeypatch.setattr(
-        "app.rpg.debug_logging.log_rpg_event",
+        "app.apps.rpg.debug_logging.log_rpg_event",
         lambda event, **kwargs: records.append({"event": event, **kwargs}),
     )
 
@@ -116,7 +116,7 @@ def test_production_job_factory_forwards_constructor_dependencies(monkeypatch) -
             captured.update(kwargs)
 
     monkeypatch.setattr(
-        "app.chat.persistence.job_store.PostgresJobStoreAdapter",
+        "app.platform.chat.persistence.job_store.PostgresJobStoreAdapter",
         Adapter,
     )
     database = object()

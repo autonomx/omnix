@@ -11,7 +11,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_session_with_hooks import (
+from app.apps.rpg.session.item_session_with_hooks import (
     apply_item_command_with_hooks,
     apply_item_session_action_with_hooks,
 )

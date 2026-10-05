@@ -5,7 +5,7 @@ from app.config.env import environment
 from typing import Any, Protocol
 
 from app.providers.hermes_client import HermesSidecarClient
-from app.rpg.hermes.planner_contract import normalize_hermes_planner_response
+from app.apps.rpg.hermes.planner_contract import normalize_hermes_planner_response
 from app.providers.hermes_status import hermes_runtime_config
 
 

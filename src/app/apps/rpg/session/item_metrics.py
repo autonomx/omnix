@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.inventory_items import display_item_name, inventory_quantity, item_type
+from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity, item_type
 
 MECHANICS_SOURCE = "engine_item_metrics_v1"
 TRACE_KEYS = {

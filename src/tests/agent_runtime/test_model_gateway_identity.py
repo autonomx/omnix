@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.model_gateway import agent_conversation_id, normalize_llm_model_id
+from app.platform.agent_runtime.model_gateway import agent_conversation_id, normalize_llm_model_id
 
 
 def test_agent_model_gateway_normalizes_facade_model_ids() -> None:

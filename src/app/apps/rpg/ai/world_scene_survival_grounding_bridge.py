@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.ai.survival_narration_grounding import (
+from app.apps.rpg.ai.survival_narration_grounding import (
     build_survival_narration_evidence,
     sanitize_survival_narration_payload,
     survival_narration_prompt_block,

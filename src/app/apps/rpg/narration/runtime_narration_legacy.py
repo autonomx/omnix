@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
+from app.apps.rpg.ai.grounding_validator import select_grounded_narration_candidate
 
 from .runtime_narration_common import (
     NARRATION_FORMAT_VERSION as NARRATION_FORMAT_VERSION,

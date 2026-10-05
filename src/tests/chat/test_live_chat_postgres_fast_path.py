@@ -5,10 +5,10 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.chat.persistence import chat_runtime as fast_path
-from app.chat.persistence import chat_runtime
-from app.chat.persistence.chat_store import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
+from app.platform.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
+from app.platform.chat.persistence import chat_runtime as fast_path
+from app.platform.chat.persistence import chat_runtime
+from app.platform.chat.persistence.chat_store import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
 
 
 NOW = "2026-07-18T00:00:00+00:00"
@@ -450,7 +450,7 @@ def test_durable_session_mutation_locks_only_the_requested_row(monkeypatch) -> N
 
 
 def test_durable_store_does_not_depend_on_the_process_chat_lock(monkeypatch) -> None:
-    from app.chat import concurrency
+    from app.platform.chat import concurrency
 
     class ForbiddenLock:
         def __enter__(self):

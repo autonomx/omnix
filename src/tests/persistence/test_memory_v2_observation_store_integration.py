@@ -8,12 +8,12 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     MemorySpaceKey,
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     ObservationIdempotencyConflict,
     PostgresMemoryV2ObservationStore,

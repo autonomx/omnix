@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.desktop_companion.operations import desktop_companion_operational_status
+from app.apps.desktop_companion.operations import desktop_companion_operational_status
 
 
 def test_operational_status_is_available_by_default() -> None:

@@ -8,8 +8,8 @@ from typing import Any, Mapping
 
 
 _RETIRED_IMPORT_TOKENS = (
-    "app.rpg.response_generation.legacy_bridge",
-    "app.rpg.ai.world_scene_narrator_runtime",
+    "app.apps.rpg.response_generation.legacy_bridge",
+    "app.apps.rpg.ai.world_scene_narrator_runtime",
     "world_scene_narrator_runtime",
     "first_call_dialogue_result",
     "legacy_response_generator",
@@ -22,16 +22,16 @@ _RETIRED_PUBLICATION_TOKENS = (
     'result["visible_publisher"]',
 )
 _PRODUCTION_OWNER_PATHS = (
-    "src/app/rpg/api/turn_pipeline.py",
-    "src/app/rpg/session/turn_presenter.py",
-    "src/app/rpg/session/narrative_engine_bridge.py",
-    "src/app/rpg/narrative_engine/consumer_publish.py",
-    "src/app/rpg/narrative_engine/production_path.py",
+    "src/app/apps/rpg/api/turn_pipeline.py",
+    "src/app/apps/rpg/session/turn_presenter.py",
+    "src/app/apps/rpg/session/narrative_engine_bridge.py",
+    "src/app/apps/rpg/narrative_engine/consumer_publish.py",
+    "src/app/apps/rpg/narrative_engine/production_path.py",
 )
 _COMPATIBILITY_ONLY_PATHS = (
-    "src/app/rpg/response_generation/legacy_bridge.py",
-    "src/app/rpg/ai/world_scene_narrator.py",
-    "src/app/rpg/ai/world_scene_narrator_runtime.py",
+    "src/app/apps/rpg/response_generation/legacy_bridge.py",
+    "src/app/apps/rpg/ai/world_scene_narrator.py",
+    "src/app/apps/rpg/ai/world_scene_narrator_runtime.py",
 )
 
 
@@ -84,11 +84,11 @@ def audit_legacy_publisher_retirement(
         if hits:
             forbidden_hits[relative] = hits
 
-    gateway = sources.get("src/app/rpg/api/turn_pipeline.py", "")
-    presenter = sources.get("src/app/rpg/session/turn_presenter.py", "")
-    bridge = sources.get("src/app/rpg/session/narrative_engine_bridge.py", "")
-    publisher = sources.get("src/app/rpg/narrative_engine/consumer_publish.py", "")
-    production = sources.get("src/app/rpg/narrative_engine/production_path.py", "")
+    gateway = sources.get("src/app/apps/rpg/api/turn_pipeline.py", "")
+    presenter = sources.get("src/app/apps/rpg/session/turn_presenter.py", "")
+    bridge = sources.get("src/app/apps/rpg/session/narrative_engine_bridge.py", "")
+    publisher = sources.get("src/app/apps/rpg/narrative_engine/consumer_publish.py", "")
+    production = sources.get("src/app/apps/rpg/narrative_engine/production_path.py", "")
     compatibility_present = tuple(
         relative for relative in _COMPATIBILITY_ONLY_PATHS if (root / relative).is_file()
     )
@@ -131,6 +131,6 @@ def audit_legacy_publisher_retirement(
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_legacy_retirement_audit() -> LegacyPublisherRetirementAudit:
-    return audit_legacy_publisher_retirement(Path(__file__).resolve().parents[4])
+    return audit_legacy_publisher_retirement(Path(__file__).resolve().parents[5])
 
 

@@ -3,30 +3,30 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.core.determinism import rng_seed_from_session_id
-from app.rpg.map_persistence import ensure_session_map_state
-from app.rpg.session.ambient_builder import (
+from app.apps.rpg.core.determinism import rng_seed_from_session_id
+from app.apps.rpg.map_persistence import ensure_session_map_state
+from app.apps.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     normalize_ambient_state,
 )
-from app.rpg.session.durable_store import (
+from app.apps.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
     load_session_from_disk,
     save_session_to_disk,
 )
-from app.rpg.session.environment import ensure_session_environment_seed_state
-from app.rpg.session.list_summaries import list_session_summaries_from_disk
-from app.rpg.session.migrations import migrate_session_payload
-from app.rpg.session.published_opening_progress import (
+from app.apps.rpg.session.environment import ensure_session_environment_seed_state
+from app.apps.rpg.session.list_summaries import list_session_summaries_from_disk
+from app.apps.rpg.session.migrations import migrate_session_payload
+from app.apps.rpg.session.published_opening_progress import (
     ensure_published_opening_progress,
 )
-from app.rpg.session.survival_persistence import normalize_session_survival_for_persistence
-from app.rpg.validation.integrity import (
+from app.apps.rpg.session.survival_persistence import normalize_session_survival_for_persistence
+from app.apps.rpg.validation.integrity import (
     assert_session_integrity,
     validate_session_integrity,
 )
-from app.rpg.performance_trace import rpg_pipeline_span_if_active
+from app.apps.rpg.performance_trace import rpg_pipeline_span_if_active
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -148,7 +148,7 @@ def load_session(session_id: str) -> dict[str, Any]:
         try:
             recovered = recover_pending_interaction_narration(session_id, session)
         except Exception as exc:
-            from app.rpg.debug_logging import log_rpg_event
+            from app.apps.rpg.debug_logging import log_rpg_event
 
             log_rpg_event(
                 "turn.stage.degraded",

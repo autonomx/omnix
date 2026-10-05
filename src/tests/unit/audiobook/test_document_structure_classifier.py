@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.audiobook.document_structure_classifier import (
+from app.apps.audiobook.document_structure_classifier import (
     DOCUMENT_STRUCTURE_CLASSIFIER_VERSION,
     local_structure_classifier,
 )
@@ -26,7 +26,7 @@ def test_structure_classifier_is_low_cost_and_allows_unknown(monkeypatch) -> Non
             )
 
     monkeypatch.setattr(
-        "app.audiobook.document_structure_classifier.get_provider",
+        "app.apps.audiobook.document_structure_classifier.get_provider",
         lambda: Provider(),
     )
     classifier = local_structure_classifier()
@@ -56,7 +56,7 @@ def test_structure_classifier_absence_is_nonfatal(monkeypatch) -> None:
         raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(
-        "app.audiobook.document_structure_classifier.get_provider",
+        "app.apps.audiobook.document_structure_classifier.get_provider",
         unavailable,
     )
     assert local_structure_classifier() is None

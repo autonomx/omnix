@@ -11,8 +11,8 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.image.providers import flux_klein_provider as flux_module
-from app.image.providers.flux_klein_provider import FluxKleinImageProvider
+from app.platform.image.providers import flux_klein_provider as flux_module
+from app.platform.image.providers.flux_klein_provider import FluxKleinImageProvider
 
 
 class _FakeImage:

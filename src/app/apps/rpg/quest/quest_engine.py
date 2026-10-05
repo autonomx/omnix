@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from app.rpg.choice.belief_updater import BeliefUpdater
+from app.apps.rpg.choice.belief_updater import BeliefUpdater
 
 # Choice and Consequence System
-from app.rpg.choice.choice_engine import ChoiceEngine
-from app.rpg.choice.consequence_engine import ConsequenceEngine
-from app.rpg.choice.timeline_recorder import TimelineRecorder
-from app.rpg.choice.world_mutator import WorldMutator
+from app.apps.rpg.choice.choice_engine import ChoiceEngine
+from app.apps.rpg.choice.consequence_engine import ConsequenceEngine
+from app.apps.rpg.choice.timeline_recorder import TimelineRecorder
+from app.apps.rpg.choice.world_mutator import WorldMutator
 
 from .quest_arc_engine import QuestArcBuilder
 from .quest_detector import QuestDetector

@@ -6,7 +6,7 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set
 
-from app.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
+from app.apps.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.ai_memory_narration_grounding.memory_narration_prompt_block', "1", "- You may say an NPC remembers, recalls, or refers to a prior event only when that fact appears in Relevant Memory or authoritative state.")

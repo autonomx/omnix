@@ -5,11 +5,11 @@ import ast
 from datetime import date, datetime, time
 from pathlib import Path
 
-from app.trading.providers.bar_semantics import equity_bar_times, equity_session_bounds
-from app.trading.strategy_outcome_quality import regular_session_reference
-from app.trading.us_equity_calendar import EASTERN, after_regular_close, regular_close_time
+from app.apps.trading.providers.bar_semantics import equity_bar_times, equity_session_bounds
+from app.apps.trading.strategy_outcome_quality import regular_session_reference
+from app.apps.trading.us_equity_calendar import EASTERN, after_regular_close, regular_close_time
 
-TRADING = Path(__file__).resolve().parents[2] / "app" / "trading"
+TRADING = Path(__file__).resolve().parents[2] / "app" / "apps" / "trading"
 DAY_AFTER_THANKSGIVING = date(2026, 11, 27)
 ORDINARY_DAY = date(2026, 11, 25)
 
@@ -27,7 +27,7 @@ def test_an_ordinary_date_does_not_compute_the_holidays(monkeypatch) -> None:
     def refuse(_year: int) -> set[date]:
         raise AssertionError("regular_holidays computed for an ordinary date")
 
-    monkeypatch.setattr("app.trading.us_equity_calendar.regular_holidays", refuse)
+    monkeypatch.setattr("app.apps.trading.us_equity_calendar.regular_holidays", refuse)
     assert regular_close_time(date(2026, 11, 10)) == time(16, 0)
     assert regular_close_time(date(2026, 6, 15)) == time(16, 0)
 

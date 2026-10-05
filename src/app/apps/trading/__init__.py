@@ -18,11 +18,11 @@ if TYPE_CHECKING:
     )
 
 _LAZY_EXPORTS = {
-    "CanonicalInstrument": "app.trading.models",
-    "DatasetProvenance": "app.trading.models",
-    "MarketBar": "app.trading.models",
-    "ProviderBinding": "app.trading.models",
-    "ProviderPolicy": "app.trading.models",
+    "CanonicalInstrument": "app.apps.trading.models",
+    "DatasetProvenance": "app.apps.trading.models",
+    "MarketBar": "app.apps.trading.models",
+    "ProviderBinding": "app.apps.trading.models",
+    "ProviderPolicy": "app.apps.trading.models",
 }
 
 __all__ = [

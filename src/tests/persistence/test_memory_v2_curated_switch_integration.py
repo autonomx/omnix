@@ -12,16 +12,16 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
-from app.assistant_memory.scope import resolve_chat_scope
-from app.assistant_memory.service import LegacyMemoryReadOnlyError
-from app.assistant_memory.v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
-from app.assistant_memory.v2.authority import CutoverNotReadyError, PostgresMemoryV2AuthorityStore
-from app.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
-from app.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
-from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime, UnsafeMemoryRollbackError
-from app.assistant_memory.v2.shadow_runner import run_shadow
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+from app.platform.assistant_memory.scope import resolve_chat_scope
+from app.platform.assistant_memory.service import LegacyMemoryReadOnlyError
+from app.platform.assistant_memory.v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
+from app.platform.assistant_memory.v2.authority import CutoverNotReadyError, PostgresMemoryV2AuthorityStore
+from app.platform.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
+from app.platform.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
+from app.platform.assistant_memory.v2.runtime import PostgresMemoryV2Runtime, UnsafeMemoryRollbackError
+from app.platform.assistant_memory.v2.shadow_runner import run_shadow
 from app.conversation.memory_contracts import MemoryConflictError, MemoryRecord
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations

@@ -11,13 +11,13 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.paper import (
+from app.apps.trading.paper import (
     PaperAccountCreate,
     PaperMarketObservation,
     PaperOrderRequest,
 )
-from app.trading.order_gateway import OrderGateway
-from app.trading.paper_repository import TradingPaperRepository
+from app.apps.trading.order_gateway import OrderGateway
+from app.apps.trading.paper_repository import TradingPaperRepository
 
 
 pytestmark = pytest.mark.skipif(

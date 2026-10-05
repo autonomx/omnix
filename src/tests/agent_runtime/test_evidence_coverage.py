@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
     EvidenceReceipt,
     EvidenceRequirement,
     EvidenceSourceOption,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     build_evidence_receipt,
     evaluate_evidence_set,
     merge_evidence_requirements,
 )
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,

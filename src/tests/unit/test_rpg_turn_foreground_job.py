@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from app.jobs.handlers import registry_from_features
-from app.rpg.jobs import turn_executor
+from app.apps.rpg.jobs import turn_executor
 from app.runtime.feature_catalog import load_feature
 
 

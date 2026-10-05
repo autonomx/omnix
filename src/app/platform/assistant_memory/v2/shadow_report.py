@@ -8,10 +8,10 @@ decision needs from the existing tables, without writing anything:
   evaluation and latest cutover readiness receipt;
 - v1 owners with memories but no v2 space yet (not imported).
 
-The shadow runner (``python -m app.assistant_memory.v2.shadow_runner``)
+The shadow runner (``python -m app.platform.assistant_memory.v2.shadow_runner``)
 produces the evaluations and receipts. Run it as an operator command::
 
-    python -m app.assistant_memory.v2.shadow_report [--require-ready]
+    python -m app.platform.assistant_memory.v2.shadow_report [--require-ready]
 
 A space's ``status`` is one of ``not_evaluated``, ``v1_changed`` (the
 owner's v1 records differ from what v2 holds: run the shadow runner

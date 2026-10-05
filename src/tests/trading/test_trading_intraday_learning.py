@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
-from app.trading.strategies.models import GapPullbackFeatures, GapPullbackResult
-from app.trading.strategy_intraday_learning import build_intraday_learning_snapshot
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import GapPullbackFeatures, GapPullbackResult
+from app.apps.trading.strategy_intraday_learning import build_intraday_learning_snapshot
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

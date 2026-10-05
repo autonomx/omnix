@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.rpg.ai.world_scene_narrator_dialogue_grounding import (
+from app.apps.rpg.ai.world_scene_narrator_dialogue_grounding import (
     annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
     Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
     select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,

@@ -31,20 +31,20 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.historical_gapper_reconstruction import (
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.historical_gapper_reconstruction import (
     AlpacaHistoricalGapperReconstructor,
 )
-from app.trading.strategy_replay_reliability import historical_replay_http_runtime
-from app.trading.strategy_leader_momentum_diagnostics import (
+from app.apps.trading.strategy_replay_reliability import historical_replay_http_runtime
+from app.apps.trading.strategy_leader_momentum_diagnostics import (
     diagnose_leader_momentum_continuation,
 )
-from app.trading.strategy_replay_reliability import (
+from app.apps.trading.strategy_replay_reliability import (
     ReplayExpectedObservation,
     assess_replay_completeness,
     replay_observation_from_result,
 )
-from app.trading.strategy_v2_qualification import managed_finviz_v2_config
+from app.apps.trading.strategy_v2_qualification import managed_finviz_v2_config
 from scripts.trade import run_interday_winner_shadow_replay as replay
 
 
@@ -115,7 +115,7 @@ def _frozen_parameters() -> dict[str, object]:
 
 
 def _verify_frozen_policy(*, expected_sha: str = EXPECTED_STRATEGY_SHA256) -> dict[str, object]:
-    current_sha = _sha256(REPOSITORY_ROOT / "src/app/trading/strategy_leader_momentum_continuation.py")
+    current_sha = _sha256(REPOSITORY_ROOT / "src/app/apps/trading/strategy_leader_momentum_continuation.py")
     if current_sha != expected_sha:
         raise RuntimeError(f"frozen strategy SHA-256 mismatch: {current_sha}")
     if leader.POLICY_VERSION != EXPECTED_POLICY_VERSION:
@@ -188,7 +188,7 @@ def _archive_snapshots(sessions: list[date]) -> tuple[dict[date, Any], dict[str,
         metadata["error"] = "OMNIX_DATABASE_URL not injected; archive lookup skipped"
         return result, metadata
     try:
-        from app.trading.strategy_repository import default_strategy_repository
+        from app.apps.trading.strategy_repository import default_strategy_repository
 
         snapshots = default_strategy_repository().list_universes(
             start_date=min(sessions), end_date=max(sessions)
@@ -1125,7 +1125,7 @@ def main() -> int:
     run_config = {
         "git_sha": strategy_before["git_sha"],
         "expected_git_sha": EXPECTED_COMMIT_SHA,
-        "strategy_file": "src/app/trading/strategy_leader_momentum_continuation.py",
+        "strategy_file": "src/app/apps/trading/strategy_leader_momentum_continuation.py",
         "strategy_sha256_before": strategy_before["strategy_sha256"],
         "strategy_sha256_after": strategy_after["strategy_sha256"],
         "policy_version": strategy_before["policy_version"],

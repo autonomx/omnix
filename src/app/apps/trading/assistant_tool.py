@@ -1,7 +1,7 @@
 """Read-only trading market-data adapter for governed Agent evidence."""
 from __future__ import annotations
 
-from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
+from app.platform.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
 from app.capabilities.registry import Capability, capability
 
 
@@ -36,9 +36,9 @@ def run_trading_tool_request(
         )
 
     try:
-        from app.trading.catalog import search_instruments
-        from app.trading.models import AssetClass
-        from app.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
+        from app.apps.trading.catalog import search_instruments
+        from app.apps.trading.models import AssetClass
+        from app.apps.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
 
         candidates = [
             item
@@ -103,7 +103,7 @@ class TradingMarketDataTool:
 
     def default_enabled(self) -> bool:
         try:
-            from app.trading.providers.alpaca_iex import alpaca_iex_configured
+            from app.apps.trading.providers.alpaca_iex import alpaca_iex_configured
 
             return alpaca_iex_configured()
         except Exception:
@@ -117,8 +117,8 @@ class TradingSecurityInstruments:
     """Trading's canonical-instrument lookup for agent evidence subjects."""
 
     def equity_instrument_id(self, ticker: str) -> str | None:
-        from app.trading.catalog import search_instruments
-        from app.trading.models import AssetClass
+        from app.apps.trading.catalog import search_instruments
+        from app.apps.trading.models import AssetClass
 
         candidates = [
             item for item in search_instruments(ticker)

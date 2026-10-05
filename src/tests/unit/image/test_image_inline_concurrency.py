@@ -4,8 +4,8 @@ from contextlib import contextmanager
 
 import pytest
 
-from app.image import service
-from app.image import jobs
+from app.platform.image import service
+from app.platform.image import jobs
 
 
 @pytest.mark.parametrize("priority", ["interactive", "batch"])

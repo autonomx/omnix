@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.chat.models import ChatMessage, ChatSession
 
 pytestmark = pytest.mark.skipif(not os.environ.get('OMNIX_TEST_DATABASE_URL'), reason='requires disposable PostgreSQL')
 
@@ -122,12 +122,12 @@ def _durable_job_worker_process(
 ):
     from types import SimpleNamespace
 
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.runtime.tenant_context import TenantContext
-    from app.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
-    from app.worker_runtime.pools import parse_pools
+    from app.composition.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
+    from app.composition.worker_runtime.pools import parse_pools
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_max=8))
     user_id, workspace_id, membership_id, roles = tenant_values
@@ -223,7 +223,7 @@ def _prepare_worker_acceptance_tables(database):
 
 
 def _create_worker_acceptance_jobs(database, count, *, run_id):
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.jobs.models import CreateJobRequest, ResourceClass
     from app.runtime.tenant_context import local_tenant_context
 
@@ -727,7 +727,7 @@ def _claim_chat_process(url, workspace, user, session, control):
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.identity_service import PostgresIdentityRepository
     from app.persistence.tenant_scope import system_scope
     from app.runtime.tenant_context import pop_tenant, push_tenant
@@ -770,14 +770,14 @@ def _mutate_chat_process(
     finish_gate,
     control,
 ):
-    from app.chat.models import ChatMessage, ChatSession
-    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+    from app.platform.chat.models import ChatMessage, ChatSession
+    from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import PostgresIdentityRepository
     from app.persistence.tenant_scope import system_scope
     from app.runtime.tenant_context import pop_tenant, push_tenant
-    from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+    from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
     from app.settings.access import install_settings_service
     from tests.support.in_memory_settings import InMemorySettingsService
 
@@ -841,7 +841,7 @@ def chat_runtime():
 
 
 def test_killed_chat_owner_recovers_once_without_duplicate_assistant_output(chat_runtime):
-    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+    from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
     from app.jobs.models import CompleteJobRequest, JobStatus
     from app.persistence.execution_repositories import JobClaimConflict
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
@@ -887,7 +887,7 @@ def test_killed_chat_owner_recovers_once_without_duplicate_assistant_output(chat
 
 
 def test_two_process_chat_mutations_preserve_unrelated_session(chat_runtime):
-    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+    from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 
     database, store, _ = chat_runtime
     adapter = PostgresChatRepositoryAdapter(database)

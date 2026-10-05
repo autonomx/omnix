@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
-from app.rpg.map_grid_contracts import GridMapDefinition, with_grid_definition_hashes
+from app.apps.rpg.map_grid_contracts import GridMapDefinition, with_grid_definition_hashes
 
 from .contracts import (
     ScenarioRevisionDocument,

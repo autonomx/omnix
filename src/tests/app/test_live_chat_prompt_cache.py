@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel
 
-from app.characters.live_conversation_profile import LiveConversationProfileStore
-from app.characters.models import UpdateCharacterRequest
-from app.characters.service import CharacterService
-from app.live_voice.prompt import cache as prompt_cache
+from app.platform.characters.live_conversation_profile import LiveConversationProfileStore
+from app.platform.characters.models import UpdateCharacterRequest
+from app.platform.characters.service import CharacterService
+from app.platform.live_voice.prompt import cache as prompt_cache
 
 
 class _FakeIdentity(BaseModel):

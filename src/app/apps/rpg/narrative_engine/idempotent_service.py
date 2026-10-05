@@ -175,7 +175,7 @@ class NarrativeEngineService(_NarrativeEngineService):
             evidence,
             validated,
         )
-        from app.rpg.presentation.dialogue_quality import (
+        from app.apps.rpg.presentation.dialogue_quality import (
             repair_canonical_dialogue_response,
         )
 

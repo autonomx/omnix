@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Request
 
-from app.rpg.worlds.profile_aware_world_images import (
+from app.apps.rpg.worlds.profile_aware_world_images import (
     generate_world_images,
     read_world_image_targets,
     regenerate_world_image_prompts,

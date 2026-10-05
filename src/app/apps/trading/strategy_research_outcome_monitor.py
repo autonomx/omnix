@@ -20,7 +20,7 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .trade_logging import trade_log
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 _STATE_KEY = "_omnix_trading_strategy_research_outcome_monitor"
 

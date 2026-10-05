@@ -9,9 +9,9 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
 
-from app.chat.assistant_turns import AssistantTurnCoordinator
-from app.chat.models import SendChatMessageRequest
-from app.live_voice.transport.sse import OmnixStreamingResponse
+from app.platform.chat.assistant_turns import AssistantTurnCoordinator
+from app.platform.chat.models import SendChatMessageRequest
+from app.platform.live_voice.transport.sse import OmnixStreamingResponse
 
 _LIVE_CHAT_STREAM_PATH = "/api/chat/sessions/{session_id}/messages/stream"
 

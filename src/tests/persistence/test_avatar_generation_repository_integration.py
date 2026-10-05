@@ -5,8 +5,8 @@ import uuid
 
 import pytest
 
-from app.characters.avatar_generation_models import CreateCharacterAvatarGenerationRequest
-from app.characters.persistence.avatar_generation_repository import (
+from app.platform.characters.avatar_generation_models import CreateCharacterAvatarGenerationRequest
+from app.platform.characters.persistence.avatar_generation_repository import (
     PostgresCharacterAvatarGenerationRepositoryAdapter,
     PostgresCharacterVisemeGenerationRepositoryAdapter,
 )

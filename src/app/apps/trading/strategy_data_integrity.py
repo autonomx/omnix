@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from .gapper_dataset import GapperUniverseSnapshot
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _REGULAR_OPEN = time(9, 30)

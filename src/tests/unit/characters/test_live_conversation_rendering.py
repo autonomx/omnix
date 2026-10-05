@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.characters.live_conversation_rendering import (
+from app.platform.characters.live_conversation_rendering import (
     PronunciationCreateRequest,
     PronunciationStore,
     SpeechDeliveryPlanRequest,

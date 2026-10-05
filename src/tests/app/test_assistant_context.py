@@ -5,15 +5,15 @@ from types import SimpleNamespace
 
 import httpx
 
-from app.chat.assistant_context.models import AssistantContextBuildResult, AssistantContextChatRequest
+from app.platform.chat.assistant_context.models import AssistantContextBuildResult, AssistantContextChatRequest
 from app.conversation.contracts import AssistantContextItem
-from app.chat.assistant_context.service import AssistantContextService
+from app.platform.chat.assistant_context.service import AssistantContextService
 from app.providers.desktop_vision import (
     CodexDesktopVisionClient,
     DesktopVisionClient,
     default_desktop_vision_client,
 )
-from app.research.web_search import should_search_automatically
+from app.platform.research.web_search import should_search_automatically
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.

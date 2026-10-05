@@ -7,7 +7,7 @@ import time
 from fastapi import FastAPI
 
 from tests.support.routers import include_router_registrar
-from app.live_voice.speech.runtime_offload import (
+from app.platform.live_voice.speech.runtime_offload import (
     CachedTtsProviderResolver,
     DeliveryPersistenceWorker,
     register_live_voice_runtime_offload,
@@ -176,7 +176,7 @@ def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
     monkeypatch.setattr(resolver, "_resolve", slow_resolve)
     startup = next(
         handler for handler in app.router.on_startup
-        if handler.__module__ == "app.live_voice.speech.runtime_offload"
+        if handler.__module__ == "app.platform.live_voice.speech.runtime_offload"
     )
 
     try:
@@ -191,7 +191,7 @@ def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
 
 
 def test_cold_phrase_provider_lookup_runs_off_the_event_loop() -> None:
-    from app.live_voice.transport.websocket import _resolve_phrase_tts_provider
+    from app.platform.live_voice.transport.websocket import _resolve_phrase_tts_provider
 
     provider = object()
     resolve_threads: list[int] = []
@@ -212,7 +212,7 @@ def test_cold_phrase_provider_lookup_runs_off_the_event_loop() -> None:
 
 
 def test_warm_phrase_provider_lookup_stays_on_the_event_loop(monkeypatch) -> None:
-    from app.live_voice.transport.websocket import _resolve_phrase_tts_provider
+    from app.platform.live_voice.transport.websocket import _resolve_phrase_tts_provider
 
     provider = object()
     resolver = CachedTtsProviderResolver(lambda: provider, log=lambda *_args, **_kwargs: None)

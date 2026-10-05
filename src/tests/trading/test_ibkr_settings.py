@@ -5,9 +5,9 @@ from copy import deepcopy
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.market_data_api import create_trading_market_data_router
-from app.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
-from app.trading.providers.ibkr_runtime import IbkrRuntime
+from app.apps.trading.market_data_api import create_trading_market_data_router
+from app.apps.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
+from app.apps.trading.providers.ibkr_runtime import IbkrRuntime
 
 
 def _install_settings_double(monkeypatch):

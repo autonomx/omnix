@@ -10,7 +10,7 @@ from .execution import ExecutionObservation
 from .paper import PaperAccountSnapshot, PaperOrderRequest
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .strategy_risk import paper_account_equity, paper_daily_realized_pnl
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 class PaperRiskPolicy(BaseModel):

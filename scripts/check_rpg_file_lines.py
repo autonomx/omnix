@@ -1,7 +1,7 @@
 """Check RPG source and test files against the 1,200-line file budget.
 
 Default target areas:
-  - src/app/rpg
+  - src/app/apps/rpg
   - src/tests/unit/rpg
 
 The script prints files whose line count is greater than the configured limit and
@@ -21,7 +21,7 @@ from typing import Iterable, Sequence
 # aligned with that global policy while existing oversize files shrink.
 DEFAULT_LIMIT = 1200
 DEFAULT_PATHS = (
-    Path("src/app/rpg"),
+    Path("src/app/apps/rpg"),
     Path("src/tests/unit/rpg"),
 )
 DEFAULT_EXTENSIONS = (
@@ -46,15 +46,15 @@ IGNORED_DIR_NAMES = {
 # Existing RPG files above the shared budget may only shrink; new files receive
 # no exception. The repository-wide architecture metrics track this debt too.
 LINE_DEBT_LIMITS = {
-    "src/app/rpg/ai/grounding_validator.py": 1017,
-    "src/app/rpg/presentation/dialogue_quality.py": 1251,
-    "src/app/rpg/response_generation/production_pipeline.py": 1182,
-    "src/app/rpg/session/genesis/campaign_lore_store.py": 1093,
-    "src/app/rpg/session/genesis/runtime_lore_materialization.py": 1049,
-    "src/app/rpg/worlds/world_images.py": 1126,
+    "src/app/apps/rpg/ai/grounding_validator.py": 1017,
+    "src/app/apps/rpg/presentation/dialogue_quality.py": 1251,
+    "src/app/apps/rpg/response_generation/production_pipeline.py": 1182,
+    "src/app/apps/rpg/session/genesis/campaign_lore_store.py": 1093,
+    "src/app/apps/rpg/session/genesis/runtime_lore_materialization.py": 1049,
+    "src/app/apps/rpg/worlds/world_images.py": 1126,
     # Single-pass generation landed as one safety-coherent cutover. Keep this
     # ceiling tight so follow-up extraction can only reduce the coordinator.
-    "src/app/rpg/worlds/generation_coordinator.py": 1259,
+    "src/app/apps/rpg/worlds/generation_coordinator.py": 1259,
 }
 
 
@@ -187,7 +187,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         nargs="*",
         type=Path,
         default=list(DEFAULT_PATHS),
-        help="Paths to scan. Defaults to src/app/rpg and src/tests/unit/rpg.",
+        help="Paths to scan. Defaults to src/app/apps/rpg and src/tests/unit/rpg.",
     )
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Maximum allowed line count. Defaults to 1200.")
     parser.add_argument(

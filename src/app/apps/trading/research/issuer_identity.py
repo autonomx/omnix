@@ -7,7 +7,7 @@ from typing import Any
 
 from httpx import HTTPError
 
-from app.trading.providers.errors import ProviderContractError, ProviderUnavailableError
+from app.apps.trading.providers.errors import ProviderContractError, ProviderUnavailableError
 
 from .contracts import IssuerIdentity, fingerprint
 
@@ -26,7 +26,7 @@ def _symbol_exchange(instrument_id: str) -> tuple[str, str | None]:
 class SecIssuerIdentityResolver:
     def __init__(self, runtime=None) -> None:
         if runtime is None:
-            from app.trading.providers.http_runtime import ProviderHttpRuntime
+            from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
             runtime = ProviderHttpRuntime("sec_issuer_identity", max_concurrency=1)
         self.runtime = runtime
         self._mapping: dict[str, dict[str, Any]] | None = None

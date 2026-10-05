@@ -8,7 +8,7 @@ from typing import Any, Literal
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.rpg.session.genesis.campaign_lore_api import (
+from app.apps.rpg.session.genesis.campaign_lore_api import (
     LoreDocumentForbidden,
     LoreDocumentNotFound,
     campaign_genesis_progress_payload,
@@ -16,18 +16,18 @@ from app.rpg.session.genesis.campaign_lore_api import (
     campaign_lore_payload,
     transition_lore_discovery,
 )
-from app.rpg.session.genesis.campaign_lore_store import (
+from app.apps.rpg.session.genesis.campaign_lore_store import (
     LoreRegenerationUnavailable,
     load_campaign_lore,
     persist_campaign_lore,
     regenerate_campaign_lore_document,
 )
-from app.rpg.session.genesis.runtime_materialization import (
+from app.apps.rpg.session.genesis.runtime_materialization import (
     RuntimeMaterializationConflict,
     RuntimeMaterializationUnavailable,
     materialize_runtime_lore,
 )
-from app.rpg.session.service import load_session
+from app.apps.rpg.session.service import load_session
 
 
 class LoreDiscoveryRequest(BaseModel):
@@ -63,7 +63,7 @@ def _session_or_404(session_id: str) -> dict[str, Any]:
 
 
 def _kick_genesis_recovery() -> None:
-    from app.rpg.session.genesis.async_coordinator import (
+    from app.apps.rpg.session.genesis.async_coordinator import (
         campaign_genesis_async_enabled,
         kick_campaign_genesis_worker,
     )

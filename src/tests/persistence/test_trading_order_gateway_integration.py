@@ -12,10 +12,10 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.kill_switches import TradingKillSwitchRepository
-from app.trading.order_gateway import OrderGateway
-from app.trading.paper import PaperAccountCreate, PaperMarketObservation, PaperOrderRequest
-from app.trading.paper_repository import TradingPaperRepository
+from app.apps.trading.kill_switches import TradingKillSwitchRepository
+from app.apps.trading.order_gateway import OrderGateway
+from app.apps.trading.paper import PaperAccountCreate, PaperMarketObservation, PaperOrderRequest
+from app.apps.trading.paper_repository import TradingPaperRepository
 
 pytestmark = [
     pytest.mark.postgres,
@@ -213,7 +213,7 @@ def test_the_kill_switch_http_control_takes_effect_without_a_restart(paper) -> N
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.trading.kill_switches import create_trading_kill_switch_router
+    from app.apps.trading.kill_switches import create_trading_kill_switch_router
 
     repository, switches, account_id, instrument_id, _ = paper
     app = FastAPI()

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from app.agent_runtime.active_objective import (
+from app.platform.agent_runtime.active_objective import (
     advance_active_objective,
     make_active_objective,
 )
-from app.agent_runtime.semantic_normalizer import normalize_semantic_task
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.semantic_normalizer import normalize_semantic_task
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
 )
-from app.agent_runtime.turn_plan import compile_turn_plan, derive_effective_objective
+from app.platform.agent_runtime.turn_plan import compile_turn_plan, derive_effective_objective
 
 
 def _task(

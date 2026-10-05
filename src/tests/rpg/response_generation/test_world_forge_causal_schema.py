@@ -1,11 +1,11 @@
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.rpg.session.genesis.world_forge_profiles import (
+from app.apps.rpg.session.genesis.world_forge_profiles import (
     DomainDefinition,
     GenreProfile,
     LaunchRequirements,

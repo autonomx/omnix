@@ -5,12 +5,12 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.providers.errors import (
+from app.apps.trading.providers.errors import (
     ProviderDataUnavailableError,
     ProviderRateLimitedError,
     ProviderUnavailableError,
 )
-from app.trading.strategy_replay_reliability import (
+from app.apps.trading.strategy_replay_reliability import (
     ReplayExpectedObservation,
     ReplayIncompleteError,
     ReplayObservationAvailability,

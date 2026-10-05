@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.model_gateway import _bounded_max_tokens, _input_tokens, _output_tokens
+from app.platform.agent_runtime.model_gateway import _bounded_max_tokens, _input_tokens, _output_tokens
 from app.providers.base import ChatResponse
 
 

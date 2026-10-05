@@ -1,5 +1,5 @@
-from app.chat.assistant_context.models import AssistantContextChatRequest
-from app.chat.assistant_context.service import AssistantContextService
+from app.platform.chat.assistant_context.models import AssistantContextChatRequest
+from app.platform.chat.assistant_context.service import AssistantContextService
 
 
 def test_live_conversation_repair_is_bounded_trusted_context() -> None:

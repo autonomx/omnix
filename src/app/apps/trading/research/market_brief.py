@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
 from app.providers.base import ChatMessage
-from app.trading.research import (
+from app.apps.trading.research import (
     _call_provider,
     _json_payload,
     _provider_identity,

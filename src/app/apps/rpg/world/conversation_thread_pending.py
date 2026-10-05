@@ -3,53 +3,53 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.world.companion_acceptance import record_companion_join_offer
-from app.rpg.world.companion_dialogue import build_companion_presence_summary
-from app.rpg.world.consequence_signals import emit_consequence_signals
-from app.rpg.world.conversation_effects import (
+from app.apps.rpg.world.companion_acceptance import record_companion_join_offer
+from app.apps.rpg.world.companion_dialogue import build_companion_presence_summary
+from app.apps.rpg.world.consequence_signals import emit_consequence_signals
+from app.apps.rpg.world.conversation_effects import (
     strip_forbidden_conversation_effects,
     validate_conversation_effects,
 )
-from app.rpg.world.conversation_pivots import detect_conversation_topic_pivot
-from app.rpg.world.conversation_settings import normalize_conversation_settings
-from app.rpg.world.conversation_social_state import (
+from app.apps.rpg.world.conversation_pivots import detect_conversation_topic_pivot
+from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
+from app.apps.rpg.world.conversation_social_state import (
     choose_npc_response_style,
     record_npc_response_beat,
     record_player_joined_conversation,
 )
-from app.rpg.world.conversation_topics import topic_is_backed_by_state
-from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
-from app.rpg.world.npc_goal_state import (
+from app.apps.rpg.world.conversation_topics import topic_is_backed_by_state
+from app.apps.rpg.world.npc_arc_continuity import update_npc_arc_continuity
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
+from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     record_goal_influence,
     response_style_from_goal,
 )
-from app.rpg.world.npc_history_state import add_npc_history_entry
-from app.rpg.world.npc_knowledge_state import (
+from app.apps.rpg.world.npc_history_state import add_npc_history_entry
+from app.apps.rpg.world.npc_knowledge_state import (
     add_npc_knowledge_from_topic,
     prune_npc_knowledge_state,
 )
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
-from app.rpg.world.npc_referrals import suggest_npc_referral
-from app.rpg.world.npc_reputation_state import (
+from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.apps.rpg.world.npc_referrals import suggest_npc_referral
+from app.apps.rpg.world.npc_reputation_state import (
     get_npc_reputation,
     response_style_from_reputation,
     update_npc_reputation,
 )
-from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
-from app.rpg.world.quest_conversation_access import (
+from app.apps.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
+from app.apps.rpg.world.quest_conversation_access import (
     evaluate_quest_conversation_access,
     filter_allowed_topic_facts_for_access,
     requested_topic_access_from_pivot,
 )
-from app.rpg.world.quest_rumor_propagation import (
+from app.apps.rpg.world.quest_rumor_propagation import (
     maybe_seed_quest_rumor_from_conversation,
     prune_quest_rumors,
 )
-from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
-from app.rpg.world.world_event_log import add_world_event
+from app.apps.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
+from app.apps.rpg.world.world_event_log import add_world_event
 
 from .conversation_thread_base import (
     MAX_BEATS_PER_THREAD,
@@ -66,7 +66,7 @@ from .conversation_thread_responses import (
     _biography_grounded_npc_response,
     _make_npc_response_beat,
 )
-from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+from app.apps.rpg.world.companion_join_intent import maybe_create_companion_join_intent
 
 def has_pending_player_conversation_response(
     simulation_state: Dict[str, Any],

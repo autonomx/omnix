@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
-from app.rpg.session.narrative_engine_bridge import (
+from app.apps.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.apps.rpg.session.narrative_engine_bridge import (
     canonicalize_direct_dialogue_result,
 )
 

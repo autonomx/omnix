@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     DeterministicBeatPlanner,
     DeterministicNarrativeWriter,
     PresentationProfile,

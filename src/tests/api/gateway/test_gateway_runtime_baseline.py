@@ -26,7 +26,7 @@ def test_production_import_does_not_import_gateway_or_contact_database():
             sys.executable,
             "-c",
             "import main, launch, sys; assert main.app is launch.app; "
-            "assert 'app.gateway.main' not in sys.modules; "
+            "assert 'app.composition.gateway.main' not in sys.modules; "
             "assert 'app.persistence.startup' not in sys.modules",
         ],
         env=env,
@@ -39,7 +39,7 @@ def test_production_import_does_not_import_gateway_or_contact_database():
 
 def test_package_create_app_uses_production_composition(monkeypatch):
     import app
-    from app import production
+    from app.composition import production
 
     expected = object()
     monkeypatch.setattr(production, "create_production_app", lambda: expected)
@@ -48,11 +48,11 @@ def test_package_create_app_uses_production_composition(monkeypatch):
 
 
 def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
-    from app import production
+    from app.composition import production
     from app.persistence import startup, database as database_module, identity_service
-    from app.gateway import main
-    from app import runtime_composition
-    from app.live_voice import hardware_policy as live_voice_hardware_policy
+    from app.composition.gateway import main
+    from app.composition import runtime_composition
+    from app.platform.live_voice import hardware_policy as live_voice_hardware_policy
     from app import assets, jobs
     from app.security import tenant_context
     from app.settings import access as settings_access
@@ -161,7 +161,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
 
 
 def test_production_rejects_legacy_backend(monkeypatch):
-    from app.production import create_production_app
+    from app.composition.production import create_production_app
     from app.persistence import startup
 
     monkeypatch.setattr(
@@ -198,12 +198,12 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
         str(Path(__file__).resolve().parents[4] / "scripts/run_omnix_gateway.py")
     )
     assert launcher["main"]() == 0
-    assert calls[0][0] == ("app.production:app",)
+    assert calls[0][0] == ("app.composition.production:app",)
     assert calls[0][1]["reload"] is True
 
 
 def test_production_application_composes_once_for_concurrent_requests(monkeypatch):
-    from app import production
+    from app.composition import production
 
     calls = []
 
@@ -234,8 +234,8 @@ def test_production_application_composes_once_for_concurrent_requests(monkeypatc
 
 
 def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeypatch):
-    from app.gateway import main
-    from app.gateway import app_factory
+    from app.composition.gateway import main
+    from app.composition.gateway import app_factory
 
     calls = []
     lifecycle = []
@@ -277,7 +277,7 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
 
 
 def test_bootstrap_failure_is_reported_as_failed_lifespan(monkeypatch):
-    from app import production
+    from app.composition import production
     from app.persistence import database
 
     def fail():
@@ -310,7 +310,7 @@ def test_bootstrap_failure_is_reported_as_failed_lifespan(monkeypatch):
 
 
 def test_readiness_is_separate_from_liveness_and_redacts_errors():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     def probe():
         raise RuntimeError("postgresql://user:secret@private-host/db")
@@ -326,7 +326,7 @@ def test_readiness_is_separate_from_liveness_and_redacts_errors():
 
 
 def test_ready_probe_reports_status_without_changing_health():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     payload = {"ready": True, "backend": "postgresql"}
     gateway = create_gateway_app(readiness_check=lambda: payload)
@@ -340,7 +340,7 @@ def test_ready_probe_reports_status_without_changing_health():
 
 
 def test_job_read_does_not_block_health():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     entered, release = threading.Event(), threading.Event()
 
@@ -374,7 +374,7 @@ def test_job_read_does_not_block_health():
 
 
 def test_sse_store_poll_runs_outside_event_loop_thread():
-    from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
+    from app.composition.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
 
     threads = []
 
@@ -443,7 +443,7 @@ def test_readiness_does_not_migrate_or_initialize_authority(monkeypatch):
 
 
 def test_required_worker_failure_and_missing_worker_gate_readiness(monkeypatch):
-    from app import production
+    from app.composition import production
     from app.persistence import runtime
     from app.runtime import worker_health as workers
 
@@ -507,8 +507,8 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
     monkeypatch.setattr(identity_service, "ensure_local_identity", forbidden)
     monkeypatch.setattr("app.persistence.apply_migrations", forbidden)
 
-    from app.rpg.api.feature_routes import rpg_world_library_routes
-    from app.rpg.session import service as rpg_session_service
+    from app.apps.rpg.api.feature_routes import rpg_world_library_routes
+    from app.apps.rpg.session import service as rpg_session_service
 
     monkeypatch.setattr(
         rpg_world_library_routes,
@@ -523,8 +523,8 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
     )
     monkeypatch.setattr(rpg_session_service, "load_session", lambda _session_id: None)
 
-    from app.characters import feature as character_feature
-    from app.characters.models import CharacterListResponse
+    from app.platform.characters import feature as character_feature
+    from app.platform.characters.models import CharacterListResponse
 
     original_register_character_routes = character_feature.register_character_routes
 
@@ -540,7 +540,7 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
         character_feature, "register_character_routes", register_test_character_routes
     )
 
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from fastapi.testclient import TestClient
 
     client = TestClient(
@@ -591,10 +591,13 @@ def test_disabled_features_are_not_imported():
     script = (
         "import sys\n"
         "from app.config.runtime import RuntimeConfig\n"
-        "from app.gateway.main import create_gateway_app\n"
+        "from app.composition.gateway.main import create_gateway_app\n"
         "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
-        "declarations = {'app.rpg', 'app.rpg.declarations', 'app.trading', 'app.trading.declarations'}\n"
-        "loaded = sorted(m for m in sys.modules if m.startswith(('app.rpg', 'app.trading')) and m not in declarations)\n"
+        "declarations = {'app.apps.rpg', 'app.apps.rpg.declarations', 'app.apps.trading', 'app.apps.trading.declarations'}\n"
+        # The kernel replay routes load RPG's replay adapter whatever is enabled (as app.replay did before PA-5.3).
+        "replay = ('app.apps.rpg.replay', 'app.apps.rpg.replay.models', 'app.apps.rpg.replay.rpg_adapter')\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith(('app.apps.rpg', 'app.apps.trading'))\n"
+        "                and m not in declarations and m not in replay)\n"
         "print(len(loaded), loaded[:5])\n"
     )
     environment = {**os.environ, "PYTHONPATH": str(src), "OMNIX_ALLOWED_HOSTS": "localhost"}

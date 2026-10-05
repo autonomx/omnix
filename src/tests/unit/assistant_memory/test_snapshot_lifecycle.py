@@ -4,10 +4,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
-from app.assistant_memory.routes import register_assistant_memory_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.assistant_memory.session import (
+from app.platform.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
+from app.platform.assistant_memory.routes import register_assistant_memory_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.assistant_memory.session import (
     RefreshSessionMemoryRequest,
     SessionMemoryConflictError,
     get_session_memory_state,

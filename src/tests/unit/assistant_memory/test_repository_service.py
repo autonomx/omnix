@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_memory import (
+from app.platform.assistant_memory import (
     MemoryConflictError,
     MemoryPolicyError,
     MemoryService,

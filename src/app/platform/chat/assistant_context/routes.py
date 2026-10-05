@@ -14,11 +14,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
-from app.chat.contracts import CHAT_RESEARCH, ResearchTurn
-from app.chat.generation_jobs import start_chat_generation_job
-from app.chat.research_citations import validate_completed_research_reply
-from app.chat.research_release import apply_research_release_decision
+from app.platform.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
+from app.platform.chat.contracts import CHAT_RESEARCH, ResearchTurn
+from app.platform.chat.generation_jobs import start_chat_generation_job
+from app.platform.chat.research_citations import validate_completed_research_reply
+from app.platform.chat.research_release import apply_research_release_decision
 from app.jobs import default_job_store
 from app.runtime.ports import optional
 
@@ -145,7 +145,7 @@ def register_assistant_context_routes(
         }
         job_store = job_store_factory()
         # Imported on first use: admission is not needed to compose the gateway.
-        from app.chat.admission import admit_chat_turn_for_http
+        from app.platform.chat.admission import admit_chat_turn_for_http
 
         admission = admit_chat_turn_for_http(
             chat_store,
@@ -249,8 +249,8 @@ def register_assistant_context_routes(
             return StreamingResponse(generate_deep_research_ack(), media_type="text/event-stream")
 
         # Imported on first use: admission is not needed to compose the gateway.
-        from app.chat.admission import admit_chat_turn_for_http, stream_chat_turn
-        from app.chat.generation_jobs import find_chat_generation_job
+        from app.platform.chat.admission import admit_chat_turn_for_http, stream_chat_turn
+        from app.platform.chat.generation_jobs import find_chat_generation_job
 
         job_store = job_store_factory()
         send_request = _send_request(request)

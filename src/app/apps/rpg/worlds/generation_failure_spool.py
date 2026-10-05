@@ -7,12 +7,12 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
 )
-from app.rpg.session.genesis.world_forge_review import failure_report
+from app.apps.rpg.session.genesis.world_forge_review import failure_report
 
 from .generation_candidate_spool import (
     spool_path,

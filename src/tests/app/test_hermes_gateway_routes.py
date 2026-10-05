@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tests.support.routers import effective_routes
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 HERMES_HIDDEN_ROUTES = {
@@ -30,7 +30,7 @@ def test_hermes_gateway_routes_are_registered() -> None:
 def test_hermes_status_reports_the_sidecar_and_its_configuration(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
-    from app.chat.assist import diagnostics as hermes_diagnostics
+    from app.platform.chat.assist import diagnostics as hermes_diagnostics
 
     monkeypatch.setattr(hermes_diagnostics, "hermes_status_payload", lambda: {
         "enabled": True, "reachable": True, "state": "ready", "message": "Hermes is reachable.",

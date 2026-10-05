@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 async def measure(samples: int, delay_ms: float) -> dict:
     started = time.perf_counter()
-    from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
+    from app.composition.gateway.main import create_gateway_app
     from app.observability.metrics import request_snapshot
     import httpx
 

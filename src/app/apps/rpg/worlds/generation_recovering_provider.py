@@ -10,20 +10,20 @@ from pydantic import BaseModel, ValidationError
 from app.providers.base import ChatMessage
 from app.providers.structured import StructuredContract, StructuredOutputGateway
 from app.providers.structured.errors import StructuredOutputError
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_first_pass_provider import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_first_pass_provider import (
     FirstPassWorldForgeTopicGenerator,
     _identity_contract,
     _authored_contract,
     _authored_system_prompt,
 )
-from app.rpg.worlds.generation_contract_bundle import build_topic_contract_bundle
-from app.rpg.worlds.generation_failure_artifact import build_failure_artifact
-from app.rpg.worlds.generation_strategy import world_forge_strategy_identity
-from app.rpg.worlds.generation_recovery_registry import StructuredRegistryRecoveryMixin
-from app.rpg.worlds.generation_recovery_review import StructuredRecoveryReviewMixin
-from app.rpg.worlds.generation_structured_recovery import (
+from app.apps.rpg.worlds.generation_contract_bundle import build_topic_contract_bundle
+from app.apps.rpg.worlds.generation_failure_artifact import build_failure_artifact
+from app.apps.rpg.worlds.generation_strategy import world_forge_strategy_identity
+from app.apps.rpg.worlds.generation_recovery_registry import StructuredRegistryRecoveryMixin
+from app.apps.rpg.worlds.generation_recovery_review import StructuredRecoveryReviewMixin
+from app.apps.rpg.worlds.generation_structured_recovery import (
     CapturingStructuredProvider,
     apply_missing_field_patches,
     decode_candidate,
@@ -37,12 +37,12 @@ from app.rpg.worlds.generation_structured_recovery import (
     semantic_correction_messages,
     validate_payload,
 )
-from app.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.worlds.providers.world_forge import (
     WorldForgeTopicResponse,
     _payload,
     _token_estimate,
 )
-from app.rpg.worlds.providers.single_pass import (
+from app.apps.rpg.worlds.providers.single_pass import (
     SinglePassWorldForgeProviderError,
     _definitions,
     _field_contract,

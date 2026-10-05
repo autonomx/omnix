@@ -1,6 +1,6 @@
 # Application legacy cleanup
 
-The React app in `web` and `app.gateway.main:app` are the supported
+The React app in `web` and `app.composition.gateway.main:app` are the supported
 browser stack. `src/main.py`, `src/launch.py`, and application factory callers
 now use that gateway.
 
@@ -8,7 +8,7 @@ now use that gateway.
 
 | Apps | Retired implementation | Current owner |
 | --- | --- | --- |
-| Chat | `run_app.py` chat stream, greetings, conversation websocket | `app.chat` and gateway chat/live speech routes |
+| Chat | `run_app.py` chat stream, greetings, conversation websocket | `app.platform.chat` and gateway chat/live speech routes |
 | Storyteller and podcast | `run_app.py` generation, parsing, episode and voice-profile routes | Shared feature jobs, assets, and React workspaces |
 | Voice and voice cloning | `run_app.py` voice studio, cloning, TTS endpoints and websocket | `app.jobs.voice_inline`, gateway voice/TTS routes and speech workers |
 | STT | `run_app.py` transcription routes and unused `parakeet_stt_legacy_server.py` | Gateway speech jobs, live speech and `parakeet_stt_runtime` |

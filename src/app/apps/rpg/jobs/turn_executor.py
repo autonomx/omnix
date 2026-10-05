@@ -7,7 +7,7 @@ from typing import Any
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
 from app.jobs.inline_execution import require_execution_authority
-from app.rpg.presentation.visible_response import visible_response_text
+from app.apps.rpg.presentation.visible_response import visible_response_text
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.jobs_turn_executor.prompt', "1", 'Resolve this RPG player command as a concise game-master response.\nSession: {v0}\nCommand: {v1}\nReturn the visible RPG response only.')
@@ -129,8 +129,8 @@ def _apply_authoritative_rpg_turn(session_id: str | None, command: str) -> dict[
     if not session_id:
         return None
 
-    from app.rpg.session import interactive_first_call_runtime  # type: ignore[import-untyped]
-    from app.rpg.session.service import load_session, save_session  # type: ignore[import-untyped]
+    from app.apps.rpg.session import interactive_first_call_runtime  # type: ignore[import-untyped]
+    from app.apps.rpg.session.service import load_session, save_session  # type: ignore[import-untyped]
 
     session = load_session(session_id)
     if session is None:
@@ -167,14 +167,14 @@ def _queue_deferred_rpg_turn_narration(session_id: str, result: dict[str, Any]) 
         return False
     tick = int(narration_request.get("tick") or result.get("tick") or 0)
 
-    from app.rpg.session.narration_worker import (  # type: ignore[import-untyped]
+    from app.apps.rpg.session.narration_worker import (  # type: ignore[import-untyped]
         ensure_narration_worker_running,
         signal_narration_work,
     )
-    from app.rpg.session.semantic_response_projection import (  # type: ignore[import-untyped]
+    from app.apps.rpg.session.semantic_response_projection import (  # type: ignore[import-untyped]
         _enqueue_narration_request as _enqueue_narration_request,
     )
-    from app.rpg.session.session_runtime_store import (  # type: ignore[import-untyped]
+    from app.apps.rpg.session.session_runtime_store import (  # type: ignore[import-untyped]
         load_runtime_session as load_runtime_session,
         save_runtime_session as save_runtime_session,
     )

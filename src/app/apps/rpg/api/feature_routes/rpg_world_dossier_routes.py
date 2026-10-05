@@ -6,15 +6,15 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Request
 
-from app.rpg.worlds.dossier_authoring import (
+from app.apps.rpg.worlds.dossier_authoring import (
     regenerate_world_entity_dossier,
     update_world_entity_dossier,
 )
-from app.rpg.worlds.dossier_quality_service import (
+from app.apps.rpg.worlds.dossier_quality_service import (
     enrich_world_dossiers,
     world_dossier_quality,
 )
-from app.rpg.worlds.dossier_regeneration_preview import (
+from app.apps.rpg.worlds.dossier_regeneration_preview import (
     preview_world_entity_dossier_regeneration,
 )
 

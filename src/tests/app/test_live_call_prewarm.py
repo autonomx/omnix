@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat import ChatSession
-from app.chat import live_call_prewarm as prewarm
+from app.platform.chat import ChatSession
+from app.platform.chat import live_call_prewarm as prewarm
 from tests.support.routers import include_router_registrar
 from app.providers import CerebrasProvider, ProviderConfig
 

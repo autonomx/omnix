@@ -40,8 +40,8 @@ for import_root in (REPOSITORY_ROOT / "src", REPOSITORY_ROOT):
 
 from scripts.trade import run_interday_winner_shadow_replay_core as _core
 
-from app.trading.market_data_recovery import detect_session_gaps, reconcile_recovery
-from app.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.market_data_recovery import detect_session_gaps, reconcile_recovery
+from app.apps.trading.models import AdjustmentMode, MarketBar
 
 
 # Public compatibility surface used by existing tests and ad-hoc research tools.

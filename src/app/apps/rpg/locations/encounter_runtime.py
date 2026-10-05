@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.locations.encounters import NO_ENCOUNTER
-from app.rpg.locations.events import record_world_event
-from app.rpg.locations.graph import OLD_MILL, get_canonical_location
+from app.apps.rpg.locations.encounters import NO_ENCOUNTER
+from app.apps.rpg.locations.events import record_world_event
+from app.apps.rpg.locations.graph import OLD_MILL, get_canonical_location
 
 SOURCE = "deterministic_phase4_encounter_combat_events"
 COMBAT_HOOK_TAG = "combat_hook"
@@ -159,7 +159,7 @@ def build_encounter_runtime_narration_contract(runtime_result: Dict[str, Any]) -
 
 
 def assert_phase4_encounter_combat_events_ready() -> Dict[str, Any]:
-    from app.rpg.locations.encounters import roll_seeded_encounter
+    from app.apps.rpg.locations.encounters import roll_seeded_encounter
 
     state: Dict[str, Any] = {}
     event_result = {

@@ -8,21 +8,21 @@ import zipfile
 import pytest
 from fastapi import FastAPI
 
-from app.rpg.api.feature_routes.rpg_world_bundle_routes import register_rpg_world_bundle_routes
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.api.feature_routes.rpg_world_bundle_routes import register_rpg_world_bundle_routes
+from app.apps.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.worlds.contracts import MapDefinitionBinding
-from app.rpg.worlds.map_blueprint_authoring import MapBlueprintDocument
-from app.rpg.worlds.service import (
+from app.apps.rpg.worlds.contracts import MapDefinitionBinding
+from app.apps.rpg.worlds.map_blueprint_authoring import MapBlueprintDocument
+from app.apps.rpg.worlds.service import (
     compile_scenario_revision,
     compile_world_release,
     compile_world_revision,
 )
-from app.rpg.worlds.world_bundle import (
+from app.apps.rpg.worlds.world_bundle import (
     WORLD_BUNDLE_DATA_PATH,
     WORLD_BUNDLE_MANIFEST_PATH,
     WorldBundleAsset,
@@ -31,7 +31,7 @@ from app.rpg.worlds.world_bundle import (
     parse_world_bundle_archive,
     sha256_hex,
 )
-from app.rpg.worlds.world_bundle_transform import transform_world_bundle
+from app.apps.rpg.worlds.world_bundle_transform import transform_world_bundle
 
 
 def _definition() -> GridMapDefinition:

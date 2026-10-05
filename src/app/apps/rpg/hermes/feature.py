@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.chat.contracts import ASSIST_READOUTS
+from app.platform.chat.contracts import ASSIST_READOUTS
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 
-from app.rpg.hermes.api import router as hermes_router
-from app.rpg.hermes.approved_routes import hermes_rpg_approved_bp
+from app.apps.rpg.hermes.api import router as hermes_router
+from app.apps.rpg.hermes.approved_routes import hermes_rpg_approved_bp
 
 
 def _router(_context: FeatureContext) -> APIRouter:
@@ -24,7 +24,7 @@ class _PlanSummaryReadout:
     name = "get_hermes_rpg_plan_summary"
 
     def payload(self, args):
-        from app.rpg.hermes.plan_summary import hermes_rpg_plan_summary_payload
+        from app.apps.rpg.hermes.plan_summary import hermes_rpg_plan_summary_payload
 
         return hermes_rpg_plan_summary_payload()
 

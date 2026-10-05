@@ -4,7 +4,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.indicators.engine import (
+from app.apps.trading.indicators.engine import (
     CORE_INDICATOR_FORMULA_VERSION,
     anchored_volume_weighted_average_price,
     average_true_range,

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.world.location_registry import current_location_id
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_knowledge_state import known_facts_for_npc
-from app.rpg.world.npc_presence_runtime import present_npcs_at_location
+from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_knowledge_state import known_facts_for_npc
+from app.apps.rpg.world.npc_presence_runtime import present_npcs_at_location
 
 
 def _safe_str(value: Any) -> str:

@@ -186,7 +186,7 @@ def hermes_rpg_context_payload(request: dict[str, Any]) -> dict[str, Any]:
     if not session_id:
         return {"ok": False, "error": "missing_session_id", "read_only": True, "source": "rpg_session"}
 
-    from app.rpg.session.service import load_session
+    from app.apps.rpg.session.service import load_session
 
     session = load_session(session_id)
     if not session:

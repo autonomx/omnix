@@ -7,8 +7,8 @@ from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
 from app.runtime.clock import TurnContext as _TurnContext
 from app.runtime.clock import bind_turn_context as _bind_turn_context
-from app.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
-from app.rpg.session.response_builder import (
+from app.apps.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
+from app.apps.rpg.session.response_builder import (
     build_apply_turn_response as _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
 )
 

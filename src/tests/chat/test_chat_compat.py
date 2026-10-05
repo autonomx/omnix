@@ -3,8 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-from app.chat.persistence import chat_store
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.persistence import chat_store
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 
 
 def test_postgres_chat_adapter_paginates_full_message_history() -> None:

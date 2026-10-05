@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
-from app.rpg.declarations import RETENTION
-from app.rpg.persistence.narration_event_repository import (
+from app.apps.rpg.declarations import RETENTION
+from app.apps.rpg.persistence.narration_event_repository import (
     MAX_RPG_NARRATION_EVENT_BYTES,
     MAX_RPG_NARRATION_EVENT_PAGE_SIZE,
     MAX_RPG_NARRATION_EVENTS_PER_SESSION,

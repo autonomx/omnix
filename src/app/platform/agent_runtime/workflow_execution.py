@@ -26,7 +26,7 @@ from .workflow_runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
+    from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
 
 
 def _resolve_approval(workflow: PostgresWorkflowRuntime, run_id: str, step_id: str, *, approved_by: str | None) -> None:

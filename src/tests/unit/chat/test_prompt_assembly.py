@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from app.chat import CreateChatSessionRequest
+from app.platform.chat import CreateChatSessionRequest
 
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
-from app.chat import ChatMessage, ChatSession, ChatSessionStore
-from app.chat.context_budget import PromptBudget
-from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
-from app.chat.prompt_rendering import render_prompt_assembly
-from app.chat.store import ChatSessionStore as JsonChatSessionStore
+from app.platform.chat import ChatMessage, ChatSession, ChatSessionStore
+from app.platform.chat.context_budget import PromptBudget
+from app.platform.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
+from app.platform.chat.prompt_rendering import render_prompt_assembly
+from app.platform.chat.store import ChatSessionStore as JsonChatSessionStore
 
 NOW = "2026-07-08T00:00:00+00:00"
 
@@ -114,7 +114,7 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
         system_prompt=None,
         research_mode_override=None,
     ))
-    from app.chat import SendChatMessageRequest
+    from app.platform.chat import SendChatMessageRequest
 
     regular.append_user_message(
         regular_session.id,

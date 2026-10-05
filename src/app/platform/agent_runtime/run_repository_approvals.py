@@ -20,7 +20,7 @@ from .repository import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.repository import PostgresAgentRunRepository
+    from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 def add_approval(repo: PostgresAgentRunRepository, approval: AgentApproval) -> AgentApproval:

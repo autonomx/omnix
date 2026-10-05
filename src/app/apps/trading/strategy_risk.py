@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .paper import PaperAccountSnapshot
 from .strategies.models import StrategyRiskProfile, StrategySignal
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 class StrategyRiskDecision(BaseModel):

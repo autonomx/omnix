@@ -47,7 +47,7 @@ def provider_credential_configured(provider: str) -> bool:
 def _default_client_factory(**kwargs: Any):
     # Import lazily: Settings imports this module, while assistant-context routing imports
     # Settings. Keeping the transport dependency here avoids a package-level import cycle.
-    from app.research.web_search import WebSearchClient
+    from app.platform.research.web_search import WebSearchClient
 
     provider = str(kwargs.get("provider") or "").strip().lower()
     if provider_requires_credential(provider) and "api_key" not in kwargs:

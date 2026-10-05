@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.agent_runtime.acceptance import evaluate_acceptance
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.acceptance import evaluate_acceptance
+from app.platform.agent_runtime.contracts import (
     AgentArtifact,
     AgentEvent,
     AgentRunSpec,
@@ -13,13 +13,13 @@ from app.agent_runtime.contracts import (
     ModelRef,
     SuccessCriterion,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
     evaluate_evidence_set,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
 
 
 def _receipt(run_id: str, requirement) -> EvidenceReceipt:

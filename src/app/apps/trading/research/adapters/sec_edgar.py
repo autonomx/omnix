@@ -43,7 +43,7 @@ class SecEdgarAdapter:
 
     def __init__(self, runtime=None) -> None:
         if runtime is None:
-            from app.trading.providers.http_runtime import ProviderHttpRuntime
+            from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
             runtime = ProviderHttpRuntime("sec_edgar_research", max_concurrency=1)
         self.runtime = runtime
 

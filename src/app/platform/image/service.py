@@ -6,25 +6,25 @@ from app.config.env import env_str, environment
 import os
 from typing import Any, Dict
 
-from app.image.cache import image_cache_key, lookup_image_cache, store_image_cache
-from app.image.config import get_active_image_provider_name, get_provider_config
-from app.image.lifecycle import (
+from app.platform.image.cache import image_cache_key, lookup_image_cache, store_image_cache
+from app.platform.image.config import get_active_image_provider_name, get_provider_config
+from app.platform.image.lifecycle import (
     get_cached_provider,
     get_or_create_image_provider,
     is_image_provider_loaded,
     load_image_provider,
     unload_image_provider,
 )
-from app.image.models import ImageGenerationRequest, ImageGenerationResponse
-from app.image.providers.registry import get_image_provider_definition, is_supported_image_provider
-from app.image.reference_assets import (
+from app.platform.image.models import ImageGenerationRequest, ImageGenerationResponse
+from app.platform.image.providers.registry import get_image_provider_definition, is_supported_image_provider
+from app.platform.image.reference_assets import (
     ImageReferenceError,
     close_image_references,
     load_image_reference_assets,
 )
-from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
-from app.image.style import apply_image_style
-from app.image.image_http_client import generate_image_via_service, is_image_service_enabled
+from app.platform.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
+from app.platform.image.style import apply_image_style
+from app.platform.image.image_http_client import generate_image_via_service, is_image_service_enabled
 from app.persistence.device_permits import device_permit_slot
 
 _GIB = float(1024**3)

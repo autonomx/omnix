@@ -1,4 +1,4 @@
-"""``python -m app.launcher start`` migrates first, then starts the gateway and the web app (WP-11.4)."""
+"""``python -m app.composition.launcher start`` migrates first, then starts the gateway and the web app (WP-11.4)."""
 from __future__ import annotations
 
 import argparse
@@ -6,7 +6,7 @@ import sys
 
 import httpx
 
-from app.launcher import __main__ as launcher
+from app.composition.launcher import __main__ as launcher
 
 
 def _client(gateway_ready_after: int, calls: list[str]) -> httpx.Client:
@@ -43,7 +43,7 @@ def test_start_stops_when_migrations_fail(monkeypatch):
         steps.append(args)
         return 1 if args[-1] == "migrate" else 0
 
-    from app.launcher import startup
+    from app.composition.launcher import startup
 
     monkeypatch.setattr(launcher, "_module", fake_module)
     monkeypatch.setattr(sys, "version_info", (3, 11, 0))
@@ -58,9 +58,9 @@ def test_start_stops_when_migrations_fail(monkeypatch):
 
 
 def test_a_missing_executable_is_a_failed_start_not_a_launcher_error(tmp_path, monkeypatch):
-    from app.launcher.service_manager import LauncherServiceManager, ServiceSpec
+    from app.composition.launcher.service_manager import LauncherServiceManager, ServiceSpec
 
-    monkeypatch.setattr("app.launcher.service_manager.initialize_service_token", lambda: "token")
+    monkeypatch.setattr("app.composition.launcher.service_manager.initialize_service_token", lambda: "token")
     manager = LauncherServiceManager([
         ServiceSpec(service_id="tool", label="Tool", command=[str(tmp_path / "missing-binary")], cwd=tmp_path),
     ])

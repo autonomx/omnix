@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
-from app.trading.strategies import evaluate_gap_pullback
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_monitor import _trade_attempt_id
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies import evaluate_gap_pullback
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_monitor import _trade_attempt_id
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -99,7 +99,7 @@ def test_trade_attempt_identity_is_stable_per_signal_and_distinct_by_signal_time
 
 
 def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> None:
-    source = Path("src/app/trading/strategy_monitor.py").read_text()
+    source = Path("src/app/apps/trading/strategy_monitor.py").read_text()
     entry_block = source.split(
         'order_key = _key(config.strategy_id, trade_attempt_id, "entry")', 1
     )[1]
@@ -117,7 +117,7 @@ def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> 
 
 def test_trade_attempt_migration_versions_repeat_symbol_correlation_atomically() -> None:
     migration = Path(
-        "src/app/trading/migrations/0046_trading_trade_attempt_correlation.sql"
+        "src/app/apps/trading/migrations/0046_trading_trade_attempt_correlation.sql"
     ).read_text()
     for token in (
         "trade_attempt_id",

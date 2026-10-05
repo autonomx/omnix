@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from app.trading import strategy_ai_shadow_provider as provider
-from app.trading import strategy_intraday_llm as intraday
+from app.apps.trading import strategy_ai_shadow_provider as provider
+from app.apps.trading import strategy_intraday_llm as intraday
 
 
 def test_default_intraday_transport_failure_trips_shared_circuit_once(monkeypatch) -> None:

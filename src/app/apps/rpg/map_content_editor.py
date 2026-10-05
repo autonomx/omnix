@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 
-from app.rpg.map_content_validation import MapContentReport, validate_map_content
+from app.apps.rpg.map_content_validation import MapContentReport, validate_map_content
 
 _ALLOWED_OPERATIONS = {
     "move_object",

@@ -8,7 +8,7 @@ from typing import Protocol
 from fastapi import FastAPI
 import pytest
 
-import app.gateway.feature_registry as feature_registry
+import app.composition.gateway.feature_registry as feature_registry
 from app.runtime import ports
 from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig

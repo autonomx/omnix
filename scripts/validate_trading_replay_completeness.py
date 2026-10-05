@@ -18,7 +18,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from app.trading.strategy_replay_reliability import (
+from app.apps.trading.strategy_replay_reliability import (
     ReplayExpectedObservation,
     assess_replay_completeness,
     replay_observation_from_result,

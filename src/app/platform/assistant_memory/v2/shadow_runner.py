@@ -20,8 +20,8 @@ While v1 is authoritative, this operator command does, for each memory space:
 
 Run it, then read the verdict with the report::
 
-    python -m app.assistant_memory.v2.shadow_runner [--probes 200]
-    python -m app.assistant_memory.v2.shadow_report --require-ready
+    python -m app.platform.assistant_memory.v2.shadow_runner [--probes 200]
+    python -m app.platform.assistant_memory.v2.shadow_report --require-ready
 
 Pre-cutover, the runner is the authoritative feed into v2: a space's
 authoritative event watermark is advanced to its observation watermark after

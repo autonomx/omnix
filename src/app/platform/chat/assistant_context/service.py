@@ -32,7 +32,7 @@ class AssistantContextService:
     def _research(self):
         if self.research_factory is not None:
             return self.research_factory()
-        from app.chat.contracts import CHAT_RESEARCH
+        from app.platform.chat.contracts import CHAT_RESEARCH
 
         return optional(CHAT_RESEARCH)
 

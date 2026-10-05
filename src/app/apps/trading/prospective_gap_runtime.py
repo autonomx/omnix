@@ -126,7 +126,7 @@ from .prospective_prediction_v4 import (
 )
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.models import GapPullbackConfig
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 RUNTIME_VERSION = "prospective-gap-runtime-v1"
@@ -541,7 +541,7 @@ class ProspectiveGapRuntime:
         self.market_service = market_service or default_market_data_service()
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         # Decision inputs come from PostgreSQL, imported with provenance by
-        # app.trading.prospective_gap_inputs (WP-8.3).
+        # app.apps.trading.prospective_gap_inputs (WP-8.3).
         if scheduler_handoff_fetcher is None or climatology_loader is None:
             from .prospective_gap_inputs import ProspectiveGapInputs
 

@@ -20,7 +20,7 @@ from typing import Literal, Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 PROSPECTIVE_GAP_STRATEGY_ID = "prospective-gap-experiment"

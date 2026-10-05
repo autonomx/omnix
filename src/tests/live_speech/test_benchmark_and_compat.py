@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from app.live_speech.benchmark import benchmark_stt, benchmark_tts
-from app.live_speech.compat import compatibility_payload
-from app.live_speech.stt import BufferedStreamingTranscriber
-from app.live_speech.tts import DeterministicSpeechSynthesizer
+from app.platform.live_speech.benchmark import benchmark_stt, benchmark_tts
+from app.platform.live_speech.compat import compatibility_payload
+from app.platform.live_speech.stt import BufferedStreamingTranscriber
+from app.platform.live_speech.tts import DeterministicSpeechSynthesizer
 
 
 def _pcm_chunk() -> bytes:

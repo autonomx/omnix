@@ -7,40 +7,40 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory.initiative import (
+from app.platform.assistant_memory.initiative import (
     TrustedCapabilityManifest,
     plan_companion_initiative,
     reset_initiative_surface_history,
 )
 from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
-from app.assistant_memory.observability import (
+from app.platform.assistant_memory.observability import (
     companion_metrics_snapshot,
     memory_usage_snapshot,
     record_companion_diagnostics,
     record_memory_usage,
     reset_companion_metrics,
 )
-from app.assistant_memory import observability
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.paralinguistic_state import (
+from app.platform.assistant_memory import observability
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.paralinguistic_state import (
     durable_affect_candidate_allowed,
     observe_paralinguistic_turn,
 )
-from app.assistant_memory.rollout import companion_rollout_policy
-from app.assistant_memory.settings import (
+from app.platform.assistant_memory.rollout import companion_rollout_policy
+from app.platform.assistant_memory.settings import (
     AssistantMemoryRuntimeSettings,
     AssistantMemorySettingsUpdate,
 )
-from app.assistant_memory.settings_routes import register_memory_settings_routes
-from app.assistant_memory.structured_consolidation import consolidate_structured_proposal
-from app.assistant_memory.structured_extraction import extract_structured_memory_proposals
-from app.assistant_memory.temporal_retrieval import (
+from app.platform.assistant_memory.settings_routes import register_memory_settings_routes
+from app.platform.assistant_memory.structured_consolidation import consolidate_structured_proposal
+from app.platform.assistant_memory.structured_extraction import extract_structured_memory_proposals
+from app.platform.assistant_memory.temporal_retrieval import (
     TemporalRetrievalResult,
     rank_temporal_records,
 )
-from app.assistant_memory.typed_memory import supersede_typed_memory
-from app.characters.live_conversation_profile import LiveConversationProfile
+from app.platform.assistant_memory.typed_memory import supersede_typed_memory
+from app.platform.characters.live_conversation_profile import LiveConversationProfile
 from tests.support.assistant_memory_settings import in_memory_assistant_memory_settings_store
 
 

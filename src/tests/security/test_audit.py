@@ -116,8 +116,8 @@ def test_denied_and_read_requests(sink, tenant) -> None:
 def test_capability_execution_is_audited(sink, tenant, monkeypatch) -> None:
     from types import MappingProxyType
 
-    from app.assistant_tools import executor
-    from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+    from app.platform.assistant_tools import executor
+    from app.platform.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 
     tenant("owner")
     monkeypatch.setattr(executor, "ADAPTERS", MappingProxyType({
@@ -131,7 +131,7 @@ def test_capability_execution_is_audited(sink, tenant, monkeypatch) -> None:
 
 
 def test_agent_run_commands_are_audited(sink, tenant, monkeypatch) -> None:
-    from app.agent_runtime import api
+    from app.platform.agent_runtime import api
 
     tenant("owner", user="user:owner")
     monkeypatch.setattr(api, "_service", lambda *_args: SimpleNamespace(command=lambda command: "snapshot"))
@@ -143,7 +143,7 @@ def test_agent_run_commands_are_audited(sink, tenant, monkeypatch) -> None:
 
 
 def test_chat_confirmations_are_audited(sink, tenant) -> None:
-    from app.chat.live_agent_store import _confirmation_grant
+    from app.platform.chat.live_agent_store import _confirmation_grant
 
     tenant("member")
     _confirmation_grant("chat:1")
@@ -181,7 +181,7 @@ def test_postgres_sink_resolves_unknown_actors(monkeypatch) -> None:
 
 
 def test_agent_run_start_is_audited(sink, tenant, monkeypatch) -> None:
-    from app.agent_runtime import api
+    from app.platform.agent_runtime import api
 
     tenant("owner")
     monkeypatch.setattr(api, "_service", lambda *_args: SimpleNamespace(

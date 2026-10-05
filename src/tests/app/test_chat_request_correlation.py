@@ -55,10 +55,10 @@ class _LoggingJobStore(InMemoryJobStore):
 
 
 def test_a_chat_submission_logs_one_request_id_from_admission_to_completion(tmp_path: Path, monkeypatch) -> None:
-    from app.chat import ChatSessionStore, CreateChatSessionRequest
-    from app.desktop_companion import chat_activity
-    from app.gateway.main import create_gateway_app
-    from app.live_voice.chat_integration import create_live_voice_chat_port
+    from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+    from app.apps.desktop_companion import chat_activity
+    from app.composition.gateway.main import create_gateway_app
+    from app.platform.live_voice.chat_integration import create_live_voice_chat_port
     from app.persistence import runtime
     from app.providers import service as provider_service
 

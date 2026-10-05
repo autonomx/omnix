@@ -7,7 +7,7 @@ import pytest
 Image = pytest.importorskip("PIL.Image")
 
 from app.assets import SharedAssetStore
-from app.image.reference_assets import (
+from app.platform.image.reference_assets import (
     close_image_references,
     list_image_reference_assets,
     load_image_reference_assets,

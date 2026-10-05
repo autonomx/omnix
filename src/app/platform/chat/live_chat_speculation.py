@@ -19,13 +19,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.providers.service import provider_lease
-from app.chat import (
+from app.platform.chat import (
     ChatMessage,
     ChatSessionStore,
     SendChatMessageRequest,
     default_chat_store,
 )
-from app.chat.store import _model_key, _provider_key
+from app.platform.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.catalog import CANCELLATION, RUNTIME_STATS, THINKING_TOGGLE, provider_supports
 

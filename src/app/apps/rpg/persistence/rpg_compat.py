@@ -187,7 +187,7 @@ def list_session_summaries_from_postgres(
 ) -> list[dict[str, Any]]:
     """Project the authoritative campaign list into the bounded UI summary contract."""
 
-    from app.rpg.session.list_summaries import session_list_summary
+    from app.apps.rpg.session.list_summaries import session_list_summary
 
     sessions = list_sessions_from_postgres()
     if limit is not None:

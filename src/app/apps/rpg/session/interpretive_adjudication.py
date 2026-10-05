@@ -68,7 +68,7 @@ def classify_interpretive_intent(
     if selection.get("reason") == "service_or_commerce_runtime_wins":
         return ""
 
-    from app.rpg.session.hypothetical_world_resolution import (
+    from app.apps.rpg.session.hypothetical_world_resolution import (
         HYPOTHETICAL_INTENT,
         looks_like_hypothetical_input,
     )
@@ -293,7 +293,7 @@ def build_interpretive_adjudication_result(
         "player_input": _s(player_input),
         "source": _INTERPRETIVE_SOURCE,
     }
-    from app.rpg.session.contract_attachment import add_contracts_to_interpretive_result
+    from app.apps.rpg.session.contract_attachment import add_contracts_to_interpretive_result
 
     return add_contracts_to_interpretive_result(result)
 

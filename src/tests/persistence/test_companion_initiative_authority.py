@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.companion_activity.initiative import (
+from app.platform.companion_activity.initiative import (
     InitiativeAcquireRequest,
     PostgresCompanionInitiativeAuthority,
 )

@@ -5,16 +5,16 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory import (
+from app.platform.assistant_memory import (
     MemoryService,
     OwnerAwareMemoryService,
     OwnerAwareInMemoryMemoryRepository,
     InMemoryMemoryRepository,
     resolve_chat_scope,
 )
-from app.assistant_memory.management import candidates_for_session
-from app.assistant_memory.routes import register_assistant_memory_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.assistant_memory.management import candidates_for_session
+from app.platform.assistant_memory.routes import register_assistant_memory_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
 
 
 import pytest

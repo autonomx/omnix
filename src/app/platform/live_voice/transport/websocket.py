@@ -15,20 +15,20 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.conversation.performance_contract import apply_performance_plan_to_provider
-from app.live_voice.capacity import live_call_capacity
+from app.platform.live_voice.capacity import live_call_capacity
 from app.conversation.text import remove_emojis
-from app.voice.contracts import TTSProviderResolver
-from app.live_voice.speech.pcm_diagnostics import (
+from app.platform.voice.contracts import TTSProviderResolver
+from app.platform.live_voice.speech.pcm_diagnostics import (
     measured_pcm_block_streamer,
     measured_pcm_converter,
 )
-from app.live_voice.speech.startup_frame_policy import (
+from app.platform.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
     stream_live_call_pcm16_blocks,
 )
 
-from app.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
-from app.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
+from app.platform.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
+from app.platform.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
     begin_stream,
     diagnostics_log_path,

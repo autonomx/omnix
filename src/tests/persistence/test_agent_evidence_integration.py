@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentRunCommand,
     AgentRunSpec,
     EvidenceDecision,
@@ -15,9 +15,9 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
-from app.agent_runtime.repository import PostgresAgentRunRepository
-from app.agent_runtime.service import AgentRunService
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,

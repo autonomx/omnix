@@ -79,12 +79,12 @@ def _parse_sse(payload: str) -> list[dict[str, Any]]:
 def test_chat_live_sse_turn_matches_pre_refactor_golden(
     tmp_path: Path, monkeypatch, caplog
 ) -> None:
-    from app.chat import ChatSessionStore, CreateChatSessionRequest
-    from app.gateway.main import create_gateway_app
+    from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+    from app.composition.gateway.main import create_gateway_app
     from app.persistence import runtime
     from app.providers import service as provider_service
     from tests.support.in_memory_jobs import InMemoryJobStore
-    from app.desktop_companion import chat_activity
+    from app.apps.desktop_companion import chat_activity
 
     class FakeActivityBridge:
         def record_user_turn(self, **_kwargs: Any) -> None:
@@ -113,7 +113,7 @@ def test_chat_live_sse_turn_matches_pre_refactor_golden(
     )
     monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
 
-    from app.live_voice.chat_integration import create_live_voice_chat_port
+    from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 
     store = RecordingChatStore(
         ChatSessionStore(

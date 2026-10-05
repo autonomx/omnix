@@ -6528,7 +6528,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 2078
+      "value": 2081
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",

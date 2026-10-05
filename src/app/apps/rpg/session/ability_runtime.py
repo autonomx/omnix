@@ -4,15 +4,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.ability_models import (
+from app.apps.rpg.session.ability_models import (
     ALLOWED_XP_SOURCES,
     DEFAULT_SKILL_XP_PER_ABILITY_USE,
     RpgAbilityStateResult,
     RpgAbilityUseResult,
     RpgProgressionResult,
 )
-from app.rpg.session.ability_tree import validate_ability
-from app.rpg.session.ability_utils import _append, _is_plain_int, _norm, _safe_dict, _safe_int, _safe_list, _text, _utc_now
+from app.apps.rpg.session.ability_tree import validate_ability
+from app.apps.rpg.session.ability_utils import _append, _is_plain_int, _norm, _safe_dict, _safe_int, _safe_list, _text, _utc_now
 
 
 def _ability_index(tree: dict[str, Any]) -> dict[str, dict[str, Any]]:

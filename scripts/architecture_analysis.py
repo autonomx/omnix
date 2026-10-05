@@ -101,6 +101,16 @@ def source_digest(sources: dict[str, str]) -> str:
     return digest.hexdigest()
 
 
+# PA-5.3: platform capabilities, apps and composition packages sit in tier folders.
+TIER_FOLDERS = frozenset({"app.platform", "app.apps", "app.composition"})
+
+
+def top_package(module: str) -> str:
+    """The top-level package of an ``app`` module: ``app.<package>``, or ``app.<tier>.<package>`` in a tier folder."""
+    parts = module.split(".")
+    return ".".join(parts[:3] if ".".join(parts[:2]) in TIER_FOLDERS and len(parts) > 2 else parts[:2])
+
+
 def module_name(path: str) -> str:
     parts = PurePosixPath(path).with_suffix("").parts
     if parts and parts[0] == "src":
@@ -558,10 +568,10 @@ class SourceAnalysis:
         for source, targets in self.import_edges(module_level=True).items():
             if not source.startswith("app."):
                 continue
-            owner = source.split(".")[1]
+            owner = top_package(source)
             for target in targets:
-                if target.startswith("app.") and target.split(".")[1] != owner:
-                    edges.setdefault(owner, set()).add(target.split(".")[1])
+                if target.startswith("app.") and top_package(target) != owner:
+                    edges.setdefault(owner, set()).add(top_package(target))
         return sorted({tuple(sorted((source, target))) for source, targets in edges.items()
                        for target in targets if source in edges.get(target, set())})
 
@@ -591,7 +601,10 @@ class SourceAnalysis:
             # nested features share its tier.
             source_module = module_name(path)
             source_layer = self.layer_of(source_module)
-            if source_layer is None and source_module.startswith("app."):
+            # A tier folder's own __init__ (PA-5.3) holds only its docstring.
+            tier_folder = source_module in TIER_FOLDERS and all(
+                isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) for node in tree.body)
+            if source_layer is None and source_module.startswith("app.") and not tier_folder:
                 add("AL001", tree, "<uncovered>", "")
             if path in unit_paths:
                 unit = units[unit_paths[path]]

@@ -8,8 +8,8 @@ import uuid
 import psycopg
 import pytest
 
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
-from app.chat.persistence.chat_runtime import (
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.persistence.chat_runtime import (
     PostgresConversationSummaryRepository,
     PostgresHistorySearchService,
 )

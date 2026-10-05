@@ -32,7 +32,7 @@ from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_stoch_rsi_5m import StochRsi5mTrade
 from .strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 EarlySingleV2Arm = Literal[

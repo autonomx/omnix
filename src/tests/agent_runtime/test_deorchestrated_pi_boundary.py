@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
-from app.agent_runtime.pi_runtime import pi_rpc_argv
-from app.agent_runtime.planning import (
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
+from app.platform.agent_runtime.pi_runtime import pi_rpc_argv
+from app.platform.agent_runtime.planning import (
     build_inspection_bundle,
     operation_plan_failures,
     planning_requirement_for_operation,
 )
-from app.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
+from app.platform.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
 
 
 def _revision() -> TaskRevision:
@@ -99,7 +99,7 @@ def test_omnix_no_longer_infers_semantic_inspection_from_user_language(tmp_path:
 
 
 def test_invalid_planning_mode_fails_closed_to_enforce() -> None:
-    from app.agent_runtime.planning import planning_mode
+    from app.platform.agent_runtime.planning import planning_mode
 
     assert planning_mode({"OMNIX_AGENT_PLANNING_MODE": "typo"}) == "enforce"
 

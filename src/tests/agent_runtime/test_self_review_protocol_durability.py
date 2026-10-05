@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -16,7 +16,7 @@ from app.agent_runtime.contracts import (
     ValidationSpec,
     WorkspaceSpec,
 )
-from app.agent_runtime.service import (
+from app.platform.agent_runtime.service import (
     AgentRunService,
     _default_review_root,
     _implementation_candidate_failures,

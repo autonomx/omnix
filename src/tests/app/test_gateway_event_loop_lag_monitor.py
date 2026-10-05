@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from app.gateway.event_loop_lag_monitor import (
+from app.composition.gateway.event_loop_lag_monitor import (
     GatewayEventLoopLagMonitor,
     capture_runtime_contention_snapshot,
     classify_stack,
@@ -30,7 +30,7 @@ def test_classify_stack_distinguishes_tts_llm_and_framework_work() -> None:
     assert classify_stack(
         [
             {
-                "file": "src/app/gateway/main.py",
+                "file": "src/app/composition/gateway/main.py",
                 "function": "stream_chat_message",
             }
         ]

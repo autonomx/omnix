@@ -5,7 +5,7 @@ on:
     branches: [main, "agent/generalized-agent-runtime"]
     paths:
       - "src/app/persistence/**"
-      - "src/app/audiobook/**"
+      - "src/app/apps/audiobook/**"
       - "src/tests/persistence/**"
       - "src/tests/app/test_chat_*.py"
       - "src/tests/chat/test_live_chat_postgres_fast_path.py"
@@ -20,7 +20,7 @@ on:
     branches: [main]
     paths:
       - "src/app/persistence/**"
-      - "src/app/audiobook/**"
+      - "src/app/apps/audiobook/**"
       - "src/tests/persistence/**"
       - "src/tests/app/test_chat_*.py"
       - "src/tests/chat/test_live_chat_postgres_fast_path.py"
@@ -90,10 +90,10 @@ jobs:
       - name: Compile hardening modules
         run: |
           python -m py_compile \
-            src/main.py src/app/production.py \
-            src/app/audiobook/document_structure.py \
-            src/app/audiobook/document_structure_classifier.py \
-            src/app/audiobook/document_structure_repository.py
+            src/main.py src/app/composition/production.py \
+            src/app/apps/audiobook/document_structure.py \
+            src/app/apps/audiobook/document_structure_classifier.py \
+            src/app/apps/audiobook/document_structure_repository.py
 
       - name: Run PostgreSQL persistence tests
         run: |

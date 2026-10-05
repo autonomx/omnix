@@ -22,7 +22,7 @@ from app.providers.structured.contracts import StructuredCapabilities, Structure
 APP = Path(__file__).resolve().parents[3] / "app"
 # The provider package maps its own settings to configurations by id, and RPG
 # leaves with WP-8.6.
-EXEMPT = (APP / "providers", APP / "rpg")
+EXEMPT = (APP / "providers", APP / "apps" / "rpg")
 
 
 def test_capabilities_are_looked_up_by_id_or_instance() -> None:

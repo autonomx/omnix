@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     HermesResearchPolicy,
     HermesResearchRequest,
     normalize_hermes_research,
@@ -75,7 +75,7 @@ def _campaign_bible_result(
     request: HermesResearchRequest,
     policy: HermesResearchPolicy,
 ) -> dict[str, Any] | None:
-    from app.rpg.session.genesis.hermes_campaign_research import (
+    from app.apps.rpg.session.genesis.hermes_campaign_research import (
         research_campaign_turn,
     )
 

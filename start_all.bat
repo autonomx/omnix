@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-REM Omnix launcher (Windows). A thin wrapper (WP-11.4): `python -m app.launcher start`
+REM Omnix launcher (Windows). A thin wrapper (WP-11.4): `python -m app.composition.launcher start`
 REM checks the interpreters, starts the PostgreSQL container, checks the database,
 REM applies migrations, serves the launcher dashboard on http://127.0.0.1:5055 and
 REM starts the gateway and web app. This wrapper only finds the app interpreter and
@@ -34,7 +34,7 @@ if /I not "%~1"=="--postgres-only" if not defined OMNIX_DATABASE_URL (
     endlocal & exit /b !OMNIX_EXIT_CODE!
 )
 
-"%RPG_FLUX_PYTHON%" -m app.launcher start --postgres-container "%OMNIX_POSTGRES_CONTAINER%" %OMNIX_LAUNCH_MODE%
+"%RPG_FLUX_PYTHON%" -m app.composition.launcher start --postgres-container "%OMNIX_POSTGRES_CONTAINER%" %OMNIX_LAUNCH_MODE%
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
 REM Keep a double-clicked window open on failure.
 if not "%OMNIX_EXIT_CODE%"=="0" if not defined OMNIX_LAUNCH_MODE pause

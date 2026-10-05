@@ -43,7 +43,7 @@ import logging
 from collections import deque
 from typing import Any, Dict, List, Optional
 
-from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
+from app.apps.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -272,9 +272,9 @@ class NarrativeSurfaceEngine:
         """
         # Fix 1: Enforce normalization at the entry point
         try:
-            from app.rpg.narrative.event_adapter import normalize_event
+            from app.apps.rpg.narrative.event_adapter import normalize_event
         except ModuleNotFoundError:
-            from app.rpg.narrative.event_adapter import normalize_event
+            from app.apps.rpg.narrative.event_adapter import normalize_event
         event = normalize_event(event)
 
         # Fix 5: Filter low-importance events to avoid narrative noise

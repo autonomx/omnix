@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.trading.strategies.contract import DataRequirements, Proposal, StrategyContext
+from app.apps.trading.strategies.contract import DataRequirements, Proposal, StrategyContext
 
 
 class FakeBreakoutConfig(BaseModel):

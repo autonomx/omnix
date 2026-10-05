@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_memory.v2.search_index import match_query
+from app.platform.assistant_memory.v2.search_index import match_query
 
 
 @pytest.mark.parametrize(("question", "query"), [

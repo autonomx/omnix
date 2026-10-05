@@ -1,6 +1,6 @@
 
-from app.assistant_tools import AssistantToolRequest, review_assistant_tool_request
-from app.assistant_tools.config_store import (
+from app.platform.assistant_tools import AssistantToolRequest, review_assistant_tool_request
+from app.platform.assistant_tools.config_store import (
     AssistantActionConfigRecord,
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,

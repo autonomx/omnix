@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.analytics import (
+from app.apps.rpg.analytics import (
     build_tick_diff,
     build_timeline_row_diff,
     build_timeline_summary,
@@ -11,7 +11,7 @@ from app.rpg.analytics import (
     get_timeline_tick,
     inspect_npc_reasoning,
 )
-from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
+from app.apps.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

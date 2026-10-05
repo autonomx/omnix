@@ -7,7 +7,7 @@ URLs or exception messages, only states, counts, ages, identifiers of
 processes and error classes. Values that look like credentials are redacted
 before the response leaves the process.
 
-The response model is `DiagnosticsPayload` in `src/app/gateway/diagnostics.py`
+The response model is `DiagnosticsPayload` in `src/app/composition/gateway/diagnostics.py`
 (and in the generated OpenAPI schema).
 
 ## Top level

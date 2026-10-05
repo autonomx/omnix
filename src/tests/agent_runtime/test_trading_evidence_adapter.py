@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.assistant_tools.models import AssistantToolRequest
-from app.trading.assistant_tool import run_trading_tool_request
-from app.trading.execution import ExecutionObservation
+from app.platform.assistant_tools.models import AssistantToolRequest
+from app.apps.trading.assistant_tool import run_trading_tool_request
+from app.apps.trading.execution import ExecutionObservation
 
 
 class _FakeProvider:

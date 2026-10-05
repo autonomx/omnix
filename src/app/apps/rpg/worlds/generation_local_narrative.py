@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_local_narrative import local_narrative_components
+from app.apps.rpg.session.genesis.world_forge_local_narrative import local_narrative_components
 
 _DIVERSITY = ("discovery_channel", "entry_mode", "consequence_scope")
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")

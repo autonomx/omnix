@@ -3,15 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.providers.additional_crypto import AdditionalCryptoProvider
-from app.trading.providers.bar_semantics import (
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.providers.additional_crypto import AdditionalCryptoProvider
+from app.apps.trading.providers.bar_semantics import (
     continuous_bar_end,
     equity_bar_times,
     is_final_bar,
 )
-from app.trading.providers.equity import YahooEquityProvider
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.providers.equity import YahooEquityProvider
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class FakeResponse:

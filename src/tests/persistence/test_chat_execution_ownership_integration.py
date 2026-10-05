@@ -16,12 +16,12 @@ from app.jobs.models import (
     JobStatus,
     ResourceClass,
 )
-from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.gateway_runtime import GatewayRuntimeOwner
-from app.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.identity_service import PostgresIdentityRepository
 from app.persistence.tenant_scope import system_scope
 from app.persistence.runtime_coordination import (

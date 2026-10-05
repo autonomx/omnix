@@ -7,11 +7,11 @@ from typing import Any, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
     resolve_or_generate_genre_profile,
 )
-from app.rpg.session.genesis.world_forge_profiles import genre_profile_from_dict
+from app.apps.rpg.session.genesis.world_forge_profiles import genre_profile_from_dict
 
 from .lifecycle_service import require_world_writable
 

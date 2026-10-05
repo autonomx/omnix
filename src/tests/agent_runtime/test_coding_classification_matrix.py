@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.chat_bridge import _apply_semantic_route_decision
-from app.agent_runtime.profiles import select_agent_profile_id
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
+from app.platform.agent_runtime.chat_bridge import _apply_semantic_route_decision
+from app.platform.agent_runtime.profiles import select_agent_profile_id
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.semantic_classifier import (
     SemanticIntentDecision,
     semantic_profile_id,
 )
@@ -29,8 +29,8 @@ CODING_AGENT_CASES = (
     ("ui_html_layout", "change the HTML layout for the chat page"),
     ("ui_stylesheet", "update the stylesheet for the composer"),
     # Explicit files, repository, codebase, and software targets.
-    ("file_router_py", "update src/app/agent_runtime/router.py to handle this case"),
-    ("file_chat_bridge_py", "edit src/app/agent_runtime/chat_bridge.py"),
+    ("file_router_py", "update src/app/platform/agent_runtime/router.py to handle this case"),
+    ("file_chat_bridge_py", "edit src/app/platform/agent_runtime/chat_bridge.py"),
     ("file_component_tsx", "modify web/src/components/Composer.tsx"),
     ("file_store_ts", "change app/chat/store.ts"),
     ("repo_fix_tests", "fix the failing tests in the repo"),
@@ -60,7 +60,7 @@ CODING_AGENT_CASES = (
     # Clear workspace reads/diagnostics should also use coding Agent.
     ("read_repo", "inspect the repository and tell me what changed"),
     ("read_codebase", "review the codebase for duplicate routing logic"),
-    ("read_router_file", "read src/app/agent_runtime/router.py and summarize the routing order"),
+    ("read_router_file", "read src/app/platform/agent_runtime/router.py and summarize the routing order"),
     ("check_file", "check router.py for the workspace mutation branch"),
     ("find_selector", "find .assistant-context-add-button in the repo"),
     ("locate_callback", "locate the callback that handles chat submission"),
@@ -76,7 +76,7 @@ CODING_AGENT_CASES = (
     ("trace_handler", "trace the request handler in the backend"),
     ("inspect_workspace", "inspect the workspace before making any changes"),
     ("review_module", "review the routing module for obvious mistakes"),
-    ("diagnose_router", "diagnose the router behavior in src/app/agent_runtime/router.py"),
+    ("diagnose_router", "diagnose the router behavior in src/app/platform/agent_runtime/router.py"),
     ("examine_function", "examine the function in src/parser.py that parses commands"),
 )
 
@@ -195,7 +195,7 @@ def test_generic_software_words_do_not_steal_other_domains(
             "workspace_mutation_request",
         ),
         (
-            "inspect src/app/agent_runtime/router.py and tell me why it routes this to Chat",
+            "inspect src/app/platform/agent_runtime/router.py and tell me why it routes this to Chat",
             "workspace_read_request",
         ),
     ],

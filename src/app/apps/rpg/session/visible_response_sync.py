@@ -7,7 +7,7 @@ from typing import Any
 # nested result/authoritative dicts.  Phase 8.31 can place the synchronous LLM
 # narration on the top-level payload, so mirror completed visible narration into
 # the nested payloads before the route extracts fallback_narration.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
 

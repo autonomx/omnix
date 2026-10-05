@@ -27,7 +27,7 @@ class CharacterAvatarService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.characters.persistence.avatar_store import production_avatar_repository
+                from app.platform.characters.persistence.avatar_store import production_avatar_repository
                 repository = production_avatar_repository()
             else:
                 repository = CharacterAvatarRepository()

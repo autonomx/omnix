@@ -12,7 +12,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=None)
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--app", default="app.production:app")
+    parser.add_argument("--app", default="app.composition.production:app")
     parser.add_argument("--reload", action="store_true")
     parser.add_argument("--api-replicas", type=int, default=None)
     parser.add_argument("--managed-stdin", action="store_true", help=argparse.SUPPRESS)

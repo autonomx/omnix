@@ -4,9 +4,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.environment_calendar import derive_calendar_state
-from app.rpg.session.environment_memory import advance_environment_memory
-from app.rpg.session.environment_weather import generate_weather_event
+from app.apps.rpg.session.environment_calendar import derive_calendar_state
+from app.apps.rpg.session.environment_memory import advance_environment_memory
+from app.apps.rpg.session.environment_weather import generate_weather_event
 
 DEFAULT_TURN_MINUTES = 10
 DEFAULT_HISTORY_LIMIT = 12

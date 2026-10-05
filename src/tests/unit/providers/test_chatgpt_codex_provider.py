@@ -739,7 +739,7 @@ def test_cancelling_a_waiting_job_leaves_the_running_turn_alone():
 
 
 def test_generation_names_its_job_when_interrupting_a_provider():
-    from app.chat import generation_jobs
+    from app.platform.chat import generation_jobs
 
     calls: list[object] = []
 

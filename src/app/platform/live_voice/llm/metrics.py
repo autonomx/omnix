@@ -4,14 +4,14 @@ from __future__ import annotations
 import time
 from typing import Any, Iterator
 
-from app.chat.contracts import (
+from app.platform.chat.contracts import (
     merge_provider_response_metrics,
     model_key,
     provider_key,
     provider_turn_deadline,
     remaining_turn_seconds,
 )
-from app.live_voice.llm.stream import LowLatencyTextChunker
+from app.platform.live_voice.llm.stream import LowLatencyTextChunker
 
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -47,7 +47,7 @@ def _chat_completion(
     from app.providers.lmstudio_provider import LMStudioProvider
 
     if isinstance(provider, LMStudioProvider):
-        from app.live_voice.llm import lmstudio_model_resolution
+        from app.platform.live_voice.llm import lmstudio_model_resolution
 
         return lmstudio_model_resolution.chat_completion_with_loaded_model(
             provider,
@@ -96,7 +96,7 @@ def generate_lmstudio_reply(
     remaining = remaining_turn_seconds(deadline)
     if remaining is not None and remaining <= 0:
         raise ProviderTimeout("chat turn deadline has expired")
-    from app.live_voice.llm.policy import lmstudio_live_voice_options
+    from app.platform.live_voice.llm.policy import lmstudio_live_voice_options
 
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
     completion_kwargs.update(lmstudio_live_voice_options(user_message))
@@ -177,7 +177,7 @@ def stream_lmstudio_reply(
         from app.providers.structured.errors import ProviderTimeout
 
         raise ProviderTimeout("chat turn deadline has expired")
-    from app.live_voice.llm.policy import lmstudio_live_voice_options
+    from app.platform.live_voice.llm.policy import lmstudio_live_voice_options
 
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
     completion_kwargs.update(lmstudio_live_voice_options(user_message))

@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.market_data_recovery import (
+from app.apps.trading.market_data_recovery import (
     StrategyDataRequirement,
     reconcile_recovery,
 )
-from app.trading.models import MarketBar
-from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 OPEN = datetime(2026, 9, 16, 13, 30, tzinfo=timezone.utc)  # 09:30 ET

@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
-from app.rpg.persistence.rpg_repository import canonical_json
+from app.apps.rpg.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     validate_generated_topic_for_publication,
 )
-from app.rpg.session.genesis.world_forge_dossiers import (
+from app.apps.rpg.session.genesis.world_forge_dossiers import (
     dossier_prompt_contract,
     validate_entity_dossier,
 )

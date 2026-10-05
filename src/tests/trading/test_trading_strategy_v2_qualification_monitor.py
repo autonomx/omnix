@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading.gapper_dataset import freeze_gapper_universe
-from app.trading.market_evidence import SourceMemberDisposition
-from app.trading.strategies.models import StrategyRiskProfile
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_universe_archiver import _archive_universe_id
-from app.trading.strategy_v2_qualification import (
+from app.apps.trading.gapper_dataset import freeze_gapper_universe
+from app.apps.trading.market_evidence import SourceMemberDisposition
+from app.apps.trading.strategies.models import StrategyRiskProfile
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_universe_archiver import _archive_universe_id
+from app.apps.trading.strategy_v2_qualification import (
     frozen_v2_config,
     managed_finviz_v2_config,
     v2_profile_fingerprint,
 )
-from app.trading.strategy_v2_qualification_monitor import replay_v2_shadow_session
+from app.apps.trading.strategy_v2_qualification_monitor import replay_v2_shadow_session
 
 
 SESSION_NOW = datetime(2026, 8, 24, 20, 30, tzinfo=timezone.utc)  # after 16:00 ET + grace

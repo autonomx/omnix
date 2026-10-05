@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 
-from app.rpg.session.narrative_engine_bridge import canonicalize_resolved_turn_result
+from app.apps.rpg.session.narrative_engine_bridge import canonicalize_resolved_turn_result
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]

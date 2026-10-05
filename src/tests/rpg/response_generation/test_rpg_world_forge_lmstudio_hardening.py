@@ -8,10 +8,10 @@ import pytest
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
 from app.providers.structured import UnsupportedStructuredMode
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_first_pass_provider import _strict_registry_contract
-from app.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_first_pass_provider import _strict_registry_contract
+from app.apps.rpg.worlds.providers.world_forge import (
     ProviderWorldForgeTopicGenerator,
     WorldForgeEntityRegistryItem,
     WorldForgeProviderConfig,

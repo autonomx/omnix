@@ -40,7 +40,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+from app.apps.rpg.ai.llm_gateway_adapter import adapt_base_provider
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.cognitive_intent_enrichment.prompt', "1", 'Character:\n- Name: {v0}\n- Traits: {v1}\n- Goals: {v2}\n- Beliefs: {v3}\n\nCurrent Intent:\n- Type: {v4}\n- Priority: {v5}\n- Target: {v6}\n- Reasoning: {v7}\n\nWorld Context:\n- Nearby threats: {v8}\n- Potential allies: {v9}\n- Faction dynamics: {v10}\n\nRefine the intent:\n- Keep the SAME intent type (required)\n- Adjust priority (0-10): higher if situation is urgent, lower if not\n- Optionally suggest a target entity (must exist in context)\n- Add brief reasoning\n\nReturn JSON ONLY with this structure:\n{{\n  "priority": 5.0,\n  "target": "entity_id or null",\n  "reasoning": "brief explanation"\n}}\n')

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
 
 
 def test_run_approval_policy_is_typed() -> None:
@@ -18,7 +18,7 @@ def test_broker_applies_monotonic_run_policy_overlay() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "broker_api.py"
     ).read_text(encoding="utf-8")
     execute_block = source.split("def execute_agent_capability", 1)[1]

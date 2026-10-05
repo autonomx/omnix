@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from app.assistant_memory.owner_defaults import (
+from app.platform.assistant_memory.owner_defaults import (
     clear_default_memory_repository_factory,
     default_memory_service,
     install_default_memory_repository_factory,
     reset_default_memory_service,
 )
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 
 
 def test_default_memory_service_does_not_cache_prebootstrap(monkeypatch) -> None:

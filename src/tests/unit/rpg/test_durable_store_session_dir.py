@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.rpg.session import durable_store
+from app.apps.rpg.session import durable_store
 
 
 def test_explicit_session_dir_round_trips_without_changing_default_authority(

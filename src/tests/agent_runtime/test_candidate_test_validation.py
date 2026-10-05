@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.agent_runtime.candidate_test_validation import (
+from app.platform.agent_runtime.candidate_test_validation import (
     candidate_test_validation_specs,
     executable_candidate_test_paths,
     missing_candidate_test_execution,
     reconcile_candidate_test_validation_results,
 )
-from app.agent_runtime.contracts import AgentEvent, ValidationResult
+from app.platform.agent_runtime.contracts import AgentEvent, ValidationResult
 
 
 def _validation(command: str, *, state: str = "state-final", success: bool = True) -> ValidationResult:
@@ -67,9 +67,9 @@ def test_executable_candidate_test_paths_are_narrow_and_exclude_support_files() 
     )
     assert paths == [
         "pkg/engine_test.go",
+        "tests/test_service.py",
         "web/src/features/assistant/chat/ChatbotWorkspace.test.tsx",
         "web/tests/e2e/chatbot-layout.spec.ts",
-        "tests/test_service.py",
     ]
 
 

@@ -4,21 +4,21 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds import generation_retry
-from app.rpg.worlds.generation_candidate_spool import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds import generation_retry
+from app.apps.rpg.worlds.generation_candidate_spool import (
     delete_candidate_spool,
     write_candidate_spool,
 )
-from app.rpg.worlds.generation_jobs import (
+from app.apps.rpg.worlds.generation_jobs import (
     WorldTopicGenerationSettings,
     canonical_hash,
 )
-from app.rpg.worlds.generation_worker import _release_interrupted_job
+from app.apps.rpg.worlds.generation_worker import _release_interrupted_job
 
 
 def _run() -> dict:

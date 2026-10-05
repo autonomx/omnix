@@ -4,7 +4,7 @@
 
 Run one worker/control gateway per workspace and scale API replicas separately. `python scripts/run_omnix_gateway.py --api-replicas 2` supervises worker port 8000 plus APIs 8001/8002. Deployment input is validated once at production composition; changing role/topology variables requires a process restart. Keep `OMNIX_DATABASE_URL` configured for authoritative PostgreSQL and apply/verify migrations through the persistence CLI before rollout.
 
-In local `development` or `local` mode, that launcher also supervises one standalone job-worker process. Start the same process explicitly with `PYTHONPATH=src python -m app.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1`. Each pool claims only its registered resource classes and has its own concurrency. The process uses per-job lease fencing and does not take the gateway's singleton lock. Set `OMNIX_LOCAL_JOB_WORKER=0` to turn off automatic local startup. Pool readiness is at `http://127.0.0.1:8090/health/ready`; Prometheus metrics by pool are at `/metrics`. Configure the bind with `OMNIX_JOB_WORKER_METRICS_HOST` and `OMNIX_JOB_WORKER_METRICS_PORT`, and set the shutdown drain period with `OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS`.
+In local `development` or `local` mode, that launcher also supervises one standalone job-worker process. Start the same process explicitly with `PYTHONPATH=src python -m app.composition.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1`. Each pool claims only its registered resource classes and has its own concurrency. The process uses per-job lease fencing and does not take the gateway's singleton lock. Set `OMNIX_LOCAL_JOB_WORKER=0` to turn off automatic local startup. Pool readiness is at `http://127.0.0.1:8090/health/ready`; Prometheus metrics by pool are at `/metrics`. Configure the bind with `OMNIX_JOB_WORKER_METRICS_HOST` and `OMNIX_JOB_WORKER_METRICS_PORT`, and set the shutdown drain period with `OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS`.
 
 Set `OMNIX_TTS_URL` to a shared HTTP service on every API process that serves speech. APIs cannot load local Qwen/CUDA TTS. `OMNIX_GATEWAY_TTS_HTTP=1` also routes the worker through that service. Live-call PCM uses `/api/tts/live-call/stream`; PostgreSQL permit saturation returns HTTP 429 with `Retry-After: 1`. `OMNIX_LIVE_MAX_CALLS` bounds persistent WebSockets per replica and defaults to the TTS permit capacity; `/ready` reports active and available call slots. `OMNIX_GATEWAY_REQUIRED_WORKERS=tts,stt` makes those services readiness dependencies; omit optional services from this list. Invalid URLs, unknown roles and contradictory explicit ownership flags fail startup.
 
@@ -126,7 +126,7 @@ tags also push the images to GHCR.
 
 4. Start the gateway in one terminal:
 
-       PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+       PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
    In PowerShell, set $env:PYTHONPATH = 'src' first if it is not already set.
 
@@ -138,7 +138,7 @@ tags also push the images to GHCR.
 
 ### Windows launcher mode
 
-`python -m app.launcher start` (wrapped by start_all.bat and start_all.sh) coordinates PostgreSQL, the gateway, optional workers, Hermes, and the browser. Interpreter paths come from `RPG_*_PYTHON`, `resources/config/launcher.toml` or the Conda environments, not from the scripts. The portable contract is the service URLs and environment variables, not a particular absolute path.
+`python -m app.composition.launcher start` (wrapped by start_all.bat and start_all.sh) coordinates PostgreSQL, the gateway, optional workers, Hermes, and the browser. Interpreter paths come from `RPG_*_PYTHON`, `resources/config/launcher.toml` or the Conda environments, not from the scripts. The portable contract is the service URLs and environment variables, not a particular absolute path.
 
 Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.
 
@@ -669,7 +669,7 @@ memory space belongs to a tenant workspace, so workspaces never share memory.
 
 Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
 embedding model is installed. `setup.bat` / `setup.sh` download it; on a host
-installed by hand, run `python -m app.assistant_memory.v2.embeddings download`
+installed by hand, run `python -m app.platform.assistant_memory.v2.embeddings download`
 once on each host that runs the scheduler or serves retrieval (about
 490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
 `resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
@@ -689,10 +689,10 @@ The switch is a human decision. With the gateway running this code (migration
 ```powershell
 $env:PYTHONPATH = "src"
 python scripts/backup_omnix.py --output-dir <backup folder>        # 1. back up
-python -m app.assistant_memory.v2.shadow_runner                   # 2. import and compare
-python -m app.assistant_memory.v2.shadow_report --require-ready   # 3. verdict
-python -m app.assistant_memory.v2.cutover activate --by <name> --reason "<why>"   # 4. switch
-python -m app.assistant_memory.v2.cutover status                  # 5. confirm
+python -m app.platform.assistant_memory.v2.shadow_runner                   # 2. import and compare
+python -m app.platform.assistant_memory.v2.shadow_report --require-ready   # 3. verdict
+python -m app.platform.assistant_memory.v2.cutover activate --by <name> --reason "<why>"   # 4. switch
+python -m app.platform.assistant_memory.v2.cutover status                  # 5. confirm
 ```
 
 The shadow runner works only while v1 is authoritative, one run at a time,
@@ -730,7 +730,7 @@ with "v1 memory changed since the shadow run": run the shadow runner again.
 
 ### Rolling back
 
-`python -m app.assistant_memory.v2.cutover rollback --by <name> --reason
+`python -m app.platform.assistant_memory.v2.cutover rollback --by <name> --reason
 "<why>"` returns curated memory to v1 only while nothing has been saved,
 edited or forgotten under v2 (v1 would lose or resurrect those memories);
 otherwise it refuses. Rollback is meant for the minutes right after a switch.
@@ -1063,8 +1063,8 @@ image once per host, then check it:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m app.agent_runtime.sandbox build
-python -m app.agent_runtime.sandbox check-egress   # exits 1 if the sandbox can reach anything but the relay
+python -m app.platform.agent_runtime.sandbox build
+python -m app.platform.agent_runtime.sandbox check-egress   # exits 1 if the sandbox can reach anything but the relay
 ```
 
 Without Docker or the image, such a run fails with the reason. To run them

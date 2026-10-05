@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 

@@ -186,10 +186,10 @@ python -m app.persistence verify</code></pre></div>
 <h3 id="2-start-the-fastapi-gateway">2. Start the FastAPI gateway</h3>
 <p>PowerShell:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
 <p>Bash, Linux, macOS, or WSL:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export PYTHONPATH=src
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
 <p>Verify <code>http://127.0.0.1:8000/api/health</code> before diagnosing feature-specific failures.</p>
 <h3 id="3-install-and-start-the-web-app">3. Install and start the web app</h3>
 <p>In another terminal:</p>
@@ -336,7 +336,7 @@ npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
 <td>Run the Playwright, API, frontend, and live-voice suites</td>
 </tr>
 </tbody></table></div>
-<p>The root <code>setup.bat</code>/<code>setup.sh</code>, <code>start_all.bat</code>/<code>start_all.sh</code> and <code>start_llama_server.sh</code> (llama.cpp on port 8180) remain at the root because they are the primary launch entrypoints. <code>start_all.sh</code> wraps <code>python -m app.launcher start</code>; container images and Compose profiles live in <code>deploy/docker/</code> and <code>docker-compose.yml</code> (see <a href="docs/OPERATIONS.html#containers">OPERATIONS.html</a>).</p>
+<p>The root <code>setup.bat</code>/<code>setup.sh</code>, <code>start_all.bat</code>/<code>start_all.sh</code> and <code>start_llama_server.sh</code> (llama.cpp on port 8180) remain at the root because they are the primary launch entrypoints. <code>start_all.sh</code> wraps <code>python -m app.composition.launcher start</code>; container images and Compose profiles live in <code>deploy/docker/</code> and <code>docker-compose.yml</code> (see <a href="docs/OPERATIONS.html#containers">OPERATIONS.html</a>).</p>
 <h2 id="documentation">Documentation</h2>
 <p>The repository keeps Markdown as editable source and generates browser-facing HTML counterparts:</p>
 <ul>
@@ -364,13 +364,13 @@ npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
 </ul>
 <h2 id="project-map">Project map</h2>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">web/           React workspaces, routing, API clients, state, events, tests
-src/app/gateway/        FastAPI browser/API boundary
+src/app/composition/gateway/        FastAPI browser/API boundary
 src/app/providers/      Provider and model integration layer
 src/app/jobs/           Shared job/run contracts and stores
 src/app/assets/         Shared asset/artifact handling
-src/app/rpg/            Deterministic RPG domain and APIs
-src/app/trading/        Market data, research, replay, alerts, strategies, paper state
-src/app/agent_runtime/  Planning, grants, execution, evidence, review, recovery
+src/app/apps/rpg/            Deterministic RPG domain and APIs
+src/app/apps/trading/        Market data, research, replay, alerts, strategies, paper state
+src/app/platform/agent_runtime/  Planning, grants, execution, evidence, review, recovery
 src/app/persistence/    PostgreSQL runtime, migrations, repositories, blob storage
 scripts/requirements/   Optional RPG/image manifests and setup/download helpers
 docs/                   Human-maintained guides and generated HTML references

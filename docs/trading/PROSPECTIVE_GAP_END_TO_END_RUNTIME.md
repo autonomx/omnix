@@ -287,7 +287,7 @@ explicit import that records its exact content, SHA-256, source and importer;
 once imported it is immutable, and a different handoff for the same session is
 refused:
 
-- `python -m app.trading.prospective_gap_inputs import-handoff --file PATH`, or
+- `python -m app.apps.trading.prospective_gap_inputs import-handoff --file PATH`, or
   `--github YYYY-MM-DD` to read it with the authenticated `gh api` client;
 - the scheduled task `trading.prospective_gap_handoff_import`, which imports
   today's handoff, and the published climatology state when a newer one is
@@ -357,6 +357,6 @@ installed GitHub CLI.
 
 ## Machine-readable climatology
 
-`omnix_trading_climatology_states` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`, one row per through-session; a freeze uses the latest state covering only earlier sessions. Migration 0124 seeds it with the state that was committed as `resources/trading/prospective_gap_state/climatology.json` (through 2026-09-23). The research process publishes new states as `resources/trading/prospective_gap_state/climatology.json` on GitHub and the scheduled import brings them in before the next premarket freeze; `python -m app.trading.prospective_gap_inputs import-climatology --file PATH` imports one by hand.
+`omnix_trading_climatology_states` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`, one row per through-session; a freeze uses the latest state covering only earlier sessions. Migration 0124 seeds it with the state that was committed as `resources/trading/prospective_gap_state/climatology.json` (through 2026-09-23). The research process publishes new states as `resources/trading/prospective_gap_state/climatology.json` on GitHub and the scheduled import brings them in before the next premarket freeze; `python -m app.apps.trading.prospective_gap_inputs import-climatology --file PATH` imports one by hand.
 
 Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries `baseline_through_session` plus the counts. Authority is chosen by through-session recency: a newer handoff checkpoint may supersede a stale local checkout, a newer local state supersedes an older handoff, and equal-date count conflicts fail closed.

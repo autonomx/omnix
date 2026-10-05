@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 
-from app.agent_runtime import preview_api
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime import preview_api
+from app.platform.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
 
 
 class _Service:

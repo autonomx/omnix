@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.map_observer_runtime import (
+from app.apps.rpg.map_observer_runtime import (
     ObserverMapKnowledge,
     ObserverMapObservedEvent,
 )

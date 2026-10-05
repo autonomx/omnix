@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.map_grid_contracts import GridMapDefinition
+from app.apps.rpg.map_grid_contracts import GridMapDefinition
 
 from .contracts import (
     CampaignWorldBinding,

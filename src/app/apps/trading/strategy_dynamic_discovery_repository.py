@@ -18,7 +18,7 @@ from .strategy_dynamic_discovery import (
     ShadowQualificationEvidence,
 )
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 EVENT_DISCOVERY = "interday_discovery_event"
 EVENT_CANDIDATE = "interday_dynamic_candidate"

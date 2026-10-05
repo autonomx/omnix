@@ -159,8 +159,8 @@ event types.
 
 ## Source of truth
 
-- Agent model gateway: `src/app/agent_runtime/model_gateway.py`
+- Agent model gateway: `src/app/platform/agent_runtime/model_gateway.py`
 - Shared upstream provider: `src/app/providers/openai_compatible_provider.py`
-- Realtime compatibility metadata: `src/app/live_speech/compat.py`
+- Realtime compatibility metadata: `src/app/platform/live_speech/compat.py`
 - Provider architecture and authority rules: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Local service setup: [SETUP.md](SETUP.md)

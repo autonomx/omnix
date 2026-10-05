@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.render_service import (
+from app.apps.audiobook.render_service import (
     RenderFailure,
     _pause_if_requested,
     _generation_progress_callback,
@@ -24,9 +24,9 @@ from app.audiobook.render_service import (
 )
 from app.assets.voice_clone_identity import voice_reference_revision
 from app.persistence.blob_store import LocalBlobStore
-from app.audiobook.render_planner import RenderUnit
-from app.audiobook.speech_plan import build_speech_plan
-from app.audiobook.hashing import bytes_hash
+from app.apps.audiobook.render_planner import RenderUnit
+from app.apps.audiobook.speech_plan import build_speech_plan
+from app.apps.audiobook.hashing import bytes_hash
 from app.persistence.tenant import local_tenant_context
 
 
@@ -89,7 +89,7 @@ def test_generation_progress_persists_fractional_unit_progress(monkeypatch) -> N
     def work(_database):
         yield SimpleNamespace(jobs=jobs, commit=lambda: None)
 
-    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
     callback = _generation_progress_callback(
         None, local_tenant_context(), job_id="job", worker_id="worker",
         lease_token="lease", completed=0, total=1,
@@ -141,7 +141,7 @@ def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) 
     def work(_database):
         yield SimpleNamespace(connection=_Connection(True), jobs=Jobs(), rollback=lambda: None)
 
-    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
     assert run_render_once(None, None, local_tenant_context(), worker_id="offline") is False
 
 
@@ -154,8 +154,8 @@ def test_offline_does_not_claim_when_another_tts_process_is_realtime_busy(monkey
     def work(_database):
         yield SimpleNamespace(connection=_Connection(False), jobs=Jobs(), rollback=lambda: None)
 
-    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
-    monkeypatch.setattr("app.audiobook.render_service.other_process_priority_pending", lambda: True)
+    monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.render_service.other_process_priority_pending", lambda: True)
     assert run_render_once(None, None, local_tenant_context(), worker_id="offline") is False
 
 
@@ -241,10 +241,10 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
     def work(database):
         yield SimpleNamespace(jobs=jobs, connection=connection, commit=lambda: None, rollback=lambda: None)
 
-    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
-    monkeypatch.setattr("app.audiobook.render_service.assert_model_revision", lambda *args: None)
-    monkeypatch.setattr("app.audiobook.render_service.load_chapter_units", lambda *args, **kwargs: [first, second])
-    monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: [
+    monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision", lambda *args: None)
+    monkeypatch.setattr("app.apps.audiobook.render_service.load_chapter_units", lambda *args, **kwargs: [first, second])
+    monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: [
         SimpleNamespace(id=first.voice_profile_id, storage_path=str(reference), metadata={"voice_id": "voice"})])
     calls = []
 
@@ -252,10 +252,10 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
         calls.extend(requests)
         return [{"success": True, "audio": base64.b64encode(_wav()).decode()}]
 
-    monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda *args: SimpleNamespace(generate_audio_batch=generate))
+    monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda *args: SimpleNamespace(generate_audio_batch=generate))
     cached_key = first.identity(provider_id="test", model_id="model", model_revision="revision",
                                 generation_parameters={}, seed=None).key()
-    monkeypatch.setattr("app.audiobook.render_service.find_valid_render", lambda *args: (
+    monkeypatch.setattr("app.apps.audiobook.render_service.find_valid_render", lambda *args: (
         {"id": "cached-first", "audio_asset_id": "audio-first"} if args[-1] == cached_key else None))
     saved = []
 
@@ -264,9 +264,9 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
         saved.append(kwargs["unit"].segment_index)
         return {"render_id": "generated-second", "audio_asset_id": "audio-second"}
 
-    monkeypatch.setattr("app.audiobook.render_service._save_render", save)
+    monkeypatch.setattr("app.apps.audiobook.render_service._save_render", save)
     completed = []
-    monkeypatch.setattr("app.audiobook.render_service._complete_span_preview", lambda *args, **kwargs: completed.extend(kwargs["refs"]))
+    monkeypatch.setattr("app.apps.audiobook.render_service._complete_span_preview", lambda *args, **kwargs: completed.extend(kwargs["refs"]))
     assert run_preview_once(None, None, local_tenant_context(), worker_id="worker")
     assert [request["text"] for request in calls] == ["Second segment."]
     assert saved == [1]
@@ -325,7 +325,7 @@ def test_combined_preview_publication_honors_cancellation(tmp_path, monkeypatch,
             ), commit=lambda: None, rollback=lambda: None,
         )
 
-    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.render_service.unit_of_work", work)
     _complete_span_preview(None, blobs, local_tenant_context(), job_id="preview",
                            worker_id="worker", lease_token="lease", refs=refs)
     if canceled:

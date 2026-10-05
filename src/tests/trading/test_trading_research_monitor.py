@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from app.trading.strategy_research_monitor import strategy_research_monitor_enabled
+from app.apps.trading.strategy_research_monitor import strategy_research_monitor_enabled
 
 
 def test_research_monitor_is_disabled_in_legacy_test_mode(monkeypatch):

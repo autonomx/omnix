@@ -4,10 +4,10 @@ import ast
 
 from pathlib import Path
 
-from app.trading.models import AdjustmentMode, AssetClass, FeedType, InstrumentType, UsageScope
+from app.apps.trading.models import AdjustmentMode, AssetClass, FeedType, InstrumentType, UsageScope
 
 
-TRADING_ROUTES_PATH = Path("src/app/trading/route_registration.py")
+TRADING_ROUTES_PATH = Path("src/app/apps/trading/route_registration.py")
 
 
 def test_string_enums_preserve_wire_values() -> None:
@@ -24,7 +24,7 @@ def test_string_enums_preserve_wire_values() -> None:
 
 
 def test_trading_uses_python311_stdlib_strenum() -> None:
-    source = Path("src/app/trading/models.py").read_text(encoding="utf-8")
+    source = Path("src/app/apps/trading/models.py").read_text(encoding="utf-8")
     assert "from enum import StrEnum" in source
     assert "except ImportError" not in source
 
@@ -33,11 +33,11 @@ def test_trading_route_module_does_not_eagerly_import_trading_stack() -> None:
     tree = ast.parse(TRADING_ROUTES_PATH.read_text(encoding="utf-8"))
     eager_imports = []
     for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("app.trading"):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("app.apps.trading"):
             eager_imports.append(node.module)
         elif isinstance(node, ast.Import):
             eager_imports.extend(
-                alias.name for alias in node.names if alias.name.startswith("app.trading")
+                alias.name for alias in node.names if alias.name.startswith("app.apps.trading")
             )
 
     assert eager_imports == [], (

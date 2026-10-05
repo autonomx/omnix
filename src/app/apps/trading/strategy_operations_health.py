@@ -12,7 +12,7 @@ from .paper_protection import PaperPositionProtection
 from .paper_risk import PaperRiskPolicy
 from .strategy_repository import StrategyProtection, TradingStrategyConfigDocument
 from .strategy_risk import paper_account_equity
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 HealthState = Literal["healthy", "degraded", "blocked", "unknown"]

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.chat.assist.modes import ModeChatResponse
-from app.assistant_tools.hermes_payloads import HermesAssistantToolExecutePayload
-from app.assistant_tools.models import (
+from app.platform.chat.assist.modes import ModeChatResponse
+from app.platform.assistant_tools.hermes_payloads import HermesAssistantToolExecutePayload
+from app.platform.assistant_tools.models import (
     AssistantToolRequest,
     AssistantToolResult,
     AssistantToolReviewDecision,
 )
-from app.chat.character_store import _CharacterSessionMixin
-from app.chat.live_agent_store import LiveAgentPlanner
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.chat.character_store import _CharacterSessionMixin
+from app.platform.chat.live_agent_store import LiveAgentPlanner
+from app.platform.chat.models import ChatMessage, ChatSession
 
 
 class StaticPlanner:
@@ -150,11 +150,11 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
-    from app.chat.assistant_turns import AssistantTurnCoordinator
+    from app.platform.chat.assistant_turns import AssistantTurnCoordinator
 
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
     monkeypatch.setattr(
-        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        "app.platform.chat.live_agent_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
     first = _message("request", "Turn off the Kasa desk plug")
@@ -191,7 +191,7 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(
         captured.append((request, grant.approved))
         return _execution_payload(request)
 
-    monkeypatch.setattr("app.chat.live_agent_store.execute_capability", execute)
+    monkeypatch.setattr("app.platform.chat.live_agent_store.execute_capability", execute)
     execution_events = list(
         store.stream_provider_reply_chunks(
             session,
@@ -245,7 +245,7 @@ def test_kasa_write_proposal_can_be_rejected_without_execution(monkeypatch) -> N
     session.messages = [proposal, reject]
     store = KasaFlowStore(session)
     monkeypatch.setattr(
-        "app.chat.live_agent_store.execute_capability",
+        "app.platform.chat.live_agent_store.execute_capability",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not execute")),
     )
 

@@ -3,41 +3,41 @@ from __future__ import annotations
 from typing import (
     Any as Any, Dict as Dict,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _action_requests_combat_defend as _action_requests_combat_defend, _action_requests_combat_flee as _action_requests_combat_flee,
     _action_requests_combat_use_item as _action_requests_combat_use_item, _action_requests_hostile_combat as _action_requests_hostile_combat,
     _extract_active_combat_state_for_turn as _extract_active_combat_state_for_turn, _lookup_actor_by_id as _lookup_actor_by_id,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _active_combat_state_from_runtime_or_simulation as _active_combat_state_from_runtime_or_simulation, _get_combat_state as _get_combat_state,
     _set_combat_state as _set_combat_state,
 )
-from app.rpg.session.combat_action_runtime import (
+from app.apps.rpg.session.combat_action_runtime import (
     _apply_active_non_attack_combat_action as _apply_active_non_attack_combat_action, _apply_attack_combat_action as _apply_attack_combat_action,
 )
-from app.rpg.session.action_execution import (
+from app.apps.rpg.session.action_execution import (
     _apply_authoritative_action as _apply_authoritative_action,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     _combat_utility_kind_from_semantic_or_text as _combat_utility_kind_from_semantic_or_text, _extract_semantic_action_record_for_turn as _extract_semantic_action_record_for_turn,
     _find_active_combat_state_deep as _find_active_combat_state_deep,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
-from app.rpg.session.visible_response_core import (
+from app.apps.rpg.session.visible_response_core import (
     _has_pending_conversation_response as _has_pending_conversation_response,
 )
-from app.rpg.session.special_combat_turns import (
+from app.apps.rpg.session.special_combat_turns import (
     _maybe_gate_non_player_combat_turn as _maybe_gate_non_player_combat_turn, _maybe_resolve_companion_combat_command_turn as _maybe_resolve_companion_combat_command_turn,
     _maybe_resolve_reposition_turn as _maybe_resolve_reposition_turn, _maybe_resolve_revive_turn as _maybe_resolve_revive_turn,
     _maybe_resolve_stabilize_turn as _maybe_resolve_stabilize_turn, _resolve_post_authoritative_combat_utility_turn as _resolve_post_authoritative_combat_utility_turn,
 )
-from app.rpg.session.combat_turn_actions import (
+from app.apps.rpg.session.combat_turn_actions import (
     _repair_generated_encounter_player_turn as _repair_generated_encounter_player_turn,
 )
 import copy
-from app.rpg.session.service_runtime import (
+from app.apps.rpg.session.service_runtime import (
     mirror_service_result as mirror_service_result,
 )
 

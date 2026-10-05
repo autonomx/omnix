@@ -4,8 +4,8 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from app.agent_runtime import quality_recovery
-from app.agent_runtime.repository import AgentLeaseConflict
+from app.platform.agent_runtime import quality_recovery
+from app.platform.agent_runtime.repository import AgentLeaseConflict
 
 
 def test_quality_lease_heartbeat_is_independent_of_service_runtime_lock(monkeypatch) -> None:

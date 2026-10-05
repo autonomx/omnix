@@ -4,7 +4,7 @@
 
 Production binds one immutable [RuntimeConfig](../src/app/runtime/config.py), derives [process capabilities](../src/app/runtime/capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
 
-PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
+PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/composition/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
 
 Production routing belongs to [ingress](architecture/OMNIX_PRODUCTION_INGRESS.md), using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See [runtime invariants](architecture/OMNIX_RUNTIME_INVARIANTS.md), [architecture gates](testing/ARCHITECTURE_GATES.md), [compatibility retirement](architecture/OMNIX_COMPATIBILITY_RETIREMENT.md) and ADRs 0010–0016 for the enforceable contracts. [ADR-0016](architecture/ADR-0016-platform-tiers.md) sets the platform tiers (kernel, shared services, platform capabilities, apps) and module boundaries; the [platform architecture roadmap](PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md) sequences the work.
 
@@ -153,10 +153,10 @@ When backend API contracts change, generated API artifacts must be refreshed in 
 
 ## FastAPI gateway
 
-The browser-facing gateway lives under `src/app/gateway`. The development entry point is:
+The browser-facing gateway lives under `src/app/composition/gateway`. The development entry point is:
 
 ```bash
-PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
 The gateway currently owns or fronts:
@@ -331,7 +331,7 @@ The image service is intentionally able to start without preloading heavyweight 
 
 ## Generalized agent runtime
 
-`src/app/agent_runtime` implements a generalized execution layer that can be used by multiple models/runtimes. Its purpose is to add authority, isolation, evidence, durability, and review around model-driven work.
+`src/app/platform/agent_runtime` implements a generalized execution layer that can be used by multiple models/runtimes. Its purpose is to add authority, isolation, evidence, durability, and review around model-driven work.
 
 ### Logical flow
 
@@ -394,7 +394,7 @@ The model is therefore responsible for reasoning and tool use, while Omnix is re
 
 ## Capability and tool governance
 
-The canonical capability registry lives in `src/app/agent_runtime/capabilities.py`. `src/app/assistant_tools/registry.py` projects assistant-visible tools from that registry.
+The canonical capability registry lives in `src/app/platform/agent_runtime/capabilities.py`. `src/app/platform/assistant_tools/registry.py` projects assistant-visible tools from that registry.
 
 Each capability includes fields such as:
 
@@ -417,7 +417,7 @@ Execution zones separate worker-local operations from broker-mediated network/in
 
 ## Assistant integrations
 
-Assistant integration adapters live under `src/app/assistant_tools`. Current code includes governed adapters/support for browser automation, Gmail, Calendar, Contacts, GitHub, Kasa/local home control, trading data, Hermes bridging, connections, credentials, and related capability/status surfaces.
+Assistant integration adapters live under `src/app/platform/assistant_tools`. Current code includes governed adapters/support for browser automation, Gmail, Calendar, Contacts, GitHub, Kasa/local home control, trading data, Hermes bridging, connections, credentials, and related capability/status surfaces.
 
 External integrations should enter through this policy layer rather than exposing raw credentials or arbitrary host access to the model.
 

@@ -610,31 +610,31 @@ export default function (pi: ExtensionAPI) {
 }
 '''
 
-write("src/app/agent_runtime/pi_engineering_extension.ts", ENGINEERING_EXTENSION)
+write("src/app/platform/agent_runtime/pi_engineering_extension.ts", ENGINEERING_EXTENSION)
 
 # 1) Pi hardening + explicit engineering extension + controlled operator settings.
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     'def pi_broker_extension_path() -> Path:\n    return Path(__file__).with_name("pi_broker_extension.ts").resolve()\n\n\ndef pi_rpc_argv',
     'def pi_broker_extension_path() -> Path:\n    return Path(__file__).with_name("pi_broker_extension.ts").resolve()\n\n\ndef pi_engineering_extension_path() -> Path:\n    return Path(__file__).with_name("pi_engineering_extension.ts").resolve()\n\n\ndef pi_rpc_argv',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     '            "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",\n            "OMNIX_AGENT_ALLOWED_PATHS": json.dumps(',
     '            "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",\n            "OMNIX_AGENT_LSP_SERVERS": source.get("OMNIX_AGENT_LSP_SERVERS", ""),\n            "OMNIX_AGENT_AST_GREP_COMMAND": source.get("OMNIX_AGENT_AST_GREP_COMMAND", "sg"),\n            "OMNIX_AGENT_ALLOWED_PATHS": json.dumps(',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     '        "--no-context-files",\n        "--extension",\n        str(pi_guard_extension_path()),',
     '        "--no-context-files",\n        "--no-extensions",\n        "--extension",\n        str(pi_guard_extension_path()),',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     '        "--extension",\n        str(pi_broker_extension_path()),\n    ]',
     '        "--extension",\n        str(pi_broker_extension_path()),\n        "--extension",\n        str(pi_engineering_extension_path()),\n    ]',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     '    if event_type in {"error", "agent_error"}:',
     '''    if event_type == "extension_ui_request":
         method = str(payload.get("method") or "")
@@ -653,7 +653,7 @@ replace(
     if event_type in {"error", "agent_error"}:''',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime_core.py",
+    "src/app/platform/agent_runtime/pi_runtime_core.py",
     '            elif command.command_type in {"approve", "reject"}:',
     '''            elif command.command_type == "clarify":
                 request_id = str(command.payload.get("request_id") or "").strip()
@@ -684,36 +684,36 @@ replace(
 )
 
 replace(
-    "src/app/agent_runtime/pi_runtime.py",
+    "src/app/platform/agent_runtime/pi_runtime.py",
     '    pi_broker_extension_path,\n    pi_guard_extension_path,',
     '    pi_broker_extension_path,\n    pi_engineering_extension_path,\n    pi_guard_extension_path,',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime.py",
+    "src/app/platform/agent_runtime/pi_runtime.py",
     '    "pi_broker_extension_path",\n    "pi_guard_extension_path",',
     '    "pi_broker_extension_path",\n    "pi_engineering_extension_path",\n    "pi_guard_extension_path",',
 )
 
 # Contracts for durable clarification and code diagnostics.
 replace(
-    "src/app/agent_runtime/contracts.py",
+    "src/app/platform/agent_runtime/contracts.py",
     'AgentCommandType = Literal["steer", "pause", "resume", "cancel", "approve", "reject"]',
     'AgentCommandType = Literal["steer", "pause", "resume", "cancel", "approve", "reject", "clarify"]',
 )
 replace(
-    "src/app/agent_runtime/contracts.py",
+    "src/app/platform/agent_runtime/contracts.py",
     '    "quality.repair_requested",\n]',
     '    "quality.repair_requested",\n    "clarification.requested",\n    "clarification.resolved",\n]',
 )
 replace(
-    "src/app/agent_runtime/contracts.py",
+    "src/app/platform/agent_runtime/contracts.py",
     'ValidationKind = Literal["test", "typecheck", "lint", "build", "diff_review", "browser", "custom"]',
     'ValidationKind = Literal["test", "typecheck", "lint", "build", "diff_review", "browser", "diagnostics", "custom"]',
 )
 
 # Canonical local capabilities.
 replace(
-    "src/app/agent_runtime/capabilities.py",
+    "src/app/platform/agent_runtime/capabilities.py",
     '    _cap("workspace.git_diff", "Read local git diff", "Read the current isolated worktree diff.", zone="worker", effect="read", category="development"),\n',
     '''    _cap("workspace.git_diff", "Read local git diff", "Read the current isolated worktree diff.", zone="worker", effect="read", category="development"),
     _cap("workspace.lsp", "Read language-server intelligence", "Read workspace-scoped definitions, references, symbols, hover and diagnostics through an operator-configured LSP server.", zone="worker", effect="read", category="development"),
@@ -726,17 +726,17 @@ replace(
 
 # Coding/reviewer ceilings.
 replace(
-    "src/app/agent_runtime/profiles.py",
+    "src/app/platform/agent_runtime/profiles.py",
     '_READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff")\n_WRITE = ("workspace.edit", "workspace.write", "workspace.command", "workspace.test")',
     '_READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff")\n_INTELLIGENCE = ("workspace.lsp", "workspace.ast_search", "agent.context")\n_WRITE = ("workspace.edit", "workspace.write", "workspace.anchored_edit", "workspace.command", "workspace.test")\n_INTERACTION = ("agent.clarify",)',
 )
 replace(
-    "src/app/agent_runtime/profiles.py",
+    "src/app/platform/agent_runtime/profiles.py",
     '        capabilities=(*_READ, *_WRITE),',
     '        capabilities=(*_READ, *_INTELLIGENCE, *_WRITE, *_INTERACTION),',
 )
 replace(
-    "src/app/agent_runtime/profiles.py",
+    "src/app/platform/agent_runtime/profiles.py",
     '        capabilities=_READ,',
     '        capabilities=(*_READ, *_INTELLIGENCE),',
 )
@@ -744,13 +744,13 @@ replace(
 # Minimum authority compiler: intelligence/context/clarification are available to coding runs;
 # stale-safe mutation only appears on mutating tasks.
 replace(
-    "src/app/agent_runtime/evidence.py",
+    "src/app/platform/agent_runtime/evidence.py",
     '                "workspace.git_diff",\n            }',
     '                "workspace.git_diff",\n                "workspace.lsp",\n                "workspace.ast_search",\n                "agent.context",\n                "agent.clarify",\n            }',
     count=1,
 )
 replace(
-    "src/app/agent_runtime/evidence.py",
+    "src/app/platform/agent_runtime/evidence.py",
     '                    "workspace.write",\n                    "workspace.command",',
     '                    "workspace.write",\n                    "workspace.anchored_edit",\n                    "workspace.command",',
     count=1,
@@ -758,12 +758,12 @@ replace(
 
 # Guard custom path/mutation tools just like builtin workspace tools.
 replace(
-    "src/app/agent_runtime/pi_guard_extension.ts",
+    "src/app/platform/agent_runtime/pi_guard_extension.ts",
     '    if (["read", "edit", "write", "grep", "find", "ls"].includes(event.toolName)) {',
     '    if (["read", "edit", "write", "grep", "find", "ls", "lsp_diagnostics", "lsp_hover", "lsp_definition", "lsp_references", "lsp_document_symbols", "ast_grep", "engineering_diagnostics", "anchored_read", "anchored_edit"].includes(event.toolName)) {',
 )
 replace(
-    "src/app/agent_runtime/pi_guard_extension.ts",
+    "src/app/platform/agent_runtime/pi_guard_extension.ts",
     '        (event.toolName === "edit" || event.toolName === "write")\n        && approvalPolicy === "always_ask"\n        && localCapabilities.has(`workspace.${event.toolName}`)',
     '        (event.toolName === "edit" || event.toolName === "write" || event.toolName === "anchored_edit")\n        && approvalPolicy === "always_ask"\n        && localCapabilities.has(event.toolName === "anchored_edit" ? "workspace.anchored_edit" : `workspace.${event.toolName}`)',
 )
@@ -772,12 +772,12 @@ replace(
 # diagnostics gate; lower policies record it as optional evidence so missing local LSP/AST
 # dependencies cannot strand ordinary runs.
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '    mutating: bool,\n) -> tuple[list[TaskRequirement], list[TaskConstraint], list[ValidationSpec]]:',
     '    mutating: bool,\n    quality_policy: str = "standard",\n) -> tuple[list[TaskRequirement], list[TaskConstraint], list[ValidationSpec]]:',
 )
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '                ValidationSpec(\n                    id="final-state-tests",\n                    kind="test",\n                    description="Run the smallest relevant regression tests against the final workspace state.",\n                    covers=[item.id for item in requirements if item.required],\n                    required=True,\n                ),\n            ]\n        )',
     '''                ValidationSpec(
                     id="final-state-tests",
@@ -798,12 +798,12 @@ replace(
         )''',
 )
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '        "browser": "browser-validation",\n    }.get(kind, f"observed-{kind}")',
     '        "browser": "browser-validation",\n        "diagnostics": "final-code-diagnostics",\n    }.get(kind, f"observed-{kind}")',
 )
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '    if capability_id in _BROWSER_ASSERTIONS:\n        kind = "browser"\n        command = f"omnix_capability {capability_id}"\n    else:\n        kind = validation_kind_for_command(command)',
     '''    tool_name = str(event.payload.get("tool") or "").strip()
     if capability_id in _BROWSER_ASSERTIONS:
@@ -816,7 +816,7 @@ replace(
         kind = validation_kind_for_command(command)''',
 )
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '        if kind == "browser":\n            broker = details if "executed" in details else details.get("result")',
     '''        if kind == "diagnostics":
             success = success and details.get("ok") is True and int(details.get("finding_count") or 0) == 0
@@ -824,7 +824,7 @@ replace(
             broker = details if "executed" in details else details.get("result")''',
 )
 replace(
-    "src/app/agent_runtime/coding_quality.py",
+    "src/app/platform/agent_runtime/coding_quality.py",
     '        "Do not substitute an unrelated passing test. For browser validation, interact with the governed "',
     '        "Do not substitute an unrelated passing test. For diagnostics validation, run engineering_diagnostics "\n        "on the changed source files after the final edit; LSP/AST evidence from an older WorkspaceState is stale. "\n        "For browser validation, interact with the governed "',
 )
@@ -835,37 +835,37 @@ for old, new in [
     ('profile=current.spec.profile,\n                    mutating="diff" in revision.expected_artifacts,', 'profile=current.spec.profile,\n                    mutating="diff" in revision.expected_artifacts,\n                    quality_policy=current.spec.quality_policy,'),
     ('profile=current.spec.profile,\n            mutating="diff" in revision.expected_artifacts,', 'profile=current.spec.profile,\n            mutating="diff" in revision.expected_artifacts,\n            quality_policy=current.spec.quality_policy,'),
 ]:
-    replace("src/app/agent_runtime/service.py", old, new)
+    replace("src/app/platform/agent_runtime/service.py", old, new)
 
 replace(
-    "src/app/agent_runtime/service.py",
+    "src/app/platform/agent_runtime/service.py",
     '            if stage_now == "inspect" and tool in {"read", "ls", "grep"}:',
     '            if stage_now == "inspect" and tool in {"read", "ls", "grep", "lsp_diagnostics", "lsp_hover", "lsp_definition", "lsp_references", "lsp_document_symbols", "lsp_workspace_symbols", "ast_grep", "anchored_read"}:',
 )
 replace(
-    "src/app/agent_runtime/service.py",
+    "src/app/platform/agent_runtime/service.py",
     '            if stage_now in {"inspect", "planning"} and tool in {"edit", "write"}:',
     '            if stage_now in {"inspect", "planning"} and tool in {"edit", "write", "anchored_edit"}:',
 )
 replace(
-    "src/app/agent_runtime/service.py",
+    "src/app/platform/agent_runtime/service.py",
     '            mutating_or_validation = tool in {"edit", "write", "bash", "powershell"} or validation_kind_for_command(command) is not None',
     '            mutating_or_validation = tool in {"edit", "write", "anchored_edit", "bash", "powershell", "engineering_diagnostics"} or validation_kind_for_command(command) is not None',
 )
 
 # Prompt the implementer to use the new intelligence/precision/interaction/context tools.
 replace(
-    "src/app/agent_runtime/pi_runtime.py",
+    "src/app/platform/agent_runtime/pi_runtime.py",
     '3. PLAN — form a concise implementation plan from repository truth. Prefer the smallest coherent architectural change over patchwork fixes.\n4. IMPLEMENT — make the change and add/update regression tests where behavior changes.',
     '3. PLAN — form a concise implementation plan from repository truth. Prefer the smallest coherent architectural change over patchwork fixes. Use LSP references/symbols and ast_grep where they improve call-site/impact certainty.\n4. IMPLEMENT — make the change and add/update regression tests where behavior changes. Prefer anchored_read + anchored_edit for nontrivial existing-file edits so stale context is rejected rather than fuzzy-applied.',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime.py",
+    "src/app/platform/agent_runtime/pi_runtime.py",
     '8. FINAL-STATE VALIDATION — run the smallest relevant tests/typecheck/lint/build against the FINAL code state. Validation from before a later mutation is stale and does not count.',
     '8. FINAL-STATE VALIDATION — run the smallest relevant tests/typecheck/lint/build against the FINAL code state. Run engineering_diagnostics on changed supported source files when available. Validation from before a later mutation is stale and does not count.',
 )
 replace(
-    "src/app/agent_runtime/pi_runtime.py",
+    "src/app/platform/agent_runtime/pi_runtime.py",
     '10. REQUEST COMPLETION — Pi settling is only a completion request. Omnix will independently validate/review the exact final state and is the only authority that can mark the run completed.',
     '10. REQUEST COMPLETION — Pi settling is only a completion request. Omnix will independently validate/review the exact final state and is the only authority that can mark the run completed. Use ask_user_question only for a material ambiguity repository truth cannot resolve; on long runs use context_info/compact_context before context pressure loses active engineering state.',
 )
@@ -996,12 +996,12 @@ write(
 from pathlib import Path
 import threading
 
-from app.agent_runtime.coding_quality import (
+from app.platform.agent_runtime.coding_quality import (
     compile_task_engineering_contract,
     missing_final_validations,
     validation_result_from_tool_event,
 )
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunCommand,
     AgentRunSnapshot,
@@ -1011,10 +1011,10 @@ from app.agent_runtime.contracts import (
     ValidationResult,
     WorkspaceSpec,
 )
-from app.agent_runtime.evidence import compile_task_authority
-from app.agent_runtime.contracts import EvidenceDecision
-from app.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event, pi_rpc_argv
-from app.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.evidence import compile_task_authority
+from app.platform.agent_runtime.contracts import EvidenceDecision
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event, pi_rpc_argv
+from app.platform.agent_runtime.profiles import get_agent_profile
 
 
 def _spec(tmp_path: Path, capabilities: list[str]) -> AgentRunSpec:
@@ -1190,7 +1190,7 @@ def test_diagnostics_findings_fail_and_stale_diagnostics_do_not_satisfy_final_st
 
 
 def test_engineering_extension_enforces_hash_and_scope_in_source() -> None:
-    source = Path("src/app/agent_runtime/pi_engineering_extension.ts").read_text(encoding="utf-8")
+    source = Path("src/app/platform/agent_runtime/pi_engineering_extension.ts").read_text(encoding="utf-8")
     assert "Stale anchored edit rejected: file SHA-256 changed" in source
     assert "Resolved path escapes the issued Omnix workspace" in source
     assert "--pattern" in source and "--json=stream" in source

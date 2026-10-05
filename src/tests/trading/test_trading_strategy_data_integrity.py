@@ -5,18 +5,18 @@ from decimal import Decimal
 import hashlib
 import json
 
-from app.trading.gapper_dataset import (
+from app.apps.trading.gapper_dataset import (
     GapperCandidate,
     freeze_gapper_universe,
     gapper_universe_fingerprint,
 )
-from app.trading.market_evidence import SourceMemberDisposition
-from app.trading.models import MarketBar
-from app.trading.strategy_data_integrity import (
+from app.apps.trading.market_evidence import SourceMemberDisposition
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_data_integrity import (
     assess_universe_integrity,
     finviz_atomic_source_locator,
 )
-from app.trading.strategy_monitor import (
+from app.apps.trading.strategy_monitor import (
     _current_session_1m_integrity,
     _finalized_bars_for_session,
 )

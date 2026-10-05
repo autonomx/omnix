@@ -7,7 +7,7 @@ from typing import Any
 from starlette.responses import StreamingResponse
 
 from app.config.env import env_str
-from app.chat.contracts import eager_async_sse_stream
+from app.platform.chat.contracts import eager_async_sse_stream
 from app.observability.tts_stream_diagnostics import stream_log
 
 _DEFAULT_PREAMBLE_BYTES = 2_048

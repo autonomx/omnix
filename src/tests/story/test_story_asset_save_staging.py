@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.assets.models import AssetRecord
-from app.story.asset_save import SaveStoryAssetRequest, save_story_asset
+from app.apps.story.asset_save import SaveStoryAssetRequest, save_story_asset
 
 
 class _BlobBackedStore:

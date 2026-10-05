@@ -59,7 +59,7 @@ jobs:
         run: |
           python -m venv .venv-gateway-lock-check
           .venv-gateway-lock-check/bin/python -m pip install --require-hashes -r requirements/gateway.lock.txt
-          PYTHONPATH=src .venv-gateway-lock-check/bin/python -c "import app.production"
+          PYTHONPATH=src .venv-gateway-lock-check/bin/python -c "import app.composition.production"
       - name: Install architecture test dependencies
         run: |
           python -m pip install --require-hashes -r requirements/dev.lock.txt

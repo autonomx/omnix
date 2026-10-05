@@ -5,41 +5,41 @@ import logging
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _DEFAULT_POST_PLAYER_QUIET_TICKS as _DEFAULT_POST_PLAYER_QUIET_TICKS, _MAX_HISTORY as _MAX_HISTORY, _MAX_PERF_TRACE_ENTRIES as _MAX_PERF_TRACE_ENTRIES,
     _build_turn_id as _build_turn_id,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _apply_grounded_scene_overlay as _apply_grounded_scene_overlay, _compact_active_interactions as _compact_active_interactions,
     _derive_grounded_scene_context as _derive_grounded_scene_context, _log_interaction_trace as _log_interaction_trace, _utc_now_iso as _utc_now_iso,
     ensure_ambient_runtime_state as ensure_ambient_runtime_state,
 )
-from app.rpg.session.combat_action_runtime import (
+from app.apps.rpg.session.combat_action_runtime import (
     _apply_last_chance_combat_utility_result as _apply_last_chance_combat_utility_result,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _build_recent_authoritative_turn_facts as _build_recent_authoritative_turn_facts, _build_recent_narration_continuity as _build_recent_narration_continuity,
 )
-from app.rpg.session.action_execution import (
+from app.apps.rpg.session.action_execution import (
     _check_opening_resolution as _check_opening_resolution, _update_known_npc_ids as _update_known_npc_ids,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _classify_player_action_context as _classify_player_action_context, _record_real_player_activity as _record_real_player_activity,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _clear_stale_last_player_action as _clear_stale_last_player_action, _runtime_continuity_grounding_enabled as _runtime_continuity_grounding_enabled,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 import time as _time
-from app.rpg.session.narration_runtime import (
+from app.apps.rpg.session.narration_runtime import (
     assemble_turn_narration_response as assemble_turn_narration_response, build_turn_narration_request as build_turn_narration_request,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     save_runtime_session as save_runtime_session,
 )
-from app.rpg.creator.world_simulation_reports import (
+from app.apps.rpg.creator.world_simulation_reports import (
     summarize_simulation_step as summarize_simulation_step,
 )
 

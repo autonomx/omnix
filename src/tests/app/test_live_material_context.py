@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.chat.live_material_context import (
+from app.platform.chat.live_material_context import (
     LiveMaterialAppendRequest,
     LiveMaterialConflictError,
     LiveMaterialStore,

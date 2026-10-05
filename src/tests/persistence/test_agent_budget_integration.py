@@ -5,10 +5,10 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.budget import AgentBudgetError, AgentBudgetManager
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
-from app.agent_runtime.repository import PostgresAgentRunRepository
-from app.agent_runtime.resource_grants import PostgresResourceGrantRepository, ResourceGrantError
+from app.platform.agent_runtime.budget import AgentBudgetError, AgentBudgetManager
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.resource_grants import PostgresResourceGrantRepository, ResourceGrantError
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -255,7 +255,7 @@ def test_token_reporting_distinguishes_missing_from_reported_zero() -> None:
 
 
 def test_priced_providers_are_metered_against_the_cost_limit(monkeypatch) -> None:
-    from app.agent_runtime import budget as budget_module
+    from app.platform.agent_runtime import budget as budget_module
     from app.settings.profile_experience import AgentProviderPrice, AgentRunSettingsProfile
 
     settings = AgentRunSettingsProfile(provider_prices={

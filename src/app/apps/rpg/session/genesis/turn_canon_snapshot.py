@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     CampaignBibleSnapshot,
     EvidenceRecord,
     campaign_bible_evidence,

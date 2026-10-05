@@ -9,7 +9,7 @@ actions backed by inventory/service availability.
 
 from typing import Any, Dict, List, Tuple
 
-from app.rpg.economy.currency import (
+from app.apps.rpg.economy.currency import (
     can_afford,
     format_currency,
     get_player_currency,
@@ -17,14 +17,14 @@ from app.rpg.economy.currency import (
     set_player_currency,
     subtract_currency_cost,
 )
-from app.rpg.economy.service_registry import (
+from app.apps.rpg.economy.service_registry import (
     SERVICE_KIND_DRINK,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
     SERVICE_PROVIDERS,
     get_provider_offers,
 )
-from app.rpg.world.location_registry import (
+from app.apps.rpg.world.location_registry import (
     has_explicit_location,
     location_allows_service,
     provider_present_at_location,

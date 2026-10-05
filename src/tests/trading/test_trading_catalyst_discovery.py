@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.trading.catalyst_discovery import discover_yahoo_catalyst_headlines
+from app.apps.trading.catalyst_discovery import discover_yahoo_catalyst_headlines
 
 
 class _Response:

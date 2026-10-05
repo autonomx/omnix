@@ -11,9 +11,9 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import inventory_quantity
-from app.rpg.session.item_market import build_merchant_catalog
-from app.rpg.session.item_transactions import apply_item_transaction
+from app.apps.rpg.session.inventory_items import inventory_quantity
+from app.apps.rpg.session.item_market import build_merchant_catalog
+from app.apps.rpg.session.item_transactions import apply_item_transaction
 
 MARKET_ACTION_SOURCE = "engine_item_market_session_v1"
 

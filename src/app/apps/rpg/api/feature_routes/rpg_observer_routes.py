@@ -7,8 +7,8 @@ from typing import Any, Mapping
 from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
-from app.rpg.map_observer_runtime import ObserverPerceptionPolicy
-from app.rpg.map_observer_service import (
+from app.apps.rpg.map_observer_runtime import ObserverPerceptionPolicy
+from app.apps.rpg.map_observer_service import (
     load_campaign_observer_projection,
     observe_campaign_map,
 )

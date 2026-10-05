@@ -5,8 +5,8 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
-from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
-from app.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 
 from .campaign_lore_store import _mapping, _text, current_location_identity
 

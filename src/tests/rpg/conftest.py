@@ -16,7 +16,7 @@ def register_feature_repositories_for_rpg_tests():
 
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
-    from app.runtime_composition import shared_service_repository_specs
+    from app.composition.runtime_composition import shared_service_repository_specs
 
     install_repository_specs(shared_service_repository_specs())
     for feature_id in enabled_feature_ids(RuntimeConfig()):
@@ -32,7 +32,7 @@ def in_memory_narrative_responses(request, monkeypatch):
     The production default follows the runtime (PostgreSQL), which needs a
     campaign row for every response; the engine tests do not create campaigns.
     """
-    from app.rpg.narrative_repository import _cached_repository
+    from app.apps.rpg.narrative_repository import _cached_repository
 
     if request.node.get_closest_marker("postgres") is None:
         monkeypatch.setenv("OMNIX_RPG_NARRATIVE_REPOSITORY", "in_memory")

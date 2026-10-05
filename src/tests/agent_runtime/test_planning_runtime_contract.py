@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.pi_runtime import PiAgentRuntime, pi_rpc_argv
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, pi_rpc_argv
 
 
 def test_mutating_coding_runtime_exposes_internal_planning_tool(tmp_path: Path) -> None:

@@ -56,7 +56,7 @@ class InMemoryDocumentStore:
 
 
 def _client() -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return TestClient(
         create_gateway_app(),
@@ -67,7 +67,7 @@ def _client() -> TestClient:
 
 
 def test_gateway_legacy_sessions_crud_contract(monkeypatch) -> None:
-    from app.chat import legacy_session_api as legacy_sessions
+    from app.platform.chat import legacy_session_api as legacy_sessions
     documents = InMemoryDocumentStore()
     monkeypatch.setattr(legacy_sessions, "_store", lambda: documents)
     monkeypatch.setattr(legacy_sessions, "get_global_system_prompt", lambda: "System prompt")
@@ -107,7 +107,7 @@ def test_gateway_legacy_sessions_crud_contract(monkeypatch) -> None:
 
 
 def test_gateway_legacy_sessions_list_orders_newest_first(monkeypatch) -> None:
-    from app.chat import legacy_session_api as legacy_sessions
+    from app.platform.chat import legacy_session_api as legacy_sessions
     documents = InMemoryDocumentStore()
     documents.records = {
         "old": {"title": "Old", "updated_at": "2026-06-14T00:00:00"},

@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.characters.avatar_models import CharacterAvatarPack
+from app.platform.characters.avatar_models import CharacterAvatarPack
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,7 +94,7 @@ def main() -> int:
     args = build_parser().parse_args()
     pack = _legacy_pack(args.legacy_character_db, args.character_id)
 
-    from app.characters.persistence.avatar_store import PostgresCharacterAvatarRepositoryAdapter
+    from app.platform.characters.persistence.avatar_store import PostgresCharacterAvatarRepositoryAdapter
     from app.persistence.blob_store import LocalBlobStore
     from app.persistence.startup import bootstrap_postgresql_runtime
 

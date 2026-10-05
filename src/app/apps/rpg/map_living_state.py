@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from app.rpg.map_contracts import MapDefinition
+from app.apps.rpg.map_contracts import MapDefinition
 
 _OBJECT_STATUSES = {"normal", "open", "closed", "damaged", "burned", "occupied"}
 _ROUTE_STATUSES = {"open", "blocked", "locked", "unknown"}

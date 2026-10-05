@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRequirement, TaskRevision, WorkspaceSpec
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRequirement, TaskRevision, WorkspaceSpec
+from app.platform.agent_runtime.planning_contracts import (
     ImplementationPlanRevision,
     ImplementationPlanSubmission,
     PlanAuthority,
@@ -15,7 +15,7 @@ from app.agent_runtime.planning_contracts import (
     PlanSemanticReview,
     RequirementPlanCoverage,
 )
-from app.agent_runtime.planning_review import (
+from app.platform.agent_runtime.planning_review import (
     PLAN_REVIEW_PROTOCOL_VERSION,
     plan_review_system_prompt,
     plan_semantic_digest,
@@ -322,8 +322,8 @@ def test_auto_mode_skips_ordinary_source_test_css_and_documentation_plans(
         ("web/package-lock.json", "Update the lockfile.", ["mutate"], [], "dependency_change"),
         ("web/src/api/generated/client.ts", "Regenerate the API client.", ["mutate"], [], "generated_contract"),
         ("tmp/cache", "Clean the temporary cache.", ["mutate"], ["Remove-Item tmp/cache -Recurse -Force"], "destructive_operation"),
-        ("src/app/agent_runtime/authority.py", "Tighten issued capability checks.", ["mutate"], [], "security_sensitive"),
-        ("src/app/trading/orders.py", "Correct order execution logic.", ["mutate"], [], "trading_logic"),
+        ("src/app/platform/agent_runtime/authority.py", "Tighten issued capability checks.", ["mutate"], [], "security_sensitive"),
+        ("src/app/apps/trading/orders.py", "Correct order execution logic.", ["mutate"], [], "trading_logic"),
     ],
 )
 def test_auto_mode_requires_review_for_each_high_risk_category(

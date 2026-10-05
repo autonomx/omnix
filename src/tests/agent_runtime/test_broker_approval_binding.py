@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import (
+from app.platform.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _command_authorization_rejection,
     _path_is_within,
     _approved_execution_key,
     _revision_scoped_evidence_execution_key,
 )
-from app.agent_runtime.contracts import AgentApproval
+from app.platform.agent_runtime.contracts import AgentApproval
 
 
 def _approval(**updates):
@@ -55,8 +55,8 @@ def test_approval_cannot_authorize_changed_arguments() -> None:
 def test_authoritative_market_subject_overrides_missing_ticker_and_rejects_conflict() -> None:
     from types import SimpleNamespace
     from fastapi import HTTPException
-    from app.agent_runtime.broker_api import BrokerCapabilityRequest, _bind_authoritative_capability_input
-    from app.agent_runtime.contracts import EvidencePolicy, EvidenceRequirement, SubjectRef
+    from app.platform.agent_runtime.broker_api import BrokerCapabilityRequest, _bind_authoritative_capability_input
+    from app.platform.agent_runtime.contracts import EvidencePolicy, EvidenceRequirement, SubjectRef
 
     policy = EvidencePolicy(
         requirement="required",
@@ -131,7 +131,7 @@ def test_command_permission_keeps_cwd_inside_workspace(tmp_path) -> None:
 
 
 def test_executions_are_approved_by_the_recorded_principal() -> None:
-    from app.agent_runtime.broker_api import _approver
+    from app.platform.agent_runtime.broker_api import _approver
     from app.capabilities.executor import LEGACY_APPROVER
 
     assert _approver(_approval(resolution_payload={"decided_by": "user:alice"})) == "user:alice"

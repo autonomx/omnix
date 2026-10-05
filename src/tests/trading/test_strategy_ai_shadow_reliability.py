@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.providers import ConnectionError, ProviderConfig
-from app.trading import strategy_ai_shadow_provider as reliability
-from app.trading.strategy_ai_shadow import AIShadowPolicyAnalyzer
+from app.apps.trading import strategy_ai_shadow_provider as reliability
+from app.apps.trading.strategy_ai_shadow import AIShadowPolicyAnalyzer
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

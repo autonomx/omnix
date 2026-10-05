@@ -14,21 +14,21 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.companion_activity.contracts import CognitionResult, CompanionCognition
-from app.companion_activity.contracts import EvidenceProposition, FrozenContract
-from app.companion_activity.contracts import (
+from app.platform.companion_activity.contracts import CognitionResult, CompanionCognition
+from app.platform.companion_activity.contracts import EvidenceProposition, FrozenContract
+from app.platform.companion_activity.contracts import (
     ActivityCheckpointReason,
     CompanionActivityCheckpointStore,
     CompanionCheckpointPolicy,
     PostgresCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.contracts import (
+from app.platform.companion_activity.contracts import (
     ActivityRuntimeResult,
     CompanionActivityRuntime,
 )
-from app.companion_activity.contracts import CompanionActivityState, empty_activity_state
-from app.companion_activity.contracts import user_activity_propositions
+from app.platform.companion_activity.contracts import CompanionActivityState, empty_activity_state
+from app.platform.companion_activity.contracts import user_activity_propositions
 
 from .models import DesktopObservation, DesktopObservedChange
 from .observation import observation_fingerprint, screen_prompt_injection_observed

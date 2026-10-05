@@ -16,7 +16,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_authorship_policy import (
+from app.apps.rpg.session.genesis.world_forge_authorship_policy import (
     MACHINE_ALLOWED,
     STRUCTURAL_ONLY,
     policy_for_path,

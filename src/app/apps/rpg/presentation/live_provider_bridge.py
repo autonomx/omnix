@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.orchestration.live_provider import get_live_provider_state
+from app.apps.rpg.orchestration.live_provider import get_live_provider_state
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

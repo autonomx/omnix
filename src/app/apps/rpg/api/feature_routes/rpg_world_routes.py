@@ -7,11 +7,11 @@ from typing import Any, Literal, Mapping
 from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
-from app.rpg.worlds.authorship_audit import (
+from app.apps.rpg.worlds.authorship_audit import (
     audit_world_authorship,
     remediate_world_authorship,
 )
-from app.rpg.worlds.contracts import (
+from app.apps.rpg.worlds.contracts import (
     CampaignWorldBinding,
     MapDefinitionBinding,
     MapInitializationOperation,
@@ -22,14 +22,14 @@ from app.rpg.worlds.contracts import (
     WorldRevisionDocument,
     WorldArtifactStage,
 )
-from app.rpg.worlds.legacy_bible_import import import_campaign_bible_as_world
-from app.rpg.worlds.lifecycle_service import (
+from app.apps.rpg.worlds.legacy_bible_import import import_campaign_bible_as_world
+from app.apps.rpg.worlds.lifecycle_service import (
     archive_scenario_project,
     archive_world_project,
     restore_scenario_project,
     restore_world_project,
 )
-from app.rpg.worlds.postgres_service import (
+from app.apps.rpg.worlds.postgres_service import (
     bind_campaign_world,
     create_scenario_project,
     create_world_project,
@@ -39,7 +39,7 @@ from app.rpg.worlds.postgres_service import (
     publish_world_revision,
     read_campaign_world_binding,
 )
-from app.rpg.worlds.topic_history import (
+from app.apps.rpg.worlds.topic_history import (
     list_world_topic_history,
     restore_world_topic_draft,
 )

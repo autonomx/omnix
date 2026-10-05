@@ -5,10 +5,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.chat.assistant_context import routes as assistant_context_routes
-from app.chat.assistant_context.models import AssistantContextBuildResult
-from app.chat.assistant_context.routes import register_assistant_context_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat.assistant_context import routes as assistant_context_routes
+from app.platform.chat.assistant_context.models import AssistantContextBuildResult
+from app.platform.chat.assistant_context.routes import register_assistant_context_routes
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 pytestmark = pytest.mark.usefixtures("legacy_test_persistence")

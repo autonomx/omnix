@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 from architecture_analysis import (
-    AnalysisError, SourceAnalysis, Violation, is_production, load_layers, tracked_sources,
+    AnalysisError, SourceAnalysis, Violation, is_production, load_layers, top_package, tracked_sources,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -176,12 +176,12 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
     for source, targets in analysis.import_edges(module_level=True).items():
         if not source.startswith("app.") or not is_production(analysis.modules[source], analysis.config):
             continue
-        owner = source.split(".")[1]
+        owner = top_package(source)
         graph.setdefault(owner, set())
         for target in targets:
-            if (target.startswith("app.") and target.split(".")[1] != owner
+            if (target.startswith("app.") and top_package(target) != owner
                     and is_production(analysis.modules[target], analysis.config)):
-                graph[owner].add(target.split(".")[1])
+                graph[owner].add(top_package(target))
     index = 0
     indices: dict[str, int] = {}
     low: dict[str, int] = {}
@@ -217,7 +217,7 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
             visit(node)
     # Keep each directed cycle edge independently fingerprinted. One new edge
     # cannot hide behind an existing strongly connected component.
-    return sorted((Violation("AL002", f"src/app/{source}/", f"app.{source}->app.{target}", 1)
+    return sorted((Violation("AL002", "src/" + source.replace(".", "/") + "/", f"{source}->{target}", 1)
                    for component in components for source in component
                    for target in graph[source] if target in component),
                   key=lambda item: (item.path, item.fingerprint))

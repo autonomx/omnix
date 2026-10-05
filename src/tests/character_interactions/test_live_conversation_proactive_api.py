@@ -5,9 +5,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.character_interactions import routes as character_integration_routes
-from app.gateway.main import create_gateway_app
-from app.chat.character_store import InMemoryChatSessionStore
+from app.apps.character_interactions import routes as character_integration_routes
+from app.composition.gateway.main import create_gateway_app
+from app.platform.chat.character_store import InMemoryChatSessionStore
 from app.persistence.runtime import reset_persistence_mode_cache
 from tests.support.in_memory_jobs import InMemoryJobStore
 

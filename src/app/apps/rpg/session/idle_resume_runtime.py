@@ -1,69 +1,69 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     add_thread_line as add_thread_line, build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
     expire_conversation_threads as expire_conversation_threads, normalize_conversation_threads as normalize_conversation_threads, seed_or_update_thread as seed_or_update_thread,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _normalize_runtime_settings as _normalize_runtime_settings, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
-from app.rpg.ai.ambient_dialogue import (
+from app.apps.rpg.ai.ambient_dialogue import (
     apply_dialogue_cooldowns as apply_dialogue_cooldowns, build_ambient_dialogue_candidates as build_ambient_dialogue_candidates,
     build_ambient_dialogue_request as build_ambient_dialogue_request, select_ambient_dialogue_candidate as select_ambient_dialogue_candidate,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _compact_active_interactions as _compact_active_interactions, _emit_scene_beats_from_active_interactions as _emit_scene_beats_from_active_interactions,
     _filter_salient_player_events as _filter_salient_player_events, _log_interaction_trace as _log_interaction_trace, _utc_now_iso as _utc_now_iso,
     ensure_ambient_runtime_state as ensure_ambient_runtime_state, get_effective_world_behavior as get_effective_world_behavior,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS, _has_blocking_player_turn_narration as _has_blocking_player_turn_narration,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _CRITICAL_REACTION_KINDS as _CRITICAL_REACTION_KINDS, _seconds_since_iso as _seconds_since_iso, advance_actor_activities_for_tick as advance_actor_activities_for_tick,
     emit_activity_beats_for_tick as emit_activity_beats_for_tick,
 )
-from app.rpg.session.idle_runtime import (
+from app.apps.rpg.session.idle_runtime import (
     advance_simulation_for_idle as advance_simulation_for_idle, build_idle_player_context as build_idle_player_context,
 )
-from app.rpg.session.ambient_builder import (
+from app.apps.rpg.session.ambient_builder import (
     build_ambient_updates as build_ambient_updates, coalesce_ambient_updates as coalesce_ambient_updates, enqueue_ambient_updates as enqueue_ambient_updates,
     get_pending_ambient_updates as get_pending_ambient_updates, is_player_visible_update as is_player_visible_update, normalize_ambient_state as normalize_ambient_state,
     score_ambient_salience as score_ambient_salience,
 )
-from app.rpg.ai.npc_initiative import (
+from app.apps.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns as apply_initiative_cooldowns, apply_world_behavior_bias as apply_world_behavior_bias,
     build_npc_initiative_candidates as build_npc_initiative_candidates, select_npc_initiative_candidate as select_npc_initiative_candidate,
 )
-from app.rpg.session.ambient_tick_runtime import (
+from app.apps.rpg.session.ambient_tick_runtime import (
     advance_autonomous_ambient_tick as advance_autonomous_ambient_tick,
 )
-from app.rpg.ai.scene_continuity import (
+from app.apps.rpg.ai.scene_continuity import (
     advance_scene as advance_scene, build_continuation_beats as build_continuation_beats, compact_finished_scenes as compact_finished_scenes,
     maybe_build_scene_consequence as maybe_build_scene_consequence, select_continuing_scene as select_continuing_scene, start_persistent_scene as start_persistent_scene,
 )
-from app.rpg.ai.scene_weaver import (
+from app.apps.rpg.ai.scene_weaver import (
     apply_scene_cooldowns as apply_scene_cooldowns, build_scene_beats as build_scene_beats, build_scene_candidates as build_scene_candidates,
     select_scene_candidate as select_scene_candidate,
 )
-from app.rpg.world.world_event_director import (
+from app.apps.rpg.world.world_event_director import (
     apply_world_behavior_to_events as apply_world_behavior_to_events, build_world_event_candidates as build_world_event_candidates,
     convert_events_to_ambient_updates as convert_events_to_ambient_updates, filter_world_events as filter_world_events,
 )
-from app.rpg.session.world_consequence_runtime import (
+from app.apps.rpg.session.world_consequence_runtime import (
     decay_world_consequences_for_tick as decay_world_consequences_for_tick, propagate_activity_consequences_for_tick as propagate_activity_consequences_for_tick,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     maybe_enqueue_llm_semantic_state_change_proposals as maybe_enqueue_llm_semantic_state_change_proposals,
     process_semantic_state_change_proposals as process_semantic_state_change_proposals,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _clear_stale_last_player_action as _clear_stale_last_player_action, _expire_stale_active_interactions as _expire_stale_active_interactions,
     _refresh_active_interactions_for_tick as _refresh_active_interactions_for_tick, _run_npc_reaction_pass as _run_npc_reaction_pass,
 )
-from app.rpg.session.action_execution import (
+from app.apps.rpg.session.action_execution import (
     _check_opening_resolution as _check_opening_resolution, _update_known_npc_ids as _update_known_npc_ids,
 )
 from typing import (
@@ -84,7 +84,7 @@ def _apply_idle_tick_to_session(
     Public wrappers should load/save around this helper rather than
     recursively calling apply_idle_tick() in a loop.
     """
-    from app.rpg.session.idle_narration_delivery import (
+    from app.apps.rpg.session.idle_narration_delivery import (
         _apply_ambient_narration_and_delivery as _apply_ambient_narration_and_delivery, _make_initiative_update_from_candidate as _make_initiative_update_from_candidate,
         _make_scene_update_from_beat as _make_scene_update_from_beat,
     )
@@ -571,7 +571,7 @@ def _apply_idle_tick_to_session(
 
     # Update recent world event rows for frontend
     try:
-        from app.rpg.analytics.world_events import build_incremental_world_event_rows
+        from app.apps.rpg.analytics.world_events import build_incremental_world_event_rows
         new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
 
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))

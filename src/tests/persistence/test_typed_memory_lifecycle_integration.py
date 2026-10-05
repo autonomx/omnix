@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 import pytest
 
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.typed_memory import create_typed_memory, supersede_typed_memory
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.typed_memory import create_typed_memory, supersede_typed_memory
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
-from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
 
 pytestmark = pytest.mark.skipif(

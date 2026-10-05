@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from app.chat.contracts import (
+from app.platform.chat.contracts import (
     SendChatMessageRequest,
     live_call_provider_affinity,
     provider_key,

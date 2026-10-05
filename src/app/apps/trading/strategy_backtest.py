@@ -32,7 +32,7 @@ from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategyS
 from .strategy_risk import size_strategy_entry
 from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels
 from .strategy_timeframes import proposal_priority, resample_final_bars
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 class BacktestSessionDataset(BaseModel):

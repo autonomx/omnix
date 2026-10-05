@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from app.rpg.session.session_store import _normalize_session
+from app.apps.rpg.session.session_store import _normalize_session
 
 
 def test_session_normalizer_preserves_manifest_counters_and_extensions() -> None:

@@ -204,7 +204,7 @@ class CharacterVisemeGenerationService:
 
             if uses_postgresql_runtime():
                 # Feature-owned adapter; the composition root is not imported here.
-                from app.characters.persistence.avatar_generation_repository import (
+                from app.platform.characters.persistence.avatar_generation_repository import (
                     PostgresCharacterVisemeGenerationRepositoryAdapter,
                 )
 

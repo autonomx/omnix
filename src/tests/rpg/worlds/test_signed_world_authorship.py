@@ -4,12 +4,12 @@ from copy import deepcopy
 
 import pytest
 
-from app.rpg.worlds.generation_authorship import AuthorshipValidationError
-from app.rpg.worlds.generation_authorship_runtime import (
+from app.apps.rpg.worlds.generation_authorship import AuthorshipValidationError
+from app.apps.rpg.worlds.generation_authorship_runtime import (
     attach_server_llm_authorship,
     build_generation_artifact,
 )
-from app.rpg.worlds.generation_authorship_signing import (
+from app.apps.rpg.worlds.generation_authorship_signing import (
     attach_signed_llm_authorship,
     harden_and_sign_generation_artifact,
     prove_path_aware_structural_repair,

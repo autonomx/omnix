@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
-from app.trading.strategy_ai_shadow_v2_monitor import (
+from app.apps.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
+from app.apps.trading.strategy_ai_shadow_v2_monitor import (
     AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT,
     deterministic_risk_geometry,
 )

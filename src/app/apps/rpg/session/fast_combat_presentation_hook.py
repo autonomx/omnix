@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.fast_combat_presentation import (
+from app.apps.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     repair_fast_combat_grounding_validation,
 )

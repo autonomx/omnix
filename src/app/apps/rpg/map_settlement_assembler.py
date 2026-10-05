@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from app.rpg.map_contracts import (
+from app.apps.rpg.map_contracts import (
     MapBackground,
     MapBounds,
     MapDefinition,
@@ -16,8 +16,8 @@ from app.rpg.map_contracts import (
     MapRouteGeometry,
     MapSprite,
 )
-from app.rpg.map_serialization import with_definition_revision
-from app.rpg.world_graph import RpgRegionGraph
+from app.apps.rpg.map_serialization import with_definition_revision
+from app.apps.rpg.world_graph import RpgRegionGraph
 
 ASSEMBLER_VERSION = 1
 _SETTLEMENT_WIDTH = 10000

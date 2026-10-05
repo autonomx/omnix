@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     AuthorityClass,
     CampaignBibleEvidenceSource,
     CampaignBibleSnapshot,

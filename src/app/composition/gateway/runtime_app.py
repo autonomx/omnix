@@ -1,7 +1,7 @@
 """Runtime gateway composition used by the local launcher."""
 from __future__ import annotations
 
-from app.production import ProductionApplication, create_production_app
+from app.composition.production import ProductionApplication, create_production_app
 
 
 def create_runtime_app():

@@ -9,9 +9,9 @@ import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat.assistant_context.routes import register_assistant_context_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.admission import admit_chat_turn
+from app.platform.chat.assistant_context.routes import register_assistant_context_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.admission import admit_chat_turn
 from app.conversation.contracts import AssistantContextItem
 from app.jobs.models import JobStatus
 from tests.support.in_memory_jobs import InMemoryJobStore

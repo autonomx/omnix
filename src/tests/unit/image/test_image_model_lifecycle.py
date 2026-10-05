@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.image import lifecycle
+from app.platform.image import lifecycle
 
 
 class _FakeProvider:

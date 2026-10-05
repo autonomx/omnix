@@ -8,7 +8,7 @@ Strategy entry authorization moved to ``order_gateway`` (WP-8.3).
 from datetime import datetime, timedelta, timezone
 
 from .strategy_evaluability import assess_bar_coverage
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 class _CoverageMarketService:

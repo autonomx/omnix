@@ -14,11 +14,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from app.rpg.release_finalization import (
+from app.apps.rpg.release_finalization import (
     LOCAL_LIVE_SMOKE_ENV,
     local_live_acceptance_criteria,
 )
-from app.rpg.release_gates import evaluate_turn_response_release_gates
+from app.apps.rpg.release_gates import evaluate_turn_response_release_gates
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _DEFAULT_COMMANDS = (

@@ -10,7 +10,7 @@ from app.config.runtime import RuntimeConfig
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from app.runtime.features import FeatureContext
 from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
-from app.trading.feature import FEATURE
+from app.apps.trading.feature import FEATURE
 
 
 def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch):
@@ -61,7 +61,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
 
 def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
-    from app.trading.providers import alpaca_iex_status
+    from app.apps.trading.providers import alpaca_iex_status
 
     started = []
     monkeypatch.setattr(alpaca_iex_status, "_enabled", lambda: True)
@@ -102,7 +102,7 @@ def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
 
 def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkeypatch):
     """The scheduler owns the loop (WP-8.3): no monitor starts a task of its own."""
-    from app.trading.monitor_task import ScheduledTradingMonitor
+    from app.apps.trading.monitor_task import ScheduledTradingMonitor
 
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
@@ -130,8 +130,8 @@ def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkey
 
 
 def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_scheduler(monkeypatch):
-    from app.trading import monitor_task
-    from app.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask, scheduled_task_spec
+    from app.apps.trading import monitor_task
+    from app.apps.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask, scheduled_task_spec
 
     logged = []
     monkeypatch.setattr(monitor_task, "trade_log", lambda *args, **fields: logged.append((args, fields)))
@@ -168,7 +168,7 @@ def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_schedul
 
 
 def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():
-    from app.trading.monitor_task import SingleFlightTasks
+    from app.apps.trading.monitor_task import SingleFlightTasks
 
     async def scenario():
         errors = []
@@ -200,7 +200,7 @@ def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():
 def test_proposals_never_wait_on_the_intraday_llm():
     import inspect as source_inspect
 
-    from app.trading.strategy_monitor import TradingStrategyMonitor
+    from app.apps.trading.strategy_monitor import TradingStrategyMonitor
 
     evaluation = source_inspect.getsource(TradingStrategyMonitor._evaluate_candidates)
     assert "await self._run_intraday_llm" not in evaluation

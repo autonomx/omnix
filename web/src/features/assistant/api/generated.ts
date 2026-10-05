@@ -8673,7 +8673,7 @@ export interface components {
              * Memory Candidates
              * @default []
              */
-            memory_candidates: components["schemas"]["app__companion_activity__cognition__MemoryCandidate"][];
+            memory_candidates: components["schemas"]["app__platform__companion_activity__cognition__MemoryCandidate"][];
             /**
              * Open Loop Updates
              * @default []
@@ -9706,34 +9706,6 @@ export interface components {
             /** Worktree */
             worktree: string | null;
         };
-        /** MemoryCandidate */
-        app__companion_activity__cognition__MemoryCandidate: {
-            /** Candidate Id */
-            candidate_id: string;
-            /** Confidence */
-            confidence: number;
-            /** Importance */
-            importance: number;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "episode" | "goal" | "open_loop" | "correction" | "progress";
-            /** Proposition Ids */
-            proposition_ids: string[];
-            /** Reason */
-            reason: string;
-            /**
-             * Sensitivity
-             * @enum {string}
-             */
-            sensitivity: "normal" | "sensitive" | "secret";
-            /**
-             * Trust Level
-             * @enum {string}
-             */
-            trust_level: "user_explicit" | "system_trusted" | "assistant_inference" | "external_untrusted" | "imported_unverified";
-        };
         /**
          * MemoryCandidate
          * @description Non-prompt-eligible proposal awaiting an explicit resolution.
@@ -9821,6 +9793,34 @@ export interface components {
              * @enum {string}
              */
             trust_level: "user_approved" | "system_trusted" | "unverified_import" | "unverified_agent" | "external_untrusted";
+        };
+        /** MemoryCandidate */
+        app__platform__companion_activity__cognition__MemoryCandidate: {
+            /** Candidate Id */
+            candidate_id: string;
+            /** Confidence */
+            confidence: number;
+            /** Importance */
+            importance: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "episode" | "goal" | "open_loop" | "correction" | "progress";
+            /** Proposition Ids */
+            proposition_ids: string[];
+            /** Reason */
+            reason: string;
+            /**
+             * Sensitivity
+             * @enum {string}
+             */
+            sensitivity: "normal" | "sensitive" | "secret";
+            /**
+             * Trust Level
+             * @enum {string}
+             */
+            trust_level: "user_explicit" | "system_trusted" | "assistant_inference" | "external_untrusted" | "imported_unverified";
         };
     };
     responses: never;

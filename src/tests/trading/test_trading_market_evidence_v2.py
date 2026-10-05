@@ -7,33 +7,33 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.market_evidence import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.market_evidence import (
     MARKET_EVIDENCE_POLICY_VERSION,
     PremarketLiquidityEvidence,
     SourceMemberDisposition,
     classify_provider_exception,
 )
-from app.trading.models import MarketBar
-from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
-from app.trading.strategy_data_integrity import finviz_atomic_source_locator
-from app.trading.strategy_evaluability import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.strategy_data_integrity import finviz_atomic_source_locator
+from app.apps.trading.strategy_evaluability import (
     assess_bar_coverage,
     assess_session_evaluability,
     build_trade_authorization,
     candidate_morning_evidence_eligible,
 )
-from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_v2_qualification import (
+from app.apps.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_v2_qualification import (
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
     evaluate_v2_prospective_qualification,
     managed_finviz_v2_config,
     v2_profile_fingerprint,
 )
-from app.trading.strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
-from app.trading.strategies.models import StrategyRiskProfile
+from app.apps.trading.strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
+from app.apps.trading.strategies.models import StrategyRiskProfile
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "2026-09-08-market-evidence-failures.json"

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds.generation_certified_publication import (
+from app.apps.rpg.worlds.generation_certified_publication import (
     _required_starter_certificate,
 )
-from app.rpg.worlds.generation_starter_bubble_publication import (
+from app.apps.rpg.worlds.generation_starter_bubble_publication import (
     StarterBubblePublicationError,
 )
 

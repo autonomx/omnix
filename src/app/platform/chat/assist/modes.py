@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from app.chat.assist.hermes import HermesAssistantPlanner
-from app.chat.assist.house import apply_house_mock, infer_house_plan
-from app.chat.assist.models import AssistantResult, ToolResult, AssistantRequest
-from app.chat.assist.review import hold_for_review, review_call
+from app.platform.chat.assist.hermes import HermesAssistantPlanner
+from app.platform.chat.assist.house import apply_house_mock, infer_house_plan
+from app.platform.chat.assist.models import AssistantResult, ToolResult, AssistantRequest
+from app.platform.chat.assist.review import hold_for_review, review_call
 from app.providers.hermes_status import hermes_runtime_config
 
 
@@ -19,7 +19,7 @@ READOUT_NAMES = {
 
 
 def _contributed_readouts() -> dict[str, Any]:
-    from app.chat.contracts import ASSIST_READOUTS
+    from app.platform.chat.contracts import ASSIST_READOUTS
     from app.runtime.ports import implementations
 
     return {readout.name: readout for readout in implementations(ASSIST_READOUTS)}
@@ -29,7 +29,7 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
     clean = str(name or "").strip()
     _ = args or {}
     if clean == "get_house_status":
-        from app.chat.assist.house import load_house_state
+        from app.platform.chat.assist.house import load_house_state
 
         return {"ok": True, "name": clean, "payload": {"state": load_house_state()}}
     if clean == "get_hermes_status":
@@ -37,7 +37,7 @@ def readout_payload(name: str, args: dict[str, Any] | None = None) -> dict[str, 
 
         return {"ok": True, "name": clean, "payload": hermes_status_payload()}
     if clean == "get_hermes_diagnostics_schema":
-        from app.chat.assist.diagnostics import hermes_diagnostics_schema
+        from app.platform.chat.assist.diagnostics import hermes_diagnostics_schema
 
         return {"ok": True, "name": clean, "payload": hermes_diagnostics_schema()}
     contributed = _contributed_readouts().get(clean)

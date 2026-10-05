@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 from .gapper_dataset import GapperCandidate
 from .market_evidence import (

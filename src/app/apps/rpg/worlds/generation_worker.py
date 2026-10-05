@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from app.persistence.database import DatabaseUnavailableError
-from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
+from app.apps.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
 from .generation_candidate_spool import (
     RawCandidateSpoolingWorldForgeGenerator,

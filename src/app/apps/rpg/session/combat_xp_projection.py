@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # RPG session runtime responsibility module.
 # PR.1.13: final-turn bridge for combat XP reward surfaces.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_int as _safe_int,
 )
 from typing import (

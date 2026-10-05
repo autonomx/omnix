@@ -1,6 +1,6 @@
 """Ports used to compose the live-voice conversation pipeline.
 
-The TTS ports belong to the speech capability (``app.voice.contracts``, PA-3.3).
+The TTS ports belong to the speech capability (``app.platform.voice.contracts``, PA-3.3).
 """
 from __future__ import annotations
 

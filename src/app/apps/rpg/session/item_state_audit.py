@@ -4,8 +4,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.crafting import CRAFTING_RECIPES
-from app.rpg.session.inventory_items import (
+from app.apps.rpg.session.crafting import CRAFTING_RECIPES
+from app.apps.rpg.session.inventory_items import (
     display_item_name,
     inventory_quantity,
     is_stackable_item,

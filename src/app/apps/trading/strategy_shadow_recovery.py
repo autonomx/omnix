@@ -14,7 +14,7 @@ from .market_data_recovery import (
     assess_data_requirement,
     latest_clean_bars,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
 

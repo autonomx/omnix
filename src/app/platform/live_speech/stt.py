@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.voice.contracts import StreamingTranscriber, TranscriptUpdate
+from app.platform.voice.contracts import StreamingTranscriber, TranscriptUpdate
 
 
 @dataclass

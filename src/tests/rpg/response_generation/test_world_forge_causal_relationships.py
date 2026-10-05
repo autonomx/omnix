@@ -1,7 +1,7 @@
-from app.rpg.session.genesis.canon_relationships import (
+from app.apps.rpg.session.genesis.canon_relationships import (
     compile_cross_domain_relationships,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
 
 def test_causal_links_compile_event_to_effect_relationships() -> None:

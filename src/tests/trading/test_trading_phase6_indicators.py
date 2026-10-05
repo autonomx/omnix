@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.trading.indicators.engine import (
+from app.apps.trading.indicators.engine import (
     CORE_INDICATOR_FORMULA_VERSION,
     exponential_moving_average,
     relative_strength_index,

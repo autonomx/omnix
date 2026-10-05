@@ -21,7 +21,7 @@ from app.assets import (
 )
 from app.runtime.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, InvalidCursor
 from app.assets.content import AssetContentUnavailable, materialize_asset
-from app.gateway.schemas import AssetContentResponse
+from app.composition.gateway.schemas import AssetContentResponse
 from app.assets.models import AssetContentTooLarge
 
 

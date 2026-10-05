@@ -10,7 +10,7 @@ from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapp
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 YAHOO_GAINERS_URL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"

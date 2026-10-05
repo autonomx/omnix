@@ -3,35 +3,35 @@ from __future__ import annotations
 from app.runtime.clock import utc_now
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_semantic_action_runtime_state as _ensure_semantic_action_runtime_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_LOCATION_CONDITIONS as _MAX_LOCATION_CONDITIONS, _MAX_RECENT_SCENE_BEATS as _MAX_RECENT_SCENE_BEATS, _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS,
     _MAX_WORLD_CONSEQUENCES as _MAX_WORLD_CONSEQUENCES, _MAX_WORLD_PRESSURE as _MAX_WORLD_PRESSURE, _MAX_WORLD_RUMORS as _MAX_WORLD_RUMORS,
 )
 import hashlib as hashlib
 import json as json
-from app.rpg.economy.menu_catalog import (
+from app.apps.rpg.economy.menu_catalog import (
     build_available_transaction_menus as build_available_transaction_menus, build_provider_transaction_menus as build_provider_transaction_menus,
 )
-from app.rpg.economy.provider_catalog import (
+from app.apps.rpg.economy.provider_catalog import (
     derive_npc_transaction_providers as derive_npc_transaction_providers, derive_world_transaction_providers as derive_world_transaction_providers,
 )
 from datetime import (
     datetime as datetime, timezone as timezone,
 )
-from app.rpg.session.turn_perf_trace import (
+from app.apps.rpg.session.turn_perf_trace import (
     record_turn_perf_trace as record_turn_perf_trace,
 )
-from app.rpg.session.semantic_interaction_runtime import (
+from app.apps.rpg.session.semantic_interaction_runtime import (
     _append_semantic_action_record as _append_semantic_action_record, _append_simulation_semantic_event as _append_simulation_semantic_event,
     _append_world_event_row as _append_world_event_row, _apply_semantic_world_propagation as _apply_semantic_world_propagation,
     _emit_scene_beat_from_semantic_action as _emit_scene_beat_from_semantic_action, _semantic_activity_kind as _semantic_activity_kind,
     _semantic_consequence_summary as _semantic_consequence_summary,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _upsert_active_interaction_from_semantic_action as _upsert_active_interaction_from_semantic_action,
 )
 from typing import (
@@ -44,7 +44,7 @@ def _apply_semantic_action_to_runtime(
     runtime_state: dict[str, Any],
     record: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    from app.rpg.session.world_consequence_runtime import (
+    from app.apps.rpg.session.world_consequence_runtime import (
         _append_world_consequence as _append_world_consequence,
     )
 
@@ -146,7 +146,7 @@ def _apply_semantic_action_to_runtime(
 
 def _record_real_player_activity(runtime_state: dict[str, Any]) -> dict[str, Any]:
     """Record real player activity timestamp and reset idle streak."""
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso,
     )
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from app.desktop_companion.memory_bridge import DesktopCompanionMemoryBridge
-from app.desktop_companion.models import (
+from app.apps.desktop_companion.memory_bridge import DesktopCompanionMemoryBridge
+from app.apps.desktop_companion.models import (
     DesktopActivitySignal,
     DesktopBehaviorState,
     DesktopObservation,

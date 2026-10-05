@@ -10,15 +10,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_models import UpsertCharacterAvatarPackRequest
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.live2d_avatar import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_models import UpsertCharacterAvatarPackRequest
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.live2d_avatar import (
     CharacterLive2DAvatarService,
     register_character_live2d_avatar_routes,
 )
-from app.characters.service import CharacterService
+from app.platform.characters.service import CharacterService
 
 
 def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) -> None:

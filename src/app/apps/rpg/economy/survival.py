@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.items.inventory_state import (
+from app.apps.rpg.items.inventory_state import (
     find_inventory_item,
     normalize_inventory_state,
     remove_inventory_item,

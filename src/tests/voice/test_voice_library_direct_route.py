@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 import app.assets.canonical_voice_clones as canonical_voice_clones
 from tests.support.routers import include_router_registrar
-from app.voice.voice_library_routes import register_voice_library_route
+from app.platform.voice.voice_library_routes import register_voice_library_route
 
 
 def test_direct_voice_library_route_reads_canonical_clone_folder(tmp_path, monkeypatch) -> None:

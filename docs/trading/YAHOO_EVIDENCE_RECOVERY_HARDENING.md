@@ -294,7 +294,7 @@ earliest receipt, which is what causal replay may know. Counters are
 incremented atomically (`omnix_trading_evidence_counters`). Evidence is
 independent of the disposable in-memory market-data cache, and nothing on the
 decision path reads local files. Bars from the earlier file store are imported
-with `python -m app.trading.evidence_import yahoo`; the import records each file
+with `python -m app.apps.trading.evidence_import yahoo`; the import records each file
 and can be re-run.
 
 ## Diagnostics endpoints

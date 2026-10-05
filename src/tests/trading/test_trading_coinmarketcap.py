@@ -6,9 +6,9 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading import market_data_api
-from app.trading.catalog import bindings_for_instrument, instrument_by_id
-from app.trading.providers.coinmarketcap import CoinMarketCapProvider
+from app.apps.trading import market_data_api
+from app.apps.trading.catalog import bindings_for_instrument, instrument_by_id
+from app.apps.trading.providers.coinmarketcap import CoinMarketCapProvider
 
 
 class JsonResponse:

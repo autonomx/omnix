@@ -39,7 +39,7 @@ Keep UI behavior, CSS ownership, component tests, and generated API contracts in
 
 ## Agent runtime / authority-sensitive code
 
-For `src/app/agent_runtime`, capability authority, approvals, evidence, acceptance, TaskGraph, persistence, and recovery are security/correctness boundaries.
+For `src/app/platform/agent_runtime`, capability authority, approvals, evidence, acceptance, TaskGraph, persistence, and recovery are security/correctness boundaries.
 
 - Profiles are ceilings, not grants.
 - Approval policy must never expand issued capabilities.
@@ -81,5 +81,5 @@ paths; do not change code from a research run.
   notes) in the body of the handoff or climatology commit and in the run's
   final report.
 
-Manual equivalents: `python -m app.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD`
+Manual equivalents: `python -m app.apps.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD`
 and `import-climatology --file PATH`.

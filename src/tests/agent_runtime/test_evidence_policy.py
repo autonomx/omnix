@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.agent_runtime.acceptance import evaluate_acceptance
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.acceptance import evaluate_acceptance
+from app.platform.agent_runtime.contracts import (
     AgentRunSpec,
     EvidenceDecision,
     EvidencePolicy,
@@ -17,7 +17,7 @@ from app.agent_runtime.contracts import (
     SubjectRef,
     TaskRevision,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     DEFAULT_FRESHNESS_SECONDS,
     EvidenceCompilationError,
     build_evidence_receipt,
@@ -32,7 +32,7 @@ from app.agent_runtime.evidence import (
     resolve_request_mode,
     validate_required_evidence_capabilities,
 )
-from app.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.profiles import get_agent_profile
 
 
 def _receipt(
@@ -160,8 +160,8 @@ def test_market_quote_compiles_to_read_only_authoritative_market_capability() ->
 
 
 def test_required_connected_evidence_fails_preflight_when_connection_is_unavailable(monkeypatch) -> None:
-    from app.assistant_tools import gate
-    from app.assistant_tools.models import AssistantToolReviewDecision
+    from app.platform.assistant_tools import gate
+    from app.platform.assistant_tools.models import AssistantToolReviewDecision
 
     monkeypatch.setattr(
         gate,
@@ -446,7 +446,7 @@ def test_fail_closed_source_does_not_use_fallback() -> None:
 
 
 def test_repository_evidence_subject_is_bound_to_immutable_commit(monkeypatch, tmp_path) -> None:
-    from app.agent_runtime.service import AgentRunService
+    from app.platform.agent_runtime.service import AgentRunService
 
     requirement = EvidenceRequirement(
         id="ci",
@@ -479,8 +479,8 @@ def test_repository_evidence_subject_is_bound_to_immutable_commit(monkeypatch, t
 
 
 def test_revision_filters_do_not_reuse_prior_tool_or_evidence_rows() -> None:
-    from app.agent_runtime.contracts import AgentArtifact, AgentEvent, TaskRevision
-    from app.agent_runtime.service import AgentRunService
+    from app.platform.agent_runtime.contracts import AgentArtifact, AgentEvent, TaskRevision
+    from app.platform.agent_runtime.service import AgentRunService
 
     revision = TaskRevision(
         run_id="run-1",
@@ -532,7 +532,7 @@ def test_revision_filters_do_not_reuse_prior_tool_or_evidence_rows() -> None:
 
 
 def test_required_subject_qualifiers_must_be_present_on_receipt() -> None:
-    from app.agent_runtime.evidence import subject_matches
+    from app.platform.agent_runtime.evidence import subject_matches
 
     required = SubjectRef(
         type="repository_ref",
@@ -831,7 +831,7 @@ def test_receipt_uses_explicit_requirement_source_binding() -> None:
 
 def test_group_preflight_accepts_healthy_issued_fallback(monkeypatch) -> None:
     from types import SimpleNamespace
-    import app.assistant_tools.gate as gate
+    import app.platform.assistant_tools.gate as gate
 
     def review(request):
         if request.action_id == "github.read_repo":

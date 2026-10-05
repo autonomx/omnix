@@ -6,10 +6,10 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from app.rpg.combat.apply import apply_attack_resolution
-from app.rpg.combat.models import AttackIntent
-from app.rpg.combat.resolver import resolve_attack
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.apply import apply_attack_resolution
+from app.apps.rpg.combat.models import AttackIntent
+from app.apps.rpg.combat.resolver import resolve_attack
+from app.apps.rpg.combat.state import (
     combat_is_active,
     get_current_actor_id,
     normalize_combat_state,

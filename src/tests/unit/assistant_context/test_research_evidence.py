@@ -1,4 +1,4 @@
-from app.research.evidence import (
+from app.platform.research.evidence import (
     prepare_evidence_context_items,
     render_answer_with_compatibility_fallback,
     validate_plain_text_citations,

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_resource_dependencies import (
+from app.apps.rpg.session.genesis.world_forge_resource_dependencies import (
     resource_dependency_components,
 )
 

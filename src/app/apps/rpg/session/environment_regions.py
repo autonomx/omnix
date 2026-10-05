@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.environment_snapshot import derive_environment_snapshot
+from app.apps.rpg.session.environment_snapshot import derive_environment_snapshot
 
 DEFAULT_ACTIVE_REGION_ID = "active"
 

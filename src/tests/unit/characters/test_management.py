@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from app.assistant_memory import (
+from app.platform.assistant_memory import (
     OwnerAwareInMemoryMemoryRepository,
     default_memory_service,
     resolve_chat_scope,
 )
-from app.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
-from app.characters.management import CharacterDataActionRequest, CharacterManagementService
-from app.characters.service import default_character_service
-from app.chat import ChatMessage, CreateChatSessionRequest, default_chat_store
+from app.platform.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
+from app.platform.characters.management import CharacterDataActionRequest, CharacterManagementService
+from app.platform.characters.service import default_character_service
+from app.platform.chat import ChatMessage, CreateChatSessionRequest, default_chat_store
 
 
 @pytest.fixture(autouse=True)

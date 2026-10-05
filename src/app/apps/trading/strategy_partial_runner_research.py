@@ -26,7 +26,7 @@ from .strategy_adaptive_exit_research import (
 from .strategy_backtest import GapPullbackBacktestTrade, _adverse_sell_slippage_bps
 from .strategy_timeframes import resample_final_bars
 from .strategy_v2_management import v2_active_stop_for_prior_high
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _FORCE_FLAT_ET = time(15, 55)

@@ -9,12 +9,12 @@ from app.jobs.handlers import JobHandlerRegistry, JobHandlerSpec
 from app.jobs.models import ResourceClass
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from app.runtime.background import BackgroundWorker, GatewayBackgroundRuntime
-from app.worker.health import create_worker_health_app
-from app.worker.__main__ import build_parser
-from app.worker_runtime import DurableFeatureJobWorker
-from app.worker_runtime import durable_feature_worker
-from app.worker_runtime.pool_runtime import JobWorkerPoolRuntime
-from app.worker_runtime.pools import DEFAULT_POOLS, RESOURCE_POOLS, parse_pools
+from app.composition.worker.health import create_worker_health_app
+from app.composition.worker.__main__ import build_parser
+from app.composition.worker_runtime import DurableFeatureJobWorker
+from app.composition.worker_runtime import durable_feature_worker
+from app.composition.worker_runtime.pool_runtime import JobWorkerPoolRuntime
+from app.composition.worker_runtime.pools import DEFAULT_POOLS, RESOURCE_POOLS, parse_pools
 
 
 def test_default_pools_cover_each_registered_durable_resource_class():

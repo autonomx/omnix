@@ -40,7 +40,7 @@ The declaration is the authority record. From it Omnix derives:
 
 Write the function that performs the action and returns an
 `AssistantToolResult`, and add it under the namespace in `ADAPTERS` in
-`src/app/assistant_tools/executor.py`:
+`src/app/platform/assistant_tools/executor.py`:
 
 ```python
 def run_acme_tool_request(request: AssistantToolRequest) -> AssistantToolResult:
@@ -60,7 +60,7 @@ authority themselves.
 ## 3. Let agents use it (optional)
 
 Agent runs receive capabilities only within their profile's ceiling
-(`src/app/agent_runtime/profiles.py`). To let a profile be issued the new
+(`src/app/platform/agent_runtime/profiles.py`). To let a profile be issued the new
 capability, add it to that profile's `external_capabilities` (always issued)
 or `optional_external_capabilities` (issued when the task needs it). Profiles
 are ceilings, not grants: a request for a capability outside the ceiling is

@@ -7,7 +7,7 @@ It declares what it is (``kind``, ``version``), how it is configured
 proposals. A strategy never places orders, calls providers or writes state.
 
 Adding a strategy: implement this protocol in one module and add one entry to
-``app/trading/strategies/registrations.py`` (see docs/trading/STRATEGY_RECIPE.md).
+``app/apps/trading/strategies/registrations.py`` (see docs/trading/STRATEGY_RECIPE.md).
 """
 from __future__ import annotations
 

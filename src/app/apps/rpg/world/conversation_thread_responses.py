@@ -3,17 +3,17 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.location_registry import current_location_id
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_dialogue_profile import (
+from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_dialogue_profile import (
     build_npc_dialogue_profile,
     deterministic_biography_line,
 )
-from app.rpg.world.npc_dialogue_recall import (
+from app.apps.rpg.world.npc_dialogue_recall import (
     find_recall_capable_npc,
     player_input_requests_recall,
 )
-from app.rpg.world.npc_presence_runtime import present_npcs_at_location
+from app.apps.rpg.world.npc_presence_runtime import present_npcs_at_location
 
 from .conversation_thread_base import (
     MAX_BEATS_PER_THREAD,

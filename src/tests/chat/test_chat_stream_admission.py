@@ -7,10 +7,10 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.admission import admit_chat_turn, stream_chat_turn
-from app.chat.generation_jobs import interrupt_active_chat_generation_jobs
-from app.gateway.main import create_gateway_app
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.admission import admit_chat_turn, stream_chat_turn
+from app.platform.chat.generation_jobs import interrupt_active_chat_generation_jobs
+from app.composition.gateway.main import create_gateway_app
 from app.jobs.models import JobStatus
 from tests.support.in_memory_jobs import InMemoryJobStore
 

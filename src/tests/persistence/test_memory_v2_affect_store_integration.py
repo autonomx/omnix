@@ -6,17 +6,17 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     AffectObservation,
     MemorySpaceKey,
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory.v2.affect_store import (
+from app.platform.assistant_memory.v2.affect_store import (
     AffectEvidenceError,
     PostgresMemoryV2AffectStore,
 )
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )

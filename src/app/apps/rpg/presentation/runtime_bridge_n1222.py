@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.presentation.runtime_bridge import (
+from app.apps.rpg.presentation.runtime_bridge import (
     build_runtime_presentation_payload as _base_runtime_presentation_payload,
 )
-from app.rpg.session.runtime_promotions import (
+from app.apps.rpg.session.runtime_promotions import (
     build_climate_survival_runtime_payload,
     build_runtime_promotion_panel_payload,
 )

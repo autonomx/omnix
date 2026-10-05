@@ -58,7 +58,8 @@ def _environment_view(node: ast.AST) -> bool:
 def _owner(path: Path) -> str:
     parts = path.parts
     if len(parts) >= 3 and parts[0] == "src" and parts[1] == "app":
-        package = parts[2]
+        # Platform capabilities, apps and composition sit in tier folders (PA-5.3).
+        package = parts[3] if parts[2] in {"platform", "apps", "composition"} and len(parts) >= 4 else parts[2]
         return {
             "agent_runtime": "agent-runtime",
             "assistant_memory": "assistant-memory",

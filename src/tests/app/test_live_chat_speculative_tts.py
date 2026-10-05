@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from app.live_voice.speech.chat_speculative_tts import (
+from app.platform.live_voice.speech.chat_speculative_tts import (
     _PROVIDER_GENERATION_LOCK,
     _accept_entry,
     _cancel_entry,

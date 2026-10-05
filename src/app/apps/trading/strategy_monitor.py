@@ -87,7 +87,7 @@ from .strategy_v2_management import (
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
 from . import strategy_session_evidence as _session_evidence
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _STATE_KEY = "_omnix_trading_strategy_monitor"

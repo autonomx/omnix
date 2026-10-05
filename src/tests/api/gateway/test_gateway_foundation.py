@@ -15,7 +15,7 @@ if str(SRC_DIR) not in sys.path:
 
 
 def _client() -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return TestClient(create_gateway_app(), raise_server_exceptions=False, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
@@ -67,7 +67,7 @@ def test_gateway_runtime_status_does_not_require_workers() -> None:
         "unreachable": 0,
         "mocked": 0,
     }
-    assert payload["compatibility"]["existing_fastapi_app"] == "app.gateway.main:app"
+    assert payload["compatibility"]["existing_fastapi_app"] == "app.composition.gateway.main:app"
 
 
 def test_gateway_worker_health_placeholder_is_explicit() -> None:
@@ -182,7 +182,7 @@ def test_gateway_compatibility_handoff_reports_current_owners() -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert payload["legacy_ui_status"] == "retired"
-    assert payload["existing_fastapi_app"] == "app.gateway.main:app"
+    assert payload["existing_fastapi_app"] == "app.composition.gateway.main:app"
     assert payload["domain_logic_policy"] == "delegate_to_existing_service_modules"
     namespaces = {target["namespace"] for target in payload["handoff_targets"]}
     assert "/api/rpg" in namespaces

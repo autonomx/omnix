@@ -11,13 +11,13 @@ from typing import Any, Dict, Iterable
 
 import torch
 
-from app.image.downloads import get_flux_local_model_status
-from app.image.flux_pipeline_loading import (
+from app.platform.image.downloads import get_flux_local_model_status
+from app.platform.image.flux_pipeline_loading import (
     build_flux_pipeline,
     validate_flux_pipeline_import,
     validate_flux_repo_runtime,
 )
-from app.image.providers.base import BaseImageProvider, ImageGenerationResult
+from app.platform.image.providers.base import BaseImageProvider, ImageGenerationResult
 from app.runtime.paths import generated_images_root
 
 logger = logging.getLogger(__name__)

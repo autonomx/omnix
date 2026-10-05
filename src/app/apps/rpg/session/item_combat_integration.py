@@ -4,8 +4,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.equipment import normalize_equipment
-from app.rpg.session.item_combat import build_attack_profile_from_item, resolve_damage_against_defense
+from app.apps.rpg.session.equipment import normalize_equipment
+from app.apps.rpg.session.item_combat import build_attack_profile_from_item, resolve_damage_against_defense
 
 
 _RESOURCE_KEYS = ("health", "hp", "hit_points")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.world.npc_evolution_state import get_npc_evolution
+from app.apps.rpg.world.npc_evolution_state import get_npc_evolution
 
 
 def _safe_str(value: Any) -> str:

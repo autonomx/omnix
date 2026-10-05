@@ -1,4 +1,4 @@
-"""What ``python -m app.launcher start`` does before serving the dashboard (WP-11.4).
+"""What ``python -m app.composition.launcher start`` does before serving the dashboard (WP-11.4).
 
 The Python launcher is the one source of truth for starting Omnix; the
 ``start_all.bat`` and ``start_all.sh`` wrappers only find the interpreter (and

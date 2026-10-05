@@ -50,7 +50,7 @@ def _rpg_routes_router(context):
 
 def _campaign_genesis_worker(context):
     async def recover() -> None:
-        from app.rpg.session.genesis.async_coordinator import configure_campaign_genesis_owner
+        from app.apps.rpg.session.genesis.async_coordinator import configure_campaign_genesis_owner
 
         owner = getattr(context.runtime_state, "background_runtime", None)
         if owner is not None:
@@ -60,7 +60,7 @@ def _campaign_genesis_worker(context):
     async def stop() -> None:
         import asyncio
 
-        from app.rpg.session.genesis.async_coordinator import stop_campaign_genesis_worker
+        from app.apps.rpg.session.genesis.async_coordinator import stop_campaign_genesis_worker
 
         await asyncio.to_thread(stop_campaign_genesis_worker)
 
@@ -85,7 +85,7 @@ FEATURE = FeatureModule(
     id="rpg",
     title="RPG",
     tier="app",
-    # The Hermes routes in app/rpg/hermes read assist mode through app.chat.contracts.
+    # The Hermes routes in app/apps/rpg/hermes read assist mode through app.platform.chat.contracts.
     depends_on=("chat",),
     # World images use image providers; RPG runs without the image feature.
     uses=("image",),

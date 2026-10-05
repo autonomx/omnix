@@ -3,39 +3,39 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.chat_bridge import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.chat_bridge import (
     _apply_semantic_route_decision,
     route_typed_chat_turn,
 )
-from app.agent_runtime.contracts import EvidenceDecision
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.contracts import EvidenceDecision
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
     evidence_decision_from_semantic,
     task_requires_workspace_mutation,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.semantic_classifier import (
     ProviderSemanticIntentClassifier,
     SemanticEvidenceHint,
     SemanticIntentDecision,
     default_semantic_intent_classifier,
     semantic_profile_id,
 )
-from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.assistant_turns import AssistantTurnCoordinator
-import app.chat.character_store as character_store
-from app.characters.repository import InMemoryCharacterRepository
-from app.characters.service import CharacterService
+from app.platform.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.assistant_turns import AssistantTurnCoordinator
+import app.platform.chat.character_store as character_store
+from app.platform.characters.repository import InMemoryCharacterRepository
+from app.platform.characters.service import CharacterService
 from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 
 
 def _use_memory_character_service(tmp_path, monkeypatch) -> None:
     service = CharacterService(InMemoryCharacterRepository(tmp_path / "characters.sqlite3"))
-    monkeypatch.setattr("app.characters.service.default_character_service", lambda: service)
+    monkeypatch.setattr("app.platform.characters.service.default_character_service", lambda: service)
     monkeypatch.setattr(
         character_store,
         "default_assistant_turn_coordinator",
@@ -846,7 +846,7 @@ def test_persistent_agent_mode_uses_semantic_weather_evidence(monkeypatch) -> No
 
 
 def test_unknown_test_provider_keeps_local_matrix_llm_free(monkeypatch) -> None:
-    import app.agent_runtime.semantic_classifier as semantic_classifier
+    import app.platform.agent_runtime.semantic_classifier as semantic_classifier
 
     monkeypatch.setattr(
         semantic_classifier,
@@ -863,7 +863,7 @@ def test_unknown_test_provider_keeps_local_matrix_llm_free(monkeypatch) -> None:
 
 
 def test_namespaced_ui_provider_identity_resolves_semantic_classifier(monkeypatch) -> None:
-    import app.agent_runtime.semantic_classifier as semantic_classifier
+    import app.platform.agent_runtime.semantic_classifier as semantic_classifier
 
     provider = _ContractFakeProvider(
         {

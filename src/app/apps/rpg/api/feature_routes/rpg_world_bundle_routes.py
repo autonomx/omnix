@@ -7,9 +7,9 @@ from typing import Any
 
 from fastapi import Body, HTTPException, Query, Request, Response
 
-from app.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
-from app.rpg.worlds.world_bundle_export import export_world_bundle
-from app.rpg.worlds.world_bundle_import import (
+from app.apps.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
+from app.apps.rpg.worlds.world_bundle_export import export_world_bundle
+from app.apps.rpg.worlds.world_bundle_import import (
     WorldBundleImportConflict,
     import_world_bundle,
 )

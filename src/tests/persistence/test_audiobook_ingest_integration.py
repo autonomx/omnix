@@ -12,20 +12,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_analyze_once, run_ingest_once
-from app.audiobook.render_service import run_preview_once, run_render_once
-from app.audiobook.assembly_service import run_assemble_once
-from app.audiobook.render_cache import find_valid_render
-from app.audiobook.render_planner import load_chapter_units
-from app.audiobook.export_service import run_export_once
-from app.audiobook import export_service
-from app.audiobook.hashing import bytes_hash
-from app.audiobook.extraction import EXTRACTOR_VERSION
-from app.audiobook.spans import DETECTOR_VERSION
-from app.audiobook.review_repository import PostgresAudiobookReviewRepository
-from app.audiobook.annotation import DiscoveredSpeaker, proposed_speaker_id
-from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.worker import run_analyze_once, run_ingest_once
+from app.apps.audiobook.render_service import run_preview_once, run_render_once
+from app.apps.audiobook.assembly_service import run_assemble_once
+from app.apps.audiobook.render_cache import find_valid_render
+from app.apps.audiobook.render_planner import load_chapter_units
+from app.apps.audiobook.export_service import run_export_once
+from app.apps.audiobook import export_service
+from app.apps.audiobook.hashing import bytes_hash
+from app.apps.audiobook.extraction import EXTRACTOR_VERSION
+from app.apps.audiobook.spans import DETECTOR_VERSION
+from app.apps.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.apps.audiobook.annotation import DiscoveredSpeaker, proposed_speaker_id
+from app.apps.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -79,14 +79,14 @@ def _expire_job_and_make_retry_due(work, context, job_id: str) -> None:
 @pytest.fixture(autouse=True)
 def _synthetic_tts_model_revision(monkeypatch) -> None:
     """These pipeline tests replace TTS; model artifact binding has separate tests."""
-    monkeypatch.setattr("app.audiobook.service.assert_model_revision",
+    monkeypatch.setattr("app.apps.audiobook.service.assert_model_revision",
                         lambda _provider, _model, _revision: None)
-    monkeypatch.setattr("app.audiobook.render_service.assert_model_revision",
+    monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision",
                         lambda _provider, _model, _revision: None)
 
 
 def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -170,7 +170,7 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
 
 
 def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -208,8 +208,8 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
 
 
 def test_manual_interpretation_is_visible_before_classification(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_structure_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
     ))
@@ -244,7 +244,7 @@ def test_manual_interpretation_is_visible_before_classification(tmp_path, monkey
 
 
 def test_analysis_resumes_prepared_chapters_before_publishing_review(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -286,7 +286,7 @@ def test_analysis_resumes_prepared_chapters_before_publishing_review(tmp_path, m
 
 
 def test_user_revises_span_without_changing_canonical_source(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -361,7 +361,7 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
                     "role": "dialogue" if payload["source_text"].lstrip().startswith('"') else "narration",
                     "delivery": "quiet"}
 
-        monkeypatch.setattr("app.audiobook.worker.local_classifier",
+        monkeypatch.setattr("app.apps.audiobook.worker.local_classifier",
                             lambda: (classify, {"mode": "local_llm_classifier", "provider_id": "test"}))
         _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:analyze-classifier")
@@ -433,7 +433,7 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
 def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
     tmp_path, monkeypatch,
 ) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -496,9 +496,9 @@ def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
                 "model": "test-model",
             }
 
-        monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+        monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier_factory)
         monkeypatch.setattr(
-            "app.audiobook.annotation._audit_selected", lambda _span_id: False,
+            "app.apps.audiobook.annotation._audit_selected", lambda _span_id: False,
         )
         _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
@@ -557,7 +557,7 @@ def test_identical_source_retries_style_discovery_after_provider_failure(
             "model": "test-model",
         }
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier_factory)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -643,7 +643,7 @@ def test_identical_source_retries_style_discovery_after_provider_failure(
 def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
     tmp_path, monkeypatch,
 ) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -732,7 +732,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             }
         return classify, {"mode": "test-batch-classifier", "version": "3"}
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -962,7 +962,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
 
 
 def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -1010,7 +1010,7 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
             work.commit()
         profile = SimpleNamespace(id="voice-cloning:golden", storage_path=str(reference),
                                   metadata={"voice_clone_id": "golden"})
-        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets",
+        monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets",
                             lambda: [profile])
         audio_buffer = io.BytesIO()
         with wave.open(audio_buffer, "wb") as writer:
@@ -1028,12 +1028,12 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
                 return [{"success": True, "audio": encoded} for _ in requests]
 
         provider = GoldenProvider()
-        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
+        monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda _name: provider)
         service.start_render(context, project_id=project["id"], model_revision="golden-model-revision")
         child_code = """
 import os, sys
 from types import SimpleNamespace
-from app.audiobook import render_service as render
+from app.apps.audiobook import render_service as render
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -1148,7 +1148,7 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
 
 
 def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -1185,7 +1185,7 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
             )
             work.commit()
         profile = SimpleNamespace(id="voice-cloning:long", storage_path=str(reference), metadata={})
-        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets",
+        monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets",
                             lambda: [profile])
         audio_buffer = io.BytesIO()
         with wave.open(audio_buffer, "wb") as writer:
@@ -1203,7 +1203,7 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
                 return [{"success": True, "audio": encoded} for _ in requests]
 
         provider = Provider()
-        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
+        monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda _name: provider)
         service.start_render(context, project_id=project["id"], model_revision="long-test-model")
         assert run_render_once(database, blobs, context, worker_id="test:long-render")
         with unit_of_work(database) as work:
@@ -1232,7 +1232,7 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
 
 
 def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -1294,7 +1294,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                                   metadata={"voice_clone_id": "test"})
         nita_profile = SimpleNamespace(id="voice-cloning:nita", storage_path=str(nita_reference),
                                        metadata={"voice_clone_id": "nita"})
-        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets",
+        monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets",
                             lambda: [profile, nita_profile])
         audio_buffer = io.BytesIO()
         with wave.open(audio_buffer, "wb") as writer:
@@ -1316,7 +1316,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                 return [{"success": True, "audio": encoded}]
 
         provider = Provider()
-        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
+        monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda _name: provider)
         with pytest.raises(ValueError, match="does not apply generation seeds"):
             service.start_render(context, project_id=project["id"],
                                  model_revision="test-model-revision", seed=42)
@@ -1408,8 +1408,8 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         real_ffmpeg_binary = export_service.ffmpeg_binary
         real_ffmpeg_version = export_service.ffmpeg_version
         real_popen = subprocess.Popen
-        monkeypatch.setattr("app.audiobook.export_service.ffmpeg_binary", lambda: "test-ffmpeg")
-        monkeypatch.setattr("app.audiobook.export_service.ffmpeg_version", lambda _binary: "test-ffmpeg 1")
+        monkeypatch.setattr("app.apps.audiobook.export_service.ffmpeg_binary", lambda: "test-ffmpeg")
+        monkeypatch.setattr("app.apps.audiobook.export_service.ffmpeg_version", lambda _binary: "test-ffmpeg 1")
 
         class FakeEncoder:
             def __init__(self, command, **_kwargs):
@@ -1437,7 +1437,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             def poll(self):
                 return 0
 
-        monkeypatch.setattr("app.audiobook.export_service.subprocess.Popen", FakeEncoder)
+        monkeypatch.setattr("app.apps.audiobook.export_service.subprocess.Popen", FakeEncoder)
         submission = service.start_export(context, project_id=project["id"], format="wav")
         assert run_export_once(database, blobs, context, worker_id="test:export")
         exports = service.list_exports(context, project["id"])
@@ -1614,7 +1614,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         child_code = """
 import os, sys
 from types import SimpleNamespace
-from app.audiobook import render_service as render
+from app.apps.audiobook import render_service as render
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -1722,9 +1722,9 @@ def test_identical_source_resubmit_reuses_empty_style_discovery(
             "model": "test-style-model",
         }
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
@@ -1811,9 +1811,9 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
             "model": "test-style-model",
         }
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
@@ -1877,7 +1877,7 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
 
 
 def test_identical_source_resubmit_reuses_revision_without_restarting_analysis(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -1959,9 +1959,9 @@ def test_identical_source_resubmit_reuses_revision_without_restarting_analysis(t
 def test_extract_quotes_rediscovers_styles_after_initial_classifier_outage(
     tmp_path, monkeypatch,
 ) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
@@ -2074,7 +2074,7 @@ def test_extract_quotes_migrates_stale_detector_before_explicit_classification(
             "reasoning_effort": "xhigh",
         }
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -2090,11 +2090,11 @@ def test_extract_quotes_migrates_stale_detector_before_explicit_classification(
         # Build the first durable revision exactly as an older runtime would:
         # old extractor/detector versions participate in that revision identity.
         monkeypatch.setattr(
-            "app.audiobook.extraction.EXTRACTOR_VERSION",
+            "app.apps.audiobook.extraction.EXTRACTOR_VERSION",
             "audiobook-extractor-v6",
         )
         monkeypatch.setattr(
-            "app.audiobook.extraction.UnicodeDialogueDetector.version",
+            "app.apps.audiobook.extraction.UnicodeDialogueDetector.version",
             "audiobook-spans-v3",
         )
         service.submit_source(
@@ -2113,11 +2113,11 @@ def test_extract_quotes_migrates_stale_detector_before_explicit_classification(
 
         # Simulate restarting onto the current code before extracting quotes.
         monkeypatch.setattr(
-            "app.audiobook.extraction.EXTRACTOR_VERSION",
+            "app.apps.audiobook.extraction.EXTRACTOR_VERSION",
             EXTRACTOR_VERSION,
         )
         monkeypatch.setattr(
-            "app.audiobook.extraction.UnicodeDialogueDetector.version",
+            "app.apps.audiobook.extraction.UnicodeDialogueDetector.version",
             DETECTOR_VERSION,
         )
 
@@ -2191,7 +2191,7 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
             }
         return classify, {"mode": "test-classifier", "version": "1"}
 
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -2258,7 +2258,7 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
 
 
 def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -2295,7 +2295,7 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
             id="voice-cloning:assembly-retry", storage_path=str(reference), metadata={},
         )
         monkeypatch.setattr(
-            "app.audiobook.render_service.discover_canonical_voice_clone_assets",
+            "app.apps.audiobook.render_service.discover_canonical_voice_clone_assets",
             lambda: [profile],
         )
 
@@ -2311,7 +2311,7 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
             def generate_audio_batch(self, requests):
                 return [{"success": True, "audio": encoded} for _ in requests]
 
-        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider",
+        monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider",
                             lambda _name: Provider())
         service.start_render(
             context, project_id=project["id"], model_revision="assembly-retry-model",
@@ -2366,7 +2366,7 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
 
 
 def test_stale_ingest_retry_is_rejected_after_canonical_source_exists(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,

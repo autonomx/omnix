@@ -9,10 +9,10 @@ that already succeeded. This wrapper gives each individual historical request a
 longer bounded backoff so the batch resumes at the failed chunk.
 """
 
-from app.trading.providers.http_runtime import ProviderHttpRuntime as _BaseProviderHttpRuntime
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime as _BaseProviderHttpRuntime
 
-import app.trading.historical_gapper_reconstruction as _reconstruction
-import app.trading.strategy_historical_bars as _historical_bars
+import app.apps.trading.historical_gapper_reconstruction as _reconstruction
+import app.apps.trading.strategy_historical_bars as _historical_bars
 import scripts.run_trading_strategy_liquidity_sweep as _sweep
 
 

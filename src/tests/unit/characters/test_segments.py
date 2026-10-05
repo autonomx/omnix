@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.chat import CreateChatSessionRequest, SendChatMessageRequest, default_chat_store
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.chat import CreateChatSessionRequest, SendChatMessageRequest, default_chat_store
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.

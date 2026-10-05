@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+from app.apps.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
 from .generation_jobs import canonical_hash
 from .lifecycle_service import require_world_writable

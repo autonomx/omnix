@@ -5,12 +5,12 @@ from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import (
+from app.platform.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _normalize_capability_input,
     _review_with_run_policy,
 )
-from app.assistant_tools.models import (
+from app.platform.assistant_tools.models import (
     AssistantToolRequest,
     AssistantToolReviewDecision,
 )
@@ -33,7 +33,7 @@ def test_run_policy_never_weakens_canonical_approval() -> None:
         input={"target": "Desk", "state": "off"},
     )
     with patch(
-        "app.agent_runtime.broker_api.review_assistant_tool_request",
+        "app.platform.agent_runtime.broker_api.review_assistant_tool_request",
         return_value=_decision(approval_required=True),
     ) as review:
         effective, decision = _review_with_run_policy(
@@ -62,7 +62,7 @@ def test_run_policy_can_make_automatic_action_stricter() -> None:
         update={"executable": False, "approval_required": True}
     )
     with patch(
-        "app.agent_runtime.broker_api.review_assistant_tool_request",
+        "app.platform.agent_runtime.broker_api.review_assistant_tool_request",
         side_effect=[automatic, stricter],
     ) as review:
         effective, decision = _review_with_run_policy(
@@ -88,7 +88,7 @@ def test_sensitive_run_policy_preserves_governed_browser_automatic_policy() -> N
         approval_required=False,
     )
     with patch(
-        "app.agent_runtime.broker_api.review_assistant_tool_request",
+        "app.platform.agent_runtime.broker_api.review_assistant_tool_request",
         return_value=automatic,
     ) as review:
         effective, decision = _review_with_run_policy(

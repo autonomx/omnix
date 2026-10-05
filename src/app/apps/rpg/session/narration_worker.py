@@ -131,7 +131,7 @@ def _is_stop_requested() -> bool:
 
 def _worker_loop() -> None:
     # Import lazily to avoid circular imports at module import time.
-    from app.rpg.session.narration_jobs import (
+    from app.apps.rpg.session.narration_jobs import (
         process_next_narration_job as process_next_narration_job,
     )
 
@@ -188,7 +188,7 @@ def publish_narration_event(session_id: str, event: dict[str, Any]) -> int:
     if not session_id:
         return 0
     from app.persistence.database import default_database
-    from app.rpg.persistence.narration_event_repository import PostgresRpgNarrationEventRepository
+    from app.apps.rpg.persistence.narration_event_repository import PostgresRpgNarrationEventRepository
 
     try:
         with default_database().transaction() as connection:

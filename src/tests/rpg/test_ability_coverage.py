@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.ability_coverage import summarize_ability_coverage, write_ability_coverage_snapshot
+from app.apps.rpg.session.ability_coverage import summarize_ability_coverage, write_ability_coverage_snapshot
 
 
 def _coverage_state() -> dict[str, Any]:

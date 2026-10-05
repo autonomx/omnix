@@ -15,7 +15,7 @@ regexes = ['''^[0-9a-f]{64}$''']
 description = "SHA-256 checksums of the pinned embedding model files (WP-8.5), not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/app/assistant_memory/v2/embeddings\.py$''']
+paths = ['''(?:^|/)src/app/platform/assistant_memory/v2/embeddings\.py$''']
 regexTarget = "secret"
 regexes = ['''^[0-9a-f]{64}$''']
 
@@ -32,7 +32,7 @@ regexes = ['''Authorization: Bearer local-dev-only''']
 description = "Transformers import misidentified as an API key"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/app/image/flux_pipeline_loading\.py$''']
+paths = ['''(?:^|/)src/app/platform/image/flux_pipeline_loading\.py$''']
 regexTarget = "match"
 regexes = ['''AutoTokenizer, Qwen3ForCausalLM''']
 

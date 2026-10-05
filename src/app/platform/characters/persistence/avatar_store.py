@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
-from app.characters.repository import CharacterConflictError
+from app.platform.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
+from app.platform.characters.repository import CharacterConflictError
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.module_repositories import PostgresModuleRecordRepository

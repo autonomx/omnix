@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from app.desktop_companion.commentary import (
+from app.apps.desktop_companion.commentary import (
     CompanionCommentaryLedger,
     build_commentary_candidate,
     commentary_similarity,
     desktop_commentary_prompt,
 )
-from app.desktop_companion.models import (
+from app.apps.desktop_companion.models import (
     CompanionAttentionDecision,
     DesktopObservation,
     DesktopObservedChange,

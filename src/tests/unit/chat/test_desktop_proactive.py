@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.chat import live_conversation_proactive as proactive_module
-from app.chat.live_conversation_proactive import (
+from app.platform.chat import live_conversation_proactive as proactive_module
+from app.platform.chat.live_conversation_proactive import (
     ProactiveDeliveryRequest,
     commit_proactive_delivery,
     stream_proactive_turn_chunks,
 )
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.chat.models import ChatMessage, ChatSession
 from app.providers import ChatMessage as ProviderMessage
 
 

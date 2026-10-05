@@ -16,7 +16,7 @@ def test_save_image_asset_bytes_sanitizes_windows_invalid_filename_chars(tmp_pat
     Those are valid logical ids, but they must not be used raw as filenames on
     Windows.
     """
-    from app.image import asset_store
+    from app.platform.image import asset_store
 
     monkeypatch.setattr(asset_store, "ASSET_DIR", str(tmp_path / "generated_images"))
     monkeypatch.setattr(asset_store, "MANIFEST_PATH", str(tmp_path / "generated_images" / "manifest.json"))
@@ -38,7 +38,7 @@ def test_save_image_asset_bytes_sanitizes_windows_invalid_filename_chars(tmp_pat
 
 
 def test_safe_asset_filename_component_preserves_stable_nonempty_name():
-    from app.image.asset_store import _safe_asset_filename_component
+    from app.platform.image.asset_store import _safe_asset_filename_component
 
     assert _safe_asset_filename_component("scene_illustration:scene:1:22222") == "scene_illustration_scene_1_22222"
     assert _safe_asset_filename_component("") == "asset"

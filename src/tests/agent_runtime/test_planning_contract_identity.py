@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime.planning_contracts import (
     ImplementationPlanSubmission,
     PlanImpactDisposition,
     PlanItem,

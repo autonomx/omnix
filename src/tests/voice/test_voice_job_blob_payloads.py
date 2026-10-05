@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 from app.assets.models import AssetListResponse, AssetRecord, AssetType
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.persistence.blob_store import LocalBlobStore
-from app.voice import jobs as voice_jobs
-from app.voice.feature import voice_submission_defaults
+from app.platform.voice import jobs as voice_jobs
+from app.platform.voice.feature import voice_submission_defaults
 
 _BASE64_RUN = re.compile(r"[A-Za-z0-9+/=]{1024,}")
 
@@ -106,7 +106,7 @@ class _Store:
 def test_audio_route_streams_audio_assets_with_ranges(tmp_path: Path) -> None:
     from fastapi import APIRouter
 
-    from app.gateway.kernel_routes.core_assets_routes import register_core_assets_routes
+    from app.composition.gateway.kernel_routes.core_assets_routes import register_core_assets_routes
 
     audio = tmp_path / "speech.wav"
     audio.write_bytes(b"RIFF" + bytes(100))

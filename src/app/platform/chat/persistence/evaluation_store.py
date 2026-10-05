@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.chat.evaluation_store import LiveChatEvaluationStore
+from app.platform.chat.evaluation_store import LiveChatEvaluationStore
 from app.persistence.document_store import PostgresDocumentStore
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.evaluation_store import VoiceSessionEvaluationRecord
+from app.platform.chat.evaluation_store import VoiceSessionEvaluationRecord
 from app.persistence.document_schemas import register_document_schema
 
 

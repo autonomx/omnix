@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.agent_runtime import service as service_module
-from app.agent_runtime import service_core as core_module
-from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, ValidationSpec
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime import service as service_module
+from app.platform.agent_runtime import service_core as core_module
+from app.platform.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, ValidationSpec
+from app.platform.agent_runtime.service import AgentRunService
 
 
 class _FakeWork:

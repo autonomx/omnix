@@ -5,14 +5,14 @@ below the architecture line-limit gate.
 """
 from __future__ import annotations
 
-from app.rpg.session.ability_catalog import (
+from app.apps.rpg.session.ability_catalog import (
     ABILITY_TEMPLATES,
     BUILD_IDENTITY_DEFAULTS,
     GENRE_CLASS_NAMES,
     GENRE_NORMALIZATION,
     TEMPLATE_FAMILIES,
 )
-from app.rpg.session.ability_models import (
+from app.apps.rpg.session.ability_models import (
     ALLOWED_CAPABILITIES,
     ALLOWED_COST_RESOURCES,
     ALLOWED_DIMENSIONS,
@@ -35,7 +35,7 @@ from app.rpg.session.ability_models import (
     RpgEffectOp,
     RpgProgressionResult,
 )
-from app.rpg.session.ability_runtime import (
+from app.apps.rpg.session.ability_runtime import (
     apply_ability_to_state,
     assign_ability_to_hotbar,
     execute_effect_ops,
@@ -48,7 +48,7 @@ from app.rpg.session.ability_runtime import (
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
 )
-from app.rpg.session.ability_tree import (
+from app.apps.rpg.session.ability_tree import (
     build_ability_tree,
     build_initial_ability_state,
     build_progression_package,

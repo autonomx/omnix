@@ -7,8 +7,8 @@ import uuid
 from typing import Any
 
 from app.jobs.handlers import JobHandlerRegistry
-from app.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
-from app.worker_runtime.pools import WorkerPoolConfig
+from app.composition.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
+from app.composition.worker_runtime.pools import WorkerPoolConfig
 
 
 class JobWorkerPoolRuntime:

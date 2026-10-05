@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.rpg.narration.runtime_narration_legacy import (
+from app.apps.rpg.narration.runtime_narration_legacy import (
     build_runtime_narration_payload as build_legacy_runtime_narration_payload,
 )
 

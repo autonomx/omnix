@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Iterator
 
-from app.rpg.session.item_turn_hooks import build_item_turn_hook_plan, run_item_turn_hooks
+from app.apps.rpg.session.item_turn_hooks import build_item_turn_hook_plan, run_item_turn_hooks
 
 MECHANICS_SOURCE = "engine_item_loadout_hooks_v1"
 TRACE_LIMIT = 20

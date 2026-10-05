@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import planning_review
-from app.agent_runtime.budget import AgentBudgetError
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime import planning_review
+from app.platform.agent_runtime.budget import AgentBudgetError
+from app.platform.agent_runtime.planning_contracts import (
     ImplementationPlanSubmission,
     PlanAuthority,
 )
@@ -128,7 +128,7 @@ def test_reviewer_budget_failure_is_not_retried_as_transport(monkeypatch) -> Non
 
 
 def test_durable_block_and_broker_preflight_prevent_pi_resubmission_loop() -> None:
-    root = Path(__file__).parents[2] / "app" / "agent_runtime"
+    root = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime"
     repository_source = (root / "planning_repository.py").read_text(encoding="utf-8")
     broker_source = (root / "pi_broker_extension.ts").read_text(encoding="utf-8")
 

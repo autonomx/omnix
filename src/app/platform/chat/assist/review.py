@@ -7,8 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from app.chat.assist.house import assist_data_root
-from app.chat.assist.models import ActionLogEntry, ConfirmationRequest, AssistantResult, PolicyDecision, ToolCall, ToolRiskLevel
+from app.platform.chat.assist.house import assist_data_root
+from app.platform.chat.assist.models import ActionLogEntry, ConfirmationRequest, AssistantResult, PolicyDecision, ToolCall, ToolRiskLevel
 
 
 # Assist mode's pending reviews and action log are chat's own documents; the

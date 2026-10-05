@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import BINANCE_POLICY, bindings_for_instrument, instrument_by_id, search_instruments
-from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import BINANCE_POLICY, bindings_for_instrument, instrument_by_id, search_instruments
+from app.apps.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .base import ProviderAdapter
 from .bar_semantics import is_final_bar

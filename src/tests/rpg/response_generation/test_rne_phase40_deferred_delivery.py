@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.narrative_delivery import (
+from app.apps.rpg.narrative_delivery import (
     deferred_public_turn_payload,
     prepare_canonical_result_delivery,
 )
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,

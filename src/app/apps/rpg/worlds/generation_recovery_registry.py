@@ -5,14 +5,14 @@ import json
 from typing import Any, Mapping
 
 from app.providers.base import ChatMessage
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_first_pass_provider import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_first_pass_provider import (
     _authored_registry_system_prompt,
     _identity_contract,
     _strict_registry_contract,
 )
-from app.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.worlds.providers.world_forge import (
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     _entity_registry_payload,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import base64
 
-from app.live_speech.protocol import dispatch_client_event
-from app.live_speech.realtime import LiveSpeechRealtimeService
+from app.platform.live_speech.protocol import dispatch_client_event
+from app.platform.live_speech.realtime import LiveSpeechRealtimeService
 
 
 def _loud_pcm(samples: int = 3200) -> bytes:

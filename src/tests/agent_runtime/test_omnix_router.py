@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.router import route_omnix_request, semantic_authority_risk
+from app.platform.agent_runtime.router import route_omnix_request, semantic_authority_risk
 
 
 def test_router_keeps_hermes_out_of_obvious_requests() -> None:

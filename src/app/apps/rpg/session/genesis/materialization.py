@@ -4,11 +4,11 @@ from app.config.env import env_str as _env_str
 
 from typing import Any, Mapping
 
-from app.rpg.session.genesis.contract import CampaignGenesisContract
-from app.rpg.session.genesis.world_forge_commit import (
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.world_forge_commit import (
     require_world_forge_commit_ready,
 )
-from app.rpg.session.genesis.world_forge_pipeline import CampaignWorldForgeResult
+from app.apps.rpg.session.genesis.world_forge_pipeline import CampaignWorldForgeResult
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -166,11 +166,11 @@ def persist_campaign_genesis(
     certification = require_world_forge_commit_ready(world_forge)
     try:
         from app.security.tenant_context import current_tenant
-        from app.rpg.persistence.rpg_campaign_bible_repository import (
+        from app.apps.rpg.persistence.rpg_campaign_bible_repository import (
             CampaignBibleRevisionConflict,
             campaign_bible_hash,
         )
-        from app.rpg.persistence.rpg_repository import canonical_json, state_hash
+        from app.apps.rpg.persistence.rpg_repository import canonical_json, state_hash
         from app.persistence.unit_of_work import unit_of_work
 
         context = current_tenant()
@@ -334,7 +334,7 @@ def persist_campaign_expansion(
     bible = dict(world_forge.compilation.document)
 
     from app.security.tenant_context import current_tenant
-    from app.rpg.persistence.rpg_repository import canonical_json
+    from app.apps.rpg.persistence.rpg_repository import canonical_json
     from app.persistence.unit_of_work import unit_of_work
 
     context = current_tenant()

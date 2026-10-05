@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.companion_activity.cognition import DeliveryIntent
-from app.companion_activity.embodiment import (
+from app.platform.companion_activity.cognition import DeliveryIntent
+from app.platform.companion_activity.embodiment import (
     CompanionEmbodimentMapper,
     RendererCapabilities,
 )

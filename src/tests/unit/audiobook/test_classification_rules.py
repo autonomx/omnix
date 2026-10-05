@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.service import AudiobookService
+from app.apps.audiobook.service import AudiobookService
 from app.persistence.blob_store import LocalBlobStore
 
 
@@ -37,8 +37,8 @@ def test_saved_rules_are_snapshotted_for_initial_import_and_can_be_cleared(tmp_p
     def unit_of_work(_database):
         yield work
 
-    monkeypatch.setattr("app.audiobook.service.unit_of_work", unit_of_work)
-    monkeypatch.setattr("app.audiobook.service.PostgresAudiobookRepository.get_project", lambda *_args: {"id": "book"})
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", unit_of_work)
+    monkeypatch.setattr("app.apps.audiobook.service.PostgresAudiobookRepository.get_project", lambda *_args: {"id": "book"})
     service = AudiobookService(None, LocalBlobStore(tmp_path))
     context = SimpleNamespace(workspace_id="workspace")
     rules = "Character quotes can also be in speaker:quote format."

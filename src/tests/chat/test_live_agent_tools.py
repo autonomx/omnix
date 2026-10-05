@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
+from app.platform.assistant_tools.models import AssistantToolRequest
 from app.capabilities.executor import LIVE_AGENT_TOOLS, live_agent_tools
 from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
 

@@ -1,11 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
-from app.chat.models import ChatMessage, ChatSession, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.prompt_assembly import PromptAssembly, PromptTurn
-from app.chat.prompt_rendering import render_prompt_assembly
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.chat.store import ChatSessionStore
+from app.platform.chat.models import ChatMessage, ChatSession, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.prompt_assembly import PromptAssembly, PromptTurn
+from app.platform.chat.prompt_rendering import render_prompt_assembly
+from app.platform.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.platform.chat.store import ChatSessionStore
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 

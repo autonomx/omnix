@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
-from app.rpg.ai.world_scene_narrator_runtime import (
+from app.apps.rpg.ai.world_scene_narrator_runtime import (
     SceneNarrator as _LegacySceneNarrator,
     apply_legacy_narration_emphasis,
     narrate_scene as _legacy_narrate_scene,

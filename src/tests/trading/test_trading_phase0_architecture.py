@@ -39,7 +39,7 @@ def test_experimental_spike_is_not_production_routed() -> None:
 
 
 def test_trading_sources_do_not_import_prototype_or_create_file_authority() -> None:
-    roots = (ROOT / "web/src/features/trading", ROOT / "src/app/trading")
+    roots = (ROOT / "web/src/features/trading", ROOT / "src/app/apps/trading")
     for trading_root in roots:
         for path in trading_root.rglob("*"):
             if not path.is_file():

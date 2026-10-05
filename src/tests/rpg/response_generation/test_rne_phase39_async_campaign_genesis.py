@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.jobs.models import ResourceClass
-from app.rpg.session.genesis.async_coordinator import (
+from app.apps.rpg.session.genesis.async_coordinator import (
     CAMPAIGN_GENESIS_ASYNC_CONTRACT,
     CAMPAIGN_GENESIS_JOB_TYPE,
     CAMPAIGN_GENESIS_RESOURCE_CLASS,
@@ -15,7 +15,7 @@ from app.rpg.session.genesis.async_coordinator import (
     enqueue_campaign_genesis,
     _preserve_live_progress_during_expansion,
 )
-from app.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -139,7 +139,7 @@ def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> 
 
 
 def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeypatch) -> None:
-    pipeline = importlib.import_module("app.rpg.session.genesis.pipeline_adapter")
+    pipeline = importlib.import_module("app.apps.rpg.session.genesis.pipeline_adapter")
     contract = _contract()
     prepared_calls: list[dict] = []
 
@@ -154,15 +154,15 @@ def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeyp
 
     monkeypatch.setattr(pipeline, "prepare_new_game_session_from_compiled_genesis", prepare)
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.campaign_genesis_async_enabled",
+        "app.apps.rpg.session.genesis.async_coordinator.campaign_genesis_async_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.campaign_genesis_sync_fallback_allowed",
+        "app.apps.rpg.session.genesis.async_coordinator.campaign_genesis_sync_fallback_allowed",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.enqueue_campaign_genesis",
+        "app.apps.rpg.session.genesis.async_coordinator.enqueue_campaign_genesis",
         lambda *args, **kwargs: {
             "ok": False,
             "error": "campaign_genesis_enqueue_failed",
@@ -206,7 +206,7 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
         saved.append(session)
         return session
 
-    monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
+    monkeypatch.setattr("app.apps.rpg.session.service.save_session", save_session)
     monkeypatch.setattr(
         "app.persistence.identity_service.ensure_local_identity",
         lambda database: SimpleNamespace(workspace_id="workspace", user_id="user"),
@@ -265,13 +265,13 @@ def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
         saved[campaign_id] = session
         return session
 
-    monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
+    monkeypatch.setattr("app.apps.rpg.session.service.save_session", save_session)
     monkeypatch.setattr(
-        "app.rpg.session.service.load_session",
+        "app.apps.rpg.session.service.load_session",
         lambda campaign_id: saved.get(campaign_id),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator._database",
+        "app.apps.rpg.session.genesis.async_coordinator._database",
         lambda value: (_ for _ in ()).throw(RuntimeError("PostgreSQL driver unavailable")),
     )
 

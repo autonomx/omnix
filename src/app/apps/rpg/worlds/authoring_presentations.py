@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_dossiers import project_entity_dossier
+from app.apps.rpg.session.genesis.world_forge_dossiers import project_entity_dossier
 
 SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "overview", "label": "Overview", "group": "workspace", "page_kind": "document"},

@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_combat_integration import resolve_actor_item_damage
+from app.apps.rpg.session.item_combat_integration import resolve_actor_item_damage
 
 
 _TRACE_LIMIT = 50

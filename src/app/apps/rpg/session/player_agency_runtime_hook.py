@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.rpg.session.player_agency_buttons import attach_next_action_buttons
-from app.rpg.session.player_agency_contract import attach_player_agency_contract
+from app.apps.rpg.session.player_agency_buttons import attach_next_action_buttons
+from app.apps.rpg.session.player_agency_contract import attach_player_agency_contract
 
 
 def _d(value: Any) -> dict[str, Any]:
@@ -32,7 +32,7 @@ def _b(value: Any, default: bool = False) -> bool:
 def _optional_flavor_provider(enable_flavor: bool) -> Any:
     if not enable_flavor:
         return None
-    from app.rpg.llm_app_gateway import build_app_llm_gateway
+    from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 
     return build_app_llm_gateway()
 

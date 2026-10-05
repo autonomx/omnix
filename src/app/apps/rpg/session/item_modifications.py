@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity
+from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity
 
 MODIFICATION_DEFINITIONS: dict[str, dict[str, Any]] = {
     "edge_damage_minor": {

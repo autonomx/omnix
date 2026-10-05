@@ -9,8 +9,8 @@ import time
 from collections import OrderedDict
 from typing import Any, Dict
 
-from app.image.config import get_active_image_provider_name, get_provider_config
-from app.image.providers.registry import (
+from app.platform.image.config import get_active_image_provider_name, get_provider_config
+from app.platform.image.providers.registry import (
     get_image_provider_definition,
     get_image_provider_keys,
     is_supported_image_provider,
@@ -217,15 +217,15 @@ def _build_provider(provider_name: str):
     config = get_provider_config(provider_name)
 
     if provider_name == "flux_klein":
-        from app.image.providers.flux_klein_provider import FluxKleinImageProvider
+        from app.platform.image.providers.flux_klein_provider import FluxKleinImageProvider
 
         return FluxKleinImageProvider(config)
     if provider_name in {"krea2_turbo", "z_image_turbo"}:
-        from app.image.providers.diffusers_turbo_provider import DiffusersTurboImageProvider
+        from app.platform.image.providers.diffusers_turbo_provider import DiffusersTurboImageProvider
 
         return DiffusersTurboImageProvider(provider_name, config)
     if provider_name == "mock":
-        from app.image.providers.mock_provider import MockImageProvider
+        from app.platform.image.providers.mock_provider import MockImageProvider
 
         return MockImageProvider(config)
 

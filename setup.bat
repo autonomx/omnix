@@ -216,10 +216,10 @@ if errorlevel 1 (
 echo.
 echo [9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)...
 set "PYTHONPATH=%CD%\src"
-"%RPG_FLUX_PYTHON%" -m app.assistant_memory.v2.embeddings download
+"%RPG_FLUX_PYTHON%" -m app.platform.assistant_memory.v2.embeddings download
 if errorlevel 1 (
     echo WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only.
-    echo          Retry later with: "%RPG_FLUX_PYTHON%" -m app.assistant_memory.v2.embeddings download
+    echo          Retry later with: "%RPG_FLUX_PYTHON%" -m app.platform.assistant_memory.v2.embeddings download
 )
 
 echo.
@@ -232,7 +232,7 @@ if errorlevel 1 goto :error
 if errorlevel 1 goto :error
 "%RPG_FLUX_PYTHON%" -c "import diffusers; print('diffusers OK')"
 if errorlevel 1 goto :error
-"%RPG_FLUX_PYTHON%" -c "from app.image.flux_pipeline_loading import validate_flux_pipeline_import; s=validate_flux_pipeline_import(); print('FLUX:', 'READY' if s.get('ok') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ok') else 1)"
+"%RPG_FLUX_PYTHON%" -c "from app.platform.image.flux_pipeline_loading import validate_flux_pipeline_import; s=validate_flux_pipeline_import(); print('FLUX:', 'READY' if s.get('ok') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ok') else 1)"
 if errorlevel 1 goto :error
 echo [FLUX] Runtime verification complete.
 echo =============================================

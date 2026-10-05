@@ -24,9 +24,9 @@ import build_causal_premarket_universe as scan_source
 import run_interday_winner_shadow_replay_core as core
 import run_stoch_rsi_early_single_v2_replay as v2run
 
-from app.trading import strategy_stoch_rsi_5m_early_single as early_single
-from app.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
-from app.trading.strategy_stoch_rsi_5m_early_single_v2 import context_size_weight, manage_trade
+from app.apps.trading import strategy_stoch_rsi_5m_early_single as early_single
+from app.apps.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
+from app.apps.trading.strategy_stoch_rsi_5m_early_single_v2 import context_size_weight, manage_trade
 
 ET = scan_source.ET
 FIVE_MINUTES = timedelta(minutes=5)

@@ -3,11 +3,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     STANDARD_DOMAIN_IDS,
     default_profile_registry,
 )
-from app.rpg.worlds import library_service
+from app.apps.rpg.worlds import library_service
 
 
 class _WorldLibrary:

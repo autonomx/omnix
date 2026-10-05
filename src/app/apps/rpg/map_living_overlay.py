@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from app.rpg.map_contracts import MapDefinition
+from app.apps.rpg.map_contracts import MapDefinition
 
 _ALLOWED_KINDS = {"npc", "danger", "resource", "quest", "event"}
 _MAX_MARKERS = 256

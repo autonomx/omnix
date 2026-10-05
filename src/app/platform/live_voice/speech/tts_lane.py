@@ -18,7 +18,7 @@ from app.settings.access import load_settings
 from app.providers.audio_registry import get_audio_registry
 
 from app.observability.tts_stream_diagnostics import stream_log
-from app.voice.contracts import TTSProvider
+from app.platform.voice.contracts import TTSProvider
 
 
 class TtsLanePriority(IntEnum):

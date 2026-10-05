@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.rpg.session.ability_system import ALLOWED_DIMENSIONS
+from app.apps.rpg.session.ability_system import ALLOWED_DIMENSIONS
 
 WORLD_SCALE_DIMENSIONS = {"relationships", "access", "narrative", "economy", "world", "information"}
 WORLD_SCALE_EFFECT_OPS = {

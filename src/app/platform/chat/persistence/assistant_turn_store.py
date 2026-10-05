@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from pydantic import ValidationError
 
-from app.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
+from app.platform.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
 from app.persistence.document_store import PostgresDocumentStore
 from app.persistence.document_schemas import register_document_schema
 from app.persistence.transaction_binding import after_commit

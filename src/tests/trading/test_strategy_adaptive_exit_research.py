@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.trading.indicator_signals import IndicatorSnapshot, MultiTimeframeIndicatorContext
-from app.trading.strategy_adaptive_exit_research import adaptive_exit_deterioration
+from app.apps.trading.indicator_signals import IndicatorSnapshot, MultiTimeframeIndicatorContext
+from app.apps.trading.strategy_adaptive_exit_research import adaptive_exit_deterioration
 
 
 def _snapshot(

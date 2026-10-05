@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.initiative import (
+from app.platform.companion_activity.initiative import (
     CompanionInitiativeAuthority,
     InitiativeAcquireRequest,
 )
-from app.companion_activity.presence import (
+from app.platform.companion_activity.presence import (
     CompanionPresenceInput,
     CompanionPresencePolicy,
 )

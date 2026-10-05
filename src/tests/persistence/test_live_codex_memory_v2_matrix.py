@@ -29,7 +29,7 @@ from uuid import uuid4
 import pytest
 
 from app.conversation.memory_contracts import MemoryRecord
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     AffectObservation,
     Episode,
     GraphAssertion,
@@ -43,54 +43,54 @@ from app.assistant_memory.v2 import (
     RetrievalQuery,
     VisibilityScope,
 )
-from app.assistant_memory.v2.affect_store import PostgresMemoryV2AffectStore
-from app.assistant_memory.v2.assistant_output import (
+from app.platform.assistant_memory.v2.affect_store import PostgresMemoryV2AffectStore
+from app.platform.assistant_memory.v2.assistant_output import (
     PostgresMemoryV2AssistantOutputLifecycle,
 )
-from app.assistant_memory.v2.authority import (
+from app.platform.assistant_memory.v2.authority import (
     PostgresMemoryV2AuthorityStore,
     StaleCutoverReceiptError,
 )
-from app.assistant_memory.v2.convergence import (
+from app.platform.assistant_memory.v2.convergence import (
     DerivedPlanPayload,
     PostgresMemoryV2DerivedCoordinator,
     RedactedDecisionSetError,
     StaleDerivedPlanError,
 )
-from app.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
-from app.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
-from app.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
-from app.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
-from app.assistant_memory.v2.graph_store import (
+from app.platform.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
+from app.platform.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
+from app.platform.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
+from app.platform.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
+from app.platform.assistant_memory.v2.graph_store import (
     GraphEvidenceError,
     GraphReplayValidator,
     PostgresMemoryV2GraphStore,
 )
-from app.assistant_memory.v2.legacy_shadow import (
+from app.platform.assistant_memory.v2.legacy_shadow import (
     LegacyMemoryV2Importer,
     PostgresMemoryV2ShadowEvaluationStore,
     compare_shadow_retrieval,
 )
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     ObservationIdempotencyConflict,
     PostgresMemoryV2ObservationStore,
 )
-from app.assistant_memory.v2.operations import PostgresMemoryV2ConvergenceWorker
-from app.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
-from app.assistant_memory.v2.replay import PostgresMemoryV2DerivedReplayValidator
-from app.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
-from app.assistant_memory.v2.runtime import (
+from app.platform.assistant_memory.v2.operations import PostgresMemoryV2ConvergenceWorker
+from app.platform.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
+from app.platform.assistant_memory.v2.replay import PostgresMemoryV2DerivedReplayValidator
+from app.platform.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
+from app.platform.assistant_memory.v2.runtime import (
     AuthoritativeIngestSequenceError,
     PostgresMemoryV2Runtime,
     UnsafeMemoryRollbackError,
 )
-from app.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
-from app.assistant_memory.v2.semantic_enrichment import (
+from app.platform.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
+from app.platform.assistant_memory.v2.semantic_enrichment import (
     SemanticMemoryProposal,
     VoiceMemDerivedSemanticEnricher,
 )
-from app.assistant_memory.v2.speculative_prefetch import (
+from app.platform.assistant_memory.v2.speculative_prefetch import (
     SpeculativeMemoryPrefetchController,
 )
 from app.persistence.config import DatabaseSettings

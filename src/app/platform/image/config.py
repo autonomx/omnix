@@ -6,7 +6,7 @@ from app.config.env import environment
 import os
 from typing import Any, Dict
 
-from app.image.providers.registry import is_supported_image_provider
+from app.platform.image.providers.registry import is_supported_image_provider
 from app.runtime.paths import MODELS_DIR
 from app.settings.access import load_settings
 

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_tools import browser_adapter
+from app.platform.assistant_tools import browser_adapter
 
 
 def test_browser_session_generation_cache_has_capacity_ttl_and_clear(monkeypatch) -> None:

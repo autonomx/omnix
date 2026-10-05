@@ -311,7 +311,7 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
         with redirect_stdout(captured), redirect_stderr(captured):
             if mode == "boot":
                 before = set(sys.modules)
-                from app.production import create_production_app
+                from app.composition.production import create_production_app
                 from app.runtime.config import RuntimeConfig, GatewayRole
                 from app.persistence.database import close_default_database
                 try:

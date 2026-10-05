@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -14,13 +14,13 @@ from app.rpg.narrative_engine import (
     NarrativeBlock,
     ValidationReport,
 )
-from app.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
-from app.rpg.narrative_engine.production_path import (
+from app.apps.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
+from app.apps.rpg.narrative_engine.production_path import (
     NarrativeProductionPathError,
     certify_production_narrative_result,
     enforce_production_narrative_result,
 )
-from app.rpg.narrative_engine.publisher_guard import publisher_guard
+from app.apps.rpg.narrative_engine.publisher_guard import publisher_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]

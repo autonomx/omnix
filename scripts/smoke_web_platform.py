@@ -48,7 +48,7 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
 
     from fastapi.testclient import TestClient
 
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.persistence.startup import bootstrap_status_payload
 
     # Mirror production startup: persistence bootstrap installs the tenant context.

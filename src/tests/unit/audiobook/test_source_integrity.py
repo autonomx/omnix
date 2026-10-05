@@ -8,9 +8,9 @@ from zipfile import ZipFile
 
 import pytest
 
-from app.audiobook.extraction import UnsupportedSource, extract_source, parse_page_ranges
-from app.audiobook.integrity import SourceIntegrityError, validate_chapter, validate_revision
-from app.audiobook.hashing import bytes_hash, object_hash
+from app.apps.audiobook.extraction import UnsupportedSource, extract_source, parse_page_ranges
+from app.apps.audiobook.integrity import SourceIntegrityError, validate_chapter, validate_revision
+from app.apps.audiobook.hashing import bytes_hash, object_hash
 
 
 def test_public_domain_epub_is_deterministic_and_lossless() -> None:
@@ -125,7 +125,7 @@ def test_opening_speaker_label_exchange_remains_separate_from_narration() -> Non
     "Ehsan: Hello.\nHe checked his phone.\nKinming: Goodbye.\nEhsan: Wait.\n",
 ])
 def test_colon_headings_and_isolated_labels_are_not_dialogue(sample: str) -> None:
-    from app.audiobook.spans import UnicodeDialogueDetector
+    from app.apps.audiobook.spans import UnicodeDialogueDetector
 
     spans = UnicodeDialogueDetector().detect("chapter", sample)
     assert "".join(span.source_text for span in spans) == sample
@@ -133,7 +133,7 @@ def test_colon_headings_and_isolated_labels_are_not_dialogue(sample: str) -> Non
 
 
 def test_indented_speaker_label_exchange_with_blank_lines() -> None:
-    from app.audiobook.spans import UnicodeDialogueDetector
+    from app.apps.audiobook.spans import UnicodeDialogueDetector
 
     sample = "  Ehsan:Hello.\n\n\tKinming: Hi.\n\n  Ehsan:Goodbye.\n"
     spans = UnicodeDialogueDetector().detect("chapter", sample)

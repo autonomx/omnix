@@ -6,15 +6,15 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.rpg.api.feature_routes.rpg_world_image_routes import register_rpg_world_image_routes
-from app.rpg.worlds import world_images
+from app.apps.rpg.api.feature_routes.rpg_world_image_routes import register_rpg_world_image_routes
+from app.apps.rpg.worlds import world_images
 
 
 def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_image_routes.read_world_image_targets",
+        "app.apps.rpg.api.feature_routes.rpg_world_image_routes.read_world_image_targets",
         lambda world_id: {
             "ok": True,
             "world": {"id": world_id, "title": "Aurelia"},
@@ -50,15 +50,15 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
         return {"ok": True, "world": {"id": world_id}, "targets": []}
 
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
+        "app.apps.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
         fake_generate,
     )
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_image_routes.update_world_image_target",
+        "app.apps.rpg.api.feature_routes.rpg_world_image_routes.update_world_image_target",
         fake_update,
     )
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_image_routes.regenerate_world_image_prompts",
+        "app.apps.rpg.api.feature_routes.rpg_world_image_routes.regenerate_world_image_prompts",
         lambda world_id, **kwargs: {"ok": True, "world_id": world_id, "targets": kwargs["target_ids"]},
     )
 
@@ -133,7 +133,7 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
 
 def test_world_image_generation_requires_at_least_one_target(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
+        "app.apps.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             ValueError("world_image_generation_targets_required")
         ),

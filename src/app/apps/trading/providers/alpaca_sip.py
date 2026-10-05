@@ -12,16 +12,16 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.catalog import bindings_for_instrument
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_evidence import SIPTradeEvent
-from app.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.catalog import bindings_for_instrument
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_evidence import SIPTradeEvent
+from app.apps.trading.us_equity_calendar import us_equity_session
 
 from .alpaca_iex import alpaca_iex_auth_headers
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"

@@ -7,7 +7,7 @@ import json
 from dataclasses import replace
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from app.rpg.narration.runtime_narration_legacy import (
+from app.apps.rpg.narration.runtime_narration_legacy import (
     build_runtime_narration_payload as build_legacy_runtime_narration_payload,
 )
 

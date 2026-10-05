@@ -263,7 +263,7 @@ def attach_genesis_to_created_session(
     session_id = str(result.get("session_id") or "")
     if not session_id:
         return result
-    from app.rpg.session.service import load_session, save_session
+    from app.apps.rpg.session.service import load_session, save_session
 
     session = result.get("session") if isinstance(result.get("session"), dict) else None
     if session is None:
@@ -338,7 +338,7 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
     legacy = adapt_genesis_payload_to_new_game_payload(
         {"request": {"genesis": contract.model_dump(mode="json")}}
     )
-    from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+    from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 
     result = create_new_game_session(RpgNewGameRequest.model_validate(legacy))
     return attach_genesis_to_created_session(result, contract)

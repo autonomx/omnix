@@ -210,7 +210,7 @@ class ProviderFacade:
                 _provider_from_info(
                     info,
                     family="image",
-                    source="app.image.providers.registry",
+                    source="app.platform.image.providers.registry",
                     capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
                 )
             )
@@ -220,7 +220,7 @@ class ProviderFacade:
                 _provider_from_info(
                     info,
                     family="rpg_visual",
-                    source="app.rpg.visual.providers.registry",
+                    source="app.apps.rpg.visual.providers.registry",
                     capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
                 )
             )

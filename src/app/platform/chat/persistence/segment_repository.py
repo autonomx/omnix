@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.chat.segments import MAX_SESSION_SEGMENTS, ConversationSegment, check_segment_identity, new_segment_id
+from app.platform.chat.segments import MAX_SESSION_SEGMENTS, ConversationSegment, check_segment_identity, new_segment_id
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 

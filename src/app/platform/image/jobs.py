@@ -23,7 +23,7 @@ from app.jobs.models import (
     ResourceClass,
 )
 
-from app.image.contracts import (
+from app.platform.image.contracts import (
     CHARACTER_AVATAR_FINISHER,
     ImageGenerateInput,
     ImageOutputRef,
@@ -110,7 +110,7 @@ def execute_image_job(
         )
 
     if generate_fn is None:
-        from app.image.service import generate_image
+        from app.platform.image.service import generate_image
 
         generate_fn = generate_image
     provider_payload["_device_permit_priority"] = "batch"

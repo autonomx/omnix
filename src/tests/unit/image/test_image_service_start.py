@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.image import image_http_client
+from app.platform.image import image_http_client
 
 
 def test_start_image_service_uses_launcher_then_lightweight_readiness_probe(monkeypatch) -> None:

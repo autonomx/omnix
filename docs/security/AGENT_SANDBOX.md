@@ -16,7 +16,7 @@ only raise its profile's isolation.
 
 ## The sandbox
 
-`python -m app.agent_runtime.sandbox build` builds the image
+`python -m app.platform.agent_runtime.sandbox build` builds the image
 `omnix-agent-sandbox:pi-0.85.1` from `deploy/docker/agent-sandbox.Dockerfile`:
 Node 22 (pinned by digest), git, Python 3 and the Pi coding agent 0.85.1, run
 as the non-root `node` user. Projects whose checks need more (a virtualenv, a
@@ -48,7 +48,7 @@ gateway) to the gateway host (`OMNIX_AGENT_SANDBOX_GATEWAY_HOST`, default
 another host port, is unreachable. The broker accepts the run's token only for
 that run's broker and model-gateway routes (WP-4.6).
 
-`python -m app.agent_runtime.sandbox check-egress` proves it on a host: from a
+`python -m app.platform.agent_runtime.sandbox check-egress` proves it on a host: from a
 container on the sandbox network it must connect to the relay and must fail to
 reach `1.1.1.1:443`; it exits 1 otherwise. On Linux the gateway must listen on
 an address the Docker bridge reaches (Docker Desktop forwards to loopback).

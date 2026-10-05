@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
+from app.platform.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
 from app.capabilities.registry import Capability, capability
 
 

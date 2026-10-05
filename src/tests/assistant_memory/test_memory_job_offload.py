@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.assistant_memory.feature import FEATURE
-from app.assistant_memory.jobs import (
+from app.platform.assistant_memory.feature import FEATURE
+from app.platform.assistant_memory.jobs import (
     MEMORY_SUGGEST_JOB_TYPE,
     create_memory_suggestion_job_request,
 )
@@ -29,7 +29,7 @@ def test_assistant_memory_registers_durable_suggestion_handler(
         memory_service_factory=lambda: None,
     )
     monkeypatch.setattr(
-        "app.assistant_memory.feature.default_memory_service",
+        "app.platform.assistant_memory.feature.default_memory_service",
         lambda: None,
     )
 

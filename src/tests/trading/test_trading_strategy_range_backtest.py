@@ -3,15 +3,15 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.historical_gapper_reconstruction import HistoricalUniverseReconstruction
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_range_backtest import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.historical_gapper_reconstruction import HistoricalUniverseReconstruction
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_range_backtest import (
     StrategyRangeBacktestRequest,
     choose_causal_universe,
     run_strategy_range_backtest,
 )
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 def candidate(symbol: str = "ABC", observed_at: datetime | None = None) -> GapperCandidate:

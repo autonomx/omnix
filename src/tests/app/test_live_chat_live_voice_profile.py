@@ -3,12 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat.models import ChatMessage, ChatSession
-from app.live_voice import pipeline as live_voice_pipeline
-from app.live_voice.chat_integration import create_live_voice_chat_port
-from app.live_voice.llm import metrics as live_voice_metrics
-from app.live_voice.llm import stream as live_voice_stream
-from app.live_voice.prompt import profile
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.live_voice import pipeline as live_voice_pipeline
+from app.platform.live_voice.chat_integration import create_live_voice_chat_port
+from app.platform.live_voice.llm import metrics as live_voice_metrics
+from app.platform.live_voice.llm import stream as live_voice_stream
+from app.platform.live_voice.prompt import profile
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import LMStudioProvider, ProviderConfig
 
@@ -61,7 +61,7 @@ def test_live_turn_profile_bounds_history_and_prompt_budget() -> None:
 
 
 def test_prompt_store_selects_feature_pipeline_for_live_voice(monkeypatch) -> None:
-    from app.chat.prompt_store import ChatSessionStore
+    from app.platform.chat.prompt_store import ChatSessionStore
 
     session, current = _session_with_long_history()
     expected = (object(), object())

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.alerts import TradingAlert
-from app.trading.alerts_monitor import TradingAlertMonitor
+from app.apps.trading.alerts import TradingAlert
+from app.apps.trading.alerts_monitor import TradingAlertMonitor
 
 
 NOW = datetime(2026, 8, 6, 7, 0, tzinfo=timezone.utc)
@@ -74,9 +74,9 @@ def test_monitor_does_not_poll_or_evaluate_expired_chart_alerts() -> None:
 
 def test_expiration_is_postgres_authority_and_evaluation_filter() -> None:
     migration = Path(
-        "src/app/trading/migrations/0026_trading_alert_expiration.sql"
+        "src/app/apps/trading/migrations/0026_trading_alert_expiration.sql"
     ).read_text()
-    implementation = Path("src/app/trading/alerts.py").read_text()
+    implementation = Path("src/app/apps/trading/alerts.py").read_text()
     assert "ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ" in migration
     assert "expires_at > %s" in implementation
     assert '"expires_at": alert.expires_at.isoformat()' in implementation

@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.persistence.errors import RevisionConflict
-from app.trading.execution import ExecutionObservation
-from app.trading.paper import (
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountCreate,
     PaperAccountSnapshot,
@@ -30,8 +30,8 @@ from app.trading.paper import (
     paper_realized_pnl,
     paper_unrealized_pnl,
 )
-from app.trading.paper_api import create_trading_paper_router
-from app.trading.paper_monitor import TradingPaperMonitor, trading_paper_monitor_enabled
+from app.apps.trading.paper_api import create_trading_paper_router
+from app.apps.trading.paper_monitor import TradingPaperMonitor, trading_paper_monitor_enabled
 
 
 NOW = datetime(2026, 8, 5, tzinfo=timezone.utc)
@@ -401,7 +401,7 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
 
 
 def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> None:
-    migration = Path("src/app/trading/migrations/0023_trading_paper.sql").read_text()
+    migration = Path("src/app/apps/trading/migrations/0023_trading_paper.sql").read_text()
     for table in (
         "omnix_trading_paper_accounts",
         "omnix_trading_paper_balances",
@@ -414,13 +414,13 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     assert "idempotency_key" in migration
 
     protection_migration = Path(
-        "src/app/trading/migrations/0039_trading_paper_protections.sql"
+        "src/app/apps/trading/migrations/0039_trading_paper_protections.sql"
     ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in protection_migration
 
     backend = "\n".join(
         path.read_text()
-        for path in Path("src/app/trading").glob("paper*.py")
+        for path in Path("src/app/apps/trading").glob("paper*.py")
     ).lower()
     for forbidden in (
         "alpaca",
@@ -430,10 +430,10 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     ):
         assert forbidden not in backend
 
-    monitor = Path("src/app/trading/paper_monitor.py").read_text()
+    monitor = Path("src/app/apps/trading/paper_monitor.py").read_text()
     assert "paper-reference" not in monitor
     assert "server_authoritative_protection" in monitor
 
-    gateway = Path("src/app/trading/route_registration.py").read_text()
+    gateway = Path("src/app/apps/trading/route_registration.py").read_text()
     assert "create_trading_paper_router" in gateway
     assert "create_trading_paper_monitor_task" in gateway

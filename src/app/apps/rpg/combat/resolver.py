@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.models import (
+from app.apps.rpg.combat.models import (
     AttackIntent,
     AttackResolution,
     DefenseResolution,
     FleeResolution,
 )
-from app.rpg.combat.rolls import deterministic_d20, deterministic_damage_roll
+from app.apps.rpg.combat.rolls import deterministic_d20, deterministic_damage_roll
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

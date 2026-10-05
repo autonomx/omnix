@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.chat import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.chat import (
     CreateChatSessionRequest,
     SendChatMessageRequest,
 )
-from app.chat.character_store import InMemoryChatSessionStore
-from app.desktop_companion import chat_activity
+from app.platform.chat.character_store import InMemoryChatSessionStore
+from app.apps.desktop_companion import chat_activity
 from app.persistence.runtime import reset_persistence_mode_cache
 
 

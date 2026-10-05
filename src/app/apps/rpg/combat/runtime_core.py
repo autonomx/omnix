@@ -4,7 +4,7 @@ import hashlib
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.apps.rpg.interactions.equipment_runtime import project_equipment_stats
 
 SOURCE = "deterministic_combat_runtime"
 

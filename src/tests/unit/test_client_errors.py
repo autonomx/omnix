@@ -7,7 +7,7 @@ import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.kernel_routes.client_errors_routes import register_client_error_routes
+from app.composition.gateway.kernel_routes.client_errors_routes import register_client_error_routes
 from app.security.permissions import DEFAULT_ROLE_PERMISSIONS, kernel_defaults_for
 
 
@@ -32,7 +32,7 @@ def _report(**overrides):
 
 
 def test_a_report_is_logged_without_query_strings(caplog):
-    with caplog.at_level(logging.WARNING, logger="app.gateway.kernel_routes.client_errors_routes"):
+    with caplog.at_level(logging.WARNING, logger="app.composition.gateway.kernel_routes.client_errors_routes"):
         response = _client().post("/api/client-errors", json=_report())
     assert response.status_code == 202
     assert response.json() == {"accepted": True}

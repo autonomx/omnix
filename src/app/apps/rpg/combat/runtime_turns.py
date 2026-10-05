@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.combat.conditions import (
+from app.apps.rpg.combat.conditions import (
     actor_has_condition,
     remove_status_effects_from_participant,
     tick_start_of_turn_status_effects,
 )
-from app.rpg.combat.runtime_core import (
+from app.apps.rpg.combat.runtime_core import (
     SOURCE,
     current_actor_id,
     get_combat_state,

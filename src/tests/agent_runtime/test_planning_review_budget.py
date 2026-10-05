@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import planning_review
-from app.agent_runtime.budget import AgentBudgetError
+from app.platform.agent_runtime import planning_review
+from app.platform.agent_runtime.budget import AgentBudgetError
 from app.providers.structured.errors import StructuredOutputExhausted
 
 

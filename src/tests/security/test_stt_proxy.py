@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from websockets.exceptions import SecurityError
 
-from app.voice import stt_proxy_routes as proxy
+from app.platform.voice import stt_proxy_routes as proxy
 from app.security.model_service import ModelServiceMiddleware
 from app.security.request_guard import RequestGuardMiddleware
 from tests.support.routers import include_router_registrar

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-HELPER = Path(__file__).resolve().parents[2] / "app" / "agent_runtime" / "pi_run_token.ts"
+HELPER = Path(__file__).resolve().parents[2] / "app" / "platform" / "agent_runtime" / "pi_run_token.ts"
 
 
 def _node() -> str:

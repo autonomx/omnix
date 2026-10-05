@@ -46,8 +46,8 @@ from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import after_regular_close
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import after_regular_close
 
 logger = logging.getLogger(__name__)
 

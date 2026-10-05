@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.combat.conditions import (
+from app.apps.rpg.combat.conditions import (
     add_status_effect_to_participant,
     build_condition_effect,
     remove_status_effects_from_participant,

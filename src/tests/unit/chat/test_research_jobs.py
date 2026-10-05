@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.research_jobs import link_user_message_to_research_job
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.research_jobs import link_user_message_to_research_job
 
 
 class TargetedMetadataStore:

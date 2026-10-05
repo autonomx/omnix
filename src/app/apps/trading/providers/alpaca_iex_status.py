@@ -14,8 +14,8 @@ from typing import Any
 
 import certifi
 from app.runtime.features import FeatureContext
-from app.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"

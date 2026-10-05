@@ -3,14 +3,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.live_voice.pipeline import build_live_voice_prompt
-from app.live_voice.prompt import profile as live_voice_profile
-from app.live_voice.prompt import cache as prompt_cache
-from app.chat.context_budget import PromptBudget
-from app.live_voice.prompt.spoken_style import apply_live_voice_spoken_style
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.live_voice.pipeline import build_live_voice_prompt
+from app.platform.live_voice.prompt import profile as live_voice_profile
+from app.platform.live_voice.prompt import cache as prompt_cache
+from app.platform.chat.context_budget import PromptBudget
+from app.platform.live_voice.prompt.spoken_style import apply_live_voice_spoken_style
+from app.platform.chat.models import ChatMessage, ChatSession
 from app.conversation.contracts import PromptMemoryItem
-from app.live_voice.prompt import companion_context
+from app.platform.live_voice.prompt import companion_context
 from app.providers import service as provider_service
 from tests.characterization.harness import capture
 

@@ -204,7 +204,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <p>Environment-owned values must not become writable browser controls unless an explicit secure backend mutation contract is added.</p>
 <p>When adding a setting, update the relevant runtime consumer and test both persistence and effective behavior. A control that saves but is never read by the runtime is not complete.</p>
 <h2 id="assistant-tool-capability-development">Assistant tool/capability development</h2>
-<p>The canonical capability registry is <code>src/app/agent_runtime/capabilities.py</code>. Browser-facing assistant tools are projected through <code>src/app/assistant_tools/registry.py</code>.</p>
+<p>The canonical capability registry is <code>src/app/platform/agent_runtime/capabilities.py</code>. Browser-facing assistant tools are projected through <code>src/app/platform/assistant_tools/registry.py</code>.</p>
 <p>Do not add a model tool by only changing a prompt. Register its authority explicitly.</p>
 <p>A capability definition should specify:</p>
 <ul>

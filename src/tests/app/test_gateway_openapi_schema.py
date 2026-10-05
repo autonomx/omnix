@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi.routing import APIRoute
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.runtime.feature_catalog import FEATURE_CATALOG
 from scripts.export_gateway_openapi import KERNEL_OWNER, ROUTE_OWNERS_FILE, normalize_contract, route_owners
 

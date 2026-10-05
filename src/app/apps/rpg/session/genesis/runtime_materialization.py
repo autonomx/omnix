@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 
 from .campaign_lore_store import (
     _campaign_id,

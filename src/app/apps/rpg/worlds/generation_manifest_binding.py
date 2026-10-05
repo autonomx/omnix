@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
 
 class EntityManifestBindingError(ValueError):

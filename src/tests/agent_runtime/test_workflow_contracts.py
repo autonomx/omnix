@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
+from app.platform.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
 
 
 def test_workflow_definition_versions_deterministic_procedure() -> None:

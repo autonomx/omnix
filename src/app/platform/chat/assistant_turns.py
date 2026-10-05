@@ -341,7 +341,7 @@ def default_assistant_turn_coordinator(database=None) -> AssistantTurnCoordinato
         with _default_lock:
             coordinator = getattr(database, "_assistant_turn_coordinator", None)
             if coordinator is None:
-                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+                from app.platform.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
 
                 coordinator = PostgresAssistantTurnCoordinator(database=database)
                 database._assistant_turn_coordinator = coordinator
@@ -352,7 +352,7 @@ def default_assistant_turn_coordinator(database=None) -> AssistantTurnCoordinato
         if _default_coordinator is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+                from app.platform.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
                 _default_coordinator = PostgresAssistantTurnCoordinator()
             else:
                 _default_coordinator = AssistantTurnCoordinator()

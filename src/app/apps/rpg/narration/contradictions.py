@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.narration.quality import normalize_text
+from app.apps.rpg.narration.quality import normalize_text
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

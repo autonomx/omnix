@@ -13,22 +13,22 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.binding_authority import MarketDataAuthorityDecision
-from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
-from app.trading.execution import (
+from app.apps.trading.binding_authority import MarketDataAuthorityDecision
+from app.apps.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
+from app.apps.trading.execution import (
     ExecutionEligibilityPolicy,
     ExecutionObservation,
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.models import (
+from app.apps.trading.models import (
     AdjustmentMode,
     BarsResponse,
     DatasetProvenance,
     MarketBar,
     ProviderBinding,
 )
-from app.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.us_equity_calendar import us_equity_session
 
 from .base import ProviderAdapter
 from .errors import ProviderContractError, ProviderDataUnavailableError
@@ -42,7 +42,7 @@ from .ibkr_runtime import (
     default_ibkr_runtime,
     official_ibapi_available,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _EXTENDED_OPEN = time(4, 0)

@@ -28,7 +28,7 @@ from . import strategy_leader_momentum_continuation as leader
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 DiagnosticCadence = Literal["decision_3m", "research_1m"]

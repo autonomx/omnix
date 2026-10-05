@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.characters.visemes import fit_visemes, viseme_sequence
+from app.platform.characters.visemes import fit_visemes, viseme_sequence
 
 
 def test_viseme_sequence_covers_distinct_visual_mouth_groups() -> None:

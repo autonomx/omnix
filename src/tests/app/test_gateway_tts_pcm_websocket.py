@@ -5,7 +5,7 @@ import threading
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.conversation.tts_stream_contract import TtsStreamRequest, estimate_chat_stream_max_new_tokens
 
 
@@ -78,7 +78,7 @@ def test_non_chat_stream_preserves_explicit_runtime_settings() -> None:
 
 
 def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkeypatch) -> None:
-    from app.voice import tts_pcm_websocket
+    from app.platform.voice import tts_pcm_websocket
 
     provider = FakeTtsProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []

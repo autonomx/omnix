@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from app.rpg.session import pipeline
+from app.apps.rpg.session import pipeline
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ def test_turn_pipeline_runs_stages_in_declared_order_and_resolves_once(monkeypat
 
 
 def test_public_interactive_turn_routes_through_the_pipeline_core(monkeypatch) -> None:
-    from app.rpg.session import interactive_first_call_runtime
+    from app.apps.rpg.session import interactive_first_call_runtime
 
     calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -76,7 +76,7 @@ def test_public_interactive_turn_routes_through_the_pipeline_core(monkeypatch) -
 
 
 def test_fast_visible_dialogue_stage_short_circuits_stateful_resolution(monkeypatch) -> None:
-    from app.rpg.session import fast_visible_dialogue_hook
+    from app.apps.rpg.session import fast_visible_dialogue_hook
 
     monkeypatch.setattr(
         pipeline,
@@ -101,7 +101,7 @@ def test_fast_visible_dialogue_stage_short_circuits_stateful_resolution(monkeypa
 
 
 def test_dialogue_quality_stage_enforces_resolved_visible_result(monkeypatch) -> None:
-    from app.rpg.session import dialogue_quality_hook
+    from app.apps.rpg.session import dialogue_quality_hook
 
     monkeypatch.setattr(
         dialogue_quality_hook,
@@ -118,7 +118,7 @@ def test_dialogue_quality_stage_enforces_resolved_visible_result(monkeypatch) ->
 
 
 def test_semantic_action_prompt_owns_the_dialogue_quality_contract() -> None:
-    from app.rpg.ai.semantic_action_intelligence import build_semantic_action_prompt
+    from app.apps.rpg.ai.semantic_action_intelligence import build_semantic_action_prompt
 
     prompt = build_semantic_action_prompt("ask about the road", {}, {}, {})
 
@@ -127,7 +127,7 @@ def test_semantic_action_prompt_owns_the_dialogue_quality_contract() -> None:
 
 
 def test_visible_response_stage_attaches_canonical_turn_record() -> None:
-    from app.rpg.session.visible_response_stage import apply_visible_response_stage
+    from app.apps.rpg.session.visible_response_stage import apply_visible_response_stage
 
     context = _context(lambda: None)
     context.result = {
@@ -145,7 +145,7 @@ def test_visible_response_stage_attaches_canonical_turn_record() -> None:
 
 
 def test_provider_visible_text_falls_back_to_assistant_message_content() -> None:
-    from app.rpg.ai.semantic_action_intelligence import _complete_raw_text
+    from app.apps.rpg.ai.semantic_action_intelligence import _complete_raw_text
 
     class Provider:
         def complete_semantic_packet(self, _prompt: str, *, response_schema: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +162,7 @@ def test_provider_visible_text_falls_back_to_assistant_message_content() -> None
 
 
 def test_first_call_selection_rejects_placeholder_and_world_info_text() -> None:
-    from app.rpg.session.visible_response_contract import validate_first_call_selection
+    from app.apps.rpg.session.visible_response_contract import validate_first_call_selection
 
     placeholder = validate_first_call_selection(
         {
@@ -197,7 +197,7 @@ def test_first_call_selection_rejects_placeholder_and_world_info_text() -> None:
 
 
 def test_generic_dialogue_fallback_repairs_meaningful_question_and_preserves_noise() -> None:
-    from app.rpg.session.interactive_first_call_runtime import _safe_dialogue_fallback_line
+    from app.apps.rpg.session.interactive_first_call_runtime import _safe_dialogue_fallback_line
 
     repaired = _safe_dialogue_fallback_line(
         speaker="Mara",
@@ -219,7 +219,7 @@ def test_generic_dialogue_fallback_repairs_meaningful_question_and_preserves_noi
 
 
 def test_direct_dialogue_owner_records_conversation_exchange(monkeypatch) -> None:
-    from app.rpg.session import canonical_direct_dialogue, dialogue_focus, first_call_dialogue
+    from app.apps.rpg.session import canonical_direct_dialogue, dialogue_focus, first_call_dialogue
 
     monkeypatch.setattr(
         first_call_dialogue,
@@ -232,7 +232,7 @@ def test_direct_dialogue_owner_records_conversation_exchange(monkeypatch) -> Non
         lambda **_kwargs: {"turn_id": "turn-12"},
     )
     # canonicalize_direct_dialogue_result is imported from narrative_engine_bridge.
-    from app.rpg.session import narrative_engine_bridge
+    from app.apps.rpg.session import narrative_engine_bridge
 
     monkeypatch.setattr(
         narrative_engine_bridge,
@@ -260,8 +260,8 @@ def test_direct_dialogue_owner_records_conversation_exchange(monkeypatch) -> Non
 
 
 def test_direct_dialogue_recording_failure_emits_degradation_metric(monkeypatch) -> None:
-    from app.rpg.session import canonical_direct_dialogue, dialogue_focus, first_call_dialogue
-    from app.rpg.session import narrative_engine_bridge
+    from app.apps.rpg.session import canonical_direct_dialogue, dialogue_focus, first_call_dialogue
+    from app.apps.rpg.session import narrative_engine_bridge
 
     monkeypatch.setattr(
         first_call_dialogue,
@@ -284,7 +284,7 @@ def test_direct_dialogue_recording_failure_emits_degradation_metric(monkeypatch)
 
     monkeypatch.setattr(dialogue_focus, "record_direct_dialogue_exchange", fail_recording)
     logged: list[dict[str, Any]] = []
-    from app.rpg import debug_logging
+    from app.apps.rpg import debug_logging
 
     monkeypatch.setattr(
         debug_logging,
@@ -381,8 +381,8 @@ def test_production_turn_pipeline_declares_commit_and_post_commit_stages() -> No
 def test_interaction_commit_stage_updates_session_override_without_false_durability(
     monkeypatch,
 ) -> None:
-    from app.rpg.session import interaction_timeline, narrative_engine_bridge
-    from app.rpg.session.interaction_stages import commit_interaction
+    from app.apps.rpg.session import interaction_timeline, narrative_engine_bridge
+    from app.apps.rpg.session.interaction_stages import commit_interaction
 
     session = {"runtime_state": {"interaction_seq": 0}}
     event = {"interaction_id": "interaction:1", "sequence": 1, "state_revision": 1}
@@ -409,7 +409,7 @@ def test_interaction_commit_stage_updates_session_override_without_false_durabil
 
 
 def test_session_load_replays_interactions_and_recovers_pending_narration(monkeypatch) -> None:
-    from app.rpg.session import interaction_event_store, interaction_lifecycle, service
+    from app.apps.rpg.session import interaction_event_store, interaction_lifecycle, service
 
     session = {"manifest": {"session_id": "campaign-load"}, "runtime_state": {}}
     calls: list[str] = []
@@ -450,7 +450,7 @@ def test_interpretive_owner_builds_world_contracts_without_installers(
     expected_intent: str,
     expected_family: str,
 ) -> None:
-    from app.rpg.session.interpretive_adjudication import (
+    from app.apps.rpg.session.interpretive_adjudication import (
         build_interpretive_adjudication_result,
     )
 
@@ -482,7 +482,7 @@ def test_interpretive_owner_builds_world_contracts_without_installers(
 
 
 def test_rpg_runtime_has_no_hook_installers_import_finders_or_fastapi_patchers() -> None:
-    root = Path("src/app/rpg")
+    root = Path("src/app/apps/rpg")
     source_files = sorted(root.rglob("*.py"))
     installer_definitions = []
     forbidden_patches = []

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.chat.generation_jobs import cancel_chat_generation_job
+from app.platform.chat.generation_jobs import cancel_chat_generation_job
 from app.jobs.models import (
     CancelJobRequest,
     CreateJobRequest,
@@ -20,7 +20,7 @@ from app.jobs.models import (
 )
 from app.jobs.projections import summarize_job
 from app.runtime.pagination import MAX_PAGE_SIZE, InvalidCursor
-from app.gateway.kernel_routes.live_event_stream import (
+from app.composition.gateway.kernel_routes.live_event_stream import (
     _sse_event,
     committed_event_stream,
     legacy_event_id,

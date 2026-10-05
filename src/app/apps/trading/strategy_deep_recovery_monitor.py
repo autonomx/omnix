@@ -39,7 +39,7 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
     _PartialCurrentSessionMarketDataProxy,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _STATE_KEY = "_omnix_trading_strategy_deep_recovery_shadow_monitor"

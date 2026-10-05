@@ -12,10 +12,10 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_objectives import build_item_objectives
-from app.rpg.session.item_report_sections import build_item_report_section
-from app.rpg.session.item_scenarios import build_item_scenario_plan
-from app.rpg.session.item_state_maintenance import build_item_state_maintenance_plan
+from app.apps.rpg.session.item_objectives import build_item_objectives
+from app.apps.rpg.session.item_report_sections import build_item_report_section
+from app.apps.rpg.session.item_scenarios import build_item_scenario_plan
+from app.apps.rpg.session.item_state_maintenance import build_item_state_maintenance_plan
 
 MECHANICS_SOURCE = "engine_item_diagnostics_v1"
 TRACE_LIMIT = 20

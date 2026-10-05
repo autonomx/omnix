@@ -1,5 +1,5 @@
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
+from app.apps.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
 
 
 def test_character_job_owner_maps_to_local_user_and_preserves_subject() -> None:

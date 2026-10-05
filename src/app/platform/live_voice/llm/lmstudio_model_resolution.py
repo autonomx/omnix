@@ -342,7 +342,7 @@ def _update_active_diagnostics(
     transport_fallback: bool | None = None,
 ) -> None:
     try:
-        from app.live_voice.llm import lmstudio_diagnostics as diagnostics_runtime
+        from app.platform.live_voice.llm import lmstudio_diagnostics as diagnostics_runtime
 
         active = diagnostics_runtime._ACTIVE_CALL.get()
     except (AttributeError, ImportError):

@@ -8,12 +8,12 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from app.trading.models import MarketBar
-from app.trading.strategies.models import GapPullbackConfig, StochRsi5mConfig
-from app.trading.strategies.registrations import STRATEGY_REGISTRY
-from app.trading.strategies.registry import MonitorOwnedStrategy, StrategyRegistry, UnknownStrategyKind
-from app.trading.strategies.runner import StrategyRunner
-from app.trading.strategy_repository import TradingStrategyConfigDocument, strategy_config_document_model
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import GapPullbackConfig, StochRsi5mConfig
+from app.apps.trading.strategies.registrations import STRATEGY_REGISTRY
+from app.apps.trading.strategies.registry import MonitorOwnedStrategy, StrategyRegistry, UnknownStrategyKind
+from app.apps.trading.strategies.runner import StrategyRunner
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument, strategy_config_document_model
 
 from src.tests.trading.fake_breakout_strategy import FakeBreakoutConfig, FakeBreakoutStrategy
 
@@ -164,7 +164,7 @@ def test_the_registry_rejects_ambiguous_or_authority_widening_entries() -> None:
 
 def test_a_registered_runner_strategy_gets_the_scheduled_task(monkeypatch) -> None:
     from app.runtime.scheduler import ScheduledTaskSpec
-    from app.trading.strategies import runner
+    from app.apps.trading.strategies import runner
 
     assert runner.strategy_runner_task(None) is None
     monkeypatch.setattr(runner, "STRATEGY_REGISTRY", STRATEGY_REGISTRY.with_entries(FakeBreakoutStrategy()))

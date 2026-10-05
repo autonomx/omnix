@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.assistant_memory.jobs import (
+from app.platform.assistant_memory.jobs import (
     create_memory_suggestion_job_request,
     process_memory_suggestion_job,
 )
-from app.chat.compaction import build_deterministic_summary, enqueue_compaction_job
-from app.assistant_memory.chat_commands import MemoryCommand, execute_memory_command
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.retention_policy import (
+from app.platform.chat.compaction import build_deterministic_summary, enqueue_compaction_job
+from app.platform.assistant_memory.chat_commands import MemoryCommand, execute_memory_command
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.retention_policy import (
     automatic_memory_derivation_allowed,
     transcript_retention_allowed,
 )

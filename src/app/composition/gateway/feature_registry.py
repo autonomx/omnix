@@ -122,7 +122,7 @@ def _register_feature_modules(gateway) -> None:
     job_handlers.register(PLATFORM_PROBE_JOB)
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
-    from app.runtime_composition import shared_service_repository_specs
+    from app.composition.runtime_composition import shared_service_repository_specs
 
     install_repository_specs(shared_service_repository_specs())
 
@@ -196,7 +196,7 @@ def _register_feature_modules(gateway) -> None:
 
     # The authentication middleware accepts the service token only on these
     # paths and lets declared public paths through without a principal.
-    from app.runtime_composition import composition_port_bindings
+    from app.composition.runtime_composition import composition_port_bindings
 
     bindings = PortBindings.build([*composition_port_bindings(), *port_bindings])
     install_port_bindings(bindings)

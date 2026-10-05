@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _ensure_active_interactions as _ensure_active_interactions, _ensure_npc_reaction_runtime_state as _ensure_npc_reaction_runtime_state,
     _ensure_simulation_state as _ensure_simulation_state, _normalize_performance_settings as _normalize_performance_settings,
     _normalize_runtime_settings as _normalize_runtime_settings, _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _DEFAULT_INTERACTION_DURATION_TICKS as _DEFAULT_INTERACTION_DURATION_TICKS, _INTERACTION_STALE_GRACE_TICKS as _INTERACTION_STALE_GRACE_TICKS,
     _MAX_ACTIVE_INTERACTIONS as _MAX_ACTIVE_INTERACTIONS, _get_narration_job_for_turn as _get_narration_job_for_turn, _is_narration_job_active as _is_narration_job_active,
 )
-from app.rpg.ai.npc_reaction_layer import (
+from app.apps.rpg.ai.npc_reaction_layer import (
     apply_npc_reactions as apply_npc_reactions, build_interaction_reaction_context as build_interaction_reaction_context,
     build_npc_reaction_candidates as build_npc_reaction_candidates, select_npc_reactions as select_npc_reactions,
     update_interaction_reaction_state as update_interaction_reaction_state,
 )
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     seed_or_update_thread as seed_or_update_thread,
 )
 import hashlib as hashlib
 import logging
-from app.rpg.session.narration_worker import (
+from app.apps.rpg.session.narration_worker import (
     ensure_narration_worker_running as ensure_narration_worker_running, signal_narration_work as signal_narration_work,
 )
 from typing import (
@@ -39,7 +39,7 @@ def _enqueue_narration_request(
     job_kind: str = "player_turn",
     priority: int = 100,
 ) -> tuple[dict[str, Any], dict[str, Any], bool]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
     )
 
@@ -137,7 +137,7 @@ def _enqueue_narration_request_old(
     session_id: str,
     narration_request: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
     )
 
@@ -526,7 +526,7 @@ def _upsert_active_interaction_from_semantic_action(
     runtime_state: dict[str, Any],
     record: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )
 
@@ -627,7 +627,7 @@ def _expire_stale_active_interactions(
     simulation_state: dict[str, Any],
     current_tick: int,
 ) -> dict[str, Any]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )
 
@@ -823,7 +823,7 @@ def _resolve_until_next_command_interactions(
     semantic_action_record: dict[str, Any],
     current_tick: int,
 ) -> dict[str, Any]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )
 

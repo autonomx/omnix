@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     GridPortal,
@@ -13,7 +13,7 @@ from app.rpg.map_grid_contracts import (
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import (
+from app.apps.rpg.map_instance_runtime import (
     MapMovementError,
     MoveActorCommand,
     create_map_instance_snapshot,

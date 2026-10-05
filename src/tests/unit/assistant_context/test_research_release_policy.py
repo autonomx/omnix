@@ -3,17 +3,17 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat.assistant_context.models import AssistantContextBuildResult
-from app.chat.assistant_context.routes import register_assistant_context_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.research.policy import ResearchPolicy
-from app.research.release_policy import (
+from app.platform.chat.assistant_context.models import AssistantContextBuildResult
+from app.platform.chat.assistant_context.routes import register_assistant_context_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.research.policy import ResearchPolicy
+from app.platform.research.release_policy import (
     ResearchReleasePolicy,
     research_release_availability,
     resolve_research_release,
 )
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.research.settings import ResearchRuntimeSettings
+from app.platform.research.settings import ResearchRuntimeSettings
 import pytest
 
 pytestmark = pytest.mark.usefixtures("legacy_test_persistence")
@@ -119,7 +119,7 @@ def test_route_rejects_silent_downgrade_and_persists_visible_opt_in_notice(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from app.chat.assistant_context import routes as assistant_context_routes
+    from app.platform.chat.assistant_context import routes as assistant_context_routes
 
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     chat_store = ChatSessionStore(tmp_path / "chat.json")

@@ -3,23 +3,23 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.currency import (
+from app.apps.rpg.interactions.currency import (
     add_currency,
     currency_snapshot,
     multiply_currency,
     subtract_currency,
 )
-from app.rpg.interactions.item_catalog import (
+from app.apps.rpg.interactions.item_catalog import (
     definition_for_item_like,
     infer_definition_id_from_name,
 )
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
-from app.rpg.interactions.merchant_catalog import get_default_merchant
+from app.apps.rpg.interactions.merchant_catalog import get_default_merchant
 
 
 def _safe_str(value: Any) -> str:

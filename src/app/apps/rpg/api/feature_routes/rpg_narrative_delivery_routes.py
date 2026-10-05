@@ -10,17 +10,17 @@ from fastapi import HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.rpg.narrative_delivery import (
+from app.apps.rpg.narrative_delivery import (
     build_production_narrative_delivery_repository,
 )
-from app.rpg.narrative_engine.contracts import CanonicalNarrativeResponse
-from app.rpg.narrative_engine.delivery import (
+from app.apps.rpg.narrative_engine.contracts import CanonicalNarrativeResponse
+from app.apps.rpg.narrative_engine.delivery import (
     NarrativeDeliveryConflict,
     NarrativeDeliveryCoordinator,
     NarrativeDeliveryEvent,
     NarrativeDeliveryRepository,
 )
-from app.rpg.narrative_repository import build_production_narrative_repository
+from app.apps.rpg.narrative_repository import build_production_narrative_repository
 
 
 class NarrativeDeliveryCancelRequest(BaseModel):

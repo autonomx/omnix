@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.live_voice.speech import pcm_diagnostics as diagnostics
+from app.platform.live_voice.speech import pcm_diagnostics as diagnostics
 
 
 def _capture_events(monkeypatch):

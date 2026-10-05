@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.party import build_companion_presence_summary
+from app.apps.rpg.party import build_companion_presence_summary
 
 from .personality import build_personality_style_tags
 from .personality_state import get_actor_personality_profile

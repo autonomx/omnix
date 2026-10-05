@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
     validate_generated_topic_for_publication,

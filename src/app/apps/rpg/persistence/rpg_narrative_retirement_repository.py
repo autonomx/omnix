@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.rpg.narrative_engine.publisher_guard import CANONICAL_PUBLISHER
+from app.apps.rpg.narrative_engine.publisher_guard import CANONICAL_PUBLISHER
 
 from .rpg_repository import canonical_json
 from app.persistence.tenant import TenantContext

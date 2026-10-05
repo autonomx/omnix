@@ -11,9 +11,9 @@ from app.runtime.background import (
     BackgroundWorker, BackgroundOwnershipUnavailable, GatewayBackgroundRuntime,
     register_background_worker,
 )
-from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
-from app.gateway.feature_registry import FeatureLifecycle, register_feature_lifecycle
-from app.gateway.lifecycle import gateway_lifespan
+from app.composition.gateway.background_runtime import GatewayBackgroundRegistryAdapter
+from app.composition.gateway.feature_registry import FeatureLifecycle, register_feature_lifecycle
+from app.composition.gateway.lifecycle import gateway_lifespan
 from app.runtime.config import RuntimeConfig, GatewayRole
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 
@@ -111,7 +111,7 @@ def test_background_connection_loss_stops_workers_and_latches_authority(monkeypa
 
 
 def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
-    from app.gateway.runtime_diagnostics import runtime_diagnostics
+    from app.composition.gateway.runtime_diagnostics import runtime_diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
     @contextmanager
     def connection():
@@ -137,7 +137,7 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
 
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):
     from app.runtime.worker_health import WorkerHealthPayload
-    from app.gateway import diagnostics
+    from app.composition.gateway import diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
     @contextmanager
     def connection():
@@ -177,7 +177,7 @@ def test_compatibility_modules_are_allowlisted():
 
 def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
     import logging
-    from app.gateway.diagnostics import redact_diagnostics
+    from app.composition.gateway.diagnostics import redact_diagnostics
     from app.runtime.logging import runtime_transition
     value = {'nested': [{'api_key': 'private', 'password': 'private',
                          'endpoint': 'postgresql://user:private@host/db'}]}
@@ -192,7 +192,7 @@ def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
 
 def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
     from app.runtime import config as runtime_config
-    from app.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.session.genesis import async_coordinator as genesis
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
     monkeypatch.setattr(genesis.threading, 'Thread', lambda *args, **kwargs: pytest.fail('API started genesis thread'))
@@ -200,7 +200,7 @@ def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
 
 
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
-    from app.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.session.genesis import async_coordinator as genesis
     from app.persistence.background_authority import require_background_owner
     from app.runtime import config as runtime_config
     # Campaign genesis runs on job-worker processes (WP-6.1).

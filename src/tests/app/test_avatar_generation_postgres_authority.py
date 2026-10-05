@@ -1,6 +1,6 @@
-from app.characters.avatar_generation_service import CharacterAvatarGenerationService
-from app.characters.avatar_viseme_generation import CharacterVisemeGenerationService
-from app.characters.persistence import avatar_generation_repository
+from app.platform.characters.avatar_generation_service import CharacterAvatarGenerationService
+from app.platform.characters.avatar_viseme_generation import CharacterVisemeGenerationService
+from app.platform.characters.persistence import avatar_generation_repository
 from app.persistence import runtime as persistence_runtime
 
 

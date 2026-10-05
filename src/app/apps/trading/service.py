@@ -35,8 +35,8 @@ from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
-from app.trading.us_equity_calendar import EASTERN
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 def _coalesced_gap_ranges(starts: set[datetime], step):

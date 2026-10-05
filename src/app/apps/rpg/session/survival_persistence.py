@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping, Tuple
 
-from app.rpg.survival import SURVIVAL_STATE_KEY, normalize_survival_state
+from app.apps.rpg.survival import SURVIVAL_STATE_KEY, normalize_survival_state
 
 SURVIVAL_PERSISTENCE_SOURCE = "runtime_survival_persistence"
 

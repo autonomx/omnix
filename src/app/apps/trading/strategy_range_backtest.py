@@ -25,8 +25,8 @@ from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_sessio
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"

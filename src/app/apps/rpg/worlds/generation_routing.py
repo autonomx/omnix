@@ -10,10 +10,10 @@ from typing import Any, Mapping
 from urllib.request import urlopen
 
 from app.providers.registry import get_provider
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
-from app.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
+from app.apps.rpg.worlds.providers.world_forge import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )

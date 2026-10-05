@@ -94,7 +94,7 @@
 </tr>
 </tbody></table></div>
 <p>Optional explicit <code>OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME</code> and <code>OMNIX_GATEWAY_ALLOW_LOCAL_TTS</code> flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. <code>OMNIX_SCHEDULER_THREAD_WORKERS</code> and <code>OMNIX_SCHEDULER_PROCESS_WORKERS</code> bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">the Nginx ingress example</a>; the Vite proxy is for local development. See <a href="OPERATIONS.html">operations</a> for readiness/recovery and <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a> for disposable test database and certification commands.</p>
-<p>The local launcher starts one job worker with the default resource pools. Run <code>PYTHONPATH=src python -m app.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1</code> to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on <code>127.0.0.1:8090</code> by default.</p>
+<p>The local launcher starts one job worker with the default resource pools. Run <code>PYTHONPATH=src python -m app.composition.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1</code> to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on <code>127.0.0.1:8090</code> by default.</p>
 <p>GPU/model calls use PostgreSQL device permits, not per-process semaphores. The gateway <code>/api/diagnostics</code> response lists configured capacity, active holders, queued priorities and the local TTS model owner. The first configured capacity for a device/model class is persisted; drain users before changing it and update <code>omnix_device_capacity</code> to the new value before restarting all processes. A live model-owner lease prevents a second process from loading local TTS; use <code>OMNIX_TTS_MODEL_OWNER</code> to choose the owner explicitly.</p>
 <p>This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.</p>
 <h3 id="port-map">Port map</h3>
@@ -260,8 +260,8 @@ python -m app.persistence verify</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m pip install --require-hashes -r requirements.txt</code></pre></div>
 <p>Use Python 3.11. <code>requirements.txt</code> installs the gateway runtime from its hash-locked dependency set. Install test tools from <code>requirements/dev.lock.txt</code>; the image, TTS, and STT runtimes have separate locks and isolated environments.</p>
 <p><code>setup.bat</code> / <code>setup.sh</code> also download Memory v2&#x27;s embedding model (<code>intfloat/multilingual-e5-small</code>, about 490 MB, pinned and SHA-256 checked) into <code>resources/models/multilingual-e5-small</code>. Rerunning setup skips files that already match their checksum. If the download fails, setup warns and continues, and memory retrieval matches words only until the model is present. On a host installed by hand, run it once after the dependency install:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">PYTHONPATH=src python -m app.assistant_memory.v2.embeddings download
-PYTHONPATH=src python -m app.assistant_memory.v2.embeddings status</code></pre></div>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">PYTHONPATH=src python -m app.platform.assistant_memory.v2.embeddings download
+PYTHONPATH=src python -m app.platform.assistant_memory.v2.embeddings status</code></pre></div>
 <h3 id="gpu-pytorch-note">GPU/PyTorch note</h3>
 <p><code>requirements.txt</code> intentionally does not install the repository&#x27;s CUDA PyTorch build. The image, TTS, and STT locks target CUDA 12.4 and keep each Torch runtime isolated. The Windows image environment can be installed with <code>scripts/requirements/bootstrap_omnix_flux_env.ps1</code>.</p>
 <p>For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:</p>
@@ -282,10 +282,10 @@ npm run web:preview</code></pre></div>
 <p>Make sure the Python environment is active, <code>PYTHONPATH</code> includes <code>src</code>, the database is reachable, and required provider/service environment variables are set.</p>
 <p>Linux/macOS/WSL:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export PYTHONPATH=src
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
 <p>PowerShell:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &#x27;src&#x27;
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
 <p>Verify:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">http://127.0.0.1:8000/api/health</code></pre></div>
 <p>The gateway also exposes runtime/worker status and the shared <code>/events</code> stream used by the web app.</p>
@@ -383,7 +383,7 @@ HERMES_TIMEOUT_SECONDS=45</code></pre></div>
 hermes model</code></pre></div>
 <p>Only set <code>HERMES_ENABLED=true</code> after the sidecar is reachable. See <a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a> for the runtime boundary and skip-install options.</p>
 <h2 id="11-launcher-dashboard">11. Launcher dashboard</h2>
-<p><code>python -m app.launcher start</code> starts Omnix on every platform; <code>start_all.bat</code> and <code>start_all.sh</code> are thin wrappers around it. The launcher:</p>
+<p><code>python -m app.composition.launcher start</code> starts Omnix on every platform; <code>start_all.bat</code> and <code>start_all.sh</code> are thin wrappers around it. The launcher:</p>
 <ul>
 <li>refuses to start while another launcher answers on port <code>5055</code>;</li>
 <li>checks that the TTS and STT runtimes run Python 3.11 (a missing one is a</li>
@@ -403,7 +403,7 @@ hermes model</code></pre></div>
 .\start_all.bat --database-credential-injected-check   # check without starting services</code></pre></div>
 <h3 id="interpreters-and-posix">Interpreters and POSIX</h3>
 <p>Neither launcher contains workstation paths. Each interpreter resolves from its environment variable (<code>RPG_FLUX_PYTHON</code>, <code>RPG_TTS_PYTHON</code>, <code>RPG_STT_PYTHON</code>), then <code>resources/config/launcher.toml</code> (copy <code>launcher.example.toml</code>; the local file is ignored by git), then the <code>rpg-flux</code>, <code>rpg-tts</code> and <code>rpg-stt</code> Conda environments under <code>CONDA_ROOT</code> (default <code>~/miniconda3</code>).</p>
-<p>On Linux and macOS, <code>./start_all.sh</code> runs the same <code>python -m app.launcher start</code> (add <code>--postgres-container &lt;name&gt;</code> to have it start a Docker container). A service whose interpreter or tool (for example <code>npm</code>) is missing shows as failed in the dashboard with the reason in its log.</p>
+<p>On Linux and macOS, <code>./start_all.sh</code> runs the same <code>python -m app.composition.launcher start</code> (add <code>--postgres-container &lt;name&gt;</code> to have it start a Docker container). A service whose interpreter or tool (for example <code>npm</code>) is missing shows as failed in the dashboard with the reason in its log.</p>
 <p><code>setup.sh</code> installs the Linux GPU locks (<code>requirements/*.linux.lock.txt</code>). Both setup scripts start <code>docker-compose.postgres.yml</code> only when Docker is available and nothing already listens on <code>OMNIX_POSTGRES_PORT</code> (5432), so an existing database is never touched.</p>
 <p>For local HTTPS, <code>python src/generate_certs.py --host &lt;name&gt; --ip &lt;address&gt; --out &lt;dir&gt;</code> writes a self-signed <code>cert.pem</code> and <code>key.pem</code> for the names given.</p>
 <p>Useful launcher-related environment values include:</p>

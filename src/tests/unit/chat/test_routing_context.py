@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 from app.providers import service as provider_service
-from app.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
-from app.chat.context_budget import PromptBudget
-from app.chat.history_search import InMemoryHistorySearchService, build_history_recall_query
-from app.chat.prompt_store import _recent_message_limit_after_summary
-from app.chat.prompt_assembly import (
+from app.platform.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat.context_budget import PromptBudget
+from app.platform.chat.history_search import InMemoryHistorySearchService, build_history_recall_query
+from app.platform.chat.prompt_store import _recent_message_limit_after_summary
+from app.platform.chat.prompt_assembly import (
     PromptAssembly,
     PromptExternalContextItem,
     PromptHistoryItem,
     PromptMemoryItem,
     PromptTurn,
 )
-from app.chat.repository import InMemoryChatRepository
-from app.chat.routing_context import build_chat_routing_context
+from app.platform.chat.repository import InMemoryChatRepository
+from app.platform.chat.routing_context import build_chat_routing_context
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.

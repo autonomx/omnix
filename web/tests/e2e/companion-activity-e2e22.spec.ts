@@ -707,7 +707,7 @@ async function waitForValue<T>(read: () => Promise<T | null>, timeoutMs: number)
 async function startManagedGateway(): Promise<ManagedGateway> {
   const root = repositoryRoot();
   const python = process.env.OMNIX_E2E22_PYTHON || 'python';
-  const args = ['-m', 'uvicorn', 'app.gateway.main:app', '--host', '127.0.0.1', '--port', String(GATEWAY_PORT)];
+  const args = ['-m', 'uvicorn', 'app.composition.gateway.main:app', '--host', '127.0.0.1', '--port', String(GATEWAY_PORT)];
   const inheritedPythonPath = process.env.PYTHONPATH ? `${resolve(root, 'src')};${process.env.PYTHONPATH}` : resolve(root, 'src');
   const gatewayEnv = {
     ...process.env,

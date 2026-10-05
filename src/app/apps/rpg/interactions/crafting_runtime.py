@@ -3,13 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
-from app.rpg.interactions.recipe_catalog import find_recipe_by_name, get_recipe
+from app.apps.rpg.interactions.recipe_catalog import find_recipe_by_name, get_recipe
 
 
 def _safe_str(value: Any) -> str:

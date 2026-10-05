@@ -5,7 +5,7 @@ import threading
 
 import pytest
 
-from app.agent_runtime.run_locks import RunLockRegistry
+from app.platform.agent_runtime.run_locks import RunLockRegistry
 
 
 def test_run_lock_registry_serializes_one_run_without_blocking_other_runs():

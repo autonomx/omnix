@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
 from src.tests.trading.test_trading_auto_paper_e2e_replay import (
     test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade as _run_fixed_bar_scenario,
 )

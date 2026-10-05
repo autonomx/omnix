@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
+from app.apps.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
 
 RELEASE_GATE_VERSION = "rpg_interactive_release_gates_v1"
 _FORBIDDEN_FOREGROUND_KEYS = {

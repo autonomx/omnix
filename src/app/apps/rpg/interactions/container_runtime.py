@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.item_model import (
     add_item_to_items_list,
     calculate_container_contents_weight,
     calculate_item_total_weight,

@@ -59,7 +59,7 @@ SHADOW CHALLENGER
 PROMOTION
 ```
 
-Reusable contracts live in `src/app/trading/prospective_prediction_evidence.py`. The stricter scheduled-run entry points live in `src/app/trading/prospective_prediction_scoring.py`; they enforce causal snapshot ordering, pre-cutoff portfolio freezing, single-provider/revision-resolved RAW 5-minute outcome data, and the formal label timeframe.
+Reusable contracts live in `src/app/apps/trading/prospective_prediction_evidence.py`. The stricter scheduled-run entry points live in `src/app/apps/trading/prospective_prediction_scoring.py`; they enforce causal snapshot ordering, pre-cutoff portfolio freezing, single-provider/revision-resolved RAW 5-minute outcome data, and the formal label timeframe.
 
 ## Causal evidence contract
 

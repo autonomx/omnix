@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.structured_consolidation import (
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.structured_consolidation import (
     consolidate_structured_proposal,
 )
-from app.assistant_memory.structured_extraction import (
+from app.platform.assistant_memory.structured_extraction import (
     extract_structured_memory_proposals,
 )
 

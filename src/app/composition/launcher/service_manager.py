@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from app.launcher.config import load_launcher_config
+from app.composition.launcher.config import load_launcher_config
 from app.runtime.net import bind_host
 from app.security.service_credentials import initialize_service_token
 
@@ -29,7 +29,7 @@ GATEWAY_READY_TIMEOUT_ENV = "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS"
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[4]
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -557,7 +557,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 app_python,
                 str(root / "scripts" / "run_omnix_gateway.py"),
                 "--app",
-                "app.gateway.runtime_app:app",
+                "app.composition.gateway.runtime_app:app",
                 "--host",
                 host,
                 "--port",

@@ -9,7 +9,7 @@ from typing import Any, Iterable
 # intentionally bypasses complete_narration_fallback's deterministic dialogue text and uses
 # the real narrator synchronously when the authoritative turn has only queued
 # narration available.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
 
@@ -80,8 +80,8 @@ def _phase8_part31_sync_narration(payload: dict[str, Any]) -> dict[str, Any]:
         return {}
 
     try:
-        from app.rpg.ai.world_scene_narrator import narrate_scene
-        from app.rpg.llm_app_gateway import build_app_llm_gateway
+        from app.apps.rpg.ai.world_scene_narrator import narrate_scene
+        from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 
         scene = _safe_dict(request.get("scene"))
         context = _safe_dict(request.get("narration_context"))

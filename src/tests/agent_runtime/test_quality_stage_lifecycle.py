@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
+from app.platform.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
 
 
 class _Cursor:

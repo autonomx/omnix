@@ -16,7 +16,7 @@ from urllib.parse import urlencode, urlparse, urlunparse
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
-from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_manager
+from app.composition.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_manager
 from app.runtime.net import allowed_origins
 from app.security.request_guard import RequestGuardMiddleware
 

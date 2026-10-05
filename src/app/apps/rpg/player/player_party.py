@@ -6,12 +6,12 @@ and Phase 10 presentation speaker cards.
 """
 from typing import Any, Dict, List
 
-from app.rpg.party import (
+from app.apps.rpg.party import (
     build_companion_presence_summary,
     build_party_summary,
     ensure_party_state,
 )
-from app.rpg.presentation import build_party_speaker_cards
+from app.apps.rpg.presentation import build_party_speaker_cards
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

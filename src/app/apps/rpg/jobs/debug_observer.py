@@ -25,7 +25,7 @@ class RpgJobDebugObserver:
     def _record(transition: str, job: JobRecord) -> None:
         if not job.type.startswith("rpg."):
             return
-        from app.rpg.debug_logging import log_rpg_event
+        from app.apps.rpg.debug_logging import log_rpg_event
 
         payload: dict[str, Any] = job.input_payload or {}
         status = getattr(job.status, "value", job.status)
@@ -49,7 +49,7 @@ class RpgJobDebugObserver:
 
 
 def rpg_debug_job_observer() -> RpgJobDebugObserver | None:
-    from app.rpg.debug_logging import rpg_debug_logging_enabled
+    from app.apps.rpg.debug_logging import rpg_debug_logging_enabled
 
     if not rpg_debug_logging_enabled():
         return None

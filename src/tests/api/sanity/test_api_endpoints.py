@@ -11,7 +11,7 @@ from tests.support.routers import effective_routes
 
 import pytest
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 CURRENT_CORE_ROUTES = (

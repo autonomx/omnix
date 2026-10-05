@@ -5,32 +5,32 @@ import logging
 from app.runtime.clock import utc_now
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _normalize_active_interactions as _normalize_active_interactions, _normalize_runtime_settings as _normalize_runtime_settings,
     _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.creator.schema import (
+from app.apps.rpg.creator.schema import (
     normalize_world_behavior_config as normalize_world_behavior_config,
 )
-from app.rpg.ai.scene_continuity import (
+from app.apps.rpg.ai.scene_continuity import (
     ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_AMBIENT_UPDATES as _MAX_AMBIENT_UPDATES, _MAX_DIRECTOR_LOG as _MAX_DIRECTOR_LOG,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _ensure_recent_scene_beats as _ensure_recent_scene_beats,
 )
-from app.rpg.session.world_consequence_runtime import (
+from app.apps.rpg.session.world_consequence_runtime import (
     emit_scene_beat as emit_scene_beat,
 )
-from app.rpg.items.inventory_state import (
+from app.apps.rpg.items.inventory_state import (
     normalize_inventory_state as normalize_inventory_state,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _get_combat_state as _get_combat_state,
 )
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.state import (
     normalize_combat_state as normalize_combat_state,
 )
 from typing import (
@@ -46,7 +46,7 @@ def _force_active_combat_utility_action(
     semantic_action_record: dict[str, Any],
     player_input: str,
 ) -> dict[str, Any]:
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
 
@@ -313,7 +313,7 @@ def _build_world_advance_recap(
     runtime_state: dict[str, Any],
     debug_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from app.rpg.session.idle_resume_runtime import (
+    from app.apps.rpg.session.idle_resume_runtime import (
         _build_player_facing_resume_summary as _build_player_facing_resume_summary, _choose_meaningful_recap_lines as _choose_meaningful_recap_lines,
         _coerce_recap_labels as _coerce_recap_labels, _is_meaningful_recap_text as _is_meaningful_recap_text,
     )
@@ -846,7 +846,7 @@ def get_effective_world_behavior(session: dict[str, Any]) -> dict[str, Any]:
     override = _safe_dict(runtime.get("world_behavior_override"))
 
     effective = dict(base)
-    from app.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS
+    from app.apps.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS
     for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
         val = override.get(key)
         if isinstance(val, str) and val.strip().lower() in allowed:

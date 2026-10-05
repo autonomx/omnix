@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from services.image import image_service_runtime as image_service_app
-from app.image import lifecycle, service
-from app.image.models import ImageGenerationRequest
-from app.image.providers.base import ImageGenerationResult
+from app.platform.image import lifecycle, service
+from app.platform.image.models import ImageGenerationRequest
+from app.platform.image.providers.base import ImageGenerationResult
 
 
 @pytest.fixture(autouse=True)

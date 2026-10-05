@@ -71,7 +71,7 @@ def _active_segment_summary(session: ChatSession) -> str | None:
     if not session.active_segment_id:
         return None
     try:
-        from app.chat.segments import conversation_segments
+        from app.platform.chat.segments import conversation_segments
 
         segments = conversation_segments().segments(session.id)
     except Exception:

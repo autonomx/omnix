@@ -24,7 +24,7 @@ from .strategy_stoch_rsi_5m import (
     evaluate_stoch_rsi_5m,
 )
 from .strategy_timeframes import resample_final_bars
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 PRE_ENTRY_RANGE_CAP_PCT = Decimal("150")

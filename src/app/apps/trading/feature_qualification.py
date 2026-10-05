@@ -17,8 +17,8 @@ from typing import Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .market_data_recovery import PriceScope, RecoveryBucketEvidence, VolumeScope
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)

@@ -49,7 +49,7 @@ def _sample_ids(url: str) -> dict[str, str]:
 async def measure(samples: int) -> dict:
     import httpx
 
-    from app.production import create_production_app
+    from app.composition.production import create_production_app
 
     ids = _sample_ids(os.environ["OMNIX_DATABASE_URL"])
     routes = [

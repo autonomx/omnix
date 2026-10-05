@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_countervailing_powers import countervailing_power_components
+from app.apps.rpg.session.genesis.world_forge_countervailing_powers import countervailing_power_components
 
 _DIVERSITY = ("constraint_mechanism", "leverage_type", "vulnerability")
 _CATEGORY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")

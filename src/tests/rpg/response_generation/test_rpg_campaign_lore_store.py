@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.session.genesis.campaign_lore_store import (
+from app.apps.rpg.session.genesis.campaign_lore_store import (
     LoreRegenerationUnavailable,
     _generated_lore_text,
     _merge_published_world_canon,
@@ -8,8 +8,8 @@ from app.rpg.session.genesis.campaign_lore_store import (
     ensure_current_location_document,
     regenerate_campaign_lore_document,
 )
-from app.rpg.session.genesis.campaign_lore_api import campaign_lore_payload
-from app.rpg.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.session.genesis.campaign_lore_api import campaign_lore_payload
+from app.apps.rpg.worlds.published_canon_projection import project_published_canon
 
 
 class _Gateway:
@@ -309,19 +309,19 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
 
     gateway = Gateway()
     monkeypatch.setattr(
-        "app.rpg.session.genesis.campaign_lore_store.load_campaign_lore",
+        "app.apps.rpg.session.genesis.campaign_lore_store.load_campaign_lore",
         lambda *_args, **_kwargs: (session, {"persisted": True}),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.campaign_lore_store.default_database",
+        "app.apps.rpg.session.genesis.campaign_lore_store.default_database",
         lambda: object(),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.campaign_lore_store.unit_of_work",
+        "app.apps.rpg.session.genesis.campaign_lore_store.unit_of_work",
         lambda _database: Work(),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.campaign_lore_store._save_portable_projection",
+        "app.apps.rpg.session.genesis.campaign_lore_store._save_portable_projection",
         lambda value: value,
     )
 

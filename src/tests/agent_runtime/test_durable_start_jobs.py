@@ -3,15 +3,15 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef
-from app.agent_runtime.jobs import (
+from app.platform.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef
+from app.platform.agent_runtime.jobs import (
     AGENT_RUN_JOB_HANDLERS,
     AgentRunJobInput,
     create_agent_promote_request,
     create_agent_run_start_request,
     create_agent_workspace_prepare_request,
 )
-from app.agent_runtime.service_core import AgentRunService
+from app.platform.agent_runtime.service_core import AgentRunService
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry
 
 

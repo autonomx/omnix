@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.characters.models import (
+from app.platform.characters.models import (
     CharacterProfile,
     CharacterProfileVersion,
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
-from app.characters.repository import CharacterConflictError, CharacterNotFoundError
+from app.platform.characters.repository import CharacterConflictError, CharacterNotFoundError
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import EntityNotFound, RevisionConflict
@@ -16,7 +16,7 @@ from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.runtime.pagination import MAX_PAGE_SIZE
-from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
+from app.platform.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 class PostgresCharacterRepositoryAdapter:
     context = RequestTenant()

@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
-from app.rpg.economy.survival import FOOD_ITEM_IDS, WATER_ITEM_IDS, consume_food, consume_water
-from app.rpg.items.inventory_state import normalize_inventory_state
-from app.rpg.locations.discovery import validate_route_access
-from app.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON
-from app.rpg.locations.runtime_travel import apply_runtime_travel
-from app.rpg.locations.travel import apply_causal_travel_projection, calculate_route_travel_cost
+from app.apps.rpg.economy.survival import FOOD_ITEM_IDS, WATER_ITEM_IDS, consume_food, consume_water
+from app.apps.rpg.items.inventory_state import normalize_inventory_state
+from app.apps.rpg.locations.discovery import validate_route_access
+from app.apps.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON
+from app.apps.rpg.locations.runtime_travel import apply_runtime_travel
+from app.apps.rpg.locations.travel import apply_causal_travel_projection, calculate_route_travel_cost
 
 SOURCE = "deterministic_phase4_travel_resource_consumption"
 
@@ -259,7 +259,7 @@ def assert_phase4_travel_resource_consumption_ready() -> Dict[str, Any]:
             "survival_state": {"hunger": 10, "thirst": 10},
         }
     }
-    from app.rpg.locations.discovery import discover_location, discover_route, unblock_route
+    from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route
 
     discover_location(state, location_id=OLD_MILL, reason="scouted_old_road", turn_index=1)
     discover_route(state, edge_id="route:old_road:old_mill", reason="scouted_old_road", turn_index=1)

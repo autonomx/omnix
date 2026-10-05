@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
+from app.apps.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

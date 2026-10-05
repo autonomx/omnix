@@ -4,11 +4,11 @@ from copy import deepcopy
 from html import escape
 from typing import Any, Dict, List
 
-from app.rpg.locations.discovery import build_accessible_location_map_payload, ensure_discovery_state
-from app.rpg.locations.events import build_location_history_model
-from app.rpg.locations.graph import RUSTY_FLAGON, get_canonical_location
-from app.rpg.locations.time import ensure_time_state
-from app.rpg.locations.travel import ensure_travel_state
+from app.apps.rpg.locations.discovery import build_accessible_location_map_payload, ensure_discovery_state
+from app.apps.rpg.locations.events import build_location_history_model
+from app.apps.rpg.locations.graph import RUSTY_FLAGON, get_canonical_location
+from app.apps.rpg.locations.time import ensure_time_state
+from app.apps.rpg.locations.travel import ensure_travel_state
 
 SOURCE = "deterministic_phase4_map_location_report"
 
@@ -163,8 +163,8 @@ def build_map_location_narration_contract(panel_payload: Dict[str, Any]) -> Dict
 
 
 def assert_phase4_map_location_report_ready() -> Dict[str, Any]:
-    from app.rpg.locations.discovery import discover_location, discover_route
-    from app.rpg.locations.travel import apply_travel
+    from app.apps.rpg.locations.discovery import discover_location, discover_route
+    from app.apps.rpg.locations.travel import apply_travel
 
     state: Dict[str, Any] = {}
     initial = build_map_location_panel_payload(state)

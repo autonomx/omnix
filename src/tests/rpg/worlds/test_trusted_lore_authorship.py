@@ -4,17 +4,17 @@ from copy import deepcopy
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_authorship_policy import (
+from app.apps.rpg.session.genesis.world_forge_authorship_policy import (
     AUTHORED_REQUIRED,
     MACHINE_ALLOWED,
     STRUCTURAL_ONLY,
     field_authorship_policy,
     topic_authorship_policy,
 )
-from app.rpg.session.genesis.world_forge_profiles import FieldDefinition
-from app.rpg.worlds.contracts import WorldRevisionDocument
-from app.rpg.worlds.generation_authorship import AuthorshipValidationError
-from app.rpg.worlds.generation_authorship_runtime import (
+from app.apps.rpg.session.genesis.world_forge_profiles import FieldDefinition
+from app.apps.rpg.worlds.contracts import WorldRevisionDocument
+from app.apps.rpg.worlds.generation_authorship import AuthorshipValidationError
+from app.apps.rpg.worlds.generation_authorship_runtime import (
     attach_human_authorship,
     attach_partial_llm_authorship,
     attach_server_llm_authorship,
@@ -23,7 +23,7 @@ from app.rpg.worlds.generation_authorship_runtime import (
     prove_structural_repair_non_authoring,
     validate_publishable_authorship,
 )
-from app.rpg.worlds.revision_authorship import (
+from app.apps.rpg.worlds.revision_authorship import (
     prepare_direct_world_revision,
     require_revision_authorship,
 )

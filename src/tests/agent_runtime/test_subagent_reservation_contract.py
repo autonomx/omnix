@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-RUNTIME = Path(__file__).parents[2] / "app" / "agent_runtime"
+RUNTIME = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime"
 
 
 def _implementation(name: str, module: str) -> str:

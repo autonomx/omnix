@@ -20,17 +20,17 @@ from pathlib import Path
 
 import run_interday_winner_shadow_replay_core as core
 
-from app.trading.strategy_stoch_rsi_5m_early_single_loss_controls import (
+from app.apps.trading.strategy_stoch_rsi_5m_early_single_loss_controls import (
     evaluate_stoch_rsi_5m_early_single_loss_control,
 )
-from app.trading.strategy_stoch_rsi_5m_early_single_research import (
+from app.apps.trading.strategy_stoch_rsi_5m_early_single_research import (
     EARLY_FAILURE_ARM_SPECS,
     ONE_MINUTE_STOP_ARMS,
     PATTERN_ARMS,
     VWAP_RECLAIM_ARMS,
     evaluate_stoch_rsi_5m_early_single_research_arm,
 )
-from app.trading.strategy_stoch_rsi_5m_research_exit import (
+from app.apps.trading.strategy_stoch_rsi_5m_research_exit import (
     recompute_stoch_rsi_5m_exit_from_entry,
 )
 

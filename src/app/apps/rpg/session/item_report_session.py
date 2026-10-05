@@ -10,7 +10,7 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_report_sections import build_item_report_section
+from app.apps.rpg.session.item_report_sections import build_item_report_section
 
 ITEM_REPORT_SESSION_SOURCE = "engine_item_report_session_v1"
 

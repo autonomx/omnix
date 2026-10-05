@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.chat.evaluation_store import (
+from app.platform.chat.evaluation_store import (
     LiveChatEvaluationExport,
     LiveChatEvaluationStore,
     PresencePolicyVersion,

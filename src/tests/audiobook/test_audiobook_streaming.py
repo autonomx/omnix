@@ -8,8 +8,8 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
-from app.audiobook.streaming import AUDIOBOOK_SAMPLE_RATE
-from app.gateway.main import create_gateway_app
+from app.apps.audiobook.streaming import AUDIOBOOK_SAMPLE_RATE
+from app.composition.gateway.main import create_gateway_app
 
 
 def _test_wav() -> bytes:
@@ -28,7 +28,7 @@ def _test_wav() -> bytes:
 
 
 def test_audiobook_websocket_streams_pcm(monkeypatch) -> None:
-    from app.audiobook import streaming as audiobook_streaming
+    from app.apps.audiobook import streaming as audiobook_streaming
 
     def fake_generate_audio_bytes(text: str, *, speaker: str, payload: dict):
         return _test_wav(), {"sample_rate": AUDIOBOOK_SAMPLE_RATE, "speaker": speaker, "text": text}
@@ -62,7 +62,7 @@ def test_audiobook_websocket_streams_pcm(monkeypatch) -> None:
 
 
 def test_story_audio_keeps_abbreviations_and_quoted_dialogue_together() -> None:
-    from app.audiobook.streaming import _sentence_segments_from_start_message
+    from app.apps.audiobook.streaming import _sentence_segments_from_start_message
 
     segments = _sentence_segments_from_start_message({
         "text": 'Dr. Vale waited. "Follow me." she said. The door opened.',

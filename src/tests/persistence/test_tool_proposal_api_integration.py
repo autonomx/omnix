@@ -7,11 +7,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_tools import proposals
-from app.assistant_tools.config_store import default_assistant_tools_config
-from app.assistant_tools.gate import review_assistant_tool_request
-from app.assistant_tools.models import AssistantToolResult
-from app.assistant_tools.routes import (
+from app.platform.assistant_tools import proposals
+from app.platform.assistant_tools.config_store import default_assistant_tools_config
+from app.platform.assistant_tools.gate import review_assistant_tool_request
+from app.platform.assistant_tools.models import AssistantToolResult
+from app.platform.assistant_tools.routes import (
     create_assistant_tool_internal_router,
     create_assistant_tool_router,
 )

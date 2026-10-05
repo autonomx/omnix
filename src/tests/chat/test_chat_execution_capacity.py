@@ -8,7 +8,7 @@ import weakref
 
 import pytest
 
-from app.chat import generation_jobs as jobs
+from app.platform.chat import generation_jobs as jobs
 from app.persistence.gateway_runtime import GatewayRuntimeOwner
 
 

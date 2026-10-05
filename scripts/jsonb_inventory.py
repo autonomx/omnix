@@ -25,7 +25,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATIONS = ROOT / "src/app/persistence/migrations"
 SOURCE = ROOT / "src/app"
 DOCUMENT = ROOT / "docs/architecture/JSONB_INVENTORY.md"
 DECISIONS = ROOT / "resources/architecture/jsonb-decisions.json"
@@ -69,9 +68,18 @@ def _top_level_parts(body: str) -> list[str]:
     return parts
 
 
+def migration_files() -> list[Path]:
+    """Every schema migration in version order, from the folders the kernel reads (PA-2.3)."""
+    if str(ROOT / "src") not in sys.path:
+        sys.path.insert(0, str(ROOT / "src"))
+    from app.persistence.migrations import migration_roots
+
+    return sorted((path for folder in migration_roots() for path in folder.glob("*.sql")), key=lambda path: path.stem)
+
+
 def jsonb_columns() -> dict[str, set[str]]:
     columns: dict[str, set[str]] = {}
-    for path in sorted(MIGRATIONS.glob("*.sql")):
+    for path in migration_files():
         sql = _strip_comments(path.read_text(encoding="utf-8"))
         events: list[tuple[int, str, tuple[str, ...]]] = []
         for match in _CREATE.finditer(sql):

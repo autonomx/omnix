@@ -528,7 +528,7 @@ def _prune_pending_oauth_locked(now: float) -> None:
 def _load_local_env() -> None:
     if environment().get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
         return
-    env_path = Path(__file__).resolve().parents[3] / ".env.local"
+    env_path = Path(__file__).resolve().parents[4] / ".env.local"
     if not env_path.exists():
         return
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():

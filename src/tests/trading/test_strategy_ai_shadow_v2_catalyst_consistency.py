@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading.strategy_ai_shadow_v2 import (
+from app.apps.trading.strategy_ai_shadow_v2 import (
     CatalystIntelligenceSnapshot,
     normalize_catalyst_provenance,
 )

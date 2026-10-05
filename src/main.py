@@ -3,7 +3,7 @@
 
 import uvicorn
 
-from app.production import app
+from app.composition.production import app
 from app.runtime.net import bind_host
 
 

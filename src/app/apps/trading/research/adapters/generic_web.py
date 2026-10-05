@@ -14,7 +14,7 @@ class GenericWebAdapter:
 
     def __init__(self, search_service=None, extractor_factory=None) -> None:
         if search_service is None:
-            from app.research.contracts import (
+            from app.platform.research.contracts import (
                 ProviderFallbackSearchClient,
                 QuickSearchService,
                 load_research_runtime_settings,
@@ -34,7 +34,7 @@ class GenericWebAdapter:
                 max_extracts=min(2, settings.max_extracts),
             )
         if extractor_factory is None:
-            from app.research.contracts import ReadablePageExtractor
+            from app.platform.research.contracts import ReadablePageExtractor
             extractor_factory = ReadablePageExtractor
         self.search_service = search_service
         self.extractor_factory = extractor_factory

@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from app.trading import strategy_ai_shadow_provider as provider
-from app.trading.strategy_ai_shadow_v2 import AIShadowV2Analyzer
+from app.apps.trading import strategy_ai_shadow_provider as provider
+from app.apps.trading.strategy_ai_shadow_v2 import AIShadowV2Analyzer
 
 
 def test_v2_terminal_transport_failure_trips_circuit_after_one_attempt(monkeypatch) -> None:

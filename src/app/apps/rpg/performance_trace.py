@@ -18,7 +18,7 @@ from fastapi.responses import Response
 
 from app.observability.tracing import annotate
 from app.observability.tracing import span as tracing_span
-from app.rpg.debug_logging import log_rpg_event, new_rpg_trace_id
+from app.apps.rpg.debug_logging import log_rpg_event, new_rpg_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -307,8 +307,8 @@ def rpg_pipeline_span_if_active(
 
 def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 200) -> Response:
     if payload.get("contract_version") == "rpg_turn_response_v2":
-        from app.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
-        from app.rpg.presentation.turn_response_budget import enforce_turn_response_budget
+        from app.apps.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES
+        from app.apps.rpg.presentation.turn_response_budget import enforce_turn_response_budget
 
         payload = enforce_turn_response_budget(
             payload,

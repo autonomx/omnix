@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from app.persistence.tenant import TenantContext
-from app.trading.paper_journal import TradingPaperJournal, automatic_trade_observations
+from app.apps.trading.paper_journal import TradingPaperJournal, automatic_trade_observations
 
 
 class _Result:

@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunCommand,
     AgentRunSpec,
@@ -20,12 +20,12 @@ from app.agent_runtime.contracts import (
     ValidationResult,
     WorkspaceState,
 )
-from app.agent_runtime.quality_recovery import (
+from app.platform.agent_runtime.quality_recovery import (
     orphaned_quality_review_run_ids,
     reconcile_orphaned_quality_reviews,
 )
-from app.agent_runtime.repository import PostgresAgentRunRepository
-from app.agent_runtime.review_orchestration_core import consume_terminal_reviewer_in_repository
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.review_orchestration_core import consume_terminal_reviewer_in_repository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

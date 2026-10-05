@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

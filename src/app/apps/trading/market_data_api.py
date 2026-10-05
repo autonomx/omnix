@@ -14,10 +14,10 @@ from app.security.provider_secret_store import (
     trading_provider_credential_sources,
 )
 from app.errors import LegacyPersistenceRetired
-from app.trading.ibkr_evidence import default_ibkr_evidence_store
-from app.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
-from app.trading.providers.ibkr_runtime import default_ibkr_runtime
-from app.trading.service import default_market_data_service
+from app.apps.trading.ibkr_evidence import default_ibkr_evidence_store
+from app.apps.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
+from app.apps.trading.providers.ibkr_runtime import default_ibkr_runtime
+from app.apps.trading.service import default_market_data_service
 
 
 class CoinMarketCapCredentialStatus(BaseModel):

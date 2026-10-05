@@ -5,11 +5,11 @@ from typing import Any, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     ProfileResolution,
     resolve_or_generate_genre_profile,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
 
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash

@@ -150,7 +150,7 @@ class CharacterManagementService:
             profile = self.character_service.update(
                 character_id,
                 __import__(
-                    "app.characters.models",
+                    "app.platform.characters.models",
                     fromlist=["UpdateCharacterRequest"],
                 ).UpdateCharacterRequest(
                     expected_version=profile.active_version,

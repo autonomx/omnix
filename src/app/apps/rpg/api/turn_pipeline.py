@@ -8,18 +8,18 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
-from app.rpg.performance_trace import (
+from app.apps.rpg.performance_trace import (
     attach_rpg_result_timing,
     build_traced_json_response,
     rpg_pipeline_span,
     rpg_pipeline_trace,
 )
-from app.rpg.presentation.turn_response import build_turn_response_v2
-from app.rpg.response_trace_headers import finalize_rpg_trace_headers
+from app.apps.rpg.presentation.turn_response import build_turn_response_v2
+from app.apps.rpg.response_trace_headers import finalize_rpg_trace_headers
 
 
 def _foreground_delivery_mode(request: Request):
-    from app.rpg.narrative_engine import DeliveryMode
+    from app.apps.rpg.narrative_engine import DeliveryMode
 
     value = str(
         request.headers.get("x-omnix-rpg-delivery-mode") or "blocking"
@@ -92,11 +92,11 @@ def _execute_foreground_rpg_turn(
             span["delivery_mode"] = delivery_mode.value
 
         with rpg_pipeline_span("turn.campaign_genesis_gate") as span:
-            from app.rpg.session.genesis.launch_readiness import (
+            from app.apps.rpg.session.genesis.launch_readiness import (
                 CampaignLaunchBlockedError,
                 require_campaign_launch_ready,
             )
-            from app.rpg.session.service import load_session
+            from app.apps.rpg.session.service import load_session
 
             launch_session = load_session(session_id)
             if not launch_session:
@@ -125,9 +125,9 @@ def _execute_foreground_rpg_turn(
             span["enabled"] = gate.get("enabled")
             span["ready"] = gate.get("ready")
 
-        from app.rpg.session import interactive_first_call_runtime
-        from app.rpg.llm_priority import foreground_rpg_llm_priority
-        from app.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
+        from app.apps.rpg.session import interactive_first_call_runtime
+        from app.apps.rpg.llm_priority import foreground_rpg_llm_priority
+        from app.apps.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
 
         with rpg_pipeline_span("turn.apply") as span:
             def apply_foreground_turn() -> dict[str, Any]:
@@ -171,7 +171,7 @@ def _execute_foreground_rpg_turn(
             raise HTTPException(status_code=status_code, detail=result)
 
         with rpg_pipeline_span("turn.narrative_replay_hydration") as span:
-            from app.rpg.narrative_replay import (
+            from app.apps.rpg.narrative_replay import (
                 CanonicalNarrativeReplayError,
                 hydrate_canonical_narrative_replay,
             )
@@ -204,7 +204,7 @@ def _execute_foreground_rpg_turn(
             span["response_id"] = replay.get("response_id")
 
         with rpg_pipeline_span("turn.narrative_present") as span:
-            from app.rpg.session.turn_presenter import (
+            from app.apps.rpg.session.turn_presenter import (
                 TurnPresentationInvariantError,
                 present_authoritative_turn,
             )
@@ -237,7 +237,7 @@ def _execute_foreground_rpg_turn(
             span["request_count"] = result.get("turn_presentation_request_count")
 
         with rpg_pipeline_span("turn.narrative_delivery_prepare") as span:
-            from app.rpg.narrative_delivery import (
+            from app.apps.rpg.narrative_delivery import (
                 prepare_canonical_result_delivery,
             )
 
@@ -254,7 +254,7 @@ def _execute_foreground_rpg_turn(
             span["next_index"] = delivery_state.get("next_index")
 
         with rpg_pipeline_span("turn.narrative_consumer_projection") as span:
-            from app.rpg.narrative_engine.consumer_publish import (
+            from app.apps.rpg.narrative_engine.consumer_publish import (
                 attach_canonical_consumer_bundle,
             )
 
@@ -284,7 +284,7 @@ def _execute_foreground_rpg_turn(
             )
 
         with rpg_pipeline_span("turn.narrative_production_certification") as span:
-            from app.rpg.narrative_engine.production_path import (
+            from app.apps.rpg.narrative_engine.production_path import (
                 NarrativeProductionPathError,
                 enforce_production_narrative_result,
             )
@@ -314,7 +314,7 @@ def _execute_foreground_rpg_turn(
             )
 
         with rpg_pipeline_span("turn.narrative_shadow") as span:
-            from app.rpg.narrative_engine.shadow import attach_shadow_report
+            from app.apps.rpg.narrative_engine.shadow import attach_shadow_report
 
             result = attach_shadow_report(
                 result,
@@ -393,7 +393,7 @@ def _execute_foreground_rpg_turn(
             payload["turn_presentation_response_id"] = result.get(
                 "turn_presentation_response_id"
             )
-            from app.rpg.narrative_delivery import deferred_public_turn_payload
+            from app.apps.rpg.narrative_delivery import deferred_public_turn_payload
 
             payload = deferred_public_turn_payload(payload)
             payload_timing = (
@@ -429,7 +429,7 @@ def _persisted_turn_session(
     if isinstance(result_session, dict) and (
         canonical_patch or result.get("interaction_persisted") is not True
     ):
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         return save_session(result_session, compact=True)
     if result.get("interaction_persisted") is True and isinstance(
@@ -437,6 +437,6 @@ def _persisted_turn_session(
         dict,
     ):
         return result_session
-    from app.rpg.session.service import load_session
+    from app.apps.rpg.session.service import load_session
 
     return load_session(session_id)

@@ -195,7 +195,7 @@ def enforce_production_narrative_result(result: dict[str, Any]) -> dict[str, Any
             "canonical RPG narrative production certification failed: "
             + ", ".join(certification.violations)
         )
-    from app.rpg.narrative_retirement import record_narrative_retirement
+    from app.apps.rpg.narrative_retirement import record_narrative_retirement
 
     try:
         return record_narrative_retirement(retired)

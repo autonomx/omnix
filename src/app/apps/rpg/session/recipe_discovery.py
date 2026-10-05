@@ -9,8 +9,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.crafting import CRAFTING_RECIPES, get_recipe
-from app.rpg.session.inventory_items import display_item_name, normalize_inventory_items
+from app.apps.rpg.session.crafting import CRAFTING_RECIPES, get_recipe
+from app.apps.rpg.session.inventory_items import display_item_name, normalize_inventory_items
 
 RECIPE_HINTS: dict[str, tuple[str, ...]] = {
     "torch": ("torch", "lamp", "light", "campfire"),

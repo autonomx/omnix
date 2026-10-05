@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import TaskRevision
-from app.agent_runtime.planning import classify_operation_effect, operation_plan_failures
-from app.agent_runtime.planning_api import (
+from app.platform.agent_runtime.contracts import TaskRevision
+from app.platform.agent_runtime.planning import classify_operation_effect, operation_plan_failures
+from app.platform.agent_runtime.planning_api import (
     _merge_plan_delta,
     _planning_state_should_stale,
     _planning_state_status_after_submission,
 )
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime.planning_contracts import (
     ImplementationPlanRevision,
     ImplementationPlanSubmission,
     PlanAuthority,

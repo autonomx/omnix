@@ -1,67 +1,67 @@
 from __future__ import annotations
 
-from app.rpg.session.combat_action_runtime import (
+from app.apps.rpg.session.combat_action_runtime import (
     _apply_ambient_conversation_result as _apply_ambient_conversation_result, _build_and_apply_turn_contract_phase as _build_and_apply_turn_contract_phase,
     _build_fallback_turn_contract_phase as _build_fallback_turn_contract_phase, _maybe_resolve_general_interaction_turn as _maybe_resolve_general_interaction_turn,
 )
-from app.rpg.session.special_combat_turns import (
+from app.apps.rpg.session.special_combat_turns import (
     _apply_deterministic_travel_resolution as _apply_deterministic_travel_resolution,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _apply_semantic_action_to_runtime as _apply_semantic_action_to_runtime,
 )
-from app.rpg.session.action_execution import (
+from app.apps.rpg.session.action_execution import (
     _award_progression as _award_progression, _get_player_location_id as _get_player_location_id,
 )
-from app.rpg.session.semantic_interaction_runtime import (
+from app.apps.rpg.session.semantic_interaction_runtime import (
     _clean_resolved_interaction_world_event_rows as _clean_resolved_interaction_world_event_rows,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _expire_stale_active_interactions as _expire_stale_active_interactions, _persist_player_interaction_state_after_turn as _persist_player_interaction_state_after_turn,
     _refresh_active_interactions_for_tick as _refresh_active_interactions_for_tick, _resolve_until_next_command_interactions as _resolve_until_next_command_interactions,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     _extract_semantic_action_record_for_turn as _extract_semantic_action_record_for_turn, _fallback_scene as _fallback_scene,
     _find_active_combat_state_deep as _find_active_combat_state_deep, _resolved_result_is_unsupported_combat_utility as _resolved_result_is_unsupported_combat_utility,
 )
 import time as _time
-from app.rpg.session.ambient_tick_runtime import (
+from app.apps.rpg.session.ambient_tick_runtime import (
     advance_autonomous_ambient_tick as advance_autonomous_ambient_tick,
 )
-from app.rpg.session.conversation_thread_runtime import (
+from app.apps.rpg.session.conversation_thread_runtime import (
     advance_conversation_threads_for_turn as advance_conversation_threads_for_turn,
 )
-from app.rpg.memory.social_effects import (
+from app.apps.rpg.memory.social_effects import (
     apply_general_social_effects as apply_general_social_effects,
 )
-from app.rpg.presentation.speaker_cards import (
+from app.apps.rpg.presentation.speaker_cards import (
     build_nearby_npc_cards as build_nearby_npc_cards,
 )
-from app.rpg.session.narration_runtime import (
+from app.apps.rpg.session.narration_runtime import (
     build_turn_narration_context as build_turn_narration_context,
 )
-from app.rpg.world.location_registry import (
+from app.apps.rpg.world.location_registry import (
     ensure_location_state as ensure_location_state,
 )
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     expire_conversation_threads as expire_conversation_threads, normalize_conversation_threads as normalize_conversation_threads,
 )
-from app.rpg.creator.world_scene_generator import (
+from app.apps.rpg.creator.world_scene_generator import (
     generate_scenes_from_simulation as generate_scenes_from_simulation,
 )
-from app.rpg.session.ambient_intent import (
+from app.apps.rpg.session.ambient_intent import (
     is_ambient_wait_or_listen_intent as is_ambient_wait_or_listen_intent,
 )
-from app.rpg.items.world_items import (
+from app.apps.rpg.items.world_items import (
     list_scene_items as list_scene_items,
 )
-from app.rpg.creator.world_simulation import (
+from app.apps.rpg.creator.world_simulation import (
     step_simulation_state as step_simulation_state,
 )
 

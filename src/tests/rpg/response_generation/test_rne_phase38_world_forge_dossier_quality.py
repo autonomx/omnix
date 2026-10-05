@@ -3,18 +3,18 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from app.rpg.session.genesis.canon_audit import CanonAuditReport
-from app.rpg.session.genesis.compiler import compile_campaign_genesis
-from app.rpg.session.genesis.contract import CampaignGenesisContract
-from app.rpg.session.genesis.world_forge_default import (
+from app.apps.rpg.session.genesis.canon_audit import CanonAuditReport
+from app.apps.rpg.session.genesis.compiler import compile_campaign_genesis
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.world_forge_default import (
     ReferenceSafeWorldForgeGenerator,
 )
-from app.rpg.session.genesis.world_forge_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_deterministic import (
     DeterministicWorldForgeGenerator,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
-from app.rpg.session.genesis.world_forge_quality import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.apps.rpg.session.genesis.world_forge_quality import (
     apply_world_forge_quality_audit,
 )
 

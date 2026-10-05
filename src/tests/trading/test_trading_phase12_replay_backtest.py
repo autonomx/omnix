@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.trading.backtest import BacktestRequest, MovingAverageCrossStrategy, run_backtest
-from app.trading.models import (
+from app.apps.trading.backtest import BacktestRequest, MovingAverageCrossStrategy, run_backtest
+from app.apps.trading.models import (
     AssetClass,
     BarsResponse,
     CanonicalInstrument,
@@ -21,8 +21,8 @@ from app.trading.models import (
     ProviderBinding,
     UsageScope,
 )
-from app.trading.replay import ReplayClock, freeze_bars_response
-from app.trading.replay_api import create_trading_replay_router
+from app.apps.trading.replay import ReplayClock, freeze_bars_response
+from app.apps.trading.replay_api import create_trading_replay_router
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -167,7 +167,7 @@ def test_backtest_is_economically_deterministic_and_has_no_lookahead() -> None:
         assert trade.signal_time == frozen.bars[trade.signal_bar_index].end_time
         assert trade.fill_time == frozen.bars[trade.fill_bar_index].start_time
         assert trade.fill_time >= trade.signal_time
-    source = Path("src/app/trading/backtest.py").read_text()
+    source = Path("src/app/apps/trading/backtest.py").read_text()
     for forbidden in (
         "import requests",
         "import httpx",
@@ -255,7 +255,7 @@ def test_replay_api_freezes_then_runs_only_the_stored_snapshot() -> None:
 
 def test_replay_migration_persists_complete_run_evidence() -> None:
     migration = Path(
-        "src/app/trading/migrations/0022_trading_replay_backtests.sql"
+        "src/app/apps/trading/migrations/0022_trading_replay_backtests.sql"
     ).read_text()
     for table in (
         "omnix_trading_datasets",
@@ -266,13 +266,13 @@ def test_replay_migration_persists_complete_run_evidence() -> None:
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in migration
     sequencing = Path(
-        "src/app/trading/migrations/0024_trading_backtest_bar_indices.sql"
+        "src/app/apps/trading/migrations/0024_trading_backtest_bar_indices.sql"
     ).read_text()
     assert "signal_bar_index" in sequencing
     assert "fill_bar_index" in sequencing
     assert "fill_bar_index = signal_bar_index + 1" in sequencing
     artifacts = Path(
-        "src/app/trading/migrations/0025_trading_backtest_artifacts.sql"
+        "src/app/apps/trading/migrations/0025_trading_backtest_artifacts.sql"
     ).read_text()
     assert "win_rate_percent" in artifacts
     assert "exposure_percent" in artifacts

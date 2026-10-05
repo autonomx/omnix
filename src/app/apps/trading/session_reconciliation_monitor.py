@@ -43,8 +43,8 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
 

@@ -6,9 +6,9 @@ from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.api import create_trading_router
-from app.trading.catalog import BINDINGS, INSTRUMENTS
-from app.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.api import create_trading_router
+from app.apps.trading.catalog import BINDINGS, INSTRUMENTS
+from app.apps.trading.models import AdjustmentMode, MarketBar
 
 
 class FakeRepository:

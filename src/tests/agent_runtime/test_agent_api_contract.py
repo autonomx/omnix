@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.api import StartAgentRunRequest
-from app.agent_runtime.profiles import (
+from app.platform.agent_runtime.api import StartAgentRunRequest
+from app.platform.agent_runtime.profiles import (
     get_agent_profile,
     resolve_profile_capabilities,
 )

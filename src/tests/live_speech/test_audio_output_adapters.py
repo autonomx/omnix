@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.live_speech.tts import DeterministicSpeechSynthesizer
-from app.live_speech.tts_adapters import (
+from app.platform.live_speech.tts import DeterministicSpeechSynthesizer
+from app.platform.live_speech.tts_adapters import (
     QwenServiceSpeechSynthesizer,
     SpeechServiceUnavailable,
     create_synthesizer_from_env,

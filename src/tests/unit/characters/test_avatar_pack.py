@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_models import UpsertCharacterAvatarPackRequest
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarAssetError, CharacterAvatarService
-from app.characters.service import CharacterService
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_models import UpsertCharacterAvatarPackRequest
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarAssetError, CharacterAvatarService
+from app.platform.characters.service import CharacterService
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
 # Shares the fixed 'maya' character; serialize on one xdist worker.

@@ -318,7 +318,7 @@ class NarratorAgent:
         Returns:
             Transition string for joining sentences.
         """
-        from app.rpg.core.determinism import rng_for_current_turn
+        from app.apps.rpg.core.determinism import rng_for_current_turn
 
         transitions = ["Then, ", "Meanwhile, ", "Suddenly, ", "Moments later, ", ""]
         return rng_for_current_turn("text:narrator_transition", sub_index).choice(transitions)

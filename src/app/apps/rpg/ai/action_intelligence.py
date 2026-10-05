@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from app.providers.structured.legacy import decode_legacy_json_object
-from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
-from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.apps.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
+from app.apps.rpg.session.turn_grounding import build_turn_grounding_packet
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.ai_action_intelligence.instructions', "1", (

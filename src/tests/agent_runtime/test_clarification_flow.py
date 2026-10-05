@@ -1,17 +1,17 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.chat_bridge import _semantic_clarification_result
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.chat_bridge import _semantic_clarification_result
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
     ModelRef,
     RequestModeSelection,
 )
-from app.agent_runtime.router import OmnixRouteDecision
-from app.agent_runtime.service_core import (
+from app.platform.agent_runtime.router import OmnixRouteDecision
+from app.platform.agent_runtime.service_core import (
     AgentRunService,
     _is_clarification_request,
 )

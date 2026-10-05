@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.rpg.hermes.candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
-from app.gateway.main import create_gateway_app
+from app.apps.rpg.hermes.candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
+from app.composition.gateway.main import create_gateway_app
 
 
 def test_hermes_candidate_payload_is_preview_only() -> None:

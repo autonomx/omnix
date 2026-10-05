@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.chat.contracts import explicit_memory_mutation_allowed
+from app.platform.chat.contracts import explicit_memory_mutation_allowed
 from app.conversation.contracts import ChatSession
 
 from .contracts import (

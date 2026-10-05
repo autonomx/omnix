@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_memory import jobs as memory_jobs
-from app.assistant_memory.jobs import MEMORY_SUGGEST_JOB_TYPE
-from app.assistant_memory.feature import FEATURE as MEMORY_FEATURE
-from app.assistant_memory.turn_reactions import suggest_memories_after_turn
-from app.chat.persistence.chat_runtime import PostgresChatSessionStore
+from app.platform.assistant_memory import jobs as memory_jobs
+from app.platform.assistant_memory.jobs import MEMORY_SUGGEST_JOB_TYPE
+from app.platform.assistant_memory.feature import FEATURE as MEMORY_FEATURE
+from app.platform.assistant_memory.turn_reactions import suggest_memories_after_turn
+from app.platform.chat.persistence.chat_runtime import PostgresChatSessionStore
 from app.events.outbox_relay import OutboxConsumerRegistry, OutboxRelayWorker
 from app.jobs import store as job_store_module
 from app.persistence.config import DatabaseSettings

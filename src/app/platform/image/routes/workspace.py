@@ -107,7 +107,7 @@ def create_image_workspace_router(
         legacy_result: dict[str, Any] | None = None
         legacy_asset_id = str((asset.compat or {}).get("legacy_asset_id") or "").strip()
         if legacy_asset_id:
-            from app.image.asset_store import delete_image_asset as delete_legacy_image_asset
+            from app.platform.image.asset_store import delete_image_asset as delete_legacy_image_asset
 
             legacy_result = delete_legacy_image_asset(
                 legacy_asset_id,

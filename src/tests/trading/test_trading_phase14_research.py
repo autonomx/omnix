@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.trading.models import (
+from app.apps.trading.models import (
     AssetClass,
     BarsResponse,
     CanonicalInstrument,
@@ -22,14 +22,14 @@ from app.trading.models import (
     ProviderBinding,
     UsageScope,
 )
-from app.trading.research import (
+from app.apps.trading.research import (
     MAX_RESEARCH_BARS,
     MAX_RESEARCH_PROMPT_CHARS,
     MarketResearchRequest,
     build_research_context,
     generate_market_research,
 )
-from app.trading.research_api import create_trading_research_router
+from app.apps.trading.research_api import create_trading_research_router
 
 
 NOW = datetime(2026, 8, 5, tzinfo=timezone.utc)
@@ -237,7 +237,7 @@ def test_research_api_is_read_only_and_maps_invalid_output_to_provider_failure()
 
 def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
     source = Path(
-        "src/app/trading/research/market_research.py"
+        "src/app/apps/trading/research/market_research.py"
     ).read_text().lower()
     for forbidden in (
         "lmstudio",
@@ -252,5 +252,5 @@ def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
         assert forbidden not in source
     assert "from app import " + "shared" not in source
     assert "app.providers" in source
-    gateway = Path("src/app/trading/route_registration.py").read_text()
+    gateway = Path("src/app/apps/trading/route_registration.py").read_text()
     assert "create_trading_research_router" in gateway

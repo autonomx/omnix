@@ -23,7 +23,7 @@ The normal development launcher can run `python scripts/run_omnix_gateway.py --a
 
 Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. `OMNIX_SCHEDULER_THREAD_WORKERS` and `OMNIX_SCHEDULER_PROCESS_WORKERS` bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
 
-The local launcher starts one job worker with the default resource pools. Run `PYTHONPATH=src python -m app.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1` to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on `127.0.0.1:8090` by default.
+The local launcher starts one job worker with the default resource pools. Run `PYTHONPATH=src python -m app.composition.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1` to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on `127.0.0.1:8090` by default.
 
 GPU/model calls use PostgreSQL device permits, not per-process semaphores. The gateway `/api/diagnostics` response lists configured capacity, active holders, queued priorities and the local TTS model owner. The first configured capacity for a device/model class is persisted; drain users before changing it and update `omnix_device_capacity` to the new value before restarting all processes. A live model-owner lease prevents a second process from loading local TTS; use `OMNIX_TTS_MODEL_OWNER` to choose the owner explicitly.
 
@@ -205,8 +205,8 @@ and memory retrieval matches words only until the model is present. On a host
 installed by hand, run it once after the dependency install:
 
 ```bash
-PYTHONPATH=src python -m app.assistant_memory.v2.embeddings download
-PYTHONPATH=src python -m app.assistant_memory.v2.embeddings status
+PYTHONPATH=src python -m app.platform.assistant_memory.v2.embeddings download
+PYTHONPATH=src python -m app.platform.assistant_memory.v2.embeddings status
 ```
 
 ### GPU/PyTorch note
@@ -253,14 +253,14 @@ Linux/macOS/WSL:
 
 ```bash
 export PYTHONPATH=src
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
 PowerShell:
 
 ```powershell
 $env:PYTHONPATH = 'src'
-python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
 Verify:
@@ -394,7 +394,7 @@ Only set `HERMES_ENABLED=true` after the sidecar is reachable. See [HERMES_SIDEC
 
 ## 11. Launcher dashboard
 
-`python -m app.launcher start` starts Omnix on every platform; `start_all.bat`
+`python -m app.composition.launcher start` starts Omnix on every platform; `start_all.bat`
 and `start_all.sh` are thin wrappers around it. The launcher:
 
 - refuses to start while another launcher answers on port `5055`;
@@ -427,7 +427,7 @@ then `resources/config/launcher.toml` (copy `launcher.example.toml`; the local
 file is ignored by git), then the `rpg-flux`, `rpg-tts` and `rpg-stt` Conda
 environments under `CONDA_ROOT` (default `~/miniconda3`).
 
-On Linux and macOS, `./start_all.sh` runs the same `python -m app.launcher start`
+On Linux and macOS, `./start_all.sh` runs the same `python -m app.composition.launcher start`
 (add `--postgres-container <name>` to have it start a Docker container). A
 service whose interpreter or tool (for example `npm`) is missing shows as
 failed in the dashboard with the reason in its log.

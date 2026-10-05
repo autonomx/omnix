@@ -5,10 +5,10 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.fundamental_metric_data import YahooAnalystMetricAdapter
-from app.trading.providers.errors import ProviderDataUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.fundamental_metric_data import YahooAnalystMetricAdapter
+from app.apps.trading.providers.errors import ProviderDataUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class FakeResponse:

@@ -12,14 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection
 
 from app.assets import SharedAssetStore, default_asset_store
-from app.chat import ChatSessionStore, default_chat_store
-from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+from app.platform.chat import ChatSessionStore, default_chat_store
+from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 from app.jobs import (
     InMemoryModelResidencyStore,
     default_model_residency_store,
 )
 from app.providers.facade import ProviderFacade, default_provider_facade
-from app.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
+from app.apps.rpg.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
 
 _LOCAL_BROWSER_ORIGINS = (
     "http://localhost:5173",
@@ -170,12 +170,12 @@ def create_gateway_app(
     from app.runtime.capabilities import RuntimeCapabilities
 
     runtime_config = runtime_config or get_runtime_config()
-    from app.chat.delivery_sync import persist_live_voice_delivery
-    from app.live_voice.diagnostics import configure_delivery_checkpoint_recorder
+    from app.platform.chat.delivery_sync import persist_live_voice_delivery
+    from app.platform.live_voice.diagnostics import configure_delivery_checkpoint_recorder
 
     configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     if job_store_factory is None:
-        from app.runtime_composition import production_job_store
+        from app.composition.runtime_composition import production_job_store
 
         get_job_store = production_job_store
     else:
@@ -224,7 +224,7 @@ def create_gateway_app(
 
     if "rpg" in enabled_feature_ids(runtime_config):
         # Importing it loads the RPG route package; skip when RPG is off (WP-7.7).
-        from app.rpg.api.feature_routes import add_rpg_debug_middleware
+        from app.apps.rpg.api.feature_routes import add_rpg_debug_middleware
 
         add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.paper import (
+from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountSnapshot,
     PaperBalance,
@@ -13,7 +13,7 @@ from app.trading.paper import (
     PaperOrderRequest,
     paper_fill_decision,
 )
-from app.trading.replay_execution import (
+from app.apps.trading.replay_execution import (
     ReplayExecutionBar,
     advance_replay_snapshot,
     detached_replay_snapshot,

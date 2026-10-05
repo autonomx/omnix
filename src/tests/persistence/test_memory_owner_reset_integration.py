@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.runtime.tenant_context import current_tenant

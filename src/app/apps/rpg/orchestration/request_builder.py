@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
+from app.apps.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

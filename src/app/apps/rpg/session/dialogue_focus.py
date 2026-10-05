@@ -643,7 +643,7 @@ def record_direct_dialogue_exchange(
     persist_error = ""
     if persist:
         try:
-            from app.rpg.session.session_runtime_store import save_runtime_session
+            from app.apps.rpg.session.session_runtime_store import save_runtime_session
 
             save_runtime_session(session)
             persisted = True

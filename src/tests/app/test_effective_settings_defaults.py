@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.chat.models import CreateChatSessionRequest
+from app.platform.chat.models import CreateChatSessionRequest
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.jobs.handlers import registry_from_features
 from app.runtime.feature_catalog import load_feature
@@ -226,7 +226,7 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
         "quality": "Studio",
     }
 
-    from app.voice.feature import voice_submission_defaults
+    from app.platform.voice.feature import voice_submission_defaults
 
     stt = voice_submission_defaults(CreateJobRequest(
         module="stt",

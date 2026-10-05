@@ -5,15 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.rpg.map_contracts import (
+from app.apps.rpg.map_contracts import (
     MapActionCapability,
     MapMarker,
     MapOverlay,
     MapRouteOverlay,
 )
-from app.rpg.map_fixtures import FROST_HAVEN_MAP_ID, NORTHERN_PASS_MAP_ID
-from app.rpg.map_repository import MapDefinitionRepository, default_map_repository
-from app.rpg.map_world_integration import (
+from app.apps.rpg.map_fixtures import FROST_HAVEN_MAP_ID, NORTHERN_PASS_MAP_ID
+from app.apps.rpg.map_repository import MapDefinitionRepository, default_map_repository
+from app.apps.rpg.map_world_integration import (
     canonical_route_id_for_locations,
     map_repository_for_session,
 )

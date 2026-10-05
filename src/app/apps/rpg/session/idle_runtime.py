@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from app.rpg.creator.defaults import apply_adventure_defaults
-from app.rpg.creator.world_simulation import step_simulation_state
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.creator.defaults import apply_adventure_defaults
+from app.apps.rpg.creator.world_simulation import step_simulation_state
+from app.apps.rpg.session.state_normalization import (
     _copy_dict,
     _ensure_simulation_state,
     _safe_dict,

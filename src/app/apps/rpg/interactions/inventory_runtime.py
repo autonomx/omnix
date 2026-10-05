@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.companion_auto_equip import apply_companion_auto_equip
-from app.rpg.interactions.companion_item_policy import (
+from app.apps.rpg.interactions.companion_auto_equip import apply_companion_auto_equip
+from app.apps.rpg.interactions.companion_item_policy import (
     evaluate_companion_item_acceptance,
 )
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.apps.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,

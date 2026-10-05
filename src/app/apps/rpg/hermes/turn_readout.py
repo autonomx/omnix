@@ -112,7 +112,7 @@ def hermes_rpg_turn_readout_payload(request: dict[str, Any]) -> dict[str, Any]:
     session_id = _safe_str(data.get("session_id")).strip()
     turn = _safe_dict(data.get("turn") or data.get("latest_turn"))
     if not turn and session_id:
-        from app.rpg.session.service import load_session
+        from app.apps.rpg.session.service import load_session
 
         session = load_session(session_id)
         if not session:

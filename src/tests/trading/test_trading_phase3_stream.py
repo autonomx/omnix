@@ -7,10 +7,10 @@ from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.api import create_trading_router
-from app.trading.catalog import BINDINGS, INSTRUMENTS
-from app.trading.streaming.binance_stream import BinanceWebSocketStream, parse_binance_kline
-from app.trading.streaming.manager import StreamingBarUpdate
+from app.apps.trading.api import create_trading_router
+from app.apps.trading.catalog import BINDINGS, INSTRUMENTS
+from app.apps.trading.streaming.binance_stream import BinanceWebSocketStream, parse_binance_kline
+from app.apps.trading.streaming.manager import StreamingBarUpdate
 
 
 class EmptyRepository:

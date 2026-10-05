@@ -4,13 +4,13 @@ from datetime import datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.finviz_gapper_discovery import FINVIZ_ATOMIC_SOURCE_LOCATOR
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.providers.errors import ProviderDataUnavailableError
-from app.trading.strategies import evaluate_gap_pullback
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_repository import TradingStrategyConfigDocument
-from app.trading import strategy_universe_archiver as archiver
+from app.apps.trading.finviz_gapper_discovery import FINVIZ_ATOMIC_SOURCE_LOCATOR
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.providers.errors import ProviderDataUnavailableError
+from app.apps.trading.strategies import evaluate_gap_pullback
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading import strategy_universe_archiver as archiver
 
 
 class FakeCatalystRepository:
@@ -298,7 +298,7 @@ def test_finviz_archive_survives_catalyst_persistence_failure(monkeypatch) -> No
     )
 
 def test_late_finviz_startup_recovery_is_research_only(monkeypatch) -> None:
-    from app.trading.strategy_data_integrity import assess_universe_integrity
+    from app.apps.trading.strategy_data_integrity import assess_universe_integrity
 
     repository = FakeRepository()
     calls = []

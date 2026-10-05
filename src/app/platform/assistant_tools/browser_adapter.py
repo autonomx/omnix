@@ -178,7 +178,7 @@ def agent_browser_command() -> str:
     configured = _env_str("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
     if configured:
         return configured
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     local_bin = repo_root / ".tools" / "npm-global"
     candidates = (
         local_bin / "agent-browser.cmd",
@@ -976,7 +976,7 @@ def _preview_npm_command() -> str:
             return str(candidate)
         raise ValueError("OMNIX_AGENT_PREVIEW_NPM_COMMAND does not point to a file")
 
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     patterns = (
         "node-v*-win-x64/npm.cmd",
         "node-v*-linux-x64/bin/npm",

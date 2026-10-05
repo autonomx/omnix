@@ -5,9 +5,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.desktop_companion.build_identity import DesktopCompanionBuildIdentity
-from app.desktop_companion.evaluation import DesktopCompanionEvaluationStore
-from app.desktop_companion.routes import register_desktop_companion_routes
+from app.apps.desktop_companion.build_identity import DesktopCompanionBuildIdentity
+from app.apps.desktop_companion.evaluation import DesktopCompanionEvaluationStore
+from app.apps.desktop_companion.routes import register_desktop_companion_routes
 
 COMMIT_SHA = "94a179154dc98f6e455c604bed100c0beee06046"
 GENERAL_SCENARIOS = [

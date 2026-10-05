@@ -8,16 +8,16 @@ from typing import Any, Iterable
 # Phase 8.35: when the semantic classifier has already produced a complete
 # stateless player-facing response, use it as the canonical visible narration and
 # do not spend another blocking LLM call asking the full narrator to rephrase it.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session,
 )
-from app.rpg.session.llm_narration_projection import (
+from app.apps.rpg.session.llm_narration_projection import (
     _phase8_part31_narration_request as _phase8_part31_narration_request,
 )
-from app.rpg.session.narration_payload_validation import (
+from app.apps.rpg.session.narration_payload_validation import (
     _phase8_part34_existing_completed_llm_narration as _phase8_part34_existing_completed_llm_narration,
 )
 
@@ -371,15 +371,15 @@ def _phase8_part35_payload_tick(payload: dict[str, Any]) -> int:
 
 
 def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str, Any], fields: dict[str, Any]) -> None:
-    from app.rpg.session.companion_turn_runtime import (
+    from app.apps.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn, _store_narration_artifact as _store_narration_artifact,
     )
 
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
 
@@ -434,7 +434,7 @@ def _phase8_part35_drop_incomplete_artifact_for_turn(
     runtime_state: dict[str, Any],
     turn_id: str,
 ) -> dict[str, Any]:
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
@@ -496,11 +496,11 @@ def _enqueue_narration_request(
     job_kind: str = "player_turn",
     priority: int = 100,
 ) -> tuple[dict[str, Any], dict[str, Any], bool]:
-    from app.rpg.session.companion_turn_runtime import (
+    from app.apps.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn,
     )
 
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso,
     )
 

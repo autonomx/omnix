@@ -3,34 +3,34 @@ from __future__ import annotations
 
 from importlib import import_module
 
-from app.assistant_memory.owner_defaults import default_memory_service
-from app.assistant_memory.selection import estimate_memory_tokens, select_memory_records
-from app.assistant_memory.service import MemoryService
-from app.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
+from app.platform.assistant_memory.owner_defaults import default_memory_service
+from app.platform.assistant_memory.selection import estimate_memory_tokens, select_memory_records
+from app.platform.assistant_memory.service import MemoryService
+from app.platform.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
 
-from app.assistant_memory.companion_context import build_companion_context_packet
-from app.assistant_memory.lifecycle import resolve_snapshot_view
-from app.assistant_memory.initiative import (
+from app.platform.assistant_memory.companion_context import build_companion_context_packet
+from app.platform.assistant_memory.lifecycle import resolve_snapshot_view
+from app.platform.assistant_memory.initiative import (
     initiative_prompt_directive,
     plan_companion_initiative,
 )
-from app.assistant_memory.observability import (
+from app.platform.assistant_memory.observability import (
     record_companion_diagnostics,
     record_memory_usage,
 )
-from app.assistant_memory.paralinguistic_state import (
+from app.platform.assistant_memory.paralinguistic_state import (
     observe_paralinguistic_turn,
     paralinguistic_prompt_directive,
 )
-from app.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
-from app.assistant_memory.rollout import companion_rollout_policy
-from app.assistant_memory.scope import resolve_chat_scope, resolve_session_memory_scope
-from app.assistant_memory.settings import (
+from app.platform.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
+from app.platform.assistant_memory.rollout import companion_rollout_policy
+from app.platform.assistant_memory.scope import resolve_chat_scope, resolve_session_memory_scope
+from app.platform.assistant_memory.settings import (
     AssistantMemoryRuntimeSettings,
     load_memory_runtime_settings,
     use_memory_runtime_settings,
 )
-from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
+from app.platform.assistant_memory.temporal_retrieval import retrieve_temporal_context
 
 __all__ = [
     "ASSISTANT_MEMORY_SETTINGS_KEY",
@@ -63,10 +63,10 @@ def owner_memory_repository():
     from app.persistence.runtime import uses_postgresql_runtime
 
     if not uses_postgresql_runtime():
-        from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+        from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 
         return OwnerAwareInMemoryMemoryRepository()
-    from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
+    from app.platform.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 
     return production_owner_memory_repository()
 
@@ -89,4 +89,4 @@ def __getattr__(name: str):
     module = _LAZY_EXPORTS.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    return getattr(import_module(f"app.assistant_memory.{module}"), name)
+    return getattr(import_module(f"app.platform.assistant_memory.{module}"), name)

@@ -8,7 +8,7 @@ Executor = Callable[[Any, str], Any]
 
 
 def _default_loader(session_id: str) -> Any:
-    from app.rpg.session.service import load_session
+    from app.apps.rpg.session.service import load_session
 
     return load_session(session_id)
 
@@ -26,7 +26,7 @@ def _default_executor(session: Any, command_text: str) -> Any:
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
 
-    from app.rpg.session.interactive_first_call_runtime import apply_turn
+    from app.apps.rpg.session.interactive_first_call_runtime import apply_turn
 
     return apply_turn(
         session_id,

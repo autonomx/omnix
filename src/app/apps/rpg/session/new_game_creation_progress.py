@@ -11,7 +11,7 @@ from app.runtime.clock import utc_now
 
 from typing import Any, Literal
 
-from app.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
+from app.apps.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
 
 CreationJobStatus = Literal["queued", "running", "completed", "failed"]
 

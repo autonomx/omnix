@@ -22,8 +22,8 @@ from pathlib import Path
 
 import run_interday_winner_shadow_replay_core as core
 
-from app.trading.strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
-from app.trading.strategy_stoch_rsi_5m_early_single_v2 import (
+from app.apps.trading.strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
+from app.apps.trading.strategy_stoch_rsi_5m_early_single_v2 import (
     ExitPolicy,
     context_size_weight,
     manage_trade,

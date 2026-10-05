@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, WorkspaceSpec
-from app.agent_runtime.evidence import EvidenceCompilationError
-from app.agent_runtime.profiles import list_agent_profiles
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, WorkspaceSpec
+from app.platform.agent_runtime.evidence import EvidenceCompilationError
+from app.platform.agent_runtime.profiles import list_agent_profiles
+from app.platform.agent_runtime.service import AgentRunService
 
 
 def test_every_profile_with_local_capabilities_requires_explicit_workspace() -> None:

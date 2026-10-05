@@ -6,8 +6,8 @@ import pytest
 
 Image = pytest.importorskip("PIL.Image")
 
-from app.image.providers.base import ImageGenerationResult
-import app.image.service as image_service
+from app.platform.image.providers.base import ImageGenerationResult
+import app.platform.image.service as image_service
 
 
 def test_image_service_resolves_reference_assets_before_provider_call(monkeypatch) -> None:

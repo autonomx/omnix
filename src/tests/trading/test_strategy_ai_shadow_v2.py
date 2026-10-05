@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import MarketBar
-from app.trading.research.contracts import TradingEvidence
-from app.trading.strategy_ai_shadow_v2 import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.research.contracts import TradingEvidence
+from app.apps.trading.strategy_ai_shadow_v2 import (
     AIShadowV2AlphaDecision,
     CatalystIntelligenceSnapshot,
     StructuredAlphaTrigger,

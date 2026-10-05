@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.ai.conversation_threads import build_conversation_thread_prompt_context
-from app.rpg.ai.world_scene_narrator import narrate_scene
-from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.memory.npc_memory_recall import recall_npc_memories
-from app.rpg.memory.service_memory_recall import recall_service_memories_for_narration
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.ai.conversation_threads import build_conversation_thread_prompt_context
+from app.apps.rpg.ai.world_scene_narrator import narrate_scene
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.memory.npc_memory_recall import recall_npc_memories
+from app.apps.rpg.memory.service_memory_recall import recall_service_memories_for_narration
+from app.apps.rpg.session.state_normalization import (
     _safe_bool,
     _safe_dict,
     _safe_int,

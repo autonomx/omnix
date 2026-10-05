@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 from typing import ClassVar
 
-from app.live_voice.hardware_policy import (
+from app.platform.live_voice.hardware_policy import (
     apply_live_voice_process_defaults,
     should_defer_speculative_tts,
 )
-from app.live_voice.llm.lmstudio_responses import stateful_responses_enabled
+from app.platform.live_voice.llm.lmstudio_responses import stateful_responses_enabled
 
 
 class _SerialTtsProvider:
@@ -79,7 +79,7 @@ def test_concurrent_tts_keeps_hidden_prefetch_enabled_even_with_serial_kill_swit
 
 
 def test_serial_speculation_kill_switch_defers_entry_before_provider_call(monkeypatch) -> None:
-    from app.live_voice.speech import speculative_tts as runtime
+    from app.platform.live_voice.speech import speculative_tts as runtime
     from app.conversation.tts_stream_contract import TtsStreamRequest
 
     provider = _SerialTtsProvider()

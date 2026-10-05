@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import BrokerCapabilityRequest, _execution_key, _validate_execution_input
+from app.platform.agent_runtime.broker_api import BrokerCapabilityRequest, _execution_key, _validate_execution_input
 
 
 def test_broker_proposal_ids_are_namespaced_by_run() -> None:

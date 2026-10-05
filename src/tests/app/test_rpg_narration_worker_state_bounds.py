@@ -1,4 +1,4 @@
-from app.rpg.session import narration_worker
+from app.apps.rpg.session import narration_worker
 
 
 def test_pending_narration_signals_expire_and_reject_over_capacity(monkeypatch) -> None:

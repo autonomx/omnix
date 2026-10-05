@@ -127,7 +127,7 @@ def test_invalid_host_configuration_fails_closed(monkeypatch, value):
         RequestGuardMiddleware(FastAPI())
 
 
-@pytest.mark.parametrize("module", ["services.tts.tts_server", "services.stt.nemotron_eou_stt_server", "services.image.image_service_runtime", "app.launcher.control_app"])
+@pytest.mark.parametrize("module", ["services.tts.tts_server", "services.stt.nemotron_eou_stt_server", "services.image.image_service_runtime", "app.composition.launcher.control_app"])
 def test_service_composition_protects_routes(monkeypatch, module):
     monkeypatch.delenv("OMNIX_ALLOWED_HOSTS", raising=False)
     monkeypatch.delenv("OMNIX_ALLOWED_ORIGINS", raising=False)
@@ -147,7 +147,7 @@ def test_service_composition_protects_routes(monkeypatch, module):
 
 
 def test_launcher_control_app_refuses_non_loopback_peers():
-    from app.launcher.control_app import app
+    from app.composition.launcher.control_app import app
 
     remote = TestClient(app, base_url="http://127.0.0.1", client=("192.0.2.10", 50000))
     assert remote.get("/api/services").status_code == 403
@@ -157,7 +157,7 @@ def test_launcher_control_app_refuses_non_loopback_peers():
 def test_gateway_composition_protects_routes(monkeypatch):
     monkeypatch.delenv("OMNIX_ALLOWED_HOSTS", raising=False)
     monkeypatch.delenv("OMNIX_ALLOWED_ORIGINS", raising=False)
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     client = TestClient(create_gateway_app(), base_url="http://127.0.0.1")
     assert client.post("/__guard_test__", headers={"Host": "evil.test"}).status_code == 421

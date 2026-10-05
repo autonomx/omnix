@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from app.rpg.core.determinism import rng_for_current_turn
+from app.apps.rpg.core.determinism import rng_for_current_turn
 from .narrative_event import NarrativeEvent
 from app.prompts import prompt_template
 

@@ -70,7 +70,7 @@ def legacy_profile_paths_for_npc(npc_id: str, *, root: Path | None = None) -> Li
 def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.rpg.persistence.rpg_feature_compat import load_npc_profile_postgres
+        from app.apps.rpg.persistence.rpg_feature_compat import load_npc_profile_postgres
         return load_npc_profile_postgres(npc_id, root=root)
     path = profile_path_for_npc(npc_id, root=root)
     if not path.exists():
@@ -155,7 +155,7 @@ def persist_npc_evolution_profiles(
     """Persist runtime_state.npc_evolution.arcs into file-based NPC profiles."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.rpg.persistence.rpg_feature_compat import persist_npc_evolution_profiles_postgres
+        from app.apps.rpg.persistence.rpg_feature_compat import persist_npc_evolution_profiles_postgres
         return persist_npc_evolution_profiles_postgres(runtime_state=runtime_state, root=root)
     runtime_state = _safe_dict(runtime_state)
     evo = _safe_dict(runtime_state.get("npc_evolution"))
@@ -305,7 +305,7 @@ def load_npc_evolution_profiles_for_runtime(
     """Load file-based NPC evolution profiles into a bounded runtime shape."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.rpg.persistence.rpg_feature_compat import load_npc_evolution_profiles_for_runtime_postgres
+        from app.apps.rpg.persistence.rpg_feature_compat import load_npc_evolution_profiles_for_runtime_postgres
         return load_npc_evolution_profiles_for_runtime_postgres(npc_ids=npc_ids, root=root)
     root = root or default_profile_root()
     loaded: Dict[str, Any] = {}

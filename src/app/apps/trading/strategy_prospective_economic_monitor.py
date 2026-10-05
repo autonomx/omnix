@@ -41,7 +41,7 @@ from .strategy_repository import (
 )
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
 

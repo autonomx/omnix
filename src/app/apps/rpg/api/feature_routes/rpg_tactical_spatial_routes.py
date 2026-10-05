@@ -7,13 +7,13 @@ from typing import Any, Literal, Mapping
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
 
-from app.rpg.tactical_spatial import (
+from app.apps.rpg.tactical_spatial import (
     TacticalAttackCommand,
     TacticalMoveCommand,
     TacticalSpatialError,
     TacticalSpatialPolicy,
 )
-from app.rpg.tactical_spatial_service import attack_tactically, move_actor_tactically
+from app.apps.rpg.tactical_spatial_service import attack_tactically, move_actor_tactically
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 

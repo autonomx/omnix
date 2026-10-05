@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Callable, Dict, List
 
-from app.rpg.session.dialogue_focus import resolve_dialogue_target
-from app.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
+from app.apps.rpg.session.dialogue_focus import resolve_dialogue_target
+from app.apps.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
 
 
 def _d(v: Any) -> Dict[str, Any]:

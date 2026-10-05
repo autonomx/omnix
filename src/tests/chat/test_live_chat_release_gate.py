@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.chat.live_chat_release_gate import (
+from app.platform.chat.live_chat_release_gate import (
     DEFAULT_LIVE_CHAT_METRIC_POLICIES,
     REQUIRED_LIVE_CHAT_SCENARIOS,
     LiveChatEvidenceMetadata,
@@ -10,7 +10,7 @@ from app.chat.live_chat_release_gate import (
     LiveChatReleaseThresholds,
     evaluate_live_chat_release_gate,
 )
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 class EmptyJobStore:

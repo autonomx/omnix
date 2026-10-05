@@ -4,13 +4,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.dialogue_quality_benchmark import (
+from app.apps.rpg.dialogue_quality_benchmark import (
     BRAN_PROFILE,
     DialogueBenchmarkCase,
     default_dialogue_benchmark_cases,
 )
-from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
-from app.rpg.session.service import load_session, save_session
+from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+from app.apps.rpg.session.service import load_session, save_session
 
 LOCAL_DIALOGUE_FIXTURE_VERSION = "rpg_local_dialogue_fixture_v1"
 

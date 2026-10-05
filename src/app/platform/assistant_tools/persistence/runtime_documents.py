@@ -27,7 +27,7 @@ def load_assistant_tool_ledger_postgres(
 ):
     if path is not None:
         raise RuntimeError("file-backed assistant-tool ledger authority is retired")
-    from app.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
+    from app.platform.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
 
     entries = []
     for _, payload, _ in PostgresDocumentStore().list(
@@ -44,7 +44,7 @@ def load_assistant_tool_ledger_postgres(
 
 
 def _register_document_schemas() -> None:
-    from app.assistant_tools.ledger import AssistantToolLedgerEntry
+    from app.platform.assistant_tools.ledger import AssistantToolLedgerEntry
 
     register_document_schema("assistant-tools", "execution-ledger", AssistantToolLedgerEntry)
 

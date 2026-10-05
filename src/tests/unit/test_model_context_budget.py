@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.chat.context_budget import DEFAULT_INPUT_TOKEN_BUDGET, prompt_budget_for_model
+from app.platform.chat.context_budget import DEFAULT_INPUT_TOKEN_BUDGET, prompt_budget_for_model
 from app.providers import model_catalog
 from app.providers.model_catalog import advertised_context_window, clear_model_catalog
 
@@ -86,8 +86,8 @@ def test_the_budget_uses_the_window_and_the_configured_cap(monkeypatch) -> None:
 
 
 def test_prompt_assembly_budgets_for_the_sessions_model(monkeypatch) -> None:
-    from app.chat.models import ChatMessage, ChatSession
-    from app.chat.prompt_assembly import build_prompt_assembly
+    from app.platform.chat.models import ChatMessage, ChatSession
+    from app.platform.chat.prompt_assembly import build_prompt_assembly
 
     monkeypatch.delenv("OMNIX_CHAT_INPUT_TOKEN_BUDGET", raising=False)
     monkeypatch.setattr(model_catalog, "_default_provider", {"lmstudio": _Provider(_models(tiny=4_096))}.get)

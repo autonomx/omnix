@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.assistant_memory.contracts import (
+from app.platform.assistant_memory.contracts import (
     MemorySpaceKey,
     ObservationAppendRequest,
     ObservationProvenance,
@@ -20,7 +20,7 @@ from app.assistant_memory.contracts import (
     VisibilityScope,
     resolve_session_memory_scope,
 )
-from app.chat.contracts import default_chat_store
+from app.platform.chat.contracts import default_chat_store
 from app.runtime.tenant_context import current_tenant
 
 from .models import DesktopObservation

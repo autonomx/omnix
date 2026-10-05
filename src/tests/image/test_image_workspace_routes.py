@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.assets import AssetRecord, AssetType
 from app.assets.store import SharedAssetStore
-from app.image.routes.workspace import create_image_workspace_router
-import app.image.asset_store as legacy_image_store
+from app.platform.image.routes.workspace import create_image_workspace_router
+import app.platform.image.asset_store as legacy_image_store
 from app.jobs import CompleteJobRequest, CreateJobRequest, ResourceClass
 from tests.support.in_memory_jobs import InMemoryJobStore
 

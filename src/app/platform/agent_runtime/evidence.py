@@ -1298,7 +1298,7 @@ def validate_required_evidence_capabilities(
     """Require one live capability per evidence requirement, not every fallback."""
     if not capabilities:
         return
-    from app.assistant_tools.contracts import review_assistant_tool_request
+    from app.platform.assistant_tools.contracts import review_assistant_tool_request
     from .capability_requests import AssistantToolRequest
 
     allowed_set = set(capabilities)

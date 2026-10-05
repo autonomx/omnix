@@ -11,28 +11,28 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.trading.strategy_ai_shadow_provider import (
+from app.apps.trading.strategy_ai_shadow_provider import (
     get_trading_research_provider,
     reset_ai_shadow_reliability_state,
 )
-from app.trading.execution import ExecutionObservation
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.indicator_signals import multi_timeframe_indicator_context
-from app.trading.market_evidence import (
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.indicator_signals import multi_timeframe_indicator_context
+from app.apps.trading.market_evidence import (
     MARKET_EVIDENCE_POLICY_VERSION,
     PremarketLiquidityEvidence,
     SourceMemberDisposition,
 )
-from app.trading.models import MarketBar
-from app.trading.strategies import evaluate_gap_pullback
-from app.trading.strategy_ai_shadow import AIShadowDecision, AIShadowPositionState, feature_snapshot
-from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
-from app.trading.strategy_data_integrity import finviz_atomic_source_locator
-from app.trading.strategy_intraday_learning import build_intraday_learning_snapshot
-from app.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
-from app.trading.strategy_repository import StrategyEvent
-from app.trading.strategy_timeframes import resample_final_bars
-from app.trading.strategy_universe_archiver import _archive_universe_id
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies import evaluate_gap_pullback
+from app.apps.trading.strategy_ai_shadow import AIShadowDecision, AIShadowPositionState, feature_snapshot
+from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.strategy_data_integrity import finviz_atomic_source_locator
+from app.apps.trading.strategy_intraday_learning import build_intraday_learning_snapshot
+from app.apps.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
+from app.apps.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_timeframes import resample_final_bars
+from app.apps.trading.strategy_universe_archiver import _archive_universe_id
 
 
 RUN_LIVE = os.environ.get("OMNIX_RUN_LIVE_AI_TRADING_E2E", "0") == "1"

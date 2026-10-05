@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.jobs.models import JobStatus
-from app.research import jobs as research_jobs
+from app.platform.research import jobs as research_jobs
 
 
 def test_research_thread_dispatch_respects_capacity(monkeypatch) -> None:

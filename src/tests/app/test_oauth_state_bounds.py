@@ -1,4 +1,4 @@
-from app.assistant_tools import connections
+from app.platform.assistant_tools import connections
 
 
 def test_pending_oauth_state_is_capacity_ttl_bounded_and_clearable(monkeypatch) -> None:

@@ -13,13 +13,13 @@ def _safe_list(value: Any) -> list[Any]:
 
 
 def list_adventure_templates_payload() -> dict[str, Any]:
-    from app.rpg.services.adventure_preview_service import get_templates
+    from app.apps.rpg.services.adventure_preview_service import get_templates
 
     return {"success": True, "templates": get_templates()}
 
 
 def validate_adventure_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_preview_service import validate_setup
+    from app.apps.rpg.services.adventure_preview_service import validate_setup
 
     result = validate_setup(_safe_dict(data))
     validation = _safe_dict(result.get("validation"))
@@ -38,7 +38,7 @@ def validate_adventure_payload(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def preview_adventure_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_preview_service import build_adventure_preview, preview_setup
+    from app.apps.rpg.services.adventure_preview_service import build_adventure_preview, preview_setup
 
     payload = _safe_dict(data)
     setup = payload.get("setup") if isinstance(payload.get("setup"), dict) else payload
@@ -49,7 +49,7 @@ def preview_adventure_payload(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def inspect_adventure_world_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import inspect_world
+    from app.apps.rpg.services.adventure_world_service import inspect_world
 
     payload = _safe_dict(data)
     setup = _safe_dict(payload.get("setup"))
@@ -57,7 +57,7 @@ def inspect_adventure_world_payload(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def inspect_adventure_world_snapshot_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import inspect_world_snapshot
+    from app.apps.rpg.services.adventure_world_service import inspect_world_snapshot
 
     payload = _safe_dict(data)
     setup = _safe_dict(payload.get("setup"))
@@ -66,7 +66,7 @@ def inspect_adventure_world_snapshot_payload(data: dict[str, Any]) -> dict[str, 
 
 
 def compare_adventure_world_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import compare_world
+    from app.apps.rpg.services.adventure_world_service import compare_world
 
     payload = _safe_dict(data)
     return compare_world(
@@ -76,7 +76,7 @@ def compare_adventure_world_payload(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def compare_adventure_entity_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import compare_world_entity
+    from app.apps.rpg.services.adventure_world_service import compare_world_entity
 
     payload = _safe_dict(data)
     entity_id = str(payload.get("entity_id") or "")
@@ -90,14 +90,14 @@ def compare_adventure_entity_payload(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def simulate_adventure_step_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import advance_world_simulation
+    from app.apps.rpg.services.adventure_world_service import advance_world_simulation
 
     payload = _safe_dict(data)
     return advance_world_simulation(_safe_dict(payload.get("setup")))
 
 
 def adventure_simulation_state_payload(data: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.services.adventure_world_service import get_simulation_state
+    from app.apps.rpg.services.adventure_world_service import get_simulation_state
 
     payload = _safe_dict(data)
     return get_simulation_state(_safe_dict(payload.get("setup")))

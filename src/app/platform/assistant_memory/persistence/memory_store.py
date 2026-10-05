@@ -10,7 +10,7 @@ from app.conversation.memory_contracts import (
     MemorySnapshot,
     MemorySnapshotItem,
 )
-from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
+from app.platform.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import EntityNotFound, RevisionConflict
@@ -18,7 +18,7 @@ from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.runtime.pagination import bounded_count
-from app.assistant_memory.persistence.repository_specs import (
+from app.platform.assistant_memory.persistence.repository_specs import (
     ASSISTANT_MEMORY_REPOSITORY_SPECS,
 )
 

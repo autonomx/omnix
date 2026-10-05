@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.assistant_memory import settings as memory_settings
-from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+from app.platform.assistant_memory import settings as memory_settings
+from app.platform.assistant_memory.settings import AssistantMemoryRuntimeSettings
 
 
 def test_unregistered_memory_settings_fall_back_to_defaults(monkeypatch) -> None:

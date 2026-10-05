@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 
-from app.trading.prospective_gap_monitor import ProspectiveGapMonitor
+from app.apps.trading.prospective_gap_monitor import ProspectiveGapMonitor
 
 
 class _Ledger:

@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.execution import ExecutionObservation
-from app.trading.paper import PaperAccount, PaperAccountSnapshot, PaperBalance, PaperPosition
-from app.trading.paper_protection import PaperPositionProtection
-from app.trading.strategy_operations_health import account_risk_health, execution_health, operational_health
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.paper import PaperAccount, PaperAccountSnapshot, PaperBalance, PaperPosition
+from app.apps.trading.paper_protection import PaperPositionProtection
+from app.apps.trading.strategy_operations_health import account_risk_health, execution_health, operational_health
 
 
 NOW = datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc)

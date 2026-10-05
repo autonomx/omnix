@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from app.agent_runtime import chat_bridge, semantic_task_parser
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime import chat_bridge, semantic_task_parser
+from app.platform.agent_runtime.semantic_task import (
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
 )
-from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.prompt_store import ChatSessionStore
+from app.platform.chat.models import CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat.prompt_store import ChatSessionStore
 from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 from app.providers import service as provider_service
 
@@ -416,7 +416,7 @@ def test_direct_json_store_cannot_bypass_agent_provider_boundary(monkeypatch, tm
             provider_calls.append(kwargs)
             raise AssertionError("direct JSON store bypassed Agent routing")
 
-    from app.chat.store import ChatSessionStore as LegacyJsonStore
+    from app.platform.chat.store import ChatSessionStore as LegacyJsonStore
 
     monkeypatch.setattr(chat_bridge, "get_provider", lambda _provider_id: _Provider())
     store = LegacyJsonStore(tmp_path / "legacy-chat.json")

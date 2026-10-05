@@ -15,7 +15,7 @@ if str(SRC_DIR) not in sys.path:
 
 def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
-    from app.voice import legacy_clone_files
+    from app.platform.voice import legacy_clone_files
     monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
@@ -59,7 +59,7 @@ def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch)
 
 def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
-    from app.voice import legacy_clone_files
+    from app.platform.voice import legacy_clone_files
     monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
@@ -104,7 +104,7 @@ def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path:
     missing_asset = next(asset for asset in listed if asset.id == "image:missing")
     assert missing_asset.storage_path == str(missing)
     assert missing_asset.compat == {
-        "legacy_system": "src/app/image/asset_store.py",
+        "legacy_system": "src/app/platform/image/asset_store.py",
         "legacy_asset_id": "missing",
         "legacy_hash": "hash:missing",
     }
@@ -112,7 +112,7 @@ def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path:
 
 def test_gateway_assets_endpoint_uses_shared_store() -> None:
     from app.assets import AssetLegacyImportDryRun, AssetListResponse, AssetMigrationPreview
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     class FakeAssetStore:
         def list_assets(self, **_page) -> AssetListResponse:
@@ -179,8 +179,8 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
     import json
 
     from app.assets import AssetListResponse, AssetRecord, AssetType
-    from app.gateway.main import create_gateway_app
-    from app.voice import legacy_clone_files
+    from app.composition.gateway.main import create_gateway_app
+    from app.platform.voice import legacy_clone_files
 
     clone_dir = tmp_path / "voice_clones"
     clone_dir.mkdir()
@@ -224,8 +224,8 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
 
 def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeypatch) -> None:
     from app.assets import canonical_voice_clones
-    from app.gateway.main import create_gateway_app
-    from app.voice import legacy_clone_files
+    from app.composition.gateway.main import create_gateway_app
+    from app.platform.voice import legacy_clone_files
 
     clone_dir = tmp_path / "voice_clones"
     clone_dir.mkdir()
@@ -261,7 +261,7 @@ def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeyp
 
 def test_gateway_assets_endpoint_pages_with_filters() -> None:
     from app.assets import AssetListResponse
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.runtime.pagination import InvalidCursor
 
     calls: list[dict[str, object]] = []

@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.locations.graph import (
+from app.apps.rpg.locations.graph import (
     MARKET,
     OLD_MILL,
     OLD_ROAD,

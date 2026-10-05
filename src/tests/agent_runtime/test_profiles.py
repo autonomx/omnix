@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from app.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities, select_agent_profile_id
+from app.platform.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities, select_agent_profile_id
 
 def test_house_profile_is_an_external_authority_ceiling_not_an_automatic_grant() -> None:
     profile = get_agent_profile("house")
@@ -46,8 +46,8 @@ def test_coding_profile_keeps_publication_off_by_default_but_allows_explicit_req
 
 
 def test_coding_task_authority_is_minimized_for_read_only_and_execution_tasks() -> None:
-    from app.agent_runtime.contracts import EvidenceDecision
-    from app.agent_runtime.evidence import compile_task_authority
+    from app.platform.agent_runtime.contracts import EvidenceDecision
+    from app.platform.agent_runtime.evidence import compile_task_authority
 
     profile = get_agent_profile("coding")
     read_only = compile_task_authority(

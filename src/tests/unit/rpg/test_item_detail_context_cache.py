@@ -1,5 +1,5 @@
 from app.persistence.tenant import TenantContext
-from app.rpg.session import item_detail
+from app.apps.rpg.session import item_detail
 
 
 def test_item_detail_context_is_read_for_each_tenant(monkeypatch) -> None:

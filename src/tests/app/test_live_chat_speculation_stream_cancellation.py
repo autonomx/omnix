@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat import live_chat_speculation as speculation_runtime
-from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.platform.chat import live_chat_speculation as speculation_runtime
+from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import ChatResponse, LMStudioProvider, ProviderConfig
 from app.runtime.cancellation import CancellationToken

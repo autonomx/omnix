@@ -7,34 +7,34 @@ complete.
 
 ## Core implementation
 
-- `src/app/trading/yahoo_evidence.py`
-- `src/app/trading/yahoo_acquisition_monitor.py`
-- `src/app/trading/providers/equity.py`
-- `src/app/trading/providers/http_runtime.py`
-- `src/app/trading/providers/alpaca_iex_status.py`
-- `src/app/trading/providers/registry.py`
-- `src/app/trading/market_data_recovery.py`
-- `src/app/trading/feature_qualification.py`
-- `src/app/trading/service.py`
-- `src/app/trading/market_evidence.py`
-- `src/app/trading/premarket_liquidity.py`
-- `src/app/trading/finviz_gapper_discovery.py`
+- `src/app/apps/trading/yahoo_evidence.py`
+- `src/app/apps/trading/yahoo_acquisition_monitor.py`
+- `src/app/apps/trading/providers/equity.py`
+- `src/app/apps/trading/providers/http_runtime.py`
+- `src/app/apps/trading/providers/alpaca_iex_status.py`
+- `src/app/apps/trading/providers/registry.py`
+- `src/app/apps/trading/market_data_recovery.py`
+- `src/app/apps/trading/feature_qualification.py`
+- `src/app/apps/trading/service.py`
+- `src/app/apps/trading/market_evidence.py`
+- `src/app/apps/trading/premarket_liquidity.py`
+- `src/app/apps/trading/finviz_gapper_discovery.py`
 
 ## Strategy-consumer migration
 
-- `src/app/trading/strategy_monitor.py`
-- `src/app/trading/strategy_runtime_reliability_fixes.py`
-- `src/app/trading/strategy_ai_shadow_v3_monitor.py`
-- `src/app/trading/strategy_prospective_economic_monitor.py`
+- `src/app/apps/trading/strategy_monitor.py`
+- `src/app/apps/trading/strategy_runtime_reliability_fixes.py`
+- `src/app/apps/trading/strategy_ai_shadow_v3_monitor.py`
+- `src/app/apps/trading/strategy_prospective_economic_monitor.py`
 
 Legacy/v2/deep shadow monitors remain source-compatible but receive the shared
 market service through `_CurrentShadowSessionProxy`.
 
 ## Runtime registration/diagnostics
 
-- `src/app/gateway/trading_routes.py`
-- `src/app/trading/market_data_api.py`
-- `src/app/trading/strategy_operations_api.py`
+- `src/app/composition/gateway/trading_routes.py`
+- `src/app/apps/trading/market_data_api.py`
+- `src/app/apps/trading/strategy_operations_api.py`
 
 ## Acceptance tests
 

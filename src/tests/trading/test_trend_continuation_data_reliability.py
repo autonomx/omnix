@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
+from app.apps.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 class _UnavailableHistory:

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
-from app.rpg.jobs.foreground_submission_store import RpgForegroundSubmissionStore
+from app.apps.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
+from app.apps.rpg.jobs.foreground_submission_store import RpgForegroundSubmissionStore
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 

@@ -9,7 +9,7 @@ missing fields, and malformed companions from earlier saves.
 """
 from typing import Any, Dict
 
-from app.rpg.party.party_state import _normalize_companion
+from app.apps.rpg.party.party_state import _normalize_companion
 
 
 def _safe_dict(v):

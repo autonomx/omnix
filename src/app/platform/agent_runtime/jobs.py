@@ -165,7 +165,7 @@ def _start_run(context: JobExecutionContext, job: JobRecord) -> JobRecord:
 
 
 def _task_graph_reference_context(service: Any, graph_run_id: str, node_id: str) -> str:
-    from app.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
+    from app.platform.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
     from app.persistence.unit_of_work import unit_of_work
 
     with unit_of_work(service.database) as work:

@@ -39,9 +39,9 @@ _DEFAULT_MAX_FIELD_CHARS = 12_000
 _MAX_COLLECTION_ITEMS = 100
 _MAX_DEPTH = 7
 _LOGGER_NAMES = (
-    "app.agent_runtime",
-    "app.gateway.agent_runtime",
-    "app.gateway.agent",
+    "app.platform.agent_runtime",
+    "app.composition.gateway.agent_runtime",
+    "app.composition.gateway.agent",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (

@@ -4,9 +4,9 @@ import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.trading.execution import ExecutionObservation
-from app.trading.paper import PaperAccount, PaperAccountSnapshot, PaperBalance, PaperOrder
-from app.trading.paper_monitor import TradingPaperMonitor
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.paper import PaperAccount, PaperAccountSnapshot, PaperBalance, PaperOrder
+from app.apps.trading.paper_monitor import TradingPaperMonitor
 
 
 NOW = datetime.now(timezone.utc)

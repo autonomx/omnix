@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.locations.encounter_runtime import apply_seeded_encounter_runtime
-from app.rpg.locations.encounters import record_encounter, roll_seeded_encounter
-from app.rpg.locations.graph import MARKET, OLD_MILL, OLD_ROAD, RUSTY_FLAGON, get_canonical_location
-from app.rpg.locations.travel_resources import apply_runtime_travel_with_resource_consumption
+from app.apps.rpg.locations.encounter_runtime import apply_seeded_encounter_runtime
+from app.apps.rpg.locations.encounters import record_encounter, roll_seeded_encounter
+from app.apps.rpg.locations.graph import MARKET, OLD_MILL, OLD_ROAD, RUSTY_FLAGON, get_canonical_location
+from app.apps.rpg.locations.travel_resources import apply_runtime_travel_with_resource_consumption
 
 SOURCE = "deterministic_phase4_runtime_travel_encounter_routing"
 
@@ -172,7 +172,7 @@ def build_runtime_travel_command_narration_contract(command_result: Dict[str, An
 
 
 def assert_phase4_runtime_travel_encounter_routing_ready() -> Dict[str, Any]:
-    from app.rpg.locations.discovery import discover_location, discover_route, unblock_route
+    from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route
 
     state = {
         "player_state": {

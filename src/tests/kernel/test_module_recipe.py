@@ -30,7 +30,7 @@ _GATEWAY_PROBE = """
 import json, sys, tempfile
 from pathlib import Path
 from fastapi.testclient import TestClient
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.jobs.handlers import JobExecutionContext
 from tests.support.in_memory_jobs import InMemoryJobStore
 
@@ -64,7 +64,7 @@ print(json.dumps({"created": created, "settings": settings, "job": str(store.get
 def _changed_outside_module(tree: Path) -> set[str]:
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=tree,
                             capture_output=True, text=True, check=True).stdout.splitlines()
-    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/")
+    module_paths = (f"src/app/apps/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/")
     return {line[3:] for line in status if not line[3:].startswith(module_paths)}
 
 

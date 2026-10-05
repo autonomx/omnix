@@ -1,6 +1,6 @@
 """ASGI entry point; application composition lives in ``app_factory``."""
 
-from app.production import app
+from app.composition.production import app
 from app.config.env import environment
 
 from .app_factory import create_gateway_app
@@ -15,4 +15,4 @@ if __name__ == "__main__":
 
     host = bind_host()
     port = int(environment().get("OMNIX_GATEWAY_PORT", str(DEFAULT_GATEWAY_PORT)))
-    uvicorn.run("app.gateway.main:app", host=host, port=port, reload=False)
+    uvicorn.run("app.composition.gateway.main:app", host=host, port=port, reload=False)

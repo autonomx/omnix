@@ -6,7 +6,7 @@ from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 NPC_PROFILE_DIR = REPO_ROOT / "resources" / "data" / "rpg" / "npcs"
 
 

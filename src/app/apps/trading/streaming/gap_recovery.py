@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from app.trading.models import MarketBar
+from app.apps.trading.models import MarketBar
 
 
 INTERVAL_DELTAS: dict[str, timedelta] = {

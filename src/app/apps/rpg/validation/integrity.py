@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Set, Tuple
 
-from app.rpg.survival import SURVIVAL_EVENT_LIMIT
+from app.apps.rpg.survival import SURVIVAL_EVENT_LIMIT
 
 MAX_VISUAL_REQUESTS = 100
 MAX_VISUAL_ASSETS = 200

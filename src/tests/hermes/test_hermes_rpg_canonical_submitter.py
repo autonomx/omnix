@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.rpg.hermes import canonical_submitter as submitter
-from app.rpg.session import interactive_first_call_runtime, service
+from app.apps.rpg.hermes import canonical_submitter as submitter
+from app.apps.rpg.session import interactive_first_call_runtime, service
 
 
 def test_default_submitter_loads_and_runs_the_durable_turn_pipeline(monkeypatch) -> None:

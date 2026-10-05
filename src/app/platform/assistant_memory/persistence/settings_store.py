@@ -1,7 +1,7 @@
 """Assistant-memory settings stored through the typed workspace service."""
 from __future__ import annotations
 
-from app.assistant_memory.settings import (
+from app.platform.assistant_memory.settings import (
     AssistantMemoryRuntimeSettings,
     AssistantMemoryRuntimeStatus,
     AssistantMemorySettingsUpdate,

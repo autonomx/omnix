@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.rpg.session.environment import build_initial_environment_seed_state
-from app.rpg.session.environment_snapshot import derive_environment_snapshot
+from app.apps.rpg.session.environment import build_initial_environment_seed_state
+from app.apps.rpg.session.environment_snapshot import derive_environment_snapshot
 
 
 def _tavern_seed_state() -> dict[str, object]:

@@ -10,10 +10,10 @@ from typing import Any, Callable, Mapping, Protocol
 from app.persistence.database import PostgresDatabase, default_database
 from app.runtime.tenant_context import TenantContext, current_tenant_for
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.narrative_engine.legacy_retirement import (
+from app.apps.rpg.narrative_engine.legacy_retirement import (
     production_legacy_retirement_audit,
 )
-from app.rpg.narrative_engine.publisher_guard import CANONICAL_PUBLISHER
+from app.apps.rpg.narrative_engine.publisher_guard import CANONICAL_PUBLISHER
 
 
 class NarrativeRetirementRepository(Protocol):

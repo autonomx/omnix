@@ -25,7 +25,7 @@ from .service_core import (
 from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
-    from app.agent_runtime.service_core import AgentRunService
+    from app.platform.agent_runtime.service_core import AgentRunService
 
 
 # Returned by an extracted step that did not settle its caller.

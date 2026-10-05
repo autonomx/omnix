@@ -60,7 +60,7 @@ from .trigger_plan import (
     evaluate_armed_trigger,
     transition_trigger_plan,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
 

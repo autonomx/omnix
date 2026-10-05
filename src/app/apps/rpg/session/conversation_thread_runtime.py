@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
-from app.rpg.session.ambient_tick_runtime import is_ambient_tick_command
-from app.rpg.world.conversation_settings import conversation_settings_from_runtime
-from app.rpg.world.conversation_threads import (
+from app.apps.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.apps.rpg.session.ambient_tick_runtime import is_ambient_tick_command
+from app.apps.rpg.world.conversation_settings import conversation_settings_from_runtime
+from app.apps.rpg.world.conversation_threads import (
     handle_pending_player_conversation_response,
     has_pending_player_conversation_response,
     maybe_advance_conversation_thread,

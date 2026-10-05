@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.voice.contracts import StreamingSpeechSynthesizer, StreamingTranscriber
+from app.platform.voice.contracts import StreamingSpeechSynthesizer, StreamingTranscriber
 
 
 class Clock(Protocol):

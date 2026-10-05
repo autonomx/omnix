@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.narrative_engine import CanonicalNarrativeResponse
-from app.rpg.narrative_engine.serialization import canonical_response_from_dict
+from app.apps.rpg.narrative_engine import CanonicalNarrativeResponse
+from app.apps.rpg.narrative_engine.serialization import canonical_response_from_dict
 
 from app.persistence.errors import RevisionConflict
 from .rpg_repository import canonical_json

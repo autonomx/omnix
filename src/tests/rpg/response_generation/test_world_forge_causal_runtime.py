@@ -2,14 +2,14 @@ import copy
 
 import pytest
 
-from app.rpg.world.causal_runtime import (
+from app.apps.rpg.world.causal_runtime import (
     advance_causal_runtime,
     advance_installed_causal_runtime,
     bootstrap_causal_runtime,
     initialize_causal_runtime,
     replay_causal_events,
 )
-from app.rpg.world.world_event_log import get_world_event_state
+from app.apps.rpg.world.world_event_log import get_world_event_state
 
 
 def _planning_topics(trend: str = "escalating"):

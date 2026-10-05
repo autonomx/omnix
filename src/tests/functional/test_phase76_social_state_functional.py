@@ -9,8 +9,8 @@ Covers:
 
 from __future__ import annotations
 
-from app.rpg.creator.presenters import CreatorStatePresenter
-from app.rpg.social_state.core import SocialStateCore
+from app.apps.rpg.creator.presenters import CreatorStatePresenter
+from app.apps.rpg.social_state.core import SocialStateCore
 
 
 class TestSocialInteractionUpdatesPersistentRelationshipState:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.presentation.dialogue_quality import enforce_dialogue_quality
+from app.apps.rpg.presentation.dialogue_quality import enforce_dialogue_quality
 
 
 def test_llm_dialogue_is_never_replaced_by_deterministic_quality_fallback() -> None:

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.chat.generation_jobs import start_chat_generation_job
-from app.chat.models import (
+from app.platform.chat.generation_jobs import start_chat_generation_job
+from app.platform.chat.models import (
     ChatSession,
     ChatSessionListResponse,
     CreateChatSessionRequest,
@@ -17,10 +17,10 @@ from app.chat.models import (
     SendChatMessageRequest,
     SendChatMessageResponse,
 )
-from app.live_voice.transport.sse import OmnixStreamingResponse
+from app.platform.live_voice.transport.sse import OmnixStreamingResponse
 
 if TYPE_CHECKING:
-    from app.chat.admission import ChatAdmission
+    from app.platform.chat.admission import ChatAdmission
 
 
 def _chat_message_image_data_urls(metadata: object) -> list[str]:
@@ -40,7 +40,7 @@ def _admit(chat_store, job_store, session_id: str, request: SendChatMessageReque
            *, begin_user_message=None) -> "ChatAdmission":
     """Shared admission for the job and streaming routes, as HTTP errors."""
     # Imported on first use: admission is not needed to compose the gateway.
-    from app.chat.admission import admit_chat_turn_for_http
+    from app.platform.chat.admission import admit_chat_turn_for_http
 
     return admit_chat_turn_for_http(
         chat_store, job_store, session_id, request, begin_user_message=begin_user_message,
@@ -173,7 +173,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         def event_line(event: dict[str, Any]) -> str:
             return f"data: {json.dumps(event, sort_keys=True)}\n\n"
 
-        from app.chat.admission import stream_chat_turn
+        from app.platform.chat.admission import stream_chat_turn
 
         def generate():
             yield event_line({"type": "user_message", "message": user_message.model_dump(mode="json")})

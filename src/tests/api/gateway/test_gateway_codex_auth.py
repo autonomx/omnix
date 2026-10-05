@@ -13,8 +13,8 @@ if str(SRC_DIR) not in sys.path:
 
 
 def test_codex_auth_status_route_reports_chatgpt_login(monkeypatch) -> None:
-    from app.gateway import kernel_routes
-    from app.gateway import main
+    from app.composition.gateway import kernel_routes
+    from app.composition.gateway import main
 
     monkeypatch.setattr(kernel_routes, "_configured_codex_path", lambda: "codex-test")
     monkeypatch.setattr(
@@ -44,8 +44,8 @@ def test_codex_auth_status_route_reports_chatgpt_login(monkeypatch) -> None:
 
 
 def test_codex_login_route_starts_codex_owned_browser_flow(monkeypatch) -> None:
-    from app.gateway import kernel_routes
-    from app.gateway import main
+    from app.composition.gateway import kernel_routes
+    from app.composition.gateway import main
 
     monkeypatch.setattr(kernel_routes, "_configured_codex_path", lambda: "codex-test")
     monkeypatch.setattr(

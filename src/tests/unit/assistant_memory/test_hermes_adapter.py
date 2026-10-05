@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.assistant_memory import InMemoryMemoryRepository, MemoryService, resolve_chat_scope
-from app.assistant_memory.hermes_adapter import (
+from app.platform.assistant_memory import InMemoryMemoryRepository, MemoryService, resolve_chat_scope
+from app.platform.assistant_memory.hermes_adapter import (
     export_approved_memory_to_hermes,
     import_hermes_memory,
 )

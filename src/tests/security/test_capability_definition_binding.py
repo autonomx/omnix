@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.broker_api import approval_definition_refusal
-from app.agent_runtime.contracts import AgentApproval
+from app.platform.agent_runtime.broker_api import approval_definition_refusal
+from app.platform.agent_runtime.contracts import AgentApproval
 from app.capabilities import registry
 from app.capabilities.registry import (
     DISPLAY_ONLY_CAPABILITY_FIELDS,
@@ -71,7 +71,7 @@ def test_an_agent_approval_records_its_definition_and_authorizes_while_it_holds(
 def test_agent_approvals_refuse_unbound_changed_and_missing_definitions(monkeypatch):
     assert approval_definition_refusal(_approval(capability_definition_hash=None)) == "approval_definition_unbound"
     assert approval_definition_refusal(_approval(capability_definition_hash="0" * 64)) == "capability_definition_changed"
-    monkeypatch.setattr("app.agent_runtime.broker_api.capability_definition_hash", lambda _capability_id: None)
+    monkeypatch.setattr("app.platform.agent_runtime.broker_api.capability_definition_hash", lambda _capability_id: None)
     assert approval_definition_refusal(_approval()) == "capability_unavailable"
 
 

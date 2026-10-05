@@ -8,13 +8,13 @@ from threading import RLock
 from typing import Any, Callable
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.rpg.persistence.rpg_narrative_response_repository import (
+from app.apps.rpg.persistence.rpg_narrative_response_repository import (
     NarrativeResponsePersistenceConflict,
 )
 from app.runtime.tenant_context import TenantContext, current_tenant_for
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.narrative_engine import CanonicalNarrativeResponse
-from app.rpg.narrative_engine.repository import (
+from app.apps.rpg.narrative_engine import CanonicalNarrativeResponse
+from app.apps.rpg.narrative_engine.repository import (
     InMemoryNarrativeResponseRepository,
     NarrativeResponseConflict,
     NarrativeResponseRepository,

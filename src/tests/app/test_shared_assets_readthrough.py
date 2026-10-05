@@ -6,7 +6,7 @@ import os
 from fastapi.testclient import TestClient
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, iter_assets
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypatch) -> None:

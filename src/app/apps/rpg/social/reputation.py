@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.social.state import (
+from app.apps.rpg.social.state import (
     clamp_social_value,
     ensure_relationship,
     ensure_social_state,

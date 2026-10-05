@@ -4,11 +4,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.live_speech import stt, tts
-from app.live_speech.stt_adapters import ParakeetServiceTranscriber
-from app.live_speech.tts_adapters import QwenServiceSpeechSynthesizer
+from app.platform.live_speech import stt, tts
+from app.platform.live_speech.stt_adapters import ParakeetServiceTranscriber
+from app.platform.live_speech.tts_adapters import QwenServiceSpeechSynthesizer
 from app.runtime.feature_catalog import load_feature
-from app.voice import contracts
+from app.platform.voice import contracts
 
 APP = Path(__file__).resolve().parents[2] / "app"
 SPEECH = {"voice": "voice", "live_voice": "live-voice", "live_speech": "live-speech"}
@@ -33,6 +33,6 @@ def test_speech_modules_reach_each_other_and_chat_only_through_contracts() -> No
                     if target != package and (target in SPEECH or target == "chat"):
                         reached.add(node.module)
 
-    assert reached <= {"app.voice.contracts", "app.chat.contracts"}
+    assert reached <= {"app.platform.voice.contracts", "app.platform.chat.contracts"}
     assert load_feature("live-voice").uses == ("voice",)
     assert load_feature("live-speech").uses == ("voice",)

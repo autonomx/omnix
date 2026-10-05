@@ -7,7 +7,7 @@ from typing import Any, Iterable
 # completed visible narration.  Player-facing dialogue should use the LLM
 # narrator's structured categorization when it is available; keyword-driven
 # deterministic results remain simulation facts, not the final transcript voice.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
 

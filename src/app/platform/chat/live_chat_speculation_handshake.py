@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.chat import ChatSessionStore, default_chat_store
+from app.platform.chat import ChatSessionStore, default_chat_store
 
 from . import live_chat_speculation as speculation_runtime
 from app.runtime.live_voice_config import resolve_live_voice_chat_route

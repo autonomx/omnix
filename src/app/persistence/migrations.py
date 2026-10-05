@@ -98,9 +98,10 @@ def migration_roots() -> list[Path]:
     """
     app_root = Path(__file__).resolve().parents[1]
     roots = [migration_root()]
-    # Feature packages sit at app/<package> or, nested, app/<package>/<feature>.
+    # Feature packages sit in a tier folder, app/<tier>/<package>, or nested,
+    # app/<tier>/<package>/<feature> (PA-5.3); app/<package> stays accepted.
     roots += sorted(
-        folder for pattern in ("*/migrations", "*/*/migrations") for folder in app_root.glob(pattern)
+        folder for pattern in ("*/migrations", "*/*/migrations", "*/*/*/migrations") for folder in app_root.glob(pattern)
         if folder.is_dir() and (folder.parent / "feature.py").is_file()
     )
     retired = migration_root().parent / "retired"

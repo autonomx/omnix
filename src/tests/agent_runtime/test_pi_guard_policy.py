@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_pi_guard_rejects_shell_composition_syntax_structurally() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "forbiddenShellSyntax" in source
     assert 'normalized.includes("$(")' in source
     assert "Run each allowed command as a separate tool call." in source
@@ -13,7 +13,7 @@ def test_pi_guard_rejects_shell_composition_syntax_structurally() -> None:
 
 
 def test_pi_guard_narrows_shell_commands_to_issued_local_capabilities() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "OMNIX_AGENT_LOCAL_CAPABILITIES" in source
     assert 'localCapabilities.has("workspace.command")' in source
     assert 'localCapabilities.has("workspace.test")' in source
@@ -23,7 +23,7 @@ def test_pi_guard_narrows_shell_commands_to_issued_local_capabilities() -> None:
 
 
 def test_pi_guard_npm_prefix_does_not_expand_test_capability() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     safe_block = source.split("const safeCommandPrefixes", 1)[1].split("];", 1)[0]
     test_block = source.split("const testCommandPrefixes", 1)[1].split("];", 1)[0]
     assert '"npm --prefix"' not in safe_block
@@ -36,14 +36,14 @@ def test_pi_guard_npm_prefix_does_not_expand_test_capability() -> None:
 
 
 def test_pi_guard_requests_approval_for_unlisted_commands_with_command_authority() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "authorizeBlockedCommand" in source
     assert "/command-authorization" in source
     assert "approval required for this exact workspace command" in source
 
 
 def test_pi_guard_supports_coding_approval_modes() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "OMNIX_AGENT_APPROVAL_POLICY" in source
     assert 'approvalPolicy === "always_ask"' in source
     assert 'approvalPolicy !== "allow_automatic"' in source
@@ -51,7 +51,7 @@ def test_pi_guard_supports_coding_approval_modes() -> None:
 
 
 def test_pi_guard_limits_playwright_to_one_file_line_test() -> None:
-    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "directPlaywrightTestCommand" in source
     assert "npmPlaywrightTestCommand" in source
     assert "playwrightFileLineSelector" in source

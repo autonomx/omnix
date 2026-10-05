@@ -18,7 +18,7 @@ def _select_final_visible_presentation(
 ):
     final_result = _safe_dict(final_result)
     runtime_narration_payload = _safe_dict(runtime_narration_payload)
-    from app.rpg.session.fast_combat_presentation_hook import (
+    from app.apps.rpg.session.fast_combat_presentation_hook import (
         select_fast_combat_presentation,
     )
 

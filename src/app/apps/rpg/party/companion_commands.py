@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.party.companion_presence import (
+from app.apps.rpg.party.companion_presence import (
     current_player_location_id,
     player_input_mentions_active_companion,
     project_active_companions_into_presence,

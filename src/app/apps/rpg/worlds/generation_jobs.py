@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.jobs.models import ResourceClass
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
 from .generation_contract_bundle import build_topic_contract_bundle
 from .generation_entity_manifest import build_entity_manifest, topic_manifest_slots

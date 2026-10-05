@@ -8,15 +8,15 @@ import threading
 
 import pytest
 
-from app.agent_runtime.contracts import AgentEvent, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.contracts import AgentEvent, AgentRunSpec, ModelRef, WorkspaceSpec
 from app.observability.agent_logging import (
     _reset_agent_debug_logging_for_tests,
     configure_agent_debug_logging,
     log_agent_activity,
 )
-from app.agent_runtime.pi_runtime import PiRpcSession
-from app.agent_runtime.pi_runtime_core import _rpc_payload_for_log
-from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.pi_runtime import PiRpcSession
+from app.platform.agent_runtime.pi_runtime_core import _rpc_payload_for_log
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_agent_activity_is_written_to_daily_and_per_run_logs(agent_log_dir: Path
 
 
 def test_agent_logger_captures_python_runtime_records_without_secrets(agent_log_dir: Path) -> None:
-    logger = logging.getLogger("app.agent_runtime.test")
+    logger = logging.getLogger("app.platform.agent_runtime.test")
     logger.error(
         "runtime observer failed",
         extra={"run_id": "run-python", "token": "secret-token"},

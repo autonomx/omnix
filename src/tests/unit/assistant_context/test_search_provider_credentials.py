@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.research import web_search
+from app.platform.research import web_search
 from app.security import provider_secret_store as secret_store
-from app.research import provider_chain
+from app.platform.research import provider_chain
 
 
 def test_default_search_client_factory_uses_provider_specific_api_key(monkeypatch) -> None:

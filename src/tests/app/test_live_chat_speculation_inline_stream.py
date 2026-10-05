@@ -5,20 +5,20 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat import ChatSession
-from app.chat import live_chat_speculation as speculation
-from app.chat import live_chat_speculation_handshake as handshake
-from app.chat import live_chat_speculation_inline_stream as inline_stream
-from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.platform.chat import ChatSession
+from app.platform.chat import live_chat_speculation as speculation
+from app.platform.chat import live_chat_speculation_handshake as handshake
+from app.platform.chat import live_chat_speculation_inline_stream as inline_stream
+from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import service as provider_service
-from app.chat.live_chat_speculation_inline_stream import (
+from app.platform.chat.live_chat_speculation_inline_stream import (
     register_live_chat_speculation_inline_stream_routes,
 )
 from tests.support.routers import include_router_registrar
 
 
 def _cors_app() -> FastAPI:
-    from app.gateway.app_factory import _install_local_browser_cors
+    from app.composition.gateway.app_factory import _install_local_browser_cors
 
     app = FastAPI()
     _install_local_browser_cors(app)

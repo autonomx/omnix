@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from app.chat.segments import InMemoryConversationSegments
+from app.platform.chat.segments import InMemoryConversationSegments
 
 
 def _create(segments: InMemoryConversationSegments, session_id: str, **overrides):

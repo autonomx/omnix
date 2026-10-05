@@ -17,8 +17,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.chat import ChatSessionStore, default_chat_store
-from app.chat.store import _provider_key
+from app.platform.chat import ChatSessionStore, default_chat_store
+from app.platform.chat.store import _provider_key
 
 from . import live_chat_speculation as speculation_runtime
 from . import live_chat_speculation_handshake as handshake_runtime

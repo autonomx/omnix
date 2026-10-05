@@ -19,12 +19,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 def services(url, workspace_id):
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
-    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
-    from app.chat.persistence.chat_runtime import PostgresCharacterChatSessionStore
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+    from app.platform.chat.persistence.chat_runtime import PostgresCharacterChatSessionStore
     from app.persistence.repositories import PostgresIdentityRepository
-    from app.gateway import _install_required_rpg_turn_hooks
-    from app.chat import live_chat_postgres_fast_path as fast
+    from app.composition.gateway import _install_required_rpg_turn_hooks
+    from app.platform.chat import live_chat_postgres_fast_path as fast
     database = PostgresDatabase(DatabaseSettings(url=url, pool_max=4))
     store = PostgresJobStoreAdapter(database)
     with database.connection() as connection:
@@ -44,8 +44,8 @@ def services(url, workspace_id):
 
 
 def submit(store, chat, session_id, submission_id):
-    from app.chat.generation_jobs import chat_submission_lock, find_chat_generation_job
-    from app.chat.models import SendChatMessageRequest
+    from app.platform.chat.generation_jobs import chat_submission_lock, find_chat_generation_job
+    from app.platform.chat.models import SendChatMessageRequest
     from app.jobs.models import CreateJobRequest, ResourceClass
     with chat_submission_lock(session_id, submission_id, job_store=store, chat_store=chat):
         existing = find_chat_generation_job(store, session_id=session_id, submission_id=submission_id)
@@ -155,10 +155,10 @@ def run_load(url, workspace_id, sessions, submissions, workers):
 def measure(url, workers, submissions):
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.repositories import PostgresIdentityRepository
     from app.persistence.unit_of_work import unit_of_work
-    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+    from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
     database = PostgresDatabase(DatabaseSettings(url=url))
     store = PostgresJobStoreAdapter(database)
     workspace_id = f'workspace:scaling-benchmark:{uuid.uuid4().hex}'

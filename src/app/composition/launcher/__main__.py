@@ -1,4 +1,4 @@
-"""``python -m app.launcher start``: the one way to start Omnix (WP-11.4).
+"""``python -m app.composition.launcher start``: the one way to start Omnix (WP-11.4).
 
 In order: refuse a second launcher, check the interpreters, set the service
 environment, start the PostgreSQL container when one is named, check the
@@ -25,7 +25,7 @@ import httpx
 
 LAUNCHER_PORT = 5055
 _HEADERS = {"X-Omnix-Client": "launcher"}
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _say(message: str, stream: TextIO | None = None) -> None:
@@ -153,12 +153,12 @@ def start(args: argparse.Namespace) -> int:
     _say("Starting the launcher dashboard; Ctrl+C stops the launcher. Use the dashboard to stop services.")
     import uvicorn
 
-    uvicorn.run("app.launcher.runtime_control_app:app", host=host, port=LAUNCHER_PORT, lifespan="on")
+    uvicorn.run("app.composition.launcher.runtime_control_app:app", host=host, port=LAUNCHER_PORT, lifespan="on")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app.launcher", description=__doc__,
+    parser = argparse.ArgumentParser(prog="python -m app.composition.launcher", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     starting = commands.add_parser("start", help="migrate and run the launcher with the gateway and web app")

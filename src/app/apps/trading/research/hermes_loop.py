@@ -11,8 +11,8 @@ from typing import Any, Callable, Protocol
 
 from pydantic import ValidationError
 
-from app.trading.trade_logging import trade_log
-from app.trading.providers.request_budget import in_provider_lane
+from app.apps.trading.trade_logging import trade_log
+from app.apps.trading.providers.request_budget import in_provider_lane
 
 from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter

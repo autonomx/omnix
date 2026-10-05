@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.item_system import (
+from app.apps.rpg.session.item_system import (
     AI_FICTION_ITEM_FIELDS,
     ENGINE_OWNED_ITEM_FIELDS,
     normalize_item_instance,

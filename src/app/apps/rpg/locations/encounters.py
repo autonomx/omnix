@@ -4,7 +4,7 @@ import hashlib
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.locations.graph import (
+from app.apps.rpg.locations.graph import (
     NEARBY_WILDERNESS,
     OLD_ROAD,
     get_canonical_location,

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping
 
-from app.rpg.prompt_profiles import (
+from app.apps.rpg.prompt_profiles import (
     RpgPromptProfile,
     default_rpg_prompt_profile_registry,
     resolve_rpg_prompt_profile,

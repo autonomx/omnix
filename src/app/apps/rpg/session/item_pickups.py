@@ -4,8 +4,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import merge_inventory_stack
-from app.rpg.session.item_rewards import generate_item_rewards
+from app.apps.rpg.session.inventory_items import merge_inventory_stack
+from app.apps.rpg.session.item_rewards import generate_item_rewards
 
 MECHANICS_SOURCE = "engine_item_pickup_v1"
 NODE_KEYS = ("item_nodes", "pickup_nodes", "resource_nodes")

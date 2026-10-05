@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from app.assistant_tools.calendar_adapter import GoogleCalendarRuntimeAdapter, run_calendar_tool_request
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.calendar_adapter import GoogleCalendarRuntimeAdapter, run_calendar_tool_request
+from app.platform.assistant_tools.models import AssistantToolRequest
 
 
 class _Response:
@@ -22,7 +22,7 @@ class _Response:
 
 def test_google_calendar_adapter_creates_real_api_payload(monkeypatch) -> None:
     captured = {}
-    monkeypatch.setattr("app.assistant_tools.calendar_adapter.google_access_token_for_tool", lambda _tool_id: "token")
+    monkeypatch.setattr("app.platform.assistant_tools.calendar_adapter.google_access_token_for_tool", lambda _tool_id: "token")
 
     def fake_urlopen(request, timeout):
         captured["url"] = request.full_url
@@ -39,7 +39,7 @@ def test_google_calendar_adapter_creates_real_api_payload(monkeypatch) -> None:
             }
         )
 
-    monkeypatch.setattr("app.assistant_tools.calendar_adapter.urlopen", fake_urlopen)
+    monkeypatch.setattr("app.platform.assistant_tools.calendar_adapter.urlopen", fake_urlopen)
     result = run_calendar_tool_request(
         AssistantToolRequest(
             tool_id="calendar",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.launcher.config import load_launcher_config
+from app.composition.launcher.config import load_launcher_config
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -58,5 +58,5 @@ def test_the_committed_template_parses_to_the_defaults():
 
 
 def test_no_launcher_source_names_a_developer_home_directory():
-    for path in (ROOT / "src/app/launcher").glob("*.py"):
+    for path in (ROOT / "src/app/composition/launcher").glob("*.py"):
         assert "unx47" not in path.read_text(encoding="utf-8"), path

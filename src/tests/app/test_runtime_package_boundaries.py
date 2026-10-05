@@ -19,9 +19,9 @@ def _python_files(root: Path):
 
 def test_trading_and_jobs_do_not_import_gateway() -> None:
     offenders: list[str] = []
-    for package in (SRC_APP / "trading", SRC_APP / "jobs"):
+    for package in (SRC_APP / "apps" / "trading", SRC_APP / "jobs"):
         for path in _python_files(package):
-            if "app.gateway" in path.read_text(encoding="utf-8"):
+            if "app.composition.gateway" in path.read_text(encoding="utf-8"):
                 offenders.append(path.relative_to(ROOT).as_posix())
     assert offenders == []
 
@@ -51,11 +51,11 @@ def test_runtime_primitives_live_under_runtime_package() -> None:
 
 def test_jobs_kernel_does_not_import_the_composition_root() -> None:
     store_source = (SRC_APP / "jobs" / "store.py").read_text(encoding="utf-8")
-    assert "app.runtime_composition" not in store_source
+    assert "app.composition.runtime_composition" not in store_source
 
 
 def test_gateway_composition_installs_the_job_store_provider(monkeypatch) -> None:
-    from app.gateway.app_factory import create_gateway_app
+    from app.composition.gateway.app_factory import create_gateway_app
     from app.jobs import store as job_store_module
     from app.runtime.config import RuntimeConfig
     from app.runtime.feature_catalog import FEATURE_CATALOG

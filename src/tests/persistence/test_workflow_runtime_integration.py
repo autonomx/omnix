@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime, WorkflowRuntimeError
-from app.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
+from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime, WorkflowRuntimeError
+from app.platform.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.unit_of_work import unit_of_work
@@ -477,7 +477,7 @@ def test_approved_step_executes_under_the_approving_principal() -> None:
     """The approver is recorded and the capability runs under their grant (WP-4.5)."""
     from types import SimpleNamespace
 
-    from app.assistant_tools.models import AssistantToolResult
+    from app.platform.assistant_tools.models import AssistantToolResult
 
     database = _database()
     grants = []

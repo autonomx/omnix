@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.social.leverage import validate_leverage
-from app.rpg.social.reputation import (
+from app.apps.rpg.social.leverage import validate_leverage
+from app.apps.rpg.social.reputation import (
     apply_global_reputation_delta,
     apply_social_deltas,
     get_global_reputation,
 )
-from app.rpg.social.state import ensure_profile, ensure_relationship
+from app.apps.rpg.social.state import ensure_profile, ensure_relationship
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

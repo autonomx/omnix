@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.service import AudiobookService
-from app.audiobook.speech_exclusions import exclusions_for_span
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.speech_exclusions import exclusions_for_span
 
 
 def test_exclusions_follow_canonical_offsets_across_new_span_boundaries():
@@ -38,7 +38,7 @@ def test_service_validates_selected_occurrence_and_invalidates_current_audio(mon
         yield SimpleNamespace(connection=Connection(), commit=lambda: committed.append(True),
                               jobs=SimpleNamespace(request_cancel=lambda _context, job_id: canceled.append(job_id),
                                                    query_jobs=lambda *_args, **_kwargs: [{"id": "job"}]))
-    monkeypatch.setattr("app.audiobook.service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", work)
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")
     if selected == "Changed":

@@ -5,13 +5,13 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.rpg.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.profiles.dynamic_npc_profiles import (
     load_npc_profile,
     normalize_npc_profile,
     npc_profile_path,
     save_npc_profile,
 )
-from app.rpg.profiles.llm_profile_drafter import (
+from app.apps.rpg.profiles.llm_profile_drafter import (
     merge_profile_draft,
     validate_profile_draft,
 )

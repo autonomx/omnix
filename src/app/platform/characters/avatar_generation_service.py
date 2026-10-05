@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
-from app.image.contracts import (
+from app.platform.image.contracts import (
     ImageReferenceError,
     close_image_references,
     load_image_reference_assets,
@@ -110,7 +110,7 @@ class CharacterAvatarGenerationService:
 
             if uses_postgresql_runtime():
                 # Feature-owned adapter; the composition root is not imported here.
-                from app.characters.persistence.avatar_generation_repository import (
+                from app.platform.characters.persistence.avatar_generation_repository import (
                     PostgresCharacterAvatarGenerationRepositoryAdapter,
                 )
 

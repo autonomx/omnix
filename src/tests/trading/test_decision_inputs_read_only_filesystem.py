@@ -9,11 +9,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.evidence_storage import MemoryEvidenceBackend, MemoryIbkrSessionEvidence
-from app.trading.ibkr_evidence import IbkrEvidenceStore
-from app.trading.models import MarketBar
-from app.trading.yahoo_evidence import YahooEvidenceStore
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.evidence_storage import MemoryEvidenceBackend, MemoryIbkrSessionEvidence
+from app.apps.trading.ibkr_evidence import IbkrEvidenceStore
+from app.apps.trading.models import MarketBar
+from app.apps.trading.yahoo_evidence import YahooEvidenceStore
 
 
 @pytest.fixture()

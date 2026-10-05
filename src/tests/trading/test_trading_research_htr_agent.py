@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.trading.research.contracts import (
+from app.apps.trading.research.contracts import (
     ResearchActionProposal,
     ResearchActionRecord,
     ResearchCoverage,
@@ -15,10 +15,10 @@ from app.trading.research.contracts import (
     ValidationFeatureResult,
     fingerprint,
 )
-from app.trading.research.coordinator import _research_status
-from app.trading.research.hermes_contract import TradingHermesNextActionDecision
-from app.trading.research.policy import evaluate_research_policy
-from app.trading.strategy_research_policy import apply_research_policy_to_quality
+from app.apps.trading.research.coordinator import _research_status
+from app.apps.trading.research.hermes_contract import TradingHermesNextActionDecision
+from app.apps.trading.research.policy import evaluate_research_policy
+from app.apps.trading.strategy_research_policy import apply_research_policy_to_quality
 
 
 def _request(**updates):
@@ -236,7 +236,7 @@ def test_research_never_changes_the_score_unless_the_configuration_opts_in():
 
 
 def test_the_research_score_opt_in_is_off_by_default_and_part_of_the_strategy_configuration():
-    from app.trading.strategies.models import GapPullbackConfig
+    from app.apps.trading.strategies.models import GapPullbackConfig
 
     assert GapPullbackConfig().research_score_adjustment_enabled is False
     assert GapPullbackConfig(research_score_adjustment_enabled=True).research_score_adjustment_enabled is True
@@ -244,7 +244,7 @@ def test_the_research_score_opt_in_is_off_by_default_and_part_of_the_strategy_co
 
 def test_the_opt_in_leaves_qualified_profile_fingerprints_unchanged_while_off():
     """Qualification evidence is bound to the profile fingerprint; the new field must not move it."""
-    from app.trading.strategy_v2_qualification import (
+    from app.apps.trading.strategy_v2_qualification import (
         FROZEN_V2_PROFILE_FINGERPRINT,
         frozen_v2_config,
         v2_profile_fingerprint,

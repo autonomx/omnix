@@ -18,8 +18,8 @@ from .strategy_evaluability import assess_session_evaluability
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 

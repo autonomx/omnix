@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.characters.avatar_generation_api import register_character_avatar_generation_routes
+from app.platform.characters.avatar_generation_api import register_character_avatar_generation_routes
 
 
 class _FailingAvatarGenerationService:

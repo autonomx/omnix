@@ -137,7 +137,7 @@ class DockerStrongIsolation:
             if _docker(self.docker, "image", "inspect", self.image).returncode != 0:
                 raise AgentIsolationError(
                     f"the agent sandbox image {self.image} is missing; "
-                    "build it with `python -m app.agent_runtime.sandbox build`"
+                    "build it with `python -m app.platform.agent_runtime.sandbox build`"
                 )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise AgentIsolationError(f"the agent sandbox needs Docker, which did not answer: {exc}") from exc

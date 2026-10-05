@@ -2,7 +2,7 @@ import threading
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-from app.audiobook import leases
+from app.apps.audiobook import leases
 from app.jobs.errors import JobClaimConflict
 
 CONTEXT = SimpleNamespace(workspace_id="workspace")

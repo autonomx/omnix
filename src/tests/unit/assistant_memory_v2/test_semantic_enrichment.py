@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     GraphEntityRef,
     GraphValue,
     MemorySpaceKey,
@@ -10,7 +10,7 @@ from app.assistant_memory.v2 import (
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory.v2.semantic_enrichment import (
+from app.platform.assistant_memory.v2.semantic_enrichment import (
     SemanticMemoryProposal,
     VoiceMemDerivedSemanticEnricher,
 )

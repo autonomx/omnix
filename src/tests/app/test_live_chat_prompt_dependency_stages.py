@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
-from app.chat import retention_policy as retention_policy_module
-from app.chat.models import ChatSession
-from app.live_voice.prompt import companion_context
-from app.live_voice.prompt import dependency_stages
+from app.platform.assistant_memory.settings import AssistantMemoryRuntimeSettings
+from app.platform.chat import retention_policy as retention_policy_module
+from app.platform.chat.models import ChatSession
+from app.platform.live_voice.prompt import companion_context
+from app.platform.live_voice.prompt import dependency_stages
 from app.providers import service as provider_service
 
 
@@ -78,7 +78,7 @@ def test_memory_prompt_loader_uses_settings_service_cache(monkeypatch):
         return AssistantMemoryRuntimeSettings(curated_memory_enabled=True)
 
     _use_test_settings(monkeypatch, fake_load)
-    from app.assistant_memory.chat_prompt import chat_memory_enabled
+    from app.platform.assistant_memory.chat_prompt import chat_memory_enabled
 
     with dependency_stages.use_cached_memory_runtime_settings():
         assert chat_memory_enabled() is True
@@ -105,7 +105,7 @@ def test_retention_and_prompt_budget_use_settings_service_cache(monkeypatch):
         created_at="2026-08-25T00:00:00+00:00",
         updated_at="2026-08-25T00:00:00+00:00",
     )
-    from app.chat.context_budget import prompt_budget_from_env
+    from app.platform.chat.context_budget import prompt_budget_from_env
 
     with dependency_stages.use_cached_memory_runtime_settings():
         assert retention_policy_module.transcript_retention_allowed(session) is True

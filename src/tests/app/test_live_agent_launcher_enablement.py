@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.launcher.startup import DEFAULT_ENVIRONMENT, apply_launcher_environment
+from app.composition.launcher.startup import DEFAULT_ENVIRONMENT, apply_launcher_environment
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -28,7 +28,7 @@ def test_kasa_requirement_matches_launcher_python_version() -> None:
     gateway_lock = (ROOT / "requirements" / "gateway.lock.txt").read_text(encoding="utf-8")
     general_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     setup = (ROOT / "setup.bat").read_text(encoding="utf-8")
-    launcher = (ROOT / "src" / "app" / "launcher" / "__main__.py").read_text(encoding="utf-8")
+    launcher = (ROOT / "src" / "app" / "composition" / "launcher" / "__main__.py").read_text(encoding="utf-8")
 
     assert "python-kasa" in gateway_input
     assert "-r ../../../requirements/gateway.in" in image_input

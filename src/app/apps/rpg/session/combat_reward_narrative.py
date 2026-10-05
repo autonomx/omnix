@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # RPG session runtime responsibility module.
 # PR.1.16: deterministic combat reward narrative contract.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 from typing import (

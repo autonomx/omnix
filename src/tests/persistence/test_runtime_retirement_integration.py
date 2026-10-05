@@ -105,7 +105,7 @@ from app.settings.access import (
     save_settings,
 )
 from app.settings.registry import core_setting_specs
-from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 from app.settings.service import SettingRevisionConflict, SettingsService
 
 settings_service = SettingsService(
@@ -154,7 +154,7 @@ protected_provider_keys = Path(os.environ["OMNIX_PROVIDER_SECRETS_PATH"])
 assert protected_provider_keys.exists()
 assert b"environment-cannot-be-overridden" not in protected_provider_keys.read_bytes()
 
-from app.assistant_tools.credentials import (
+from app.platform.assistant_tools.credentials import (
     AssistantToolCredentialsPayload,
     load_assistant_tool_credentials,
     save_assistant_tool_credentials,
@@ -172,12 +172,12 @@ except SecretStoreUnavailable:
 else:
     raise AssertionError("assistant-tool credentials were saved without a writable secret store")
 
-from app.chat.assist.house import load_house_state, save_house_state
+from app.platform.chat.assist.house import load_house_state, save_house_state
 
 save_house_state({"rooms": {"office": {"lights": "on"}}, "reminders": []})
 assert load_house_state()["rooms"]["office"]["lights"] == "on"
 
-from app.chat.assistant_turns import default_assistant_turn_coordinator
+from app.platform.chat.assistant_turns import default_assistant_turn_coordinator
 
 assistant_turn = default_assistant_turn_coordinator().start(
     session_id="chat:runtime",
@@ -186,11 +186,11 @@ assistant_turn = default_assistant_turn_coordinator().start(
 )
 assert default_assistant_turn_coordinator().get(assistant_turn.assistant_turn_id) is not None
 
-from app.assistant_memory.settings import (
+from app.platform.assistant_memory.settings import (
     AssistantMemorySettingsUpdate,
 )
 
-from app.assistant_memory.settings import default_memory_settings_store
+from app.platform.assistant_memory.settings import default_memory_settings_store
 memory_settings = default_memory_settings_store()
 memory_settings.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
 assert memory_settings.load_persisted().suggestions_enabled is True
@@ -204,7 +204,7 @@ with default_database().connection() as connection:
         "WHERE module = 'assistant-memory' AND record_type = 'runtime-settings'"
     ).fetchone()[0] == 0
 
-from app.characters.live_conversation_profile import (
+from app.platform.characters.live_conversation_profile import (
     LiveConversationProfileUpdate,
     default_live_conversation_profile_store,
 )
@@ -213,7 +213,7 @@ conversation_profiles = default_live_conversation_profile_store()
 conversation_profiles.update_defaults(LiveConversationProfileUpdate(talkativeness=63))
 assert conversation_profiles.get_defaults().talkativeness == 63
 
-from app.assistant_tools.ledger import (
+from app.platform.assistant_tools.ledger import (
     AssistantToolLedgerEntry,
     append_assistant_tool_ledger_entry,
     load_assistant_tool_ledger,
@@ -233,8 +233,8 @@ for variable in (
 ):
     assert not Path(os.environ[variable]).exists(), variable
 
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.runtime.feature_catalog import load_feature
 from app.persistence.repository_registry import install_repository_specs
 
@@ -261,8 +261,8 @@ loaded_chat = chat_repository.get_session("chat:runtime")
 assert loaded_chat is not None
 assert loaded_chat.messages[0].content == "hello"
 
-from app.characters.models import CreateCharacterRequest
-from app.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
+from app.platform.characters.models import CreateCharacterRequest
+from app.platform.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
 
 characters = PostgresCharacterRepositoryAdapter()
 created_character = characters.create(CreateCharacterRequest(
@@ -276,7 +276,7 @@ assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
 from app.conversation.memory_contracts import MemoryRecord
-from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
+from app.platform.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
 record = MemoryRecord(
@@ -334,7 +334,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert stored_asset.id == "asset:runtime"
     assert any(item.id == "asset:runtime" for item in assets.list_assets().assets)
 
-from app.rpg.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
+from app.apps.rpg.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
 
 session = {
     "manifest": {"session_id": "campaign:runtime", "title": "Runtime campaign", "turn_count": 0},
@@ -346,10 +346,10 @@ assert load_session_from_postgres("campaign:runtime") == session
 
 from app import assets as assets_package
 from app.assets import store as asset_store_module
-from app.assistant_memory import service as memory_service_module
-from app.characters import service as character_service_module
-from app.chat import repository as chat_repository_module
-from app.runtime_composition import production_job_store
+from app.platform.assistant_memory import service as memory_service_module
+from app.platform.characters import service as character_service_module
+from app.platform.chat import repository as chat_repository_module
+from app.composition.runtime_composition import production_job_store
 
 assert chat_repository_module.InMemoryChatRepository.__name__ == "InMemoryChatRepository"
 assert memory_service_module.InMemoryMemoryRepository.__name__ == "InMemoryMemoryRepository"

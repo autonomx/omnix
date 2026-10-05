@@ -35,7 +35,7 @@ def _travel_location_id(state: Dict[str, Any]) -> str:
 
 
 def _weather_fields(day_count: int, *, location_id: str = "") -> Dict[str, Any]:
-    from app.rpg.locations.weather import weather_fields_for_time_state
+    from app.apps.rpg.locations.weather import weather_fields_for_time_state
 
     return weather_fields_for_time_state(day_count, location_id=location_id)
 
@@ -85,7 +85,7 @@ def ensure_time_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     time_log = list(_safe_list(time_state.get("time_log")))
     normalized = _derive_time_state(elapsed, time_log=time_log, location_id=_travel_location_id(state))
     state["time_state"] = normalized
-    from app.rpg.locations.weather import ensure_weather_state
+    from app.apps.rpg.locations.weather import ensure_weather_state
 
     ensure_weather_state(state, location_id=_travel_location_id(state))
     return _safe_dict(state.get("time_state"))
@@ -124,7 +124,7 @@ def advance_time(
         location_id=location_id,
     )
     simulation_state["time_state"] = after
-    from app.rpg.locations.weather import refresh_weather_state
+    from app.apps.rpg.locations.weather import refresh_weather_state
 
     weather_refresh = refresh_weather_state(
         simulation_state,

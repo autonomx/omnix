@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import inspect
 
-from app.agent_runtime.planning_api import (
+from app.platform.agent_runtime.planning_api import (
     _plan_next_action,
     _preexisting_dirty_operation_failures,
     _preexisting_dirty_plan_failures,
     authorize_agent_planned_operation,
 )
-from app.agent_runtime.planning_contracts import ImplementationPlanSubmission, PlanItem
+from app.platform.agent_runtime.planning_contracts import ImplementationPlanSubmission, PlanItem
 
 
 _DIRTY_TEST = "web/tests/e2e/chatbot-layout.spec.ts"

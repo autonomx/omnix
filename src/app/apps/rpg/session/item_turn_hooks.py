@@ -12,11 +12,11 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_diagnostics import build_item_diagnostics, record_item_diagnostics
-from app.rpg.session.item_objectives import build_item_objectives
-from app.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
-from app.rpg.session.item_state_maintenance import build_item_state_maintenance_plan, run_item_state_maintenance
-from app.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
+from app.apps.rpg.session.item_diagnostics import build_item_diagnostics, record_item_diagnostics
+from app.apps.rpg.session.item_objectives import build_item_objectives
+from app.apps.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
+from app.apps.rpg.session.item_state_maintenance import build_item_state_maintenance_plan, run_item_state_maintenance
+from app.apps.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
 
 MECHANICS_SOURCE = "engine_item_turn_hooks_v1"
 TRACE_LIMIT = 20

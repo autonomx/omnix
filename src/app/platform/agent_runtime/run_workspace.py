@@ -14,7 +14,7 @@ import json
 import subprocess
 from pathlib import Path
 import tempfile
-from app.assistant_tools.contracts import github_repository_from_remote
+from app.platform.assistant_tools.contracts import github_repository_from_remote
 from .isolation import run_mutates
 from .request_policy import allowed_workspace_root
 from .contracts import (
@@ -41,7 +41,7 @@ from .service_core import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.service_core import AgentRunService
+    from app.platform.agent_runtime.service_core import AgentRunService
 
 
 def _capture_workspace_baseline(

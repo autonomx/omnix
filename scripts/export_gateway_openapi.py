@@ -307,7 +307,7 @@ def _gateway_app() -> object:
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return create_gateway_app()
 

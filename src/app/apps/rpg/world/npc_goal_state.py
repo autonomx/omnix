@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.location_registry import current_location_id
+from app.apps.rpg.world.location_registry import current_location_id
 
 MAX_GOALS_PER_NPC = 4
 MAX_RECENT_GOAL_EVENTS = 20

@@ -5,16 +5,16 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
-from app.trading.models import MarketBar
-from app.trading.prospective_prediction_evidence import (
+from app.apps.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
+from app.apps.trading.models import MarketBar
+from app.apps.trading.prospective_prediction_evidence import (
     EvidenceTimestamps,
     FrozenForecast,
     PremarketEvidenceItem,
     PremarketEvidenceSnapshot,
 )
-from app.trading.prospective_prediction_scoring import bind_formal_v3_v4_pair
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.prospective_prediction_scoring import bind_formal_v3_v4_pair
+from app.apps.trading.prospective_prediction_v4 import (
     CalibratorArtifact,
     CashPreservingAuthorizedPortfolio,
     CatalystDecomposition,

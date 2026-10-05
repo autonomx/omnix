@@ -3,14 +3,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.conversation_topics import conversation_topics_for_state
-from app.rpg.world.location_registry import current_location_id
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_goal_state import active_goals_for_npc
-from app.rpg.world.npc_presence_runtime import (
+from app.apps.rpg.world.conversation_topics import conversation_topics_for_state
+from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_goal_state import active_goals_for_npc
+from app.apps.rpg.world.npc_presence_runtime import (
     update_present_npcs_for_location,
 )
-from app.rpg.world.scene_continuity_state import scene_continuity_for_location
+from app.apps.rpg.world.scene_continuity_state import scene_continuity_for_location
 
 DEFAULT_LOCATION_NPCS = {
     # Conservative fallbacks only. Do not introduce authority/guest NPCs such

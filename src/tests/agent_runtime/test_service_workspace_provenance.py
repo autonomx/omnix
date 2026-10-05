@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.coding_quality import capture_workspace_state
-from app.agent_runtime.service import AgentRunService
-from app.agent_runtime.workspace import WorkspaceAuthority
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.coding_quality import capture_workspace_state
+from app.platform.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.workspace import WorkspaceAuthority
 
 
 class _ArtifactRepository:
@@ -139,7 +139,7 @@ def test_service_quarantines_generated_windows_cache_before_change_set_capture(
     )
     quarantine_root = tmp_path / "quarantine-root"
     quarantine_root.mkdir()
-    monkeypatch.setattr("app.agent_runtime.workspace.tempfile.gettempdir", lambda: str(quarantine_root))
+    monkeypatch.setattr("app.platform.agent_runtime.workspace.tempfile.gettempdir", lambda: str(quarantine_root))
 
     service._capture_workspace_baseline(repository_store, spec)
     (worktree / "clean.py").write_text("value = 2\n", encoding="utf-8")

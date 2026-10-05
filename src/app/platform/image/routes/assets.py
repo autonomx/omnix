@@ -119,7 +119,7 @@ def _normalized_browser_preview(
     try:
         from PIL import Image
 
-        from app.image.output_normalization import normalize_generated_image
+        from app.platform.image.output_normalization import normalize_generated_image
     except ImportError:
         return None
     try:

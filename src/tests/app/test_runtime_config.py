@@ -122,7 +122,7 @@ def test_scheduler_role_owns_task_scheduling_without_global_background_authority
 
 
 def test_job_worker_role_gets_job_execution_without_migration_authority():
-    from app.production import maybe_apply_migrations_on_start
+    from app.composition.production import maybe_apply_migrations_on_start
 
     config = RuntimeConfig.from_environment(
         {"OMNIX_GATEWAY_BACKGROUND_ROLE": "job-worker"}
@@ -209,7 +209,7 @@ def test_worker_discovery_is_an_immutable_normalized_snapshot(monkeypatch):
 
 
 def test_migrate_on_start_is_limited_to_local_development_workers():
-    from app.production import maybe_apply_migrations_on_start
+    from app.composition.production import maybe_apply_migrations_on_start
 
     calls = []
     assert maybe_apply_migrations_on_start(

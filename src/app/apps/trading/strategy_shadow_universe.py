@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from .strategy_dynamic_discovery import INTERDAY_TRADING_STRATEGY_ID
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .strategy_universe_archiver import _archive_universe_id
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 def _is_interday_group(config: TradingStrategyConfigDocument) -> bool:

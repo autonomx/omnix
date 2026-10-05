@@ -11,12 +11,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
-from app.rpg.session.durable_store import (
+from app.apps.rpg.session.durable_store import (
     CorruptSessionPayloadError,
     _read_payload_json,
     ensure_session_dir,
 )
-from app.rpg.session.migrations import migrate_session_payload
+from app.apps.rpg.session.migrations import migrate_session_payload
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def _summary_from_path(path: Path) -> Dict[str, Any]:
 def list_session_summaries_from_disk(*, limit: int | None = None) -> List[Dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.rpg.persistence.rpg_compat import list_session_summaries_from_postgres
+        from app.apps.rpg.persistence.rpg_compat import list_session_summaries_from_postgres
         return list_session_summaries_from_postgres(limit=limit)
     """Return bounded session summaries without normalizing full session payloads."""
 

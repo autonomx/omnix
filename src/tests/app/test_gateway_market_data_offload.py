@@ -6,7 +6,7 @@ from fastapi import FastAPI
 import httpx
 import pytest
 
-from app.trading.api import create_trading_router
+from app.apps.trading.api import create_trading_router
 
 
 @pytest.mark.parametrize('path,method', [('/bars', 'bars'), ('/quotes', 'quote')])

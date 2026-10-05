@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.worlds.starter_bubble import (
+from app.apps.rpg.worlds.starter_bubble import (
     build_starter_bubble,
     build_starter_map_definitions,
     predictive_materialization_queue,

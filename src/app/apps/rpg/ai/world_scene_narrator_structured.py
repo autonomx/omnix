@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.rpg.ai.world_scene_narrator_payloads import (
+from app.apps.rpg.ai.world_scene_narrator_payloads import (
     annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
     Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
     select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
@@ -321,7 +321,7 @@ def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
 def build_structured_narration(
     scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str
 ) -> Dict[str, Any]:
-    from app.rpg.ai.world_scene_narrator_prompts import (
+    from app.apps.rpg.ai.world_scene_narrator_prompts import (
         _with_scene_response_defaults,
         parse_scene_response,
     )

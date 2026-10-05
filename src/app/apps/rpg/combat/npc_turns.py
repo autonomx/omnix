@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from app.rpg.combat.apply import apply_attack_resolution
-from app.rpg.combat.initiative import advance_turn
-from app.rpg.combat.lifecycle import evaluate_combat_exit
-from app.rpg.combat.models import AttackIntent
-from app.rpg.combat.resolver import resolve_attack
-from app.rpg.combat.state import get_current_actor_id, normalize_combat_state
+from app.apps.rpg.combat.apply import apply_attack_resolution
+from app.apps.rpg.combat.initiative import advance_turn
+from app.apps.rpg.combat.lifecycle import evaluate_combat_exit
+from app.apps.rpg.combat.models import AttackIntent
+from app.apps.rpg.combat.resolver import resolve_attack
+from app.apps.rpg.combat.state import get_current_actor_id, normalize_combat_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

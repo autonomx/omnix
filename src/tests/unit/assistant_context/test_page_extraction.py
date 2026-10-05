@@ -1,8 +1,8 @@
 from app.conversation.contracts import AssistantContextItem
-from app.research.extraction import ReadablePageExtractor, extract_readable_content
-from app.research.outbound_web import OutboundWebResponse
-from app.research.quick_search import QuickSearchService
-from app.research.source_store import ResearchSourceStore
+from app.platform.research.extraction import ReadablePageExtractor, extract_readable_content
+from app.platform.research.outbound_web import OutboundWebResponse
+from app.platform.research.quick_search import QuickSearchService
+from app.platform.research.source_store import ResearchSourceStore
 
 
 class FakePolicy:

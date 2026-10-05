@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.jobs import CreateJobRequest, FailJobRequest, ResourceClass
 from tests.support.in_memory_jobs import InMemoryJobStore
 

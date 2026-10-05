@@ -7,19 +7,19 @@ from typing import Any
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.rpg.persistence.rpg_item_description_repository import (
+from app.apps.rpg.persistence.rpg_item_description_repository import (
     PostgresRpgItemDescriptionRepository,
 )
-from app.rpg.persistence.rpg_repository import canonical_json
-from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.session.inventory_items import (
+from app.apps.rpg.persistence.rpg_repository import canonical_json
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.session.inventory_items import (
     canonical_item_id,
     display_item_name,
     inventory_quantity,
     item_type,
     normalize_inventory_items,
 )
-from app.rpg.session.item_descriptions import build_item_description_context
+from app.apps.rpg.session.item_descriptions import build_item_description_context
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.session_item_detail.prompt', "1", (

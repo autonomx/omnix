@@ -16,7 +16,7 @@ from .indicators.engine import exponential_moving_average
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_stoch_rsi_5m import StochRsi5mTrade
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _EMA_PERIOD = 5

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.agent_runtime.run_slots import AgentRunCapacityError, PostgresAgentRunSlots
+from app.platform.agent_runtime.run_slots import AgentRunCapacityError, PostgresAgentRunSlots
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 
@@ -42,7 +42,7 @@ def database():
 def _hold_in_another_process(run_id: str, max_runs: int) -> subprocess.Popen[str]:
     script = textwrap.dedent(f"""
         import os, sys, time
-        from app.agent_runtime.run_slots import PostgresAgentRunSlots
+        from app.platform.agent_runtime.run_slots import PostgresAgentRunSlots
         from app.persistence.config import DatabaseSettings
         from app.persistence.database import PostgresDatabase
         database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=2))

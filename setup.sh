@@ -213,9 +213,9 @@ fi
 
 echo ""
 echo "[9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)..."
-if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.assistant_memory.v2.embeddings download; then
+if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.platform.assistant_memory.v2.embeddings download; then
     echo "WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only."
-    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.assistant_memory.v2.embeddings download"
+    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.platform.assistant_memory.v2.embeddings download"
 fi
 
 echo ""
@@ -234,7 +234,7 @@ fi
 if [ $? -ne 0 ]; then
     error
 fi
-"$RPG_FLUX_PYTHON" -c "from app.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
+"$RPG_FLUX_PYTHON" -c "from app.apps.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
 if [ $? -ne 0 ]; then
     error
 fi

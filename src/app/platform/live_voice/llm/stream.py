@@ -10,7 +10,7 @@ import time
 from contextlib import ExitStack
 from typing import Any, Iterator
 
-from app.chat.contracts import (
+from app.platform.chat.contracts import (
     merge_provider_response_metrics,
     model_key,
     provider_key,
@@ -219,7 +219,7 @@ def stream_low_latency_reply(
                 raise ProviderTimeout("chat turn deadline has expired")
             completion_kwargs["request_timeout_seconds"] = remaining
         if provider_supports(provider_name, THINKING_TOGGLE):
-            from app.live_voice.llm.policy import lmstudio_live_voice_options
+            from app.platform.live_voice.llm.policy import lmstudio_live_voice_options
 
             completion_kwargs.update(lmstudio_live_voice_options(user_message))
         response = provider.chat_completion(

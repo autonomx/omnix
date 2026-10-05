@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.chat.assist.hermes import normalize_hermes_response, tool_calls_from_hermes
-from app.chat.assist.diagnostics import hermes_diagnostics_schema, hermes_diagnostics_status_payload
-from app.chat.assist.modes import readout_payload
+from app.platform.chat.assist.hermes import normalize_hermes_response, tool_calls_from_hermes
+from app.platform.chat.assist.diagnostics import hermes_diagnostics_schema, hermes_diagnostics_status_payload
+from app.platform.chat.assist.modes import readout_payload
 from app.providers.hermes_status import hermes_status_payload
 
 
@@ -74,8 +74,8 @@ def test_unknown_readout_is_rejected_without_payload() -> None:
 
 
 def test_plan_summary_readout_returns_dry_shape() -> None:
-    from app.chat.contracts import ASSIST_READOUTS
-    from app.rpg.hermes.feature import _PlanSummaryReadout
+    from app.platform.chat.contracts import ASSIST_READOUTS
+    from app.apps.rpg.hermes.feature import _PlanSummaryReadout
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, reset_port_bindings_for_tests
 
     # Composition binds the Hermes feature's readout (ADR-0016).

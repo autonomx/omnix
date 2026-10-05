@@ -12,23 +12,23 @@ from datetime import datetime, timezone
 from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
 
-from app.chat.assistant_turns import default_assistant_turn_coordinator
-from app.chat.character_store import (
+from app.platform.chat.assistant_turns import default_assistant_turn_coordinator
+from app.platform.chat.character_store import (
     _CharacterSessionMixin,
     _find_idempotent_user_turn,
     _start_assistant_turn,
     _store_database,
 )
-from app.chat.compaction import ConversationSummary
+from app.platform.chat.compaction import ConversationSummary
 from app.persistence.document_schemas import register_document_schema
-from app.chat.history_search import HistorySearchResult, HistorySearchStatus
-from app.chat.memory_port import parse_memory_command
-from app.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
-from app.chat.prompt_assembly import PromptHistoryItem
-from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
-from app.chat.prompt_store import turn_completed_event
-from app.chat.retention_policy import transcript_retention_allowed
-from app.chat.store import _context_source_summaries
+from app.platform.chat.history_search import HistorySearchResult, HistorySearchStatus
+from app.platform.chat.memory_port import parse_memory_command
+from app.platform.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
+from app.platform.chat.prompt_assembly import PromptHistoryItem
+from app.platform.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
+from app.platform.chat.prompt_store import turn_completed_event
+from app.platform.chat.retention_policy import transcript_retention_allowed
+from app.platform.chat.store import _context_source_summaries
 from app.conversation.contracts import (
     AcceptedChatActivityRecorder,
     LIVE_VOICE_ROUTE_METADATA_KEY,
@@ -677,7 +677,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         Called after the turn's own transaction commits, as the memory call it
         replaces was; the outbox then delivers it to every consumer.
         """
-        from app.chat.turn_events import CHAT_TURN_COMPLETED, turn_completed_event_key
+        from app.platform.chat.turn_events import CHAT_TURN_COMPLETED, turn_completed_event_key
 
         context = self._repository.context
         event = turn_completed_event(session, user_message_id, user_id=context.user_id)
@@ -716,7 +716,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self.job_service = job_service
         self.live_voice_chat_port = live_voice_chat_port
         if live_agent_planner is None:
-            from app.chat.live_agent_store import default_live_agent_planner
+            from app.platform.chat.live_agent_store import default_live_agent_planner
 
             live_agent_planner = default_live_agent_planner()
         self.live_agent_planner = live_agent_planner
@@ -725,7 +725,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self._initialize_prompt_context_cache()
 
     def transcript_retention_allowed(self, session):
-        from app.chat.retention_policy import transcript_retention_allowed
+        from app.platform.chat.retention_policy import transcript_retention_allowed
 
         return transcript_retention_allowed(
             session,
@@ -822,7 +822,7 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
     def get_session(self, session_id: str) -> ChatSession | None:
         session = _load_single_session(self, session_id)
         if session is not None:
-            from app.chat.live_chat_speculation import prime_live_speculation_session
+            from app.platform.chat.live_chat_speculation import prime_live_speculation_session
 
             prime_live_speculation_session(session)
         return session
@@ -836,7 +836,7 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         context_diagnostics: dict[str, Any] | None = None,
         start_streaming: bool = False,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        from app.chat.live_chat_speculation import prime_live_speculation_session
+        from app.platform.chat.live_chat_speculation import prime_live_speculation_session
 
         with _durable_session_mutation(self, session_id):
             persist = lambda routed_request, route_metadata: _begin_user_message_fast(
@@ -883,7 +883,7 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         content: str,
         metadata: dict[str, Any],
     ) -> ChatSession | None:
-        from app.chat.live_chat_speculation import prime_live_speculation_session
+        from app.platform.chat.live_chat_speculation import prime_live_speculation_session
 
         with _durable_session_mutation(self, session_id) as lock_wait_ms:
             session = _complete_streamed_reply_fast(

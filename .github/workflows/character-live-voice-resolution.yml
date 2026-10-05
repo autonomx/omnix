@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - "src/app/assets/canonical_voice_clones.py"
-      - "src/app/characters/live_call.py"
-      - "src/app/characters/service.py"
+      - "src/app/platform/characters/live_call.py"
+      - "src/app/platform/characters/service.py"
       - "src/app/providers/tts_http_client.py"
       - "src/app/providers/voice_debug.py"
       - "src/services/tts/tts_server.py"
@@ -62,8 +62,8 @@ jobs:
         run: |
           ruff check \
             src/app/assets/canonical_voice_clones.py \
-            src/app/characters/live_call.py \
-            src/app/characters/service.py \
+            src/app/platform/characters/live_call.py \
+            src/app/platform/characters/service.py \
             src/app/providers/tts_http_client.py \
             src/app/providers/voice_debug.py \
             src/tests/unit/assets/test_canonical_voice_clone_resolution.py \

@@ -16,7 +16,7 @@ def test_all_application_entrypoints_use_the_shared_gateway():
     import launch
     import main
     from app import create_app
-    from app.gateway.main import app
+    from app.composition.gateway.main import app
 
     assert launch.create_app() is main.create_app() is app
     assert (launch.HOST, launch.PORT) == (main.HOST, main.PORT)
@@ -32,7 +32,7 @@ def test_all_application_entrypoints_use_the_shared_gateway():
 
 
 def test_current_apps_keep_their_shared_contracts_without_old_routes():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     gateway = create_gateway_app()
     paths = set(gateway.openapi()["paths"])

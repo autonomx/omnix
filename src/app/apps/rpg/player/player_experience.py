@@ -36,7 +36,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
+from app.apps.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -945,4 +945,4 @@ class MemoryEchoSystem:
 
 
 # Re-exported here for the historical public API.
-from app.rpg.player.player_experience_engine import PlayerExperienceEngine  # noqa: E402,F401
+from app.apps.rpg.player.player_experience_engine import PlayerExperienceEngine  # noqa: E402,F401

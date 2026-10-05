@@ -3,71 +3,71 @@ from __future__ import annotations
 from typing import (
     Any as Any, List as List,
 )
-from app.rpg.session.combat_turn_actions import (
+from app.apps.rpg.session.combat_turn_actions import (
     _ability_id_from_player_input as _ability_id_from_player_input, _manual_encounter_preset_from_input as _manual_encounter_preset_from_input,
     _resolve_active_combat_utility_turn as _resolve_active_combat_utility_turn,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _active_combat_state_from_runtime_or_simulation as _active_combat_state_from_runtime_or_simulation, _active_combat_utility_kind as _active_combat_utility_kind,
 )
-from app.rpg.session.combat_action_runtime import (
+from app.apps.rpg.session.combat_action_runtime import (
     _apply_advisory_phase as _apply_advisory_phase, _force_combat_utility_action_type as _force_combat_utility_action_type,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _build_last_player_action_record as _build_last_player_action_record,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _build_turn_id as _build_turn_id,
 )
-from app.rpg.session.semantic_interaction_runtime import (
+from app.apps.rpg.session.semantic_interaction_runtime import (
     _coerce_action_target as _coerce_action_target, _coerce_action_target_to_active_combat_participant as _coerce_action_target_to_active_combat_participant,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _ensure_simulation_state as _ensure_simulation_state, _normalize_performance_settings as _normalize_performance_settings,
     _normalize_story_policy as _normalize_story_policy, _normalize_structured_action as _normalize_structured_action, _safe_dict as _safe_dict, _safe_int as _safe_int,
     _safe_str as _safe_str, _story_policy_record_replay_artifacts as _story_policy_record_replay_artifacts,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _force_active_combat_utility_action as _force_active_combat_utility_action,
 )
-from app.rpg.session.special_combat_turns import (
+from app.apps.rpg.session.special_combat_turns import (
     _maybe_resolve_combat_ability_turn as _maybe_resolve_combat_ability_turn, _maybe_start_manual_encounter as _maybe_start_manual_encounter,
 )
-from app.rpg.session.action_execution import (
+from app.apps.rpg.session.action_execution import (
     _structured_action_prompt as _structured_action_prompt, select_primary_action as select_primary_action,
 )
 import time as _time
-from app.rpg.session.conversation_thread_runtime import (
+from app.apps.rpg.session.conversation_thread_runtime import (
     advance_conversation_threads_for_turn as advance_conversation_threads_for_turn,
 )
-from app.rpg.creator.defaults import (
+from app.apps.rpg.creator.defaults import (
     apply_adventure_defaults as apply_adventure_defaults,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     derive_action_candidates as derive_action_candidates, load_runtime_session as load_runtime_session,
 )
-from app.rpg.session.ambient_tick_runtime import (
+from app.apps.rpg.session.ambient_tick_runtime import (
     is_ambient_tick_command as is_ambient_tick_command,
 )
-from app.rpg.ai.action_intelligence import (
+from app.apps.rpg.ai.action_intelligence import (
     merge_action_advisory as merge_action_advisory,
 )
-from app.rpg.combat.companion_ai import (
+from app.apps.rpg.combat.companion_ai import (
     parse_companion_command as parse_companion_command,
 )
-from app.rpg.world.npc_dialogue_recall import (
+from app.apps.rpg.world.npc_dialogue_recall import (
     player_input_requests_recall as player_input_requests_recall,
 )
-from app.rpg.session.turn_perf_trace import (
+from app.apps.rpg.session.turn_perf_trace import (
     record_turn_perf_trace as record_turn_perf_trace, record_turn_perf_trace_stack as record_turn_perf_trace_stack,
 )
-from app.rpg.economy.service_resolver import (
+from app.apps.rpg.economy.service_resolver import (
     resolve_service_turn as resolve_service_turn,
 )
-from app.rpg.session.service_runtime import (
+from app.apps.rpg.session.service_runtime import (
     service_action_from_result as service_action_from_result, service_semantic_action_from_result as service_semantic_action_from_result,
 )
-from app.rpg.session.deferred_narration_guard import (
+from app.apps.rpg.session.deferred_narration_guard import (
     suppress_provider_runtime_narration as suppress_provider_runtime_narration,
 )
 

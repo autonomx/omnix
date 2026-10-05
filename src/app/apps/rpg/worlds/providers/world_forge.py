@@ -6,10 +6,10 @@ from typing import Any, Callable, Mapping
 
 from app.providers.base import BaseProvider
 from app.providers.registry import get_provider
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
-from app.rpg.worlds.providers.world_forge_foundation import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
+from app.apps.rpg.worlds.providers.world_forge_foundation import (
     WorldForgeDossier,
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
@@ -25,7 +25,7 @@ from app.rpg.worlds.providers.world_forge_foundation import (
     _token_estimate,
     _topic_contract,
 )
-from app.rpg.worlds.providers.world_forge_generator import (
+from app.apps.rpg.worlds.providers.world_forge_generator import (
     ProviderWorldForgeTopicGenerator,
 )
 

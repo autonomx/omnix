@@ -122,14 +122,14 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.jobs import store as job_store
     from app.persistence.startup import bootstrap_postgresql_runtime
     from app.providers import service as provider_service
-    from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
-    from app.rpg.narrative_engine import service as narrative_service
-    from app.rpg.narrative_engine.writer import StructuredNarrativeWriter
-    from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+    from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from app.apps.rpg.narrative_engine import service as narrative_service
+    from app.apps.rpg.narrative_engine.writer import StructuredNarrativeWriter
+    from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
     from tests.support.routers import include_router_registrar
 
     bootstrap_postgresql_runtime()

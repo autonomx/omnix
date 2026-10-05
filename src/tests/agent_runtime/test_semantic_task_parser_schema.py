@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.platform.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers.base import ChatResponse
 
 

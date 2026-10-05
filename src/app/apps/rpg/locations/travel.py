@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON, find_location_route, get_canonical_location
+from app.apps.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON, find_location_route, get_canonical_location
 
 SOURCE = "deterministic_phase4_travel_costs"
 

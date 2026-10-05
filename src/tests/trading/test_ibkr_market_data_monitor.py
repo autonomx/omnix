@@ -6,13 +6,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.trading import ibkr_market_data_monitor as monitor_module
-from app.trading.execution import ExecutionObservation, assess_execution_observation
-from app.trading.execution_observation_plane import ExecutionObservationPlane
-from app.trading.evidence_storage import MemoryIbkrSessionEvidence
-from app.trading.ibkr_evidence import IbkrEvidenceStore
-from app.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
-from app.trading.streaming.manager import StreamingQuoteUpdate
+from app.apps.trading import ibkr_market_data_monitor as monitor_module
+from app.apps.trading.execution import ExecutionObservation, assess_execution_observation
+from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
+from app.apps.trading.evidence_storage import MemoryIbkrSessionEvidence
+from app.apps.trading.ibkr_evidence import IbkrEvidenceStore
+from app.apps.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
+from app.apps.trading.streaming.manager import StreamingQuoteUpdate
 
 
 ET = ZoneInfo("America/New_York")
@@ -142,7 +142,7 @@ def test_ibkr_monitor_records_missing_last_as_durable_soak_failure(tmp_path):
 
 
 def test_execution_observation_monitor_does_not_own_ibkr_subscriptions():
-    source = Path("src/app/trading/execution_observation_monitor.py").read_text(
+    source = Path("src/app/apps/trading/execution_observation_monitor.py").read_text(
         encoding="utf-8"
     ).lower()
 

@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from app.live_voice.llm.stream import (
+from app.platform.live_voice.llm.stream import (
     LowLatencyTextChunker,
     stream_low_latency_reply,
 )

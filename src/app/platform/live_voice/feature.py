@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
+from app.platform.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.agent_runtime import quality_recovery as recovery_module
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime import quality_recovery as recovery_module
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -15,11 +15,11 @@ from app.agent_runtime.contracts import (
     TaskRevision,
     WorkspaceState,
 )
-from app.agent_runtime.quality_recovery import (
+from app.platform.agent_runtime.quality_recovery import (
     _promote_protocol_complete_reviewers,
     _queue_acceptance_recovery,
 )
-from app.agent_runtime.review_orchestration import reconcile_review_progress_in_repository
+from app.platform.agent_runtime.review_orchestration import reconcile_review_progress_in_repository
 
 
 class _Work:

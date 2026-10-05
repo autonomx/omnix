@@ -20,7 +20,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from app.chat.contracts import (
+from app.platform.chat.contracts import (
     merge_provider_response_metrics,
     model_key,
     provider_turn_deadline,
@@ -30,8 +30,8 @@ from app.providers import ChatMessage as ProviderMessage
 from app.providers.base import ChatResponse, ConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
 
-from app.live_voice.llm.stream import LowLatencyTextChunker
-from app.live_voice.llm import lmstudio_model_resolution as model_resolution
+from app.platform.live_voice.llm.stream import LowLatencyTextChunker
+from app.platform.live_voice.llm import lmstudio_model_resolution as model_resolution
 from app.observability.tts_stream_diagnostics import stream_log
 
 _RESPONSES_ENDPOINT = "/v1/responses"

@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading import strategy_evolving_top_gainers as evolving
-from app.trading.strategy_leader_momentum_continuation import LeaderMomentumSnapshot
+from app.apps.trading import strategy_evolving_top_gainers as evolving
+from app.apps.trading.strategy_leader_momentum_continuation import LeaderMomentumSnapshot
 
 
 SESSION = date(2026, 9, 9)

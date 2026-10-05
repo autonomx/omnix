@@ -5,11 +5,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.strategy_evolving_top_gainers import (
+from app.apps.trading.strategy_evolving_top_gainers import (
     EvolvingTopGainersConfig,
     TopGainerObservation,
 )
-from app.trading.strategy_evolving_top_gainers_research import (
+from app.apps.trading.strategy_evolving_top_gainers_research import (
     HistoricalPopulationManifest,
     assess_population_integrity,
     leaderboard_trajectory_at,

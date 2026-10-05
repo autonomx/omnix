@@ -9,7 +9,7 @@ from app.runtime.clock import utc_now
 
 from typing import Any, Dict, List
 
-from app.rpg.social.conversation_presentation import build_conversation_payload
+from app.apps.rpg.social.conversation_presentation import build_conversation_payload
 
 # ── Hard caps (Phase 0.3) ──────────────────────────────────────────────────
 _MAX_AMBIENT_QUEUE = 32

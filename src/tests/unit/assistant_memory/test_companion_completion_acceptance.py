@@ -4,20 +4,20 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.assistant_memory.companion_context import (
+from app.platform.assistant_memory.companion_context import (
     build_companion_context_packet,
     invalidate_companion_context,
 )
-from app.assistant_memory.lifecycle import resolve_snapshot_view
+from app.platform.assistant_memory.lifecycle import resolve_snapshot_view
 from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.temporal_retrieval import (
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.temporal_retrieval import (
     invalidate_temporal_retrieval,
     rank_temporal_records,
 )
-from app.assistant_memory.typed_memory import create_typed_memory, supersede_typed_memory
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.platform.assistant_memory.typed_memory import create_typed_memory, supersede_typed_memory
+from app.platform.chat.prompt_assembly import PromptMemoryItem
 
 
 def _context() -> MemoryScopeContext:

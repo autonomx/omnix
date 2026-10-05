@@ -8,8 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
-from app.rpg.session.ability_system import (
+from app.apps.rpg.session.ability_coverage import write_ability_coverage_snapshot
+from app.apps.rpg.session.ability_system import (
     apply_ability_to_state,
     assign_ability_to_hotbar,
     build_progression_package,
@@ -17,21 +17,21 @@ from app.rpg.session.ability_system import (
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
 )
-from app.rpg.session.crafting import craft_from_inventory
-from app.rpg.session.equipment import equip_item_for_player, resolve_equipment_slot
-from app.rpg.session.inventory_items import (
+from app.apps.rpg.session.crafting import craft_from_inventory
+from app.apps.rpg.session.equipment import equip_item_for_player, resolve_equipment_slot
+from app.apps.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
     is_protected_item,
     merge_inventory_stack,
     normalize_player_inventory,
 )
-from app.rpg.session.item_materials import salvage_item
-from app.rpg.session.item_modifications import apply_item_modification, replace_inventory_item
-from app.rpg.session.item_loadout_hooks import run_loadout_item_hooks
-from app.rpg.session.item_use import use_inventory_item
-from app.rpg.session.service import load_session, save_session
-from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
+from app.apps.rpg.session.item_materials import salvage_item
+from app.apps.rpg.session.item_modifications import apply_item_modification, replace_inventory_item
+from app.apps.rpg.session.item_loadout_hooks import run_loadout_item_hooks
+from app.apps.rpg.session.item_use import use_inventory_item
+from app.apps.rpg.session.service import load_session, save_session
+from app.apps.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
 
 LoadoutActionKind = Literal[
     "inspect",

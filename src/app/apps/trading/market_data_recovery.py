@@ -24,8 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)

@@ -23,7 +23,7 @@ PROBE = "/api/__auth_probe__"
 
 @pytest.fixture(scope="module")
 def gateway():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     authenticator = FakeAuthenticator()
     app = create_gateway_app(auth_service=authenticator)
@@ -222,7 +222,7 @@ def test_authentication_backend_failure_fails_closed(gateway) -> None:
 
 
 def test_unenforced_mode_passes_requests_through() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     app = create_gateway_app(auth_service=FakeAuthenticator(resolve_auth_settings({})))
     client = _client(app)

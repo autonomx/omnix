@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _normalize_active_interactions as _normalize_active_interactions, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 import hashlib as hashlib
 import json as json
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _LOCATION_CONDITION_DECAY_TICKS as _LOCATION_CONDITION_DECAY_TICKS, _MAX_ACCEPTED_STATE_CHANGE_EVENTS as _MAX_ACCEPTED_STATE_CHANGE_EVENTS,
     _MAX_APPLIED_PROPOSAL_IDS as _MAX_APPLIED_PROPOSAL_IDS, _MAX_LOCATION_CONDITIONS as _MAX_LOCATION_CONDITIONS, _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS,
     _MAX_RECORDED_SEMANTIC_LLM_PROPOSALS as _MAX_RECORDED_SEMANTIC_LLM_PROPOSALS, _MAX_SEMANTIC_PROPOSALS as _MAX_SEMANTIC_PROPOSALS,
@@ -14,7 +14,7 @@ from app.rpg.session.companion_turn_runtime import (
     _WORLD_CONSEQUENCE_DECAY_TICKS as _WORLD_CONSEQUENCE_DECAY_TICKS, _WORLD_PRESSURE_DECAY_TICKS as _WORLD_PRESSURE_DECAY_TICKS,
     _WORLD_RUMOR_DECAY_TICKS as _WORLD_RUMOR_DECAY_TICKS,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _ensure_recent_scene_beats as _ensure_recent_scene_beats, _location_condition_key as _location_condition_key, _normalize_activity_record as _normalize_activity_record,
     _normalize_location_condition as _normalize_location_condition, _normalize_pressure_record as _normalize_pressure_record, _normalize_scene_beat as _normalize_scene_beat,
     _normalize_world_consequence as _normalize_world_consequence, _normalize_world_rumor as _normalize_world_rumor, _stable_consequence_id as _stable_consequence_id,
@@ -516,7 +516,7 @@ def _stable_semantic_state_change_proposal_id(
 
 
 def _ensure_semantic_pipeline_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         ensure_ambient_runtime_state as ensure_ambient_runtime_state,
     )
 
@@ -670,7 +670,7 @@ def record_semantic_llm_capture(
     tick: int,
 ) -> dict[str, Any]:
 
-    from app.rpg.session.semantic_state_changes import (
+    from app.apps.rpg.session.semantic_state_changes import (
         _normalize_llm_text_output as _normalize_llm_text_output,
     )
 

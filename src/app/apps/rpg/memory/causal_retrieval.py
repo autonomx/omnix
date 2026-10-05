@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from app.rpg.memory.causal_memory import normalize_npc_memory_state
+from app.apps.rpg.memory.causal_memory import normalize_npc_memory_state
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

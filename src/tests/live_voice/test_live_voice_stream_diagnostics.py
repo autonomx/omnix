@@ -4,8 +4,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
-from app.live_voice import diagnostics as live_voice_stream_diagnostics
+from app.composition.gateway.main import create_gateway_app
+from app.platform.live_voice import diagnostics as live_voice_stream_diagnostics
 
 
 class EmptyJobStore:
@@ -35,7 +35,7 @@ def test_delivery_checkpoint_is_persisted_through_injected_chat_port(monkeypatch
 
 
 def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -> None:
-    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
+    from app.platform.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     records: list[tuple[str, str, str, dict[str, Any]]] = []
     monkeypatch.setattr(
@@ -103,7 +103,7 @@ def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -
 
 
 def test_live_voice_diagnostics_status_returns_log_path(monkeypatch) -> None:
-    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
+    from app.platform.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     monkeypatch.setattr(
         live_voice_diagnostics_routes,

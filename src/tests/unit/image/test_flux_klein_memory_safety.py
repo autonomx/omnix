@@ -9,9 +9,9 @@ pytestmark = pytest.mark.gpu
 
 import pytest
 
-from app.image import flux_pipeline_loading
-from app.image.providers import flux_klein_provider as flux_module
-from app.image.providers.flux_klein_provider import FluxKleinImageProvider
+from app.platform.image import flux_pipeline_loading
+from app.platform.image.providers import flux_klein_provider as flux_module
+from app.platform.image.providers.flux_klein_provider import FluxKleinImageProvider
 
 
 def test_direct_cuda_mode_rejects_loading_when_free_vram_is_too_low(monkeypatch) -> None:

@@ -16,7 +16,7 @@ from .providers.errors import ProviderContractError, ProviderDataUnavailableErro
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategies.models import GapPullbackConfig
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _PREMARKET_OPEN = time(4, 0)

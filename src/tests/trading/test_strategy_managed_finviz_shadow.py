@@ -9,8 +9,8 @@ import pytest
 
 from fastapi import FastAPI
 
-from app.trading import strategy_monitor as monitor_module
-from app.trading.strategy_managed_finviz_shadow import (
+from app.apps.trading import strategy_monitor as monitor_module
+from app.apps.trading.strategy_managed_finviz_shadow import (
     MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
     MANAGED_FINVIZ_SHADOW_STRATEGY_ID,
     ManagedFinvizShadowProvisionResult,
@@ -20,8 +20,8 @@ from app.trading.strategy_managed_finviz_shadow import (
 from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig
 from app.runtime.features import FeatureContext
-from app.trading.strategy_monitor import create_trading_strategy_monitor_task
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.strategy_monitor import create_trading_strategy_monitor_task
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 

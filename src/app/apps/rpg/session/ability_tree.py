@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from app.rpg.session.ability_catalog import ABILITY_TEMPLATES, BUILD_IDENTITY_DEFAULTS, GENRE_CLASS_NAMES, GENRE_NORMALIZATION, TEMPLATE_FAMILIES
-from app.rpg.session.ability_models import (
+from app.apps.rpg.session.ability_catalog import ABILITY_TEMPLATES, BUILD_IDENTITY_DEFAULTS, GENRE_CLASS_NAMES, GENRE_NORMALIZATION, TEMPLATE_FAMILIES
+from app.apps.rpg.session.ability_models import (
     ALLOWED_CAPABILITIES,
     ALLOWED_COST_RESOURCES,
     ALLOWED_DIMENSIONS,
@@ -18,7 +18,7 @@ from app.rpg.session.ability_models import (
     RpgAbilityValidationResult,
     RpgCharacterIdentity,
 )
-from app.rpg.session.ability_utils import _is_plain_int, _non_empty_strings, _norm, _safe_dict, _safe_list
+from app.apps.rpg.session.ability_utils import _is_plain_int, _non_empty_strings, _norm, _safe_dict, _safe_list
 
 
 def normalize_genre(value: Any) -> str:

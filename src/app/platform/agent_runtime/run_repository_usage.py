@@ -17,7 +17,7 @@ from .repository import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.repository import PostgresAgentRunRepository
+    from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 def get_usage(repo: PostgresAgentRunRepository, run_id: str) -> dict[str, Any]:

@@ -6,10 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketDenialResponse
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
 from app.conversation.performance_contract import SpeechPerformancePlan
-from app.live_voice.capacity import LiveCallCapacity
+from app.platform.live_voice.capacity import LiveCallCapacity
 from app.providers.qwen_http_gateway import TtsServiceSaturated
 
 
@@ -139,7 +139,7 @@ def _assert_start_control(
 
 
 def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
     monkeypatch.setattr(
@@ -296,7 +296,7 @@ def test_live_call_websocket_applies_only_declared_provider_controls(monkeypatch
 
 
 def test_live_call_websocket_denies_connections_above_configured_capacity(monkeypatch) -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     capacity = LiveCallCapacity(1)
     monkeypatch.setattr(tts_live_call_websocket, "live_call_capacity", lambda: capacity)

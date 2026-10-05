@@ -7,21 +7,21 @@ from copy import deepcopy
 from time import perf_counter
 from typing import Any
 
-from app.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
-from app.rpg.ai.compact_dialogue import (
+from app.apps.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
+from app.apps.rpg.ai.compact_dialogue import (
     build_compact_dialogue_advisory,
 )
-from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
-from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
-from app.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
-from app.rpg.session.public_state_bridge import hydrate_simulation_player
-from app.rpg.session.semantic_interaction import attach_semantic_interaction
-from app.rpg.economy.service_resolver import resolve_service_turn
-from app.rpg.session.companion_turn_runtime import _build_turn_id
-from app.rpg.session.service_runtime import service_action_from_result
-from app.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
-from app.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
+from app.apps.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.apps.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
+from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
+from app.apps.rpg.session.semantic_interaction import attach_semantic_interaction
+from app.apps.rpg.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
+from app.apps.rpg.session.service_runtime import service_action_from_result
+from app.apps.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
+from app.apps.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
 
 logger = logging.getLogger(__name__)
 
@@ -518,7 +518,7 @@ def _should_safe_fallback_nonstateful_dialogue(
         return False
     if _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory):
         return True
-    from app.rpg.session.interpretive_adjudication import should_use_interpretive_adjudication
+    from app.apps.rpg.session.interpretive_adjudication import should_use_interpretive_adjudication
 
     return should_use_interpretive_adjudication(
         player_input=player_input,
@@ -658,7 +658,7 @@ def _safe_dialogue_fallback_result(
     selection: dict[str, Any],
     service_matched: bool = False,
 ) -> dict[str, Any]:
-    from app.rpg.session.interpretive_adjudication import (
+    from app.apps.rpg.session.interpretive_adjudication import (
         build_interpretive_adjudication_result,
         should_use_interpretive_adjudication,
     )
@@ -988,7 +988,7 @@ def apply_turn(
 ) -> dict[str, Any]:
     """Run the interactive turn through the explicit ordered stage pipeline."""
 
-    from app.rpg.session.pipeline import TurnContext, run_turn_pipeline
+    from app.apps.rpg.session.pipeline import TurnContext, run_turn_pipeline
 
     context = TurnContext(
         session_id=session_id,

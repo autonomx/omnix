@@ -1,7 +1,7 @@
 """Compatibility exports for the live genre-profile provider boundary."""
 from __future__ import annotations
 
-from app.rpg.worlds.providers.profile import (
+from app.apps.rpg.worlds.providers.profile import (
     GenreProfileProposalResponse,
     ProfileDomainResponse,
     ProfileFieldResponse,

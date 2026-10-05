@@ -3,14 +3,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
-from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
-from app.assistant_memory.jobs import (
+from app.platform.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
+from app.platform.assistant_memory.jobs import (
     MEMORY_SUGGEST_JOB_TYPE,
     enqueue_memory_suggestion_job,
     extract_memory_candidates,
     process_memory_suggestion_job,
 )
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from tests.support.in_memory_jobs import InMemoryJobStore
 import pytest
 
@@ -25,7 +25,7 @@ class StaticProvider:
 
 
 def setup_runtime(tmp_path, monkeypatch):
-    from app.assistant_memory import jobs as memory_jobs
+    from app.platform.assistant_memory import jobs as memory_jobs
 
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")
     job_store = InMemoryJobStore(tmp_path / "jobs")

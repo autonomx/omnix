@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime import isolation
-from app.agent_runtime.api import StartAgentRunRequest
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.isolation import (
+from app.platform.agent_runtime import isolation
+from app.platform.agent_runtime.api import StartAgentRunRequest
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.isolation import (
     RELAY_CONTAINER,
     SANDBOX_NETWORK,
     AgentIsolationError,
@@ -17,9 +17,9 @@ from app.agent_runtime.isolation import (
     LocalSupervisedIsolation,
     plan_isolation,
 )
-from app.agent_runtime.local_workspace import LocalWorkspaceSelectionError, validate_local_workspace_root
-from app.agent_runtime.pi_runtime import PiRpcSession
-from app.agent_runtime.pi_runtime_core import build_agent_environment
+from app.platform.agent_runtime.local_workspace import LocalWorkspaceSelectionError, validate_local_workspace_root
+from app.platform.agent_runtime.pi_runtime import PiRpcSession
+from app.platform.agent_runtime.pi_runtime_core import build_agent_environment
 from tests.agent_runtime.test_pi_runtime import _IdleProcess
 
 

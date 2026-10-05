@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading import prospective_gap_inputs as inputs_module
-from app.trading.prospective_gap_runtime import ProspectiveGapRuntime
+from app.apps.trading import prospective_gap_inputs as inputs_module
+from app.apps.trading.prospective_gap_runtime import ProspectiveGapRuntime
 
 
 def test_the_scheduled_github_import_runs_by_default(monkeypatch) -> None:
@@ -66,7 +66,7 @@ def _climatology(through: str) -> str:
 def test_the_published_climatology_is_imported_once_it_is_newer(monkeypatch) -> None:
     from datetime import date
 
-    from app.trading.prospective_gap_runtime import ProspectiveClimatologyState
+    from app.apps.trading.prospective_gap_runtime import ProspectiveClimatologyState
 
     monday = date(2026, 10, 5)
     assert inputs_module.previous_session(monday) == date(2026, 10, 2)

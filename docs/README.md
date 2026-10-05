@@ -124,7 +124,7 @@ python -m pip install --require-hashes -r requirements.txt
 npm install
 
 # Start the FastAPI web gateway
-PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
 # In another terminal, start the browser app
 npm run web:dev
@@ -166,14 +166,14 @@ npm --workspace @omnix/web run api:check
 
 - `web/src/app/modules.ts` — routed application module catalog.
 - `web/src/features/` — browser feature workspaces and shared assistant UI.
-- `src/app/gateway/` — browser-facing FastAPI gateway and compatibility handoff.
-- `src/app/agent_runtime/` — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.
-- `src/app/assistant_tools/` — governed assistant-tool adapters and policy projection.
+- `src/app/composition/gateway/` — browser-facing FastAPI gateway and compatibility handoff.
+- `src/app/platform/agent_runtime/` — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.
+- `src/app/platform/assistant_tools/` — governed assistant-tool adapters and policy projection.
 - `src/app/providers/` — provider/model integration layer.
 - `src/app/jobs/` — shared job/run contracts and stores.
 - `src/app/assets/` — shared asset/artifact system.
-- `src/app/rpg/` — deterministic RPG domain and APIs.
-- `src/app/trading/` — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.
+- `src/app/apps/rpg/` — deterministic RPG domain and APIs.
+- `src/app/apps/trading/` — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.
 - `src/app/persistence/` — PostgreSQL persistence contracts and transaction policy.
 - `scripts/requirements/` — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in `requirements.txt`.
 - `resources/` — models, data, logs, and generated/runtime resources.

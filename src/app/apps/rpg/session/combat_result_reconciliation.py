@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     _combat_result_from_consumable_result as _combat_result_from_consumable_result,
     _extract_successful_consumable_result_from_payload as _extract_successful_consumable_result_from_payload,
     _extract_successful_consumable_result_from_string_payload as _extract_successful_consumable_result_from_string_payload,
     _find_active_combat_state_deep as _find_active_combat_state_deep, _safe_parse_mapping_payload as _safe_parse_mapping_payload,
 )
-from app.rpg.combat.abilities import (
+from app.apps.rpg.combat.abilities import (
     resolve_combat_ability as resolve_combat_ability,
 )
 from typing import (
@@ -68,7 +68,7 @@ def _reconcile_player_combat_ability_action(
     combat_use_item. This rewrites those turns into authoritative ability
     results.
     """
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _ability_id_from_player_input as _ability_id_from_player_input, _target_id_for_ability as _target_id_for_ability,
     )
 

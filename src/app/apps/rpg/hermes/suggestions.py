@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
-from app.rpg.hermes.context import hermes_rpg_context_payload
-from app.rpg.hermes.mode_routing import omnix_mode_policy
+from app.apps.rpg.hermes.adapter_contract import hermes_adapter_preview_payload
+from app.apps.rpg.hermes.context import hermes_rpg_context_payload
+from app.apps.rpg.hermes.mode_routing import omnix_mode_policy
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

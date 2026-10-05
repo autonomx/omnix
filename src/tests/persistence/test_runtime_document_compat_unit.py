@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.assistant_tools.ledger import AssistantToolLedgerEntry
-from app.assistant_tools.persistence import runtime_documents as tool_documents
-from app.chat.assist import house as house_state_store
-from app.characters.live_conversation_profile import LiveConversationProfileUpdate
-from app.characters.persistence import live_profile_store
-from app.chat.persistence import assistant_turn_store, legacy_sessions
+from app.platform.assistant_tools.ledger import AssistantToolLedgerEntry
+from app.platform.assistant_tools.persistence import runtime_documents as tool_documents
+from app.platform.chat.assist import house as house_state_store
+from app.platform.characters.live_conversation_profile import LiveConversationProfileUpdate
+from app.platform.characters.persistence import live_profile_store
+from app.platform.chat.persistence import assistant_turn_store, legacy_sessions
 
 
 class _Lock:
@@ -108,7 +108,7 @@ def test_feature_owned_runtime_documents(monkeypatch) -> None:
 
 
 def test_turn_coordinators_preserve_independent_writes_and_read_legacy_records(monkeypatch):
-    from app.chat.assistant_turns import AssistantTurnRecord
+    from app.platform.chat.assistant_turns import AssistantTurnRecord
 
     documents = _Documents()
     legacy = AssistantTurnRecord(

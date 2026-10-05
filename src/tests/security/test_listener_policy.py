@@ -78,7 +78,7 @@ def test_configured_origins(monkeypatch):
 
 
 def test_launcher_propagates_listener_policy(monkeypatch):
-    from app.launcher.service_manager import build_default_service_specs
+    from app.composition.launcher.service_manager import build_default_service_specs
 
     monkeypatch.setenv("OMNIX_BIND_HOST", "192.168.1.2")
     monkeypatch.setenv("OMNIX_ALLOW_LAN", "true")
@@ -112,7 +112,7 @@ def test_launcher_autostart_sends_guard_header(monkeypatch):
 
     import httpx
 
-    from app.launcher import __main__ as launcher_main
+    from app.composition.launcher import __main__ as launcher_main
 
     created = []
 

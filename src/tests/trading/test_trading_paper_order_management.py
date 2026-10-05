@@ -5,14 +5,14 @@ from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.paper import (
+from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountSnapshot,
     PaperBalance,
     PaperOrder,
     PaperPosition,
 )
-from app.trading.paper_api import create_trading_paper_router
+from app.apps.trading.paper_api import create_trading_paper_router
 
 
 INSTRUMENT = "equity:NYSE:TEST"

@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-import app.rpg.worlds.generation_retry as generation_retry_module
-from app.rpg.api.feature_routes.rpg_world_library_routes import _raise_generation_error
+import app.apps.rpg.worlds.generation_retry as generation_retry_module
+from app.apps.rpg.api.feature_routes.rpg_world_library_routes import _raise_generation_error
 from app.persistence.config import DatabaseConfigurationError
 from app.persistence.database import DatabaseUnavailableError
-from app.rpg.worlds.generation_diagnostics import log_world_generation_event
-from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
-from app.rpg.worlds.generation_retry import (
+from app.apps.rpg.worlds.generation_diagnostics import log_world_generation_event
+from app.apps.rpg.worlds.generation_jobs import WorldTopicGenerationSettings
+from app.apps.rpg.worlds.generation_retry import (
     continue_world_generation,
 )
 
@@ -166,7 +166,7 @@ def _install_approval(
     approved_hash: str = _APPROVED_PROFILE_HASH,
 ) -> None:
     monkeypatch.setattr(
-        "app.rpg.worlds.generation_retry.require_approved_profile",
+        "app.apps.rpg.worlds.generation_retry.require_approved_profile",
         lambda world: {
             "status": "approved",
             "approved_profile_hash": approved_hash,

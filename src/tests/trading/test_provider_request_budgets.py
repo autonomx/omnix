@@ -6,10 +6,10 @@ import asyncio
 import httpx
 import pytest
 
-from app.trading.providers.binance import _request_weight
-from app.trading.providers.errors import ProviderRateLimitedError, ProviderUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
-from app.trading.providers.request_budget import (
+from app.apps.trading.providers.binance import _request_weight
+from app.apps.trading.providers.errors import ProviderRateLimitedError, ProviderUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.providers.request_budget import (
     BudgetLimit,
     RequestBudget,
     current_lane,

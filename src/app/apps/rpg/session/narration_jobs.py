@@ -3,37 +3,37 @@ from __future__ import annotations
 # RPG session runtime responsibility module.
 import time as _time
 import logging
-from app.rpg.ai.world_scene_narrator import (
+from app.apps.rpg.ai.world_scene_narrator import (
     narrate_scene as narrate_scene,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _normalize_final_narration_text as _normalize_final_narration_text, _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _ensure_narration_job_state as _ensure_narration_job_state, _get_authoritative_narration_job_id as _get_authoritative_narration_job_id,
     _get_narration_job_for_turn as _get_narration_job_for_turn, _has_narration_artifact_for_turn as _has_narration_artifact_for_turn,
     _mark_narration_job_status as _mark_narration_job_status, _store_narration_artifact as _store_narration_artifact,
 )
-from app.rpg.session.narration_worker import (
+from app.apps.rpg.session.narration_worker import (
     publish_narration_event as publish_narration_event, signal_narration_work as signal_narration_work,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
 )
 import os as os
-from app.rpg.ai.grounding_soft_audit import (
+from app.apps.rpg.ai.grounding_soft_audit import (
     run_grounding_soft_audit as run_grounding_soft_audit,
 )
-from app.rpg.llm_app_gateway import (
+from app.apps.rpg.llm_app_gateway import (
     build_app_llm_gateway as build_app_llm_gateway,
 )
-from app.rpg.ai.grounding_settings import (
+from app.apps.rpg.ai.grounding_settings import (
     normalize_grounding_settings as normalize_grounding_settings,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _enqueue_grounding_soft_audit_request as _enqueue_grounding_soft_audit_request,
 )
 from typing import (
@@ -737,13 +737,13 @@ def process_next_narration_job(session_id: str) -> dict[str, Any]:
     if not isinstance(result, dict):
         return result
     try:
-        from app.rpg.session.interaction_lifecycle import (
+        from app.apps.rpg.session.interaction_lifecycle import (
             apply_narration_result_to_interaction,
         )
 
         return apply_narration_result_to_interaction(session_id, result)
     except Exception as exc:
-        from app.rpg.debug_logging import log_rpg_event
+        from app.apps.rpg.debug_logging import log_rpg_event
 
         result["interaction_lifecycle_update"] = {
             "updated": False,

@@ -8,9 +8,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.agent_runtime.api import StartAgentRunRequest, router
-from app.agent_runtime.profiles import AgentProfile, get_agent_profile
-from app.agent_runtime.request_policy import allowed_workspace_root, validate_request_policy
+from app.platform.agent_runtime.api import StartAgentRunRequest, router
+from app.platform.agent_runtime.profiles import AgentProfile, get_agent_profile
+from app.platform.agent_runtime.request_policy import allowed_workspace_root, validate_request_policy
 
 
 def test_public_request_cannot_loosen_approval():

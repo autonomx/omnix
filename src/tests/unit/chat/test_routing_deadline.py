@@ -3,7 +3,7 @@ from __future__ import annotations
 from time import monotonic
 from types import SimpleNamespace
 
-from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
+from app.platform.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 
 
 def test_provider_turn_deadline_uses_configured_provider_timeout(monkeypatch) -> None:

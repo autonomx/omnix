@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.

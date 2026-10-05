@@ -12,8 +12,8 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from services.image import image_service_runtime as image_service_app
-from app.image import downloads as image_downloads
-from app.image.downloads import get_image_local_model_status
+from app.platform.image import downloads as image_downloads
+from app.platform.image.downloads import get_image_local_model_status
 
 
 @pytest.fixture(autouse=True)

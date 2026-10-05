@@ -1,4 +1,4 @@
-from app.rpg.orchestration.live_provider import (
+from app.apps.rpg.orchestration.live_provider import (
     append_provider_execution_event,
     begin_provider_execution,
     fail_provider_execution,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.rpg.ai.world_scene_narrator_common import (
+from app.apps.rpg.ai.world_scene_narrator_common import (
     annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
     Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
     select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
@@ -487,7 +487,7 @@ def _strip_unbacked_memory_reference_from_npc_line(
     if service_backed or npc_backed:
         return line
 
-    from app.rpg.ai.world_scene_narrator_service_grounding import (
+    from app.apps.rpg.ai.world_scene_narrator_service_grounding import (
         _service_grounded_npc_line as _service_grounded_npc_line,
     )
 

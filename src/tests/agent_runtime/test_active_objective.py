@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.active_objective import (
     build_routing_environment,
     normalize_objective_relation,
     objective_continuity_candidate,
     objective_resume_replays_prior_request,
     resolve_active_objective,
 )
-from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.chat_bridge import route_typed_chat_turn
+from app.platform.agent_runtime.semantic_task import (
     SemanticOperation,
     SemanticSubject,
     SemanticTask,

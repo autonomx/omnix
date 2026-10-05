@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 
 async function main() {
-  const source = fs.readFileSync(path.resolve(__dirname, "../../app/agent_runtime/pi_broker_extension.ts"), "utf8");
+  const source = fs.readFileSync(path.resolve(__dirname, "../../app/platform/agent_runtime/pi_broker_extension.ts"), "utf8");
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     reportDiagnostics: true,

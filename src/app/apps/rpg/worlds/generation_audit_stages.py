@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.canon_audit import audit_generated_canon
-from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
+from app.apps.rpg.session.genesis.canon_audit import audit_generated_canon
+from app.apps.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
 
 
 def _candidate(row: Mapping[str, Any]) -> Mapping[str, Any] | None:

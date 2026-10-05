@@ -5,13 +5,13 @@ from importlib import import_module
 
 import pytest
 
-from app.research import contracts
+from app.platform.research import contracts
 from app.runtime.feature_catalog import load_feature
 
 
 def test_every_entry_point_is_the_defining_modules_object() -> None:
     for name, module in contracts._ENTRY_POINTS.items():
-        assert getattr(contracts, name) is getattr(import_module(f"app.research.{module}"), name)
+        assert getattr(contracts, name) is getattr(import_module(f"app.platform.research.{module}"), name)
 
 
 def test_an_unknown_name_is_an_attribute_error() -> None:

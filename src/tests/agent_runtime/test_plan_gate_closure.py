@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentRunSpec,
     ModelRef,
     TaskRequirement,
     TaskRevision,
     ValidationSpec,
 )
-from app.agent_runtime.planning import plan_gate_failures
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime.planning import plan_gate_failures
+from app.platform.agent_runtime.planning_contracts import (
     ImpactCandidate,
     ImplementationPlanSubmission,
     InspectionEvidence,

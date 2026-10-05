@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.service import AgentRunService
 
 
 def test_start_paths_require_diff_only_for_workspace_mutation_authority() -> None:
-    root = Path(__file__).parents[2] / "app" / "agent_runtime"
+    root = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime"
     for name in ("api.py", "chat_lane_agent.py"):
         source = (root / name).read_text(encoding="utf-8")
         assert "task_requires_workspace_mutation" in source
@@ -103,9 +103,9 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
 
 
 def test_workspace_inspection_failure_fails_closed(monkeypatch, tmp_path) -> None:
-    from app.agent_runtime.acceptance import evaluate_acceptance
-    from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-    from app.agent_runtime.workspace import WorkspaceAuthority
+    from app.platform.agent_runtime.acceptance import evaluate_acceptance
+    from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+    from app.platform.agent_runtime.workspace import WorkspaceAuthority
 
     monkeypatch.setattr(
         WorkspaceAuthority,

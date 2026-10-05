@@ -9,8 +9,8 @@ from typing import Any, Mapping, Sequence
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from app.rpg.map_content_editor import MapContentEditError, apply_map_content_operations
-from app.rpg.map_content_validation import validate_map_content
+from app.apps.rpg.map_content_editor import MapContentEditError, apply_map_content_operations
+from app.apps.rpg.map_content_validation import validate_map_content
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 

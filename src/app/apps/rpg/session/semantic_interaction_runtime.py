@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _ensure_semantic_action_runtime_state as _ensure_semantic_action_runtime_state, _normalize_social_axes as _normalize_social_axes,
     _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_INTERACTION_REACTION_STATE as _MAX_INTERACTION_REACTION_STATE, _MAX_NPC_REACTION_RECORDS as _MAX_NPC_REACTION_RECORDS, _MAX_RECENT_SCENE_BEATS as _MAX_RECENT_SCENE_BEATS,
     _MAX_RECENT_WORLD_EVENT_ROWS as _MAX_RECENT_WORLD_EVENT_ROWS, _MAX_RUNTIME_LLM_RECORDS as _MAX_RUNTIME_LLM_RECORDS,
     _MAX_SEMANTIC_ACTION_RECORDS as _MAX_SEMANTIC_ACTION_RECORDS, _MAX_WORLD_CONSEQUENCES as _MAX_WORLD_CONSEQUENCES, _MAX_WORLD_PRESSURE as _MAX_WORLD_PRESSURE,
     _MAX_WORLD_RUMORS as _MAX_WORLD_RUMORS,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _dialogue_semantic_action_from_player_input as _dialogue_semantic_action_from_player_input,
 )
 import json as json
@@ -211,7 +211,7 @@ def _coerce_action_target_to_active_combat_participant(
     action: dict[str, Any],
     player_input: str,
 ) -> dict[str, Any]:
-    from app.rpg.session.semantic_state_changes import (
+    from app.apps.rpg.session.semantic_state_changes import (
         _get_combat_state as _get_combat_state,
     )
 
@@ -599,7 +599,7 @@ def _apply_semantic_observer_reactions(
     runtime_state: dict[str, Any],
     record: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.rpg.session.player_activity_runtime import (
+    from app.apps.rpg.session.player_activity_runtime import (
         _normalize_activity_record as _normalize_activity_record, _stable_activity_id as _stable_activity_id, ensure_actor_activity_state as ensure_actor_activity_state,
         set_actor_activity as set_actor_activity,
     )
@@ -676,11 +676,11 @@ def _apply_semantic_world_propagation(
     runtime_state: dict[str, Any],
     record: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    from app.rpg.session.player_activity_runtime import (
+    from app.apps.rpg.session.player_activity_runtime import (
         _stable_consequence_id as _stable_consequence_id, ensure_world_consequence_state as ensure_world_consequence_state,
     )
 
-    from app.rpg.session.world_consequence_runtime import (
+    from app.apps.rpg.session.world_consequence_runtime import (
         _append_world_pressure as _append_world_pressure, _append_world_rumor as _append_world_rumor,
     )
 

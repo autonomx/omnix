@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from app.characters.interaction import resolve_interaction_context
-from app.chat.session_identity import LEGACY_MAYA_SYSTEM_PROMPT
-from app.characters.models import CharacterProfileSnapshot, InteractionSelection
-from app.chat import prompt_assembly as prompt_assembly_module
-from app.chat.contracts import (
+from app.platform.characters.interaction import resolve_interaction_context
+from app.platform.chat.session_identity import LEGACY_MAYA_SYSTEM_PROMPT
+from app.platform.characters.models import CharacterProfileSnapshot, InteractionSelection
+from app.platform.chat import prompt_assembly as prompt_assembly_module
+from app.platform.chat.contracts import (
     normal_chat_prompt_window_enabled,
     normal_chat_recent_message_limit,
 )
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.prompt_assembly import build_prompt_assembly
-from app.chat.prompt_rendering import render_prompt_assembly
-from app.live_voice.prompt.window import build_prompt_assembly_with_window
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.prompt_assembly import build_prompt_assembly
+from app.platform.chat.prompt_rendering import render_prompt_assembly
+from app.platform.live_voice.prompt.window import build_prompt_assembly_with_window
 
 _NOW = "2026-08-04T00:00:00+00:00"
 _CHARACTER_PERSONALITY = """You are Jinx from Arcane: brilliant, chaotic, theatrical, and dangerous.

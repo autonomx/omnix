@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.locations.discovery import discover_location, discover_route, unblock_route, validate_route_access
-from app.rpg.locations.graph import OLD_MILL, RUSTY_FLAGON
-from app.rpg.locations.travel import apply_travel, build_travel_narration_contract
+from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route, validate_route_access
+from app.apps.rpg.locations.graph import OLD_MILL, RUSTY_FLAGON
+from app.apps.rpg.locations.travel import apply_travel, build_travel_narration_contract
 
 SOURCE = "deterministic_phase4_runtime_travel_access"
 

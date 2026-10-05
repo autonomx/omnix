@@ -3,10 +3,10 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from app.image.models import ImageGenerationResponse
+from app.platform.image.models import ImageGenerationResponse
 from app.jobs import CreateJobRequest, ResourceClass
 from app.jobs.models import JobStage
-from app.image.jobs import execute_image_job
+from app.platform.image.jobs import execute_image_job
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 

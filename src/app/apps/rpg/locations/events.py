@@ -4,7 +4,7 @@ from copy import deepcopy
 from html import escape
 from typing import Any, Dict, List
 
-from app.rpg.locations.graph import get_canonical_location
+from app.apps.rpg.locations.graph import get_canonical_location
 
 SOURCE = "deterministic_phase4_world_events"
 REPORT_SOURCE = "deterministic_phase4_location_history_report"
@@ -182,8 +182,8 @@ def build_world_event_narration_contract(event_result: Dict[str, Any]) -> Dict[s
 
 
 def assert_phase4_world_events_location_history_ready() -> Dict[str, Any]:
-    from app.rpg.locations.encounters import record_encounter, roll_seeded_encounter
-    from app.rpg.locations.travel import apply_travel
+    from app.apps.rpg.locations.encounters import record_encounter, roll_seeded_encounter
+    from app.apps.rpg.locations.travel import apply_travel
 
     state: Dict[str, Any] = {}
     apply_travel(state, start_location_id="location:rusty_flagon", end_location_id="location:old_road", turn_index=1)

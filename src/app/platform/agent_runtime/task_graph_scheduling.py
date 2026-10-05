@@ -32,7 +32,7 @@ from .task_graph_runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
+    from app.platform.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
 # Returned by an extracted step that did not settle its caller.

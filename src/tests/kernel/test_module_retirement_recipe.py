@@ -75,7 +75,7 @@ _BOOT = """
 import json, sys, tempfile
 from pathlib import Path
 from fastapi.testclient import TestClient
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.jobs.models import ClaimJobRequest, CreateJobRequest
 from app.persistence.database import default_database
 from app.persistence.identity_service import ensure_local_identity
@@ -128,7 +128,7 @@ print(json.dumps({"item": item["id"], "running": running, "queued": queued}))
 _DURING_DRAIN = _BOOT + """
 from app.jobs.handlers import JobExecutionContext
 from app.persistence.module_states import ModuleNotAcceptingWork
-from app.worker_runtime.durable_feature_worker import _LeaseBoundJobStore
+from app.composition.worker_runtime.durable_feature_worker import _LeaseBoundJobStore
 
 ids = json.loads(sys.argv[1])
 result = {"write": client.post("/api/retire-probe/items", json={"name": "late"}).status_code,
@@ -181,7 +181,7 @@ def test_a_retired_app_leaves_only_final_work_a_tombstone_and_two_edited_lines(w
     env = {**os.environ, "PYTHONPATH": str(worktree / "src"), "OMNIX_ALLOWED_HOSTS": "testserver",
            "OMNIX_DATABASE_URL": fresh_database, "OMNIX_MIGRATION_DATABASE_URL": fresh_database}
     _run([sys.executable, "scripts/new_module.py", MODULE_ID, "--tier", "app", "--web"], worktree, env)
-    feature = worktree / "src" / "app" / PACKAGE / "feature.py"
+    feature = worktree / "src" / "app" / "apps" / PACKAGE / "feature.py"
     feature.write_text(feature.read_text(encoding="utf-8") + _EXTENSION, encoding="utf-8", newline="\n")
     _run(["git", "add", "-A"], worktree)
     _run(["git", "-c", "user.name=recipe", "-c", "user.email=recipe@example.invalid", "commit", "-q", "--no-verify",
@@ -215,7 +215,7 @@ def test_a_retired_app_leaves_only_final_work_a_tombstone_and_two_edited_lines(w
 
     # Only the two registration lines change outside the module, plus the tombstone and generated contracts.
     changed = _status(worktree)
-    module_paths = (f"src/app/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/",
+    module_paths = (f"src/app/apps/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/",
                     f"src/app/persistence/retired/{PACKAGE}/")
     generated = {"web/src/api/generated/openapi.json", "web/src/api/generated/route-owners.json"}
     assert {path for path in changed if not path.startswith(module_paths)} - generated == {
@@ -224,7 +224,7 @@ def test_a_retired_app_leaves_only_final_work_a_tombstone_and_two_edited_lines(w
     tombstone = worktree / "src" / "app" / "persistence" / "retired" / PACKAGE
     assert sorted(path.name for path in (tombstone / "migrations").iterdir())[0].endswith(f"_{PACKAGE}_initial.sql")
     assert 'JOB_TYPES: tuple[str, ...] = ("retire_probe.note",)' in (tombstone / "tombstone.py").read_text(encoding="utf-8")
-    assert not (worktree / "src" / "app" / PACKAGE).exists()
+    assert not (worktree / "src" / "app" / "apps" / PACKAGE).exists()
 
     # The runner knows every applied migration, the gateway starts, and the stored setting survives.
     _run([sys.executable, "-m", "app.persistence", "migrate"], worktree, env)

@@ -43,8 +43,8 @@ def commit_turn_interaction(
     ) + 1
     interaction_id = f"interaction:{sequence}"
     # Import lazily so gateway startup can install the interaction hook while
-    # app.rpg.presentation is still completing its package initialization.
-    from app.rpg.presentation.visible_response import build_visible_response
+    # app.apps.rpg.presentation is still completing its package initialization.
+    from app.apps.rpg.presentation.visible_response import build_visible_response
 
     visible = build_visible_response(result, player_input)
     sources = _result_sources(result)

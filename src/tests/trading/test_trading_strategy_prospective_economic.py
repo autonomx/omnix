@@ -4,14 +4,14 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.strategies.models import StrategyRiskProfile
-from app.trading.strategy_prospective_economic import (
+from app.apps.trading.strategies.models import StrategyRiskProfile
+from app.apps.trading.strategy_prospective_economic import (
     PROSPECTIVE_ECONOMIC_VERSION,
     evaluate_prospective_economic_status,
     prospective_economic_profile_fingerprint,
 )
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_v2_qualification import frozen_v2_config
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_v2_qualification import frozen_v2_config
 
 
 def _strategy() -> TradingStrategyConfigDocument:

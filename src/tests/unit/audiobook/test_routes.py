@@ -9,8 +9,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.audiobook import routes as audiobook_routes
-from app.gateway.main import create_gateway_app
+from app.apps.audiobook import routes as audiobook_routes
+from app.composition.gateway.main import create_gateway_app
 
 
 def test_audiobook_api_is_registered_on_gateway() -> None:
@@ -51,9 +51,9 @@ def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -
             "-c",
             (
                 "import sys; "
-                "from app.gateway.main import create_gateway_app; "
+                "from app.composition.gateway.main import create_gateway_app; "
                 "create_gateway_app(); "
-                "assert 'app.audiobook.service' not in sys.modules; "
+                "assert 'app.apps.audiobook.service' not in sys.modules; "
                 "assert 'app.providers.faster_qwen3_tts_provider' not in sys.modules"
             ),
         ],

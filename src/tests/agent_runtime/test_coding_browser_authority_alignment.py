@@ -3,15 +3,15 @@ from __future__ import annotations
 import pytest
 
 from app.capabilities import browser_capability_ids
-from app.agent_runtime.coding_external_authority import (
+from app.platform.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,
 )
-from app.agent_runtime.coding_quality import compile_task_engineering_contract
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.evidence import classify_evidence, compile_task_authority
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.coding_quality import compile_task_engineering_contract
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.evidence import classify_evidence, compile_task_authority
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.service import AgentRunService
 
 
 # Representative coverage for every UI/web vocabulary family that the coding

@@ -8,21 +8,21 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from app.trading.catalog import POLICIES, bindings_for_instrument
-from app.trading.execution import (
+from app.apps.trading.catalog import POLICIES, bindings_for_instrument
+from app.apps.trading.execution import (
     ExecutionEligibilityPolicy,
     ExecutionObservation,
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.models import AdjustmentMode, MarketBar, ProviderBinding
-from app.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.models import AdjustmentMode, MarketBar, ProviderBinding
+from app.apps.trading.us_equity_calendar import us_equity_session
 
 from .base import ProviderAdapter
 from .alpaca_iex_status import default_alpaca_iex_status_cache
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"

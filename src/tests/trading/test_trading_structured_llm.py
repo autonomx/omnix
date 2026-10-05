@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.providers import ChatMessage
 from app.providers.base import ChatResponse
-from app.trading.structured_llm import TradingModelOutputError, trading_model_call
+from app.apps.trading.structured_llm import TradingModelOutputError, trading_model_call
 
 
 class Decision(BaseModel):

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from app.providers.base import ChatMessage
-from app.trading.research import _call_provider, _json_payload, default_research_provider
+from app.apps.trading.research import _call_provider, _json_payload, default_research_provider
 
 from .contracts import NoveltyShadowAnnotation, TradingEvidence
 

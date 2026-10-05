@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Iterator
 
-from app.rpg.session.narration_trace import record_narration_trace
+from app.apps.rpg.session.narration_trace import record_narration_trace
 
 _SUPPRESS_PROVIDER_RUNTIME_NARRATION: ContextVar[bool] = ContextVar(
     "RPG_SUPPRESS_PROVIDER_RUNTIME_NARRATION",

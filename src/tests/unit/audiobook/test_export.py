@@ -6,9 +6,9 @@ from array import array
 
 import pytest
 
-from app.audiobook.export import (concatenate_chapters, ffmetadata,
+from app.apps.audiobook.export import (concatenate_chapters, ffmetadata,
                                   ffmpeg_command, freeze_manifest, manifest_hash)
-from app.audiobook.export_service import _stage_book_input
+from app.apps.audiobook.export_service import _stage_book_input
 from app.persistence.blob_store import LocalBlobStore
 
 

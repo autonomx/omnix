@@ -7,16 +7,16 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
-from app.trading.execution import (
+from app.apps.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
+from app.apps.trading.execution import (
     ExecutionEligibilityPolicy,
     ExecutionObservation,
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.models import BarsResponse, MarketBar, ProviderBinding
+from app.apps.trading.models import BarsResponse, MarketBar, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
 from .aggregation import (

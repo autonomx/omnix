@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-RUNTIME = Path(__file__).parents[2] / "app" / "agent_runtime"
+RUNTIME = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime"
 
 # Modules that own SQL. Services, routers and supervisors call these; they
 # never hand a statement to a connection themselves.

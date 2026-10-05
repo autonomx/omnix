@@ -70,7 +70,7 @@ class MemoryService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.assistant_memory.persistence.memory_store import production_memory_repository
+                from app.platform.assistant_memory.persistence.memory_store import production_memory_repository
                 repository = production_memory_repository()
             else:
                 repository = InMemoryMemoryRepository()
@@ -390,7 +390,7 @@ def _default_legacy_write_guard() -> None:
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return
-    from app.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
+    from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
 
     if PostgresMemoryV2AuthorityStore().current().epoch.authority != "v1":
         raise LegacyMemoryReadOnlyError(

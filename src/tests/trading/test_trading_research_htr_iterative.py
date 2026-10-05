@@ -3,14 +3,14 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from app.trading.research.adapters.base import AdapterExecutionResult
-from app.trading.research.contracts import (
+from app.apps.trading.research.adapters.base import AdapterExecutionResult
+from app.apps.trading.research.contracts import (
     IssuerIdentity,
     TradingEvidence,
     TradingResearchRequest,
     fingerprint,
 )
-from app.trading.research.hermes_loop import hermes_trading_research_enabled, run_iterative_research
+from app.apps.trading.research.hermes_loop import hermes_trading_research_enabled, run_iterative_research
 
 
 class MemoryRepository:

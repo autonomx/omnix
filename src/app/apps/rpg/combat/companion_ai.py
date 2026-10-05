@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.abilities import resolve_combat_ability
-from app.rpg.combat.apply import apply_defense_resolution
-from app.rpg.combat.resolver import resolve_defend
+from app.apps.rpg.combat.abilities import resolve_combat_ability
+from app.apps.rpg.combat.apply import apply_defense_resolution
+from app.apps.rpg.combat.resolver import resolve_defend
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

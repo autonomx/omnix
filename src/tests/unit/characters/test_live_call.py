@@ -10,19 +10,19 @@ from app.assets import (
     SharedAssetStore,
     canonical_voice_clones,
 )
-from app.characters import (
+from app.platform.characters import (
     CharacterRepository,
     CreateCharacterRequest,
     SetSessionInteractionRequest,
     UpdateCharacterRequest,
 )
-from app.characters.live_call import normalize_speech_style, resolve_live_call_runtime
-from app.characters.service import CharacterService
-from app.characters.voice_consent import (
+from app.platform.characters.live_call import normalize_speech_style, resolve_live_call_runtime
+from app.platform.characters.service import CharacterService
+from app.platform.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.chat import CreateChatSessionRequest, default_chat_store
+from app.platform.chat import CreateChatSessionRequest, default_chat_store
 from app.persistence.runtime import reset_persistence_mode_cache
 
 

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.paper import (
+from app.apps.trading.paper import (
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
@@ -132,12 +132,12 @@ def test_idempotency_key_reuse_requires_identical_semantic_payload() -> None:
 
 def test_paper_reservation_schema_and_repository_guards_are_present() -> None:
     migration = Path(
-        "src/app/trading/migrations/0035_trading_paper_reservations.sql"
+        "src/app/apps/trading/migrations/0035_trading_paper_reservations.sql"
     ).read_text()
     assert "reserved_quantity" in migration
     assert "reserved_cash" in migration
 
-    repository = Path("src/app/trading/paper_repository.py").read_text()
+    repository = Path("src/app/apps/trading/paper_repository.py").read_text()
     assert "paper_idempotency_payload_mismatch" in repository
     assert "available = available - %s" in repository
     assert "reserved_quantity = reserved_quantity + %s" in repository

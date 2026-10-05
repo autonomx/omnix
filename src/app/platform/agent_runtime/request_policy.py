@@ -60,7 +60,7 @@ def allowed_workspace_root(value: str) -> str:
     OMNIX_AGENT_WORKSPACE_ROOTS uses the platform path-list separator. Relative
     configured roots are anchored to the repository, never the process cwd.
     """
-    repository = Path(__file__).resolve().parents[3]
+    repository = Path(__file__).resolve().parents[4]
     configured = _env_str("OMNIX_AGENT_WORKSPACE_ROOTS")
     if configured is None:
         roots = [repository, repository / "resources/agent_workspaces"]

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.rpg.jobs import turn_executor
-from app.rpg.presentation.visible_response import visible_response_text
+from app.apps.rpg.jobs import turn_executor
+from app.apps.rpg.presentation.visible_response import visible_response_text
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -26,7 +26,7 @@ def test_all_delivery_paths_share_canonical_visible_text() -> None:
 
 
 def test_legacy_gateway_response_bridge_and_duplicate_route_are_deleted() -> None:
-    gateway = _REPO_ROOT / "src" / "app" / "gateway"
+    gateway = _REPO_ROOT / "src" / "app" / "composition" / "gateway"
 
     assert not (gateway / "rpg_visible_response_bridge.py").exists()
     assert not (gateway / "rpg_direct_turn_routes.py").exists()

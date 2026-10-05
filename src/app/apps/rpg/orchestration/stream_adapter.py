@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.runtime.dialogue_runtime import (
+from app.apps.rpg.runtime.dialogue_runtime import (
     append_runtime_stream_chunk,
     finalize_runtime_turn,
 )

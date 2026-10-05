@@ -4,14 +4,14 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "src/app/chat/store.py"
-      - "src/app/agent_runtime/chat_bridge.py"
-      - "src/app/agent_runtime/evidence.py"
-      - "src/app/agent_runtime/router.py"
-      - "src/app/agent_runtime/profiles.py"
-      - "src/app/agent_runtime/semantic_classifier.py"
-      - "src/app/live_voice/llm/stream.py"
-      - "src/app/gateway/main.py"
+      - "src/app/platform/chat/store.py"
+      - "src/app/platform/agent_runtime/chat_bridge.py"
+      - "src/app/platform/agent_runtime/evidence.py"
+      - "src/app/platform/agent_runtime/router.py"
+      - "src/app/platform/agent_runtime/profiles.py"
+      - "src/app/platform/agent_runtime/semantic_classifier.py"
+      - "src/app/platform/live_voice/llm/stream.py"
+      - "src/app/composition/gateway/main.py"
       - "src/app/providers/service.py"
       - "src/app/settings/service.py"
       - "src/app/providers/chatgpt_codex_provider.py"
@@ -19,7 +19,7 @@ on:
       - "src/app/providers/registry.py"
       - "src/app/providers/facade.py"
       - "src/app/providers/__init__.py"
-      - "src/app/gateway/settings_control.py"
+      - "src/app/composition/gateway/settings_control.py"
       - "src/app/settings/profile_core.py"
       - "web/src/api/client.ts"
       - "web/src/api/generated/**"
@@ -91,16 +91,16 @@ jobs:
           # gate focused on the touched provider/chat files rather than linting
           # legacy provider implementation wholesale; cache behavior is covered below.
           ruff check --select E4,E7,E9,F \
-            src/app/chat/store.py \
-            src/app/agent_runtime/chat_bridge.py \
-            src/app/agent_runtime/router.py \
-            src/app/agent_runtime/profiles.py \
-            src/app/agent_runtime/semantic_classifier.py \
-            src/app/live_voice/llm/stream.py \
+            src/app/platform/chat/store.py \
+            src/app/platform/agent_runtime/chat_bridge.py \
+            src/app/platform/agent_runtime/router.py \
+            src/app/platform/agent_runtime/profiles.py \
+            src/app/platform/agent_runtime/semantic_classifier.py \
+            src/app/platform/live_voice/llm/stream.py \
             src/app/providers/chatgpt_codex_provider.py \
             src/app/providers/registry.py \
             src/app/providers/facade.py \
-            src/app/gateway/settings_control.py \
+            src/app/composition/gateway/settings_control.py \
             src/app/settings/profile_core.py \
             src/tests/api/gateway/test_gateway_codex_auth.py \
             src/tests/app/test_live_chat_low_latency_stream.py \

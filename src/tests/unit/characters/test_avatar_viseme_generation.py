@@ -4,15 +4,15 @@ import sqlite3
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_models import UpsertCharacterAvatarPackRequest
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.avatar_viseme_generation import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_models import UpsertCharacterAvatarPackRequest
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.avatar_viseme_generation import (
     CharacterVisemeGenerationRepository,
     CharacterVisemeGenerationService,
 )
-from app.characters.service import CharacterService
+from app.platform.characters.service import CharacterService
 from app.jobs import CompleteJobRequest, FailJobRequest
 from tests.support.in_memory_jobs import InMemoryJobStore
 

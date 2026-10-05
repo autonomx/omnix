@@ -10,8 +10,8 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.catalyst_evidence import capture_catalyst_evidence
-from app.trading.catalyst_repository import TradingCatalystRepository
+from app.apps.trading.catalyst_evidence import capture_catalyst_evidence
+from app.apps.trading.catalyst_repository import TradingCatalystRepository
 
 
 pytestmark = pytest.mark.skipif(

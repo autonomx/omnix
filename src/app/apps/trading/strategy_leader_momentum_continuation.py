@@ -26,7 +26,7 @@ from .indicators.engine import average_true_range, exponential_moving_average
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 POLICY_VERSION = "leader-momentum-continuation-v1.2"

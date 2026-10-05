@@ -9,15 +9,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import (
+from app.apps.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
     inventory_quantity,
     merge_inventory_stack,
     normalize_player_inventory,
 )
-from app.rpg.session.item_market import copper_to_currency, find_offer, quote_merchant_transaction, value_to_copper
-from app.rpg.session.item_system import normalize_item_instance
+from app.apps.rpg.session.item_market import copper_to_currency, find_offer, quote_merchant_transaction, value_to_copper
+from app.apps.rpg.session.item_system import normalize_item_instance
 
 TRANSACTION_SOURCE = "engine_item_transaction_v1"
 

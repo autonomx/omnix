@@ -150,7 +150,7 @@ class Topology:
     def start_gateway(self, name: str, role: str, version: str, port: int, extra: dict[str, str] | None = None) -> None:
         command = [
             sys.executable, str(ROOT / "scripts/run_omnix_gateway.py"),
-            "--app", "app.gateway.runtime_app:app", "--host", "127.0.0.1",
+            "--app", "app.composition.gateway.runtime_app:app", "--host", "127.0.0.1",
             "--port", str(port), "--api-replicas", "0", "--managed-stdin",
         ]
         process = Process(name, command, self._env(role, version, extra=extra), self.log_dir)
@@ -160,7 +160,7 @@ class Topology:
 
     def start_worker(self, name: str, version: str, extra: dict[str, str] | None = None) -> None:
         command = [
-            sys.executable, "-m", "app.worker", "--managed-stdin",
+            sys.executable, "-m", "app.composition.worker", "--managed-stdin",
             "--metrics-port", str(_free_port()),
         ]
         process = Process(name, command, self._env("job-worker", version, extra=extra), self.log_dir)

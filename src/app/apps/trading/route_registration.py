@@ -11,27 +11,27 @@ from app.runtime.scheduler import ScheduledTaskSpec
 
 def create_trading_router(context: FeatureContext) -> APIRouter:
     """Compose the Trading HTTP surface without patching the gateway class."""
-    from app.trading.alerts_api import create_trading_alert_router
-    from app.trading.api import create_trading_router as create_trading_base_router
-    from app.trading.catalyst_api import create_trading_catalyst_router
-    from app.trading.execution_api import create_trading_execution_router
-    from app.trading.hermes_research_api import create_trading_hermes_research_router
-    from app.trading.kill_switches import create_trading_kill_switch_router
-    from app.trading.market_data_api import create_trading_market_data_router
-    from app.trading.metric_api import create_trading_metric_router
-    from app.trading.model_api import create_trading_model_router
-    from app.trading.paper_analytics_api import create_trading_paper_analytics_router
-    from app.trading.paper_api import create_trading_paper_router
-    from app.trading.prospective_gap_api import create_trading_prospective_gap_router
-    from app.trading.replay_api import create_trading_replay_router
-    from app.trading.research_api import create_trading_research_router
-    from app.trading.scanner_api import create_trading_scanner_router
-    from app.trading.strategy_api import create_trading_strategy_router
-    from app.trading.strategy_operations_api import create_trading_strategy_operations_router
-    from app.trading.strategy_prospective_economic_api import (
+    from app.apps.trading.alerts_api import create_trading_alert_router
+    from app.apps.trading.api import create_trading_router as create_trading_base_router
+    from app.apps.trading.catalyst_api import create_trading_catalyst_router
+    from app.apps.trading.execution_api import create_trading_execution_router
+    from app.apps.trading.hermes_research_api import create_trading_hermes_research_router
+    from app.apps.trading.kill_switches import create_trading_kill_switch_router
+    from app.apps.trading.market_data_api import create_trading_market_data_router
+    from app.apps.trading.metric_api import create_trading_metric_router
+    from app.apps.trading.model_api import create_trading_model_router
+    from app.apps.trading.paper_analytics_api import create_trading_paper_analytics_router
+    from app.apps.trading.paper_api import create_trading_paper_router
+    from app.apps.trading.prospective_gap_api import create_trading_prospective_gap_router
+    from app.apps.trading.replay_api import create_trading_replay_router
+    from app.apps.trading.research_api import create_trading_research_router
+    from app.apps.trading.scanner_api import create_trading_scanner_router
+    from app.apps.trading.strategy_api import create_trading_strategy_router
+    from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
+    from app.apps.trading.strategy_prospective_economic_api import (
         create_trading_strategy_prospective_economic_router,
     )
-    from app.trading.strategy_solana_ai_monitor import create_trading_solana_ai_control_router
+    from app.apps.trading.strategy_solana_ai_monitor import create_trading_solana_ai_control_router
 
     router = APIRouter()
     for factory in (
@@ -66,29 +66,29 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
 
 def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], ScheduledTaskSpec | None], ...]:
     """Each monitor is a task on the shared scheduler (WP-8.3); enablement stays with its module."""
-    from app.trading.alerts_monitor import create_trading_alert_monitor_task
-    from app.trading.execution_observation_monitor import create_trading_execution_observation_monitor_task
-    from app.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_task
-    from app.trading.metric_monitor import create_trading_metric_monitor_task
-    from app.trading.paper_monitor import create_trading_paper_monitor_task
-    from app.trading.prospective_gap_monitor import create_prospective_gap_monitor_task
-    from app.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_task
-    from app.trading.session_reconciliation_monitor import create_trading_session_reconciliation_monitor_task
-    from app.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_task
-    from app.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_task
-    from app.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_task
-    from app.trading.strategy_deep_recovery_monitor import create_trading_strategy_deep_recovery_shadow_monitor_task
-    from app.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_task
-    from app.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_task
-    from app.trading.strategy_monitor import create_trading_strategy_monitor_task
-    from app.trading.strategy_prospective_economic_monitor import create_trading_strategy_prospective_economic_monitor_task
-    from app.trading.strategy_research_monitor import create_trading_strategy_research_monitor_task
-    from app.trading.strategy_research_outcome_monitor import create_trading_strategy_research_outcome_monitor_task
-    from app.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_task
-    from app.trading.strategy_universe_archive_monitor import create_trading_strategy_universe_archive_monitor_task
-    from app.trading.strategy_v2_qualification_monitor import create_trading_strategy_v2_qualification_monitor_task
-    from app.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_task
-    from app.trading.monitor_task import scheduled_task_spec
+    from app.apps.trading.alerts_monitor import create_trading_alert_monitor_task
+    from app.apps.trading.execution_observation_monitor import create_trading_execution_observation_monitor_task
+    from app.apps.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_task
+    from app.apps.trading.metric_monitor import create_trading_metric_monitor_task
+    from app.apps.trading.paper_monitor import create_trading_paper_monitor_task
+    from app.apps.trading.prospective_gap_monitor import create_prospective_gap_monitor_task
+    from app.apps.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_task
+    from app.apps.trading.session_reconciliation_monitor import create_trading_session_reconciliation_monitor_task
+    from app.apps.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_task
+    from app.apps.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_task
+    from app.apps.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_task
+    from app.apps.trading.strategy_deep_recovery_monitor import create_trading_strategy_deep_recovery_shadow_monitor_task
+    from app.apps.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_task
+    from app.apps.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_task
+    from app.apps.trading.strategy_monitor import create_trading_strategy_monitor_task
+    from app.apps.trading.strategy_prospective_economic_monitor import create_trading_strategy_prospective_economic_monitor_task
+    from app.apps.trading.strategy_research_monitor import create_trading_strategy_research_monitor_task
+    from app.apps.trading.strategy_research_outcome_monitor import create_trading_strategy_research_outcome_monitor_task
+    from app.apps.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_task
+    from app.apps.trading.strategy_universe_archive_monitor import create_trading_strategy_universe_archive_monitor_task
+    from app.apps.trading.strategy_v2_qualification_monitor import create_trading_strategy_v2_qualification_monitor_task
+    from app.apps.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_task
+    from app.apps.trading.monitor_task import scheduled_task_spec
 
     monitor_tasks = (
         create_trading_alert_monitor_task,
@@ -122,8 +122,8 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
 
         return create
 
-    from app.trading.prospective_gap_inputs import handoff_import_task
-    from app.trading.strategies.runner import strategy_runner_task
+    from app.apps.trading.prospective_gap_inputs import handoff_import_task
+    from app.apps.trading.strategies.runner import strategy_runner_task
 
     return (
         *(factory_for(create_task) for create_task in monitor_tasks),

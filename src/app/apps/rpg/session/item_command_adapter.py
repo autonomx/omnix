@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_session_actions import apply_item_session_action, available_item_session_actions
+from app.apps.rpg.session.item_session_actions import apply_item_session_action, available_item_session_actions
 
 ITEM_COMMAND_ADAPTER_SOURCE = "engine_item_command_adapter_v1"
 

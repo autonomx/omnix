@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.rpg.visual import providers
+from app.apps.rpg.visual import providers
 
 
 def test_rpg_visual_provider_cache_expires_and_invalidates(monkeypatch) -> None:

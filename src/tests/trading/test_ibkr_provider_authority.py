@@ -1,19 +1,19 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.api import ProviderDescriptor
-from app.trading.binding_authority import MarketDataAuthorityDecision
-from app.trading.catalog import bindings_for_instrument
-from app.trading.execution import ExecutionObservation, assess_execution_observation
-from app.trading.providers.ibkr import IbkrEquityProvider
-from app.trading.providers.ibkr_runtime import (
+from app.apps.trading.api import ProviderDescriptor
+from app.apps.trading.binding_authority import MarketDataAuthorityDecision
+from app.apps.trading.catalog import bindings_for_instrument
+from app.apps.trading.execution import ExecutionObservation, assess_execution_observation
+from app.apps.trading.providers.ibkr import IbkrEquityProvider
+from app.apps.trading.providers.ibkr_runtime import (
     FakeIbkrTransport,
     IbkrContractIdentity,
     IbkrQuoteSnapshot,
     IbkrRuntime,
 )
-from app.trading.providers.registry import ProviderRegistry
-import app.trading.providers.registry as registry_module
+from app.apps.trading.providers.registry import ProviderRegistry
+import app.apps.trading.providers.registry as registry_module
 
 
 INSTRUMENT = "equity:NASDAQ:AAPL"

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.assistant_tools.config_store import (
+from app.platform.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
 )
 from types import MappingProxyType
 
-from app.assistant_tools import executor
+from app.platform.assistant_tools import executor
 from app.capabilities.executor import CapabilityGrant, execute_capability
-from app.assistant_tools.kasa_adapter import KasaDeviceRecord, run_kasa_tool_request
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.kasa_adapter import KasaDeviceRecord, run_kasa_tool_request
+from app.platform.assistant_tools.models import AssistantToolRequest
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -106,7 +106,7 @@ def test_kasa_write_adapter_reports_verified_before_and_after_state() -> None:
 
 def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.assistant_tools.gate.load_assistant_tools_config",
+        "app.platform.assistant_tools.gate.load_assistant_tools_config",
         _connected_kasa_config,
     )
     calls: list[AssistantToolRequest] = []

@@ -21,10 +21,10 @@ class PublisherOwnershipAudit:
 
 
 def audit_publisher_ownership(repository_root: Path) -> PublisherOwnershipAudit:
-    gateway = repository_root / "src" / "app" / "rpg" / "api" / "turn_pipeline.py"
-    publisher = repository_root / "src" / "app" / "rpg" / "narrative_engine" / "consumer_publish.py"
-    guard = repository_root / "src" / "app" / "rpg" / "narrative_engine" / "publisher_guard.py"
-    bridge = repository_root / "src" / "app" / "rpg" / "session" / "narrative_engine_bridge.py"
+    gateway = repository_root / "src" / "app" / "apps" / "rpg" / "api" / "turn_pipeline.py"
+    publisher = repository_root / "src" / "app" / "apps" / "rpg" / "narrative_engine" / "consumer_publish.py"
+    guard = repository_root / "src" / "app" / "apps" / "rpg" / "narrative_engine" / "publisher_guard.py"
+    bridge = repository_root / "src" / "app" / "apps" / "rpg" / "session" / "narrative_engine_bridge.py"
     sources = {
         "gateway": gateway.read_text(encoding="utf-8"),
         "publisher": publisher.read_text(encoding="utf-8"),

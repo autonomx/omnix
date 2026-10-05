@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.assets import SharedAssetStore
 from app.assets.store import LEGACY_IMAGE_MANIFEST
-from app.image import asset_store as legacy_asset_store
+from app.platform.image import asset_store as legacy_asset_store
 from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, reset_port_bindings_for_tests
 
 

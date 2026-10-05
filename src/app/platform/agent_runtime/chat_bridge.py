@@ -11,7 +11,7 @@ from .exception_logging import log_recovered_exception
 
 # Lane modules resolve these through this module at call time; tests replace them here.
 from app.providers.service import get_provider as get_provider
-from app.assistant_tools.contracts import review_assistant_tool_request as review_assistant_tool_request
+from app.platform.assistant_tools.contracts import review_assistant_tool_request as review_assistant_tool_request
 from .evidence import validate_required_evidence_capabilities as validate_required_evidence_capabilities
 from app.capabilities.executor import execute_capability as execute_capability
 
@@ -194,7 +194,7 @@ def _resolve_routing_context(
             pass
 
     try:
-        from app.chat.contracts import build_chat_routing_context, build_prompt_assembly
+        from app.platform.chat.contracts import build_chat_routing_context, build_prompt_assembly
 
         assembly = build_prompt_assembly(
             session,

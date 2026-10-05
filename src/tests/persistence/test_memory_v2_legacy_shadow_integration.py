@@ -7,23 +7,23 @@ from uuid import uuid4
 import pytest
 
 from app.conversation.memory_contracts import MemoryRecord
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     MemorySpaceKey,
     RetrievalCandidate,
     RetrievalResult,
     RetrievalScore,
 )
-from app.assistant_memory.v2.graph_store import (
+from app.platform.assistant_memory.v2.graph_store import (
     GraphReplayValidator,
     PostgresMemoryV2GraphStore,
 )
-from app.assistant_memory.v2.legacy_shadow import (
+from app.platform.assistant_memory.v2.legacy_shadow import (
     LegacyMemoryV2Importer,
     PostgresMemoryV2ShadowEvaluationStore,
     compare_shadow_retrieval,
     legacy_seed_projector,
 )
-from app.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
+from app.platform.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations

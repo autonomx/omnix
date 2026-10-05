@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.typed_memory import (
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.typed_memory import (
     create_typed_memory,
     supersede_typed_memory,
     validate_typed_payload,

@@ -17,7 +17,7 @@ if str(SRC_DIR) not in sys.path:
 
 
 def _client(db_path: Path, *, service_token: str | None = None) -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     headers = {"X-Omnix-Client": "web"}
     if service_token is not None:
@@ -138,8 +138,8 @@ def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path, se
 
 @pytest.mark.anyio
 async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkeypatch, tmp_path: Path) -> None:
-    from app.gateway import main as gateway_main
-    from app.rpg.api import compat_router
+    from app.composition.gateway import main as gateway_main
+    from app.apps.rpg.api import compat_router
 
     started = threading.Event()
     release = threading.Event()

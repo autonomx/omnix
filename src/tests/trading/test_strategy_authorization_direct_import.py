@@ -17,9 +17,9 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
         from datetime import time
         from types import SimpleNamespace
 
-        assert "app.trading" not in sys.modules
-        import app.trading.strategy_monitor as strategy_monitor
-        assert strategy_monitor.strategy_paper_access.__module__ == "app.trading.order_gateway"
+        assert "app.apps.trading" not in sys.modules
+        import app.apps.trading.strategy_monitor as strategy_monitor
+        assert strategy_monitor.strategy_paper_access.__module__ == "app.apps.trading.order_gateway"
 
         class StrategyRepository:
             def __init__(self):
@@ -102,7 +102,7 @@ def test_strategy_monitor_composes_authorization_on_direct_import():
         assert paper_repository.place_calls == 0
         assert len(strategy_repository.events) == 1
         assert strategy_repository.events[0].state == "denied"
-        assert "app.trading" in sys.modules
+        assert "app.apps.trading" in sys.modules
         """
     )
     environment = os.environ.copy()

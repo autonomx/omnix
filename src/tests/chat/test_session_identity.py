@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.chat import session_identity
-from app.chat.contracts import CHARACTER_RESOLVER
+from app.platform.chat import session_identity
+from app.platform.chat.contracts import CHARACTER_RESOLVER
 from app.conversation.contracts import (
     SYSTEM_ASSISTANT_ID,
     CharacterModeDisabledError,

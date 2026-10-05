@@ -7,7 +7,7 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.feature_registry import feature_guard
+from app.composition.gateway.feature_registry import feature_guard
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, JobHandlerSpec, executing_job
 from app.jobs.models import JobRecord
 from app.persistence.module_states import ModuleState

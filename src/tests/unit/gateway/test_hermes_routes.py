@@ -1,5 +1,5 @@
 from tests.support.routers import effective_routes
-from app.gateway.app_factory import create_gateway_app
+from app.composition.gateway.app_factory import create_gateway_app
 from app.runtime.config import RuntimeConfig
 
 

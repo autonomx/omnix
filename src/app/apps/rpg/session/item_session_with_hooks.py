@@ -11,8 +11,8 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session import item_command_adapter, item_session_actions
-from app.rpg.session.item_turn_hooks import run_item_turn_hooks
+from app.apps.rpg.session import item_command_adapter, item_session_actions
+from app.apps.rpg.session.item_turn_hooks import run_item_turn_hooks
 
 MECHANICS_SOURCE = "engine_item_session_with_hooks_v1"
 ITEM_TRACE_LIMIT = 50

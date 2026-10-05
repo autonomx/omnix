@@ -9,7 +9,7 @@ import psycopg
 import pytest
 
 from app.events.event_reader import EventCursor, EventReader, event_cursor
-from app.gateway.kernel_routes.live_event_stream import committed_event_stream
+from app.composition.gateway.kernel_routes.live_event_stream import committed_event_stream
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

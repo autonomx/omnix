@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.world.location_registry import current_location_id
-from app.rpg.world.npc_schedule_state import scheduled_npcs_for_location
+from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.world.npc_schedule_state import scheduled_npcs_for_location
 
 
 def _safe_str(value: Any) -> str:

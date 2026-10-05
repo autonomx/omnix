@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import MarketBar
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading import strategy_stoch_trend_capture as capture
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading import strategy_stoch_trend_capture as capture
 
 
 START = datetime(2026, 9, 2, 13, 36, tzinfo=timezone.utc)  # 09:36 ET

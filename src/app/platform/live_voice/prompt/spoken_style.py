@@ -1,7 +1,7 @@
 """Add a natural spoken-conversation contract to live voice prompts only."""
 from __future__ import annotations
 
-from app.chat.contracts import PromptAssembly, RenderedPrompt, RenderedPromptMessage
+from app.platform.chat.contracts import PromptAssembly, RenderedPrompt, RenderedPromptMessage
 from app.conversation.contracts import estimate_tokens
 
 _SECTION_NAME = "live_voice_spoken_style"

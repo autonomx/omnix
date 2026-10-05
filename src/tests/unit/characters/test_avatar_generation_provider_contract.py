@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.characters.avatar_generation_models import CreateCharacterAvatarGenerationRequest
+from app.platform.characters.avatar_generation_models import CreateCharacterAvatarGenerationRequest
 
 
 def test_avatar_generation_defaults_to_flux_image_provider() -> None:

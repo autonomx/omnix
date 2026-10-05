@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.assistant_memory.persistence.settings_store import (
+from app.platform.assistant_memory.persistence.settings_store import (
     SettingsServiceAssistantMemorySettingsStore,
     assistant_memory_setting_spec,
 )

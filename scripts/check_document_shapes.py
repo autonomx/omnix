@@ -18,22 +18,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # The modules that register document shapes (kept in step by
 # src/tests/persistence/test_document_schemas.py).
 DOCUMENT_SCHEMA_OWNERS = (
-    "app.chat.assist.house",
-    "app.assistant_tools.persistence.configuration",
-    "app.assistant_tools.persistence.runtime_documents",
-    "app.characters.persistence.avatar_generation_repository",
-    "app.characters.persistence.avatar_store",
-    "app.characters.persistence.live_profile_store",
-    "app.chat.persistence.assistant_turn_store",
-    "app.chat.persistence.chat_runtime",
-    "app.chat.persistence.evaluation_store",
-    "app.chat.persistence.legacy_sessions",
+    "app.platform.chat.assist.house",
+    "app.platform.assistant_tools.persistence.configuration",
+    "app.platform.assistant_tools.persistence.runtime_documents",
+    "app.platform.characters.persistence.avatar_generation_repository",
+    "app.platform.characters.persistence.avatar_store",
+    "app.platform.characters.persistence.live_profile_store",
+    "app.platform.chat.persistence.assistant_turn_store",
+    "app.platform.chat.persistence.chat_runtime",
+    "app.platform.chat.persistence.evaluation_store",
+    "app.platform.chat.persistence.legacy_sessions",
     "app.persistence.model_residency",
-    "app.chat.legacy_session_api",
+    "app.platform.chat.legacy_session_api",
     "app.providers.persistence.model_refresh",
-    "app.research.persistence.source_store",
-    "app.rpg.persistence.rpg_feature_compat",
-    "app.trading.repositories",
+    "app.platform.research.persistence.source_store",
+    "app.apps.rpg.persistence.rpg_feature_compat",
+    "app.apps.trading.repositories",
 )
 
 

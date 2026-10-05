@@ -28,8 +28,8 @@ def _client(settings_service=None) -> TestClient:
 
 
 def _test_gateway_app(**kwargs):
-    from app.chat import InMemoryChatSessionStore
-    from app.gateway.main import create_gateway_app
+    from app.platform.chat import InMemoryChatSessionStore
+    from app.composition.gateway.main import create_gateway_app
     from app.jobs import InMemoryModelResidencyStore
     from tests.support.in_memory_jobs import InMemoryJobStore
 
@@ -271,7 +271,7 @@ def test_gateway_diagnostics_endpoint_reports_worker_summary() -> None:
     with (
         patch.dict("os.environ", {}, clear=True),
         patch(
-            "app.gateway.diagnostics.get_provider_model_cache_status",
+            "app.composition.gateway.diagnostics.get_provider_model_cache_status",
             return_value=ProviderModelCachePayload(status="ready"),
         ),
     ):

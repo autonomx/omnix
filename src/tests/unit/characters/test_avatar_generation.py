@@ -5,17 +5,17 @@ from pathlib import Path
 import pytest
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_generation_models import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_generation_models import (
     BackfillClonedVoiceCharactersRequest,
     CreateCharacterAvatarGenerationRequest,
 )
-from app.characters.avatar_generation_repository import CharacterAvatarGenerationRepository
-from app.characters.avatar_generation_service import CharacterAvatarGenerationService
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.service import CharacterService
-from app.characters.voice_consent import (
+from app.platform.characters.avatar_generation_repository import CharacterAvatarGenerationRepository
+from app.platform.characters.avatar_generation_service import CharacterAvatarGenerationService
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.service import CharacterService
+from app.platform.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
@@ -167,7 +167,7 @@ def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, mon
 def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, monkeypatch) -> None:
     characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "app.characters.avatar_generation_service.load_image_reference_assets",
+        "app.platform.characters.avatar_generation_service.load_image_reference_assets",
         lambda *_args, **_kwargs: [],
     )
     characters.create(

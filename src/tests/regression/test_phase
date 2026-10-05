@@ -9,10 +9,10 @@ import json
 import pytest
 
 from app import create_app
-from app.rpg.analytics.tick_diff import build_tick_diff
-from app.rpg.analytics.timeline import build_timeline_summary, get_timeline_tick
-from app.rpg.analytics.npc_reasoning import inspect_npc_reasoning
-from app.rpg.analytics.gm_hooks import (
+from app.apps.rpg.analytics.tick_diff import build_tick_diff
+from app.apps.rpg.analytics.timeline import build_timeline_summary, get_timeline_tick
+from app.apps.rpg.analytics.npc_reasoning import inspect_npc_reasoning
+from app.apps.rpg.analytics.gm_hooks import (
     gm_force_npc_goal,
     gm_force_faction_trend,
     gm_append_debug_note,

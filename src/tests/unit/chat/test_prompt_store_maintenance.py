@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
-from app.chat import prompt_store
-from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.chat import prompt_store
+from app.platform.chat.models import CreateChatSessionRequest, SendChatMessageRequest
 
 
 class _StaticProvider:

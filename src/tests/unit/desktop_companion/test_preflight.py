@@ -4,7 +4,7 @@ import base64
 import struct
 
 from app.conversation.contracts import AssistantContextItem
-from app.desktop_companion.preflight import (
+from app.apps.desktop_companion.preflight import (
     DesktopCompanionPreflightRequest,
     DesktopCompanionPreflightService,
     is_remote_vision_endpoint,

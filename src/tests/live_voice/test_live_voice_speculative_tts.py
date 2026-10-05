@@ -8,11 +8,11 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from types import SimpleNamespace
 
-from app.live_voice.speech import speculative_tts
-from app.live_voice.speech.tts_lane import (
+from app.platform.live_voice.speech import speculative_tts
+from app.platform.live_voice.speech.tts_lane import (
     reset_live_voice_execution_lane_for_tests,
 )
-from app.live_voice.speech.speculative_tts import (
+from app.platform.live_voice.speech.speculative_tts import (
     _accept_entry,
     _claim_entry,
     _LiveLaneProviderProxy,

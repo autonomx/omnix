@@ -1673,7 +1673,7 @@ export interface components {
             domain_logic_policy: string;
             /**
              * Existing Fastapi App
-             * @default app.gateway.main:app
+             * @default app.composition.gateway.main:app
              */
             existing_fastapi_app: string;
             /**

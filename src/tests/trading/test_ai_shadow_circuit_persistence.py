@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading import strategy_ai_shadow_provider as persistence
-from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading import strategy_ai_shadow_provider as persistence
+from app.apps.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 class MemoryRepository:

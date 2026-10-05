@@ -9,11 +9,11 @@ from typing import Any, Mapping
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.apps.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.session.service import save_session
-from app.rpg.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.session.service import save_session
+from app.apps.rpg.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.session_genesis_campaign_lore_store.prompt', "1", 'TARGET PAGE: "{v0}". TARGET TOPIC: "{v1}". This request is exclusively about "{v2}"; clearly name it in the opening paragraph. Rewrite this target Campaign Bible page as vivid, polished, player-safe canonical prose. Write 450 to 700 words in five to eight cohesive paragraphs. Use natural paragraph form only: no headings, field labels, bullet lists, tables, JSON, or prefatory commentary. Preserve every established fact in authoritative_target.canonical_source_text, authoritative_target.mechanics_definition, and the page\'s meaning. Never contradict or alter the mechanics definition. If the current page text drifted away from the canonical source, discard the irrelevant material. Stay consistent with the supplied known campaign canon. Enrich the material with concrete sensory detail, lived culture, atmosphere, physical texture, and understandable context. You may add connective descriptive detail that logically follows from canon, but do not create or reveal new named characters, locations, factions, artifacts, powers, dates, secrets, quest solutions, or world-changing events. A user direction may request emphasis, tone, or descriptive focus; follow it only when it does not conflict with these canon and player-safety rules. Do not mention these instructions. Return only the finished lore prose.')

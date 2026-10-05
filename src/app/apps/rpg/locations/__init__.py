@@ -1,12 +1,12 @@
 """Deterministic RPG location and travel helpers."""
 
-from app.rpg.locations.command_routing import (
+from app.apps.rpg.locations.command_routing import (
     apply_runtime_travel_command,
     assert_phase4_runtime_travel_encounter_routing_ready,
     build_runtime_travel_command_narration_contract,
     resolve_travel_command,
 )
-from app.rpg.locations.discovery import (
+from app.apps.rpg.locations.discovery import (
     DEFAULT_ROUTE_BLOCKS,
     STARTER_DISCOVERED_LOCATIONS,
     STARTER_DISCOVERED_ROUTES,
@@ -22,13 +22,13 @@ from app.rpg.locations.discovery import (
     unblock_route,
     validate_route_access,
 )
-from app.rpg.locations.encounter_runtime import (
+from app.apps.rpg.locations.encounter_runtime import (
     apply_seeded_encounter_runtime,
     assert_phase4_encounter_combat_events_ready,
     build_encounter_runtime_narration_contract,
     classify_encounter_resolution,
 )
-from app.rpg.locations.encounters import (
+from app.apps.rpg.locations.encounters import (
     ENCOUNTER_TABLES,
     NO_ENCOUNTER,
     assert_phase4_seeded_encounters_ready,
@@ -38,7 +38,7 @@ from app.rpg.locations.encounters import (
     record_encounter,
     roll_seeded_encounter,
 )
-from app.rpg.locations.events import (
+from app.apps.rpg.locations.events import (
     assert_phase4_world_events_location_history_ready,
     build_location_history_model,
     build_world_event_narration_contract,
@@ -47,7 +47,7 @@ from app.rpg.locations.events import (
     record_world_event,
     render_location_history_report_html,
 )
-from app.rpg.locations.graph import (
+from app.apps.rpg.locations.graph import (
     CANONICAL_EDGES,
     CANONICAL_LOCATION_ORDER,
     CANONICAL_LOCATIONS,
@@ -67,18 +67,18 @@ from app.rpg.locations.graph import (
     list_location_exits,
     validate_location_graph,
 )
-from app.rpg.locations.map_report import (
+from app.apps.rpg.locations.map_report import (
     assert_phase4_map_location_report_ready,
     build_map_location_narration_contract,
     build_map_location_panel_payload,
     render_map_location_report_html,
 )
-from app.rpg.locations.runtime_travel import (
+from app.apps.rpg.locations.runtime_travel import (
     apply_runtime_travel,
     assert_phase4_runtime_travel_access_ready,
     build_runtime_travel_narration_contract,
 )
-from app.rpg.locations.time import (
+from app.apps.rpg.locations.time import (
     DEFAULT_DAY_COUNT,
     DEFAULT_SEASON,
     DEFAULT_START_MINUTE_OF_DAY,
@@ -92,7 +92,7 @@ from app.rpg.locations.time import (
     ensure_time_state,
     format_clock_time,
 )
-from app.rpg.locations.travel import (
+from app.apps.rpg.locations.travel import (
     ROUTE_TRAVEL_COSTS,
     apply_travel,
     assert_phase4_travel_costs_ready,
@@ -102,7 +102,7 @@ from app.rpg.locations.travel import (
     get_route_travel_cost,
     validate_route_travel_costs,
 )
-from app.rpg.locations.travel_resources import (
+from app.apps.rpg.locations.travel_resources import (
     apply_runtime_travel_with_resource_consumption,
     apply_travel_resource_consumption,
     assert_phase4_travel_resource_consumption_ready,
@@ -110,7 +110,7 @@ from app.rpg.locations.travel_resources import (
     build_travel_resource_requirement,
     validate_travel_resources_available,
 )
-from app.rpg.locations.weather import (
+from app.apps.rpg.locations.weather import (
     DAYS_PER_SEASON,
     SEASON_ORDER,
     SEASON_WEATHER_TABLE,

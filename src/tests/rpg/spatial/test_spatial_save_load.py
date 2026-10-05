@@ -1,6 +1,6 @@
 import json
 
-from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
 from tests.rpg.spatial.fixtures import tavern_spatial_fixture
 
 

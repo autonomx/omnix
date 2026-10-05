@@ -3,18 +3,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.companion_acceptance import (
+from app.apps.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
     resolve_pending_companion_offer_response,
 )
-from app.rpg.world.companion_dialogue import (
+from app.apps.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
-from app.rpg.world.conversation_settings import normalize_conversation_settings
-from app.rpg.world.location_registry import present_npcs_for_current_location
-from app.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
-from app.rpg.world.npc_goal_state import (
+from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
+from app.apps.rpg.world.location_registry import present_npcs_for_current_location
+from app.apps.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
+from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     goal_topic_bias,
     record_goal_influence,

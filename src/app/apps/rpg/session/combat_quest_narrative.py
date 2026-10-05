@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # RPG session runtime responsibility module.
 # PR.1.19: deterministic combat quest sync narrative contract.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 from typing import (

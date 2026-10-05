@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.player.player_encounter import build_encounter_view
-from app.rpg.player.player_scene_state import ensure_player_state
+from app.apps.rpg.player.player_encounter import build_encounter_view
+from app.apps.rpg.player.player_scene_state import ensure_player_state
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

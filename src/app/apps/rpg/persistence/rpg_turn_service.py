@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.narrative_engine import CanonicalNarrativeResponse
-from app.rpg.narrative_engine.serialization import canonical_response_from_dict
+from app.apps.rpg.narrative_engine import CanonicalNarrativeResponse
+from app.apps.rpg.narrative_engine.serialization import canonical_response_from_dict
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.execution_repositories import JobClaimConflict
@@ -42,7 +42,7 @@ def persist_foreground_turn(
     interaction_record_id = _campaign_record_id("interaction", session_id, state_revision)
     canonical_narrative = _canonical_narrative_response(result, session_id=session_id)
 
-    from app.rpg.foreground_turn_record import build_foreground_turn_record
+    from app.apps.rpg.foreground_turn_record import build_foreground_turn_record
 
     response_source = dict(result)
     response_source["submission_id"] = submission_id

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.rpg.map_contracts import (
+from app.apps.rpg.map_contracts import (
     MapBackground,
     MapBounds,
     MapDefinition,
@@ -14,7 +14,7 @@ from app.rpg.map_contracts import (
     MapRenderOrder,
     MapSprite,
 )
-from app.rpg.map_fixtures import FROST_HAVEN_MAP_ID, starter_map_definitions
+from app.apps.rpg.map_fixtures import FROST_HAVEN_MAP_ID, starter_map_definitions
 
 FROSTED_FLAGON_INTERIOR_MAP_ID = "interior:frosted_flagon"
 

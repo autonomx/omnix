@@ -5,22 +5,22 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_memory import resolve_chat_scope
-from app.assistant_memory.service import (
+from app.platform.assistant_memory import resolve_chat_scope
+from app.platform.assistant_memory.service import (
     LegacyMemoryReadOnlyError,
     default_memory_service,
 )
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     MemoryGrant,
     MemorySpaceKey,
     RetrievalCandidate,
     RetrievalResult,
     RetrievalScore,
 )
-from app.assistant_memory import chat_prompt as memory_prompt
+from app.platform.assistant_memory import chat_prompt as memory_prompt
 from app.conversation.memory_contracts import MemoryRecord
-from app.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
-from app.chat.prompt_rendering import _memory_section
+from app.platform.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
+from app.platform.chat.prompt_rendering import _memory_section
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
 pytestmark = pytest.mark.postgres
@@ -333,7 +333,7 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
 
 
 def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
-    import app.assistant_memory.v2.authority as authority_module
+    import app.platform.assistant_memory.v2.authority as authority_module
     from app.persistence import runtime
 
     monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: True)

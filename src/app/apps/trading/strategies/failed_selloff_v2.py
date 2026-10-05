@@ -15,8 +15,8 @@ uses future bars and never re-emits a breakout that occurred on an older prefix.
 
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
 
 from .gap_pullback import _ET, _regular_bars, session_vwap
 from .models import GapPullbackConfig, GapPullbackFeatures, GapPullbackResult, StrategySignal

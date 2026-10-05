@@ -70,7 +70,7 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
         "simulation_state": _safe_dict(data.get("simulation_state")),
         "runtime_state": _safe_dict(data.get("runtime_state")),
     }
-    from app.rpg.session.public_state_bridge import synchronize_player_projections
+    from app.apps.rpg.session.public_state_bridge import synchronize_player_projections
 
     return synchronize_player_projections(normalized)
 

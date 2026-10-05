@@ -592,7 +592,7 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
+        from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         routing_deadline_at = provider_turn_deadline(
             provider_id,
@@ -637,7 +637,7 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
+        from app.platform.chat.assist.modes import ModeChatRequest, plan_mode_chat
 
         result = plan_mode_chat(
             ModeChatRequest(

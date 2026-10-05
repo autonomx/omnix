@@ -4,9 +4,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_report_session import record_item_report_for_session
-from app.rpg.session.item_state_audit import build_item_state_audit, record_item_state_audit
-from app.rpg.session.item_state_compaction import (
+from app.apps.rpg.session.item_report_session import record_item_report_for_session
+from app.apps.rpg.session.item_state_audit import build_item_state_audit, record_item_state_audit
+from app.apps.rpg.session.item_state_compaction import (
     DEFAULT_BUCKET_LIMIT,
     apply_item_state_compaction,
     build_item_state_compaction,

@@ -22,12 +22,12 @@ def _load(mod_name: str, rel_path: str):
     return mod
 
 
-_schema = _load("app.rpg.creator.schema", "app/rpg/creator/schema.py")
-_defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
-_amb_builder = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
-_amb_policy = _load("app.rpg.session.ambient_policy", "app/rpg/session/ambient_policy.py")
-_amb_dialogue = _load("app.rpg.ai.ambient_dialogue", "app/rpg/ai/ambient_dialogue.py")
-_npc_init = _load("app.rpg.ai.npc_initiative", "app/rpg/ai/npc_initiative.py")
+_schema = _load("app.apps.rpg.creator.schema", "app/apps/rpg/creator/schema.py")
+_defaults = _load("app.apps.rpg.creator.defaults", "app/apps/rpg/creator/defaults.py")
+_amb_builder = _load("app.apps.rpg.session.ambient_builder", "app/apps/rpg/session/ambient_builder.py")
+_amb_policy = _load("app.apps.rpg.session.ambient_policy", "app/apps/rpg/session/ambient_policy.py")
+_amb_dialogue = _load("app.apps.rpg.ai.ambient_dialogue", "app/apps/rpg/ai/ambient_dialogue.py")
+_npc_init = _load("app.apps.rpg.ai.npc_initiative", "app/apps/rpg/ai/npc_initiative.py")
 
 build_ambient_dialogue_candidates = _amb_dialogue.build_ambient_dialogue_candidates
 select_ambient_dialogue_candidate = _amb_dialogue.select_ambient_dialogue_candidate

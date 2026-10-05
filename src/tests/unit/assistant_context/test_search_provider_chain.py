@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from app.conversation.contracts import AssistantContextItem
-from app.research.policy import ResearchPolicy
-from app.research.provider_chain import (
+from app.platform.research.policy import ResearchPolicy
+from app.platform.research.provider_chain import (
     ProviderFallbackSearchClient,
     normalize_provider_chain,
 )
-from app.research.quick_search import QuickSearchService
-from app.research.settings import ResearchRuntimeSettings
+from app.platform.research.quick_search import QuickSearchService
+from app.platform.research.settings import ResearchRuntimeSettings
 
 
 class FakeProviderClient:

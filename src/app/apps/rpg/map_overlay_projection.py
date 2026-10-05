@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from app.rpg.map_contracts import MapDefinition, MapPolygon
+from app.apps.rpg.map_contracts import MapDefinition, MapPolygon
 
 ObjectMapStatus = Literal["normal", "open", "closed", "damaged", "burned", "occupied"]
 _ALLOWED_OBJECT_STATUSES = {"normal", "open", "closed", "damaged", "burned", "occupied"}

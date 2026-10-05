@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -14,17 +14,17 @@ from app.assistant_memory.v2 import (
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory.v2.convergence import (
+from app.platform.assistant_memory.v2.convergence import (
     DerivedPlanPayload,
     PostgresMemoryV2DerivedCoordinator,
 )
-from app.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
-from app.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
+from app.platform.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )
-from app.assistant_memory.v2.replay import PostgresMemoryV2DerivedReplayValidator
+from app.platform.assistant_memory.v2.replay import PostgresMemoryV2DerivedReplayValidator
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations

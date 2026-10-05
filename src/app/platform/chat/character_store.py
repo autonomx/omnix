@@ -32,7 +32,7 @@ def _record_accepted_activity(
 
 def conversation_segments() -> Any:
     """Chat's segment repository, loaded when a session first needs it."""
-    from app.chat.segments import conversation_segments as segments
+    from app.platform.chat.segments import conversation_segments as segments
 
     return segments()
 

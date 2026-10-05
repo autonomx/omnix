@@ -16,7 +16,7 @@ if str(SRC_DIR) not in sys.path:
 
 
 def _client() -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.providers.facade import ProviderFacade
 
     facade = ProviderFacade(
@@ -88,7 +88,7 @@ def test_gateway_models_endpoint_uses_same_facade_payload() -> None:
 
 
 def test_gateway_provider_payload_is_offloaded_from_event_loop(monkeypatch) -> None:
-    from app.gateway import main
+    from app.composition.gateway import main
     from app.providers.facade import ProviderFacade
 
     facade = ProviderFacade(
@@ -107,7 +107,7 @@ def test_gateway_provider_payload_is_offloaded_from_event_loop(monkeypatch) -> N
         calls.append(func)
         return func(*args, **kwargs)
 
-    from app.gateway import kernel_routes
+    from app.composition.gateway import kernel_routes
 
     monkeypatch.setattr(kernel_routes.asyncio, "to_thread", fake_to_thread)
     payload = asyncio.run(route.endpoint())

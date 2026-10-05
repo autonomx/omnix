@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_spatial_routes import (
+from app.apps.rpg.session.genesis.world_forge_spatial_routes import (
     minimum_route_count,
     spatial_route_components,
 )

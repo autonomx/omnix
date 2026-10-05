@@ -46,7 +46,7 @@ from app.prompts import prompt_template
 
 
 ACCEPTANCE_RETRY_PROMPT_TEMPLATE = prompt_template(
-    'agent_runtime.service_core.acceptance_retry_prompt', "1",
+    'agent_runtime.service_core.acceptance_retry_prompt', "2",
     (
         'Omnix acceptance did not pass ({joined}). Continue the same task; do not stop yet. '
         'Re-read the original user objective before making any repair: acceptance repair is not '

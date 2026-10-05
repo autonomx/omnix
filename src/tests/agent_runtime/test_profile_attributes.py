@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.agent_runtime.profiles import (
+from app.platform.agent_runtime.profiles import (
     get_agent_profile,
     list_agent_profiles,
     profile_external_ceiling,
@@ -12,7 +12,7 @@ from app.agent_runtime.profiles import (
     profile_repository_guidance,
 )
 
-RUNTIME = Path(__file__).resolve().parents[2] / "app" / "agent_runtime"
+RUNTIME = Path(__file__).resolve().parents[2] / "app" / "platform" / "agent_runtime"
 
 
 def test_the_coding_profiles_declare_their_behaviour() -> None:

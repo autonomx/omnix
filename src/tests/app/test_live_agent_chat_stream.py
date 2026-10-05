@@ -4,10 +4,10 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.chat.assist.modes import ModeChatResponse
-from app.chat.segments import InMemoryConversationSegments
-from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.gateway.main import create_gateway_app
+from app.platform.chat.assist.modes import ModeChatResponse
+from app.platform.chat.segments import InMemoryConversationSegments
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+from app.composition.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 
@@ -35,15 +35,15 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
     monkeypatch.setenv("OMNIX_ASSISTANT_TURN_STORE_PATH", str(tmp_path / "turns.json"))
-    from app.chat.assistant_turns import AssistantTurnCoordinator
+    from app.platform.chat.assistant_turns import AssistantTurnCoordinator
 
     coordinator = AssistantTurnCoordinator(tmp_path / "turns.json")
     monkeypatch.setattr(
-        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        "app.platform.chat.live_agent_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
     monkeypatch.setattr(
-        "app.chat.character_store.default_assistant_turn_coordinator",
+        "app.platform.chat.character_store.default_assistant_turn_coordinator",
         lambda *_args, **_kwargs: coordinator,
     )
     planner = StaticPlanner(
@@ -66,7 +66,7 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
         tmp_path / "chat.json",
         live_agent_planner=planner,
     )
-    monkeypatch.setattr("app.chat.character_store.conversation_segments", InMemoryConversationSegments)
+    monkeypatch.setattr("app.platform.chat.character_store.conversation_segments", InMemoryConversationSegments)
     session = store.create_session(CreateChatSessionRequest(title="Live Agent"))
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(

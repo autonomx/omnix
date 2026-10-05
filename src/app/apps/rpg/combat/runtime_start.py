@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.combat.runtime_core import (
+from app.apps.rpg.combat.runtime_core import (
     SOURCE,
     build_initiative_order,
     current_actor_id,

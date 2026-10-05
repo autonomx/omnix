@@ -20,12 +20,12 @@ class RpgReportJobInput(BaseModel):
 
 
 def execute_rpg_turn_job(job_store: Any, job: JobRecord) -> JobRecord:
-    from app.rpg.jobs.turn_executor import execute_inline_feature_job
+    from app.apps.rpg.jobs.turn_executor import execute_inline_feature_job
 
     return execute_inline_feature_job(job_store, job)
 
 
 def execute_rpg_report_job(job_store: Any, job: JobRecord) -> JobRecord:
-    from app.rpg.jobs.last10_report import execute_rpg_last10_report_job
+    from app.apps.rpg.jobs.last10_report import execute_rpg_last10_report_job
 
     return execute_rpg_last10_report_job(job_store, job)

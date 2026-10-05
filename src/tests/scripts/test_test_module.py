@@ -18,8 +18,8 @@ def test_every_catalog_module_has_a_test_directory_with_tests(module_id: str) ->
 
 
 def test_a_nested_package_uses_its_own_name() -> None:
-    assert module_tests.module_test_directory("app.rpg.hermes").name == "hermes"
-    assert module_tests.module_test_directory("app.agent_runtime").name == "agent_runtime"
+    assert module_tests.module_test_directory("app.apps.rpg.hermes").name == "hermes"
+    assert module_tests.module_test_directory("app.platform.agent_runtime").name == "agent_runtime"
 
 
 def test_characterization_scenarios_name_catalog_modules() -> None:

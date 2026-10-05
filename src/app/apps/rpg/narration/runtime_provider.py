@@ -4,7 +4,7 @@ import logging
 
 from typing import Any
 
-from app.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
+from app.apps.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
 
 logger = logging.getLogger(__name__)
 

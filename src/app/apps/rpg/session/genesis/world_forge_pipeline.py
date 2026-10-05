@@ -33,7 +33,7 @@ from .world_forge_profile_graph import (
 from .world_forge_profiles import GenreProfile, genre_profile_from_dict
 from .world_forge_quality import apply_world_forge_quality_audit
 from .world_forge_social_planning import build_social_planning_topics
-from app.rpg.world.causal_runtime import bootstrap_causal_runtime
+from app.apps.rpg.world.causal_runtime import bootstrap_causal_runtime
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,7 @@ def _default_generator() -> WorldForgeTopicGenerator:
         from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
         return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
-    from app.rpg.worlds.providers.world_forge import build_production_world_forge_generator
+    from app.apps.rpg.worlds.providers.world_forge import build_production_world_forge_generator
 
     return build_production_world_forge_generator()
 

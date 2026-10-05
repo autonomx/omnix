@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from app.agent_runtime.coding_quality import (
+from app.platform.agent_runtime.coding_quality import (
     capture_workspace_state,
     compile_task_engineering_contract,
     legacy_required_review_count,
@@ -14,7 +14,7 @@ from app.agent_runtime.coding_quality import (
     review_payload_from_text,
     self_review_prompt,
 )
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -27,18 +27,18 @@ from app.agent_runtime.contracts import (
     ValidationResult,
     WorkspaceSpec,
 )
-from app.agent_runtime.pi_runtime import PiAgentRuntime, pi_rpc_argv
-from app.agent_runtime.task_revision_quality import hydrate_task_revision
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.repository_guidance import compile_repository_guidance
-from app.agent_runtime.service import (
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, pi_rpc_argv
+from app.platform.agent_runtime.task_revision_quality import hydrate_task_revision
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.repository_guidance import compile_repository_guidance
+from app.platform.agent_runtime.service import (
     _is_structured_self_review_message,
     _is_terminal_self_review_message,
     _terminal_message_settles_quality_stage,
     _self_review_response_from_repository,
     _self_review_response_text,
 )
-from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec
+from app.platform.agent_runtime.subagents import ChildRunRequest, derive_child_spec
 
 
 def _git(cwd: Path, *args: str) -> str:

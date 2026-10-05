@@ -3,11 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.party.companion_memory import companion_loyalty_projection
-from app.rpg.party.companion_presence import (
+from app.apps.rpg.party.companion_memory import companion_loyalty_projection
+from app.apps.rpg.party.companion_presence import (
     build_party_aware_turn_context,
 )
-from app.rpg.party.companion_quests import companion_quest_summary
+from app.apps.rpg.party.companion_quests import companion_quest_summary
 
 
 def _safe_str(value: Any) -> str:

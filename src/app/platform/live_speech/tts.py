@@ -1,7 +1,7 @@
 """Deterministic TTS on the speech contract's session port, and TTS text splitting (PA-3.3)."""
 from __future__ import annotations
 
-from app.voice.contracts import AudioDelta, StreamingSpeechSynthesizer
+from app.platform.voice.contracts import AudioDelta, StreamingSpeechSynthesizer
 
 
 class DeterministicSpeechSynthesizer(StreamingSpeechSynthesizer):

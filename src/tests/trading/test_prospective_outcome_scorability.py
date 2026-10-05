@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from app.trading.prospective_prediction_evidence import (
+from app.apps.trading.prospective_prediction_evidence import (
     OutcomeMeasurementsV1,
     assess_outcome_scorability,
 )

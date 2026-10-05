@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import (
+from app.platform.assistant_memory.v2 import (
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -16,21 +16,21 @@ from app.assistant_memory.v2 import (
     RetrievalQuery,
     VisibilityScope,
 )
-from app.assistant_memory.v2.convergence import (
+from app.platform.assistant_memory.v2.convergence import (
     DerivedPlanPayload,
     PostgresMemoryV2DerivedCoordinator,
 )
-from app.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
-from app.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
-from app.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
-from app.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
-from app.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
-from app.assistant_memory.v2.observation_store import (
+from app.platform.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
+from app.platform.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
+from app.platform.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
+from app.platform.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
+from app.platform.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
+from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )
-from app.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
-from app.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
+from app.platform.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
+from app.platform.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations

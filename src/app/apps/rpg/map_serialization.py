@@ -7,7 +7,7 @@ import hashlib
 import json
 from typing import Any, Mapping
 
-from app.rpg.map_contracts import MapDefinition
+from app.apps.rpg.map_contracts import MapDefinition
 
 
 def canonical_map_json(value: object) -> str:

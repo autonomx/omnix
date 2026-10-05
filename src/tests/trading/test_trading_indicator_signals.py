@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.indicator_signals import (
+from app.apps.trading.indicator_signals import (
     indicator_entry_confirmation,
     multi_timeframe_indicator_context,
 )
-from app.trading.models import MarketBar
+from app.apps.trading.models import MarketBar
 
 
 def _bar(index: int, close: Decimal, *, session_day: int = 20) -> MarketBar:

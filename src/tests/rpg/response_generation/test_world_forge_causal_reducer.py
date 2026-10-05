@@ -2,12 +2,12 @@ import copy
 
 import pytest
 
-from app.rpg.world.causal_reducer import (
+from app.apps.rpg.world.causal_reducer import (
     WorldStateDelta,
     causal_state_hash,
     reduce_world_state,
 )
-from app.rpg.world.causal_state import build_mutable_world_state
+from app.apps.rpg.world.causal_state import build_mutable_world_state
 
 
 def _state():

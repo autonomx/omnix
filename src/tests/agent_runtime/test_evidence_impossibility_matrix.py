@@ -4,21 +4,21 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceDecision,
     EvidencePolicy,
     EvidenceReceipt,
     EvidenceRequirement,
     EvidenceSourceOption,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
     evaluate_evidence_set,
     validate_required_evidence_capabilities,
 )
-from app.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.profiles import get_agent_profile
 
 
 @pytest.mark.parametrize(
@@ -56,8 +56,8 @@ def test_required_connection_unavailable_is_preflight_failure(
     monkeypatch,
     capability: str,
 ) -> None:
-    from app.assistant_tools import gate
-    from app.assistant_tools.models import AssistantToolReviewDecision
+    from app.platform.assistant_tools import gate
+    from app.platform.assistant_tools.models import AssistantToolReviewDecision
 
     monkeypatch.setattr(
         gate,

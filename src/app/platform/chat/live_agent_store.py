@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 
-from app.chat.assist.live_agent import (
+from app.platform.chat.assist.live_agent import (
     LiveAgentUnavailable,
 )
-from app.chat.assist.live_agent import (
+from app.platform.chat.assist.live_agent import (
     LiveAgentRouteDecision,
     live_agent_runtime_config,
     resolve_live_agent_route,
 )
-from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
+from app.platform.chat.assist.modes import ModeChatRequest, plan_mode_chat
 from app.capabilities.approvals import ApproverNotAllowed, current_approver
 from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.security import audit
@@ -61,7 +61,7 @@ class AssistCoreLiveAgentPlanner:
         context: dict[str, Any],
         timeout_seconds: float,
     ) -> Any:
-        from app.chat.assist.live_agent import plan_live_agent_proposal
+        from app.platform.chat.assist.live_agent import plan_live_agent_proposal
 
         return plan_live_agent_proposal(
             content=content,
@@ -153,7 +153,7 @@ def stream_live_agent_turn(
             yield from _governed_rejection_events(user_message, request)
             return
 
-        from app.chat.contracts import route_typed_turn as route_typed_chat_turn
+        from app.platform.chat.contracts import route_typed_turn as route_typed_chat_turn
 
         generalized = route_typed_chat_turn(
             session,

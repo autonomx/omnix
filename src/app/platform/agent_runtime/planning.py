@@ -152,7 +152,7 @@ def _path_impact(path: str) -> tuple[PlanningConfidence, PlanningConfidence, Pla
     name = Path(lowered).name
     if any(token in lowered for token in ("/test", "/tests", "e2e", ".spec.", ".test.", "__snapshots__", "fixture")):
         return "high", "medium", "high", "exact_literal_in_test_or_fixture"
-    if lowered.startswith(("src/", "app/", "apps/", "packages/")):
+    if lowered.startswith(("src/", "app/", "apps/", "packages/", "web/")):
         return "high", "medium", "high", "exact_literal_in_source"
     if name.endswith((".md", ".rst", ".txt")) or lowered.startswith("docs/"):
         return "low", "low", "medium", "exact_literal_in_documentation"

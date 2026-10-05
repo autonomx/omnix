@@ -3,10 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.profiles.dynamic_npc_profiles import (
     load_npc_profile,
 )
-from app.rpg.profiles.profile_drafts import (
+from app.apps.rpg.profiles.profile_drafts import (
     profile_draft_summary,
 )
 

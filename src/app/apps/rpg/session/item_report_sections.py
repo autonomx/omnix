@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.item_action_summary import build_item_action_summary
-from app.rpg.session.item_metrics import build_item_metrics_snapshot
+from app.apps.rpg.session.item_action_summary import build_item_action_summary
+from app.apps.rpg.session.item_metrics import build_item_metrics_snapshot
 
 MECHANICS_SOURCE = "engine_item_report_section_v1"
 COVERAGE_LABELS = {

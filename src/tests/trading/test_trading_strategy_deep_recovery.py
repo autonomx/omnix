@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_deep_recovery import evaluate_deep_recovery_shadow
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_deep_recovery import evaluate_deep_recovery_shadow
 
 
 INSTRUMENT = "equity:NASDAQ:RECOV"

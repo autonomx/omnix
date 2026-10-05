@@ -1,7 +1,7 @@
 # Story module for RPG system.
 #
 # Keep this package import light. Tests and runtime modules often import
-# app.rpg.story.story_arc_lifecycle directly.
+# app.apps.rpg.story.story_arc_lifecycle directly.
 
 from __future__ import annotations
 

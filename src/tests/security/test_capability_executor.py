@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from app.assistant_tools import executor as tools_executor
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools import executor as tools_executor
+from app.platform.assistant_tools.models import AssistantToolRequest
 from app.capabilities import approvals
 from app.capabilities.approvals import (
     ApproverNotAllowed,
@@ -80,7 +80,7 @@ def test_grants_are_validated(kwargs) -> None:
 def test_only_the_executor_dispatches_to_adapters() -> None:
     """Static check: adapter entry points and the runtime are referenced only by the executor."""
     adapter_functions = {function.__name__ for function in tools_executor.ADAPTERS.values()}
-    owners = {APP / "assistant_tools" / "executor.py"}
+    owners = {APP / "platform" / "assistant_tools" / "executor.py"}
     offenders = []
     for path in APP.rglob("*.py"):
         if path in owners or path.name.endswith("_adapter.py"):
@@ -134,7 +134,7 @@ def test_signed_in_installs_default_to_low_risk_self_approval(monkeypatch) -> No
 
 
 def test_chat_confirmation_without_permission_is_not_an_approval(as_tenant) -> None:
-    from app.chat.live_agent_store import _confirmation_grant
+    from app.platform.chat.live_agent_store import _confirmation_grant
 
     as_tenant("member")
     assert _confirmation_grant("chat:1").approved is False
@@ -146,7 +146,7 @@ def test_chat_confirmation_without_permission_is_not_an_approval(as_tenant) -> N
 def test_agent_approval_commands_carry_the_approving_principal(monkeypatch, as_tenant) -> None:
     from fastapi import HTTPException
 
-    from app.agent_runtime import api
+    from app.platform.agent_runtime import api
 
     sent = []
 

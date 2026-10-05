@@ -32,7 +32,7 @@ A `DEGRADED` forecast remains a forecast and is still scored. `ACT/WATCH/ABSTAIN
 
 ## Implemented contracts
 
-Implementation lives in `src/app/trading/prospective_prediction_v4.py`.
+Implementation lives in `src/app/apps/trading/prospective_prediction_v4.py`.
 
 ### Frozen cohort identity
 
@@ -401,7 +401,7 @@ trading quality must remain separate. V4 modestly improved paired probability
 metrics while fully-invested research portfolios still suffered large losses.
 
 The following operational changes are implemented in
-`src/app/trading/prospective_prediction_operational.py` without changing v3 or
+`src/app/apps/trading/prospective_prediction_operational.py` without changing v3 or
 the frozen v4 scoring coefficients.
 
 ### Causal premarket enrichment adapter

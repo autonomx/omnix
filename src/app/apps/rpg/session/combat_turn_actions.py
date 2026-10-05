@@ -1,67 +1,67 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _get_combat_state as _get_combat_state, _set_combat_state as _set_combat_state,
 )
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _actor_is_player as _actor_is_player, _build_combat_gate_result as _build_combat_gate_result, _derive_grounded_scene_context as _derive_grounded_scene_context,
     _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text,
 )
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
-from app.rpg.combat.resolver import (
+from app.apps.rpg.combat.resolver import (
     resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.rpg.combat.apply import (
+from app.apps.rpg.combat.apply import (
     apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _build_turn_id as _build_turn_id, _fallback_general_interaction_narration as _fallback_general_interaction_narration,
     _player_input_requests_general_interaction as _player_input_requests_general_interaction, _player_input_requests_reposition as _player_input_requests_reposition,
     _requested_reposition_values as _requested_reposition_values,
 )
-from app.rpg.items.item_effects import (
+from app.apps.rpg.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
-from app.rpg.combat.initiative import (
+from app.apps.rpg.combat.initiative import (
     advance_turn as advance_turn,
 )
-from app.rpg.combat.npc_turns import (
+from app.apps.rpg.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
-from app.rpg.combat.lifecycle import (
+from app.apps.rpg.combat.lifecycle import (
     evaluate_combat_exit as evaluate_combat_exit,
 )
-from app.rpg.combat.encounters import (
+from app.apps.rpg.combat.encounters import (
     build_encounter_from_preset as build_encounter_from_preset,
 )
-from app.rpg.combat.world_consequences import (
+from app.apps.rpg.combat.world_consequences import (
     emit_combat_world_consequence as emit_combat_world_consequence,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     _find_active_combat_state_deep as _find_active_combat_state_deep, _safe_parse_mapping_payload as _safe_parse_mapping_payload,
 )
-from app.rpg.combat.positioning import (
+from app.apps.rpg.combat.positioning import (
     can_attack_target as can_attack_target, reposition_participant as reposition_participant,
 )
-from app.rpg.interactions.resolver import (
+from app.apps.rpg.interactions.resolver import (
     resolve_general_interaction as resolve_general_interaction_v2,
 )
-from app.rpg.social.npc_backbone import (
+from app.apps.rpg.social.npc_backbone import (
     resolve_npc_backbone_decision as resolve_npc_backbone_decision,
 )
-from app.rpg.narration.quality import (
+from app.apps.rpg.narration.quality import (
     update_narration_quality_memory as update_narration_quality_memory, validate_narration_quality as validate_narration_quality,
 )
-from app.rpg.narration.contradictions import (
+from app.apps.rpg.narration.contradictions import (
     validate_narration_contradictions as validate_narration_contradictions,
 )
 from typing import (

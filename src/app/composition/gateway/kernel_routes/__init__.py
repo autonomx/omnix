@@ -9,15 +9,15 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, Response
 
 from app.assets import AssetType
-from app.assistant_tools import (
+from app.platform.assistant_tools import (
     AssistantToolRegistryPayload,
     assistant_tool_registry_payload,
 )
 from app.jobs import JobRecord, ModelResidencyDiagnostics, ModelResidencyRecord
-from app.gateway.diagnostics import (
+from app.composition.gateway.diagnostics import (
     DiagnosticsPayload,
 )
-from app.chat.legacy_session_api import (
+from app.platform.chat.legacy_session_api import (
     LegacyGenerateTitleRequest,
     LegacyGenerateTitleResponse,
     LegacySessionCreateResponse,
@@ -36,7 +36,7 @@ from app.observability.reports import (
     ReportListResponse,
     list_report_artifacts,
 )
-from app.gateway.settings_control import (
+from app.composition.gateway.settings_control import (
     SettingsPayload,
     SettingsSaveResponse,
     get_settings_payload,
@@ -54,7 +54,7 @@ from app.providers.cache_status import (
 )
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 from app.providers.facade import ProviderFacadePayload
-from app.replay import (
+from app.apps.rpg.replay import (
     CheckpointBundleRequest,
     CheckpointEnvelope,
     PersistenceInventory,
@@ -74,7 +74,7 @@ from app.persistence.document_store import DocumentRevisionConflict
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.settings.access import load_settings
 from app.settings.profile_repository import load_settings_profile
-from app.voice.legacy_clone_files import delete_legacy_voice_clone_files
+from app.platform.voice.legacy_clone_files import delete_legacy_voice_clone_files
 
 from .core_assets_routes import _asset_by_id
 from ..schemas import (
@@ -326,7 +326,7 @@ def create_kernel_router(
         "/api/diagnostics", response_model=DiagnosticsPayload, tags=["diagnostics"]
     )
     def diagnostics() -> DiagnosticsPayload:
-        from app.gateway.diagnostics import get_runtime_diagnostics_payload
+        from app.composition.gateway.diagnostics import get_runtime_diagnostics_payload
         return get_runtime_diagnostics_payload(
             state, model_residency_store_factory=get_model_residency_store,
             allow_offline_store=allow_offline_model_residency_store,
@@ -355,7 +355,7 @@ def create_kernel_router(
             collectors.append(CapacityCollector(permits.metrics_snapshot))
         if database is not None:
             # In-memory runtimes (tests, benchmarks) have no pool or durable queue.
-            from app.gateway.runtime_diagnostics import durable_metrics_snapshot
+            from app.composition.gateway.runtime_diagnostics import durable_metrics_snapshot
 
             collectors.append(PoolCollector(database.pool_statistics))
             collectors.append(DurableStateCollector(lambda: durable_metrics_snapshot(services)))
@@ -490,12 +490,12 @@ def _compatibility_handoff() -> CompatibilityHandoffPayload:
         handoff_targets=[
             {
                 "namespace": "/api/rpg",
-                "current_owner": "app.gateway RPG routes",
+                "current_owner": "app.composition.gateway RPG routes",
                 "gateway_phase": "current",
             },
             {
                 "namespace": "/api/image-generation",
-                "current_owner": "app.gateway image workspace and image service",
+                "current_owner": "app.composition.gateway image workspace and image service",
                 "gateway_phase": "current",
             },
             {
@@ -505,7 +505,7 @@ def _compatibility_handoff() -> CompatibilityHandoffPayload:
             },
             {
                 "namespace": "/api/assets/{asset_id}/file",
-                "current_owner": "app.gateway.image_asset_routes",
+                "current_owner": "app.composition.gateway.image_asset_routes",
                 "gateway_phase": "current",
             },
         ]
@@ -521,7 +521,7 @@ def _runtime_status() -> RuntimeStatusPayload:
         workers=workers,
         compatibility={
             "legacy_ui_status": "retired",
-            "existing_fastapi_app": "app.gateway.main:app",
+            "existing_fastapi_app": "app.composition.gateway.main:app",
             "domain_logic_policy": "delegate_to_existing_service_modules",
         },
     )

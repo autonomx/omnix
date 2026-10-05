@@ -1,64 +1,64 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _action_requests_revive_or_heal_other as _action_requests_revive_or_heal_other, _action_requests_stabilize as _action_requests_stabilize, _actor_is_player as _actor_is_player,
     _build_combat_gate_result as _build_combat_gate_result, _derive_grounded_scene_context as _derive_grounded_scene_context,
     _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text, _infer_recovery_target_actor_id as _infer_recovery_target_actor_id,
 )
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _build_turn_id as _build_turn_id, _player_input_requests_reposition as _player_input_requests_reposition, _requested_reposition_values as _requested_reposition_values,
 )
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.combat.recovery import (
+from app.apps.rpg.combat.recovery import (
     revive_participant_with_healing as revive_participant_with_healing, stabilize_participant as stabilize_participant,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _get_combat_state as _get_combat_state, _set_combat_state as _set_combat_state,
 )
-from app.rpg.combat.positioning import (
+from app.apps.rpg.combat.positioning import (
     reposition_participant as reposition_participant,
 )
-from app.rpg.combat.companion_ai import (
+from app.apps.rpg.combat.companion_ai import (
     apply_companion_intent as apply_companion_intent, choose_companion_intent as choose_companion_intent,
 )
-from app.rpg.session.combat_turn_actions import (
+from app.apps.rpg.session.combat_turn_actions import (
     _target_id_for_ability as _target_id_for_ability,
 )
-from app.rpg.combat.abilities import (
+from app.apps.rpg.combat.abilities import (
     resolve_combat_ability as resolve_combat_ability,
 )
-from app.rpg.combat.encounters import (
+from app.apps.rpg.combat.encounters import (
     build_encounter_from_preset as build_encounter_from_preset,
 )
-from app.rpg.world.travel_graph import (
+from app.apps.rpg.world.travel_graph import (
     apply_travel_result_to_state as apply_travel_result_to_state, build_travel_state_delta as build_travel_state_delta, build_travel_world_event as build_travel_world_event,
     list_available_routes as list_available_routes, resolve_travel_destination as resolve_travel_destination,
 )
-from app.rpg.combat.resolver import (
+from app.apps.rpg.combat.resolver import (
     resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.rpg.combat.apply import (
+from app.apps.rpg.combat.apply import (
     apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
-from app.rpg.items.item_effects import (
+from app.apps.rpg.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
-from app.rpg.combat.initiative import (
+from app.apps.rpg.combat.initiative import (
     advance_turn as advance_turn,
 )
-from app.rpg.combat.npc_turns import (
+from app.apps.rpg.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
-from app.rpg.combat.lifecycle import (
+from app.apps.rpg.combat.lifecycle import (
     evaluate_combat_exit as evaluate_combat_exit,
 )
 from typing import (

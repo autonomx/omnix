@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.persistence.errors import RevisionConflict
-from app.trading.alerts import (
+from app.apps.trading.alerts import (
     TradingAlert,
     TradingAlertCreate,
     TradingAlertEvaluation,
@@ -22,8 +22,8 @@ from app.trading.alerts import (
     cooldown_elapsed,
     crossed_threshold,
 )
-from app.trading.alerts_api import create_trading_alert_router
-from app.trading.alerts_monitor import TradingAlertMonitor, trading_alert_monitor_enabled
+from app.apps.trading.alerts_api import create_trading_alert_router
+from app.apps.trading.alerts_monitor import TradingAlertMonitor, trading_alert_monitor_enabled
 
 
 NOW = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
@@ -155,9 +155,9 @@ def alert(
 
 
 def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
-    migration = Path("src/app/trading/migrations/0020_trading_alerts.sql").read_text()
+    migration = Path("src/app/apps/trading/migrations/0020_trading_alerts.sql").read_text()
     trendline_migration = Path(
-        "src/app/trading/migrations/0036_trading_trendline_alerts.sql"
+        "src/app/apps/trading/migrations/0036_trading_trendline_alerts.sql"
     ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alerts" in migration
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alert_triggers" in migration
@@ -225,7 +225,7 @@ def test_condition_values_and_finalized_bar_policy_are_explicit() -> None:
     ) == 71
     assert TradingAlertEvaluationPolicy().allow_partial_bars is False
     assert TradingAlertEvaluationPolicy(allow_partial_bars=True).allow_partial_bars is True
-    source = Path("src/app/trading/alerts.py").read_text()
+    source = Path("src/app/apps/trading/alerts.py").read_text()
     assert "not evaluation.is_final" in source
     assert "allow_partial_bars" in source
 

@@ -94,7 +94,7 @@ def test_application_startup_is_explicit_and_postgresql_only() -> None:
     assert 'parser.add_argument("--app"' in launcher
     assert not (ROOT / "src" / "usercustomize.py").exists()
     assert not (APP_ROOT / "jobs" / "voice_inline.py").exists()
-    assert (APP_ROOT / "voice" / "jobs.py").exists()
+    assert (APP_ROOT / "platform" / "voice" / "jobs.py").exists()
     assert not (APP_ROOT / "shared.py").exists()
 
 

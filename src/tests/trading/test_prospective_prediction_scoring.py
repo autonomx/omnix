@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_evidence import (
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_evidence import (
     EvidenceTimestamps,
     FrozenForecast,
     PremarketEvidenceItem,
@@ -14,7 +14,7 @@ from app.trading.prospective_prediction_evidence import (
     SIPTradeEvent,
     select_analysis_session_prices,
 )
-from app.trading.prospective_prediction_scoring import (
+from app.apps.trading.prospective_prediction_scoring import (
     build_formal_outcome_labels,
     canonical_formal_5m_bars,
     freeze_formal_research_portfolios,

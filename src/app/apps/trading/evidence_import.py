@@ -1,7 +1,7 @@
 """One-off import of the file-based market evidence into PostgreSQL (WP-8.3).
 
-    python -m app.trading.evidence_import yahoo [--root resources/trading/yahoo_evidence]
-    python -m app.trading.evidence_import ibkr [--root resources/trading/ibkr_evidence]
+    python -m app.apps.trading.evidence_import yahoo [--root resources/trading/yahoo_evidence]
+    python -m app.apps.trading.evidence_import ibkr [--root resources/trading/ibkr_evidence]
 
 Each file is recorded in ``omnix_trading_evidence_imports`` with its SHA-256,
 so the import can be re-run: bar files whose content changed are imported
@@ -153,7 +153,7 @@ def import_ibkr(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app.trading.evidence_import", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="python -m app.apps.trading.evidence_import", description=__doc__.splitlines()[0])
     parser.add_argument("provider", choices=("yahoo", "ibkr"))
     parser.add_argument("--root", type=Path)
     args = parser.parse_args(argv)

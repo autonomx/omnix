@@ -8,21 +8,21 @@ from fastapi import HTTPException, Request
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.debug_logging import new_rpg_trace_id
-from app.rpg.worlds.generation_acceptance import (
+from app.apps.rpg.debug_logging import new_rpg_trace_id
+from app.apps.rpg.worlds.generation_acceptance import (
     accept_world_generation_candidate,
     accept_world_generation_candidates,
 )
-from app.rpg.worlds.generation_repair_evaluation import require_retry_budget
-from app.rpg.worlds.generation_retry import (
+from app.apps.rpg.worlds.generation_repair_evaluation import require_retry_budget
+from app.apps.rpg.worlds.generation_retry import (
     decide_world_generation_retry,
     retry_failed_world_generation,
 )
-from app.rpg.worlds.generation_review_analytics import (
+from app.apps.rpg.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
-from app.rpg.worlds.generation_review_state import review_state
-from app.rpg.worlds.generation_worker import kick_world_generation_worker
+from app.apps.rpg.worlds.generation_review_state import review_state
+from app.apps.rpg.worlds.generation_worker import kick_world_generation_worker
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny

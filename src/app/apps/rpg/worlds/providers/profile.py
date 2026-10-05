@@ -16,13 +16,13 @@ from app.providers.structured import (
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     GenreProfileGenerator,
     HeuristicWorldLocalProfileGenerator,
     _core_domains,
     normalize_genre_key,
 )
-from app.rpg.session.genesis.world_forge_profiles import (
+from app.apps.rpg.session.genesis.world_forge_profiles import (
     DomainDefinition,
     DomainTargetRange,
     FieldDefinition,
@@ -30,7 +30,7 @@ from app.rpg.session.genesis.world_forge_profiles import (
     LaunchRequirements,
     RuntimeCapabilityDefaults,
 )
-from app.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.apps.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
 
 _CORE_DOMAINS = _core_domains()
 _ALLOWED_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS)

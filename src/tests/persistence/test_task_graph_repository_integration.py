@@ -5,13 +5,13 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.contracts import ModelRef
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.contracts import ModelRef
+from app.platform.agent_runtime.task_graph import (
     TaskGraph,
     TaskNode,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_repository import (
+from app.platform.agent_runtime.task_graph_repository import (
     PostgresTaskGraphRepository,
     TaskGraphConcurrencyError,
 )

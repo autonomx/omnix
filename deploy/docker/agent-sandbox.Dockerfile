@@ -3,7 +3,7 @@
 # non-root user, on an internal network that reaches only the broker relay
 # (see docs/security/AGENT_SANDBOX.md).
 #
-#   python -m app.agent_runtime.sandbox build
+#   python -m app.platform.agent_runtime.sandbox build
 #
 # Projects whose tests need more (a Python virtualenv, a database client)
 # extend this image and point OMNIX_AGENT_DOCKER_IMAGE at theirs.

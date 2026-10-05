@@ -53,7 +53,7 @@ def attach_compiled_genesis_to_session(
         return result
     session = result.get("session") if isinstance(result.get("session"), dict) else None
     if session is None:
-        from app.rpg.session.service import load_session
+        from app.apps.rpg.session.service import load_session
 
         session = load_session(session_id)
     if not session:
@@ -84,7 +84,7 @@ def attach_compiled_genesis_to_session(
         }
     )
     if persist:
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         saved = save_session(session, compact=compact_save)
     else:
@@ -112,7 +112,7 @@ def _save_prepared_result(result: dict[str, Any]) -> dict[str, Any]:
     session = result.get("session") if isinstance(result.get("session"), dict) else None
     if session is None:
         return result
-    from app.rpg.session.new_game import _save_created_session
+    from app.apps.rpg.session.new_game import _save_created_session
 
     saved_result = _save_created_session(session)
     return {**result, **saved_result}
@@ -125,7 +125,7 @@ def _attach_world_forge_progress(
     error: str = "",
 ) -> dict[str, Any]:
     session_id = str(result.get("session_id") or "")
-    from app.rpg.session.new_game_creation_progress import (
+    from app.apps.rpg.session.new_game_creation_progress import (
         attach_creation_metadata,
         build_creation_job,
         build_creation_progress_snapshot,
@@ -184,7 +184,7 @@ def prepare_new_game_session_from_compiled_genesis(
 ) -> dict[str, Any]:
     """Build the deterministic blocked shell shared by sync and async launch paths."""
 
-    from app.rpg.session.new_game import RpgNewGameRequest, _build_new_game_session
+    from app.apps.rpg.session.new_game import RpgNewGameRequest, _build_new_game_session
 
     legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
     result = _result_from_unsaved_session(_build_new_game_session(legacy_request))

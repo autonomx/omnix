@@ -25,15 +25,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from app.trading.gapper_dataset import GapperCandidate  # noqa: E402
-from app.trading.models import MarketBar  # noqa: E402
-from app.trading.strategies.failed_selloff_v2 import evaluate_gap_pullback_v2  # noqa: E402
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback  # noqa: E402
-from app.trading.strategies.models import GapPullbackConfig, StochRsi5mConfig  # noqa: E402
-from app.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m  # noqa: E402
-from app.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture  # noqa: E402
-from app.trading.strategy_timeframes import resample_final_bars  # noqa: E402
-from app.trading.us_equity_calendar import EASTERN  # noqa: E402
+from app.apps.trading.gapper_dataset import GapperCandidate  # noqa: E402
+from app.apps.trading.models import MarketBar  # noqa: E402
+from app.apps.trading.strategies.failed_selloff_v2 import evaluate_gap_pullback_v2  # noqa: E402
+from app.apps.trading.strategies.gap_pullback import evaluate_gap_pullback  # noqa: E402
+from app.apps.trading.strategies.models import GapPullbackConfig, StochRsi5mConfig  # noqa: E402
+from app.apps.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m  # noqa: E402
+from app.apps.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture  # noqa: E402
+from app.apps.trading.strategy_timeframes import resample_final_bars  # noqa: E402
+from app.apps.trading.us_equity_calendar import EASTERN  # noqa: E402
 
 SESSION = date(2026, 9, 29)
 RECEIVED = datetime(2026, 9, 29, 21, 0, tzinfo=timezone.utc)

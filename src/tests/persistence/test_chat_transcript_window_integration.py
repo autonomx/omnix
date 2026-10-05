@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 import psycopg
 import pytest
 
-from app.chat.models import ChatMessage
-from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
-from app.chat.prompt_assembly import build_prompt_assembly
-from app.chat.prompt_rendering import render_prompt_assembly
-from app.chat.prompt_window import build_prompt_assembly_with_window
+from app.platform.chat.models import ChatMessage
+from app.platform.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.platform.chat.prompt_assembly import build_prompt_assembly
+from app.platform.chat.prompt_rendering import render_prompt_assembly
+from app.platform.chat.prompt_window import build_prompt_assembly_with_window
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

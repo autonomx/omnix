@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.party.companion_presence import active_party_companions
-from app.rpg.party.companion_values import evaluate_companion_value_alignment
+from app.apps.rpg.party.companion_presence import active_party_companions
+from app.apps.rpg.party.companion_values import evaluate_companion_value_alignment
 
 MAX_COMPANION_MEMORIES_PER_NPC = 24
 MAX_COMPANION_RELATIONSHIP_EVENTS_PER_NPC = 24

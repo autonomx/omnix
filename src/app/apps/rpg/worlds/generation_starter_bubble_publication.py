@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.map_grid_contracts import GridMapDefinition
+from app.apps.rpg.map_grid_contracts import GridMapDefinition
 
 from .contracts import MapDefinitionBinding, canonical_content_hash
 from .generation_publication import WorldGenerationPublication

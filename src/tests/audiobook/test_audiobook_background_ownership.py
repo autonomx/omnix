@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook import routes
+from app.apps.audiobook import routes
 from app.runtime.background import (
     BackgroundOwnershipUnavailable,
     GatewayBackgroundRuntime,
@@ -24,7 +24,7 @@ def test_api_audiobook_lifecycle_never_initializes_workers(monkeypatch):
 
 
 def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypatch):
-    from app.audiobook import worker, assembly_service, export_service, render_service
+    from app.apps.audiobook import worker, assembly_service, export_service, render_service
     from app.persistence.background_authority import require_background_owner
 
     owner = GatewayBackgroundRuntime(

@@ -9,8 +9,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import display_item_name, inventory_quantity
-from app.rpg.session.item_system import build_item_catalog, normalize_item_instance
+from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity
+from app.apps.rpg.session.item_system import build_item_catalog, normalize_item_instance
 
 CURRENCY_VALUES = {"copper": 1, "silver": 10, "gold": 100}
 MERCHANT_STOCK: dict[str, tuple[str, ...]] = {

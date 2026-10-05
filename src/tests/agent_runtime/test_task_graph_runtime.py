@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     ModelRef,
 )
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
     TaskGraphRunSnapshot,
@@ -17,7 +17,7 @@ from app.agent_runtime.task_graph import (
     TaskNodeRunState,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
+from app.platform.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
 MODEL = ModelRef(provider_id="test", model_id="test-model")

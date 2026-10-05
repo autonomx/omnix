@@ -6,19 +6,19 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
-from app.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
-from app.desktop_companion.context import DesktopCompanionContextStore
-from app.desktop_companion.models import (
+from app.platform.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
+from app.apps.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
+from app.apps.desktop_companion.context import DesktopCompanionContextStore
+from app.apps.desktop_companion.models import (
     CompanionAttentionDecision,
     DesktopActivitySignal,
     DesktopBehaviorState,
     DesktopObservation,
     DesktopObservedChange,
 )
-from app.desktop_companion.operations import DesktopCompanionOperationalStatus
-from app.desktop_companion.routes import register_desktop_companion_routes
-from app.desktop_companion.runtime import DesktopCompanionObserveResponse
+from app.apps.desktop_companion.operations import DesktopCompanionOperationalStatus
+from app.apps.desktop_companion.routes import register_desktop_companion_routes
+from app.apps.desktop_companion.runtime import DesktopCompanionObserveResponse
 
 NOW = datetime(2026, 9, 15, 14, 0, tzinfo=timezone.utc)
 

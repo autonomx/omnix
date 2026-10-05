@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentApproval,
     AgentRunCommand,
@@ -17,7 +17,7 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
-from app.agent_runtime.repository import (
+from app.platform.agent_runtime.repository import (
     AgentLeaseConflict,
     AgentRunConcurrencyError,
     PostgresAgentRunRepository,
@@ -64,19 +64,19 @@ def _create_run(database: PostgresDatabase) -> tuple[object, str, int]:
 
 
 def _agent_run_owner_process(url: str, tenant_values: tuple, control) -> None:
-    from app.agent_runtime.contracts import AgentEvent
-    from app.agent_runtime.jobs import (
+    from app.platform.agent_runtime.contracts import AgentEvent
+    from app.platform.agent_runtime.jobs import (
         AGENT_RUN_JOB_HANDLERS,
         create_agent_promote_request,
         enqueue_agent_job,
     )
-    from app.agent_runtime.service import AgentRunService
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.agent_runtime.service import AgentRunService
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.jobs.handlers import JobHandlerRegistry
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.runtime.tenant_context import TenantContext, install_process_tenant
-    from app.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
+    from app.composition.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=6))
     context = TenantContext(
@@ -467,8 +467,8 @@ def test_consumed_idempotency_key_cannot_execute_again() -> None:
 @pytest.mark.postgres
 @pytest.mark.multiprocess
 def test_agent_run_start_steer_approve_complete_across_processes() -> None:
-    from app.agent_runtime.service import AgentRunService
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.agent_runtime.service import AgentRunService
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.runtime import ensure_postgresql_runtime_ready
 
     database = _database()

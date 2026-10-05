@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.rpg.worlds.authoring_service import (
+from app.apps.rpg.worlds.authoring_service import (
     _world_token_usage,
     read_authoring_manifest,
     read_authoring_section,
 )
-from app.rpg.worlds.authoring_presentations import (
+from app.apps.rpg.worlds.authoring_presentations import (
     COLLECTION_CATEGORIES,
     SYSTEM_SECTIONS,
     entity_card,
@@ -140,11 +140,11 @@ def _detail() -> dict[str, object]:
 
 def test_manifest_uses_user_facing_sections_and_hides_pipeline_nodes(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: _detail(),
     )
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service._image_section_status",
+        "app.apps.rpg.worlds.authoring_service._image_section_status",
         lambda world_id, database=None: ("complete", 3),
     )
 
@@ -326,7 +326,7 @@ def test_world_token_usage_does_not_mark_an_unreported_live_call_unavailable() -
 
 def test_lore_with_entities_stays_a_document_page(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: _detail(),
     )
 
@@ -354,7 +354,7 @@ def test_failed_lore_shows_a_retry_note_instead_of_fallback_canon(monkeypatch) -
         "provenance": {},
     }
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: detail,
     )
 
@@ -372,7 +372,7 @@ def test_legacy_deterministic_lore_is_hidden_pending_provider_retry(monkeypatch)
         "generator": "deterministic_profile_fixture_v1",
     }
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: detail,
     )
 
@@ -402,7 +402,7 @@ def test_realm_card_uses_a_readable_dossier_label_when_source_canon_omits_a_name
 
 def test_points_of_interest_and_classes_have_typed_card_presentations(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: _detail(),
     )
 

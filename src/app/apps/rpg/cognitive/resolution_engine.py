@@ -53,8 +53,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
-from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
+from app.apps.rpg.ai.llm_gateway_adapter import adapt_base_provider
+from app.apps.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.cognitive_resolution_engine.prompt', "1", 'You are a narrative resolution engine. Generate a satisfying resolution for this storyline.\n\nStoryline Type: {v0}\nParticipants: {v1}\nResolution Type: {v2}\nProgress: {v3:.0%}\n\nEvent History:\n{v4}\n\nCharacter States:\n{v5}\n\nGenerate a resolution that:\n1. Is exactly 1-2 sentences long\n2. Reflects the consequences of the storyline events\n3. Matches the resolution type: {v6}\n4. Feels emotionally meaningful, not mechanical\n5. Updates relationships based on the outcome\n\nResolution:')

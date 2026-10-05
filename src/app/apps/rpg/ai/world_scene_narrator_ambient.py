@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.rpg.ai.world_scene_narrator_common import (
+from app.apps.rpg.ai.world_scene_narrator_common import (
     annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
     Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
     select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
@@ -14,7 +14,7 @@ from app.rpg.ai.world_scene_narrator_common import (
     _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
     _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
 )
-from app.rpg.ai.world_scene_narrator_dialogue_grounding import _bound_text as _bound_text
+from app.apps.rpg.ai.world_scene_narrator_dialogue_grounding import _bound_text as _bound_text
 
 _AMBIENT_TEMPLATES = {
     "npc_to_player": '{speaker_name} turns to you: "{text}"',

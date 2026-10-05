@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from math import ceil, sqrt
 from typing import Any
 
-from app.rpg.map_contracts import (
+from app.apps.rpg.map_contracts import (
     MapBackground,
     MapBounds,
     MapDefinition,
@@ -18,10 +18,10 @@ from app.rpg.map_contracts import (
     MapRouteGeometry,
     MapSprite,
 )
-from app.rpg.map_repository import MapDefinitionRepository, default_map_repository
-from app.rpg.map_serialization import with_definition_revision
-from app.rpg.map_settlement_assembler import assemble_settlement_map
-from app.rpg.world_graph import RpgLocationNode, RpgRegionGraph, RpgRoute
+from app.apps.rpg.map_repository import MapDefinitionRepository, default_map_repository
+from app.apps.rpg.map_serialization import with_definition_revision
+from app.apps.rpg.map_settlement_assembler import assemble_settlement_map
+from app.apps.rpg.world_graph import RpgLocationNode, RpgRegionGraph, RpgRoute
 
 WORLD_GRAPH_SCHEMA_VERSION = 1
 _REGION_WIDTH = 12000

@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 
 from app.settings.access import load_settings
 from app.providers import service as provider_service
-from app.chat import ChatMessage, ChatSessionStore, default_chat_store
-from app.chat.store import _model_key, _provider_key
+from app.platform.chat import ChatMessage, ChatSessionStore, default_chat_store
+from app.platform.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.providers.service import get_tts_provider

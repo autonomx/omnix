@@ -2,9 +2,9 @@
 from app.capabilities.registry import TOOL_DECLARATIONS
 from app.runtime.features import FeatureModule
 from app.runtime.ports import ContributionSpec
-from app.agent_runtime.contracts import SECURITY_INSTRUMENTS
-from app.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
-from app.trading.strategy_range_backtest_jobs import STRATEGY_RANGE_BACKTEST_JOB
+from app.platform.agent_runtime.contracts import SECURITY_INSTRUMENTS
+from app.apps.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
+from app.apps.trading.strategy_range_backtest_jobs import STRATEGY_RANGE_BACKTEST_JOB
 
 from .route_registration import create_trading_router, trading_scheduled_task_factories
 

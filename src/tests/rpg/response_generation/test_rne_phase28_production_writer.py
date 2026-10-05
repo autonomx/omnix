@@ -12,7 +12,7 @@ from app.providers.base import (
     ModelInfo,
     ProviderConfig,
 )
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     AuthorityClass,
     BeatKind,
     BeatPurpose,
@@ -26,9 +26,9 @@ from app.rpg.narrative_engine import (
     TurnPresentationRequest,
     VisibilityClass,
 )
-from app.rpg.narrative_engine.validation import write_validate_repair
-from app.rpg.narrative_engine.writer import writer_payload
-from app.rpg.narrative_provider import (
+from app.apps.rpg.narrative_engine.validation import write_validate_repair
+from app.apps.rpg.narrative_engine.writer import writer_payload
+from app.apps.rpg.narrative_provider import (
     NarrativeProviderConfig,
     ProductionStructuredNarrativeWriter,
     ProviderNarrativeGenerator,
@@ -419,7 +419,7 @@ def test_service_default_resolves_production_writer_factory(monkeypatch) -> None
         )
     )
     monkeypatch.setattr(
-        "app.rpg.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narrative_provider.build_production_narrative_writer",
         lambda: writer,
     )
     service = NarrativeEngineService(

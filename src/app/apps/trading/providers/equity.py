@@ -9,9 +9,9 @@ from typing import Any
 
 import httpx
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
-from app.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
+from app.apps.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .base import ProviderAdapter
 from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar

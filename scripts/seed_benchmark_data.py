@@ -56,8 +56,8 @@ def _workspace(url: str) -> tuple[str, str]:
 
 
 def _documents() -> tuple[str, str, str, str]:
-    from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-    from app.trading.strategies.models import StochRsi5mConfig, StrategyRiskProfile
+    from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+    from app.apps.trading.strategies.models import StochRsi5mConfig, StrategyRiskProfile
 
     spec = AgentRunSpec(run_id="placeholder", task="benchmark run", model=ModelRef(provider_id="test", model_id="m"))
     config = StochRsi5mConfig()

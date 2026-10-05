@@ -4,20 +4,20 @@ import copy
 import hashlib
 from typing import Any, Dict
 
-from app.rpg.economy.service_effects import apply_service_purchase_result
-from app.rpg.session.service_living_world import apply_service_living_world_effects
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.economy.service_effects import apply_service_purchase_result
+from app.apps.rpg.session.service_living_world import apply_service_living_world_effects
+from app.apps.rpg.session.state_normalization import (
     _safe_dict,
     _safe_int,
     _safe_list,
     _safe_str,
 )
-from app.rpg.session.pending_interactions import (
+from app.apps.rpg.session.pending_interactions import (
     close_pending_service_offer,
     record_service_offer,
 )
-from app.rpg.session.duration_actions import apply_duration_action
-from app.rpg.session.quest_evidence import (
+from app.apps.rpg.session.duration_actions import apply_duration_action
+from app.apps.rpg.session.quest_evidence import (
     apply_quest_evidence,
     clue_for_service_interaction,
 )

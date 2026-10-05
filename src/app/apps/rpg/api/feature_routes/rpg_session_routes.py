@@ -13,13 +13,13 @@ from .rpg_campaign_lore_routes import register_rpg_campaign_lore_routes
 from .rpg_narrative_delivery_routes import (
     register_rpg_narrative_delivery_routes,
 )
-from app.rpg.api.turn_pipeline import execute_foreground_rpg_turn
-from app.rpg.session.ability_coverage import summarize_ability_coverage
-from app.rpg.session.environment_narration import build_environment_narration_contract
-from app.rpg.session.environment_regions import derive_active_region_snapshot
-from app.rpg.session.genesis.pipeline_adapter import create_new_game_from_genesis_payload
-from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
-from app.rpg.session.new_game import (
+from app.apps.rpg.api.turn_pipeline import execute_foreground_rpg_turn
+from app.apps.rpg.session.ability_coverage import summarize_ability_coverage
+from app.apps.rpg.session.environment_narration import build_environment_narration_contract
+from app.apps.rpg.session.environment_regions import derive_active_region_snapshot
+from app.apps.rpg.session.genesis.pipeline_adapter import create_new_game_from_genesis_payload
+from app.apps.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
+from app.apps.rpg.session.new_game import (
     RpgNewGameRequest,
     RpgRenameSessionRequest,
     continue_rpg_session,
@@ -29,8 +29,8 @@ from app.rpg.session.new_game import (
     rename_rpg_session,
     start_rpg_preset,
 )
-from app.rpg.session.service import list_session_summaries, load_session
-from app.rpg.session.world_ability_integration import ensure_world_scale_abilities
+from app.apps.rpg.session.service import list_session_summaries, load_session
+from app.apps.rpg.session.world_ability_integration import ensure_world_scale_abilities
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
@@ -390,7 +390,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     async def rpg_local_dialogue_fixture(http_request: Request, request_body: RpgLocalDialogueFixtureRequestBody) -> dict[str, Any]:
         _require_local_dialogue_fixture_request(http_request)
         payload = request_body.model_dump(exclude_unset=True, by_alias=True)
-        from app.rpg.local_dialogue_quality_fixtures import (
+        from app.apps.rpg.local_dialogue_quality_fixtures import (
             dialogue_benchmark_case,
             provision_local_dialogue_fixture,
         )

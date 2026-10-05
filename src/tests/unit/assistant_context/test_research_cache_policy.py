@@ -3,17 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.conversation.contracts import AssistantContextItem
-from app.research import cache as research_cache
-from app.research.cache import ResearchCacheStore
-from app.research.extraction import ExtractedPage, ReadablePageExtractor
-from app.research.outbound_web import OutboundWebResponse
-from app.research.policy import (
+from app.platform.research import cache as research_cache
+from app.platform.research.cache import ResearchCacheStore
+from app.platform.research.extraction import ExtractedPage, ReadablePageExtractor
+from app.platform.research.outbound_web import OutboundWebResponse
+from app.platform.research.policy import (
     ResearchPolicy,
     privacy_contract,
 )
-from app.research.quick_search import QuickSearchService
-from app.research.retention import ResearchRetentionService
-from app.research.source_store import ResearchSourceStore
+from app.platform.research.quick_search import QuickSearchService
+from app.platform.research.retention import ResearchRetentionService
+from app.platform.research.source_store import ResearchSourceStore
 
 
 class CountingSearchClient:

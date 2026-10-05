@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.session import turn_presenter
-from app.rpg.session.turn_presenter import (
+from app.apps.rpg.session import turn_presenter
+from app.apps.rpg.session.turn_presenter import (
     TurnPresentationInvariantError,
     present_authoritative_turn,
 )

@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.economy.currency import (
+from app.apps.rpg.economy.currency import (
     apply_currency_delta,
     get_player_currency,
     set_player_currency,
 )
-from app.rpg.economy.service_transactions import (
+from app.apps.rpg.economy.service_transactions import (
     append_service_transaction_record,
     build_service_transaction_record,
 )

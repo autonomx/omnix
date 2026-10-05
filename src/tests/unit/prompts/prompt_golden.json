@@ -36,8 +36,8 @@
     "version": "1"
   },
   "agent_runtime.pi_runtime_core.initial_prompt_2": {
-    "sha256": "f5328b825e290f13045bfa5bf02ff99491d85e09e0df0f0e82363e6aa6fb2a6b",
-    "version": "1"
+    "sha256": "451cc84d7d1b100ac689505edb75ac0dbcbfdd75f51f966b19caa6e5f33fa9b2",
+    "version": "2"
   },
   "agent_runtime.pi_runtime_core.initial_prompt_3": {
     "sha256": "1362f5b5a7833e4fa9f3cd6b040b020f05aa59fc630ff133cc801723355fa532",
@@ -76,8 +76,8 @@
     "version": "1"
   },
   "agent_runtime.service_core.acceptance_retry_prompt": {
-    "sha256": "bf549d10eba9377a5a0b26a95b4279a9c0702d4b8524db903eba2f608663c9a4",
-    "version": "1"
+    "sha256": "630d4a78135f78d0327c87120a866a09f87aa69d5128f2c8394b691e1b1bd4cd",
+    "version": "2"
   },
   "assistant_memory.initiative.prompt_directive": {
     "sha256": "fb46f32d0e36bb146fa20195ecb51ddc68274d6923e7e14dc060bae61cb47d40",

@@ -26,17 +26,17 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading.strategy_evolving_top_gainers import (
+from app.apps.trading.strategy_evolving_top_gainers import (
     EvolvingTopGainersConfig,
     observations_from_market_bars,
 )
-from app.trading.strategy_evolving_top_gainers_research import (
+from app.apps.trading.strategy_evolving_top_gainers_research import (
     HistoricalPopulationManifest,
     leaderboard_trajectory_at,
     replay_evolving_top_gainers_strict,
 )
-from app.trading.strategy_leader_momentum_continuation import POLICY_VERSION
-from app.trading.strategy_leader_momentum_research import (
+from app.apps.trading.strategy_leader_momentum_continuation import POLICY_VERSION
+from app.apps.trading.strategy_leader_momentum_research import (
     BASELINE_V1_2,
     CONTROLLED_PULLBACK_ONLY,
     CONTROLLED_PULLBACK_SINGLE_TRADE,
@@ -450,7 +450,7 @@ def main() -> int:
     if cache.load_manifest("5m") is None or cache.load_manifest("1m") is None:
         raise RuntimeError("cache-only replay requires completed 5m and 1m manifests")
     envelopes = _load_population_report(population_root, sessions)
-    strategy_path = REPOSITORY_ROOT / "src" / "app" / "trading" / "strategy_leader_momentum_continuation.py"
+    strategy_path = REPOSITORY_ROOT / "src" / "app" / "apps" / "trading" / "strategy_leader_momentum_continuation.py"
     strategy_sha_before = _sha256(strategy_path)
     git_sha_before = _git_sha()
     if POLICY_VERSION != "leader-momentum-continuation-v1.2":

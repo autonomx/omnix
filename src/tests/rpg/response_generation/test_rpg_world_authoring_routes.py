@@ -4,12 +4,12 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.rpg.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
+from app.apps.rpg.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
 
 
 def test_authoring_manifest_and_projection_routes_are_in_openapi(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_manifest",
+        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_manifest",
         lambda world_id: {
             "ok": True,
             "world": {"id": world_id, "title": "Aurelia"},
@@ -18,7 +18,7 @@ def test_authoring_manifest_and_projection_routes_are_in_openapi(monkeypatch) ->
         },
     )
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_section",
+        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_section",
         lambda world_id, section_id: {
             "ok": True,
             "world_id": world_id,
@@ -62,7 +62,7 @@ def test_world_metadata_patch_requires_concurrency_token(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_metadata",
+        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_metadata",
         fake_update,
     )
     app = FastAPI()
@@ -99,7 +99,7 @@ def test_topic_patch_requires_revision_hash_and_preserves_lock(monkeypatch) -> N
         }
 
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_topic",
+        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_topic",
         fake_update,
     )
     app = FastAPI()
@@ -146,7 +146,7 @@ def test_topic_history_restore_uses_dual_concurrency_tokens(monkeypatch) -> None
         }
 
     monkeypatch.setattr(
-        "app.rpg.api.feature_routes.rpg_world_authoring_routes.restore_world_topic",
+        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.restore_world_topic",
         fake_restore,
     )
     app = FastAPI()

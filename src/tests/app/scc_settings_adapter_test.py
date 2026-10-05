@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.persistence.document_store import PostgresDocumentStore
-from app.gateway import settings_control
+from app.composition.gateway import settings_control
 from tests.support.settings_runtime import install_settings_test_runtime
 
 

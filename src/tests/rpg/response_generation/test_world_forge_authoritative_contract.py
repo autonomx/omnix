@@ -12,10 +12,10 @@ from app.providers.structured.parsing import (
     decode_exact_json_object,
     validate_json_resources,
 )
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.worlds.generation_contract_bundle import build_topic_contract_bundle
-from app.rpg.worlds.generation_first_pass_provider import _authored_system_prompt
-from app.rpg.worlds.generation_contract_receipt import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.worlds.generation_contract_bundle import build_topic_contract_bundle
+from app.apps.rpg.worlds.generation_first_pass_provider import _authored_system_prompt
+from app.apps.rpg.worlds.generation_contract_receipt import (
     canonical_candidate_content_hash,
     require_authoritative_contract_receipt,
 )

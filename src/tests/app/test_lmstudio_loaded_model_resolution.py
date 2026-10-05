@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.live_voice.llm.lmstudio_model_resolution import (
+from app.platform.live_voice.llm.lmstudio_model_resolution import (
     _clear_lmstudio_model_discovery_cache,
     chat_completion_with_loaded_model,
     resolve_lmstudio_model,

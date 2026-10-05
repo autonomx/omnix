@@ -99,7 +99,7 @@ def test_problem_codes(status, detail, code) -> None:
 def test_a_failing_market_data_provider_does_not_leak_its_error(caplog) -> None:
     from types import SimpleNamespace
 
-    from app.trading.api import create_trading_router
+    from app.apps.trading.api import create_trading_router
 
     def failing_service():
         def bars(*_args):
@@ -111,7 +111,7 @@ def test_a_failing_market_data_provider_does_not_leak_its_error(caplog) -> None:
     install_error_envelope(app)
     app.include_router(create_trading_router(market_service_factory=failing_service))
 
-    with caplog.at_level(logging.WARNING, logger="app.trading.api"):
+    with caplog.at_level(logging.WARNING, logger="app.apps.trading.api"):
         response = TestClient(app).get("/api/trading/bars", params={"instrument_id": "AAPL"})
 
     assert response.status_code == 502

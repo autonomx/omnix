@@ -4,9 +4,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "src/app/chat/**"
+      - "src/app/platform/chat/**"
       - "src/app/conversation/**"
-      - "src/app/live_voice/**"
+      - "src/app/platform/live_voice/**"
       - "src/app/providers/**"
       - "web/src/features/assistant/workspace/**"
       - "src/tests/app/test_live_chat_*.py"
@@ -17,9 +17,9 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/app/chat/**"
+      - "src/app/platform/chat/**"
       - "src/app/conversation/**"
-      - "src/app/live_voice/**"
+      - "src/app/platform/live_voice/**"
       - "src/app/providers/**"
       - "web/src/features/assistant/workspace/**"
       - "src/tests/app/test_live_chat_*.py"
@@ -61,25 +61,25 @@ jobs:
           npm ci
       - name: Import live voice entry points
         run: |
-          python -c "from app.live_voice.hardware_policy import apply_live_voice_process_defaults; from app.launcher.runtime_control_app import app, build_runtime_service_specs; from app.providers.live_stt_contracts import LiveSttNegotiation; from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME; from app.chat.live_chat_speculation import LiveSpeculationRequest; from app.conversation.tts_stream_contract import TtsStreamRequest"
+          python -c "from app.platform.live_voice.hardware_policy import apply_live_voice_process_defaults; from app.composition.launcher.runtime_control_app import app, build_runtime_service_specs; from app.providers.live_stt_contracts import LiveSttNegotiation; from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME; from app.platform.chat.live_chat_speculation import LiveSpeculationRequest; from app.conversation.tts_stream_contract import TtsStreamRequest"
 
       - name: Lint focused live voice modules
         run: |
           ruff check \
-            src/app/live_voice/hardware_policy.py \
-            src/app/launcher/runtime_control_app.py \
+            src/app/platform/live_voice/hardware_policy.py \
+            src/app/composition/launcher/runtime_control_app.py \
             src/app/providers/live_stt_contracts.py \
             src/app/providers/nemotron_eou_live_websocket.py \
             src/app/providers/nemotron_eou_quality.py \
             src/app/providers/stt_live_websocket.py \
-            src/app/live_voice/llm/lmstudio_responses.py \
-            src/app/chat/live_chat_speculation.py \
-            src/app/live_voice/speech/tts_lane.py \
-            src/app/live_voice/speech/speculative_tts.py \
-            src/app/live_voice/prompt/spoken_style.py \
-            src/app/live_voice/llm/lmstudio_model_resolution.py \
-            src/app/live_voice/speech/startup_frame_policy.py \
-            src/app/live_voice/transport/websocket.py \
+            src/app/platform/live_voice/llm/lmstudio_responses.py \
+            src/app/platform/chat/live_chat_speculation.py \
+            src/app/platform/live_voice/speech/tts_lane.py \
+            src/app/platform/live_voice/speech/speculative_tts.py \
+            src/app/platform/live_voice/prompt/spoken_style.py \
+            src/app/platform/live_voice/llm/lmstudio_model_resolution.py \
+            src/app/platform/live_voice/speech/startup_frame_policy.py \
+            src/app/platform/live_voice/transport/websocket.py \
             src/app/conversation/tts_stream_contract.py \
             src/services/stt/nemotron_eou_stt_server.py \
             src/tests/app/test_runtime_launcher_services.py \

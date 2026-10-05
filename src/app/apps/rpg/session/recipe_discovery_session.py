@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.recipe_discovery import apply_recipe_discovery
+from app.apps.rpg.session.recipe_discovery import apply_recipe_discovery
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

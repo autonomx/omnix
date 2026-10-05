@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.item_loadout_hooks import loadout_item_trace_order
-from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
+from app.apps.rpg.session.item_loadout_hooks import loadout_item_trace_order
+from app.apps.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 
 
 def apply_loadout_action_with_item_hooks(

@@ -99,27 +99,27 @@ def capability_runtime_installed():
     # Composition installs the assistant-tools runtime behind
     # app.capabilities.executor (WP-4.5); tests that call capability paths
     # without composing a gateway get the same runtime.
-    from app.assistant_tools.executor import execute_with_grant
+    from app.platform.assistant_tools.executor import execute_with_grant
     from app.capabilities.executor import CAPABILITY_RUNTIME
     from app.capabilities.registry import TOOL_DECLARATIONS
-    from app.chat.contracts import CHAT_RESEARCH
-    from app.research.assistant_tool import ResearchTool
-    from app.agent_runtime.chat_bridge import route_typed_chat_turn
-    from app.agent_runtime.contracts import SECURITY_INSTRUMENTS
-    from app.agent_runtime.feature import _RunWorkspaces
-    from app.assistant_tools.contracts import AGENT_RUN_WORKSPACES
-    from app.chat.contracts import TYPED_TURN_ROUTER
-    from app.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
-    from app.characters.interaction import CharacterChatResolver
-    from app.chat.contracts import CHARACTER_RESOLVER, CHAT_MEMORY
-    from app.assistant_memory.chat_prompt import AssistantChatMemory
+    from app.platform.chat.contracts import CHAT_RESEARCH
+    from app.platform.research.assistant_tool import ResearchTool
+    from app.platform.agent_runtime.chat_bridge import route_typed_chat_turn
+    from app.platform.agent_runtime.contracts import SECURITY_INSTRUMENTS
+    from app.platform.agent_runtime.feature import _RunWorkspaces
+    from app.platform.assistant_tools.contracts import AGENT_RUN_WORKSPACES
+    from app.platform.chat.contracts import TYPED_TURN_ROUTER
+    from app.platform.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
+    from app.platform.characters.interaction import CharacterChatResolver
+    from app.platform.chat.contracts import CHARACTER_RESOLVER, CHAT_MEMORY
+    from app.platform.assistant_memory.chat_prompt import AssistantChatMemory
     from app.capabilities.executor import LIVE_AGENT_TOOLS
-    from app.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
-    from app.live_voice.prompt.cache import CharacterSnapshotCacheObserver
-    from app.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
-    from app.research.api import ChatResearchAdapter
+    from app.platform.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
+    from app.platform.live_voice.prompt.cache import CharacterSnapshotCacheObserver
+    from app.apps.trading.assistant_tool import TradingMarketDataTool, TradingSecurityInstruments
+    from app.platform.research.api import ChatResearchAdapter
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
-    from app.runtime_composition import composition_port_bindings
+    from app.composition.runtime_composition import composition_port_bindings
 
     # Every feature is enabled by default, so tests see the ports composition binds.
     install_port_bindings(PortBindings.build([
@@ -173,7 +173,7 @@ def isolated_runtime_configuration(monkeypatch):
     from app.persistence.runtime import reset_persistence_mode_cache
     from app.settings import access as settings_access
     from app.settings.registry import core_setting_specs
-    from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+    from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 
     reset_persistence_mode_cache()
     monkeypatch.setattr(runtime_config, "_process_config", None)

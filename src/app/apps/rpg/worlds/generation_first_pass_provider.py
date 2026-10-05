@@ -17,16 +17,16 @@ from pydantic import ConfigDict, Field, create_model
 
 from app.providers.base import ChatMessage
 from app.providers.structured import StructuredContract, StructuredOutputGateway
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_dossier_quality import content_target
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_contract_bundle import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_dossier_quality import content_target
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_contract_bundle import (
     TopicContractBundle,
     build_topic_contract_bundle,
 )
-from app.rpg.worlds.generation_strategy import world_forge_strategy_identity
-from app.rpg.worlds.generation_failure_artifact import build_failure_artifact
-from app.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.worlds.generation_strategy import world_forge_strategy_identity
+from app.apps.rpg.worlds.generation_failure_artifact import build_failure_artifact
+from app.apps.rpg.worlds.providers.world_forge import (
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
@@ -34,7 +34,7 @@ from app.rpg.worlds.providers.world_forge import (
     _payload,
     _token_estimate,
 )
-from app.rpg.worlds.providers.single_pass import (
+from app.apps.rpg.worlds.providers.single_pass import (
     SinglePassProviderWorldForgeTopicGenerator,
     SinglePassWorldForgeProviderError,
     _field_contract,

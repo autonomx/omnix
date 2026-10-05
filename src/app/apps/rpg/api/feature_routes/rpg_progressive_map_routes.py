@@ -6,8 +6,8 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Query, Request
 
-from app.rpg.worlds.progressive_materialization import materialize_deferred_location
-from app.rpg.worlds.progressive_materialization_job_service import (
+from app.apps.rpg.worlds.progressive_materialization import materialize_deferred_location
+from app.apps.rpg.worlds.progressive_materialization_job_service import (
     materialization_job_telemetry,
     schedule_campaign_predictive_materialization,
     schedule_predictive_materialization,

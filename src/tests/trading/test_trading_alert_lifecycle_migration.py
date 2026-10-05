@@ -5,7 +5,7 @@ from pathlib import Path
 
 def test_alert_lifecycle_migration_preserves_observation_history_only_for_lifecycle_edits() -> None:
     migration = Path(
-        "src/app/trading/migrations/0027_trading_alert_lifecycle_history.sql"
+        "src/app/apps/trading/migrations/0027_trading_alert_lifecycle_history.sql"
     ).read_text(encoding="utf-8")
     assert "BEFORE UPDATE ON omnix_trading_alerts" in migration
     assert "NEW.enabled" not in migration

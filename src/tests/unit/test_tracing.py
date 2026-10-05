@@ -15,10 +15,10 @@ import httpx  # noqa: E402
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
 
-from app.live_speech.metrics import LiveSpeechMetrics  # noqa: E402
+from app.platform.live_speech.metrics import LiveSpeechMetrics  # noqa: E402
 from app.observability import tracing  # noqa: E402
 from app.observability.logging import RequestContextMiddleware, configure_logging  # noqa: E402
-from app.rpg.performance_trace import rpg_pipeline_span, rpg_pipeline_trace  # noqa: E402
+from app.apps.rpg.performance_trace import rpg_pipeline_span, rpg_pipeline_trace  # noqa: E402
 
 logger = logging.getLogger("omnix.tests.tracing")
 
@@ -146,7 +146,7 @@ def test_live_speech_stages_become_spans(exporter):
 
 
 def test_gateway_middleware_installs_server_spans(exporter):
-    from app.gateway.app_factory import _install_request_middleware
+    from app.composition.gateway.app_factory import _install_request_middleware
 
     gateway = FastAPI()
 

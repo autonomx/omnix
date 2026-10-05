@@ -8,8 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.chat import ChatSessionStore
-from app.gateway.main import create_gateway_app
+from app.platform.chat import ChatSessionStore
+from app.composition.gateway.main import create_gateway_app
 from app.runtime.config import RuntimeConfig
 from app.runtime.feature_catalog import FEATURE_CATALOG, enabled_feature_ids, load_feature
 from app.security.service_token import require_service_token
@@ -62,7 +62,7 @@ def _provider_free_app(config: RuntimeConfig, path: Path, monkeypatch):
 
 
 def test_audiobook_feature_is_in_lazy_catalog() -> None:
-    assert FEATURE_CATALOG["audiobook"] == "app.audiobook.feature:FEATURE"
+    assert FEATURE_CATALOG["audiobook"] == "app.apps.audiobook.feature:FEATURE"
     feature = load_feature("audiobook")
     assert feature.id == "audiobook"
     assert len(feature.routers) == 2

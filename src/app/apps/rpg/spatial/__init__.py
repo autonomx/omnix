@@ -14,13 +14,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.spatial.audibility import (
+from app.apps.rpg.spatial.audibility import (
     audible_entities_from,
     can_hear_area,
     can_hear_entity,
 )
-from app.rpg.spatial.distance import euclidean_distance
-from app.rpg.spatial.graph import (
+from app.apps.rpg.spatial.distance import euclidean_distance
+from app.apps.rpg.spatial.graph import (
     ensure_spatial_graph,
     find_connection,
     get_entity_area,
@@ -29,9 +29,9 @@ from app.rpg.spatial.graph import (
     list_entities_in_area,
     set_entity_area,
 )
-from app.rpg.spatial.movement import can_move_between, move_entity
-from app.rpg.spatial.serialization import normalize_spatial_graph
-from app.rpg.spatial.visibility import (
+from app.apps.rpg.spatial.movement import can_move_between, move_entity
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.visibility import (
     can_see_area,
     can_see_entity,
     visible_entities_from,
@@ -47,7 +47,7 @@ def distance(a: Any, b: Any) -> float:
 def astar(start: Any, goal: Any, session: Any | None = None) -> list[Any]:
     """Return a deterministic legacy path between two positions.
 
-    Older NPC planner code imports ``astar`` directly from ``app.rpg.spatial``
+    Older NPC planner code imports ``astar`` directly from ``app.apps.rpg.spatial``
     during app startup.  The current spatial graph layer owns area movement, so
     this compatibility helper intentionally avoids inventing graph state.  It
     returns the minimal valid path shape expected by the planner: ``[start]``

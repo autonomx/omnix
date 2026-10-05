@@ -9,12 +9,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_combat_session import apply_session_item_combat
-from app.rpg.session.item_effect_session import apply_item_effect_for_session, available_item_effects_for_session
-from app.rpg.session.item_market_session import apply_session_market_action, market_offer_quantities
-from app.rpg.session.item_pickup_session import apply_session_scene_item_pickup, available_scene_pickups_for_session
-from app.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
-from app.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
+from app.apps.rpg.session.item_combat_session import apply_session_item_combat
+from app.apps.rpg.session.item_effect_session import apply_item_effect_for_session, available_item_effects_for_session
+from app.apps.rpg.session.item_market_session import apply_session_market_action, market_offer_quantities
+from app.apps.rpg.session.item_pickup_session import apply_session_scene_item_pickup, available_scene_pickups_for_session
+from app.apps.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
+from app.apps.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
 
 ITEM_SESSION_ACTIONS_SOURCE = "engine_item_session_actions_v1"
 

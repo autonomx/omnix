@@ -17,10 +17,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import bindings_for_instrument, instrument_by_id
-from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import bindings_for_instrument, instrument_by_id
+from app.apps.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class MarketMetricPoint(BaseModel):

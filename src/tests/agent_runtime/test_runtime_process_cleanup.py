@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.pi_runtime import PiAgentRuntime
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime
 
 
 def test_pi_runtime_exposes_terminal_process_cleanup() -> None:

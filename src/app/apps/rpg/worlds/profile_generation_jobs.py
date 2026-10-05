@@ -11,18 +11,18 @@ from app.jobs.models import ResourceClass
 from app.persistence.database import DatabaseUnavailableError
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     GenreProfileGenerator,
     GenreProfileRegistry,
     ProfileResolution,
     default_profile_registry,
     resolve_or_generate_genre_profile,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.rpg.session.genesis.world_forge_profile_provider import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.session.genesis.world_forge_profile_provider import (
     build_genre_profile_generator_from_settings,
 )
-from app.rpg.session.genesis.world_forge_profiles import genre_profile_from_dict
+from app.apps.rpg.session.genesis.world_forge_profiles import genre_profile_from_dict
 
 from .generation_jobs import canonical_hash
 from .generation_routing import ResolvedWorldForgeRoute, resolve_world_forge_route
@@ -403,7 +403,7 @@ def execute_claimed_world_profile_job(
         selected_generator = generator or build_genre_profile_generator_from_settings(
             dict(payload.get("settings") or {})
         )
-        from app.rpg.llm_priority import background_rpg_llm_priority
+        from app.apps.rpg.llm_priority import background_rpg_llm_priority
 
         with background_rpg_llm_priority():
             resolution = resolve_or_generate_genre_profile(

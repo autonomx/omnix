@@ -5,10 +5,10 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-from app.agent_runtime.repository import PostgresAgentRunRepository
-from app.agent_runtime.task_graph import TaskGraph, TaskNode, task_node_fingerprint
-from app.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.task_graph import TaskGraph, TaskNode, task_node_fingerprint
+from app.platform.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity

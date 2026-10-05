@@ -14,7 +14,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
 
-from app.chat.contracts import model_key
+from app.platform.chat.contracts import model_key
 from app.observability.tts_stream_diagnostics import stream_log
 
 _ACTIVE_CALL: ContextVar[dict[str, Any] | None] = ContextVar(

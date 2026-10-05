@@ -1,16 +1,16 @@
-from app.rpg.session.genesis.world_forge_anchor_registry import (
+from app.apps.rpg.session.genesis.world_forge_anchor_registry import (
     allocate_global_anchor_registry,
     anchor_slice_for_domain,
     validate_global_anchor_registry,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     generate_campaign_topics,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
 
 
 def _graph():

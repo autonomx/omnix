@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.live_voice.llm import lmstudio_responses as runtime
+from app.platform.live_voice.llm import lmstudio_responses as runtime
 from app.providers import ChatMessage as ProviderMessage
 
 

@@ -4,9 +4,9 @@ The prospective-gap runtime reads the premarket handoff and the climatology
 state only from PostgreSQL. They arrive through explicit imports that record
 their provenance (exact content, SHA-256, source, importer):
 
-    python -m app.trading.prospective_gap_inputs import-handoff --file PATH
-    python -m app.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD
-    python -m app.trading.prospective_gap_inputs import-climatology --file PATH
+    python -m app.apps.trading.prospective_gap_inputs import-handoff --file PATH
+    python -m app.apps.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD
+    python -m app.apps.trading.prospective_gap_inputs import-climatology --file PATH
 
 The scheduled GitHub import (``trading.prospective_gap_handoff_import``) runs
 during the premarket window: it imports today's handoff from
@@ -33,7 +33,7 @@ from typing import Any
 
 from app.config.env import env_str
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
-from app.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN
 
 from .prospective_gap_runtime import ProspectiveClimatologyState, SchedulerPremarketHandoff
 
@@ -189,7 +189,7 @@ def previous_session(session_date: date) -> date:
     """The last U.S. equity trading day before ``session_date``."""
     from datetime import timedelta
 
-    from app.trading.us_equity_calendar import regular_holidays
+    from app.apps.trading.us_equity_calendar import regular_holidays
 
     day = session_date - timedelta(days=1)
     while day.weekday() >= 5 or day in regular_holidays(day.year):
@@ -260,7 +260,7 @@ def handoff_import_task(context) -> Any:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app.trading.prospective_gap_inputs", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="python -m app.apps.trading.prospective_gap_inputs", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     handoff = commands.add_parser("import-handoff", help="import a premarket handoff")
     source = handoff.add_mutually_exclusive_group(required=True)

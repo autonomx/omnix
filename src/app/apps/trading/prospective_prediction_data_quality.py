@@ -15,8 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import AnalysisSessionPrices
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 DATA_QUALITY_POLICY_VERSION = "prospective-price-crosscheck-v1"
 

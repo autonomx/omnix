@@ -2,8 +2,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.audiobook.repository import PostgresAudiobookRepository, cancel_render_run_jobs
-from app.audiobook.worker import run_ingest_once
+from app.apps.audiobook.repository import PostgresAudiobookRepository, cancel_render_run_jobs
+from app.apps.audiobook.worker import run_ingest_once
 from app.persistence.tenant import local_tenant_context
 
 
@@ -94,7 +94,7 @@ def test_reclaimed_superseded_ingest_is_canceled_before_extraction(monkeypatch):
         yield SimpleNamespace(jobs=jobs, connection=Connection(("new-job",)), assets=_SOURCE_ASSET,
                               commit=lambda: None, rollback=lambda: None)
 
-    monkeypatch.setattr("app.audiobook.worker.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.worker.unit_of_work", work)
     assert run_ingest_once(None, None, local_tenant_context(), worker_id="recovery")
     assert canceled == ["old-job"]
 
@@ -125,12 +125,12 @@ def test_ingest_superseded_during_extraction_cannot_publish(monkeypatch):
         connection.current = ("new-job",)
         return SimpleNamespace(chapters=())
 
-    monkeypatch.setattr("app.audiobook.worker.unit_of_work", work)
-    monkeypatch.setattr("app.audiobook.worker.extract_source", extract)
-    monkeypatch.setattr("app.audiobook.worker._reuse_existing_dialogue_segmentation",
+    monkeypatch.setattr("app.apps.audiobook.worker.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.worker.extract_source", extract)
+    monkeypatch.setattr("app.apps.audiobook.worker._reuse_existing_dialogue_segmentation",
                         lambda *args: SimpleNamespace(chapters=()))
-    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.analyze_document_structure", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_structure_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.analyze_document_structure", lambda *args, **kwargs: None)
     blobs = SimpleNamespace(read_bytes=lambda *args, **kwargs: b"source text")
     assert run_ingest_once(None, blobs, local_tenant_context(), worker_id="slow-worker")
     # No append_source_revision or complete method exists on the fakes: publishing

@@ -8,15 +8,15 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.v2 import MemorySpaceKey, RetrievalResult
-from app.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
-from app.assistant_memory.v2.legacy_shadow import (
+from app.platform.assistant_memory.v2 import MemorySpaceKey, RetrievalResult
+from app.platform.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
+from app.platform.assistant_memory.v2.legacy_shadow import (
     LegacyMemoryV2Importer,
     PostgresMemoryV2ShadowEvaluationStore,
     compare_shadow_retrieval,
 )
-from app.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
-from app.assistant_memory.v2.shadow_report import build_shadow_report, main
+from app.platform.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
+from app.platform.assistant_memory.v2.shadow_report import build_shadow_report, main
 from app.conversation.memory_contracts import MemoryRecord
 from app.persistence.migrations import apply_migrations
 from app.persistence.tenant_scope import system_scope

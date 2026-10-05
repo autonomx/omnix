@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.live_speech.session_queue import QueuedLiveSpeechSession
+from app.platform.live_speech.session_queue import QueuedLiveSpeechSession
 
 
 @pytest.mark.anyio

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
-from app.trading.trade_logging import trade_log, trade_log_path
+from app.apps.trading.trade_logging import trade_log, trade_log_path
 
 
 def test_trade_audit_log_writes_jsonl_and_redacts_secrets(monkeypatch, tmp_path) -> None:
@@ -52,7 +52,7 @@ def test_trade_audit_log_can_be_disabled(monkeypatch, tmp_path) -> None:
 
 
 def test_each_process_writes_its_own_file(monkeypatch, tmp_path) -> None:
-    from app.trading.trade_logging import trade_log_process_name
+    from app.apps.trading.trade_logging import trade_log_process_name
 
     monkeypatch.setenv("OMNIX_TRADE_LOG_DIR", str(tmp_path / "trade"))
     monkeypatch.delenv("OMNIX_INSTANCE_NAME", raising=False)

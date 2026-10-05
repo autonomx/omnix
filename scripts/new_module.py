@@ -2,7 +2,7 @@
 
     python scripts/new_module.py <module-id> --tier app|platform [--web] [--no-generate]
 
-Writes the module anatomy (roadmap §1.2) under ``src/app/<package>/``: the
+Writes the module anatomy (roadmap §1.2) under ``src/app/<tier folder>/<package>/``: the
 FeatureModule, a contract, a service and repository, an example durable job,
 ``declarations.py`` (settings section, retention, permissions) and a migration
 creating a tenant-isolated table and a child table that follows it, with the
@@ -26,6 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "src" / "app"
 CATALOG = APP / "runtime" / "feature_catalog.py"
+# The tier folder a module's package sits in (PA-5.3).
+TIER_FOLDERS = {"app": "apps", "platform": "platform"}
 WEB = ROOT / "web"
 WEB_MANIFESTS = WEB / "src" / "app" / "modulesManifest.ts"
 MODULE_ID = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
@@ -395,7 +397,7 @@ def test_the_module_declares_its_tier_and_job() -> None:
 def backend_files(n: dict[str, str], *, tier: str, web: bool, version: int) -> dict[Path, str]:
     """The module package, its migration and its test directory."""
     pkg, title = n["pkg"], n["title"]
-    base = APP / pkg
+    base = APP / TIER_FOLDERS[tier] / pkg
     tests = ROOT / "src" / "tests" / pkg
     files = {
         base / "__init__.py": f'"""{title} module (scaffolded by scripts/new_module.py, PA-4.2)."""\n',
@@ -480,10 +482,10 @@ export function {pascal}Workspace({{ module }}: {{ module: OmnixModuleDefinition
     }
 
 
-def register(n: dict[str, str], *, web: bool) -> list[Path]:
+def register(n: dict[str, str], *, tier: str, web: bool) -> list[Path]:
     """The two registration lines, the only hand edits outside the module."""
     text = CATALOG.read_text(encoding="utf-8")
-    entry = f'    "{n["id"]}": "app.{n["pkg"]}.feature:FEATURE",\n'
+    entry = f'    "{n["id"]}": "app.{TIER_FOLDERS[tier]}.{n["pkg"]}.feature:FEATURE",\n'
     closing = text.index("})", text.index("FEATURE_CATALOG"))
     CATALOG.write_text(text[:closing] + entry + text[closing:], encoding="utf-8")
     edited = [CATALOG]
@@ -517,7 +519,7 @@ def scaffold(module_id: str, *, tier: str, web: bool) -> dict[str, list[Path]]:
     if tier not in {"app", "platform"}:
         raise ScaffoldError("tier must be app or platform")
     n = names(module_id)
-    if f'"{module_id}":' in CATALOG.read_text(encoding="utf-8") or (APP / n["pkg"]).exists():
+    if f'"{module_id}":' in CATALOG.read_text(encoding="utf-8") or (APP / TIER_FOLDERS[tier] / n["pkg"]).exists():
         raise ScaffoldError(f"module {module_id!r} already exists")
     files = backend_files(n, tier=tier, web=web, version=next_migration_version())
     if web:
@@ -527,7 +529,7 @@ def scaffold(module_id: str, *, tier: str, web: bool) -> dict[str, list[Path]]:
     for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="\n")
-    return {"written": sorted(files), "edited": register(n, web=web)}
+    return {"written": sorted(files), "edited": register(n, tier=tier, web=web)}
 
 
 def main(argv: list[str] | None = None) -> int:

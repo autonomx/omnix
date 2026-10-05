@@ -456,7 +456,8 @@ def _is_web_ui_validation(command: str) -> bool:
         or ("npm --prefix" in normalized and " build" in normalized)
     ):
         return True
-    return "pytest" in normalized and "web" in normalized
+    # A pytest command that names a web/ path (PA-5.4), not any word containing "web".
+    return "pytest" in normalized and re.search(r"(?:^|[\s'\"=])web/", normalized) is not None
 
 
 def _successful_exact_ui_validation(

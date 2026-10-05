@@ -24,27 +24,27 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from app.rpg.ai.grounding_settings import normalize_grounding_settings
-from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
-from app.rpg.memory.npc_memory_recall import memory_reference_is_backed
-from app.rpg.dialogue.npc_response_architecture import (
+from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.ai.grounding_validator import select_grounded_narration_candidate
+from app.apps.rpg.memory.npc_memory_recall import memory_reference_is_backed
+from app.apps.rpg.dialogue.npc_response_architecture import (
     build_runtime_npc_response_architecture,
 )
-from app.rpg.presentation.current_turn_prompt_contract import (
+from app.apps.rpg.presentation.current_turn_prompt_contract import (
     build_runtime_current_turn_prompt_contract,
     format_runtime_prompt_contract_block,
 )
-from app.rpg.presentation.grounding_validator import (
+from app.apps.rpg.presentation.grounding_validator import (
     build_runtime_presentation_guardrails_block,
     sanitize_unsupported_combat_payload,
 )
-from app.rpg.presentation.provider_payload import (
+from app.apps.rpg.presentation.provider_payload import (
     parse_runtime_provider_payload,
 )
 
 
 # Phase 8: player-facing encounter view
-from app.rpg.player import build_encounter_view
+from app.apps.rpg.player import build_encounter_view
 
 logger = logging.getLogger(__name__)
 

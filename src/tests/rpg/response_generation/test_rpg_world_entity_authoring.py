@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.entity_authoring import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.entity_authoring import (
     replace_entity_content,
     validate_entity_references,
 )

@@ -9,10 +9,10 @@ from typing import Any, Iterable
 # dialogue answer before the expensive full narrator can run.  This preserves the
 # intended one-foreground-LLM dialogue path and prevents deterministic service /
 # economy fallbacks from overriding safe social dialogue.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict,
 )
-from app.rpg.session.llm_narration_projection import (
+from app.apps.rpg.session.llm_narration_projection import (
     _phase8_part31_narration_request as _phase8_part31_narration_request,
 )
 
@@ -75,7 +75,7 @@ def _phase8_part38_norm(value: Any) -> str:
 
 
 def _phase8_part38_direct_safe(source: dict[str, Any]) -> bool:
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
@@ -114,7 +114,7 @@ def _phase8_part38_direct_safe(source: dict[str, Any]) -> bool:
 
 
 def _phase8_part38_player_utterance(source: dict[str, Any]) -> str:
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.modding.content_packs import build_pack_application_preview
+from app.apps.rpg.modding.content_packs import build_pack_application_preview
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

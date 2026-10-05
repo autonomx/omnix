@@ -4,25 +4,25 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
-from app.rpg.session.genesis.canon_audit import audit_generated_canon
-from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
-from app.rpg.session.genesis.world_forge_fact_pipeline_publication import (
+from app.apps.rpg.session.genesis.canon_audit import audit_generated_canon
+from app.apps.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicGraph
+from app.apps.rpg.session.genesis.world_forge_fact_pipeline_publication import (
     validate_or_compile_structured_entity_facts,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
 )
-from app.rpg.session.genesis.world_forge_integrity import (
+from app.apps.rpg.session.genesis.world_forge_integrity import (
     WorldForgeIntegrityError,
     WorldForgeIntegrityIssue,
 )
-from app.rpg.session.genesis.world_forge_presentation_trusted import (
+from app.apps.rpg.session.genesis.world_forge_presentation_trusted import (
     render_fact_derived_presentations,
 )
-from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
-from app.rpg.session.genesis.world_forge_semantic_quality import (
+from app.apps.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
+from app.apps.rpg.session.genesis.world_forge_semantic_quality import (
     require_topic_semantic_quality,
 )
 

@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Request
 
-from app.rpg.worlds.lifecycle_service import (
+from app.apps.rpg.worlds.lifecycle_service import (
     delete_world_project,
     world_deletion_eligibility,
 )

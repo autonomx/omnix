@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.live_speech.benchmark_runner import run_benchmarks, sample_pcm_chunks
-from app.live_speech.realtime import LiveSpeechRealtimeService
-from app.live_speech.tts import DeterministicSpeechSynthesizer
+from app.platform.live_speech.benchmark_runner import run_benchmarks, sample_pcm_chunks
+from app.platform.live_speech.realtime import LiveSpeechRealtimeService
+from app.platform.live_speech.tts import DeterministicSpeechSynthesizer
 
 
 def test_benchmark_runner_emits_targets_and_results() -> None:

@@ -143,7 +143,7 @@ def test_first_exit_signal_drains_and_second_falls_through(monkeypatch) -> None:
 
 def test_gateway_readiness_reports_draining_with_build_revision(monkeypatch) -> None:
     from app.config.runtime import RuntimeConfig
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     config = RuntimeConfig.from_environment({"OMNIX_SOFTWARE_REVISION": "rev-n1"})
     app = create_gateway_app(runtime_config=config)

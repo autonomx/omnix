@@ -9,9 +9,9 @@ Tests ensure that existing functionality is not broken by Phase 4 changes:
 
 import pytest
 
-from app.rpg.core.event_bus import Event, EventBus
-from app.rpg.core.timeline_graph import TimelineGraph
-from app.rpg.core.timeline_query import (
+from app.apps.rpg.core.event_bus import Event, EventBus
+from app.apps.rpg.core.timeline_graph import TimelineGraph
+from app.apps.rpg.core.timeline_query import (
     TimelineQueryEngine,
     create_intent_event,
 )

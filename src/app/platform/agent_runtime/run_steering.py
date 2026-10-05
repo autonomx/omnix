@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING
 from .run_repository_queries import PostgresAgentRunQueries
 
 if TYPE_CHECKING:
-    from app.agent_runtime.service_core import AgentRunService
+    from app.platform.agent_runtime.service_core import AgentRunService
 
 
 def command_with_context(

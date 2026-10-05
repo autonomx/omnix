@@ -28,7 +28,7 @@ def ffmpeg_binary() -> str:
         # imageio-ffmpeg binary without adding it to the launcher PATH.
         # Prefer that local, pinned binary before reporting the prerequisite
         # as unavailable. An explicit OMNIX_FFMPEG value and PATH still win.
-        root = Path(__file__).resolve().parents[3]
+        root = Path(__file__).resolve().parents[4]
         bundled = sorted(
             (root / "venv" / "Lib" / "site-packages" / "imageio_ffmpeg" / "binaries").glob(
                 "ffmpeg*.exe"

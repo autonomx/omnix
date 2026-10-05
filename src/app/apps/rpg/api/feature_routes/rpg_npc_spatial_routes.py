@@ -7,20 +7,20 @@ from typing import Any, Literal, Mapping
 from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
-from app.rpg.npc_spatial_campaign_authoring import (
+from app.apps.rpg.npc_spatial_campaign_authoring import (
     configure_campaign_spatial_policy,
     read_campaign_spatial_state,
     save_campaign_spatial_goal,
     save_campaign_spatial_routine,
 )
-from app.rpg.npc_spatial_campaign_contracts import (
+from app.apps.rpg.npc_spatial_campaign_contracts import (
     CampaignNpcSpatialGoal,
     CampaignNpcSpatialPolicy,
     CampaignNpcSpatialRoutine,
     CampaignSpatialTickRequest,
     NpcSpatialRoutineStep,
 )
-from app.rpg.npc_spatial_campaign_runtime import advance_campaign_spatial_tick
+from app.apps.rpg.npc_spatial_campaign_runtime import advance_campaign_spatial_tick
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 

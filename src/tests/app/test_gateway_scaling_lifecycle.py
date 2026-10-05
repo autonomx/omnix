@@ -10,9 +10,9 @@ import pytest
 
 from app.runtime.background import GatewayBackgroundRuntime
 from app.providers import service as shared
-from app.gateway.lifecycle import gateway_lifespan
-from app.chat import generation_jobs as jobs
-from app.trading.metric_data import BinanceLiquidationBuffer
+from app.composition.gateway.lifecycle import gateway_lifespan
+from app.platform.chat import generation_jobs as jobs
+from app.apps.trading.metric_data import BinanceLiquidationBuffer
 
 
 def test_gateway_composition_does_not_patch_fastapi_constructor():
@@ -22,7 +22,7 @@ def test_gateway_composition_does_not_patch_fastapi_constructor():
             sys.executable,
             "-c",
             "from fastapi import FastAPI; original = FastAPI.__init__; "
-            "from app.gateway.main import create_gateway_app; gateway = create_gateway_app(); "
+            "from app.composition.gateway.main import create_gateway_app; gateway = create_gateway_app(); "
             "assert FastAPI.__init__ is original; "
             "assert not any(getattr(r, 'path', '').startswith('/api/') for r in FastAPI(title='Omnix Web Gateway').routes); "
             "assert gateway.state.features_registered",
@@ -194,7 +194,7 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
 
 
 def test_delivery_worker_restarts_explicitly_and_drops_post_shutdown_checkpoints():
-    from app.live_voice.speech.runtime_offload import DeliveryPersistenceWorker
+    from app.platform.live_voice.speech.runtime_offload import DeliveryPersistenceWorker
 
     received = []
     finished = threading.Event()
@@ -238,7 +238,7 @@ def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
 
 def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypatch):
     from fastapi import FastAPI
-    from app.live_voice.speech import runtime_offload as offload
+    from app.platform.live_voice.speech import runtime_offload as offload
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
     monkeypatch.delenv("OMNIX_GATEWAY_TTS_HTTP", raising=False)
@@ -256,7 +256,7 @@ def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypa
     monkeypatch.setattr(resolver, "start", lambda: calls.append("start"))
     startup = next(
         handler for handler in app.router.on_startup
-        if handler.__module__ == "app.live_voice.speech.runtime_offload"
+        if handler.__module__ == "app.platform.live_voice.speech.runtime_offload"
     )
     asyncio.run(startup())
     assert calls == []

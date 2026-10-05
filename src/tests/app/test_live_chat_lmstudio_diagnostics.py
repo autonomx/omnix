@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from app.live_voice.llm import lmstudio_diagnostics as diagnostics
-from app.live_voice.llm import lmstudio_responses as responses_runtime
+from app.platform.live_voice.llm import lmstudio_diagnostics as diagnostics
+from app.platform.live_voice.llm import lmstudio_responses as responses_runtime
 from app.providers.base import ChatMessage, ProviderConfig
 from app.providers.lmstudio_provider import LMStudioProvider
 

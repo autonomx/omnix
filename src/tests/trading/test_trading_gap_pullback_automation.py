@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from app.trading.bounce_model import label_two_r_before_one_r
-from app.trading.catalyst_evidence import capture_catalyst_evidence
-from app.trading.gapper_dataset import (
+from app.apps.trading.bounce_model import label_two_r_before_one_r
+from app.apps.trading.catalyst_evidence import capture_catalyst_evidence
+from app.apps.trading.gapper_dataset import (
     GapperCandidate,
     freeze_gapper_universe,
     time_of_day_relative_volume,
 )
-from app.trading.models import MarketBar
-from app.trading.paper import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountSnapshot,
     PaperBalance,
@@ -22,11 +22,11 @@ from app.trading.paper import (
     PaperLedgerEntry,
     PaperPosition,
 )
-from app.trading.replay import FrozenBar, dataset_gaps
-from app.trading.strategies import evaluate_gap_pullback, session_vwap
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
-from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
-from app.trading.strategy_risk import size_strategy_entry
+from app.apps.trading.replay import FrozenBar, dataset_gaps
+from app.apps.trading.strategies import evaluate_gap_pullback, session_vwap
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
+from app.apps.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
+from app.apps.trading.strategy_risk import size_strategy_entry
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -479,10 +479,10 @@ def test_two_r_label_is_pessimistic_when_stop_and_target_hit_same_bar() -> None:
 
 
 def test_strategy_surface_remains_paper_only_and_ai_shadow_only() -> None:
-    monitor = Path("src/app/trading/strategy_monitor.py").read_text()
-    catalyst = Path("src/app/trading/catalyst_evidence.py").read_text().lower()
-    gateway = Path("src/app/trading/route_registration.py").read_text()
-    strategy_api = Path("src/app/trading/strategy_api.py").read_text()
+    monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text()
+    catalyst = Path("src/app/apps/trading/catalyst_evidence.py").read_text().lower()
+    gateway = Path("src/app/apps/trading/route_registration.py").read_text()
+    strategy_api = Path("src/app/apps/trading/strategy_api.py").read_text()
 
     assert '"live_broker_enabled": False' in monitor
     assert '"ai_order_placement_enabled": False' in monitor

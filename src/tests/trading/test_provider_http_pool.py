@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 APP = Path(__file__).resolve().parents[2] / "app"
 

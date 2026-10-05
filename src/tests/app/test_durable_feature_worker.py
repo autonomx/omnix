@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from app.worker_runtime.durable_feature_worker import (
+from app.composition.worker_runtime.durable_feature_worker import (
     _LeaseBoundJobStore,
     DurableFeatureJobWorker,
     execute_durable_feature_job,
@@ -308,7 +308,7 @@ def test_a_claimed_job_logs_under_its_submitting_request_id(monkeypatch):
 def test_a_job_execution_is_timed_by_type_and_outcome(monkeypatch):
     from app.jobs.models import JobStatus
     from app.observability.metrics import exposition
-    from app.worker_runtime import durable_feature_worker
+    from app.composition.worker_runtime import durable_feature_worker
 
     def executions(outcome):
         prefix = f'omnix_job_execution_seconds_count{{job_type="feature.timed",outcome="{outcome}"}} '

@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-from app.rpg.worlds.world_bundle import parse_world_bundle_archive
+from app.apps.rpg.worlds.world_bundle import parse_world_bundle_archive
 
 SAMPLE_DIR = (
     Path(__file__).resolve().parents[4]

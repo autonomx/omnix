@@ -5,11 +5,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     CampaignBibleSnapshot,
     EvidenceRecord,
 )
-from app.rpg.narrative_engine.shadow import runtime_evidence
+from app.apps.rpg.narrative_engine.shadow import runtime_evidence
 
 from .campaign_bible_runtime import load_campaign_bible_snapshot
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
@@ -97,7 +97,7 @@ def _session(result: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
     if isinstance(existing, Mapping):
         return existing
     try:
-        from app.rpg.session.service import load_session
+        from app.apps.rpg.session.service import load_session
 
         loaded = load_session(campaign_id)
         return loaded if isinstance(loaded, Mapping) else {}

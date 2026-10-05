@@ -141,7 +141,7 @@ limits happen at the route and are counted in both.
 
 ## Job worker
 
-The job worker process (`python -m app.worker`) serves its own `GET /metrics`
+The job worker process (`python -m app.composition.worker`) serves its own `GET /metrics`
 on its private listener (`--metrics-host`, `--metrics-port`), per resource pool:
 `omnix_job_worker_pool_ready`, `omnix_job_worker_pool_active_jobs`,
 `omnix_job_worker_pool_concurrency_limit`, and the counters

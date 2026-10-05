@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.extraction import EXTRACTOR_VERSION
-from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_ingest_once
+from app.apps.audiobook.extraction import EXTRACTOR_VERSION
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.worker import run_ingest_once
 
 
 @pytest.mark.parametrize("force", [False, True])
@@ -37,12 +37,12 @@ def test_quote_extraction_publishes_spans_without_queuing_classification(monkeyp
     def work(_database):
         assets = SimpleNamespace(asset_fields=lambda *_args, **_kwargs: {"storage_key": "key", "checksum_sha256": "checksum"})
         yield SimpleNamespace(connection=Connection(), jobs=Jobs(), assets=assets, commit=lambda: None, rollback=lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.unit_of_work", work)
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker._reuse_existing_dialogue_segmentation", lambda *_args: None)
-    monkeypatch.setattr("app.audiobook.worker.PostgresAudiobookRepository.append_source_revision", lambda _self, _context, revision, **_kwargs: published.append(revision))
-    monkeypatch.setattr("app.audiobook.worker.PostgresAudiobookDocumentStructureRepository.append_analysis", lambda *_args, **_kwargs: "structure")
+    monkeypatch.setattr("app.apps.audiobook.worker.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_structure_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker._reuse_existing_dialogue_segmentation", lambda *_args: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.PostgresAudiobookRepository.append_source_revision", lambda _self, _context, revision, **_kwargs: published.append(revision))
+    monkeypatch.setattr("app.apps.audiobook.worker.PostgresAudiobookDocumentStructureRepository.append_analysis", lambda *_args, **_kwargs: "structure")
     assert run_ingest_once(None, SimpleNamespace(read_bytes=lambda *_args, **_kwargs: b'"Hello."'), SimpleNamespace(workspace_id="workspace"), worker_id="worker")
     assert len(published) == 1 and published[0].chapters[0].spans[0].structural_kind == "dialogue"
     assert len(completed) == 1
@@ -64,7 +64,7 @@ def test_classification_uses_reviewed_spans_and_changed_rules_require_extraction
         yield SimpleNamespace(connection=Connection(), commit=lambda: None,
                               jobs=SimpleNamespace(create_job=lambda _context, payload: queued.append(payload),
                                                    query_jobs=lambda *_args, **_kwargs: []))
-    monkeypatch.setattr("app.audiobook.service.unit_of_work", work)
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", work)
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")
     if not extraction_only and rules == "changed rules":

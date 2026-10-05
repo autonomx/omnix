@@ -21,17 +21,17 @@ from app.security.model_service import ModelServiceMiddleware
 
 environment()["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 
-from app.image.config import get_active_image_provider_name, is_image_generation_enabled
-from app.image.downloads import download_image_model, get_image_local_model_status
-from app.image.lifecycle import (
+from app.platform.image.config import get_active_image_provider_name, is_image_generation_enabled
+from app.platform.image.downloads import download_image_model, get_image_local_model_status
+from app.platform.image.lifecycle import (
     get_image_provider_cache_status,
     is_image_provider_loaded,
     load_image_provider,
     unload_all_image_providers,
     unload_image_provider,
 )
-from app.image.providers.registry import get_image_provider_definition, list_image_providers
-from app.image.service import generate_image_local
+from app.platform.image.providers.registry import get_image_provider_definition, list_image_providers
+from app.platform.image.service import generate_image_local
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 from typing import Any as _TypedRequestAny

@@ -4,9 +4,9 @@ import os
 
 import pytest
 
-from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_analyze_once, run_ingest_once
-from app.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.worker import run_analyze_once, run_ingest_once
+from app.apps.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -58,9 +58,9 @@ def test_ingest_persists_structure_and_scoped_override_history(
     tmp_path, monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"],
         pool_min=1,
@@ -221,11 +221,11 @@ def test_render_run_omits_fully_skipped_source_chapters(
     tmp_path, monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     monkeypatch.setattr(
-        "app.audiobook.service.assert_model_revision",
+        "app.apps.audiobook.service.assert_model_revision",
         lambda _provider, _model, _revision: None,
     )
     database = PostgresDatabase(DatabaseSettings(
@@ -325,9 +325,9 @@ def test_role_override_requeues_analysis_when_speaker_visibility_changes(
     tmp_path, monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.audiobook.worker.local_structure_classifier", lambda: None
+        "app.apps.audiobook.worker.local_structure_classifier", lambda: None
     )
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"],
         pool_min=1,

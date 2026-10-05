@@ -7,8 +7,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.kernel_routes.core_jobs_routes import register_core_jobs_routes
-from app.worker_runtime.durable_feature_worker import _LeaseBoundJobStore
+from app.composition.gateway.kernel_routes.core_jobs_routes import register_core_jobs_routes
+from app.composition.worker_runtime.durable_feature_worker import _LeaseBoundJobStore
 from app.jobs.foreground_execution import ForegroundExecution, current_foreground_execution, foreground_execution
 from app.jobs.models import (
     CompleteJobRequest,
@@ -20,7 +20,7 @@ from app.jobs.models import (
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.identity_service import PostgresIdentityRepository
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work

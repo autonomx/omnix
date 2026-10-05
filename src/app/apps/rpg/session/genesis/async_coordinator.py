@@ -92,7 +92,7 @@ class _BackgroundPriorityGenerator:
         self.generator = generator
 
     def generate(self, node: Any, **kwargs: Any) -> GeneratedTopic:
-        from app.rpg.llm_priority import background_rpg_llm_priority
+        from app.apps.rpg.llm_priority import background_rpg_llm_priority
 
         with background_rpg_llm_priority():
             return self.generator.generate(node, **kwargs)
@@ -128,7 +128,7 @@ def _write_session_progress(
     job_id: str,
     error: str = "",
 ) -> dict[str, Any] | None:
-    from app.rpg.session.service import load_session, save_session
+    from app.apps.rpg.session.service import load_session, save_session
 
     session = load_session(campaign_id)
     if not session:
@@ -223,7 +223,7 @@ def enqueue_campaign_genesis(
     session["setup_payload"] = setup
     session["manifest"] = manifest
 
-    from app.rpg.session.service import save_session
+    from app.apps.rpg.session.service import save_session
 
     saved = save_session(session, compact=True)
     try:
@@ -371,7 +371,7 @@ def _write_expansion_progress(
     job_id: str,
     error: str = "",
 ) -> dict[str, Any] | None:
-    from app.rpg.session.service import load_session, save_session
+    from app.apps.rpg.session.service import load_session, save_session
 
     session = load_session(campaign_id)
     if not session:
@@ -469,7 +469,7 @@ def _run_campaign_expansion_job(
         }
         selected_generator = generator
         if selected_generator is None:
-            from app.rpg.worlds.providers.world_forge import (
+            from app.apps.rpg.worlds.providers.world_forge import (
                 build_production_world_forge_generator,
             )
 
@@ -483,8 +483,8 @@ def _run_campaign_expansion_job(
             canon_revision=2,
         )
         certification = require_world_forge_commit_ready(world_forge)
-        from app.rpg.llm_priority import background_rpg_llm_priority
-        from app.rpg.session.service import load_session, save_session
+        from app.apps.rpg.llm_priority import background_rpg_llm_priority
+        from app.apps.rpg.session.service import load_session, save_session
 
         with background_rpg_llm_priority():
             session = load_session(campaign_id)
@@ -650,7 +650,7 @@ def run_campaign_genesis_worker_once(
             launch_only=True,
         )
         certification = require_world_forge_commit_ready(world_forge)
-        from app.rpg.session.service import load_session, save_session
+        from app.apps.rpg.session.service import load_session, save_session
 
         session = load_session(campaign_id)
         if not session:

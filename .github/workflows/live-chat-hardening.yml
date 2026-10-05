@@ -4,10 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "src/app/chat/**"
-      - "src/app/live_voice/**"
-      - "src/app/assistant_memory/**"
-      - "src/app/agent_runtime/**"
+      - "src/app/platform/chat/**"
+      - "src/app/platform/live_voice/**"
+      - "src/app/platform/assistant_memory/**"
+      - "src/app/platform/agent_runtime/**"
       - "src/tests/app/test_live_chat_*.py"
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/agent_runtime/**"
@@ -17,10 +17,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/app/chat/**"
-      - "src/app/live_voice/**"
-      - "src/app/assistant_memory/**"
-      - "src/app/agent_runtime/**"
+      - "src/app/platform/chat/**"
+      - "src/app/platform/live_voice/**"
+      - "src/app/platform/assistant_memory/**"
+      - "src/app/platform/agent_runtime/**"
       - "src/tests/app/test_live_chat_*.py"
       - "src/tests/app/test_live_voice_*.py"
       - "src/tests/agent_runtime/**"
@@ -66,53 +66,53 @@ jobs:
         run: |
           set -o pipefail
           ruff check \
-            src/app/assistant_memory/companion_context.py \
-            src/app/assistant_memory/controls.py \
-            src/app/assistant_memory/initiative.py \
-            src/app/assistant_memory/jobs.py \
-            src/app/assistant_memory/management_routes.py \
-            src/app/assistant_memory/observability.py \
-            src/app/assistant_memory/paralinguistic_state.py \
-            src/app/assistant_memory/rollout.py \
-            src/app/assistant_memory/settings.py \
-            src/app/assistant_memory/settings_routes.py \
-            src/app/assistant_memory/structured_consolidation.py \
-            src/app/assistant_memory/structured_extraction.py \
-            src/app/assistant_memory/structured_provider.py \
-            src/app/assistant_memory/temporal_retrieval.py \
-            src/app/chat/character_store.py \
-            src/app/chat/compaction.py \
-            src/app/chat/live_conversation_proactive.py \
-            src/app/chat/memory_commands.py \
-            src/app/chat/provider_metrics.py \
-            src/app/chat/retention_policy.py \
-            src/app/desktop_companion/context.py \
-            src/app/desktop_companion/memory_bridge.py \
-            src/app/desktop_companion/routes.py \
+            src/app/platform/assistant_memory/companion_context.py \
+            src/app/platform/assistant_memory/controls.py \
+            src/app/platform/assistant_memory/initiative.py \
+            src/app/platform/assistant_memory/jobs.py \
+            src/app/platform/assistant_memory/management_routes.py \
+            src/app/platform/assistant_memory/observability.py \
+            src/app/platform/assistant_memory/paralinguistic_state.py \
+            src/app/platform/assistant_memory/rollout.py \
+            src/app/platform/assistant_memory/settings.py \
+            src/app/platform/assistant_memory/settings_routes.py \
+            src/app/platform/assistant_memory/structured_consolidation.py \
+            src/app/platform/assistant_memory/structured_extraction.py \
+            src/app/platform/assistant_memory/structured_provider.py \
+            src/app/platform/assistant_memory/temporal_retrieval.py \
+            src/app/platform/chat/character_store.py \
+            src/app/platform/chat/compaction.py \
+            src/app/platform/chat/live_conversation_proactive.py \
+            src/app/platform/chat/memory_commands.py \
+            src/app/platform/chat/provider_metrics.py \
+            src/app/platform/chat/retention_policy.py \
+            src/app/apps/desktop_companion/context.py \
+            src/app/apps/desktop_companion/memory_bridge.py \
+            src/app/apps/desktop_companion/routes.py \
             src/app/observability/content_free_diagnostics.py \
-            src/app/gateway/event_loop_lag_monitor.py \
-            src/app/live_voice/prompt/companion_context.py \
-            src/app/live_voice/prompt/profile.py \
-            src/app/live_voice/llm/stream.py \
-            src/app/live_voice/llm/metrics.py \
-            src/app/live_voice/llm/routing.py \
-            src/app/live_voice/llm/retry.py \
-            src/app/chat/live_material_context.py \
-            src/app/chat/live_observation_generation.py \
-            src/app/live_voice/transport/cue_asset_routes.py \
-            src/app/live_voice/speech/runtime_offload.py \
-            src/app/live_voice/release_gate.py \
-            src/app/chat/live_chat_release_gate.py \
-            src/app/chat/live_chat_release_aggregation.py \
-            src/app/chat/evaluation_store.py \
-            src/app/chat/live_chat_evaluation_routes.py \
-            src/app/live_voice/transport/diagnostics_routes.py \
-            src/app/assistant_memory/jobs.py \
-            src/app/live_voice/transport/websocket.py \
+            src/app/composition/gateway/event_loop_lag_monitor.py \
+            src/app/platform/live_voice/prompt/companion_context.py \
+            src/app/platform/live_voice/prompt/profile.py \
+            src/app/platform/live_voice/llm/stream.py \
+            src/app/platform/live_voice/llm/metrics.py \
+            src/app/platform/live_voice/llm/routing.py \
+            src/app/platform/live_voice/llm/retry.py \
+            src/app/platform/chat/live_material_context.py \
+            src/app/platform/chat/live_observation_generation.py \
+            src/app/platform/live_voice/transport/cue_asset_routes.py \
+            src/app/platform/live_voice/speech/runtime_offload.py \
+            src/app/platform/live_voice/release_gate.py \
+            src/app/platform/chat/live_chat_release_gate.py \
+            src/app/platform/chat/live_chat_release_aggregation.py \
+            src/app/platform/chat/evaluation_store.py \
+            src/app/platform/chat/live_chat_evaluation_routes.py \
+            src/app/platform/live_voice/transport/diagnostics_routes.py \
+            src/app/platform/assistant_memory/jobs.py \
+            src/app/platform/live_voice/transport/websocket.py \
             src/app/conversation/tts_stream_contract.py \
             src/app/observability/tts_stream_diagnostics.py \
-            src/app/chat/persistence/chat_store.py \
-            src/app/chat/persistence/chat_runtime.py \
+            src/app/platform/chat/persistence/chat_store.py \
+            src/app/platform/chat/persistence/chat_runtime.py \
             src/app/providers/lmstudio_provider.py \
             src/app/providers/stt_live_runtime_support.py \
             src/app/providers/stt_live_websocket.py \

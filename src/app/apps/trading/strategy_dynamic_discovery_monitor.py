@@ -17,7 +17,7 @@ from .strategy_dynamic_discovery import (
     INTERDAY_TRADING_STRATEGY_ID,
 )
 from .strategy_repository import TradingStrategyRepository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 _STATE_KEY = "_omnix_interday_dynamic_discovery_monitor"
 

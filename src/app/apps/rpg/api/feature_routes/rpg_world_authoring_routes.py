@@ -6,17 +6,17 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Request
 
-from app.rpg.worlds.authoring_service import (
+from app.apps.rpg.worlds.authoring_service import (
     read_authoring_manifest,
     read_authoring_section,
     update_world_metadata,
 )
-from app.rpg.worlds.entity_authoring import (
+from app.apps.rpg.worlds.entity_authoring import (
     read_world_entity,
     regenerate_world_entity,
     update_world_entity,
 )
-from app.rpg.worlds.topic_authoring import (
+from app.apps.rpg.worlds.topic_authoring import (
     read_world_topic,
     restore_world_topic,
     update_world_topic,

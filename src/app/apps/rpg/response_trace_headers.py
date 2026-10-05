@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi.responses import Response
 
-from app.rpg.performance_trace import RpgPipelineTrace
+from app.apps.rpg.performance_trace import RpgPipelineTrace
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
 _INTERNAL_TARGET_PERCENT = 98.0

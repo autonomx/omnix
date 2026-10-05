@@ -5,8 +5,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
-from app.live_voice.speech.startup_frame_policy import (
+from app.composition.gateway.main import create_gateway_app
+from app.platform.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS,
     TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
@@ -48,7 +48,7 @@ class EmptyJobStore:
 
 
 def _patch_live_tts_test_runtime(monkeypatch, provider: Any, app) -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     monkeypatch.setattr(
         app.state.live_voice_tts_provider_resolver,
@@ -66,7 +66,7 @@ def _patch_live_tts_test_runtime(monkeypatch, provider: Any, app) -> None:
 
 
 def test_live_voice_transport_uses_startup_frame_policy() -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 3_840
@@ -85,7 +85,7 @@ def test_two_step_chunk_gets_first_chunk_onset_window() -> None:
 
 
 def test_gateway_composition_binds_warmed_live_tts_provider() -> None:
-    from app.live_voice.speech import runtime_offload
+    from app.platform.live_voice.speech import runtime_offload
 
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     assert (
@@ -106,7 +106,7 @@ def test_gateway_composition_preserves_explicit_provider_injection(monkeypatch) 
 
 
 def test_four_step_qwen_chunk_hands_off_two_160ms_frames_before_provider_resumes(monkeypatch) -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = BlockingAfterInitialQwenChunkProvider()
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())

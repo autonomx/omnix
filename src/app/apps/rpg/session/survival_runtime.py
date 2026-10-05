@@ -5,7 +5,7 @@ import logging
 import copy
 from typing import Any, Dict, Iterable, List, Tuple
 
-from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
+from app.apps.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +468,7 @@ def _append_runtime_history(runtime_state: Dict[str, Any], survival_action: Dict
 
 def _persist_session_best_effort(session: Dict[str, Any]) -> None:
     try:
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         save_session(session)
     except Exception:

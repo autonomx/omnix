@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.hermes.sequence_planner_loop import hermes_sequence_planner_loop
+from app.apps.rpg.hermes.sequence_planner_loop import hermes_sequence_planner_loop
 
 
 def test_planner_loop_refines_duplicate_and_unsupported_items() -> None:

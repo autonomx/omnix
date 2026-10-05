@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.item_model import (
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,

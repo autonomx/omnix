@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.models import MarketBar
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.models import MarketBar
 
 from .bar_semantics import interval_duration
 

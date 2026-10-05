@@ -19,7 +19,7 @@ def _state(**extra):
 
 def test_version_features_and_events_are_reported_per_process() -> None:
     from app.persistence.migrations import SCHEMA_KNOWN
-    from app.gateway.runtime_diagnostics import runtime_diagnostics
+    from app.composition.gateway.runtime_diagnostics import runtime_diagnostics
 
     payload = runtime_diagnostics(_state()).model_dump()
 

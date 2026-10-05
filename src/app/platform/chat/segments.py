@@ -93,7 +93,7 @@ def conversation_segments() -> Any:
     from app.persistence.runtime import uses_postgresql_runtime
 
     if uses_postgresql_runtime():
-        from app.chat.persistence.segment_repository import PostgresConversationSegmentRepository
+        from app.platform.chat.persistence.segment_repository import PostgresConversationSegmentRepository
 
         return PostgresConversationSegmentRepository()
     return InMemoryConversationSegments()

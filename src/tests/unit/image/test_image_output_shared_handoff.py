@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from services.image import image_service_runtime
 from app.assets import content
-from app.image import jobs as image_jobs
+from app.platform.image import jobs as image_jobs
 from app.persistence import blob_store as blob_module
 from app.persistence.blob_store import LocalBlobStore
 

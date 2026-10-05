@@ -1,5 +1,5 @@
 
-from app.rpg.npc_evolution.profile_store import (
+from app.apps.rpg.npc_evolution.profile_store import (
     profile_path_for_npc,
 )
 

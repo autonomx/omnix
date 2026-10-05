@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _INTERVAL = re.compile(r"^(?P<count>[1-9][0-9]*)(?P<unit>mo|m|h|d|w)$", re.IGNORECASE)

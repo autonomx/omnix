@@ -7,13 +7,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading import strategy_ai_shadow_provider as provider
-from app.trading import strategy_evaluability
-from app.trading.providers import alpaca_iex
-from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
-from app.trading.strategy_ai_shadow_v2_monitor import TradingAIShadowV2Monitor
-from app.trading.strategy_outcome_quality import outcome_is_valid as _outcome_is_valid
-from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
+from app.apps.trading import strategy_ai_shadow_provider as provider
+from app.apps.trading import strategy_evaluability
+from app.apps.trading.providers import alpaca_iex
+from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.strategy_ai_shadow_v2_monitor import TradingAIShadowV2Monitor
+from app.apps.trading.strategy_outcome_quality import outcome_is_valid as _outcome_is_valid
+from app.apps.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 class _Response:

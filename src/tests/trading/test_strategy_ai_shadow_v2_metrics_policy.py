@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading.strategy_ai_shadow_v2_hardening import _episode_metrics, _lift_metrics
-from app.trading.strategy_ai_shadow_v2_roadmap_policy import _decision_outcome_metrics
-from app.trading.strategy_ai_shadow_v2_roadmap_policy import AI_SHADOW_V2_POLICY_VERSION
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_ai_shadow_v2_hardening import _episode_metrics, _lift_metrics
+from app.apps.trading.strategy_ai_shadow_v2_roadmap_policy import _decision_outcome_metrics
+from app.apps.trading.strategy_ai_shadow_v2_roadmap_policy import AI_SHADOW_V2_POLICY_VERSION
+from app.apps.trading.strategy_repository import StrategyEvent
 
 AT = datetime(2026, 9, 10, 20, 0, tzinfo=timezone.utc)
 INSTRUMENT = "equity:NASDAQ:TEST"

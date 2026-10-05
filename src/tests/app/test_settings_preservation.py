@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 from app.config.defaults import DEFAULT_SETTINGS
-from app.gateway import settings_control
-from app.gateway.legacy_settings_payload import apply_settings_payload
+from app.composition.gateway import settings_control
+from app.composition.gateway.legacy_settings_payload import apply_settings_payload
 from app.providers import service as provider_service
 from tests.support.settings_runtime import install_settings_test_runtime
 

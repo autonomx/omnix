@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.companion_activity.contracts import (
+from app.platform.companion_activity.contracts import (
     EvidenceLink,
     EvidenceProposition,
     derive_proposition,

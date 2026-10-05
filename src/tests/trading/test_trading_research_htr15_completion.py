@@ -5,21 +5,21 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.models import MarketBar
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.research.contracts import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.research.contracts import (
     ResearchValidationReport,
     StrategyResearchFeatures,
     ValidationFeatureResult,
 )
-from app.trading.research.policy import ResearchPolicyDecision
-from app.trading.research.validation import build_validation_report
-from app.trading.strategies import evaluate_gap_pullback
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
-from app.trading.strategy_repository import TradingStrategyConfigDocument
-from app.trading.strategy_research_policy import resolve_strategy_research_policy
+from app.apps.trading.research.policy import ResearchPolicyDecision
+from app.apps.trading.research.validation import build_validation_report
+from app.apps.trading.strategies import evaluate_gap_pullback
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.strategy_research_policy import resolve_strategy_research_policy
 
 
 OPEN = datetime(2026, 8, 18, 13, 30, tzinfo=timezone.utc)
@@ -299,10 +299,10 @@ def test_backtest_returns_decision_row_for_every_candidate() -> None:
 
 
 def test_deterministic_harvest_resolution_rule_skips_only_fully_resolved_primary_case() -> None:
-    from app.trading.research.contracts import ResearchCoverage
-    from app.trading.research.coordinator import _deterministic_harvest_resolved
-    from app.trading.research.facts.extraction import build_fact_set
-    from app.trading.research.contracts import TradingEvidence, fingerprint
+    from app.apps.trading.research.contracts import ResearchCoverage
+    from app.apps.trading.research.coordinator import _deterministic_harvest_resolved
+    from app.apps.trading.research.facts.extraction import build_fact_set
+    from app.apps.trading.research.contracts import TradingEvidence, fingerprint
 
     captured = datetime(2026, 8, 20, 13, 30, tzinfo=timezone.utc)
     catalyst = TradingEvidence(

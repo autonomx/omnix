@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
-from app.trading.providers.errors import ProviderContractError
+from app.apps.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
+from app.apps.trading.providers.errors import ProviderContractError
 
 
 def test_missing_alpaca_indicator_bars_normalizes_to_empty(monkeypatch) -> None:

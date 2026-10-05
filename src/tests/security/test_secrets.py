@@ -82,7 +82,7 @@ def test_store_selection(monkeypatch) -> None:
 
 
 def test_tool_credentials_are_kept_per_workspace(isolated_secret_store) -> None:
-    from app.assistant_tools.credentials import (
+    from app.platform.assistant_tools.credentials import (
         AssistantToolCredentialRecord,
         credential_for_tool,
         delete_tool_credential,
@@ -106,7 +106,7 @@ def test_tool_credentials_are_kept_per_workspace(isolated_secret_store) -> None:
 
 def test_credentials_never_touch_files() -> None:
     """No plaintext backend: the credentials module performs no file writes."""
-    tree = ast.parse((APP / "assistant_tools" / "credentials.py").read_text(encoding="utf-8"))
+    tree = ast.parse((APP / "platform" / "assistant_tools" / "credentials.py").read_text(encoding="utf-8"))
     calls = {
         getattr(node.func, "attr", getattr(node.func, "id", ""))
         for node in ast.walk(tree)

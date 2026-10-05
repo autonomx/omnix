@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
-from app.rpg.interactions.item_model import (
+from app.apps.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.apps.rpg.interactions.item_model import (
     normalize_item_instance,
     recalculate_inventory_derived_fields,
 )

@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.indicator_signals import multi_timeframe_indicator_context
-from app.trading.models import MarketBar
-from app.trading.providers.alpaca_iex_status import AlpacaIexStatusCache, AlpacaTradingStatus
-from app.trading.research.contracts import (
+from app.apps.trading.indicator_signals import multi_timeframe_indicator_context
+from app.apps.trading.models import MarketBar
+from app.apps.trading.providers.alpaca_iex_status import AlpacaIexStatusCache, AlpacaTradingStatus
+from app.apps.trading.research.contracts import (
     CatalystFactSet,
     ResearchCoverage,
     SupplyFact,
@@ -14,7 +14,7 @@ from app.trading.research.contracts import (
     TradingFactSet,
     TradingResearchReport,
 )
-from app.trading.strategy_prospective_signal_features import (
+from app.apps.trading.strategy_prospective_signal_features import (
     build_prospective_signal_features,
     premarket_structure_snapshot,
 )

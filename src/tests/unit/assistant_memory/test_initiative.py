@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.assistant_memory import initiative
-from app.assistant_memory.initiative import (
+from app.platform.assistant_memory import initiative
+from app.platform.assistant_memory.initiative import (
     TrustedCapabilityManifest,
     initiative_prompt_directive,
     plan_companion_initiative,
@@ -12,11 +12,11 @@ from app.assistant_memory.initiative import (
     reset_initiative_surface_history,
 )
 from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
-from app.assistant_memory.temporal_retrieval import (
+from app.platform.assistant_memory.temporal_retrieval import (
     TemporalRetrievalResult,
     rank_temporal_records,
 )
-from app.characters.live_conversation_profile import LiveConversationProfile
+from app.platform.characters.live_conversation_profile import LiveConversationProfile
 
 
 def _record(*, score_kind: str = "routine", content: str = "The user takes Route X to work.") -> MemoryRecord:

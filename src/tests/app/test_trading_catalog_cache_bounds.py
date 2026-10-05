@@ -1,4 +1,4 @@
-from app.trading import catalog
+from app.apps.trading import catalog
 
 
 def _instrument(instrument_id: str):

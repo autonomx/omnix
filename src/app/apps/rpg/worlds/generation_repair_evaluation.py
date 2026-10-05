@@ -6,7 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
+from app.apps.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
 
 _MAX_CONSECUTIVE_NO_OPS = 2
 _REVIEWABLE_PROGRESS_KEYS = (

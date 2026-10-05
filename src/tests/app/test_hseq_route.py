@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import create_fastapi_app
-from app.rpg.hermes.approved_routes import hermes_rpg_sequence_review_payload
+from app.apps.rpg.hermes.approved_routes import hermes_rpg_sequence_review_payload
 
 
 def sample_payload() -> dict:

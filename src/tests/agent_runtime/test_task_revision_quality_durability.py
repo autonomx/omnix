@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import TaskRevision
-from app.agent_runtime.task_revision_quality import persist_task_revision_contract
+from app.platform.agent_runtime.contracts import TaskRevision
+from app.platform.agent_runtime.task_revision_quality import persist_task_revision_contract
 
 
 class _Result:

@@ -4,13 +4,13 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.execution import (
+from app.apps.trading.execution import (
     ExecutionEligibilityPolicy,
     ExecutionObservation,
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.providers.equity_execution import (
+from app.apps.trading.providers.equity_execution import (
     YAHOO_EXECUTION_ELIGIBLE,
     yahoo_execution_observation,
 )

@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import ResourceClass
-from app.research.persistence.report_repository import PostgresResearchReportRepository
+from app.platform.research.persistence.report_repository import PostgresResearchReportRepository
 from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
 from app.runtime.features import FeatureContext
 from app.capabilities.registry import TOOL_DECLARATIONS
-from app.chat.contracts import CHAT_RESEARCH
+from app.platform.chat.contracts import CHAT_RESEARCH
 from app.runtime.ports import ContributionSpec
 from .api import create_research_credential_router
 

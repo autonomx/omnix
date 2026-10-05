@@ -6,8 +6,8 @@ import json
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_authorship_signing import verify_record_signature
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_authorship_signing import verify_record_signature
 
 RECEIPT_SCHEMA_VERSION = "rpg_world_forge_contract_receipt_v1"
 CONTRACT_DESCRIPTOR_KEYS = (

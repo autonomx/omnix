@@ -48,8 +48,10 @@ def test_prompts_match_the_reviewed_golden_file():
 
 def test_every_prompt_module_declares_templates_with_unique_ids():
     templates = load_templates()
+    # A module's package: app.<package> or, in a tier folder (PA-5.3), app.<tier>.<package>.
     assert {template.module for template in templates.values()} <= {
-        name.split(".")[1] for name in PROMPT_MODULES
+        name.split(".")[2 if name.split(".")[1] in {"platform", "apps", "composition"} else 1]
+        for name in PROMPT_MODULES
     }
     assert all(template.id.startswith(template.module + ".") for template in templates.values())
 

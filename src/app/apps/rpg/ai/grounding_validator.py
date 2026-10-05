@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
-from app.rpg.ai.grounding_patterns import (
+from app.apps.rpg.ai.grounding_patterns import (
     _AMBIGUOUS_DEBT_RESPONSE_PATTERNS,
     _CLEAR_DEBT_REFUSAL_PATTERNS,
     _COMBAT_PATTERNS,
@@ -17,7 +17,7 @@ from app.rpg.ai.grounding_patterns import (
     _REWARD_PATTERNS,
     _UNSUPPORTED_DEBT_CLAIM_PATTERNS,
 )
-from app.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
 
 
 @dataclass

@@ -11,8 +11,8 @@ import hashlib
 import re
 from typing import Any
 
-from app.rpg.session.environment_memory import RECENT_CONDITION_KEYS
-from app.rpg.session.environment_weather import generate_weather_event
+from app.apps.rpg.session.environment_memory import RECENT_CONDITION_KEYS
+from app.apps.rpg.session.environment_weather import generate_weather_event
 
 ENVIRONMENT_VERSION = 1
 DAYS_PER_YEAR = 360

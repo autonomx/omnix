@@ -67,7 +67,7 @@ def _runtime_repository_factory() -> RepositoryFactory | None:
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return None
-    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+    from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
     return PostgresOwnerAwareMemoryRepository
 
@@ -75,7 +75,7 @@ def _runtime_repository_factory() -> RepositoryFactory | None:
 def _legacy_memory_write_guard() -> None:
     """Keep the resident v1 service readable but immutable after v2 cutover."""
 
-    from app.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
+    from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
 
     authority = PostgresMemoryV2AuthorityStore().current().epoch.authority
     if authority != "v1":

@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_v2_management import (
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
     v2_initial_stop_from_target,

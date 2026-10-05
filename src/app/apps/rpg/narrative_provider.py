@@ -18,10 +18,10 @@ from app.providers.structured import (
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
-from app.rpg.narrative_engine import DeterministicNarrativeWriter, NarrativeWriter
-from app.rpg.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
-from app.rpg.narrative_engine.planner import NarrativePlan
-from app.rpg.narrative_engine.writer import (
+from app.apps.rpg.narrative_engine import DeterministicNarrativeWriter, NarrativeWriter
+from app.apps.rpg.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
+from app.apps.rpg.narrative_engine.planner import NarrativePlan
+from app.apps.rpg.narrative_engine.writer import (
     WriterResult,
     parse_structured_blocks,
     writer_payload,

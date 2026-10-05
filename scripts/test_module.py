@@ -5,7 +5,7 @@
 
 A module's tests are `src/tests/<package>/`, named after the last part of its
 Python package in the feature catalog (`agent-runtime` -> `agent_runtime`,
-`hermes` -> `app.rpg.hermes` -> `hermes`), plus the characterization scenarios
+`hermes` -> `app.apps.rpg.hermes` -> `hermes`), plus the characterization scenarios
 that list the module in their `MODULES` tuple. Tests that span modules stay in
 the cross-cutting directories (`kernel/`, `e2e/`, `characterization/`, `support/`).
 """
@@ -22,7 +22,7 @@ CHARACTERIZATION = TESTS / "characterization"
 
 
 def catalog() -> dict[str, str]:
-    """Catalog module id -> its Python package (`app.rpg.hermes`)."""
+    """Catalog module id -> its Python package (`app.apps.rpg.hermes`)."""
     if str(ROOT / "src") not in sys.path:
         sys.path.insert(0, str(ROOT / "src"))
     from app.runtime.feature_catalog import FEATURE_CATALOG

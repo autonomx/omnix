@@ -13,12 +13,12 @@ from __future__ import annotations
 import copy
 import json
 
-from app.rpg.migration.models import (
+from app.apps.rpg.migration.models import (
     CURRENT_PACK_FORMAT_VERSION,
     CURRENT_SAVE_FORMAT_VERSION,
 )
-from app.rpg.migration.pack_migrator import PackMigrator
-from app.rpg.migration.save_migrator import SaveMigrator
+from app.apps.rpg.migration.pack_migrator import PackMigrator
+from app.apps.rpg.migration.save_migrator import SaveMigrator
 
 # ---------------------------------------------------------------------------
 # Helpers

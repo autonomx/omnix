@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.trading.llm_reliability_metrics import LLMReliabilityLedger
+from app.apps.trading.llm_reliability_metrics import LLMReliabilityLedger
 
 
 def test_llm_reliability_separates_attempts_from_circuit_suppressions():

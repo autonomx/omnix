@@ -4,19 +4,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.rpg.session.genesis.canon_audit import audit_generated_canon
-from app.rpg.session.genesis.canon_compiler import compile_campaign_bible
-from app.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.canon_audit import audit_generated_canon
+from app.apps.rpg.session.genesis.canon_compiler import compile_campaign_bible
+from app.apps.rpg.session.genesis.canon_relationships import compile_cross_domain_relationships
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
     WorldForgeJobRecord,
 )
-from app.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
+from app.apps.rpg.session.genesis.world_forge_quality import apply_world_forge_quality_audit
 
 from .canon_repair import repair_generation_contracts
 from .contracts import WorldArtifactStage, WorldReleaseDocument, WorldRevisionDocument

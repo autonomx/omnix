@@ -116,7 +116,7 @@ class AssistantContextChatRequest(BaseModel):
         research or desktop context work has started.
         """
 
-        from app.chat.models import SendChatMessageRequest
+        from app.platform.chat.models import SendChatMessageRequest
 
         validated = SendChatMessageRequest(
             content=self.content,

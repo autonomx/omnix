@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.narrative_reference import canonical_narrative_reference
-from app.rpg.presentation.turn_response import build_turn_response_v2
-from app.rpg.presentation.turn_response_budget import (
+from app.apps.rpg.narrative_reference import canonical_narrative_reference
+from app.apps.rpg.presentation.turn_response import build_turn_response_v2
+from app.apps.rpg.presentation.turn_response_budget import (
     encoded_size_bytes,
     enforce_turn_response_budget,
 )

@@ -10,16 +10,16 @@ from typing import Any, Callable, Mapping
 from app.persistence.database import PostgresDatabase, default_database
 from app.runtime.tenant_context import TenantContext, current_tenant_for
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.narrative_engine.authority import DeliveryMode
-from app.rpg.narrative_engine.delivery import (
+from app.apps.rpg.narrative_engine.authority import DeliveryMode
+from app.apps.rpg.narrative_engine.delivery import (
     InMemoryNarrativeDeliveryRepository,
     NarrativeDeliveryAdvance,
     NarrativeDeliveryCoordinator,
     NarrativeDeliveryRecord,
     NarrativeDeliveryRepository,
 )
-from app.rpg.narrative_engine.serialization import canonical_response_from_dict
-from app.rpg.narrative_repository import build_production_narrative_repository
+from app.apps.rpg.narrative_engine.serialization import canonical_response_from_dict
+from app.apps.rpg.narrative_repository import build_production_narrative_repository
 
 
 class PostgresNarrativeDeliveryRepositoryAdapter:

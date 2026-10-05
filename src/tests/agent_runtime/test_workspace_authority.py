@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime.workspace import (
+from app.platform.agent_runtime.workspace import (
     WorkspaceAuthority,
     WorkspacePolicyError,
     _workspace_process_environment,
@@ -103,7 +103,7 @@ def test_workspace_quarantines_only_known_literal_systemdrive_cache(tmp_path: Pa
     (cache / "cversions.2.db").write_bytes(b"cache")
     quarantine_root = tmp_path / "quarantine-root"
     quarantine_root.mkdir()
-    monkeypatch.setattr("app.agent_runtime.workspace.tempfile.gettempdir", lambda: str(quarantine_root))
+    monkeypatch.setattr("app.platform.agent_runtime.workspace.tempfile.gettempdir", lambda: str(quarantine_root))
 
     records = authority.quarantine_generated_windows_cache_contamination()
 

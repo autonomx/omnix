@@ -15,8 +15,8 @@ from .market_evidence import (
     TradeAuthorizationAssessment,
     premarket_evidence_feature_compatible,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_publication_transaction import publication_transaction_report
-from app.rpg.worlds.generation_starter_topology import (
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_publication_transaction import publication_transaction_report
+from app.apps.rpg.worlds.generation_starter_topology import (
     StarterTopologyCompilationError,
     require_valid_starter_topology,
     starter_topology_issues,

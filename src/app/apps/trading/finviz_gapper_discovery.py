@@ -46,8 +46,8 @@ from .strategy_data_integrity import (
     FINVIZ_ATOMIC_FIRST_PAGE_MAX,
     finviz_atomic_source_locator,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
 

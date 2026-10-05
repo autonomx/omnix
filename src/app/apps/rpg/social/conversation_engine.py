@@ -126,10 +126,10 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
 
     if settings.get("llm_expand_npc_conversations"):
         try:
-            from app.rpg.ai.conversation_gateway import (
+            from app.apps.rpg.ai.conversation_gateway import (
                 generate_recorded_conversation_line,
             )
-            from app.rpg.llm_app_gateway import build_app_llm_gateway
+            from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
             llm_gateway = build_app_llm_gateway()
             mode = _safe_str(_safe_dict(runtime_state).get("mode")).strip().lower() or "live"
             conv_id = _safe_str(conversation.get("conversation_id"))
@@ -437,7 +437,7 @@ def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[
     session_id = _safe_str(runtime_state.get("session_id")).strip()
     if session_id:
         try:
-            from app.rpg.session.companion_turn_runtime import (
+            from app.apps.rpg.session.companion_turn_runtime import (
                 _maybe_enqueue_latest_ambient_conversation_narration as _maybe_enqueue_latest_ambient_conversation_narration,
             )
             ambient_result = _maybe_enqueue_latest_ambient_conversation_narration(

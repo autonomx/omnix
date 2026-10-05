@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from app.chat.contracts import prompt_budget_from_env, resolve_shared_memory_categories
+from app.platform.chat.contracts import prompt_budget_from_env, resolve_shared_memory_categories
 from app.conversation.contracts import ChatSession, PromptMemoryItem
 
 from .contracts import (
@@ -33,7 +33,7 @@ def _memory_v2_runtime(
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return None
-    from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
+    from app.platform.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 
     return PostgresMemoryV2Runtime()
 

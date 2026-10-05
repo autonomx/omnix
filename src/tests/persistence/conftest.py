@@ -18,7 +18,7 @@ def register_feature_repositories_for_persistence_gates():
 
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
-    from app.runtime_composition import shared_service_repository_specs
+    from app.composition.runtime_composition import shared_service_repository_specs
 
     install_repository_specs(shared_service_repository_specs())
     for feature_id in enabled_feature_ids(RuntimeConfig()):
@@ -30,8 +30,8 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.strategy_intraday_llm import IntradayLLMAnalyzer, IntradayLLMResult
-from app.trading.strategy_repository import TradingStrategyRepository
+from app.apps.trading.strategy_intraday_llm import IntradayLLMAnalyzer, IntradayLLMResult
+from app.apps.trading.strategy_repository import TradingStrategyRepository
 
 
 @pytest.fixture(scope="session", autouse=True)

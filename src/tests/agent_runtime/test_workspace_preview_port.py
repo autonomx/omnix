@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_tools import browser_adapter
-from app.assistant_tools.contracts import AGENT_RUN_WORKSPACES
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools import browser_adapter
+from app.platform.assistant_tools.contracts import AGENT_RUN_WORKSPACES
+from app.platform.assistant_tools.models import AssistantToolRequest
 from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, installed_port_bindings
 
 

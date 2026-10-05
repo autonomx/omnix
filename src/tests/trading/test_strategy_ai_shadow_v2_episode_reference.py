@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading.strategy_ai_shadow_v2_hardening import _episode_reference_event
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_ai_shadow_v2_hardening import _episode_reference_event
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 AT = datetime(2026, 9, 10, 14, 0, tzinfo=timezone.utc)

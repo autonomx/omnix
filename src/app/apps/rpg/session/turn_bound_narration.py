@@ -9,16 +9,16 @@ from typing import Any
 # completed LLM narration merely because it has an npc-shaped dictionary.  Bind
 # completed synchronous narrator output to the exact turn immediately so the SSE
 # route and polling path do not queue or render an older fallback response.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session,
 )
-from app.rpg.session.llm_narration_projection import (
+from app.apps.rpg.session.llm_narration_projection import (
     _phase8_part31_iter_payload_dicts as _phase8_part31_iter_payload_dicts,
 )
-from app.rpg.session.semantic_response_projection import (
+from app.apps.rpg.session.semantic_response_projection import (
     _phase8_part35_payload_tick as _phase8_part35_payload_tick, _phase8_part35_payload_turn_id as _phase8_part35_payload_turn_id,
 )
 
@@ -45,7 +45,7 @@ def _phase8_part34_has_structured_llm_payload(source: dict[str, Any]) -> bool:
     fields, which made lines like ``Careful now...`` count as completed narration
     and prevented the real narrator from running.
     """
-    from app.rpg.session.companion_turn_runtime import (
+    from app.apps.rpg.session.companion_turn_runtime import (
         _narration_artifact_has_structured_llm_content as _narration_artifact_has_structured_llm_content,
         _narration_artifact_is_echo_fallback as _narration_artifact_is_echo_fallback,
     )
@@ -95,7 +95,7 @@ def _phase8_part37_clean_text(value: Any) -> str:
 
 
 def _phase8_part37_completed_llm_fields(payload: dict[str, Any]) -> dict[str, Any]:
-    from app.rpg.session.companion_turn_runtime import (
+    from app.apps.rpg.session.companion_turn_runtime import (
         _narration_artifact_is_echo_fallback as _narration_artifact_is_echo_fallback,
     )
 
@@ -154,15 +154,15 @@ def _phase8_part37_tick(payload: dict[str, Any]) -> int:
 
 
 def _phase8_part37_persist_llm_artifact(session_id: str, payload: dict[str, Any], fields: dict[str, Any]) -> None:
-    from app.rpg.session.companion_turn_runtime import (
+    from app.apps.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn, _store_narration_artifact as _store_narration_artifact,
     )
 
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
 

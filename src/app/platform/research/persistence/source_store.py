@@ -6,12 +6,12 @@ from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
-from app.research.source_store import ResearchSourceStore
+from app.platform.research.source_store import ResearchSourceStore
 from app.persistence.document_store import PostgresDocumentStore
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.research.contracts import ResearchSource, ResearchSourceSnapshot
-from app.research.source_store import ResearchSourceManifest
+from app.platform.research.contracts import ResearchSource, ResearchSourceSnapshot
+from app.platform.research.source_store import ResearchSourceManifest
 from app.persistence.document_schemas import register_document_schema
 
 
@@ -29,7 +29,7 @@ class PostgresResearchSourceStore(ResearchSourceStore):
             raise RuntimeError(
                 "file-backed research source authority is retired; use the legacy importer"
             )
-        from app.research.source_store import _utcnow
+        from app.platform.research.source_store import _utcnow
 
         self.path = Path("postgresql://research-sources")
         self.clock = clock or _utcnow
@@ -63,7 +63,7 @@ class PostgresResearchSourceStore(ResearchSourceStore):
 
         from app.assets.models import AssetRecord, AssetType
         from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
-        from app.research.contracts import ResearchSourceSnapshot
+        from app.platform.research.contracts import ResearchSourceSnapshot
 
         with self._lock:
             payload = self._load()

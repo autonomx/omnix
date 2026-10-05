@@ -1,6 +1,6 @@
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_semantic_quality import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_semantic_quality import (
     audit_topic_semantic_quality,
 )
 

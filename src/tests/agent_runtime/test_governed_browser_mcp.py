@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.capabilities import default_capability_registry
-from app.agent_runtime.coding_external_authority import (
+from app.platform.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,
 )
@@ -15,10 +15,10 @@ from app.capabilities.mcp_policy import (
     configured_mcp_capability_ids,
     load_mcp_policy,
 )
-from app.agent_runtime.profiles import get_agent_profile, profile_external_ceiling
-from app.assistant_tools import browser_adapter, mcp_adapter
-from app.assistant_tools.models import AssistantToolRequest
-from app.assistant_tools.validation import is_valid_action_id
+from app.platform.agent_runtime.profiles import get_agent_profile, profile_external_ceiling
+from app.platform.assistant_tools import browser_adapter, mcp_adapter
+from app.platform.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.validation import is_valid_action_id
 
 
 @pytest.fixture(autouse=True)
@@ -296,11 +296,11 @@ def test_browser_assertion_passes_and_failure_is_not_execution_success(
 
 
 def test_browser_assertion_becomes_state_bound_validation() -> None:
-    from app.agent_runtime.coding_quality import (
+    from app.platform.agent_runtime.coding_quality import (
         compile_task_engineering_contract,
         validation_result_from_tool_event,
     )
-    from app.agent_runtime.contracts import AgentEvent, TaskRevision
+    from app.platform.agent_runtime.contracts import AgentEvent, TaskRevision
 
     requirements, constraints, plan = compile_task_engineering_contract(
         "Fix the React quiz and verify it with browser testing",
@@ -350,8 +350,8 @@ def test_browser_assertion_becomes_state_bound_validation() -> None:
 
 
 def test_browser_runtime_failure_is_classified_as_infrastructure() -> None:
-    from app.agent_runtime.coding_quality import validation_result_from_tool_event
-    from app.agent_runtime.contracts import AgentEvent
+    from app.platform.agent_runtime.coding_quality import validation_result_from_tool_event
+    from app.platform.agent_runtime.contracts import AgentEvent
 
     event = AgentEvent(
         run_id="run-browser-infrastructure",
@@ -460,7 +460,7 @@ def test_negative_browser_assertion_proves_removed_text(
 
 
 def test_plain_sidebar_mutation_requires_browser_proof() -> None:
-    from app.agent_runtime.coding_quality import compile_task_engineering_contract
+    from app.platform.agent_runtime.coding_quality import compile_task_engineering_contract
 
     _requirements, _constraints, plan = compile_task_engineering_contract(
         "remove tools option from side bar",

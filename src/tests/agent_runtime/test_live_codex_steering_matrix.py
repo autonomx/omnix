@@ -14,14 +14,14 @@ import os
 
 import pytest
 
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     compile_task_authority,
     revise_objective,
     steering_semantic_context,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.semantic_task import compile_semantic_task
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.semantic_task import compile_semantic_task
+from app.platform.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 

@@ -4,15 +4,15 @@ Ensures product layer presentation builders maintain backward compatibility
 and deterministic behavior across changes.
 """
 
-from app.rpg.presentation.dialogue_ux import INTENT_BUTTONS, build_dialogue_ux_payload
-from app.rpg.presentation.intro_scene import build_intro_scene_payload
-from app.rpg.presentation.narrative_recap import build_narrative_recap_payload
-from app.rpg.presentation.player_inspector import (
+from app.apps.rpg.presentation.dialogue_ux import INTENT_BUTTONS, build_dialogue_ux_payload
+from app.apps.rpg.presentation.intro_scene import build_intro_scene_payload
+from app.apps.rpg.presentation.narrative_recap import build_narrative_recap_payload
+from app.apps.rpg.presentation.player_inspector import (
     _band,
     build_player_inspector_overlay_payload,
 )
-from app.rpg.presentation.save_load_ux import build_save_load_ux_payload
-from app.rpg.presentation.setup_flow import (
+from app.apps.rpg.presentation.save_load_ux import build_save_load_ux_payload
+from app.apps.rpg.presentation.setup_flow import (
     VALID_GENRES,
     build_setup_flow_payload,
 )

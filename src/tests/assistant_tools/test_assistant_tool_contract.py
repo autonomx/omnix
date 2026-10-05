@@ -1,4 +1,4 @@
-from app.assistant_tools import (
+from app.platform.assistant_tools import (
     AssistantToolAction,
     AssistantToolRequest,
     AssistantToolSpec,
@@ -135,8 +135,8 @@ def test_destructive_action_cannot_run_automatically(category, destructive):
     assert pending.valid is True
     assert pending.approval_required is True
     assert pending.executable is False
-    from app.assistant_tools.gate import review_assistant_tool_request
-    from app.assistant_tools.config_store import default_assistant_tools_config
+    from app.platform.assistant_tools.gate import review_assistant_tool_request
+    from app.platform.assistant_tools.config_store import default_assistant_tools_config
     config = default_assistant_tools_config()
     configured = next(item for item in config.tools if item.tool_id == tool.id)
     configured.enabled = True

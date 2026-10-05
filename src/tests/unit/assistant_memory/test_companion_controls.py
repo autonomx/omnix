@@ -3,25 +3,25 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory.controls import (
+from app.platform.assistant_memory.controls import (
     export_owner_memory,
     recent_automatic_memories,
     reset_owner_memory,
     set_memory_archived,
     undo_automatic_memory,
 )
-from app.assistant_memory.management_routes import register_memory_management_routes
+from app.platform.assistant_memory.management_routes import register_memory_management_routes
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.observability import (
+from app.platform.assistant_memory.observability import (
     memory_usage_snapshot,
     record_memory_usage,
     reset_companion_metrics,
 )
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.structured_consolidation import consolidate_structured_proposal
-from app.assistant_memory.structured_extraction import extract_structured_memory_proposals
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.structured_consolidation import consolidate_structured_proposal
+from app.platform.assistant_memory.structured_extraction import extract_structured_memory_proposals
+from app.platform.chat.models import ChatMessage, ChatSession
 
 
 def _context(owner_id: str = "system-assistant") -> MemoryScopeContext:

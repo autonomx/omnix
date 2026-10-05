@@ -5,14 +5,14 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat.assistant_context.models import AssistantContextBuildResult
-from app.chat.assistant_context.routes import register_assistant_context_routes
-from app.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat.assistant_context.models import AssistantContextBuildResult
+from app.platform.chat.assistant_context.routes import register_assistant_context_routes
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
 from app.conversation.research_compatibility import reset_research_compatibility_telemetry
-from app.research.api import register_research_job_routes
-from app.research.policy import ResearchPolicy
-from app.research.release_policy import ResearchReleasePolicy
-from app.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
+from app.platform.research.api import register_research_job_routes
+from app.platform.research.policy import ResearchPolicy
+from app.platform.research.release_policy import ResearchReleasePolicy
+from app.platform.research.settings import ResearchRuntimeSettings, load_research_runtime_settings
 from tests.support.in_memory_jobs import InMemoryJobStore
 import pytest
 

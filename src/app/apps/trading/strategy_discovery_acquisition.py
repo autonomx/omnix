@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from .finviz_gapper_discovery import discover_finviz_gappers
 from .strategy_dynamic_discovery import MarketAnomalyFeatures
-from app.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN
 
 
 class CausalMarketObservation(BaseModel):

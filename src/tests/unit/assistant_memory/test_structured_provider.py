@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.assistant_memory.structured_provider import (
+from app.platform.assistant_memory.structured_provider import (
     ProviderStructuredProposalProvider,
     default_structured_proposal_provider,
 )

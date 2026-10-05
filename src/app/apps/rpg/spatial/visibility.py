@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.spatial.graph import (
+from app.apps.rpg.spatial.graph import (
     find_connection,
     get_entity_area,
 )
-from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
 
 
 def can_see_area(

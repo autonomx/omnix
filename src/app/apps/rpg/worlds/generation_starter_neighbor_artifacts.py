@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.map_grid_contracts import with_grid_definition_hashes
+from app.apps.rpg.map_grid_contracts import with_grid_definition_hashes
 
 from .generation_starter_bubble_support import derive_starter_bubble
 from .starter_bubble import (

@@ -8,20 +8,20 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.api import create_trading_router
-from app.trading.catalog import (
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.api import create_trading_router
+from app.apps.trading.catalog import (
     POLICIES,
     binding_by_id,
     bindings_for_instrument,
     instrument_by_id,
 )
-from app.trading.models import BarsResponse, DatasetProvenance, MarketBar
-from app.trading.providers.base import ProviderAdapter
-from app.trading.providers.errors import ProviderUnavailableError
-from app.trading.providers.equity import YahooEquityProvider
-from app.trading.providers.registry import ProviderRegistry
-from app.trading.service import TradingMarketDataService
+from app.apps.trading.models import BarsResponse, DatasetProvenance, MarketBar
+from app.apps.trading.providers.base import ProviderAdapter
+from app.apps.trading.providers.errors import ProviderUnavailableError
+from app.apps.trading.providers.equity import YahooEquityProvider
+from app.apps.trading.providers.registry import ProviderRegistry
+from app.apps.trading.service import TradingMarketDataService
 
 
 AAPL = "equity:NASDAQ:AAPL"
@@ -275,9 +275,9 @@ def test_every_registered_provider_implements_the_adapter_interface() -> None:
     """WP-8.3: the registry describes providers through one interface, not name branches."""
     import inspect as source_inspect
 
-    from app.trading.catalog import POLICIES
-    from app.trading.providers.base import MarketDataProvider
-    from app.trading.providers.registry import ProviderRegistry
+    from app.apps.trading.catalog import POLICIES
+    from app.apps.trading.providers.base import MarketDataProvider
+    from app.apps.trading.providers.registry import ProviderRegistry
 
     registry = ProviderRegistry()
     for provider_id in POLICIES:

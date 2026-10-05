@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.rpg.worlds import generation_certified_publication as certified
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds import generation_certified_publication as certified
+from app.apps.rpg.worlds.generation_publication_transaction import (
     WorldGenerationCertificationError,
     publication_transaction_report,
     require_certified_publication,

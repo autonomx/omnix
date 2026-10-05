@@ -7,16 +7,16 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.trading.models import MarketBar
-from app.trading.providers.errors import ProviderContractError
-from app.trading.strategy_deep_recovery import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.providers.errors import ProviderContractError
+from app.apps.trading.strategy_deep_recovery import (
     DeepRecoveryShadowEvaluation,
     apply_deep_recovery_risk_policy,
 )
-from app.trading.strategy_evaluability import assess_bar_coverage
-from app.trading.providers.alpaca_iex import _parse_timestamp as parse_alpaca_timestamp
-from app.trading.strategy_intraday_llm import _IntradaySchemaProviderProxy
-from app.trading.strategy_session_evidence import (
+from app.apps.trading.strategy_evaluability import assess_bar_coverage
+from app.apps.trading.providers.alpaca_iex import _parse_timestamp as parse_alpaca_timestamp
+from app.apps.trading.strategy_intraday_llm import _IntradaySchemaProviderProxy
+from app.apps.trading.strategy_session_evidence import (
     FULL_SESSION_1M_LIMIT,
     _FullSessionMarketServiceProxy,
     _trend_events_for_session,

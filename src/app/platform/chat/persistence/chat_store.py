@@ -4,15 +4,15 @@ import json
 import base64
 from typing import Any
 
-from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
+from app.platform.chat.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.runtime.pagination import MAX_PAGE_SIZE
-from app.chat.retention_policy import transcript_retention_allowed
+from app.platform.chat.retention_policy import transcript_retention_allowed
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
-from app.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
+from app.platform.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
 
 
 def _json(value: Any) -> str:
@@ -37,8 +37,8 @@ def transcript_window_complete(
     ``SUMMARY_TEXT_CHARS`` characters of the older ones. Once the loaded older
     messages add more than that, any older message cannot change the prompt.
     """
-    from app.chat.compaction import SUMMARY_TEXT_CHARS, summary_line_length
-    from app.chat.prompt_window import MAX_RECENT_MESSAGE_LIMIT
+    from app.platform.chat.compaction import SUMMARY_TEXT_CHARS, summary_line_length
+    from app.platform.chat.prompt_window import MAX_RECENT_MESSAGE_LIMIT
 
     if through_message_id is not None:
         index = next((i for i, message in enumerate(messages) if message.id == through_message_id), None)

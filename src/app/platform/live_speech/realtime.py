@@ -9,7 +9,7 @@ from .cancel_scope import CancelScope
 from .events import LiveSpeechEvent, LiveSpeechSessionConfig, error_event, event
 from .llm import EchoTextGenerator, StreamingTextGenerator
 from .metrics import LiveSpeechMetrics
-from app.voice.contracts import StreamingSpeechSynthesizer, StreamingTranscriber
+from app.platform.voice.contracts import StreamingSpeechSynthesizer, StreamingTranscriber
 
 from .stt import BufferedStreamingTranscriber
 from .tts import DeterministicSpeechSynthesizer, split_text_for_tts

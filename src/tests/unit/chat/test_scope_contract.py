@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.assistant_memory import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
-from app.chat import ChatSessionStore, CreateChatSessionRequest
+from app.platform.assistant_memory import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -31,7 +31,7 @@ def test_chat_session_scope_is_server_owned_and_legacy_safe(tmp_path):
 
 
 def test_legacy_chat_payload_receives_memory_scope_defaults():
-    from app.chat import ChatSession
+    from app.platform.chat import ChatSession
 
     session = ChatSession.model_validate(
         {

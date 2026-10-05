@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.chat.assist.live_agent import LiveAgentUnavailable
-from app.chat.assist.modes import ModeChatResponse
-from app.chat.character_store import _CharacterSessionMixin
-from app.chat.live_agent_store import LiveAgentPlanner
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.chat.assist.live_agent import LiveAgentUnavailable
+from app.platform.chat.assist.modes import ModeChatResponse
+from app.platform.chat.character_store import _CharacterSessionMixin
+from app.platform.chat.live_agent_store import LiveAgentPlanner
+from app.platform.chat.models import ChatMessage, ChatSession
 
 
 class StaticPlanner:
@@ -128,11 +128,11 @@ def _session(content: str, *, voice: bool = True, explicit_agent: bool = False):
 
 
 def _use_test_turn_coordinator(monkeypatch, tmp_path) -> None:
-    from app.chat.assistant_turns import AssistantTurnCoordinator
+    from app.platform.chat.assistant_turns import AssistantTurnCoordinator
 
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
     monkeypatch.setattr(
-        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        "app.platform.chat.live_agent_store.default_assistant_turn_coordinator",
         lambda: coordinator,
     )
 

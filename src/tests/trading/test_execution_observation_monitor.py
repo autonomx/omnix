@@ -4,9 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 
-from app.trading.execution_observation_plane import ExecutionObservationPlane
-from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
-from app.trading.execution_observation_monitor import TradingExecutionObservationMonitor
+from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
+from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.execution_observation_monitor import TradingExecutionObservationMonitor
 
 
 NOW = datetime(2026, 9, 18, 14, 0, tzinfo=timezone.utc)

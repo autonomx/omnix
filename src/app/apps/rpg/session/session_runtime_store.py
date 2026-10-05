@@ -3,55 +3,55 @@ from __future__ import annotations
 import logging
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 import json as json
 import ast as ast
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _build_turn_id as _build_turn_id,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _actor_is_player as _actor_is_player, _build_combat_gate_result as _build_combat_gate_result, _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text,
 )
-from app.rpg.combat.resolver import (
+from app.apps.rpg.combat.resolver import (
     resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.rpg.combat.apply import (
+from app.apps.rpg.combat.apply import (
     apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
-from app.rpg.items.item_effects import (
+from app.apps.rpg.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
-from app.rpg.combat.initiative import (
+from app.apps.rpg.combat.initiative import (
     advance_turn as advance_turn,
 )
-from app.rpg.combat.npc_turns import (
+from app.apps.rpg.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
-from app.rpg.combat.lifecycle import (
+from app.apps.rpg.combat.lifecycle import (
     evaluate_combat_exit as evaluate_combat_exit,
 )
-from app.rpg.session.semantic_state_changes import (
+from app.apps.rpg.session.semantic_state_changes import (
     _set_combat_state as _set_combat_state,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _runtime_compact_save_enabled as _runtime_compact_save_enabled,
 )
-from app.rpg.session.service import (
+from app.apps.rpg.session.service import (
     load_session as load_canonical_session,
     save_session as save_canonical_session,
 )
-from app.rpg.session.response_builder import (
+from app.apps.rpg.session.response_builder import (
     build_turn_payload as build_turn_payload,
 )
-from app.rpg.session.player_activity_runtime import (
+from app.apps.rpg.session.player_activity_runtime import (
     _build_transaction_menus_for_state as _build_transaction_menus_for_state,
 )
-from app.rpg.session.semantic_interaction_runtime import (
+from app.apps.rpg.session.semantic_interaction_runtime import (
     _find_npc_target_by_name as _find_npc_target_by_name,
 )
 from typing import (
@@ -309,7 +309,7 @@ def _combat_utility_kind_from_semantic_or_text(
     semantic_action_record: dict[str, Any],
     player_input: str,
 ) -> str:
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
 
@@ -390,7 +390,7 @@ def _resolved_result_is_unsupported_combat_utility(
     resolved_result: dict[str, Any],
     player_input: str,
 ) -> str:
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
 
@@ -457,7 +457,7 @@ def _rescue_final_apply_turn_combat_utility_result(
     This wrapper-level rescue rewrites the completed unsupported result into an
     authoritative combat utility result before the manual transcript and UI see it.
     """
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
 

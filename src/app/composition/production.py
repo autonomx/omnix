@@ -105,7 +105,7 @@ def create_production_app(config: RuntimeConfig | None = None):
     config = config or RuntimeConfig.from_environment(environment())
     maybe_apply_migrations_on_start(config)
     install_runtime_config(config)
-    from app.live_voice.capacity import configure_live_call_capacity
+    from app.platform.live_voice.capacity import configure_live_call_capacity
 
     configure_live_call_capacity(config.live_max_calls)
     capabilities = RuntimeCapabilities.from_config(config)
@@ -141,33 +141,33 @@ def create_production_app(config: RuntimeConfig | None = None):
     settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
     from app.settings.access import install_settings_service
     install_settings_service(settings_service)
-    from app.live_voice.hardware_policy import apply_live_voice_process_defaults
+    from app.platform.live_voice.hardware_policy import apply_live_voice_process_defaults
 
     apply_live_voice_process_defaults()
     # Resolve adapters after bootstrap, including when a schema exporter or test
     # previously imported the provider-free gateway factory in this process.
     from app.assets import default_asset_store
-    from app.runtime_composition import (
+    from app.composition.runtime_composition import (
         production_chat_store,
         production_job_store,
         production_model_residency_store,
         production_owner_memory_repository,
     )
-    from app.assistant_memory.owner_defaults import install_default_memory_repository_factory
+    from app.platform.assistant_memory.owner_defaults import install_default_memory_repository_factory
 
     # Every process (API, scheduler, job worker) serves curated memory from
     # the repository that follows the memory authority (WP-8.5).
     install_default_memory_repository_factory(
         production_owner_memory_repository, routes_by_authority=True,
     )
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.runtime.net import bind_host
     from app.security.auth import AuthService, bootstrap_authentication, resolve_auth_settings
 
     auth_service = AuthService(resolve_auth_settings(), database=database)
     bootstrap_authentication(auth_service, bind_host=bind_host(None))
-    from app.chat.generation_jobs import (
+    from app.platform.chat.generation_jobs import (
         _ChatGenerationDispatcher,
         recover_abandoned_chat_generation_jobs,
     )
@@ -187,10 +187,10 @@ def create_production_app(config: RuntimeConfig | None = None):
         chat_execution_owner=owner,
         chat_dispatcher=dispatcher,
     )
-    from app.agent_runtime.service import AgentRunService
+    from app.platform.agent_runtime.service import AgentRunService
 
     agent_runs = AgentRunService(database, job_store=jobs)
-    from app.chat.live_agent_store import default_live_agent_planner
+    from app.platform.chat.live_agent_store import default_live_agent_planner
 
     services = GatewayRuntimeServices(
         jobs=jobs,
@@ -282,8 +282,8 @@ def create_production_app(config: RuntimeConfig | None = None):
         )
 
         def converge_memory_v2(_task_context) -> None:
-            from app.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
-            from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
+            from app.platform.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
+            from app.platform.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 
             # Before the cutover the shadow runner converges its own spaces.
             if PostgresMemoryV2Runtime(services.jobs.database).current().epoch.authority != "v2":
@@ -397,7 +397,7 @@ def create_production_app(config: RuntimeConfig | None = None):
                         )
 
     def readiness():
-        from app.live_voice.capacity import live_call_capacity_snapshot
+        from app.platform.live_voice.capacity import live_call_capacity_snapshot
 
         payload = production_readiness(config)
         payload["live_voice_capacity"] = live_call_capacity_snapshot()

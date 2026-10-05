@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.npc_goal_state import (
+from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     record_goal_influence,
     response_style_from_goal,

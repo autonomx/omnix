@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.characters.live_conversation_profile import (
+from app.platform.characters.live_conversation_profile import (
     LiveConversationProfileStore,
     LiveConversationProfileUpdate,
 )

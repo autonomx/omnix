@@ -24,7 +24,7 @@ from pydantic import (
 from app.providers.base import ChatMessage, ChatResponse
 from app.providers.structured import StructuredContract
 from app.providers.structured.parsing import canonical_structured_text, decode_json_object
-from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
+from app.apps.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 
 logger = logging.getLogger(__name__)
 

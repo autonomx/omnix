@@ -12,10 +12,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.runtime.clock import utc_now
-from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
-from app.rpg.session.ability_system import build_progression_package
-from app.rpg.session.new_game_settings import build_new_game_setup_effects
-from app.rpg.session.service import archive_session, load_session, save_session
+from app.apps.rpg.session.ability_coverage import write_ability_coverage_snapshot
+from app.apps.rpg.session.ability_system import build_progression_package
+from app.apps.rpg.session.new_game_settings import build_new_game_setup_effects
+from app.apps.rpg.session.service import archive_session, load_session, save_session
 
 DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 NEW_GAME_CONTRACT_VERSION = "rpg_new_game_v1"

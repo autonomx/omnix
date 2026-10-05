@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.visible_response_contract import attach_visible_turn_record
+from app.apps.rpg.session.visible_response_contract import attach_visible_turn_record
 
 
 def apply_visible_response_stage(ctx: Any) -> Any:

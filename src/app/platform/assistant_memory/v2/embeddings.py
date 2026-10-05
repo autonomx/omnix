@@ -3,7 +3,7 @@
 The model runs locally on CPU through ONNX Runtime (no PyTorch). It is not
 bundled: download it once with
 
-    python -m app.assistant_memory.v2.embeddings download
+    python -m app.platform.assistant_memory.v2.embeddings download
 
 which fetches a pinned revision from Hugging Face and checks each file's
 SHA-256. Without the model, Memory v2 retrieves by words alone.
@@ -146,7 +146,7 @@ def _main(argv: list[str]) -> int:
         sys.stdout.write(json.dumps({"model": MODEL_ID, "directory": str(model_dir()), "installed": model_installed(),
                                      "enabled": embeddings_enabled()}) + "\n")
         return 0
-    sys.stderr.write("usage: python -m app.assistant_memory.v2.embeddings [download|status]\n")
+    sys.stderr.write("usage: python -m app.platform.assistant_memory.v2.embeddings [download|status]\n")
     return 2
 
 

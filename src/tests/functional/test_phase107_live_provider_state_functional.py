@@ -1,4 +1,4 @@
-from app.rpg.orchestration.live_provider import (
+from app.apps.rpg.orchestration.live_provider import (
     build_provider_execution_id,
     ensure_live_provider_state,
     get_live_provider_state,

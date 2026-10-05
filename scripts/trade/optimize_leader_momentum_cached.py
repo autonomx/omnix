@@ -26,8 +26,8 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.models import MarketBar
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.models import MarketBar
 from scripts.trade import run_interday_winner_shadow_replay as replay
 
 

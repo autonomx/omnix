@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import JobProgress, JobStatus
-from app.trading.strategy_api import create_trading_strategy_router
-from app.trading.strategy_range_backtest import StrategyRangeBacktestRequest
-from app.trading.strategy_range_backtest_jobs import (
+from app.apps.trading.strategy_api import create_trading_strategy_router
+from app.apps.trading.strategy_range_backtest import StrategyRangeBacktestRequest
+from app.apps.trading.strategy_range_backtest_jobs import (
     STRATEGY_RANGE_BACKTEST_JOB,
     StrategyRangeBacktestJobInput,
     _execute_range_backtest_job,
@@ -78,7 +78,7 @@ def test_range_backtest_route_submits_and_reads_durable_job_state() -> None:
 
 
 def test_range_backtest_job_persists_progress_and_result(monkeypatch) -> None:
-    from app.trading import strategy_api
+    from app.apps.trading import strategy_api
 
     jobs = MagicMock()
     jobs.complete_job.return_value = SimpleNamespace(status=JobStatus.COMPLETED)

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import time
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
 
 from .models import (
     GapPullbackConfig,
@@ -13,8 +13,8 @@ from .models import (
     GapPullbackState,
     StrategySignal,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)

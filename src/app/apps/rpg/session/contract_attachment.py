@@ -21,10 +21,10 @@ def add_contracts_to_interpretive_result(result: dict[str, Any]) -> dict[str, An
     if copied.get("source") != _INTERPRETIVE_SOURCE:
         return copied
 
-    from app.rpg.session.response_authority import resolve_response_authority
-    from app.rpg.session.turn_plan import build_turn_plan_for_response
-    from app.rpg.session.world_reasoning_adapter import build_world_reasoning_from_interpretive_result
-    from app.rpg.session.world_reasoning_contracts import build_reasoning_trace
+    from app.apps.rpg.session.response_authority import resolve_response_authority
+    from app.apps.rpg.session.turn_plan import build_turn_plan_for_response
+    from app.apps.rpg.session.world_reasoning_adapter import build_world_reasoning_from_interpretive_result
+    from app.apps.rpg.session.world_reasoning_contracts import build_reasoning_trace
 
     mapped = build_world_reasoning_from_interpretive_result(copied)
     intent_result = _d(mapped.get("intent_result"))

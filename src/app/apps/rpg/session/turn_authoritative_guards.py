@@ -9,28 +9,28 @@ logger = logging.getLogger(__name__)
 from copy import deepcopy
 from typing import Any, Iterable
 
-from app.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
-from app.rpg.economy.service_resolver import resolve_service_turn
-from app.rpg.economy.currency import format_currency
-from app.rpg.session.public_state_bridge import (
+from app.apps.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.apps.rpg.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.economy.currency import format_currency
+from app.apps.rpg.session.public_state_bridge import (
     hydrate_simulation_player,
     project_authoritative_player,
 )
-from app.rpg.session.service_runtime import (
+from app.apps.rpg.session.service_runtime import (
     service_action_from_result,
     service_authoritative_result,
 )
 
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session,
 )
-from app.rpg.session.semantic_direct_response import (
+from app.apps.rpg.session.semantic_direct_response import (
     _phase8_part38_iter_candidate_sources as _phase8_part38_iter_candidate_sources,
 )
-from app.rpg.session.llm_narration_projection import (
+from app.apps.rpg.session.llm_narration_projection import (
     _phase8_part31_iter_payload_dicts as _phase8_part31_iter_payload_dicts,
 )
 
@@ -133,7 +133,7 @@ def _source_field(source: dict[str, Any], key: str) -> str:
 
 
 def _source_text(source: dict[str, Any], player_input: str) -> str:
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
@@ -321,7 +321,7 @@ def _apply_turn_authoritative(
     performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
 ) -> dict[str, Any]:
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
 
@@ -385,7 +385,7 @@ def _service_postcondition_satisfied(
     session_id: str,
     service_result: dict[str, Any],
 ) -> bool:
-    from app.rpg.session.state_normalization import (
+    from app.apps.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
 
@@ -617,7 +617,7 @@ def _response_soft_truth(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _persist_soft_truth(payload: dict[str, Any], session_id: str) -> dict[str, Any]:
-    from app.rpg.session.session_runtime_store import (
+    from app.apps.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
 

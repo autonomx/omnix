@@ -1,7 +1,7 @@
 from app.conversation.contracts import AssistantContextItem
-from app.research.extraction import ExtractedPage
-from app.research.quick_search import QuickSearchService
-from app.research.source_store import (
+from app.platform.research.extraction import ExtractedPage
+from app.platform.research.quick_search import QuickSearchService
+from app.platform.research.source_store import (
     ResearchSourceStore,
     canonicalize_source_url,
     stable_source_record_id,

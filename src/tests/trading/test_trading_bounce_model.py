@@ -4,13 +4,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.bounce_model import BounceFeatureVector, LABEL_DEFINITION
-from app.trading.bounce_training import (
+from app.apps.trading.bounce_model import BounceFeatureVector, LABEL_DEFINITION
+from app.apps.trading.bounce_training import (
     BounceTrainingExample,
     fit_bounce_logistic,
     score_fitted_bounce_model,
 )
-from app.trading.bounce_validation import BounceValidationExample, validate_bounce_artifact
+from app.apps.trading.bounce_validation import BounceValidationExample, validate_bounce_artifact
 
 
 TRAINED_AT = datetime(2026, 8, 18, 20, 0, tzinfo=timezone.utc)
@@ -148,9 +148,9 @@ def test_locked_model_reports_dated_oos_calibration_and_evidence_volume() -> Non
 
 
 def test_model_artifacts_have_relational_authority_and_no_execution_gate() -> None:
-    migration = Path("src/app/trading/migrations/0040_trading_model_artifacts.sql").read_text()
-    model_api = Path("src/app/trading/model_api.py").read_text().lower()
-    strategy_monitor = Path("src/app/trading/strategy_monitor.py").read_text().lower()
+    migration = Path("src/app/apps/trading/migrations/0040_trading_model_artifacts.sql").read_text()
+    model_api = Path("src/app/apps/trading/model_api.py").read_text().lower()
+    strategy_monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text().lower()
 
     assert "create table if not exists omnix_trading_model_artifacts" in migration.lower()
     assert "check (shadow_only = true)" in migration.lower()

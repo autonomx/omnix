@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     CampaignBibleSnapshot,
     VisibilityClass,
     campaign_bible_evidence,
 )
-from app.rpg.session.genesis import turn_grounding
-from app.rpg.session.genesis import npc_lore_projection
-from app.rpg.session.genesis.npc_lore_projection import ensure_encountered_npc_lore
-from app.rpg.world import npc_biography_registry
+from app.apps.rpg.session.genesis import turn_grounding
+from app.apps.rpg.session.genesis import npc_lore_projection
+from app.apps.rpg.session.genesis.npc_lore_projection import ensure_encountered_npc_lore
+from app.apps.rpg.world import npc_biography_registry
 
 
 def _session() -> dict:

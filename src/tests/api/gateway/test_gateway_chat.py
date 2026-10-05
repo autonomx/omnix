@@ -22,8 +22,8 @@ def in_memory_character_repository(monkeypatch):
 
 
 def _client(tmp_path: Path) -> TestClient:
-    from app.chat import InMemoryChatSessionStore
-    from app.gateway.main import create_gateway_app
+    from app.platform.chat import InMemoryChatSessionStore
+    from app.composition.gateway.main import create_gateway_app
     from tests.support.in_memory_jobs import InMemoryJobStore
 
     return TestClient(
@@ -83,7 +83,7 @@ def test_gateway_chat_sessions_are_backend_owned(tmp_path: Path) -> None:
 def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
 
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monke
 def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
 
     calls = 0
@@ -165,8 +165,8 @@ def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, mo
 
 
 def test_gateway_chat_queue_failure_marks_user_turn_failed(tmp_path: Path) -> None:
-    from app.chat import ChatSessionStore
-    from app.gateway.main import create_gateway_app
+    from app.platform.chat import ChatSessionStore
+    from app.composition.gateway.main import create_gateway_app
     from tests.support.in_memory_jobs import InMemoryJobStore
 
     class FailingJobStore(InMemoryJobStore):
@@ -200,7 +200,7 @@ def test_gateway_chat_cancel_cannot_commit_late_provider_reply(tmp_path: Path, m
     import threading
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
 
     entered = threading.Event()
@@ -241,7 +241,7 @@ def test_gateway_interrupts_active_generation_within_a_chat_session(tmp_path: Pa
     import threading
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
 
     first_entered = threading.Event()
@@ -297,10 +297,10 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
 ) -> None:
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
     from app.conversation.contracts import AssistantContextItem
-    from app.research.quick_search import QuickSearchExecution, QuickSearchService
+    from app.platform.research.quick_search import QuickSearchExecution, QuickSearchService
 
     calls: list[dict[str, object]] = []
 
@@ -356,11 +356,11 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
 def test_context_completion_failure_removes_unvalidated_reply(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
-    from app.chat.assistant_context import routes
+    from app.platform.chat.assistant_context import routes
     from app.conversation.contracts import AssistantContextItem
-    from app.research.quick_search import QuickSearchExecution, QuickSearchService
+    from app.platform.research.quick_search import QuickSearchExecution, QuickSearchService
 
     monkeypatch.setattr(
         provider_service,
@@ -421,7 +421,7 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
 ) -> None:
     from types import SimpleNamespace
 
-    from app.chat import prompt_store
+    from app.platform.chat import prompt_store
     from app.providers import service as provider_service
     from app.conversation.contracts import AssistantContextItem
     from app.providers.desktop_vision import DesktopVisionClient

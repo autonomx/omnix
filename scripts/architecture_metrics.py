@@ -591,8 +591,8 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     # and to the kernel router; their routes are authorized even without a
     # per-route dependency. Sidecar apps outside the gateway still count.
     composition_guarded = (
-        "Depends(permission_guard)" in analysis.sources.get("src/app/gateway/feature_registry.py", "")
-        and "Depends(kernel_permission_guard)" in analysis.sources.get("src/app/gateway/app_factory.py", "")
+        "Depends(permission_guard)" in analysis.sources.get("src/app/composition/gateway/feature_registry.py", "")
+        and "Depends(kernel_permission_guard)" in analysis.sources.get("src/app/composition/gateway/app_factory.py", "")
     )
     feature_package_paths = tuple(
         "src/" + package.replace(".", "/") + "/"
@@ -601,7 +601,7 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
         # Composed into the gateway through guarded routers as well; the
         # runtime test in src/tests/security/test_permissions.py proves every
         # composed route refuses a caller without permissions.
-        "src/app/gateway/",
+        "src/app/composition/gateway/",
     )
     evidence["other_fixed_sleeps_in_tests"] = []
     values["files_over_1200_lines"] = sum(
@@ -855,7 +855,7 @@ def _is_docstring(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
 
 def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
     graph = analysis.import_edges()
-    roots = {name for name in graph if name in {"app.production", "app.worker", "launch", "main"} or analysis.modules[name].endswith("/__main__.py")}
+    roots = {name for name in graph if name in {"app.composition.production", "app.composition.worker", "launch", "main"} or analysis.modules[name].endswith("/__main__.py")}
     # The kernel reads a module's declarations by convention, as it finds migrations (PA-2.2).
     roots.update(name for name in graph if name.endswith(".declarations") and name.removesuffix(".declarations") + ".feature" in graph)
     # Scripts and registered literal module names are additional entry points.
@@ -874,7 +874,7 @@ def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
                     if target_module in graph:
                         roots.add(target_module)
     reached = _reach(graph, roots)
-    return sorted(analysis.modules[name] for name in graph if name.startswith("app.rpg.") and name not in reached and not is_test(analysis.modules[name]))
+    return sorted(analysis.modules[name] for name in graph if name.startswith("app.apps.rpg.") and name not in reached and not is_test(analysis.modules[name]))
 
 
 def _reach(graph: dict[str, set[str]], roots: set[str]) -> set[str]:

@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from app.providers.structured.legacy import decode_legacy_json_object
-from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.apps.rpg.session.turn_grounding import build_turn_grounding_packet
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.ai_semantic_action_intelligence.instructions', "1", (
@@ -250,7 +250,7 @@ def _repair_provider_message_content(
     raw_text: str,
     source: str,
 ) -> tuple[Any, str, str]:
-    from app.rpg.session.visible_response_contract import (
+    from app.apps.rpg.session.visible_response_contract import (
         extract_provider_message_content,
         is_invalid_visible_value,
     )
@@ -281,7 +281,7 @@ def build_semantic_action_prompt(player_input: str, simulation_state: dict[str, 
     instructions = (
         _PROMPT_1.text
     )
-    from app.rpg.presentation.dialogue_quality import dialogue_quality_contract_text
+    from app.apps.rpg.presentation.dialogue_quality import dialogue_quality_contract_text
 
     prompt = instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
     return (

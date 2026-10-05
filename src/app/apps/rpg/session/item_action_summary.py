@@ -4,10 +4,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.crafting import CRAFTING_RECIPES, preview_craft
-from app.rpg.session.equipment import resolve_equipment_slot
-from app.rpg.session.inventory_items import display_item_name, inventory_quantity, is_protected_item, item_type, normalize_inventory_items
-from app.rpg.session.item_materials import salvage_item
+from app.apps.rpg.session.crafting import CRAFTING_RECIPES, preview_craft
+from app.apps.rpg.session.equipment import resolve_equipment_slot
+from app.apps.rpg.session.inventory_items import display_item_name, inventory_quantity, is_protected_item, item_type, normalize_inventory_items
+from app.apps.rpg.session.item_materials import salvage_item
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

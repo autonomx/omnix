@@ -17,7 +17,7 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 from app.providers.structured.parsing import decode_json_object
-from app.rpg.ai.semantic_packet_contract import SemanticPacketEnvelope
+from app.apps.rpg.ai.semantic_packet_contract import SemanticPacketEnvelope
 
 logger = logging.getLogger(__name__)
 _RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(

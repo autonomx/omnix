@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.api.compat.rpg_session_compat import get_rpg_session_payload as _legacy_get_rpg_session_payload
-from app.rpg.session.genesis.promoted_launch import create_promoted_new_game
+from app.apps.rpg.api.compat.rpg_session_compat import get_rpg_session_payload as _legacy_get_rpg_session_payload
+from app.apps.rpg.session.genesis.promoted_launch import create_promoted_new_game
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

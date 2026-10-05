@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.item_action_summary import build_item_action_summary
-from app.rpg.session.item_report_sections import build_item_report_section
+from app.apps.rpg.session.item_action_summary import build_item_action_summary
+from app.apps.rpg.session.item_report_sections import build_item_report_section
 
 ITEM_OBJECTIVES_SOURCE = "engine_item_objectives_v1"
 

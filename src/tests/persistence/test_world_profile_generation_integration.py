@@ -9,13 +9,13 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     HeuristicWorldLocalProfileGenerator,
 )
-from app.rpg.worlds.contracts import WorldProjectCreate
-from app.rpg.worlds.generation_worker import run_world_generation_worker_once
-from app.rpg.worlds.postgres_service import create_world_project
-from app.rpg.worlds.profile_generation_jobs import WORLD_PROFILE_JOB_TYPE
+from app.apps.rpg.worlds.contracts import WorldProjectCreate
+from app.apps.rpg.worlds.generation_worker import run_world_generation_worker_once
+from app.apps.rpg.worlds.postgres_service import create_world_project
+from app.apps.rpg.worlds.profile_generation_jobs import WORLD_PROFILE_JOB_TYPE
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -65,7 +65,7 @@ def test_unknown_world_profile_is_generated_and_pinned_before_lore(
         _reset(database)
         monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
         monkeypatch.setattr(
-            "app.rpg.worlds.postgres_service.kick_world_generation_worker",
+            "app.apps.rpg.worlds.postgres_service.kick_world_generation_worker",
             lambda **_kwargs: False,
         )
 

@@ -4,21 +4,21 @@ on:
   pull_request:
     branches: [main, "codingagent", "agent/generalized-agent-runtime", "agent/coding-quality-phases-20-31"]
     paths:
-      - "src/app/agent_runtime/**"
+      - "src/app/platform/agent_runtime/**"
       - "src/tests/agent_runtime/**"
       - "src/tests/e2e/test_default_llm_agent_ui_flow.py"
       - "src/tests/persistence/test_agent_*"
       - "src/tests/persistence/test_workflow_*"
       - "src/tests/persistence/test_task_graph_*"
-      - "src/app/agent_runtime/routes.py"
-      - "src/app/gateway/__init__.py"
-      - "src/app/chat/assist/hermes.py"
-      - "src/app/assistant_tools/registry.py"
-      - "src/app/assistant_tools/hermes_bridge.py"
-      - "src/app/assistant_tools/home_adapter.py"
-      - "src/app/assistant_tools/trading_adapter.py"
-      - "src/app/assistant_tools/config_store.py"
-      - "src/app/assistant_tools/repo_adapter.py"
+      - "src/app/platform/agent_runtime/routes.py"
+      - "src/app/composition/gateway/__init__.py"
+      - "src/app/platform/chat/assist/hermes.py"
+      - "src/app/platform/assistant_tools/registry.py"
+      - "src/app/platform/assistant_tools/hermes_bridge.py"
+      - "src/app/platform/assistant_tools/home_adapter.py"
+      - "src/app/platform/assistant_tools/trading_adapter.py"
+      - "src/app/platform/assistant_tools/config_store.py"
+      - "src/app/platform/assistant_tools/repo_adapter.py"
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
       - "web/src/features/assistant/chat/ChatbotWorkspace.tsx"
@@ -31,17 +31,17 @@ on:
       - "web/src/features/assistant/workspace/assistant-context-controller.test.ts"
       - "src/app/assistant_context/models.py"
       - "src/app/assistant_context/routes.py"
-      - "src/app/chat/models.py"
-      - "src/app/chat/store.py"
-      - "src/app/chat/prompt_store.py"
-      - "src/app/chat/prompt_assembly.py"
-      - "src/app/chat/prompt_rendering.py"
-      - "src/app/chat/routing_context.py"
-      - "src/app/chat/history_search.py"
-      - "src/app/chat/compaction.py"
-      - "src/app/chat/memory_prompt.py"
-      - "src/app/chat/live_agent_store.py"
-      - "src/app/chat/sqlite_store.py"
+      - "src/app/platform/chat/models.py"
+      - "src/app/platform/chat/store.py"
+      - "src/app/platform/chat/prompt_store.py"
+      - "src/app/platform/chat/prompt_assembly.py"
+      - "src/app/platform/chat/prompt_rendering.py"
+      - "src/app/platform/chat/routing_context.py"
+      - "src/app/platform/chat/history_search.py"
+      - "src/app/platform/chat/compaction.py"
+      - "src/app/platform/chat/memory_prompt.py"
+      - "src/app/platform/chat/live_agent_store.py"
+      - "src/app/platform/chat/sqlite_store.py"
       - "src/tests/unit/chat/test_routing_context.py"
       - "src/tests/unit/chat/test_memory_injection.py"
       - "src/tests/unit/assistant_context/test_local_workspace_context.py"
@@ -112,8 +112,8 @@ jobs:
         run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
       - name: Compile Agent Runtime and Chat context modules
         run: |
-          python -m compileall -q src/app/agent_runtime
-          python -m compileall -q src/app/chat
+          python -m compileall -q src/app/platform/agent_runtime
+          python -m compileall -q src/app/platform/chat
       - name: Run Agent Runtime unit and authority tests
         run: |
           python -m pytest src/tests/agent_runtime -q --tb=short

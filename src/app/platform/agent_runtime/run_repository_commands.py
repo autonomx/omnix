@@ -15,7 +15,7 @@ from .repository import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.repository import PostgresAgentRunRepository
+    from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 def enqueue_command(repo: PostgresAgentRunRepository, command: AgentRunCommand) -> AgentRunCommand:

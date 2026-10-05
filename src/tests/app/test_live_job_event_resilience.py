@@ -7,11 +7,11 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from app.gateway.kernel_routes.live_event_stream import (
+from app.composition.gateway.kernel_routes.live_event_stream import (
     live_event_start_id,
     resilient_live_job_event_stream,
 )
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from fastapi.routing import APIRoute
 from app.persistence.database import DatabaseUnavailableError
 
@@ -53,7 +53,7 @@ def test_live_event_stream_survives_transient_postgres_error(monkeypatch) -> Non
     async def no_wait(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("app.gateway.kernel_routes.live_event_stream.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.composition.gateway.kernel_routes.live_event_stream.asyncio.sleep", no_wait)
 
     async def collect() -> list[str]:
         stream = resilient_live_job_event_stream(FakeStore([FakeEvent(1)], fail_once=True))
@@ -100,4 +100,4 @@ def test_job_events_route_uses_the_jobs_kernel_stream() -> None:
     ]
 
     assert len(matching) == 1
-    assert matching[0].endpoint.__module__ == "app.gateway.kernel_routes.core_jobs_routes"
+    assert matching[0].endpoint.__module__ == "app.composition.gateway.kernel_routes.core_jobs_routes"

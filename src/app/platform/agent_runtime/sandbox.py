@@ -1,8 +1,8 @@
 """Operator commands for the agent sandbox (WP-4.7).
 
-    python -m app.agent_runtime.sandbox build         # build the sandbox image
-    python -m app.agent_runtime.sandbox status        # Docker, image, network, relay
-    python -m app.agent_runtime.sandbox check-egress  # prove only the relay is reachable
+    python -m app.platform.agent_runtime.sandbox build         # build the sandbox image
+    python -m app.platform.agent_runtime.sandbox status        # Docker, image, network, relay
+    python -m app.platform.agent_runtime.sandbox check-egress  # prove only the relay is reachable
 
 ``check-egress`` starts the managed network and relay, then from a container
 on the sandbox network tries the relay (must connect) and an outside address
@@ -27,7 +27,7 @@ from .isolation import (
     unsandboxed_runs_allowed,
 )
 
-DOCKERFILE = Path(__file__).resolve().parents[3] / "deploy" / "docker" / "agent-sandbox.Dockerfile"
+DOCKERFILE = Path(__file__).resolve().parents[4] / "deploy" / "docker" / "agent-sandbox.Dockerfile"
 # A TCP connect probe run inside the sandbox image; prints "open" or "closed".
 _PROBE = (
     "const s=require('net').connect({host:process.argv[1],port:+process.argv[2]});"

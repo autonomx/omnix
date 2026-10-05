@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.social.reputation import get_global_reputation, get_relationship
+from app.apps.rpg.social.reputation import get_global_reputation, get_relationship
 
 
 def build_social_dialogue_context(

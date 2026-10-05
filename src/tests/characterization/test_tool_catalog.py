@@ -7,9 +7,9 @@ are excluded because they come from the local MCP policy file.
 from __future__ import annotations
 
 from app.capabilities.registry import TOOL_DECLARATIONS, _definition_hash, default_capability_registry
-from app.research.assistant_tool import ResearchTool
+from app.platform.research.assistant_tool import ResearchTool
 from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, installed_port_bindings
-from app.trading.assistant_tool import TradingMarketDataTool
+from app.apps.trading.assistant_tool import TradingMarketDataTool
 
 from .harness import capture
 

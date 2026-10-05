@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.apps.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.persistence.tenant import local_tenant_context
 
 

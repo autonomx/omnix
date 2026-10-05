@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.world_reasoning_contracts import build_turn_plan
+from app.apps.rpg.session.world_reasoning_contracts import build_turn_plan
 
 _PRESENTATION_BY_AUTHORITY = {
     "addressed_npc": "npc_dialogue",

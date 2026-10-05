@@ -9,7 +9,7 @@ Fixes applied:
 """
 from typing import Any, Dict
 
-from app.rpg.items import (
+from app.apps.rpg.items import (
     get_item_definition,
     normalize_inventory_state,
     remove_inventory_item,

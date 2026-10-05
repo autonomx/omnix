@@ -113,7 +113,7 @@ services:
 
   job-worker-1: &job-worker
     <<: *omnix
-    command: ["python", "-m", "app.worker", "--metrics-host", "0.0.0.0"]
+    command: ["python", "-m", "app.composition.worker", "--metrics-host", "0.0.0.0"]
     environment:
       <<: *omnix-env
       OMNIX_GATEWAY_BACKGROUND_ROLE: job-worker

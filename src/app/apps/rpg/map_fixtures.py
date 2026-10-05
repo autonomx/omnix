@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.rpg.map_contracts import (
+from app.apps.rpg.map_contracts import (
     MapBackground,
     MapBounds,
     MapDefinition,

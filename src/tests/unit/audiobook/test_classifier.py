@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.audiobook.classifier import local_classifier, with_classification_rules
+from app.apps.audiobook.classifier import local_classifier, with_classification_rules
 
 
 def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
@@ -24,7 +24,7 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
                         '"role":"narration","delivery":""}',
             )
 
-    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: Provider())
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Provider())
     classifier = local_classifier()
     assert classifier is not None
     classify, details = classifier
@@ -81,7 +81,7 @@ def test_style_discovery_uses_low_reasoning_without_downgrading_speaker_analysis
                 content='{"styles":[]}',
             )
 
-    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: Provider())
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Provider())
     classifier = local_classifier()
     assert classifier is not None
     classify, _details = classifier
@@ -116,7 +116,7 @@ def test_classifier_allows_annotation_retry_after_transient_provider_error(monke
                 raise result
             return result
 
-    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: Provider())
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: Provider())
     classifier = local_classifier()
     assert classifier is not None
     classify, _details = classifier
@@ -146,7 +146,7 @@ def _provider_returning(*contents, finish_reason=None):
 
 def test_the_structured_gateway_sends_the_request_unchanged(monkeypatch) -> None:
     provider, calls = _provider_returning('{"characters":[],"spans":[]}')
-    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: provider)
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: provider)
     classify, details = local_classifier()
 
     assert classify({"task": "analyze_story_dialogue_full_context"}) == {"characters": [], "spans": []}
@@ -160,23 +160,23 @@ def test_unusable_classifier_output_is_a_parse_failure(monkeypatch) -> None:
 
     for content in ('```json\n{"spans":[]}\n```', '["not", "an", "object"]', "   "):
         provider, _calls = _provider_returning(content)
-        monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda provider=provider: provider)
+        monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda provider=provider: provider)
         classify, _details = local_classifier()
         with pytest.raises(ValueError):
             classify({"task": "analyze_story_dialogue_full_context"})
 
     provider, _calls = _provider_returning('{"spans":[', finish_reason="length")
-    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: provider)
+    monkeypatch.setattr("app.apps.audiobook.classifier.get_provider", lambda: provider)
     classify, _details = local_classifier()
     with pytest.raises(ValueError, match="unusable"):
         classify({"task": "analyze_story_dialogue_full_context"})
 
 
 def test_the_document_structure_classifier_sends_its_request_unchanged(monkeypatch) -> None:
-    from app.audiobook.document_structure_classifier import local_structure_classifier
+    from app.apps.audiobook.document_structure_classifier import local_structure_classifier
 
     provider, calls = _provider_returning('{"blocks":[]}')
-    monkeypatch.setattr("app.audiobook.document_structure_classifier.get_provider", lambda: provider)
+    monkeypatch.setattr("app.apps.audiobook.document_structure_classifier.get_provider", lambda: provider)
     classify, details = local_structure_classifier()
 
     assert classify({"task": "classify_document_regions"}) == {"blocks": []}

@@ -9,7 +9,7 @@ from typing import Protocol
 
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
-from app.trading.us_equity_calendar import EASTERN
+from app.apps.trading.us_equity_calendar import EASTERN
 
 from .paper import (
     PaperAccount,

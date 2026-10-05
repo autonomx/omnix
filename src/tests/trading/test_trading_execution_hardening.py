@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.paper import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.paper import (
     PaperExecutionPolicy,
     PaperMarketObservation,
     PaperOrder,
@@ -15,8 +15,8 @@ from app.trading.paper import (
     paper_observation_key,
     paper_protection_trigger,
 )
-from app.trading.providers.alpaca_iex_status import AlpacaIexStatusCache, AlpacaTradingStatus
-from app.trading.us_equity_calendar import us_equity_session
+from app.apps.trading.providers.alpaca_iex_status import AlpacaIexStatusCache, AlpacaTradingStatus
+from app.apps.trading.us_equity_calendar import us_equity_session
 
 
 NOW = datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc)

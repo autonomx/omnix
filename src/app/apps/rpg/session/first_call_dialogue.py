@@ -307,12 +307,12 @@ def build_non_stateful_dialogue_result(
         return result
 
     try:
-        from app.rpg.session.dialogue_focus import record_direct_dialogue_exchange
+        from app.apps.rpg.session.dialogue_focus import record_direct_dialogue_exchange
 
         turn_id = _s(result.get("turn_id"))
         if not turn_id:
             try:
-                from app.rpg.session.companion_turn_runtime import _build_turn_id
+                from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
 
                 turn_id = _s(_build_turn_id(runtime_state))
             except Exception:
@@ -326,7 +326,7 @@ def build_non_stateful_dialogue_result(
             persist=True,
         )
     except Exception as exc:
-        from app.rpg.debug_logging import log_rpg_event
+        from app.apps.rpg.debug_logging import log_rpg_event
 
         result["conversation_thread_record"] = {
             "recorded": False,

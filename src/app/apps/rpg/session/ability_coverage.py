@@ -14,7 +14,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
 
-from app.rpg.session.ability_system import ALLOWED_DIMENSIONS
+from app.apps.rpg.session.ability_system import ALLOWED_DIMENSIONS
 
 REQUIRED_ABILITY_COVERAGE_DIMENSIONS = (
     "resources",

@@ -1,6 +1,6 @@
-from app.assistant_tools.ledger import AssistantToolLedgerEntry
-from app.assistant_tools.models import AssistantToolResult
-from app.assistant_tools.result_context import tool_result_to_chat_context
+from app.platform.assistant_tools.ledger import AssistantToolLedgerEntry
+from app.platform.assistant_tools.models import AssistantToolResult
+from app.platform.assistant_tools.result_context import tool_result_to_chat_context
 
 
 def test_tool_result_context_includes_summary_and_ledger_reference():

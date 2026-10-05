@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.rpg.performance_trace import (
+from app.apps.rpg.performance_trace import (
     attach_rpg_result_timing,
     build_traced_json_response,
     rpg_pipeline_span,
     rpg_pipeline_trace,
 )
-from app.rpg.response_trace_headers import finalize_rpg_trace_headers
+from app.apps.rpg.response_trace_headers import finalize_rpg_trace_headers
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 

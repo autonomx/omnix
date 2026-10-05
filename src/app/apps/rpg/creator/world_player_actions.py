@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 # Phase 8: player-facing action summaries
-from app.rpg.player import ensure_player_state
+from app.apps.rpg.player import ensure_player_state
 
 # ---------------------------------------------------------------------------
 # Internal helpers

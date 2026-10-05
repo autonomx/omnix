@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.providers.ibkr_runtime import (
+from app.apps.trading.providers.ibkr_runtime import (
     FakeIbkrTransport,
     IbkrContractAmbiguousError,
     IbkrContractIdentity,

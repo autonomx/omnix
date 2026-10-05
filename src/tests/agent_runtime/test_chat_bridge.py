@@ -4,16 +4,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.chat_bridge import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.chat_bridge import (
     _agent_task,
     _direct_request,
     _select_profile,
     _unauthorized_agent_command,
     route_typed_chat_turn,
 )
-from app.agent_runtime.active_objective import make_active_objective
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.active_objective import make_active_objective
+from app.platform.agent_runtime.contracts import (
     AgentRunCommand,
     AgentRunSpec,
     EvidenceDecision,
@@ -22,16 +22,16 @@ from app.agent_runtime.contracts import (
     ModelRef,
     WorkspaceSpec,
 )
-from app.assistant_tools.models import AssistantToolResult
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_task import (
+from app.platform.assistant_tools.models import AssistantToolResult
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
     SemanticTaskCompilation,
 )
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
     TaskGraphRunSnapshot,
@@ -39,7 +39,7 @@ from app.agent_runtime.task_graph import (
     TaskNodeRunState,
     task_node_fingerprint,
 )
-from app.agent_runtime.turn_plan import compile_turn_plan
+from app.platform.agent_runtime.turn_plan import compile_turn_plan
 
 
 class _DefaultV2TestParser:
@@ -155,7 +155,7 @@ def test_chat_profile_selection_is_semantic_and_bounded() -> None:
 def test_coding_profile_selection_covers_live_chat_coding_prompts() -> None:
     assert _select_profile("implement a small improvement to the agent router") == "coding"
     assert _select_profile(
-        "/agent In `src/app/agent_runtime/router.py`, add a short comment and run pytest"
+        "/agent In `src/app/platform/agent_runtime/router.py`, add a short comment and run pytest"
     ) == "coding"
     assert _select_profile(
         "/agent Review router.py and chat_bridge.py for routing inconsistencies and run router tests"
@@ -428,8 +428,8 @@ def test_natural_continuation_uses_context_without_reference_regex(monkeypatch, 
 
 
 def test_direct_request_does_not_build_canonical_routing_context(monkeypatch) -> None:
-    from app.assistant_tools.config_store import default_assistant_tools_config
-    from app.assistant_tools.gate import review_assistant_tool_request
+    from app.platform.assistant_tools.config_store import default_assistant_tools_config
+    from app.platform.assistant_tools.gate import review_assistant_tool_request
 
     monkeypatch.setattr(
         chat_bridge,
@@ -1234,7 +1234,7 @@ def test_read_only_run_rejects_publication_without_github_capability() -> None:
 
 
 def test_live_voice_metadata_can_be_detected_without_session_state() -> None:
-    from app.agent_runtime.chat_bridge import _is_live_voice
+    from app.platform.agent_runtime.chat_bridge import _is_live_voice
     message = SimpleNamespace(metadata={"speech_segment_id": "voice-segment:abc"})
     assert _is_live_voice(message) is True
 

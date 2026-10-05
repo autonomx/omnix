@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-from app.agent_runtime.model_gateway import _STREAM_END, _next_stream_response, normalize_llm_provider_id
-from app.agent_runtime.pi_runtime import normalize_pi_event
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.platform.agent_runtime.model_gateway import _STREAM_END, _next_stream_response, normalize_llm_provider_id
+from app.platform.agent_runtime.pi_runtime import normalize_pi_event
 
 
 def test_pi_settled_is_a_claim_not_terminal_completion() -> None:

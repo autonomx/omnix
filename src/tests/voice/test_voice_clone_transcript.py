@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.providers import service as provider_service
-from app.voice import jobs as voice_inline
+from app.platform.voice import jobs as voice_inline
 
 
 class _FakeSttProvider:

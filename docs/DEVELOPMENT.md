@@ -231,7 +231,7 @@ When adding a setting, update the relevant runtime consumer and test both persis
 
 ## Assistant tool/capability development
 
-The canonical capability registry is `src/app/agent_runtime/capabilities.py`. Browser-facing assistant tools are projected through `src/app/assistant_tools/registry.py`.
+The canonical capability registry is `src/app/platform/agent_runtime/capabilities.py`. Browser-facing assistant tools are projected through `src/app/platform/assistant_tools/registry.py`.
 
 Do not add a model tool by only changing a prompt. Register its authority explicitly.
 

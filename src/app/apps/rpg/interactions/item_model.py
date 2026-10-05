@@ -4,7 +4,7 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.item_catalog import (
+from app.apps.rpg.interactions.item_catalog import (
     definition_for_item_like,
 )
 

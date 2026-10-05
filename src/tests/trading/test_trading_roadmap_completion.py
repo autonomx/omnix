@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.trading.catalyst_evidence import capture_catalyst_evidence, dilution_flags
-from app.trading.models import MarketBar
-from app.trading.paper_analytics import lifecycle_funnel
-from app.trading.strategy_monitor import _rsi_crossed_after_activation
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.catalyst_evidence import capture_catalyst_evidence, dilution_flags
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper_analytics import lifecycle_funnel
+from app.apps.trading.strategy_monitor import _rsi_crossed_after_activation
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 def _bar(index: int, close: str) -> MarketBar:
@@ -60,13 +60,13 @@ def test_live_rsi_helper_matches_causal_cross_contract() -> None:
 
 
 def test_completion_migration_preserves_initial_risk_and_protection_snapshots() -> None:
-    migration = Path("src/app/trading/migrations/0044_trading_roadmap_completion.sql").read_text()
+    migration = Path("src/app/apps/trading/migrations/0044_trading_roadmap_completion.sql").read_text()
     for token in (
         "archived_at", "initial_stop_price", "mae_price", "mfe_price",
         "trg_omnix_trading_strategy_protection_equity",
         "trg_zz_omnix_trading_strategy_trade_metrics",
     ):
         assert token in migration
-    monitor = Path("src/app/trading/strategy_monitor.py").read_text()
+    monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text()
     assert 'trigger = "rsi"' in monitor
     assert "relative_strength_index" in monitor

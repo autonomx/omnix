@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.assistant_memory import resolve_chat_scope
-from app.assistant_memory.hermes_adapter import (
+from app.platform.assistant_memory import resolve_chat_scope
+from app.platform.assistant_memory.hermes_adapter import (
     export_approved_memory_to_hermes,
     import_hermes_memory,
 )
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
-from app.assistant_memory.character_hermes_adapter import (
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory.character_hermes_adapter import (
     export_character_memory_to_hermes,
     import_character_hermes_memory,
 )

@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from ..contracts import CatalystFactSet, TradingEvidence
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 _SUPPLY_ONLY_FORMS = {"S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"}
 

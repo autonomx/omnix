@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 
-from app.rpg.map_contracts import MapContractError
-from app.rpg.map_serialization import canonical_map_json, map_content_revision
+from app.apps.rpg.map_contracts import MapContractError
+from app.apps.rpg.map_serialization import canonical_map_json, map_content_revision
 
 
 @dataclass(frozen=True)

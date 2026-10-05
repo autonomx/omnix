@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     GridPoint,
 )
-from app.rpg.map_instance_runtime import (
+from app.apps.rpg.map_instance_runtime import (
     CampaignMapInstanceSnapshot,
     create_map_instance_snapshot,
 )

@@ -4,14 +4,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.assistant_memory.routes import register_assistant_memory_routes
-from app.assistant_memory.settings import AssistantMemorySettingsUpdate
-from app.chat.compaction import compaction_enabled
-from app.chat.context_budget import prompt_budget_from_env
-from app.chat.history_search import history_recall_enabled
-from app.assistant_memory.chat_prompt import chat_memory_enabled
-from app.assistant_memory.jobs import memory_suggestions_enabled
-from app.assistant_memory.hermes_adapter import hermes_memory_sync_enabled
+from app.platform.assistant_memory.routes import register_assistant_memory_routes
+from app.platform.assistant_memory.settings import AssistantMemorySettingsUpdate
+from app.platform.chat.compaction import compaction_enabled
+from app.platform.chat.context_budget import prompt_budget_from_env
+from app.platform.chat.history_search import history_recall_enabled
+from app.platform.assistant_memory.chat_prompt import chat_memory_enabled
+from app.platform.assistant_memory.jobs import memory_suggestions_enabled
+from app.platform.assistant_memory.hermes_adapter import hermes_memory_sync_enabled
 from tests.support.assistant_memory_settings import (
     InMemorySettingsService,
     in_memory_assistant_memory_settings_store,
@@ -112,7 +112,7 @@ def test_inferred_memory_approval_cannot_be_disabled(monkeypatch):
 
 def test_settings_read_fails_closed_without_a_settings_service(monkeypatch):
     import app.settings.access as settings_access
-    from app.assistant_memory.settings import load_memory_runtime_status
+    from app.platform.assistant_memory.settings import load_memory_runtime_status
 
     def unavailable_service():
         raise RuntimeError("settings service is not installed")
@@ -124,7 +124,7 @@ def test_settings_read_fails_closed_without_a_settings_service(monkeypatch):
 
 def test_memory_settings_updates_use_optimistic_revisions(monkeypatch):
     service = InMemorySettingsService()
-    from app.assistant_memory.persistence.settings_store import (
+    from app.platform.assistant_memory.persistence.settings_store import (
         ASSISTANT_MEMORY_SETTINGS_KEY,
         SettingsServiceAssistantMemorySettingsStore,
     )

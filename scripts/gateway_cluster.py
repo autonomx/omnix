@@ -45,7 +45,7 @@ def start_local_job_worker(cwd: Path, env: Mapping[str, str] | None = None):
     child_env = child_environment("job-worker")
     child_env["OMNIX_LOCAL_JOB_WORKER"] = "0"
     child = subprocess.Popen(
-        [sys.executable, "-m", "app.worker", "--managed-stdin"],
+        [sys.executable, "-m", "app.composition.worker", "--managed-stdin"],
         cwd=cwd,
         env=child_env,
         stdin=subprocess.PIPE,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
-from app.agent_runtime.service import _quality_sized_run_spec
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
+from app.platform.agent_runtime.service import _quality_sized_run_spec
 
 
 def _spec(*, policy: str = "strict", limits: RunLimits | None = None, profile: str = "coding") -> AgentRunSpec:

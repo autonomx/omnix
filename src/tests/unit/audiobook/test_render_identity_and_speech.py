@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from app.audiobook.render_keys import RenderIdentity, invalidation_for
-from app.audiobook.speech_plan import build_speech_plan, split_speech_plan
+from app.apps.audiobook.render_keys import RenderIdentity, invalidation_for
+from app.apps.audiobook.speech_plan import build_speech_plan, split_speech_plan
 
 
 def _identity(plan_hash: str) -> RenderIdentity:

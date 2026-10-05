@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.llm_app_gateway import (
+from app.apps.rpg.llm_app_gateway import (
     build_app_llm_gateway as build_app_llm_gateway,
 )
 

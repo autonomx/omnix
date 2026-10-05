@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Request
 
-from app.rpg.debug_logging import (
+from app.apps.rpg.debug_logging import (
     configure_rpg_debug_logging,
     log_rpg_event,
     new_rpg_trace_id,

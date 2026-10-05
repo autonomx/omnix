@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.persistence.errors import RevisionConflict
-from app.trading.api import create_trading_router
+from app.apps.trading.api import create_trading_router
 
 
 class RevisionedRepository:

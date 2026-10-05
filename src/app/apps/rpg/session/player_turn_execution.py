@@ -2,81 +2,81 @@ from __future__ import annotations
 
 import logging
 
-from app.rpg.session.public_state_bridge import merge_authoritative_session_state
+from app.apps.rpg.session.public_state_bridge import merge_authoritative_session_state
 
 # RPG session runtime responsibility module.
-from app.rpg.session.turn_perf_trace import (
+from app.apps.rpg.session.turn_perf_trace import (
     record_elapsed_turn_stage as record_elapsed_turn_stage, record_turn_perf_trace as record_turn_perf_trace, record_turn_perf_trace_stack as record_turn_perf_trace_stack,
 )
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     _mirror_enemy_ai_combat_results as _mirror_enemy_ai_combat_results, _mirror_rescued_combat_utility_result as _mirror_rescued_combat_utility_result,
     _rescue_final_apply_turn_combat_utility_result as _rescue_final_apply_turn_combat_utility_result, load_runtime_session as load_runtime_session,
 )
 import copy
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _sync_session_if_companion_runtime_mutated as _sync_session_if_companion_runtime_mutated,
     _sync_session_simulation_state_for_early_return as _sync_session_simulation_state_for_early_return,
     _try_resolve_pending_companion_offer_at_turn_start as _try_resolve_pending_companion_offer_at_turn_start,
 )
-from app.rpg.party.companion_presence import (
+from app.apps.rpg.party.companion_presence import (
     build_party_aware_turn_context as build_party_aware_turn_context, companion_presence_summary as companion_presence_summary,
     project_active_companions_into_presence as project_active_companions_into_presence,
 )
-from app.rpg.party.companion_memory import (
+from app.apps.rpg.party.companion_memory import (
     companion_loyalty_projection as companion_loyalty_projection, companion_memory_summary as companion_memory_summary,
     record_companion_join_memory as record_companion_join_memory,
 )
-from app.rpg.party.companion_quests import (
+from app.apps.rpg.party.companion_quests import (
     companion_quest_summary as companion_quest_summary, seed_companion_quest_from_arc as seed_companion_quest_from_arc,
 )
-from app.rpg.party.party_composition import (
+from app.apps.rpg.party.party_composition import (
     project_party_composition_effects as project_party_composition_effects,
 )
-from app.rpg.party.companion_turns import (
+from app.apps.rpg.party.companion_turns import (
     maybe_build_direct_companion_turn_response as maybe_build_direct_companion_turn_response,
 )
-from app.rpg.party.companion_commands import (
+from app.apps.rpg.party.companion_commands import (
     maybe_apply_companion_command as maybe_apply_companion_command,
 )
-from app.rpg.interactions.interaction_runtime import (
+from app.apps.rpg.interactions.interaction_runtime import (
     resolve_general_interaction as resolve_general_interaction,
 )
-from app.rpg.narration.combat_contract import (
+from app.apps.rpg.narration.combat_contract import (
     combat_contract_requires_llm as combat_contract_requires_llm,
 )
-from app.rpg.session.visible_response_core import (
+from app.apps.rpg.session.visible_response_core import (
     _apply_combat_narration_if_needed as _apply_combat_narration_if_needed,
     _apply_visible_interaction_reason_to_resolved_result as _apply_visible_interaction_reason_to_resolved_result,
     _interaction_visible_result_reason as _interaction_visible_result_reason,
     _patch_visible_interaction_reason_into_payload_text as _patch_visible_interaction_reason_into_payload_text,
 )
-from app.rpg.session.combat_turn_actions import (
+from app.apps.rpg.session.combat_turn_actions import (
     _apply_manual_start_encounter_turn as _apply_manual_start_encounter_turn, _manual_encounter_preset_from_input as _manual_encounter_preset_from_input,
     _reconcile_combat_world_consequences as _reconcile_combat_world_consequences, _reconcile_general_interaction_action as _reconcile_general_interaction_action,
     _reconcile_narration_quality_memory_and_warnings as _reconcile_narration_quality_memory_and_warnings,
     _reconcile_npc_backbone_social_decision as _reconcile_npc_backbone_social_decision, _reconcile_player_reposition_action as _reconcile_player_reposition_action,
     _reconcile_position_attack_range_gate as _reconcile_position_attack_range_gate,
 )
-from app.rpg.session.combat_result_reconciliation import (
+from app.apps.rpg.session.combat_result_reconciliation import (
     _mirror_ability_results as _mirror_ability_results, _mirror_encounter_result as _mirror_encounter_result,
     _reconcile_combat_use_item_with_successful_consumable as _reconcile_combat_use_item_with_successful_consumable,
     _reconcile_combat_victory_rewards_and_loot as _reconcile_combat_victory_rewards_and_loot,
     _reconcile_manual_forced_generated_victory_attack as _reconcile_manual_forced_generated_victory_attack,
     _reconcile_player_combat_ability_action as _reconcile_player_combat_ability_action,
 )
-from app.rpg.session.response_builder import (
+from app.apps.rpg.session.response_builder import (
     build_apply_turn_response as build_apply_turn_response,
 )
-from app.rpg.session.companion_turn_enrichment import (
+from app.apps.rpg.session.companion_turn_enrichment import (
     _apply_post_action_companion_enrichment as _apply_post_action_companion_enrichment,
 )
-from app.rpg.campaign_journal_runtime import (
+from app.apps.rpg.campaign_journal_runtime import (
     advance_campaign_journal_for_turn as advance_campaign_journal_for_turn,
 )
-from app.rpg.session.combat_action_reconciliation import (
+from app.apps.rpg.session.combat_action_reconciliation import (
     _attach_narration_quality_and_backbone_context as _attach_narration_quality_and_backbone_context,
     _reconcile_ability_cooldown_tick_for_manual_current_actor as _reconcile_ability_cooldown_tick_for_manual_current_actor,
     _reconcile_combat_recovery_action as _reconcile_combat_recovery_action,
@@ -85,22 +85,22 @@ from app.rpg.session.combat_action_reconciliation import (
     _reconcile_forced_combat_conditions as _reconcile_forced_combat_conditions, _reconcile_generated_attack_not_actor_turn as _reconcile_generated_attack_not_actor_turn,
     _reconcile_invalid_companion_command as _reconcile_invalid_companion_command,
 )
-from app.rpg.session.deferred_narration_guard import (
+from app.apps.rpg.session.deferred_narration_guard import (
     suppress_provider_runtime_narration as suppress_provider_runtime_narration,
 )
-from app.rpg.session.narration_trace import (
+from app.apps.rpg.session.narration_trace import (
     record_narration_trace as record_narration_trace, record_narration_trace_stack as record_narration_trace_stack,
 )
-from app.rpg.narration.runtime_provider import (
+from app.apps.rpg.narration.runtime_provider import (
     get_runtime_llm_provider as get_runtime_llm_provider,
 )
-from app.rpg.response_generation.runtime_bridge import (
+from app.apps.rpg.response_generation.runtime_bridge import (
     build_runtime_narration_payload as build_runtime_narration_payload,
 )
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _apply_dialogue_state_update_from_narration as _apply_dialogue_state_update_from_narration,
 )
-from app.rpg.session.visible_response_selection import (
+from app.apps.rpg.session.visible_response_selection import (
     _select_final_visible_presentation as _select_final_visible_presentation,
 )
 from typing import (
@@ -117,13 +117,13 @@ def apply_turn(
     *,
     performance_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from app.rpg.session.turn_authoritative_guards import (
+    from app.apps.rpg.session.turn_authoritative_guards import (
         _apply_turn_authoritative as _apply_turn_authoritative,
     )
 
     record_turn_perf_trace_stack(
         "runtime_apply_turn_enter",
-        function="app.rpg.session.runtime.apply_turn",
+        function="app.apps.rpg.session.runtime.apply_turn",
     )
     _apply_turn_started = __import__("time").perf_counter()
     session = load_runtime_session(session_id)
@@ -579,7 +579,7 @@ def apply_turn(
         )
         final_result = _mirror_encounter_result(final_result)
         try:
-            from app.rpg.session.service import save_session
+            from app.apps.rpg.session.service import save_session
             save_session(_safe_dict(final_result.get("session")))
         except Exception:
             logger.debug("suppressed error in %s", "apply_turn", exc_info=True)

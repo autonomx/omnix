@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+from app.apps.rpg.profiles.dynamic_npc_profiles import load_npc_profile
 
 
 def _safe_str(value: Any) -> str:

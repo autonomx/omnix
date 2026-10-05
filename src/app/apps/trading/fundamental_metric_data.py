@@ -8,11 +8,11 @@ from typing import Any
 
 import httpx
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import bindings_for_instrument, instrument_by_id
-from app.trading.metric_data import MarketMetricPoint, MarketMetricResponse, MarketMetricSeries
-from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import bindings_for_instrument, instrument_by_id
+from app.apps.trading.metric_data import MarketMetricPoint, MarketMetricResponse, MarketMetricSeries
+from app.apps.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class YahooAnalystMetricAdapter:

@@ -3,55 +3,55 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
-from app.rpg.world.companion_acceptance import (
+from app.apps.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.apps.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
     hydrate_companion_acceptance_from_pending_offers,
     resolve_pending_companion_offer_response,
 )
-from app.rpg.world.companion_dialogue import (
+from app.apps.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
-from app.rpg.world.conversation_director import select_conversation_intent
-from app.rpg.world.conversation_effects import (
+from app.apps.rpg.world.conversation_director import select_conversation_intent
+from app.apps.rpg.world.conversation_effects import (
     build_conversation_world_signal,
     strip_forbidden_conversation_effects,
     validate_conversation_effects,
 )
-from app.rpg.world.conversation_rumor_propagation import (
+from app.apps.rpg.world.conversation_rumor_propagation import (
     add_rumor_seed,
     expire_stale_signals,
 )
-from app.rpg.world.conversation_settings import normalize_conversation_settings
-from app.rpg.world.conversation_topics import (
+from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
+from app.apps.rpg.world.conversation_topics import (
     select_conversation_topic,
     topic_is_backed_by_state,
 )
-from app.rpg.world.location_registry import (
+from app.apps.rpg.world.location_registry import (
     current_location_id,
     get_location,
 )
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_dialogue_recall import (
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_dialogue_recall import (
     player_input_requests_recall,
 )
-from app.rpg.world.npc_goal_state import (
+from app.apps.rpg.world.npc_goal_state import (
     seed_default_npc_goals,
 )
-from app.rpg.world.npc_history_state import (
+from app.apps.rpg.world.npc_history_state import (
     prune_npc_history_state,
 )
-from app.rpg.world.npc_knowledge_state import (
+from app.apps.rpg.world.npc_knowledge_state import (
     add_npc_knowledge_from_topic,
     prune_npc_knowledge_state,
 )
-from app.rpg.world.scene_continuity_state import (
+from app.apps.rpg.world.scene_continuity_state import (
     update_scene_continuity_from_conversation,
 )
-from app.rpg.world.world_event_log import add_world_event
+from app.apps.rpg.world.world_event_log import add_world_event
 
-from app.rpg.world.conversation_thread_base import (
+from app.apps.rpg.world.conversation_thread_base import (
     MAX_BEATS_PER_THREAD as MAX_BEATS_PER_THREAD,
     MAX_CONVERSATION_THREADS as MAX_CONVERSATION_THREADS,
     MAX_WORLD_SIGNALS as MAX_WORLD_SIGNALS,
@@ -81,13 +81,13 @@ from app.rpg.world.conversation_thread_base import (
     get_conversation_thread_state as get_conversation_thread_state,
     select_conversation_participants as select_conversation_participants,
 )
-from app.rpg.world.conversation_thread_responses import (
+from app.apps.rpg.world.conversation_thread_responses import (
     _biography_grounded_npc_response as _biography_grounded_npc_response,
     _consume_recall_request_as_conversation_reply as _consume_recall_request_as_conversation_reply,
     _make_npc_response_beat as _make_npc_response_beat,
     _npc_response_line_for_player_join as _npc_response_line_for_player_join,
 )
-from app.rpg.world.conversation_thread_pending import (
+from app.apps.rpg.world.conversation_thread_pending import (
     handle_pending_player_conversation_response as handle_pending_player_conversation_response,
     has_pending_player_conversation_response as has_pending_player_conversation_response,
     maybe_consume_pending_player_response as maybe_consume_pending_player_response,

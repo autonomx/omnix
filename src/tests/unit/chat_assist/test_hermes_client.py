@@ -4,11 +4,11 @@ import json
 
 import httpx
 
-from app.chat.assist.models import AssistantRequest
-from app.agent_runtime.evidence import _hermes_evidence_decision
-from app.chat.assist.hermes import HermesAssistantPlanner
+from app.platform.chat.assist.models import AssistantRequest
+from app.platform.agent_runtime.evidence import _hermes_evidence_decision
+from app.platform.chat.assist.hermes import HermesAssistantPlanner
 from app.providers.hermes_client import HermesSidecarClient
-from app.research.planner import HermesResearchPlanner
+from app.platform.research.planner import HermesResearchPlanner
 from tests.support.http import mock_http_client
 
 
@@ -78,7 +78,7 @@ def _client_replying(monkeypatch, content, *, status: int = 200) -> list[dict]:
 
 
 def _research_request():
-    from app.research.planner import ResearchPlanningRequest
+    from app.platform.research.planner import ResearchPlanningRequest
 
     return ResearchPlanningRequest(question="What is the current Rust release?")
 

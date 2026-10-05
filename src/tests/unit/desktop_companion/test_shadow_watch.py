@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.desktop_companion.models import DesktopActivitySignal, DesktopBehaviorState, DesktopCompanionPolicy
-from app.desktop_companion.shadow_watch import decide_shadow_watch
+from app.apps.desktop_companion.models import DesktopActivitySignal, DesktopBehaviorState, DesktopCompanionPolicy
+from app.apps.desktop_companion.shadow_watch import decide_shadow_watch
 
 
 def activity(**updates):

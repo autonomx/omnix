@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.assets import SharedAssetStore
-from app.image.routes.references import create_image_reference_router
+from app.platform.image.routes.references import create_image_reference_router
 
 
 def test_reference_routes_list_and_upload(tmp_path, monkeypatch) -> None:

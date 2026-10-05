@@ -11,7 +11,7 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, inventory_quantity, item_type
+from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, inventory_quantity, item_type
 
 SUPPORTED_ITEM_EFFECT_OPS = {
     "restore_resource",

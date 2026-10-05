@@ -17,15 +17,15 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.trading.gapper_dataset import freeze_gapper_universe
-from app.trading.historical_gapper_reconstruction import (
+from app.apps.trading.gapper_dataset import freeze_gapper_universe
+from app.apps.trading.historical_gapper_reconstruction import (
     _alpaca_bars,
     _minute_candidate,
     _previous_close_map,
 )
-from app.trading.providers.alpaca_iex import alpaca_iex_auth_headers
-from app.trading.strategy_backtest import freeze_backtest_session
-from app.trading.strategy_historical_bars import alpaca_historical_session_bars
+from app.apps.trading.providers.alpaca_iex import alpaca_iex_auth_headers
+from app.apps.trading.strategy_backtest import freeze_backtest_session
+from app.apps.trading.strategy_historical_bars import alpaca_historical_session_bars
 from scripts.run_trading_strategy_backtest import strict_v11_strategy
 from scripts.run_trading_strategy_liquidity_sweep import (
     _cache_namespace,

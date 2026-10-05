@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.trading.catalog import (
+from app.apps.trading.catalog import (
     all_bindings,
     binding_by_id,
     bindings_for_instrument,
     default_binding,
     instrument_by_id,
 )
-from app.trading.instrument_catalog_service import ProviderBackedInstrumentCatalog
+from app.apps.trading.instrument_catalog_service import ProviderBackedInstrumentCatalog
 
 
 class FakeResponse:

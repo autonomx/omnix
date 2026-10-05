@@ -1,6 +1,6 @@
-from app.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
-from app.chat.research_citations import validate_completed_research_reply
-from app.research.api import ChatResearchAdapter
+from app.platform.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
+from app.platform.chat.research_citations import validate_completed_research_reply
+from app.platform.research.api import ChatResearchAdapter
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.

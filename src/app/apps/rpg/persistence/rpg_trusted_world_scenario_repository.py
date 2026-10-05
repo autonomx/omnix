@@ -5,17 +5,17 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from app.rpg.worlds.generation_authorship import AuthorshipValidationError
-from app.rpg.worlds.generation_authorship_policy_signing import (
+from app.apps.rpg.worlds.generation_authorship import AuthorshipValidationError
+from app.apps.rpg.worlds.generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
     require_policy_bound_authorship,
     signed_authorship_policy,
 )
-from app.rpg.worlds.generation_authorship_signing import (
+from app.apps.rpg.worlds.generation_authorship_signing import (
     attach_signed_human_authorship,
     sanitize_untrusted_candidate,
 )
-from app.rpg.worlds.generation_test_mode import deterministic_world_forge_test_mode
+from app.apps.rpg.worlds.generation_test_mode import deterministic_world_forge_test_mode
 
 from .rpg_repository import canonical_json
 from .rpg_world_scenario_repository import PostgresRpgWorldScenarioRepository

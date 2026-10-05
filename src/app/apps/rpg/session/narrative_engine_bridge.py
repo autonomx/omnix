@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -23,8 +23,8 @@ from app.rpg.narrative_engine import (
     ValidationReport,
     legacy_response_projection,
 )
-from app.rpg.narrative_engine.serialization import canonical_response_from_dict
-from app.rpg.session.genesis.turn_grounding import (
+from app.apps.rpg.narrative_engine.serialization import canonical_response_from_dict
+from app.apps.rpg.session.genesis.turn_grounding import (
     TurnGroundingPacket,
     build_turn_grounding_packet,
     narrative_grounding_footer,
@@ -258,7 +258,7 @@ def _dialogue_quality_context(
     *,
     player_input: str,
 ) -> dict[str, Any]:
-    from app.rpg.presentation.dialogue_quality import (
+    from app.apps.rpg.presentation.dialogue_quality import (
         build_canonical_dialogue_quality_context,
     )
 

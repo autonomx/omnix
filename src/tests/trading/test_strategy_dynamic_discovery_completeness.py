@@ -3,20 +3,20 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from app.trading import strategy_dynamic_discovery as dd
-from app.trading.strategy_discovery_acquisition import (
+from app.apps.trading import strategy_dynamic_discovery as dd
+from app.apps.trading.strategy_discovery_acquisition import (
     CausalMarketObservation,
     PersistedCatalystIntelligenceSource,
     install_default_discovery_sources,
     registered_discovery_sources,
     unregister_discovery_acquisition_source,
 )
-from app.trading.strategy_discovery_replay import (
+from app.apps.trading.strategy_discovery_replay import (
     DiscoveryOpportunityLabel,
     DiscoveryReplayObservation,
     replay_dynamic_discovery,
 )
-from app.trading.strategy_interday_postclose import label_candidate_outcome
+from app.apps.trading.strategy_interday_postclose import label_candidate_outcome
 
 
 SESSION = date(2026, 9, 11)

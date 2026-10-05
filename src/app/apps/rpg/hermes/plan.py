@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.hermes.planner_context import hermes_planner_context_from_session
-from app.rpg.hermes.plan_request import HermesRpgPlanClient, request_hermes_rpg_plan
-from app.rpg.hermes.ticket import hermes_rpg_ticket_payload
-from app.rpg.hermes.validator import validate_hermes_rpg_proposal
+from app.apps.rpg.hermes.planner_context import hermes_planner_context_from_session
+from app.apps.rpg.hermes.plan_request import HermesRpgPlanClient, request_hermes_rpg_plan
+from app.apps.rpg.hermes.ticket import hermes_rpg_ticket_payload
+from app.apps.rpg.hermes.validator import validate_hermes_rpg_proposal
 
 
 def hermes_rpg_plan_payload(request: dict[str, Any], *, client: HermesRpgPlanClient | None = None) -> dict[str, Any]:
@@ -48,7 +48,7 @@ def _planner_context(request: dict[str, Any]) -> dict[str, Any]:
     session_id = str(request.get("session_id") or "").strip()
     if not session_id:
         return {"ok": False, "error": "missing_session_id", "source": "hermes_rpg_plan", "read_only": True}
-    from app.rpg.session.service import load_session
+    from app.apps.rpg.session.service import load_session
 
     session = load_session(session_id)
     if not session:

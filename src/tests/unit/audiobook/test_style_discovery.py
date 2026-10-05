@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.audiobook.document_structure import analyze_document_structure, mask_span_for_analysis
-from app.audiobook.extraction import extract_source, resegment_revision
-from app.audiobook.style_discovery import DISCOVERY_VERSION, discover_dialogue_styles
+from app.apps.audiobook.document_structure import analyze_document_structure, mask_span_for_analysis
+from app.apps.audiobook.extraction import extract_source, resegment_revision
+from app.apps.audiobook.style_discovery import DISCOVERY_VERSION, discover_dialogue_styles
 
 
 def test_custom_rules_probe_short_chapter_and_enable_isolated_speaker_labels() -> None:

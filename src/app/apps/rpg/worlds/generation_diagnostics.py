@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.rpg.debug_logging import rpg_debug_log_dir, rpg_debug_logging_enabled
+from app.apps.rpg.debug_logging import rpg_debug_log_dir, rpg_debug_logging_enabled
 
 _LOG_PREFIX = "world-generation"
 _MAX_ERROR_CHARS = 1_200

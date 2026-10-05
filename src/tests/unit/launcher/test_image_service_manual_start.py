@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.launcher import service_manager as launcher_service_manager
-from app.launcher.service_manager import (
+from app.composition.launcher import service_manager as launcher_service_manager
+from app.composition.launcher.service_manager import (
     LauncherServiceManager,
     ServiceSpec,
     build_default_service_specs,

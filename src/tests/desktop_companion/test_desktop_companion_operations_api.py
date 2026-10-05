@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.desktop_companion.operations import DesktopCompanionOperationalStatus
-from app.desktop_companion.routes import register_desktop_companion_routes
+from app.apps.desktop_companion.operations import DesktopCompanionOperationalStatus
+from app.apps.desktop_companion.routes import register_desktop_companion_routes
 
 
 class ExplodingRuntime:

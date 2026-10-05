@@ -10,15 +10,15 @@ from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from app.rpg.map_actions import MapActionError, MapActionRequest, apply_map_action, map_action_error_payload
-from app.rpg.map_living_overlay import project_living_map_markers
-from app.rpg.map_living_state import merge_living_overlay_payload, project_living_map_state
-from app.rpg.map_overlay_projection import merge_dynamic_overlay_payload, project_dynamic_map_overlay
-from app.rpg.map_projection import project_session_map_overlay
-from app.rpg.map_repository import MapDefinitionNotFound, default_map_repository
-from app.rpg.map_serialization import canonical_map_json
-from app.rpg.map_world_integration import MapWorldIntegrationError, map_repository_for_session
-from app.rpg.session.service import load_session, save_session
+from app.apps.rpg.map_actions import MapActionError, MapActionRequest, apply_map_action, map_action_error_payload
+from app.apps.rpg.map_living_overlay import project_living_map_markers
+from app.apps.rpg.map_living_state import merge_living_overlay_payload, project_living_map_state
+from app.apps.rpg.map_overlay_projection import merge_dynamic_overlay_payload, project_dynamic_map_overlay
+from app.apps.rpg.map_projection import project_session_map_overlay
+from app.apps.rpg.map_repository import MapDefinitionNotFound, default_map_repository
+from app.apps.rpg.map_serialization import canonical_map_json
+from app.apps.rpg.map_world_integration import MapWorldIntegrationError, map_repository_for_session
+from app.apps.rpg.session.service import load_session, save_session
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 from typing import Literal

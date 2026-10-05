@@ -1,6 +1,6 @@
-from app.rpg.session.genesis.canon_compiler import CanonCompilationResult
-from app.rpg.session.genesis.world_forge_pipeline import _attach_runtime_bootstrap
-from app.rpg.world.causal_runtime import (
+from app.apps.rpg.session.genesis.canon_compiler import CanonCompilationResult
+from app.apps.rpg.session.genesis.world_forge_pipeline import _attach_runtime_bootstrap
+from app.apps.rpg.world.causal_runtime import (
     advance_installed_causal_runtime,
     bootstrap_causal_runtime,
 )

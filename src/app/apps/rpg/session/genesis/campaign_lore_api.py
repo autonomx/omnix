@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.rpg.worlds.authoring_presentations import entity_card
+from app.apps.rpg.worlds.authoring_presentations import entity_card
 
 from .runtime_lore_materialization import canonical_lore_topic_id
 

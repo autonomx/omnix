@@ -22,11 +22,11 @@ from pydantic import (
     create_model,
 )
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
-from app.rpg.worlds.generation_contract_receipt import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
+from app.apps.rpg.worlds.generation_contract_receipt import (
     RECEIPT_SCHEMA_VERSION,
     canonical_candidate_content_hash,
 )

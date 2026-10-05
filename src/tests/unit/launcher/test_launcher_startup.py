@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from app.launcher import __main__ as launcher_main
-from app.launcher import startup
-from app.launcher.config import LauncherConfig
+from app.composition.launcher import __main__ as launcher_main
+from app.composition.launcher import startup
+from app.composition.launcher.config import LauncherConfig
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -148,8 +148,8 @@ def test_the_wrappers_only_call_the_python_launcher() -> None:
     batch = (ROOT / "start_all.bat").read_text(encoding="utf-8")
     shell = (ROOT / "start_all.sh").read_text(encoding="utf-8")
 
-    assert '-m app.launcher start --postgres-container "%OMNIX_POSTGRES_CONTAINER%"' in batch
-    assert 'exec "$RPG_FLUX_PYTHON" -m app.launcher start' in shell
+    assert '-m app.composition.launcher start --postgres-container "%OMNIX_POSTGRES_CONTAINER%"' in batch
+    assert 'exec "$RPG_FLUX_PYTHON" -m app.composition.launcher start' in shell
     # The Windows wrapper keeps only the protected credential hand-off.
     assert "manage_postgresql_credential.ps1" in batch and "-Action launch" in batch
     for moved in ("uvicorn", "docker", "app.persistence", "Invoke-WebRequest", "HERMES_ENABLED"):

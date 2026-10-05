@@ -75,23 +75,23 @@ def test_native_runtime_import_defers_database_and_gateway():
     import sys
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]))
     result = subprocess.run([sys.executable, '-c',
-        "import app.gateway.runtime_app, sys; "
-        "assert 'app.gateway.main' not in sys.modules; "
+        "import app.composition.gateway.runtime_app, sys; "
+        "assert 'app.composition.gateway.main' not in sys.modules; "
         "assert 'app.persistence.startup' not in sys.modules"],
         env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
 
 
 def test_native_composition_uses_process_owned_job_store(monkeypatch):
-    from app.gateway.app_factory import create_gateway_app
-    from app.gateway import runtime_app
+    from app.composition.gateway.app_factory import create_gateway_app
+    from app.composition.gateway import runtime_app
     store = object()
     app = create_gateway_app(job_store_factory=lambda: store)
     monkeypatch.setattr(runtime_app, 'create_production_app', lambda: app)
     assert runtime_app.create_runtime_app() is app
     matching = [route for route in effective_routes(app) if route.path == '/events']
     assert len(matching) == 1
-    assert matching[0].endpoint.__module__ == 'app.gateway.kernel_routes.core_jobs_routes'
+    assert matching[0].endpoint.__module__ == 'app.composition.gateway.kernel_routes.core_jobs_routes'
 
 
 def test_private_shutdown_reader_does_not_block_numpy_initialization():

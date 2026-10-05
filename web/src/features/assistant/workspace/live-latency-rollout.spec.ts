@@ -145,13 +145,13 @@ describe('live latency PR3-PR5 rollout policies', () => {
 
   it('reports only normalized live-voice critical dirty paths from build provenance', () => {
     expect(parseLiveVoiceCriticalDirtyFiles(JSON.stringify([
-      'src/app/gateway/live_voice_speculative_tts.py',
-      ' src/app/gateway/live_voice_execution_lane.py ',
-      'src/app/gateway/live_voice_speculative_tts.py',
+      'src/app/composition/gateway/live_voice_speculative_tts.py',
+      ' src/app/composition/gateway/live_voice_execution_lane.py ',
+      'src/app/composition/gateway/live_voice_speculative_tts.py',
       42,
     ]))).toEqual([
-      'src/app/gateway/live_voice_speculative_tts.py',
-      'src/app/gateway/live_voice_execution_lane.py',
+      'src/app/composition/gateway/live_voice_speculative_tts.py',
+      'src/app/composition/gateway/live_voice_execution_lane.py',
     ]);
     expect(parseLiveVoiceCriticalDirtyFiles('not-json')).toEqual([]);
     expect(parseLiveVoiceCriticalDirtyFiles(undefined)).toEqual([]);

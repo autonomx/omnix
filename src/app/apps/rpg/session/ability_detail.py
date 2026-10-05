@@ -4,8 +4,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.session.item_detail import _session_genre, _setting_context
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.session.item_detail import _session_genre, _setting_context
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.session_ability_detail.prompt', "1", (

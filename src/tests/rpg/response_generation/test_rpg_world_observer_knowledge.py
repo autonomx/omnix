@@ -3,8 +3,8 @@ from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 
-from app.rpg.api.feature_routes.rpg_observer_routes import register_rpg_observer_routes
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.api.feature_routes.rpg_observer_routes import register_rpg_observer_routes
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     GridPortal,
@@ -14,8 +14,8 @@ from app.rpg.map_grid_contracts import (
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import create_map_instance_snapshot
-from app.rpg.map_observer_runtime import (
+from app.apps.rpg.map_instance_runtime import create_map_instance_snapshot
+from app.apps.rpg.map_observer_runtime import (
     ObserverPerceptionPolicy,
     has_line_of_sight,
     observe_map,

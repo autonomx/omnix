@@ -1,8 +1,8 @@
 import pytest
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_integrity import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_integrity import (
     WorldForgeIntegrityError,
     resolve_reference,
     validate_and_normalize_provider_topic,

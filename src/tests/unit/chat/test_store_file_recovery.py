@@ -1,7 +1,7 @@
 import json
 
-from app.chat.models import CreateChatSessionRequest
-from app.chat.store import ChatSessionStore
+from app.platform.chat.models import CreateChatSessionRequest
+from app.platform.chat.store import ChatSessionStore
 
 
 def test_store_recovers_complete_document_with_trailing_fragment(tmp_path):

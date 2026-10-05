@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Callable, Protocol
 
-from app.rpg.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
-from app.rpg.debug_logging import log_rpg_event, new_rpg_trace_id, summarize_turn_result
+from app.apps.rpg.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
+from app.apps.rpg.debug_logging import log_rpg_event, new_rpg_trace_id, summarize_turn_result
 
 
 @dataclass(slots=True)
@@ -56,7 +56,7 @@ class FastVisibleDialogueStage:
     optional: bool = True
 
     def run(self, ctx: TurnContext) -> TurnContext:
-        from app.rpg.session.fast_visible_dialogue_hook import try_fast_visible_dialogue
+        from app.apps.rpg.session.fast_visible_dialogue_hook import try_fast_visible_dialogue
 
         result = try_fast_visible_dialogue(ctx)
         if result:
@@ -73,7 +73,7 @@ class DialogueQualityStage:
     optional: bool = True
 
     def run(self, ctx: TurnContext) -> TurnContext:
-        from app.rpg.session.dialogue_quality_hook import apply_dialogue_quality_stage
+        from app.apps.rpg.session.dialogue_quality_hook import apply_dialogue_quality_stage
 
         return apply_dialogue_quality_stage(ctx)
 
@@ -86,7 +86,7 @@ class VisibleResponseStage:
     optional: bool = False
 
     def run(self, ctx: TurnContext) -> TurnContext:
-        from app.rpg.session.visible_response_stage import apply_visible_response_stage
+        from app.apps.rpg.session.visible_response_stage import apply_visible_response_stage
 
         return apply_visible_response_stage(ctx)
 
@@ -101,7 +101,7 @@ class FastCombatResultStage:
     def run(self, ctx: TurnContext) -> TurnContext:
         if not isinstance(ctx.result, dict):
             return ctx
-        from app.rpg.session.interactive_fast_combat_result_hook import (
+        from app.apps.rpg.session.interactive_fast_combat_result_hook import (
             normalize_interactive_fast_combat_result,
         )
 
@@ -119,7 +119,7 @@ class PlayerAgencyStage:
     def run(self, ctx: TurnContext) -> TurnContext:
         if not isinstance(ctx.result, dict):
             return ctx
-        from app.rpg.session.player_agency_runtime_hook import (
+        from app.apps.rpg.session.player_agency_runtime_hook import (
             attach_player_agency_to_runtime_result,
         )
 
@@ -150,7 +150,7 @@ class InteractionCommitStage:
     commit_boundary: bool = True
 
     def run(self, ctx: TurnContext) -> TurnContext:
-        from app.rpg.session.interaction_stages import commit_interaction
+        from app.apps.rpg.session.interaction_stages import commit_interaction
 
         return commit_interaction(ctx)
 
@@ -163,7 +163,7 @@ class InteractionLifecycleStage:
     optional: bool = True
 
     def run(self, ctx: TurnContext) -> TurnContext:
-        from app.rpg.session.interaction_stages import initialize_lifecycle
+        from app.apps.rpg.session.interaction_stages import initialize_lifecycle
 
         return initialize_lifecycle(ctx)
 
@@ -210,10 +210,10 @@ def run_turn_pipeline(
             ctx = _run_stage_sequence(ctx, stages)
         else:
             from app.persistence.runtime import uses_postgresql_runtime
-            from app.rpg.narrative_engine.persistence_policy import (
+            from app.apps.rpg.narrative_engine.persistence_policy import (
                 narrative_repository_save_policy,
             )
-            from app.rpg.persistence.rpg_session_save_policy import (
+            from app.apps.rpg.persistence.rpg_session_save_policy import (
                 rpg_session_save_policy,
             )
 

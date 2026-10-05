@@ -72,7 +72,7 @@ class _Store:
 
 
 def _client(store: _Store) -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return TestClient(
         create_gateway_app(asset_store_factory=lambda: store),

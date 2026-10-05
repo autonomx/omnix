@@ -9,20 +9,20 @@ from pydantic import ValidationError
 
 from app.persistence.config import DatabaseConfigurationError
 from app.persistence.database import DatabaseUnavailableError
-from app.rpg.debug_logging import new_rpg_trace_id
-from app.rpg.worlds.generation_diagnostics import (
+from app.apps.rpg.debug_logging import new_rpg_trace_id
+from app.apps.rpg.worlds.generation_diagnostics import (
     log_world_generation_event,
     world_generation_log_hint,
 )
-from app.rpg.worlds.generation_retry import (
+from app.apps.rpg.worlds.generation_retry import (
     continue_world_generation,
     retry_failed_world_generation,
 )
-from app.rpg.worlds.launch_repair_service import (
+from app.apps.rpg.worlds.launch_repair_service import (
     prepare_opening_scenarios_for_launch,
     repair_world_for_launch,
 )
-from app.rpg.worlds.library_service import (
+from app.apps.rpg.worlds.library_service import (
     publish_world_library_generation,
     read_world_detail,
     read_world_generation,
@@ -30,18 +30,18 @@ from app.rpg.worlds.library_service import (
     save_world_topic,
     start_world_library_generation,
 )
-from app.rpg.worlds.map_blueprint_authoring import (
+from app.apps.rpg.worlds.map_blueprint_authoring import (
     MapBlueprintDocument,
     list_map_blueprints,
     materialize_missing_location_blueprints,
     save_map_blueprint,
 )
-from app.rpg.worlds.published_launch import launch_published_scenario
-from app.rpg.worlds.starter_bubble import (
+from app.apps.rpg.worlds.published_launch import launch_published_scenario
+from app.apps.rpg.worlds.starter_bubble import (
     build_starter_bubble,
     predictive_materialization_queue,
 )
-from app.rpg.worlds.starter_bubble_service import promote_starter_bubble
+from app.apps.rpg.worlds.starter_bubble_service import promote_starter_bubble
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny

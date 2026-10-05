@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from app.rpg.memory.causal_memory import add_causal_memory, make_causal_memory
-from app.rpg.spatial.audibility import can_hear_area
-from app.rpg.spatial.graph import get_entity_area
-from app.rpg.spatial.serialization import normalize_spatial_graph
-from app.rpg.spatial.visibility import can_see_entity
+from app.apps.rpg.memory.causal_memory import add_causal_memory, make_causal_memory
+from app.apps.rpg.spatial.audibility import can_hear_area
+from app.apps.rpg.spatial.graph import get_entity_area
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.visibility import can_see_entity
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

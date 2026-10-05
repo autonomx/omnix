@@ -7,8 +7,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.chat.models import ChatSession
-from app.chat.repository_models import ChatImportState
+from app.platform.chat.models import ChatSession
+from app.platform.chat.repository_models import ChatImportState
 
 
 @dataclass

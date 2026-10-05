@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import threading
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentArtifact,
     AgentEvent,
     AgentRunSnapshot,
@@ -15,9 +15,9 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
-from app.agent_runtime.evidence import build_evidence_receipt
-from app.agent_runtime.semantic_classifier import classify_semantic_intent_safely
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.evidence import build_evidence_receipt
+from app.platform.agent_runtime.semantic_classifier import classify_semantic_intent_safely
+from app.platform.agent_runtime.service import AgentRunService
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 
 
@@ -270,7 +270,7 @@ def test_partial_evidence_timeout_leaves_requirement_unsatisfied() -> None:
     assert first is not None
     assert timed_out is None
 
-    from app.agent_runtime.evidence import evaluate_evidence_set
+    from app.platform.agent_runtime.evidence import evaluate_evidence_set
 
     result = evaluate_evidence_set("run-1", policy, [first])
     assert result.passed is False

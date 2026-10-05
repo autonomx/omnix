@@ -5,7 +5,7 @@ import base64
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.live_speech.api_stub import create_live_speech_router
+from app.platform.live_speech.api_stub import create_live_speech_router
 
 
 def _client() -> TestClient:

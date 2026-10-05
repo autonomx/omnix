@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
-from app.assistant_memory.consolidation import (
+from app.platform.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
+from app.platform.assistant_memory.consolidation import (
     MemoryCapacityPolicy,
     analyze_memory_health,
 )

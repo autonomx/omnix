@@ -4,24 +4,24 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from app.characters.interaction import (
+from app.platform.characters.interaction import (
     InteractionSelection,
     character_mode_enabled,
     resolve_interaction_context,
     resolve_shared_memory_categories,
     resolve_system_session_identity,
 )
-from app.characters.live_conversation_profile import (
+from app.platform.characters.live_conversation_profile import (
     LiveConversationProfile,
     LiveConversationProfileStore,
     default_live_conversation_profile_store,
 )
-from app.characters.service import (
+from app.platform.characters.service import (
     CHARACTER_SNAPSHOT_OBSERVERS,
     CharacterSnapshotObserver,
     default_character_service,
 )
-from app.characters.session_models import SetSessionInteractionRequest
+from app.platform.characters.session_models import SetSessionInteractionRequest
 
 __all__ = [
     "CHARACTER_SNAPSHOT_OBSERVERS",
@@ -60,4 +60,4 @@ def __getattr__(name: str) -> Any:
     module = _LAZY_EXPORTS.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    return getattr(import_module(f"app.characters.{module}"), name)
+    return getattr(import_module(f"app.platform.characters.{module}"), name)

@@ -1,5 +1,5 @@
-from app.assistant_tools.contacts_adapter import ContactRecord, FakeContactsRuntimeAdapter, run_contacts_tool_request
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.contacts_adapter import ContactRecord, FakeContactsRuntimeAdapter, run_contacts_tool_request
+from app.platform.assistant_tools.models import AssistantToolRequest
 
 
 def test_fake_contacts_adapter_searches_records():

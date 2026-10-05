@@ -17,10 +17,10 @@ from collections import deque
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.clock import DeterministicClock
-from app.rpg.core.determinism import DeterminismConfig
-from app.rpg.core.event_bus import Event, EventBus, EventContext
-from app.rpg.core.replay_engine import ReplayEngine
+from app.apps.rpg.core.clock import DeterministicClock
+from app.apps.rpg.core.determinism import DeterminismConfig
+from app.apps.rpg.core.event_bus import Event, EventBus, EventContext
+from app.apps.rpg.core.replay_engine import ReplayEngine
 
 # ---------------------------------------------------------------------------
 # Backward Compatibility Tests
@@ -345,7 +345,7 @@ class TestIntegrationRegression(unittest.TestCase):
         """Debug mode should still log events (as debug records, WP-10.1)."""
         bus = EventBus(debug=True)
 
-        with self.assertLogs("app.rpg.core.event_bus", level="DEBUG") as captured:
+        with self.assertLogs("app.apps.rpg.core.event_bus", level="DEBUG") as captured:
             e = Event(type="debug_test", payload={"x": 1}, source="test")
             bus.emit(e)
 

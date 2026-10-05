@@ -1,5 +1,5 @@
 #!/bin/bash
-# Omnix launcher (POSIX). A thin wrapper: `python -m app.launcher start` checks
+# Omnix launcher (POSIX). A thin wrapper: `python -m app.composition.launcher start` checks
 # PostgreSQL, applies migrations, serves the launcher dashboard on
 # http://127.0.0.1:5055 and starts the gateway and web app (WP-11.4).
 # Interpreters: RPG_FLUX_PYTHON / RPG_TTS_PYTHON / RPG_STT_PYTHON, else
@@ -33,4 +33,4 @@ if [ -x "$SCRIPT_DIR/.tools/npm-global/bin/mcporter" ]; then
     export OMNIX_AGENT_MCPORTER_COMMAND="$SCRIPT_DIR/.tools/npm-global/bin/mcporter"
 fi
 
-exec "$RPG_FLUX_PYTHON" -m app.launcher start "$@"
+exec "$RPG_FLUX_PYTHON" -m app.composition.launcher start "$@"

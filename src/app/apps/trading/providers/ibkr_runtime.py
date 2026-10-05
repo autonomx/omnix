@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Protocol
 
-from app.trading.ibkr_settings import IbkrSettings, load_ibkr_settings
+from app.apps.trading.ibkr_settings import IbkrSettings, load_ibkr_settings
 
 
 IBKR_MARKET_DATA_TYPES = {

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.contracts import ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
 )
-from app.agent_runtime.task_graph import compile_task_graph
+from app.platform.agent_runtime.task_graph import compile_task_graph
 
 
 MODEL = ModelRef(provider_id="test", model_id="test-model")

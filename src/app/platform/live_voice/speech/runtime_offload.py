@@ -358,7 +358,7 @@ def register_live_voice_runtime_offload(router: APIRouter, state: Any) -> None:
 
 def configure_live_voice_runtime_offload() -> None:
     """Compose bounded persistence and provider resolution for live voice."""
-    from app.live_voice import diagnostics
+    from app.platform.live_voice import diagnostics
 
     global _PROVIDER_RESOLVER, _PERSISTENCE_WORKER
     if _PERSISTENCE_WORKER is None:

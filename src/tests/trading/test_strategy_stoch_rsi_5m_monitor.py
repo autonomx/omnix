@@ -6,11 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading import strategy_stoch_rsi_5m as stoch_module
-from app.trading.models import MarketBar
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategies.models import StochRsi5mConfig
+from app.apps.trading import strategy_stoch_rsi_5m as stoch_module
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategies.models import StochRsi5mConfig
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -154,8 +154,8 @@ async def test_monitor_persists_stoch_rsi_evidence_without_execution(
 async def test_monitor_uses_early_single_evaluator_for_early_single_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.trading import strategy_stoch_rsi_5m_monitor as monitor_module
-    from app.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot
+    from app.apps.trading import strategy_stoch_rsi_5m_monitor as monitor_module
+    from app.apps.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot
 
     calls: list[str] = []
     snapshot = StochRsi5mSnapshot(

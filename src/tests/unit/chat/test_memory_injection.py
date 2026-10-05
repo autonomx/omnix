@@ -4,17 +4,17 @@ import re
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
-from app.assistant_memory import (
+from app.platform.assistant_memory import (
     InMemoryMemoryRepository,
     MemoryService,
     OwnerAwareInMemoryMemoryRepository,
     OwnerAwareMemoryService,
     resolve_chat_scope,
 )
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.assistant_memory.chat_prompt import resolve_prompt_memory
-from app.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
-from app.chat.store import ChatSessionStore as LegacyChatSessionStore
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.platform.assistant_memory.chat_prompt import resolve_prompt_memory
+from app.platform.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
+from app.platform.chat.store import ChatSessionStore as LegacyChatSessionStore
 import pytest
 
 # Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
@@ -77,7 +77,7 @@ def test_memory_feature_flag_off_preserves_legacy_provider_payload(monkeypatch, 
         content="Continue",
         created_at="2026-07-08T00:00:00+00:00",
     )
-    from app.chat import ChatMessage
+    from app.platform.chat import ChatMessage
 
     current = ChatMessage.model_validate(vars(request_message))
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
@@ -189,7 +189,7 @@ def test_character_shared_memory_is_allowlisted_normal_read_only_context(
     monkeypatch,
     tmp_path,
 ):
-    from app.assistant_memory import chat_prompt as memory_prompt
+    from app.platform.assistant_memory import chat_prompt as memory_prompt
 
     service = OwnerAwareMemoryService(
         OwnerAwareInMemoryMemoryRepository(tmp_path / "owner-memory.sqlite3")
@@ -292,7 +292,7 @@ def test_forgotten_snapshot_record_is_not_injected(monkeypatch, tmp_path):
     service.forget_memory(context, record.id, expected_revision=1)
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "1")
     monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
-    from app.chat import ChatMessage
+    from app.platform.chat import ChatMessage
 
     current = ChatMessage(
         id="msg:current",
@@ -320,7 +320,7 @@ def test_agent_routing_context_reuses_approved_chat_memory(monkeypatch, tmp_path
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "1")
     monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
 
-    from app.chat import ChatMessage
+    from app.platform.chat import ChatMessage
 
     current = ChatMessage(
         id="msg:routing-current",

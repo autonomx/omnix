@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_v3_migration_persists_binding_authority_trigger_plans_and_manifests():
     migration = Path(
-        "src/app/trading/migrations/0083_trading_evidence_execution_v3.sql"
+        "src/app/apps/trading/migrations/0083_trading_evidence_execution_v3.sql"
     ).read_text(encoding="utf-8")
 
     for token in (
@@ -19,7 +19,7 @@ def test_v3_migration_persists_binding_authority_trigger_plans_and_manifests():
 
 def test_v3_follow_up_migration_repairs_late_binding_and_strategy_changes():
     migration = Path(
-        "src/app/trading/migrations/0089_trading_evidence_execution_v3_checksum_repair.sql"
+        "src/app/apps/trading/migrations/0089_trading_evidence_execution_v3_checksum_repair.sql"
     ).read_text(encoding="utf-8")
 
     for token in (

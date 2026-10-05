@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.archetypes import (
+from app.apps.rpg.combat.archetypes import (
     get_enemy_archetype,
     instantiate_enemy_from_archetype,
 )
-from app.rpg.combat.state import normalize_combat_state
+from app.apps.rpg.combat.state import normalize_combat_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

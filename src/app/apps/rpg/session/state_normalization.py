@@ -4,18 +4,18 @@ from copy import deepcopy
 import json
 from typing import Any
 
-from app.rpg.ai.grounding_settings import normalize_grounding_settings
-from app.rpg.economy.currency import currency_to_copper_value, normalize_currency
-from app.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
-from app.rpg.items.world_items import ensure_world_item_state
-from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
-from app.rpg.memory.memory_state import ensure_memory_state
-from app.rpg.memory.world_memory_state import ensure_world_memory_state
-from app.rpg.player import ensure_player_party, ensure_player_state
-from app.rpg.player.player_progression_state import ensure_player_progression_state
-from app.rpg.presentation.personality_state import ensure_personality_state
-from app.rpg.presentation.visual_state import ensure_visual_state
-from app.rpg.world.conversation_settings import normalize_conversation_settings
+from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.economy.currency import currency_to_copper_value, normalize_currency
+from app.apps.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
+from app.apps.rpg.items.world_items import ensure_world_item_state
+from app.apps.rpg.memory.actor_memory_state import ensure_actor_memory_state
+from app.apps.rpg.memory.memory_state import ensure_memory_state
+from app.apps.rpg.memory.world_memory_state import ensure_world_memory_state
+from app.apps.rpg.player import ensure_player_party, ensure_player_state
+from app.apps.rpg.player.player_progression_state import ensure_player_progression_state
+from app.apps.rpg.presentation.personality_state import ensure_personality_state
+from app.apps.rpg.presentation.visual_state import ensure_visual_state
+from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
 
 _DEFAULT_STORY_POLICY = {
     "save_load_stable": True,

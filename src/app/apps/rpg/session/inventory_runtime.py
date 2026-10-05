@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.items.inventory_state import (
+from app.apps.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
     get_inventory_item_for_drop,
     remove_inventory_item,
     unequip_inventory_slot,
 )
-from app.rpg.items.world_items import drop_world_item, pickup_world_item
-from app.rpg.session.state_normalization import _safe_dict, _safe_str
+from app.apps.rpg.items.world_items import drop_world_item, pickup_world_item
+from app.apps.rpg.session.state_normalization import _safe_dict, _safe_str
 
 
 def extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:

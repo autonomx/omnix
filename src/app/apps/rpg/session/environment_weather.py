@@ -4,8 +4,8 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from app.rpg.session.climate_profiles import resolve_climate_profile
-from app.rpg.session.environment_calendar import derive_calendar_state
+from app.apps.rpg.session.climate_profiles import resolve_climate_profile
+from app.apps.rpg.session.environment_calendar import derive_calendar_state
 
 INTENSITIES = ("trace", "light", "moderate", "heavy", "severe")
 MIN_FRONT_DURATION_MINUTES = 6 * 60

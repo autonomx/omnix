@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
 
-import app.gateway.feature_registry as feature_registry
+import app.composition.gateway.feature_registry as feature_registry
 from app.config.load import load_feature_config
 from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig

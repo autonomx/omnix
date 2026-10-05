@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from app.rpg.npc_spatial_campaign_contracts import (
+from app.apps.rpg.npc_spatial_campaign_contracts import (
     CampaignNpcSpatialGoal,
     CampaignNpcSpatialPolicy,
     CampaignNpcSpatialRoutine,

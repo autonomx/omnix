@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading.research.contracts import TradingEvidence
-from app.trading.strategy_ai_shadow_v2 import (
+from app.apps.trading.research.contracts import TradingEvidence
+from app.apps.trading.strategy_ai_shadow_v2 import (
     deterministic_evidence_quality as catalyst_deterministic_evidence_quality,
 )
 

@@ -5,15 +5,15 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_v4 import ExecutionCostInput
-from app.trading.prospective_prediction_v42 import (
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_v4 import ExecutionCostInput
+from app.apps.trading.prospective_prediction_v42 import (
     V42Forecast,
     V42MechanismHeads,
     V42ReturnDistribution,
     V42RiskInteractions,
 )
-from app.trading.prospective_prediction_v42_action import (
+from app.apps.trading.prospective_prediction_v42_action import (
     V42ActionPolicy,
     authorize_v42_action,
     build_portfolio_f,

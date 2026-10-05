@@ -10,10 +10,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.providers import service as shared
-from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.gateway.main import create_gateway_app
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.composition.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.rpg.jobs.turn_executor import (
+from app.apps.rpg.jobs.turn_executor import (
     _queue_deferred_rpg_turn_narration,
     _rpg_turn_visible_text,
 )
@@ -206,8 +206,8 @@ def test_rpg_turn_visible_text_falls_back_for_direct_npc_business_question() -> 
 
 
 def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
-    from app.rpg.session import narration_worker
-    from app.rpg.session import semantic_response_projection, session_runtime_store
+    from app.apps.rpg.session import narration_worker
+    from app.apps.rpg.session import semantic_response_projection, session_runtime_store
 
     saved_sessions: list[dict] = []
     signaled: list[str] = []
@@ -394,7 +394,7 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
 
 
 def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
-    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+    from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     session = chat_store.create_session(CreateChatSessionRequest(title="Recovery"))
@@ -432,7 +432,7 @@ def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
 
 
 def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
-    from app.chat.persistence import chat_runtime
+    from app.platform.chat.persistence import chat_runtime
 
     repository = object()
     monkeypatch.setattr(
@@ -581,8 +581,8 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
 
 
 def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
-    from app.rpg.session import interactive_first_call_runtime
-    from app.rpg.session import service
+    from app.apps.rpg.session import interactive_first_call_runtime
+    from app.apps.rpg.session import service
 
     client, provider, store = _gateway_client(tmp_path, monkeypatch)
     applied: list[tuple[str, str, dict[str, object]]] = []

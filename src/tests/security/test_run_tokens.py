@@ -95,7 +95,7 @@ def _request_with(claims) -> Request:
     ],
 )
 def test_live_run_guard_refuses_stale_tokens(monkeypatch, snapshot, detail) -> None:
-    from app.agent_runtime import run_token_guard, service
+    from app.platform.agent_runtime import run_token_guard, service
 
     claims = verify_run_token(
         issue_run_token(**{**CLAIMS, "caps_digest": capabilities_digest([], [])}), run_id="run-1"
@@ -108,7 +108,7 @@ def test_live_run_guard_refuses_stale_tokens(monkeypatch, snapshot, detail) -> N
 
 
 def test_live_run_guard_accepts_the_current_owner(monkeypatch) -> None:
-    from app.agent_runtime import run_token_guard, service
+    from app.platform.agent_runtime import run_token_guard, service
 
     claims = verify_run_token(
         issue_run_token(**{**CLAIMS, "caps_digest": capabilities_digest(["workspace.read"], [])}), run_id="run-1"
@@ -122,8 +122,8 @@ def test_live_run_guard_accepts_the_current_owner(monkeypatch) -> None:
 
 
 def test_docker_receives_the_token_by_name_only(tmp_path, monkeypatch) -> None:
-    from app.agent_runtime import isolation
-    from app.agent_runtime.contracts import AgentRunSpec, ModelRef
+    from app.platform.agent_runtime import isolation
+    from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
 
     spec = AgentRunSpec(run_id="run-1", task="t", model=ModelRef(provider_id="p", model_id="m"))
     runner = isolation.DockerStrongIsolation.__new__(isolation.DockerStrongIsolation)
@@ -138,8 +138,8 @@ def test_docker_receives_the_token_by_name_only(tmp_path, monkeypatch) -> None:
 
 
 def test_credentials_are_never_forwarded_to_child_processes(tmp_path) -> None:
-    from app.agent_runtime.contracts import AgentRunSpec, ModelRef
-    from app.agent_runtime.pi_runtime_core import build_agent_environment
+    from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef
+    from app.platform.agent_runtime.pi_runtime_core import build_agent_environment
     from app.runtime.process_environment import bounded_process_environment
 
     parent = {"PATH": "/bin", "OMNIX_SERVICE_TOKEN": "s", "OMNIX_RUN_TOKEN_KEY": "k" * 40, "OMNIX_AGENT_RUN_TOKEN": "t"}

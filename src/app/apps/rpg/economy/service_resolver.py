@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.economy.currency import (
+from app.apps.rpg.economy.currency import (
     can_afford,
     format_currency,
     get_player_currency,
     negative_currency,
     normalize_currency,
 )
-from app.rpg.economy.service_registry import (
+from app.apps.rpg.economy.service_registry import (
     SERVICE_KIND_DRINK,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
@@ -22,14 +22,14 @@ from app.rpg.economy.service_registry import (
     get_provider_offers,
     get_service_provider,
 )
-from app.rpg.economy.service_stock import filter_available_offers
-from app.rpg.session.ambient_intent import (
+from app.apps.rpg.economy.service_stock import filter_available_offers
+from app.apps.rpg.session.ambient_intent import (
     is_ambient_wait_or_listen_intent,
     is_room_context_ambient_not_lodging,
 )
-from app.rpg.session.semantic_interaction import semantic_interaction_from_action
-from app.rpg.session.pending_interactions import select_pending_service_offer
-from app.rpg.world.location_registry import (
+from app.apps.rpg.session.semantic_interaction import semantic_interaction_from_action
+from app.apps.rpg.session.pending_interactions import select_pending_service_offer
+from app.apps.rpg.world.location_registry import (
     current_location_id,
     has_explicit_location,
     location_allows_service,

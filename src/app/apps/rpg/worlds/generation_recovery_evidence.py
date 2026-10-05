@@ -13,9 +13,9 @@ import json
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
 
 from .generation_authorship_signing import prove_path_aware_structural_repair
 from .generation_recovering_provider import (

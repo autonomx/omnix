@@ -21,7 +21,7 @@ from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
 from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _STATE_KEY = "_omnix_trading_yahoo_acquisition_monitor"

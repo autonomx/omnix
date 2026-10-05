@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.audiobook.annotation import (
+from app.apps.audiobook.annotation import (
     Speaker, SpeakerAlias, annotate_span_batches, annotate_spans, narrator_id,
     normalize_speaker_name, proposed_speaker_id, resolve_speaker,
 )
-from app.audiobook.extraction import extract_source
-from app.audiobook.spans import DETECTOR_VERSION
+from app.apps.audiobook.extraction import extract_source
+from app.apps.audiobook.spans import DETECTOR_VERSION
 
 
 def _spans():
@@ -386,7 +386,7 @@ def test_discovered_confirmed_alias_reuses_active_identity_within_chapter(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.audiobook.annotation._audit_selected", lambda _span_id: False,
+        "app.apps.audiobook.annotation._audit_selected", lambda _span_id: False,
     )
     revision = extract_source(
         project_id="book:confirmed-alias-discovery",
@@ -663,7 +663,7 @@ def test_ambiguous_unknown_identity_stays_in_review_even_when_confident() -> Non
 
 
 def test_full_story_ai_is_semantic_authority_over_regex_attribution(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:tag-authority",
         content=b'"Run!" Daniel shouted.\n',
@@ -801,7 +801,7 @@ def test_small_chapter_uses_one_full_story_pass_plus_one_verifier() -> None:
     ]
     assert len(calls[0]["span_ids"]) == 5
 def test_easy_known_speaker_skips_second_llm_pass(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:adaptive-easy",
         content=b'"Hello."\\n',
@@ -837,7 +837,7 @@ def test_easy_known_speaker_skips_second_llm_pass(monkeypatch) -> None:
 
 
 def test_full_story_salvages_role_delivery_swap_without_rerun(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:schema-salvage",
         content=b'"Stop," Nita said.\\n',
@@ -873,7 +873,7 @@ def test_full_story_salvages_role_delivery_swap_without_rerun(monkeypatch) -> No
 
 
 def test_full_story_retries_only_missing_span_after_bad_id(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:partial-repair",
         content=b'"One," Nita said.\\n"Two," Nita added.\\n',
@@ -936,7 +936,7 @@ def test_full_story_retries_only_missing_span_after_bad_id(monkeypatch) -> None:
 
 
 def test_low_confidence_verifies_only_flagged_span(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:selective-verify",
         content=b'"One."\n"Two."\n',
@@ -995,7 +995,7 @@ def test_low_confidence_verifies_only_flagged_span(monkeypatch) -> None:
 
 
 def test_audit_disagreement_escalates_to_full_context(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: True)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: True)
     revision = extract_source(
         project_id="book:audit-escalation",
         content=b'"Hello."\\n',
@@ -1038,7 +1038,7 @@ def test_audit_disagreement_escalates_to_full_context(monkeypatch) -> None:
 
 
 def test_full_story_accepts_missing_ambiguity_and_harmless_extra_fields(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:tolerant-shape",
         content=b'"Hello."\\n',
@@ -1072,9 +1072,9 @@ def test_full_story_accepts_missing_ambiguity_and_harmless_extra_fields(monkeypa
 
 
 def test_high_confidence_attribution_conflict_is_soft_signal(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     monkeypatch.setattr(
-        "app.audiobook.annotation._direct_attribution_evidence",
+        "app.apps.audiobook.annotation._direct_attribution_evidence",
         lambda *_args, **_kwargs: (["mara-id"], ["Mara"]),
     )
     revision = extract_source(
@@ -1111,9 +1111,9 @@ def test_high_confidence_attribution_conflict_is_soft_signal(monkeypatch) -> Non
 
 
 def test_soft_signal_is_telemetry_without_hard_model_risk(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     monkeypatch.setattr(
-        "app.audiobook.annotation._direct_attribution_evidence",
+        "app.apps.audiobook.annotation._direct_attribution_evidence",
         lambda *_args, **_kwargs: (["mara-id"], ["Mara"]),
     )
     revision = extract_source(
@@ -1151,7 +1151,7 @@ def test_soft_signal_is_telemetry_without_hard_model_risk(monkeypatch) -> None:
 
 
 def test_verifier_receives_only_nearby_assignment_context(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:bounded-verification-context",
         content=(
@@ -1211,7 +1211,7 @@ def test_verifier_receives_only_nearby_assignment_context(monkeypatch) -> None:
 
 
 def test_stable_unknown_speaker_id_still_requires_verification(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     project_id = "book:unknown-stable-id"
     revision = extract_source(
         project_id=project_id,
@@ -1254,7 +1254,7 @@ def test_stable_unknown_speaker_id_still_requires_verification(monkeypatch) -> N
 
 
 def test_resolved_pronoun_note_does_not_trigger_verification(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:resolved-pronoun-note",
         content=b'Seraphine smiled.\\n"Still works," she said.\\n',
@@ -1288,7 +1288,7 @@ def test_resolved_pronoun_note_does_not_trigger_verification(monkeypatch) -> Non
 
 
 def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:true-ambiguity",
         content=b'"What next?"\\n',
@@ -1326,7 +1326,7 @@ def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
 
 
 def test_single_edit_span_id_typo_is_repaired_without_retry(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:span-id-one-edit",
         content=b'"Hello."\\n',
@@ -1366,7 +1366,7 @@ def test_single_edit_span_id_typo_is_repaired_without_retry(monkeypatch) -> None
 
 
 def test_audit_sampling_targets_at_most_one_span_per_window(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _key: True)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _key: True)
     revision = extract_source(
         project_id="book:window-audit",
         content=(
@@ -1423,7 +1423,7 @@ def test_audit_sampling_targets_at_most_one_span_per_window(monkeypatch) -> None
 
 
 def test_context_only_dialogue_is_visible_but_not_a_classifier_target(monkeypatch) -> None:
-    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _key: False)
+    monkeypatch.setattr("app.apps.audiobook.annotation._audit_selected", lambda _key: False)
     revision = extract_source(
         project_id="book:context-only-dialogue",
         source_format="txt",

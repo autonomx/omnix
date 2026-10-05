@@ -6,26 +6,26 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.session.genesis.canon_audit import (
+from app.apps.rpg.session.genesis.canon_audit import (
     CanonAuditIssue,
     CanonAuditReport,
 )
-from app.rpg.session.genesis.compiler import compile_campaign_genesis
-from app.rpg.session.genesis.contract import CampaignGenesisContract
-from app.rpg.session.genesis.materialization import (
+from app.apps.rpg.session.genesis.compiler import compile_campaign_genesis
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.materialization import (
     materialize_world_forge_into_session,
     persist_campaign_genesis,
 )
-from app.rpg.session.genesis.world_forge_commit import (
+from app.apps.rpg.session.genesis.world_forge_commit import (
     WorldForgeCommitBlockedError,
     certify_world_forge_commit,
     require_world_forge_commit_ready,
 )
-from app.rpg.session.genesis.world_forge_default import (
+from app.apps.rpg.session.genesis.world_forge_default import (
     ReferenceSafeWorldForgeGenerator,
 )
-from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
-from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.apps.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 
 
 ROOT = Path(__file__).resolve().parents[4]

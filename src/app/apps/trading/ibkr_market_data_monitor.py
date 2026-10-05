@@ -37,7 +37,7 @@ from .strategy_shadow_universe import (
 )
 from .streaming.manager import StreamingQuoteUpdate
 from .us_equity_calendar import us_equity_session
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.item_pickups import apply_scene_item_pickup, list_scene_item_nodes
+from app.apps.rpg.session.item_pickups import apply_scene_item_pickup, list_scene_item_nodes
 
 PICKUP_SESSION_SOURCE = "engine_item_pickup_session_v1"
 

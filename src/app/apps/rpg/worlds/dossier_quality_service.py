@@ -7,16 +7,16 @@ from typing import Any, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_dossier_quality import (
+from app.apps.rpg.session.genesis.world_forge_dossier_quality import (
     dossier_word_count,
     validate_dossier_quality,
 )
-from app.rpg.session.genesis.world_forge_dossiers import (
+from app.apps.rpg.session.genesis.world_forge_dossiers import (
     placeholder_section_title_count,
     project_entity_dossier,
     validate_entity_dossier,
 )
-from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
+from app.apps.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
 from .dossier_authoring import regenerate_world_entity_dossier
 

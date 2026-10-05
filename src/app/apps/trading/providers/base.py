@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from app.trading.models import ProviderBinding, ProviderPolicy
+from app.apps.trading.models import ProviderBinding, ProviderPolicy
 
 
 @runtime_checkable

@@ -22,8 +22,8 @@ import os
 
 import pytest
 
-from app.agent_runtime.semantic_task import compile_semantic_task
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.platform.agent_runtime.semantic_task import compile_semantic_task
+from app.platform.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 
@@ -169,7 +169,7 @@ CASES: tuple[CodingClassificationCase, ...] = (
     # Backend/repository mutations.
     CodingClassificationCase(
         "router_fix_file",
-        "src/app/agent_runtime/router.py still misclassifies this case; fix it",
+        "src/app/platform/agent_runtime/router.py still misclassifies this case; fix it",
         "agent",
         "agent",
         "coding",
@@ -250,7 +250,7 @@ CASES: tuple[CodingClassificationCase, ...] = (
     ),
     CodingClassificationCase(
         "python_parser",
-        "fix the Python parser in src/app/agent_runtime/router.py",
+        "fix the Python parser in src/app/platform/agent_runtime/router.py",
         "agent",
         "agent",
         "coding",

@@ -86,7 +86,7 @@ __all__ = ["PostgresOwnerAwareMemoryRepository"]
 
 def production_owner_memory_repository():
     """Curated memory records follow the memory authority (v1, then Memory v2)."""
-    from app.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
+    from app.platform.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
     from app.persistence.repository_registry import register_feature_repositories
 
     register_feature_repositories("assistant-memory")

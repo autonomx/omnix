@@ -16,29 +16,29 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import order_gateway as hardening_module
-from app.trading.execution import ExecutionObservation
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.market_evidence import (
+from app.apps.trading import strategy_monitor as strategy_monitor_module
+from app.apps.trading import order_gateway as hardening_module
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.market_evidence import (
     MARKET_EVIDENCE_POLICY_VERSION,
     PremarketLiquidityEvidence,
     SourceMemberDisposition,
 )
-from app.trading.models import MarketBar
-from app.trading.paper import PaperAccountCreate, PaperMarketObservation
-from app.trading.paper_repository import TradingPaperRepository
-from app.trading.strategies import evaluate_gap_pullback
-from app.trading.strategies.models import StrategyRiskProfile
-from app.trading.strategy_data_integrity import finviz_atomic_source_locator
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import PaperAccountCreate, PaperMarketObservation
+from app.apps.trading.paper_repository import TradingPaperRepository
+from app.apps.trading.strategies import evaluate_gap_pullback
+from app.apps.trading.strategies.models import StrategyRiskProfile
+from app.apps.trading.strategy_data_integrity import finviz_atomic_source_locator
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_repository import (
     StrategyEvent,
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
-from app.trading.strategy_universe_archiver import _archive_universe_id
-from app.trading.strategy_v2_qualification import (
+from app.apps.trading.strategy_universe_archiver import _archive_universe_id
+from app.apps.trading.strategy_v2_qualification import (
     PROSPECTIVE_ECONOMIC_POLICY_VERSION,
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,

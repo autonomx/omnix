@@ -1,6 +1,6 @@
 """The agent runtime's view of capability requests and results (WP-8.2).
 
-The one place ``app.agent_runtime`` depends on ``app.assistant_tools``
+The one place ``app.platform.agent_runtime`` depends on ``app.platform.assistant_tools``
 request models; the broker, chat lanes, TaskGraph and workflows import them
 from here.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
+from app.platform.assistant_tools.contracts import AssistantToolRequest, AssistantToolResult
 from app.capabilities.executor import CapabilityGrant, execute_capability
 
 # A capability node's executor: (session id, request) -> tool result.

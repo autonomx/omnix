@@ -19,7 +19,7 @@ from .market_evidence import (
 )
 from .providers.alpaca_iex import alpaca_iex_auth_headers
 from .providers.http_runtime import ProviderHttpRuntime
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _PREMARKET_OPEN = time(4, 0)

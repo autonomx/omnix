@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.backtest import (
+from app.apps.trading.backtest import (
     BACKTEST_MARK_TO_MARKET_POLICY,
     BacktestRequest,
     MovingAverageCrossStrategy,
     run_backtest,
 )
-from app.trading.models import (
+from app.apps.trading.models import (
     AssetClass,
     BarsResponse,
     CanonicalInstrument,
@@ -20,7 +20,7 @@ from app.trading.models import (
     ProviderBinding,
     UsageScope,
 )
-from app.trading.replay import freeze_bars_response
+from app.apps.trading.replay import freeze_bars_response
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)

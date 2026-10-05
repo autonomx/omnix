@@ -15,7 +15,7 @@ import time
 from typing import Any
 from contextvars import Token
 
-from app.chat.contracts import ChatMessage, ChatSession, PromptAssembly, RenderedPrompt
+from app.platform.chat.contracts import ChatMessage, ChatSession, PromptAssembly, RenderedPrompt
 
 
 @dataclass(slots=True)
@@ -60,7 +60,7 @@ def _profile_selection_stage(
 def _dependency_settings_stage(
     context: LiveVoicePromptContext,
 ) -> LiveVoicePromptContext:
-    from app.live_voice.prompt.dependency_stages import (
+    from app.platform.live_voice.prompt.dependency_stages import (
         begin_dependency_timings,
         use_cached_memory_runtime_settings,
     )
@@ -74,7 +74,7 @@ def _dependency_settings_stage(
 def _prompt_cache_stage(
     context: LiveVoicePromptContext,
 ) -> LiveVoicePromptContext:
-    from app.live_voice.prompt.cache import begin_prompt_stage_timings
+    from app.platform.live_voice.prompt.cache import begin_prompt_stage_timings
 
     context.started_at = time.perf_counter()
     context.cache_token, context.cache_timings = begin_prompt_stage_timings()
@@ -84,7 +84,7 @@ def _prompt_cache_stage(
 def _companion_context_stage(
     context: LiveVoicePromptContext,
 ) -> LiveVoicePromptContext:
-    from app.live_voice.prompt.companion_context import build_companion_prompt
+    from app.platform.live_voice.prompt.companion_context import build_companion_prompt
 
     context.assembly, context.rendered = build_companion_prompt(
         context.store,
@@ -98,7 +98,7 @@ def _companion_context_stage(
 def _spoken_style_stage(
     context: LiveVoicePromptContext,
 ) -> LiveVoicePromptContext:
-    from app.live_voice.prompt.spoken_style import (
+    from app.platform.live_voice.prompt.spoken_style import (
         apply_live_voice_spoken_style,
         record_spoken_style_diagnostics,
     )
@@ -116,11 +116,11 @@ def _finish_prompt_stages(context: LiveVoicePromptContext) -> None:
         if context.started_at is not None
         else 0.0
     )
-    from app.live_voice.prompt.dependency_stages import end_dependency_timings
+    from app.platform.live_voice.prompt.dependency_stages import end_dependency_timings
 
     try:
         if context.started_at is not None:
-            from app.live_voice.prompt.cache import end_prompt_stage_timings
+            from app.platform.live_voice.prompt.cache import end_prompt_stage_timings
 
             if context.cache_token is not None and context.cache_timings is not None:
                 end_prompt_stage_timings(

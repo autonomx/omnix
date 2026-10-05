@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from app.assistant_memory.paralinguistic_state import (
+from app.platform.assistant_memory.paralinguistic_state import (
     clear_ephemeral_call_state,
     durable_affect_candidate_allowed,
     get_ephemeral_call_state,

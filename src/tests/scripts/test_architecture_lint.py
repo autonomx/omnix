@@ -23,8 +23,8 @@ NEW = lint.MIGRATIONS + "0002_more.sql"
 # ADR-0016: modules get their tier from feature.py. Synthetic sources under
 # chat/ and rpg/ belong to these declared features unless a test supplies its own.
 DECLARED_FEATURES = {
-    APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')\n",
-    APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')\n",
+    APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='Chat', tier='platform')\n",
+    APP + "apps/rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')\n",
 }
 
 
@@ -33,29 +33,29 @@ def report(sources):
 
 
 CASES = [
-    ("AL001", {APP + "jobs/a.py": "def work():\n    from app.chat import service",
-               APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', tier='platform')"}),
-    ("AL002", {APP + "chat/a.py": "import app.jobs.a", APP + "jobs/a.py": "import app.chat.a"}),
-    ("AL003", {APP + "chat/a.py": "import external as other\nother.method = replacement"}),
-    ("AL003", {APP + "chat/a.py": "from external import Foreign\nsetattr(Foreign, 'method', replacement)"}),
-    ("AL003", {APP + "chat/a.py": "from external import Foreign\ndel Foreign.method"}),
-    ("AL003", {APP + "chat/a.py": "import sys\nsys.modules['external'] = replacement"}),
-    ("AL003", {APP + "chat/a.py": "import sys\nsys.modules['external'].method = replacement"}),
-    ("AL003", {APP + "chat/a.py": "import sys\nsys.meta_path.append(finder)"}),
+    ("AL001", {APP + "jobs/a.py": "def work():\n    from app.platform.chat import service",
+               APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', tier='platform')"}),
+    ("AL002", {APP + "platform/chat/a.py": "import app.jobs.a", APP + "jobs/a.py": "import app.platform.chat.a"}),
+    ("AL003", {APP + "platform/chat/a.py": "import external as other\nother.method = replacement"}),
+    ("AL003", {APP + "platform/chat/a.py": "from external import Foreign\nsetattr(Foreign, 'method', replacement)"}),
+    ("AL003", {APP + "platform/chat/a.py": "from external import Foreign\ndel Foreign.method"}),
+    ("AL003", {APP + "platform/chat/a.py": "import sys\nsys.modules['external'] = replacement"}),
+    ("AL003", {APP + "platform/chat/a.py": "import sys\nsys.modules['external'].method = replacement"}),
+    ("AL003", {APP + "platform/chat/a.py": "import sys\nsys.meta_path.append(finder)"}),
     ("AL003", {"src/sitecustomize.py": "import builtins\nbuiltins.open = replacement"}),
-    ("AL004", {APP + "chat/a.py": "import external\ndef _install_hook():\n    external.method = replacement"}),
-    ("AL005", {APP + "chat/a.py": "@router.post('/api/test')\nasync def handle():\n    return {}"}),
-    ("AL006", {APP + "chat/a.py": "sql = 'SELECT * FROM omnix_jobs'"}),
-    ("AL007", {APP + "chat/a.py": "from os import getenv as read\nread('SECRET')"}),
-    ("AL008", {APP + "chat/a.py": "print('debug')"}),
-    ("AL009", {APP + "chat/a.py": "try:\n    work()\nexcept Exception:\n    pass"}),
-    ("AL010", {APP + "chat/a.py": "from external import *"}),
-    ("AL011", {APP + "chat/a.py": "from app.persistence.blob_store import LocalBlobStore as Store\nStore()"}),
-    ("AL012", {APP + "chat/a.py": "local_tenant_context()"}),
-    ("AL013", {APP + "rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
+    ("AL004", {APP + "platform/chat/a.py": "import external\ndef _install_hook():\n    external.method = replacement"}),
+    ("AL005", {APP + "platform/chat/a.py": "@router.post('/api/test')\nasync def handle():\n    return {}"}),
+    ("AL006", {APP + "platform/chat/a.py": "sql = 'SELECT * FROM omnix_jobs'"}),
+    ("AL007", {APP + "platform/chat/a.py": "from os import getenv as read\nread('SECRET')"}),
+    ("AL008", {APP + "platform/chat/a.py": "print('debug')"}),
+    ("AL009", {APP + "platform/chat/a.py": "try:\n    work()\nexcept Exception:\n    pass"}),
+    ("AL010", {APP + "platform/chat/a.py": "from external import *"}),
+    ("AL011", {APP + "platform/chat/a.py": "from app.persistence.blob_store import LocalBlobStore as Store\nStore()"}),
+    ("AL012", {APP + "platform/chat/a.py": "local_tenant_context()"}),
+    ("AL013", {APP + "apps/rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
-    ("AL015", {APP + "chat/a.py": "def work():\n    import app.rpg.b", APP + "rpg/b.py": "def work():\n    import app.chat.a"}),
-    ("AL016", {APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
+    ("AL015", {APP + "platform/chat/a.py": "def work():\n    import app.apps.rpg.b", APP + "apps/rpg/b.py": "def work():\n    import app.platform.chat.a"}),
+    ("AL016", {APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]
 
 
@@ -67,10 +67,10 @@ def test_each_rule_and_patch_form(rule, sources):
 
 
 @pytest.mark.parametrize("path,source", [
-    (APP + "chat/cli.py", "print('result')"),
-    (APP + "chat/release_cli.py", "print('result')"),
-    (APP + "chat/__main__.py", "print('result')"),
-    (APP + "chat/tool.py", "def main():\n    print('result')\n\nif __name__ == '__main__':\n    main()"),
+    (APP + "platform/chat/cli.py", "print('result')"),
+    (APP + "platform/chat/release_cli.py", "print('result')"),
+    (APP + "platform/chat/__main__.py", "print('result')"),
+    (APP + "platform/chat/tool.py", "def main():\n    print('result')\n\nif __name__ == '__main__':\n    main()"),
 ])
 def test_command_line_programs_may_print_their_output(path, source):
     """AL008 is about logging; a CLI's stdout is its output (WP-10.1)."""
@@ -91,23 +91,23 @@ def layer_violations(sources):
 
 def test_declared_feature_dependency_may_import_only_the_contract_module():
     sources = {
-        APP + "chat/feature.py": feature("chat", "platform"),
-        APP + "live_voice/feature.py": feature("live-voice", "platform", ("chat",)),
-        APP + "chat/contracts.py": "class ChatPort: ...\n",
-        APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
+        APP + "platform/chat/feature.py": feature("chat", "platform"),
+        APP + "platform/live_voice/feature.py": feature("live-voice", "platform", ("chat",)),
+        APP + "platform/chat/contracts.py": "class ChatPort: ...\n",
+        APP + "platform/live_voice/adapter.py": "from app.platform.chat.contracts import ChatPort\n",
     }
     assert not layer_violations(sources)
 
-    sources[APP + "live_voice/adapter.py"] = "from app.chat.store import ChatSessionStore\n"
+    sources[APP + "platform/live_voice/adapter.py"] = "from app.platform.chat.store import ChatSessionStore\n"
     assert layer_violations(sources)
 
 
 def test_feature_contract_import_requires_a_declared_dependency():
     sources = {
-        APP + "chat/feature.py": feature("chat", "platform"),
-        APP + "live_voice/feature.py": feature("live-voice", "platform"),
-        APP + "chat/contracts.py": "class ChatPort: ...\n",
-        APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
+        APP + "platform/chat/feature.py": feature("chat", "platform"),
+        APP + "platform/live_voice/feature.py": feature("live-voice", "platform"),
+        APP + "platform/chat/contracts.py": "class ChatPort: ...\n",
+        APP + "platform/live_voice/adapter.py": "from app.platform.chat.contracts import ChatPort\n",
     }
     assert layer_violations(sources)
 
@@ -115,41 +115,41 @@ def test_feature_contract_import_requires_a_declared_dependency():
 def test_contract_import_against_the_declared_direction_is_a_violation():
     """ADR-0016: if characters depends on chat, chat may not import characters' contract."""
     sources = {
-        APP + "chat/feature.py": feature("chat", "platform"),
-        APP + "characters/feature.py": feature("characters", "platform", ("chat",)),
-        APP + "characters/contracts.py": "class CharacterPort: ...\n",
-        APP + "chat/adapter.py": "from app.characters.contracts import CharacterPort\n",
+        APP + "platform/chat/feature.py": feature("chat", "platform"),
+        APP + "platform/characters/feature.py": feature("characters", "platform", ("chat",)),
+        APP + "platform/characters/contracts.py": "class CharacterPort: ...\n",
+        APP + "platform/chat/adapter.py": "from app.platform.characters.contracts import CharacterPort\n",
     }
-    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "chat/adapter.py"]
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "platform/chat/adapter.py"]
 
 
 def test_an_app_never_imports_another_app_even_through_its_contract():
     sources = {
-        APP + "trading/feature.py": feature("trading", "app"),
-        APP + "story/feature.py": feature("story", "app", ("trading",)),
-        APP + "trading/contracts.py": "class Quote: ...\n",
-        APP + "story/adapter.py": "from app.trading.contracts import Quote\n",
+        APP + "apps/trading/feature.py": feature("trading", "app"),
+        APP + "apps/story/feature.py": feature("story", "app", ("trading",)),
+        APP + "apps/trading/contracts.py": "class Quote: ...\n",
+        APP + "apps/story/adapter.py": "from app.apps.trading.contracts import Quote\n",
     }
-    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "story/adapter.py"]
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "apps/story/adapter.py"]
 
 
 def test_a_platform_capability_never_imports_an_app_contract():
     sources = {
-        APP + "chat/feature.py": feature("chat", "platform", ("rpg",)),
-        APP + "rpg/feature.py": feature("rpg", "app"),
-        APP + "rpg/contracts.py": "class Turn: ...\n",
-        APP + "chat/adapter.py": "from app.rpg.contracts import Turn\n",
+        APP + "platform/chat/feature.py": feature("chat", "platform", ("rpg",)),
+        APP + "apps/rpg/feature.py": feature("rpg", "app"),
+        APP + "apps/rpg/contracts.py": "class Turn: ...\n",
+        APP + "platform/chat/adapter.py": "from app.apps.rpg.contracts import Turn\n",
     }
-    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "chat/adapter.py"]
+    assert [entry["path"] for entry in layer_violations(sources)] == [APP + "platform/chat/adapter.py"]
 
 
 def test_a_contracts_package_is_a_contract():
     sources = {
-        APP + "chat/feature.py": feature("chat", "platform"),
-        APP + "rpg/feature.py": feature("rpg", "app", ("chat",)),
-        APP + "chat/contracts/__init__.py": "",
-        APP + "chat/contracts/ports.py": "class Port: ...\n",
-        APP + "rpg/adapter.py": "from app.chat.contracts.ports import Port\n",
+        APP + "platform/chat/feature.py": feature("chat", "platform"),
+        APP + "apps/rpg/feature.py": feature("rpg", "app", ("chat",)),
+        APP + "platform/chat/contracts/__init__.py": "",
+        APP + "platform/chat/contracts/ports.py": "class Port: ...\n",
+        APP + "apps/rpg/adapter.py": "from app.platform.chat.contracts.ports import Port\n",
     }
     assert not layer_violations(sources)
 
@@ -169,26 +169,35 @@ def test_an_app_package_outside_every_layer_is_a_violation():
     assert [entry["fingerprint"] for entry in layer_violations(sources)] == ["<module>:<uncovered>"]
 
 
+def test_a_tier_folder_holds_only_feature_packages():
+    # PA-5.3: app/platform/__init__.py with only its docstring is fine; code in it or a
+    # loose module beside the feature packages belongs to no layer.
+    assert layer_violations({APP + "platform/__init__.py": '"""Platform capabilities."""\n'}) == []
+    sources = {APP + "platform/__init__.py": "VALUE = 1\n", APP + "apps/loose.py": "VALUE = 1\n"}
+    assert sorted(entry["path"] for entry in layer_violations(sources)) == [APP + "apps/loose.py",
+                                                                          APP + "platform/__init__.py"]
+
+
 def test_a_feature_without_a_tier_and_a_nested_feature_with_another_tier_are_violations():
-    untiered = {APP + "chat/feature.py": "FEATURE = FeatureModule(id='chat', title='T')\n"}
+    untiered = {APP + "platform/chat/feature.py": "FEATURE = FeatureModule(id='chat', title='T')\n"}
     assert "<module>:<missing-tier>" in {entry["fingerprint"] for entry in layer_violations(untiered)}
 
     conflicting = {
-        APP + "rpg/feature.py": feature("rpg", "app"),
-        APP + "rpg/hermes/feature.py": feature("hermes", "platform", ("rpg",)),
+        APP + "apps/rpg/feature.py": feature("rpg", "app"),
+        APP + "apps/rpg/hermes/feature.py": feature("hermes", "platform", ("rpg",)),
     }
     assert {entry["fingerprint"] for entry in layer_violations(conflicting)} == {
-        "<module>:<tier-conflict>:app.rpg.hermes"
+        "<module>:<tier-conflict>:app.apps.rpg.hermes"
     }
 
 
 def test_nested_features_and_transitional_owners_belong_to_their_unit():
     sources = {
-        APP + "rpg/feature.py": feature("rpg", "app"),
-        APP + "rpg/hermes/feature.py": feature("hermes", "app", ("rpg",)),
-        APP + "rpg/hermes/flow.py": "from app.rpg import engine\n",
-        APP + "rpg/engine.py": "VALUE = 1\n",
-        APP + "replay/adapter.py": "from app.rpg import engine\n",
+        APP + "apps/rpg/feature.py": feature("rpg", "app"),
+        APP + "apps/rpg/hermes/feature.py": feature("hermes", "app", ("rpg",)),
+        APP + "apps/rpg/hermes/flow.py": "from app.apps.rpg import engine\n",
+        APP + "apps/rpg/engine.py": "VALUE = 1\n",
+        APP + "apps/rpg/replay/adapter.py": "from app.apps.rpg import engine\n",
     }
     assert not layer_violations(sources)
 
@@ -259,28 +268,28 @@ PROVENANCE_CASES = [
 
 @pytest.mark.parametrize("name,source,count", PROVENANCE_CASES, ids=[case[0] for case in PROVENANCE_CASES])
 def test_foreign_write_provenance(name, source, count):
-    current = report({APP + "chat/a.py": source})
+    current = report({APP + "platform/chat/a.py": source})
     assert current["errors"] == [], name
     assert sum(entry["count"] for entry in current["violations"] if entry["rule"] == "AL003") == count
 
 
 def test_alias_fingerprints_use_actual_qualified_target_with_scoped_imports():
     source = "import first as target\ntarget.method = replacement\ndef patch():\n    import second as target\n    target.method = replacement"
-    current = report({APP + "chat/a.py": source})
+    current = report({APP + "platform/chat/a.py": source})
     assert {entry["fingerprint"] for entry in current["violations"] if entry["rule"] == "AL003"} == {
         "<module>:first.method", "patch:second.method",
     }
 
 
 def test_install_hook_cannot_hide_its_patch_behind_a_module_alias():
-    current = report({APP + "chat/a.py": "import external\ndef install_hooks():\n    target = external\n    target.method = replacement"})
+    current = report({APP + "platform/chat/a.py": "import external\ndef install_hooks():\n    target = external\n    target.method = replacement"})
     assert {entry["rule"] for entry in current["violations"]} >= {"AL003", "AL004"}
 
 
 def test_owned_class_metaclass_fingerprint_never_contains_definition_line():
     source = "class Local:\n    pass\ntype(Local).method = replacement"
-    before = report({APP + "chat/a.py": source})
-    moved = report({APP + "chat/a.py": "\n\n" + source})
+    before = report({APP + "platform/chat/a.py": source})
+    moved = report({APP + "platform/chat/a.py": "\n\n" + source})
     assert lint.compare(moved, before) == []
     assert {entry["fingerprint"] for entry in before["violations"]} == {"<module>:builtins.type.method"}
 
@@ -290,40 +299,40 @@ def test_compliant_owners_local_classes_and_tests_are_allowed():
         APP + "config/a.py": "import os\nos.getenv('X')",
         APP + "persistence/job_repository.py": "sql = 'SELECT * FROM omnix_jobs'",
         APP + "persistence/blob_store.py": "LocalBlobStore()",
-        APP + "production.py": "bootstrap_local_tenant()",
-        APP + "chat/a.py": "class Local:\n    pass\nLocal.method = replacement\n@router.post('/api/a')\nasync def route():\n    await work()",
-        APP + "rpg/core/a.py": "import random\nrandom.Random(42)",
+        APP + "composition/production.py": "bootstrap_local_tenant()",
+        APP + "platform/chat/a.py": "class Local:\n    pass\nLocal.method = replacement\n@router.post('/api/a')\nasync def route():\n    await work()",
+        APP + "apps/rpg/core/a.py": "import random\nrandom.Random(42)",
         "src/tests/test_example.py": "import builtins\nbuiltins.open = fake\nprint('test')",
     }
     assert report(sources)["violations"] == []
 
 
 def test_cycles_with_three_packages_and_different_modules_are_detected():
-    sources = {APP + "chat/a.py": "import app.jobs.b", APP + "jobs/a.py": "import app.providers.b",
-               APP + "providers/a.py": "import app.chat.b", APP + "chat/b.py": "",
+    sources = {APP + "platform/chat/a.py": "import app.jobs.b", APP + "jobs/a.py": "import app.providers.b",
+               APP + "providers/a.py": "import app.platform.chat.b", APP + "platform/chat/b.py": "",
                APP + "jobs/b.py": "", APP + "providers/b.py": ""}
     cycles = [entry for entry in report(sources)["violations"] if entry["rule"] == "AL002"]
     assert len(cycles) == 3
-    sources[APP + "providers/a.py"] = "def lazy():\n    import app.chat.b"
+    sources[APP + "providers/a.py"] = "def lazy():\n    import app.platform.chat.b"
     assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL002"]
 
 
 def test_production_cycle_graph_excludes_test_imports():
-    sources = {APP + "jobs/a.py": "import app.chat.a", APP + "chat/a.py": "",
-               APP + "chat/test_old.py": "import app.jobs.a"}
+    sources = {APP + "jobs/a.py": "import app.platform.chat.a", APP + "platform/chat/a.py": "",
+               APP + "platform/chat/test_old.py": "import app.jobs.a"}
     assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL002"]
 
 
 def test_new_cycle_edge_cannot_hide_in_an_existing_component():
-    sources = {APP + "chat/a.py": "import app.jobs.a", APP + "jobs/a.py": "import app.chat.a\nimport app.providers.a",
-               APP + "providers/a.py": "import app.chat.a"}
+    sources = {APP + "platform/chat/a.py": "import app.jobs.a", APP + "jobs/a.py": "import app.platform.chat.a\nimport app.providers.a",
+               APP + "providers/a.py": "import app.platform.chat.a"}
     previous = report(sources)
-    sources[APP + "chat/a.py"] += "\nimport app.providers.a"
+    sources[APP + "platform/chat/a.py"] += "\nimport app.providers.a"
     assert any("AL002" in error for error in lint.compare(report(sources), previous))
 
 
 def test_baseline_ignores_line_moves_but_detects_duplicate_violations():
-    path = APP + "chat/a.py"
+    path = APP + "platform/chat/a.py"
     previous = report({path: "import external\nexternal.method = replacement"})
     moved = report({path: "\n\nimport external\nexternal.method = replacement"})
     assert lint.compare(moved, previous) == []
@@ -334,8 +343,8 @@ def test_baseline_ignores_line_moves_but_detects_duplicate_violations():
 
 
 def test_fixes_require_shrinking_and_cannot_grow_on_update():
-    previous = report({APP + "chat/a.py": "print('old')"})
-    fixed = report({APP + "chat/a.py": ""})
+    previous = report({APP + "platform/chat/a.py": "print('old')"})
+    fixed = report({APP + "platform/chat/a.py": ""})
     assert any("stale" in error for error in lint.compare(fixed, previous))
     assert lint.compare(fixed, previous, shrinking=True) == []
     assert lint.compare(previous, fixed, shrinking=True)
@@ -484,14 +493,14 @@ def test_reference_migrations_uses_immutable_resolved_commit(tmp_path):
 
 def test_a_declared_use_allows_the_contract_import_in_one_direction():
     sources = {
-        APP + "image/feature.py": feature("image", "platform"),
-        APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='T', tier='app', uses=('image',))\n",
-        APP + "image/contracts.py": "class Provider: ...\n",
-        APP + "rpg/adapter.py": "from app.image.contracts import Provider\n",
+        APP + "platform/image/feature.py": feature("image", "platform"),
+        APP + "apps/rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='T', tier='app', uses=('image',))\n",
+        APP + "platform/image/contracts.py": "class Provider: ...\n",
+        APP + "apps/rpg/adapter.py": "from app.platform.image.contracts import Provider\n",
     }
     assert not layer_violations(sources)
 
-    sources[APP + "rpg/adapter.py"] = "from app.image.providers import Provider\n"
+    sources[APP + "apps/rpg/adapter.py"] = "from app.platform.image.providers import Provider\n"
     assert layer_violations(sources)
 
 
@@ -512,7 +521,7 @@ def _al016(sources):
 
 def test_al016_flags_sql_against_another_modules_table_in_a_table_position():
     sources = {**_owned_tables(omnix_rpg_turns="rpg", omnix_chat_sessions="chat"),
-               APP + "chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'\nOWN = 'UPDATE omnix_chat_sessions SET x = 1'\n"
+               APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'\nOWN = 'UPDATE omnix_chat_sessions SET x = 1'\n"
                                   "NOTE = 'the omnix_rpg_turns table is RPG data'\n"}
     assert _al016(sources) == {"<module>:omnix_rpg_turns"}
 
@@ -525,7 +534,7 @@ def test_al016_flags_kernel_code_naming_a_module_table():
 
 def test_al016_checks_migrations_in_module_folders_and_allows_registration_rows():
     sources = {**_owned_tables(omnix_chat_sessions="chat", omnix_retention_policies="kernel"),
-               APP + "rpg/migrations/0200_rpg_extra.sql": (
+               APP + "apps/rpg/migrations/0200_rpg_extra.sql": (
                    "ALTER TABLE omnix_chat_sessions ADD COLUMN x int;\n"
                    "INSERT INTO omnix_retention_policies (record_type) VALUES ('rpg') ON CONFLICT DO NOTHING;\n")}
     assert _al016(sources) == {"<migration>:alter table:omnix_chat_sessions"}
@@ -534,13 +543,13 @@ def test_al016_checks_migrations_in_module_folders_and_allows_registration_rows(
 def test_a_migration_moved_into_its_modules_folder_is_not_a_change():
     sql = "-- omnix-migration: phase=expand transactional=true\nSELECT 1;\n"
     protected = {OLD: lint.checksum(sql)}
-    moved = {APP + "chat/migrations/0001_platform.sql": sql}
+    moved = {APP + "platform/chat/migrations/0001_platform.sql": sql}
     assert not [entry for entry in lint.measure({**DECLARED_FEATURES, **moved}, CONFIG, protected)["violations"]
                 if entry["rule"] == "AL014"]
 
 
 def test_a_sql_file_outside_the_three_migration_places_is_a_violation():
-    sources = {APP + "rpg/persistence/migrations/v8.sql": "SELECT 1;\n"}
+    sources = {APP + "apps/rpg/persistence/migrations/v8.sql": "SELECT 1;\n"}
     assert {(entry["path"], entry["fingerprint"]) for entry in report(sources)["violations"] if entry["rule"] == "AL014"} == {
-        (APP + "rpg/persistence/migrations/v8.sql", "stray_schema_migration"),
+        (APP + "apps/rpg/persistence/migrations/v8.sql", "stray_schema_migration"),
     }

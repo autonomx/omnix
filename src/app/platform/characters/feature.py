@@ -7,10 +7,10 @@ from fastapi import APIRouter
 from typing import Any
 
 from app.runtime.features import FeatureContext, FeatureModule
-from app.chat.contracts import CHARACTER_RESOLVER
-from app.image.contracts import CHARACTER_AVATAR_FINISHER
+from app.platform.chat.contracts import CHARACTER_RESOLVER
+from app.platform.image.contracts import CHARACTER_AVATAR_FINISHER
 from app.runtime.ports import ContributionSpec
-from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
+from app.platform.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 from .api import register_character_routes
 from .avatar_api import register_character_avatar_routes

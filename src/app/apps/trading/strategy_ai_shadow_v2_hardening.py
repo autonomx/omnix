@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.trading.us_equity_calendar import after_regular_close
+from app.apps.trading.us_equity_calendar import after_regular_close
 
 import logging
 

@@ -97,7 +97,7 @@ def classify_stack(stack: list[dict[str, Any]]) -> str:
         token in text for token in (" event.wait", " threading.py wait", " acquire")
     ):
         return "tts_first_frame_wait"
-    if any(token in text for token in ("app/gateway", "starlette", "fastapi", "uvicorn")):
+    if any(token in text for token in ("app/composition/gateway", "starlette", "fastapi", "uvicorn")):
         return "gateway_or_framework_callback"
     if any(token in text for token in ("asyncio", "selectors.py", "proactor_events")):
         return "asyncio_idle_or_io"

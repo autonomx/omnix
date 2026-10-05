@@ -29,13 +29,13 @@ from .writer import NarrativeWriter
 
 
 def _production_writer() -> NarrativeWriter:
-    from app.rpg.narrative_provider import build_production_narrative_writer
+    from app.apps.rpg.narrative_provider import build_production_narrative_writer
 
     return build_production_narrative_writer()
 
 
 def _production_repository() -> NarrativeResponseRepository:
-    from app.rpg.narrative_repository import build_production_narrative_repository
+    from app.apps.rpg.narrative_repository import build_production_narrative_repository
 
     return build_production_narrative_repository()
 

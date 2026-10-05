@@ -31,7 +31,7 @@ from .prospective_prediction_v4 import (
     apply_execution_costs,
 )
 from .prospective_prediction_v42 import V42Forecast
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 V42_ACTION_VERSION = "prospective-gap-v4.2-action-v1"

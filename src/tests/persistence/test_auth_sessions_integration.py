@@ -272,7 +272,7 @@ def test_disabled_membership_ends_existing_sessions(database) -> None:
 
 
 def test_launcher_login_flow_through_the_gateway(database, local_auth, monkeypatch) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     service, _ = local_auth
     app = create_gateway_app(auth_service=service)
@@ -317,7 +317,7 @@ def test_launcher_login_flow_through_the_gateway(database, local_auth, monkeypat
 
 def test_https_sign_in_sets_a_secure_host_only_session_cookie(database, local_auth) -> None:
     """Behind HTTPS the cookies are Secure and the session cookie is ``__Host-`` (ASVS 3.4.1, 3.4.4)."""
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     service, credential = local_auth
     assert service.settings.cookie_secure is False
@@ -349,7 +349,7 @@ def test_a_user_sees_their_sessions_and_signs_out_the_others(database, local_aut
 
     Revocation checks the credential, so it shares the sign-in rate limit;
     this test makes more attempts than that limit allows in a minute."""
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     monkeypatch.setenv("OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE", "50")
 
@@ -409,7 +409,7 @@ def test_oidc_users_sign_others_out_only_soon_after_signing_in(database) -> None
 
 
 def test_manual_login_rotates_any_presented_session(database, local_auth) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     service, credential = local_auth
     client = TestClient(

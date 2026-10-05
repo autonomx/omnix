@@ -6,12 +6,12 @@ from typing import Any, Mapping
 
 from fastapi import HTTPException, Request
 
-from app.rpg.worlds.profile_authoring import (
+from app.apps.rpg.worlds.profile_authoring import (
     approve_world_profile_review,
     read_world_profile_review,
     update_world_profile_review,
 )
-from app.rpg.worlds.profile_generation_jobs import retry_world_profile_creation
+from app.apps.rpg.worlds.profile_generation_jobs import retry_world_profile_creation
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny

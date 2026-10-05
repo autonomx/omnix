@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.store import ChatSessionStore
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.store import ChatSessionStore
 
 
 class _FakeCodexProvider:

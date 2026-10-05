@@ -6,8 +6,8 @@ import zipfile
 
 import pytest
 
-from app.audiobook import extraction
-from app.characters import live2d_avatar
+from app.apps.audiobook import extraction
+from app.platform.characters import live2d_avatar
 
 
 def _archive(members: dict[str, bytes]) -> bytes:

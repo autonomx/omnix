@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.combat.runtime_core import (
+from app.apps.rpg.combat.runtime_core import (
     SOURCE,
     combat_seed,
     default_target_for_actor,
@@ -19,12 +19,12 @@ from app.rpg.combat.runtime_core import (
     safe_str,
     sync_participant_hp_to_actor_state,
 )
-from app.rpg.combat.runtime_turns import advance_combat_turn, gate_combat_action
-from app.rpg.interactions.equipment_runtime import (
+from app.apps.rpg.combat.runtime_turns import advance_combat_turn, gate_combat_action
+from app.apps.rpg.interactions.equipment_runtime import (
     consume_equipped_ammo,
     project_equipment_stats,
 )
-from app.rpg.interactions.loot_runtime import generate_loot_from_table
+from app.apps.rpg.interactions.loot_runtime import generate_loot_from_table
 
 
 def resolve_combat_attack(

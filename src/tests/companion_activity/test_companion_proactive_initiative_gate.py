@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.companion_activity.initiative import CompanionInitiativeAuthority
-from app.character_interactions import routes as character_integration_routes
+from app.platform.companion_activity.initiative import CompanionInitiativeAuthority
+from app.apps.character_interactions import routes as character_integration_routes
 
 
 class FakeChatStore:

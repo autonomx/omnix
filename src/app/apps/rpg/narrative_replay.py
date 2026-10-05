@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.rpg.narrative_engine.repository import NarrativeResponseRepository
-from app.rpg.narrative_reference import compact_canonical_narrative_reference
+from app.apps.rpg.narrative_engine.repository import NarrativeResponseRepository
+from app.apps.rpg.narrative_reference import compact_canonical_narrative_reference
 
 
 class CanonicalNarrativeReplayError(RuntimeError):
@@ -41,7 +41,7 @@ def hydrate_canonical_narrative_replay(
         )
 
     if repository is None:
-        from app.rpg.narrative_repository import (
+        from app.apps.rpg.narrative_repository import (
             build_production_narrative_repository,
         )
 

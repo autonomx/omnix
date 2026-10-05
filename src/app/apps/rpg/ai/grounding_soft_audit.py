@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any, Dict, Mapping, Optional
 
-from app.rpg.ai.grounding_settings import normalize_grounding_settings
-from app.rpg.ai.grounding_validator import validate_narration_grounding
+from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.ai.grounding_validator import validate_narration_grounding
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.ai_grounding_soft_audit.build_soft_audit_prompt', "1", 'You are a strict RPG grounding auditor.\n\nYou are checking already-displayed presentation text against an authoritative turn contract.\n\nRules:\n- You are NOT changing game state.\n- You may only append a short in-character correction if the displayed text made an unsupported claim.\n- Do not grant or remove gold, items, XP, quest completion, location travel, damage, death, or hidden facts.\n- If no correction is needed, return correction_needed=false.\n- If a correction is needed, write one short line from the same speaker when possible.\n- The correction itself must be safe and grounded.\n- Output only JSON.\n\nAuthoritative turn contract:\n{v0}\n\nState snapshot:\n{v1}\n\nDisplayed payload:\n{v2}\n\nReturn exactly:\n{{\n  "correction_needed": true/false,\n  "reason": "short reason",\n  "correction": {{\n    "format_version": "rpg_narration_v2",\n    "narration": "",\n    "action": "",\n    "npc": {{"speaker": "", "line": ""}},\n    "reward": null,\n    "followup_hooks": []\n  }}\n}}\n')

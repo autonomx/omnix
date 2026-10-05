@@ -20,9 +20,9 @@ retuning the policy.
 
 Use:
 
-- `app.trading.strategy_evolving_top_gainers`
-- `app.trading.strategy_evolving_top_gainers_research`
-- `app.trading.strategy_leader_momentum_research`
+- `app.apps.trading.strategy_evolving_top_gainers`
+- `app.apps.trading.strategy_evolving_top_gainers_research`
+- `app.apps.trading.strategy_leader_momentum_research`
 
 Do not duplicate their logic in a local replay script.
 

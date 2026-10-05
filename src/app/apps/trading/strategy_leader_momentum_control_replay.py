@@ -25,7 +25,7 @@ from .strategy_leader_momentum_diagnostics import (
     LeaderMomentumCohortObservation,
     LeaderMomentumDiagnosticTrace,
 )
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 ControlUniverseScope = Literal["observable_scanner", "discovered_candidates"]
 

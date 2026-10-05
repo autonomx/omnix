@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.assistant_tools.intent import detect_assistant_tool_intent
-from app.gateway.main import create_gateway_app
+from app.platform.assistant_tools.intent import detect_assistant_tool_intent
+from app.composition.gateway.main import create_gateway_app
 
 
 def test_detect_assistant_tool_intent_for_email_draft():

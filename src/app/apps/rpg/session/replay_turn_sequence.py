@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, Dict, List
 
-from app.rpg.session.replay_checkpoint import (
+from app.apps.rpg.session.replay_checkpoint import (
     build_session_checkpoint,
     compare_session_checkpoints,
     restore_session_from_checkpoint,
@@ -34,7 +34,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _travel_handler(simulation_state: Dict[str, Any], command: Dict[str, Any], turn_index: int) -> Dict[str, Any]:
-    from app.rpg.locations.command_routing import apply_runtime_travel_command
+    from app.apps.rpg.locations.command_routing import apply_runtime_travel_command
 
     return apply_runtime_travel_command(
         simulation_state,
@@ -200,7 +200,7 @@ def build_replay_turn_sequence_contract(validation_result: Dict[str, Any]) -> Di
 
 
 def assert_phase7_replay_turn_sequence_ready() -> Dict[str, Any]:
-    from app.rpg.locations.discovery import discover_location, discover_route, unblock_route
+    from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route
 
     session = {
         "manifest": {"id": "phase7:sequence", "session_id": "phase7:sequence"},

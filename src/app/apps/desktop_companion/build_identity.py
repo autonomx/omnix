@@ -32,7 +32,7 @@ def resolve_desktop_companion_build_identity(
                 app_version=str(values.get("OMNIX_APP_VERSION") or "1.0.0")[:80],
                 source=f"environment:{key.lower()}",
             )
-    root = repo_root or Path(__file__).resolve().parents[3]
+    root = repo_root or Path(__file__).resolve().parents[4]
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],

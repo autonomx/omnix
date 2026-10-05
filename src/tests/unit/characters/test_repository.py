@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.characters import (
+from app.platform.characters import (
     CharacterConflictError,
     CharacterRepository,
     CreateCharacterRequest,

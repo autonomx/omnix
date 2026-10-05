@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.live_voice.llm.retry import (
+from app.platform.live_voice.llm.retry import (
     EmptyProviderStreamError,
     retry_provider_stream,
 )

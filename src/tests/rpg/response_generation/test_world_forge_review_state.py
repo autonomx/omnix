@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
-from app.rpg.worlds.generation_attempt_history import with_validation_attempt
-from app.rpg.worlds.generation_review_state import (
+from app.apps.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
+from app.apps.rpg.worlds.generation_attempt_history import with_validation_attempt
+from app.apps.rpg.worlds.generation_review_state import (
     accepted_review_report,
     review_state,
     validation_evidence,

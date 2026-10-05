@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.economy.currency import normalize_currency
-from app.rpg.economy.pricing import ITEM_PRICES, SERVICE_PRICES
+from app.apps.rpg.economy.currency import normalize_currency
+from app.apps.rpg.economy.pricing import ITEM_PRICES, SERVICE_PRICES
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

@@ -6,8 +6,8 @@ from app.config.env import environment
 from dataclasses import replace
 from pathlib import Path
 
-from app.launcher import control_app
-from app.launcher.service_manager import (
+from app.composition.launcher import control_app
+from app.composition.launcher.service_manager import (
     LauncherServiceManager,
     build_default_service_specs,
     reset_default_manager_for_tests,
@@ -19,7 +19,7 @@ LIVE_STT_URL = "/api/stt?language=en&authority=auto&endpoint_threshold=0.5"
 
 
 def build_runtime_service_specs():
-    root = Path(__file__).resolve().parents[3]
+    root = Path(__file__).resolve().parents[4]
     specs = []
 
     for spec in build_default_service_specs(root):

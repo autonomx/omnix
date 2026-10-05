@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import threading
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
     ModelRef,
 )
-from app.agent_runtime import pi_runtime
-from app.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event
+from app.platform.agent_runtime import pi_runtime
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event
 
 
 def _spec(run_id: str) -> AgentRunSpec:

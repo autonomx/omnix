@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+from app.apps.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
 from .authoring_presentations import (
     PIPELINE_CATEGORIES as _PIPELINE_CATEGORIES,

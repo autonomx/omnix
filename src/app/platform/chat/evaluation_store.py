@@ -425,7 +425,7 @@ def default_live_chat_evaluation_store() -> LiveChatEvaluationStore:
     global _default_store, _default_store_path
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.chat.persistence.evaluation_store import PostgresLiveChatEvaluationStore
+        from app.platform.chat.persistence.evaluation_store import PostgresLiveChatEvaluationStore
         return PostgresLiveChatEvaluationStore()
     path = default_live_chat_evaluation_path()
     if _default_store is None or _default_store_path != path:

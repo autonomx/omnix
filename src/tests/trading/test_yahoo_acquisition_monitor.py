@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.trading.yahoo_acquisition_monitor import TradingYahooAcquisitionMonitor
+from app.apps.trading.yahoo_acquisition_monitor import TradingYahooAcquisitionMonitor
 
 
 ET = ZoneInfo("America/New_York")

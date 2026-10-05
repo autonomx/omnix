@@ -10,7 +10,7 @@ from copy import deepcopy
 from time import perf_counter
 from typing import Any
 
-from app.rpg.session.turn_grounding import build_turn_grounding_packet
+from app.apps.rpg.session.turn_grounding import build_turn_grounding_packet
 
 _SOURCE = "fast_visible_dialogue_v1"
 _STATEFUL_TERMS = (
@@ -202,7 +202,7 @@ def _s(value: Any) -> str:
 def try_fast_visible_dialogue(ctx: Any) -> dict[str, Any]:
     """Return a deterministic no-LLM result when the fast path is safe."""
 
-    from app.rpg.session import interactive_first_call_runtime as runtime
+    from app.apps.rpg.session import interactive_first_call_runtime as runtime
 
     return _try_fast_visible_dialogue(
         runtime,

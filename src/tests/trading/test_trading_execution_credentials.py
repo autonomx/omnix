@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading import execution_api
+from app.apps.trading import execution_api
 
 
 def test_alpaca_credential_status_is_masked_and_never_returns_secret(monkeypatch) -> None:

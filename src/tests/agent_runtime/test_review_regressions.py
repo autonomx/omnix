@@ -4,16 +4,16 @@ from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
 
-from app.assistant_tools.models import AssistantToolRequest
-from app.assistant_tools.repo_adapter import run_repository_tool_request
-from app.chat import generation_jobs
+from app.platform.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.repo_adapter import run_repository_tool_request
+from app.platform.chat import generation_jobs
 
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_allow_automatic_does_not_widen_issued_command_capability() -> None:
-    source = (ROOT / "src/app/agent_runtime/pi_guard_extension.ts").read_text(encoding="utf-8")
+    source = (ROOT / "src/app/platform/agent_runtime/pi_guard_extension.ts").read_text(encoding="utf-8")
     capability_gate = '!commandAllowedByIssuedCapability && !localCapabilities.has("workspace.command")'
     approval_gate = 'approvalPolicy !== "allow_automatic"'
     assert capability_gate in source
@@ -74,7 +74,7 @@ def test_chat_dispatcher_worker_survives_unhandled_job_failure(monkeypatch) -> N
 
 
 def test_task_graph_terminal_child_reconciles_from_waiting_for_approval() -> None:
-    source = (ROOT / "src/app/agent_runtime/task_graph_scheduling.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/app/platform/agent_runtime/task_graph_scheduling.py").read_text(encoding="utf-8")
     terminal_region = source.split(
         'if child.status not in {"completed", "failed", "cancelled"}:', 1
     )[1].split("def _claim_node", 1)[0]

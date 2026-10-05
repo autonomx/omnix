@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel, ConfigDict
 
-from app.trading.providers.errors import ProviderFallbackEligibleError
-from app.trading.trade_logging import trade_log
+from app.apps.trading.providers.errors import ProviderFallbackEligibleError
+from app.apps.trading.trade_logging import trade_log
 
 from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter

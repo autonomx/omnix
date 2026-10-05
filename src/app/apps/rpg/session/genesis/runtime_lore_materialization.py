@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 
 from .campaign_lore_store import _mapping, _rows, _text, current_location_identity
 from .world_forge_dossiers import (

@@ -21,7 +21,7 @@ from typing import Iterable, Mapping, Sequence
 
 from . import strategy_dynamic_discovery as dd
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 EVENT_OBSERVATION = "interday_discovery_observation"
 EVENT_CAUSALITY_VIOLATION = "interday_discovery_causality_violation"

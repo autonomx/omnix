@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 
 
 class BlockingAfterFirstChunkTtsProvider:
@@ -43,7 +43,7 @@ class EmptyJobStore:
 
 
 def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = BlockingAfterFirstChunkTtsProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
@@ -154,7 +154,7 @@ def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
 
 
 def test_promoted_speculative_runway_is_sent_in_one_browser_message(monkeypatch) -> None:
-    from app.live_voice.transport import websocket as tts_live_call_websocket
+    from app.platform.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = ThreeFrameSpeculativeCacheProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []

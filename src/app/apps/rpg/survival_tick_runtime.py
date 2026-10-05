@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional
 
-from app.rpg.survival import DEFAULT_SURVIVAL_TICK_RATES, tick_survival_state
+from app.apps.rpg.survival import DEFAULT_SURVIVAL_TICK_RATES, tick_survival_state
 
 SURVIVAL_TICK_SOURCE = "runtime_survival_tick"
 SURVIVAL_TICK_HISTORY_LIMIT = 64

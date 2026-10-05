@@ -13,7 +13,7 @@ if str(SRC_DIR) not in sys.path:
 
 
 def test_rpg_replay_adapter_state_hash_is_deterministic() -> None:
-    from app.replay import RpgReplayPersistenceAdapter
+    from app.apps.rpg.replay import RpgReplayPersistenceAdapter
 
     adapter = RpgReplayPersistenceAdapter()
 
@@ -25,7 +25,7 @@ def test_rpg_replay_adapter_state_hash_is_deterministic() -> None:
 
 
 def test_rpg_replay_adapter_checkpoint_roundtrip() -> None:
-    from app.replay import RpgReplayPersistenceAdapter
+    from app.apps.rpg.replay import RpgReplayPersistenceAdapter
 
     adapter = RpgReplayPersistenceAdapter()
     bundle = {"turn_index": 3, "state_versions": {"inventory": "v1"}, "values": ["a", "b"]}
@@ -47,7 +47,7 @@ def test_rpg_replay_adapter_checkpoint_roundtrip() -> None:
 
 
 def test_gateway_replay_endpoints_expose_rpg_wrappers() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     client = TestClient(
         create_gateway_app(),
@@ -71,8 +71,8 @@ def test_gateway_replay_endpoints_expose_rpg_wrappers() -> None:
 
 
 def test_gateway_replay_inventory_can_be_injected() -> None:
-    from app.gateway.main import create_gateway_app
-    from app.replay import PersistenceInventory, RpgReplayPersistenceAdapter
+    from app.composition.gateway.main import create_gateway_app
+    from app.apps.rpg.replay import PersistenceInventory, RpgReplayPersistenceAdapter
 
     class FakeReplayAdapter(RpgReplayPersistenceAdapter):
         def list_sessions(self) -> PersistenceInventory:

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.order_gateway import OrderGateway, StrategyEntryAuthorizer, StrategyPaperAccess
-from app.trading.paper import PaperOrderRequest
+from app.apps.trading.order_gateway import OrderGateway, StrategyEntryAuthorizer, StrategyPaperAccess
+from app.apps.trading.paper import PaperOrderRequest
 
 APP = Path(__file__).parents[2] / "app"
 ORDER_METHODS = {"place_order", "cancel_order", "replace_order"}
@@ -27,7 +27,7 @@ def test_only_the_gateway_calls_the_repositorys_order_methods() -> None:
             ):
                 callers.add(path.relative_to(APP).as_posix())
     # paper_repository defines them; the guarded strategy view names them to refuse them.
-    assert callers <= {"trading/order_gateway.py", "trading/paper_repository.py"}
+    assert callers <= {"apps/trading/order_gateway.py", "apps/trading/paper_repository.py"}
 
 
 class _Repository:

@@ -8,15 +8,15 @@ from collections import Counter
 from typing import Any, Mapping, Sequence
 
 from app.persistence.database import DatabaseUnavailableError
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
 )
-from app.rpg.session.genesis.world_forge_review import (
+from app.apps.rpg.session.genesis.world_forge_review import (
     failure_report,
     result_status,
     review_report,
@@ -874,7 +874,7 @@ def execute_claimed_world_topic_job(
                 f"world_topic_contract_mismatch_before_provider_call:{topic_id}"
             )
 
-        from app.rpg.worlds.providers.world_forge import attach_world_forge_progress_callback
+        from app.apps.rpg.worlds.providers.world_forge import attach_world_forge_progress_callback
 
         def checkpoint_batch_progress(checkpoint: Mapping[str, Any]) -> None:
             token_usage = dict(checkpoint.get("token_usage") or {})
@@ -921,7 +921,7 @@ def execute_claimed_world_topic_job(
                 selected_generator,
                 checkpoint_batch_progress,
             )
-            from app.rpg.llm_priority import background_rpg_llm_priority
+            from app.apps.rpg.llm_priority import background_rpg_llm_priority
 
             try:
                 with background_rpg_llm_priority():

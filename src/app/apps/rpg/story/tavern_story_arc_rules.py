@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from app.rpg.story.story_arc_lifecycle import ArcFailureRule, ArcResolutionRule
+from app.apps.rpg.story.story_arc_lifecycle import ArcFailureRule, ArcResolutionRule
 
 
 def tavern_story_arc_rules() -> Tuple[List[ArcResolutionRule], List[ArcFailureRule]]:

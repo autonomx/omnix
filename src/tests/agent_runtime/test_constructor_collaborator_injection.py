@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import AgentEvent
-from app.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event, pi_rpc_argv
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.contracts import AgentEvent
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event, pi_rpc_argv
+from app.platform.agent_runtime.service import AgentRunService
 
 
 def test_agent_run_service_stores_constructor_injected_ports() -> None:

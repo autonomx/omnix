@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.assistant_tools import assistant_tool_registry_payload, default_assistant_tools
-from app.gateway.main import create_gateway_app
+from app.platform.assistant_tools import assistant_tool_registry_payload, default_assistant_tools
+from app.composition.gateway.main import create_gateway_app
 
 EXPECTED_TOOLS = {
     "gmail", "calendar", "contacts", "research", "trading", "market",

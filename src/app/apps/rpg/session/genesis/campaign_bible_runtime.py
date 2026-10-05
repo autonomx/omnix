@@ -5,7 +5,7 @@ import logging
 
 from typing import Any, Mapping
 
-from app.rpg.narrative_engine import CampaignBibleSnapshot
+from app.apps.rpg.narrative_engine import CampaignBibleSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ def load_campaign_bible_snapshot(
             return stored
     if session is None:
         try:
-            from app.rpg.session.service import load_session
+            from app.apps.rpg.session.service import load_session
 
             session = load_session(campaign_id)
         except Exception:

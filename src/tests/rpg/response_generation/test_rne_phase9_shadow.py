@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 
-from app.rpg.narrative_engine.shadow import (
+from app.apps.rpg.narrative_engine.shadow import (
     attach_shadow_report,
     build_shadow_report,
     shadow_selected,

@@ -1,34 +1,34 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.world.companion_acceptance import (
+from app.apps.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug as get_pending_companion_offer_debug, hydrate_companion_acceptance_from_pending_offers as hydrate_companion_acceptance_from_pending_offers,
     resolve_pending_companion_offer_response as resolve_pending_companion_offer_response,
 )
 import copy
-from app.rpg.profiles.character_cards import (
+from app.apps.rpg.profiles.character_cards import (
     list_character_cards_for_simulation_state as list_character_cards_for_simulation_state,
 )
-from app.rpg.interactions.resolver import (
+from app.apps.rpg.interactions.resolver import (
     detect_interaction_intent as detect_interaction_intent,
 )
-from app.rpg.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.profiles.dynamic_npc_profiles import (
     load_npc_profile as load_npc_profile,
 )
-from app.rpg.profiles.profile_drafts import (
+from app.apps.rpg.profiles.profile_drafts import (
     profile_draft_summary as profile_draft_summary,
 )
-from app.rpg.session.inventory_runtime import (
+from app.apps.rpg.session.inventory_runtime import (
     drop_item_action as drop_item_action, equip_item_action as equip_item_action, extract_equipment as extract_equipment, pickup_item_action as pickup_item_action,
     unequip_item_action as unequip_item_action,
 )
-from app.rpg.session.idle_runtime import (
+from app.apps.rpg.session.idle_runtime import (
     advance_simulation_for_idle as advance_simulation_for_idle, build_idle_player_context as build_idle_player_context,
 )
-from app.rpg.session.service_runtime import (
+from app.apps.rpg.session.service_runtime import (
     service_action_from_result as service_action_from_result, service_authoritative_result as service_authoritative_result,
     service_semantic_action_from_result as service_semantic_action_from_result,
 )
@@ -37,20 +37,20 @@ from typing import (
 )
 
 
-from app.rpg.world.companion_dialogue import (
+from app.apps.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
-from app.rpg.world.location_registry import ensure_location_state as ensure_location_state
-from app.rpg.world.npc_dialogue_recall import player_input_requests_recall as player_input_requests_recall
-from app.rpg.world.travel_graph import (
+from app.apps.rpg.world.location_registry import ensure_location_state as ensure_location_state
+from app.apps.rpg.world.npc_dialogue_recall import player_input_requests_recall as player_input_requests_recall
+from app.apps.rpg.world.travel_graph import (
     apply_travel_result_to_state as apply_travel_result_to_state,
     build_travel_state_delta as build_travel_state_delta,
     build_travel_world_event as build_travel_world_event,
     list_available_routes as list_available_routes,
     resolve_travel_destination as resolve_travel_destination,
 )
-from app.rpg.world.world_event_director import (
+from app.apps.rpg.world.world_event_director import (
     apply_world_behavior_to_events as apply_world_behavior_to_events,
     build_world_event_candidates as build_world_event_candidates,
     convert_events_to_ambient_updates as convert_events_to_ambient_updates,
@@ -199,7 +199,7 @@ def _sync_session_simulation_state_for_early_return(
 
     # Best-effort save. Lazy import avoids module-level circular imports.
     try:
-        from app.rpg.session.service import save_session
+        from app.apps.rpg.session.service import save_session
 
         save_session(session)
     except Exception as exc:
@@ -805,7 +805,7 @@ def _maybe_enqueue_latest_ambient_conversation_narration(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.rpg.session.semantic_response_projection import (
+    from app.apps.rpg.session.semantic_response_projection import (
         _enqueue_narration_request as _enqueue_narration_request,
     )
 
@@ -903,7 +903,7 @@ def _mark_narration_job_status(
     worker_token: str = "",
     error: str = "",
 ) -> dict[str, Any]:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso,
     )
 

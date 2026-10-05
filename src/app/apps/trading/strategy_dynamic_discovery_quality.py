@@ -16,7 +16,7 @@ from typing import Mapping, Sequence
 from . import strategy_dynamic_discovery as dd
 from . import strategy_dynamic_discovery_runtime as runtime
 from .strategy_repository import TradingStrategyRepository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 _BASE_COMPLETE_RUN = runtime._run_dynamic_discovery_once_complete
 _BASE_APPLY_SCAN = runtime.apply_discovery_scan

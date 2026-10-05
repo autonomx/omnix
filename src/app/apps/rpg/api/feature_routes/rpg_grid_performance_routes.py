@@ -7,8 +7,8 @@ from typing import Any, Mapping
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
 
-from app.rpg.grid_runtime_performance import GridRuntimeBudget
-from app.rpg.grid_runtime_performance_service import profile_campaign_grid_runtime
+from app.apps.rpg.grid_runtime_performance import GridRuntimeBudget
+from app.apps.rpg.grid_runtime_performance_service import profile_campaign_grid_runtime
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny

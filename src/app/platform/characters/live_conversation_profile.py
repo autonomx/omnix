@@ -137,7 +137,7 @@ def default_live_conversation_profile_store() -> LiveConversationProfileStore:
     global _default_store, _default_store_path
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.characters.persistence.live_profile_store import PostgresLiveConversationProfileStore
+        from app.platform.characters.persistence.live_profile_store import PostgresLiveConversationProfileStore
         return PostgresLiveConversationProfileStore()
     if _default_store_factory_override is not None:
         if _default_store is None:

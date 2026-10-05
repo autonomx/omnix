@@ -6,17 +6,17 @@ from types import SimpleNamespace
 
 import pytest
 
-import app.trading.prospective_gap_runtime as runtime_module
-from app.trading.execution import ExecutionObservation
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.market_data_window import (
+import app.apps.trading.prospective_gap_runtime as runtime_module
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.market_data_window import (
     MarketDataWindow,
     detect_window_gaps,
     finalized_window_bars,
 )
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_gap_repository import ProspectiveGapRepository
-from app.trading.prospective_gap_runtime import (
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_gap_repository import ProspectiveGapRepository
+from app.apps.trading.prospective_gap_runtime import (
     PortfolioEPolicy,
     PremarketFreezeRequest,
     PremarketInstrumentInput,
@@ -25,19 +25,19 @@ from app.trading.prospective_gap_runtime import (
     SchedulerPremarketHandoff,
     SchedulerPremarketInstrumentInput,
 )
-from app.trading.prospective_prediction_evidence import FrozenForecast
-from app.trading.prospective_prediction_operational import (
+from app.apps.trading.prospective_prediction_evidence import FrozenForecast
+from app.apps.trading.prospective_prediction_operational import (
     OperationalConfirmationEvaluation,
     build_operational_formal_outcome,
 )
-from app.trading.prospective_prediction_v41 import (
+from app.apps.trading.prospective_prediction_v41 import (
     DEFAULT_V41_SPEC,
     V41MechanismHeads,
     V41ScoreInputs,
     score_v41_raw_probability,
     session_eligible_for_v41_forward_validation,
 )
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.prospective_prediction_v4 import (
     CalibratorArtifact,
     CatalystDecomposition,
     ConfirmationTransitionReceipt,
@@ -45,7 +45,7 @@ from app.trading.prospective_prediction_v4 import (
     GrossReturnDistribution,
     MechanismRiskScores,
 )
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 SESSION = date(2026, 9, 22)
@@ -654,7 +654,7 @@ def test_formal_outcome_accepts_standard_us_equity_early_close() -> None:
 
 
 def test_an_imported_handoff_with_malformed_content_is_refused_before_storage() -> None:
-    from app.trading.prospective_gap_inputs import ProspectiveGapInputs
+    from app.apps.trading.prospective_gap_inputs import ProspectiveGapInputs
 
     def no_database():
         raise AssertionError("a malformed handoff reached the database")

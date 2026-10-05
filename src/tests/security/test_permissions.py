@@ -28,7 +28,7 @@ BUILT_IN_DOCS = {"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}
 
 @pytest.fixture(scope="module")
 def gateway():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     authenticator = FakeAuthenticator()
     return create_gateway_app(auth_service=authenticator), authenticator
@@ -189,7 +189,7 @@ def test_permissions_document_is_current() -> None:
 
 def test_gateway_without_installed_tenant_serves_the_local_owner(monkeypatch) -> None:
     """Sign-in off and no persistence bootstrap (benchmarks): not a 500."""
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.runtime import tenant_context
 
     class EmptyStore:

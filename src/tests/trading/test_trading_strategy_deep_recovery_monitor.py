@@ -6,12 +6,12 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
-from app.trading.models import MarketBar
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_deep_recovery_monitor import TradingStrategyDeepRecoveryShadowMonitor
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_shadow_execution import ShadowExecutionEvidence
+from app.apps.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_deep_recovery_monitor import TradingStrategyDeepRecoveryShadowMonitor
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_shadow_execution import ShadowExecutionEvidence
 
 
 INSTRUMENT = "equity:NASDAQ:RECOV"
@@ -151,7 +151,7 @@ class FakeMarketService:
 
 
 def test_deep_recovery_monitor_is_structurally_orderless() -> None:
-    import app.trading.strategy_deep_recovery_monitor as module
+    import app.apps.trading.strategy_deep_recovery_monitor as module
 
     source = inspect.getsource(module)
     assert "TradingPaperRepository" not in source
@@ -177,7 +177,7 @@ def test_deep_recovery_monitor_persists_one_shadow_signal_with_no_execution_auth
         )
 
     monkeypatch.setattr(
-        "app.trading.strategy_deep_recovery_monitor.observe_shadow_execution",
+        "app.apps.trading.strategy_deep_recovery_monitor.observe_shadow_execution",
         fake_observe,
     )
     monitor = TradingStrategyDeepRecoveryShadowMonitor(

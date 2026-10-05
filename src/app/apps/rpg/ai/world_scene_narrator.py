@@ -7,8 +7,8 @@ contains no star imports, import-order fixups, or runtime symbol replacement.
 """
 from __future__ import annotations
 
-from app.rpg.ai.world_scene_narrator_ambient import narrate_ambient_update
-from app.rpg.ai.world_scene_narrator_prompts import (
+from app.apps.rpg.ai.world_scene_narrator_ambient import narrate_ambient_update
+from app.apps.rpg.ai.world_scene_narrator_prompts import (
     NPCReaction,
     NarrativeResult,
     build_choice_prompt,
@@ -18,7 +18,7 @@ from app.rpg.ai.world_scene_narrator_prompts import (
     parse_npc_reaction,
     parse_scene_response,
 )
-from app.rpg.response_generation.legacy_bridge import (
+from app.apps.rpg.response_generation.legacy_bridge import (
     SceneNarrator,
     apply_legacy_narration_emphasis,
     narrate_scene_canonical,

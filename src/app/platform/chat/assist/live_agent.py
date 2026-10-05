@@ -8,9 +8,9 @@ from typing import Literal, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.capabilities.executor import CapabilityGrant, execute_capability, live_agent_tools
-from app.chat.assist.hermes import HermesAssistantPlanner
-from app.chat.assist.models import AssistantRequest, ToolResult
-from app.chat.assist.modes import apply_mode_result, ModeChatResponse, detect_mode_domain
+from app.platform.chat.assist.hermes import HermesAssistantPlanner
+from app.platform.chat.assist.models import AssistantRequest, ToolResult
+from app.platform.chat.assist.modes import apply_mode_result, ModeChatResponse, detect_mode_domain
 from app.config.env import environment
 from app.providers.hermes_status import hermes_runtime_config
 

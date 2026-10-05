@@ -5,15 +5,15 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.prospective_prediction_v4 import (
     CatalystDecomposition,
     ExtensionExhaustionRisk,
     MechanismRiskScores,
     PremarketFeature,
     PremarketMarketStateSnapshot,
 )
-from app.trading.prospective_prediction_v42 import (
+from app.apps.trading.prospective_prediction_v42 import (
     V42ReturnObservation,
     build_v42_feature_bundle,
     evaluate_v42_return_metrics,

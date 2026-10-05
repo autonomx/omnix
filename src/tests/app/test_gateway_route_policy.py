@@ -22,7 +22,7 @@ def test_generated_ingress_matches_policy():
     for target, expected in module.rendered_files().items():
         assert target.read_text(encoding='utf-8') == expected, target
     source = (ROOT / 'web/gateway-routing.ts').read_text(encoding='utf-8')
-    assert "import routingPolicy from '../../../deploy/gateway-route-policy.json'" in source
+    assert "import routingPolicy from '../deploy/gateway-route-policy.json'" in source
     assert 'proxy_next_upstream off;' in module.render(POLICY)
     assert 'proxy_buffering off;' in module.render(POLICY)
 
@@ -56,8 +56,8 @@ def _megabytes(limit: str) -> int:
 
 
 def test_ingress_body_limits_admit_what_the_gateway_accepts():
-    from app.audiobook.extraction import MAX_SOURCE_BYTES
-    from app.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
+    from app.apps.audiobook.extraction import MAX_SOURCE_BYTES
+    from app.apps.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
     from app.security.model_service import DEFAULT_MAX_UPLOAD_BYTES
 
     limits = POLICY['body_limits']

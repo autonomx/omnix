@@ -15,7 +15,7 @@ from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 _STATE_KEY="_omnix_trading_strategy_research_monitor"
 

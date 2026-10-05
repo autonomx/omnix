@@ -8,36 +8,36 @@ from typing import Any, Protocol
 
 from app.runtime.ports import Port
 
-from app.chat.compaction import build_deterministic_summary, compaction_enabled
-from app.chat.context_budget import PromptBudget, prompt_budget_from_env
-from app.chat.live_call_prewarm import live_call_provider_affinity
-from app.chat.live_chat_async_sse_bridge import eager_async_sse_stream
-from app.chat.memory_port import CHAT_MEMORY, ChatMemory, resolve_prompt_memory
-from app.chat.retention_policy import explicit_memory_mutation_allowed
-from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest, SendChatMessageResponse
-from app.chat.research_jobs import link_user_message_to_research_job
-from app.chat.character_store import CHAT_STORE_FACTORY
-from app.chat.prompt_assembly import (
+from app.platform.chat.compaction import build_deterministic_summary, compaction_enabled
+from app.platform.chat.context_budget import PromptBudget, prompt_budget_from_env
+from app.platform.chat.live_call_prewarm import live_call_provider_affinity
+from app.platform.chat.live_chat_async_sse_bridge import eager_async_sse_stream
+from app.platform.chat.memory_port import CHAT_MEMORY, ChatMemory, resolve_prompt_memory
+from app.platform.chat.retention_policy import explicit_memory_mutation_allowed
+from app.platform.chat.models import ChatMessage, ChatSession, SendChatMessageRequest, SendChatMessageResponse
+from app.platform.chat.research_jobs import link_user_message_to_research_job
+from app.platform.chat.character_store import CHAT_STORE_FACTORY
+from app.platform.chat.prompt_assembly import (
     PromptAssembly,
     build_prompt_assembly,
     resolve_system_session_identity,
 )
-from app.chat.prompt_window import (
+from app.platform.chat.prompt_window import (
     build_prompt_assembly_with_window,
     normal_chat_prompt_window_enabled,
     normal_chat_recent_message_limit,
 )
-from app.chat.provider_routing import resolve_effective_provider_id
-from app.chat.session_identity import CHARACTER_RESOLVER, CharacterResolver, resolve_shared_memory_categories
-from app.chat.prompt_rendering import (
+from app.platform.chat.provider_routing import resolve_effective_provider_id
+from app.platform.chat.session_identity import CHARACTER_RESOLVER, CharacterResolver, resolve_shared_memory_categories
+from app.platform.chat.prompt_rendering import (
     RenderedPrompt,
     RenderedPromptMessage,
     render_prompt_assembly,
 )
-from app.chat.provider_metrics import merge_provider_response_metrics
-from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
-from app.chat.store import _model_key as model_key
-from app.chat.store import _provider_key as provider_key
+from app.platform.chat.provider_metrics import merge_provider_response_metrics
+from app.platform.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
+from app.platform.chat.store import _model_key as model_key
+from app.platform.chat.store import _provider_key as provider_key
 from app.conversation.contracts import estimate_tokens
 
 
@@ -112,13 +112,13 @@ def route_typed_turn(session: Any, user_message: Any, **options: Any) -> Any:
 
 
 def hermes_assist_status_payload() -> dict:
-    from app.chat.assist.diagnostics import hermes_diagnostics_status_payload
+    from app.platform.chat.assist.diagnostics import hermes_diagnostics_status_payload
 
     return hermes_diagnostics_status_payload()
 
 
 def hermes_assist_test_payload(*, content: str, session_id: str, domain: str, metadata: dict) -> dict:
-    from app.chat.assist.diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
+    from app.platform.chat.assist.diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
 
     return hermes_diagnostics_test_payload(
         HermesDiagnosticsTestRequest(content=content, session_id=session_id, domain=domain, metadata=metadata)
@@ -126,7 +126,7 @@ def hermes_assist_test_payload(*, content: str, session_id: str, domain: str, me
 
 
 def hermes_assist_readout_payload(name: str, args: dict) -> dict:
-    from app.chat.assist.modes import readout_payload
+    from app.platform.chat.assist.modes import readout_payload
 
     return readout_payload(name, args)
 
@@ -202,4 +202,4 @@ def __getattr__(name: str) -> Any:
     module = _LAZY_EXPORTS.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    return getattr(import_module(f"app.chat.{module}"), name)
+    return getattr(import_module(f"app.platform.chat.{module}"), name)

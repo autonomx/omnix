@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.combat.conditions import (
+from app.apps.rpg.combat.conditions import (
     add_status_effect_to_participant,
     build_condition_effect,
     build_condition_result,

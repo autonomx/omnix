@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from app.providers import service as provider_service
-from app.chat import ChatMessage, ChatSession, ChatSessionStore
-from app.chat.compaction import (
+from app.platform.chat import ChatMessage, ChatSession, ChatSessionStore
+from app.platform.chat.compaction import (
     DEFAULT_RECENT_MESSAGE_LIMIT,
     HISTORY_COMPACT_JOB_TYPE,
     InMemoryConversationSummaryRepository,

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
+from app.apps.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
 
 from .capture import persist_captured_provider_result
 from .fallback import (

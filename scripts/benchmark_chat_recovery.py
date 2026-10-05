@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 def measure(url: str, samples: int) -> dict:
-    from app.chat.generation_jobs import (
+    from app.platform.chat.generation_jobs import (
         ChatQueueFull,
         _ChatGenerationDispatcher,
         _ChatGenerationWork,
@@ -27,7 +27,7 @@ def measure(url: str, samples: int) -> dict:
     )
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.repositories import PostgresIdentityRepository
 
     database = PostgresDatabase(DatabaseSettings(url=url))

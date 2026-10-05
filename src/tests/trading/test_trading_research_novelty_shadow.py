@@ -4,8 +4,8 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
-from app.trading.research.contracts import TradingEvidence, fingerprint
-from app.trading.research.novelty_shadow import generate_novelty_shadow
+from app.apps.trading.research.contracts import TradingEvidence, fingerprint
+from app.apps.trading.research.novelty_shadow import generate_novelty_shadow
 
 
 class FakeProvider:

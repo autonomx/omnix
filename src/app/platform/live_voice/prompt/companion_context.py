@@ -5,7 +5,7 @@ from app.config.env import env_str as _env_str
 from collections.abc import Callable
 from typing import Any
 
-from app.assistant_memory.contracts import (
+from app.platform.assistant_memory.contracts import (
     build_companion_context_packet,
     companion_rollout_policy,
     initiative_prompt_directive,
@@ -19,18 +19,18 @@ from app.assistant_memory.contracts import (
     retrieve_temporal_context,
 )
 from app.conversation.contracts import PromptMemoryItem
-from app.characters.contracts import (
+from app.platform.characters.contracts import (
     LiveConversationProfile,
     default_live_conversation_profile_store,
 )
-from app.chat.contracts import (
+from app.platform.chat.contracts import (
     build_prompt_assembly,
     compaction_enabled,
     render_prompt_assembly,
     resolve_prompt_memory,
 )
 
-from app.live_voice.prompt import profile as live_profile
+from app.platform.live_voice.prompt import profile as live_profile
 from app.observability.tts_stream_diagnostics import stream_log
 
 _TEMPORAL_CATEGORY = {
@@ -71,7 +71,7 @@ def _merge_memory(
 
 def _effective_profile(session_id: str) -> LiveConversationProfile:
     try:
-        from app.live_voice.prompt.cache import get_live_conversation_profile_cached
+        from app.platform.live_voice.prompt.cache import get_live_conversation_profile_cached
 
         return get_live_conversation_profile_cached(
             default_live_conversation_profile_store(),
@@ -94,8 +94,8 @@ def _timed(name: str, function: Callable[..., Any], *args: Any, **kwargs: Any) -
         return function(*args, **kwargs)
     finally:
         elapsed_ms = (time.perf_counter() - started) * 1000.0
-        from app.live_voice.prompt.cache import record_prompt_stage_time
-        from app.live_voice.prompt.dependency_stages import record_dependency_stage_time
+        from app.platform.live_voice.prompt.cache import record_prompt_stage_time
+        from app.platform.live_voice.prompt.dependency_stages import record_dependency_stage_time
 
         record_prompt_stage_time(name, elapsed_ms)
         record_dependency_stage_time(name, elapsed_ms)
@@ -381,7 +381,7 @@ def build_companion_prompt(
 
 
 def _cached_identity_resolver() -> Callable[[Any], Any]:
-    from app.live_voice.prompt.cache import resolve_system_session_identity_cached
+    from app.platform.live_voice.prompt.cache import resolve_system_session_identity_cached
 
     return resolve_system_session_identity_cached
 

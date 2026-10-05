@@ -5,11 +5,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from app.characters.avatar_generation_models import (
+from app.platform.characters.avatar_generation_models import (
     CharacterAvatarGenerationBatch,
     CreateCharacterAvatarGenerationRequest,
 )
-from app.characters.avatar_viseme_generation import CharacterVisemeGenerationBatch
+from app.platform.characters.avatar_viseme_generation import CharacterVisemeGenerationBatch
 from app.persistence.document_schemas import register_document_schema
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.module_repositories import PostgresModuleRecordRepository

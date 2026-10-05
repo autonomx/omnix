@@ -17,7 +17,7 @@ import time
 import httpx
 from fastapi import FastAPI
 
-from app.chat.models import ChatSessionListResponse
+from app.platform.chat.models import ChatSessionListResponse
 
 STORE_DELAY_SECONDS = 0.2
 LOAD_SECONDS = 1.2
@@ -130,7 +130,7 @@ async def _measure(app: FastAPI, slow_paths: list[str]) -> dict[str, float]:
 
 
 def test_slow_stores_do_not_stall_the_gateway_event_loop() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     gateway = create_gateway_app(
         job_store_factory=SlowJobStore,

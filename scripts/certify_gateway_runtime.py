@@ -77,14 +77,14 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
             enabled_features=tuple(sorted(enabled)),
             disabled_features=tuple(sorted(set(FEATURE_CATALOG) - enabled)),
         )
-        from app.chat import generation_jobs
+        from app.platform.chat import generation_jobs
         generation_jobs._generate_reply = lambda *args, **kwargs: {'content': 'Certified deterministic reply.', 'metadata': {}}
         from app.providers import audio_registry
         def no_local_registry():
             raise AssertionError('certification processes must use remote TTS')
         audio_registry.get_audio_registry = no_local_registry
         from app.observability.metrics import request_snapshot
-        from app.production import create_production_app
+        from app.composition.production import create_production_app
         app = create_production_app(config)
         # Failure certification can shorten observation deadlines without
         # changing durable checks or the production defaults.

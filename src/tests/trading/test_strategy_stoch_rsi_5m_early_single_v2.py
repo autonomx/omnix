@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading import strategy_stoch_rsi_5m_early_single_v2 as v2
-from app.trading.models import MarketBar
-from app.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
+from app.apps.trading import strategy_stoch_rsi_5m_early_single_v2 as v2
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
 
 # 2026-09-10 09:30 ET.
 OPEN = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)

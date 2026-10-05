@@ -21,13 +21,13 @@ This guide walks through both. Run the commands from the repository root, with `
 python scripts/new_module.py field-notes --tier app --web
 ```
 
-The id is lowercase words joined by `-`, and the Python package is the id with `_` (`field_notes`). Use `--tier platform` for a capability other modules will build on. Leave out `--web` for a backend-only module.
+The id is lowercase words joined by `-`, and the Python package is the id with `_` (`field_notes`). Use `--tier platform` for a capability other modules will build on. The package goes in its tier folder: `src/app/apps/` or `src/app/platform/`. Leave out `--web` for a backend-only module.
 
 The script writes a small working module:
 
 | Path | What it is |
 |---|---|
-| `src/app/field_notes/feature.py` | The `FEATURE = FeatureModule(...)` declaration, and nothing else. |
+| `src/app/apps/field_notes/feature.py` | The `FEATURE = FeatureModule(...)` declaration, and nothing else. |
 | `contracts.py` | What other modules may import: DTOs and ports. |
 | `declarations.py` | What the kernel reads without loading the module. It imports kernel modules only. It holds the settings section (`SETTINGS`), retention handlers (`RETENTION`), capacity counts (`CAPACITY`) and the read and write permissions (`PERMISSIONS`). |
 | `service.py`, `repository.py` | Workflow and transactions, and the SQL, one method per intent. |
@@ -74,7 +74,7 @@ Factories receive a `FeatureContext`: runtime configuration, capabilities, kerne
 - Request bodies are Pydantic models. Declare a `response_model` for every route.
 - Handlers translate domain exceptions to status codes (missing → 404, validation → 422, state conflict → 409) and hold no business logic.
 - Blocking work runs off the event loop: plain `def` handlers run in the threadpool, and `async def` handlers call blocking services through `asyncio.to_thread`.
-- Stream uploads with a hard cap that also holds for chunked bodies, and stream downloads. `src/app/audiobook/routes.py` shows both.
+- Stream uploads with a hard cap that also holds for chunked bodies, and stream downloads. `src/app/apps/audiobook/routes.py` shows both.
 
 **Service and repositories.**
 
@@ -110,7 +110,7 @@ npm --prefix web run api:types
 ### 4. Check
 
 ```sh
-git add src/app/field_notes src/tests/field_notes web/src/features/field-notes
+git add src/app/apps/field_notes src/tests/field_notes web/src/features/field-notes
 python scripts/check_module.py field-notes
 ```
 

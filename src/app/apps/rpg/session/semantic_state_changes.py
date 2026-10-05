@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 
 # RPG session runtime responsibility module.
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _normalize_active_interactions as _normalize_active_interactions, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.combat.state import (
+from app.apps.rpg.combat.state import (
     normalize_combat_state as normalize_combat_state,
 )
-from app.rpg.session.world_consequence_runtime import (
+from app.apps.rpg.session.world_consequence_runtime import (
     _accepted_state_change_event_ids as _accepted_state_change_event_ids, _allowed_semantic_actions as _allowed_semantic_actions,
     _applied_semantic_proposal_ids as _applied_semantic_proposal_ids, _ensure_semantic_pipeline_state as _ensure_semantic_pipeline_state, _find_actor_state as _find_actor_state,
     _normalize_actor_state_for_delta as _normalize_actor_state_for_delta, _normalize_semantic_state_change_proposal as _normalize_semantic_state_change_proposal,
@@ -18,16 +18,16 @@ from app.rpg.session.world_consequence_runtime import (
     clear_recorded_semantic_llm_capture as clear_recorded_semantic_llm_capture, emit_scene_beat as emit_scene_beat,
     enqueue_semantic_state_change_proposal as enqueue_semantic_state_change_proposal, validate_semantic_state_change_proposal as validate_semantic_state_change_proposal,
 )
-from app.rpg.session.companion_turn_runtime import (
+from app.apps.rpg.session.companion_turn_runtime import (
     _MAX_ACCEPTED_STATE_CHANGE_EVENTS as _MAX_ACCEPTED_STATE_CHANGE_EVENTS, _MAX_APPLIED_PROPOSAL_IDS as _MAX_APPLIED_PROPOSAL_IDS,
     _MAX_LLM_PROPOSAL_CANDIDATES as _MAX_LLM_PROPOSAL_CANDIDATES, _MAX_PROMPT_SCENE_BEATS as _MAX_PROMPT_SCENE_BEATS,
     _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS as _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS,
 )
 import json as json
-from app.rpg.session.narration_queue_runtime import (
+from app.apps.rpg.session.narration_queue_runtime import (
     _build_active_interaction_prompt_context as _build_active_interaction_prompt_context,
 )
-from app.rpg.ai.conversation_threads import (
+from app.apps.rpg.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
 from typing import (
@@ -286,7 +286,7 @@ def process_semantic_state_change_proposals(
     runtime_state: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
 
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _log_interaction_trace as _log_interaction_trace,
     )
 
@@ -397,7 +397,7 @@ def _build_semantic_state_change_prompt_contract(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
 ) -> str:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _log_interaction_trace as _log_interaction_trace,
     )
 
@@ -849,11 +849,11 @@ def _active_combat_utility_kind(
     semantic_action_record: dict[str, Any],
     player_input: str,
 ) -> str:
-    from app.rpg.session.combat_intent import (
+    from app.apps.rpg.session.combat_intent import (
         _extract_active_combat_state_for_turn as _extract_active_combat_state_for_turn,
     )
 
-    from app.rpg.session.combat_turn_actions import (
+    from app.apps.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
 

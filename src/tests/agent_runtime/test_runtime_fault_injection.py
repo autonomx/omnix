@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.acceptance import evaluate_acceptance
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.acceptance import evaluate_acceptance
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSpec,
     EvidencePolicy,
@@ -15,18 +15,18 @@ from app.agent_runtime.contracts import (
     EvidenceRequirement,
     ModelRef,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     build_evidence_receipt,
     evaluate_evidence_set,
     validate_required_evidence_capabilities,
 )
-from app.agent_runtime.semantic_classifier import classify_semantic_intent_safely
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.semantic_classifier import classify_semantic_intent_safely
+from app.platform.agent_runtime.service import AgentRunService
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 class _ExplodingClassifier:
@@ -85,8 +85,8 @@ def test_evidence_provider_timeout_produces_no_receipt() -> None:
     ["missing_connection", "tool_disabled", "permission_denied", "rate_limited"],
 )
 def test_connector_preflight_denial_fails_closed(monkeypatch, reason: str) -> None:
-    from app.assistant_tools import gate
-    from app.assistant_tools.models import AssistantToolReviewDecision
+    from app.platform.assistant_tools import gate
+    from app.platform.assistant_tools.models import AssistantToolReviewDecision
 
     monkeypatch.setattr(
         gate,

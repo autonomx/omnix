@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import workspace_dependencies
-from app.agent_runtime.workspace_dependencies import WorkspaceDependencyError, prepare_project_dependencies
+from app.platform.agent_runtime import workspace_dependencies
+from app.platform.agent_runtime.workspace_dependencies import WorkspaceDependencyError, prepare_project_dependencies
 
 
 def _node_project(root: Path) -> None:

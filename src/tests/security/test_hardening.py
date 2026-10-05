@@ -12,7 +12,7 @@ from app.security.url_policy import UrlPolicyError, check_outbound_url
 
 @pytest.fixture(scope="module")
 def client():
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
@@ -62,7 +62,7 @@ def _counter(name: str, label: str) -> float:
 
 
 def test_login_attempts_are_rate_limited() -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     before = _counter("omnix_rate_limit_rejections_total", 'limit="login"')
     fresh = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
@@ -106,7 +106,7 @@ def test_refused_sign_in_is_counted_by_reason(client) -> None:
 
 
 def test_approval_calls_are_rate_limited(monkeypatch) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     monkeypatch.setenv("OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE", "2")
     fresh = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"},
@@ -117,7 +117,7 @@ def test_approval_calls_are_rate_limited(monkeypatch) -> None:
 
 @pytest.mark.parametrize("environment,status", [("development", 200), ("production", 403)])
 def test_api_docs_need_admin_docs_outside_development(monkeypatch, environment, status) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from tests.support.auth import FakeAuthenticator
 
     monkeypatch.setenv("OMNIX_ENV", environment)

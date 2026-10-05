@@ -11,7 +11,7 @@ from .models import MarketBar
 from .providers.alpaca_iex_status import AlpacaIexStatusCache, default_alpaca_iex_status_cache
 from .research.fact_repository import TradingFactRepository, default_fact_repository
 from .research.repository import TradingResearchRepository, default_research_repository
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 _SCHEMA_VERSION = "v2-prospective-signal-features-2"

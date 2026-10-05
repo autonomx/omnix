@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
-from app.agent_runtime.coding_quality import compile_task_engineering_contract
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
-from app.agent_runtime.planning import (
+from app.platform.agent_runtime.coding_quality import compile_task_engineering_contract
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
+from app.platform.agent_runtime.planning import (
     build_inspection_bundle,
     build_plan_authority,
     capture_planning_baseline,
@@ -15,7 +15,7 @@ from app.agent_runtime.planning import (
     plan_conformance_failures,
     plan_gate_failures,
 )
-from app.agent_runtime.planning_contracts import (
+from app.platform.agent_runtime.planning_contracts import (
     ImplementationPlanRevision,
     ImplementationPlanSubmission,
     PlanImpactDisposition,

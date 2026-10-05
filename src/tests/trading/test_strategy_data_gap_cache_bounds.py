@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.trading import strategy_ai_shadow_monitor as monitor
+from app.apps.trading import strategy_ai_shadow_monitor as monitor
 
 
 def test_data_gap_heartbeat_cache_is_bounded_expiring_and_invalidatable(monkeypatch) -> None:

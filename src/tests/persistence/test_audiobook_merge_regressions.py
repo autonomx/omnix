@@ -8,10 +8,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.audiobook.service import AudiobookService
-from app.audiobook.render_planner import load_chapter_units
-from app.audiobook.render_service import run_preview_once
-from app.audiobook.worker import run_ingest_once
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.render_planner import load_chapter_units
+from app.apps.audiobook.render_service import run_preview_once
+from app.apps.audiobook.worker import run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -28,8 +28,8 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def pipeline(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_structure_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -123,8 +123,8 @@ def test_export_ownership_backfill_allows_cancel_and_project_deletion(pipeline):
 
 def test_long_span_audition_uses_selected_voice_and_returns_all_segments(pipeline, monkeypatch, tmp_path):
     database, context, blobs, service = pipeline
-    monkeypatch.setattr("app.audiobook.service.assert_model_revision", lambda *args: None)
-    monkeypatch.setattr("app.audiobook.render_service.assert_model_revision", lambda *args: None)
+    monkeypatch.setattr("app.apps.audiobook.service.assert_model_revision", lambda *args: None)
+    monkeypatch.setattr("app.apps.audiobook.render_service.assert_model_revision", lambda *args: None)
     project_id = service.create_project(context, title="Full span audition")["id"]
     service.submit_source(context, project_id=project_id, source_format="txt",
                           content=("A long sentence for the audition. " * 40).encode(), filename="long.txt")
@@ -141,8 +141,8 @@ def test_long_span_audition_uses_selected_voice_and_returns_all_segments(pipelin
         reference = tmp_path / f"{name}.wav"
         reference.write_bytes(name.encode())
         profiles.append(SimpleNamespace(id=f"voice-cloning:{name}", storage_path=str(reference), metadata={}))
-    monkeypatch.setattr("app.audiobook.service.discover_canonical_voice_clone_assets", lambda: profiles)
-    monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: profiles)
+    monkeypatch.setattr("app.apps.audiobook.service.discover_canonical_voice_clone_assets", lambda: profiles)
+    monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: profiles)
     service.assign_voice(context, project_id=project_id, speaker_id=narrator_id,
                           voice_profile_id="voice-cloning:saved")
     with unit_of_work(database) as work:
@@ -163,7 +163,7 @@ def test_long_span_audition_uses_selected_voice_and_returns_all_segments(pipelin
             writer.writeframes(b"\x01\x00" * 160)
         return [{"success": True, "audio": base64.b64encode(buffer.getvalue()).decode()}]
 
-    monkeypatch.setattr("app.audiobook.render_service.get_tts_provider",
+    monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider",
                         lambda *args: SimpleNamespace(generate_audio_batch=generate))
     for _ in range(2):  # Second audition must reuse every cached segment.
         audition = service.start_preview(context, project_id=project_id, chapter_id=chapter_id,

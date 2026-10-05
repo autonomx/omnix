@@ -39,18 +39,18 @@ from typing import Literal
 
 import pytest
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import ActiveObjective
-from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.evidence import compile_task_authority
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.active_objective import ActiveObjective
+from app.platform.agent_runtime.chat_bridge import route_typed_chat_turn
+from app.platform.agent_runtime.evidence import compile_task_authority
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticTask,
 )
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
-from app.agent_runtime.turn_plan import TurnPlan, compile_turn_plan
+from app.platform.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.platform.agent_runtime.turn_plan import TurnPlan, compile_turn_plan
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 

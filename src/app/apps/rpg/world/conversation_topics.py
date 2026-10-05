@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.location_registry import current_location_id, get_location
+from app.apps.rpg.world.location_registry import current_location_id, get_location
 
 
 def _safe_str(value: Any) -> str:

@@ -5,16 +5,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.historical_gapper_reconstruction import HistoricalUniverseReconstruction
-from app.trading.research.adapters.generic_web import GenericWebAdapter
-from app.trading.research.contracts import IssuerIdentity
-from app.trading.research.runtime_policy import (
+from app.apps.trading.historical_gapper_reconstruction import HistoricalUniverseReconstruction
+from app.apps.trading.research.adapters.generic_web import GenericWebAdapter
+from app.apps.trading.research.contracts import IssuerIdentity
+from app.apps.trading.research.runtime_policy import (
     ExternalWebSearchForbiddenError,
     external_web_search_allowed,
     forbid_external_web_search_scope,
 )
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_range_backtest import StrategyRangeBacktestRequest, run_strategy_range_backtest
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_range_backtest import StrategyRangeBacktestRequest, run_strategy_range_backtest
 
 
 class _CountingSearchService:

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.rpg import performance_trace
-from app.rpg.performance_trace import (
+from app.apps.rpg import performance_trace
+from app.apps.rpg.performance_trace import (
     build_traced_json_response,
     current_rpg_pipeline_trace,
     rpg_pipeline_span,

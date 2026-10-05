@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.strategy_discovery_replay import (
+from app.apps.trading.strategy_discovery_replay import (
     DiscoveryOpportunityLabel,
     DiscoveryReplayObservation,
     replay_dynamic_discovery,
 )
-from app.trading.strategy_dynamic_discovery import (
+from app.apps.trading.strategy_dynamic_discovery import (
     AttributionStage,
     CandidateLifecycleState,
     DiscoveryEvent,
@@ -30,9 +30,9 @@ from app.trading.strategy_dynamic_discovery import (
     merge_discovery_event,
     tier_candidates,
 )
-from app.trading.strategy_dynamic_discovery_learning import build_daily_discovery_report
-from app.trading.strategy_interday_attribution import attribution_stage_for_strategy_event
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_dynamic_discovery_learning import build_daily_discovery_report
+from app.apps.trading.strategy_interday_attribution import attribution_stage_for_strategy_event
+from app.apps.trading.strategy_repository import StrategyEvent
 
 SESSION = date(2026, 9, 11)
 T0 = datetime(2026, 9, 11, 13, 5, tzinfo=timezone.utc)

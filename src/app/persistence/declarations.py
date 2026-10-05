@@ -120,7 +120,8 @@ def _declaration_files() -> list[tuple[str, Path]]:
     """Every module's ``declarations.py`` next to its ``feature.py``, then every retired module's tombstone."""
     app_root = Path(__file__).resolve().parents[1]
     found = sorted(
-        path for pattern in ("*/declarations.py", "*/*/declarations.py") for path in app_root.glob(pattern)
+        path for pattern in ("*/declarations.py", "*/*/declarations.py", "*/*/*/declarations.py")
+        for path in app_root.glob(pattern)
         if (path.parent / "feature.py").is_file()
     )
     found += tombstone_files()
@@ -138,7 +139,7 @@ def tombstone_files() -> list[Path]:
 
 
 def declaration_modules() -> tuple[str, ...]:
-    """Every module's declarations: ``app/<package>/declarations.py`` or one level deeper, next to a feature.py."""
+    """Every module's declarations: ``app/<tier>/<package>/declarations.py`` or one level deeper, next to a feature.py."""
     return tuple(name for name, _ in _declaration_files())
 
 

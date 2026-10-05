@@ -3,11 +3,11 @@ name: Avatar frame stabilization
 on:
   pull_request:
     paths:
-      - "src/app/characters/avatar_frame_stabilization.py"
-      - "src/app/characters/avatar_viseme_generation.py"
-      - "src/app/characters/live2d_avatar.py"
+      - "src/app/platform/characters/avatar_frame_stabilization.py"
+      - "src/app/platform/characters/avatar_viseme_generation.py"
+      - "src/app/platform/characters/live2d_avatar.py"
       - "src/app/assistant_context/__init__.py"
-      - "src/app/image/jobs.py"
+      - "src/app/platform/image/jobs.py"
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "src/tests/unit/characters/test_live2d_avatar_api.py"
@@ -54,14 +54,14 @@ jobs:
       - name: Lint avatar code
         run: |
           ruff check \
-            src/app/characters/avatar_frame_stabilization.py \
-            src/app/characters/avatar_viseme_generation.py \
-            src/app/characters/live2d_avatar.py \
+            src/app/platform/characters/avatar_frame_stabilization.py \
+            src/app/platform/characters/avatar_viseme_generation.py \
+            src/app/platform/characters/live2d_avatar.py \
             src/tests/unit/characters/test_avatar_frame_stabilization.py \
             src/tests/unit/characters/test_avatar_viseme_generation.py \
             src/tests/unit/characters/test_live2d_avatar_api.py
       - name: Compile image-job integration
-        run: python -m py_compile src/app/image/jobs.py
+        run: python -m py_compile src/app/platform/image/jobs.py
       - name: Verify avatar backend behavior
         run: >-
           pytest -q

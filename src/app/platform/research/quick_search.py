@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from app.conversation.contracts import AssistantContextItem
-from app.research.web_search import WebSearchClient
+from app.platform.research.web_search import WebSearchClient
 
 from .cache import ResearchCacheStore
 from .contracts import ResearchSource, ResearchSourceSnapshot

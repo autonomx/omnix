@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat import generation_jobs as jobs
+from app.platform.chat import generation_jobs as jobs
 from app.observability.logging import (
     RequestContextMiddleware,
     configure_logging,
@@ -108,7 +108,7 @@ def test_context_nests_and_user_ids_are_hashed(captured) -> None:
 
 
 def test_the_gateway_installs_the_request_context_outermost() -> None:
-    from app.gateway.app_factory import _install_request_middleware
+    from app.composition.gateway.app_factory import _install_request_middleware
 
     gateway = FastAPI()
     _install_request_middleware(gateway, auth_service=object())

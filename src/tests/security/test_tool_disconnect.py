@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_tools import connections
-from app.assistant_tools.config_store import default_assistant_tools_config
-from app.assistant_tools.credentials import AssistantToolCredentialRecord, credential_for_tool, upsert_tool_credential
+from app.platform.assistant_tools import connections
+from app.platform.assistant_tools.config_store import default_assistant_tools_config
+from app.platform.assistant_tools.credentials import AssistantToolCredentialRecord, credential_for_tool, upsert_tool_credential
 
 
 @pytest.fixture

@@ -9,9 +9,9 @@ from typing import Any
 import httpx
 
 from app.security.provider_secret_store import load_trading_provider_secrets
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import COINMARKETCAP_POLICY, bindings_for_instrument, instrument_by_id
-from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import COINMARKETCAP_POLICY, bindings_for_instrument, instrument_by_id
+from app.apps.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .base import ProviderAdapter
 from .bar_semantics import is_final_bar

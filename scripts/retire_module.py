@@ -64,12 +64,18 @@ def _log(message: str) -> None:
 
 
 def module_package(module_id: str) -> str:
-    """The module's package below ``app``, e.g. ``recipe_probe`` or ``rpg.hermes``."""
+    """The module's package below ``app``, e.g. ``apps.recipe_probe`` or ``apps.rpg.hermes``."""
     from app.runtime.feature_catalog import FEATURE_CATALOG
 
     if module_id not in FEATURE_CATALOG:
         raise RetirementError(f"{module_id!r} is not a catalog module")
     return FEATURE_CATALOG[module_id].split(":", 1)[0].removeprefix("app.").removesuffix(".feature")
+
+
+def unit_name(package: str) -> str:
+    """The package without its tier folder (PA-5.3), as tests and retired folders name it: ``rpg_hermes``."""
+    tier, _, rest = package.partition(".")
+    return (rest if tier in {"platform", "apps", "composition"} and rest else package).replace(".", "_")
 
 
 def dependents(module_id: str, package: str) -> list[str]:
@@ -86,7 +92,7 @@ def dependents(module_id: str, package: str) -> list[str]:
         if manifest.parent.name != module_id and re.search(rf"backendModules:\s*\[[^\]]*'{re.escape(module_id)}'",
                                                            manifest.read_text(encoding="utf-8")):
             found.append(f"web feature {manifest.parent.name} lists it in backendModules")
-    own = (APP.joinpath(*package.split(".")), ROOT / "src" / "tests" / package.replace(".", "_"))
+    own = (APP.joinpath(*package.split(".")), ROOT / "src" / "tests" / unit_name(package))
     importer = re.compile(rf"^\s*(?:from|import)\s+app\.{re.escape(package)}\b", re.M)
     for path in sorted([*APP.glob("**/*.py"), *(ROOT / "src" / "tests").glob("**/*.py")]):
         if not any(path.is_relative_to(folder) for folder in own):
@@ -255,7 +261,7 @@ def _update_conformance_baseline(module_id: str) -> None:
 def retire_files(module_id: str, described: dict[str, Any]) -> dict[str, list[Path]]:
     package = described["package"]
     source = APP.joinpath(*package.split("."))
-    folder = RETIRED / package.replace(".", "_")
+    folder = RETIRED / unit_name(package)
     if folder.exists():
         raise RetirementError(f"{folder.relative_to(ROOT).as_posix()} already exists")
     edited = _remove_registration(module_id)
@@ -266,7 +272,7 @@ def retire_files(module_id: str, described: dict[str, Any]) -> dict[str, list[Pa
         written.append(folder / "migrations")
     written[0].write_text(tombstone_source(module_id, described, datetime.now(timezone.utc).date().isoformat()),
                           encoding="utf-8", newline="\n")
-    removed = [path for path in (source, ROOT / "src" / "tests" / package.replace(".", "_"),
+    removed = [path for path in (source, ROOT / "src" / "tests" / unit_name(package),
                                  WEB / "src" / "features" / module_id) if path.is_dir()]
     for path in removed:
         shutil.rmtree(path)

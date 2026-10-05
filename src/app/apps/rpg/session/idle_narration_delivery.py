@@ -1,26 +1,26 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.rpg.session.session_runtime_store import (
+from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
 )
-from app.rpg.session.combat_intent import (
+from app.apps.rpg.session.combat_intent import (
     _build_world_advance_recap as _build_world_advance_recap, _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
 )
-from app.rpg.session.state_normalization import (
+from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.rpg.session.ambient_builder import (
+from app.apps.rpg.session.ambient_builder import (
     _MAX_IDLE_TICKS_PER_REQUEST as _MAX_IDLE_TICKS_PER_REQUEST, _MAX_RESUME_CATCHUP_TICKS as _MAX_RESUME_CATCHUP_TICKS,
 )
-from app.rpg.session.idle_resume_runtime import (
+from app.apps.rpg.session.idle_resume_runtime import (
     _apply_idle_tick_to_session as _apply_idle_tick_to_session, _build_resume_fallback_recap as _build_resume_fallback_recap,
     _recap_has_renderable_content as _recap_has_renderable_content,
 )
-from app.rpg.ai.world_scene_narrator_ambient import (
+from app.apps.rpg.ai.world_scene_narrator_ambient import (
     narrate_ambient_update as narrate_ambient_update,
 )
-from app.rpg.session.ambient_policy import (
+from app.apps.rpg.session.ambient_policy import (
     classify_ambient_delivery as classify_ambient_delivery, record_interrupt as record_interrupt,
 )
 from typing import (
@@ -33,7 +33,7 @@ from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
 from app.runtime.clock import TurnContext as _TurnContext
 from app.runtime.clock import bind_turn_context as _bind_turn_context
-from app.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
+from app.apps.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
 
 def _make_initiative_update_from_candidate(
     candidate: dict[str, Any],
@@ -128,7 +128,7 @@ def _apply_ambient_narration_and_delivery(
 
     llm_gateway = None
     try:
-        from app.rpg.provider_access import get_provider
+        from app.apps.rpg.provider_access import get_provider
         llm_gateway = get_provider()
     except Exception:
         llm_gateway = None

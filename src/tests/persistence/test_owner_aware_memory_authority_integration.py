@@ -58,7 +58,7 @@ from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.owner_defaults import (
+from app.platform.assistant_memory.owner_defaults import (
     default_memory_service,
     reset_default_memory_service,
 )
@@ -125,7 +125,7 @@ from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
 from app.conversation.memory_contracts import MemoryScopeContext
-from app.assistant_memory.owner_defaults import default_memory_service
+from app.platform.assistant_memory.owner_defaults import default_memory_service
 
 system = MemoryScopeContext(
     profile_id="profile:default",

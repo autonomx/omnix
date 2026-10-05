@@ -5,19 +5,19 @@ from decimal import Decimal
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.trading.market_evidence import (
+from app.apps.trading.market_evidence import (
     PremarketLiquidityEvidence,
     YAHOO_HARDENED_EVIDENCE_POLICY_VERSION,
     YAHOO_RELATIVE_VOLUME,
     evidence_authorizes_feature,
     premarket_evidence_feature_compatible,
 )
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.market_data_recovery import reconcile_recovery
-from app.trading.service import TradingMarketDataService
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.evidence_storage import MemoryEvidenceBackend
-from app.trading.yahoo_evidence import YahooEvidenceStore
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.market_data_recovery import reconcile_recovery
+from app.apps.trading.service import TradingMarketDataService
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.evidence_storage import MemoryEvidenceBackend
+from app.apps.trading.yahoo_evidence import YahooEvidenceStore
 
 
 ET = ZoneInfo("America/New_York")

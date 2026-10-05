@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from app.rpg.ai.memory_narration_grounding import sanitize_memory_narration_payload
-from app.rpg.ai.world_scene_survival_grounding_bridge import (
+from app.apps.rpg.ai.memory_narration_grounding import sanitize_memory_narration_payload
+from app.apps.rpg.ai.world_scene_survival_grounding_bridge import (
     _merge_bs1_sanitized_payload,
 )
 
-from app.rpg.ai.world_scene_narrator_service_grounding import (
+from app.apps.rpg.ai.world_scene_narrator_service_grounding import (
     annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
     Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
     select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,

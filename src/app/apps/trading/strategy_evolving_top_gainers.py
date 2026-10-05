@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .models import MarketBar
 from . import strategy_leader_momentum_continuation as leader
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 class EvolvingTopGainersConfig(BaseModel):

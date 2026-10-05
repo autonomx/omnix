@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 import pytest
 
-from app.image import image_http_client
+from app.platform.image import image_http_client
 from app.providers import tts_http_client
 from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
 from app.jobs import provider_control

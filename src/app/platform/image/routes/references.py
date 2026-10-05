@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.assets import AssetListResponse, PublicAssetListResponse, PublicAssetRecord
 from app.runtime.contracts import AssetService
-from app.image.reference_assets import (
+from app.platform.image.reference_assets import (
     ImageReferenceError,
     list_image_reference_assets,
     save_image_reference_upload,

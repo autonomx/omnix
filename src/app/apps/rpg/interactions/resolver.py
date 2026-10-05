@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from app.rpg.interactions.inventory import add_item_to_player_inventory, player_has_item
-from app.rpg.interactions.objects import (
+from app.apps.rpg.interactions.inventory import add_item_to_player_inventory, player_has_item
+from app.apps.rpg.interactions.objects import (
     find_object_id_from_text,
     item_id_from_text,
     set_world_object,

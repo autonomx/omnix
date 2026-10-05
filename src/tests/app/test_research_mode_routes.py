@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.chat import ChatSessionStore, CreateChatSessionRequest
-import app.chat.research_mode_routes as routes
-import app.chat.character_store as character_store
+from app.platform.chat import ChatSessionStore, CreateChatSessionRequest
+import app.platform.chat.research_mode_routes as routes
+import app.platform.chat.character_store as character_store
 
 
 class _Segment:

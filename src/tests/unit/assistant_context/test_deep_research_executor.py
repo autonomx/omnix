@@ -3,20 +3,20 @@ from __future__ import annotations
 from collections import deque
 
 from app.conversation.contracts import AssistantContextItem
-from app.research.contracts import ResearchSource, ResearchSourceSnapshot
-from app.research.executor import (
+from app.platform.research.contracts import ResearchSource, ResearchSourceSnapshot
+from app.platform.research.executor import (
     DeepResearchExecutor,
     ResearchExecutionCheckpoint,
     detect_conflicts,
 )
-from app.research.jobs import DeepResearchJobInput
-from app.research.planner import (
+from app.platform.research.jobs import DeepResearchJobInput
+from app.platform.research.planner import (
     ResearchOperation,
     ResearchPlan,
     ResearchPlannerDecision,
 )
-from app.research.quick_search import QuickSearchExecution
-from app.research.source_store import ResearchSourceStore
+from app.platform.research.quick_search import QuickSearchExecution
+from app.platform.research.source_store import ResearchSourceStore
 
 
 class FixedPlanner:

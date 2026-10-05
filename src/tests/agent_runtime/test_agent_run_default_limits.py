@@ -1,8 +1,8 @@
 """Default agent run limits come from the settings (owner decision)."""
 from __future__ import annotations
 
-from app.agent_runtime import budget
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
+from app.platform.agent_runtime import budget
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
 from app.settings.profile_experience import AgentRunSettingsProfile
 from app.settings.profile_models import SettingsProfile
 

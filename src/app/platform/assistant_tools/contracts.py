@@ -6,14 +6,14 @@ from typing import Any, Protocol
 
 from app.runtime.ports import Port
 
-from app.assistant_tools.kasa_plan import (
+from app.platform.assistant_tools.kasa_plan import (
     KASA_READ_TOOLS,
     first_pending_kasa_write,
     is_kasa_tool_name,
     kasa_request_from_tool_call,
 )
-from app.assistant_tools.live_agent_proposals import live_agent_planner_context, live_agent_tool_proposals
-from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from app.platform.assistant_tools.live_agent_proposals import live_agent_planner_context, live_agent_tool_proposals
+from app.platform.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 
 __all__ = [
     "AGENT_RUN_WORKSPACES",
@@ -54,4 +54,4 @@ def __getattr__(name: str) -> Any:
     module = _LAZY_EXPORTS.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    return getattr(import_module(f"app.assistant_tools.{module}"), name)
+    return getattr(import_module(f"app.platform.assistant_tools.{module}"), name)

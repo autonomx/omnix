@@ -17,7 +17,7 @@ deterministic distractors. Three paths answer every question:
   of day, top 12);
 - ``v2_words``: ``UnifiedMemoryV2Retriever`` by words only (top 12 within the same budget);
 - ``v2``: the same with VoiceMem's embedding retrieval (multilingual-e5-small),
-  when the model is installed (``python -m app.assistant_memory.v2.embeddings download``).
+  when the model is installed (``python -m app.platform.assistant_memory.v2.embeddings download``).
 
 Besides the 24 questions, 8 "hard" paraphrases share no meaningful word with
 their memory.
@@ -136,15 +136,15 @@ def _scope_context():
 
 
 def run_v1_chat(records, question: str) -> tuple[list[str], int]:
-    from app.assistant_memory.selection import estimate_memory_tokens, select_memory_records
+    from app.platform.assistant_memory.selection import estimate_memory_tokens, select_memory_records
 
     selection = select_memory_records(records, _scope_context(), token_budget=TOKEN_BUDGET)
     return [record.id for record in selection.records], sum(estimate_memory_tokens(r.content) for r in selection.records)
 
 
 def run_v1_companion(records, question: str) -> tuple[list[str], int]:
-    from app.assistant_memory.selection import estimate_memory_tokens
-    from app.assistant_memory.temporal_retrieval import rank_temporal_records
+    from app.platform.assistant_memory.selection import estimate_memory_tokens
+    from app.platform.assistant_memory.temporal_retrieval import rank_temporal_records
 
     items = rank_temporal_records(records, question, now=NOW, timezone_name="UTC", limit=TOP_K)
     return [item.memory_id for item in items], sum(estimate_memory_tokens(item.record.content) for item in items)
@@ -152,14 +152,14 @@ def run_v1_companion(records, question: str) -> tuple[list[str], int]:
 
 class V2Store:
     def __init__(self, database) -> None:
-        from app.assistant_memory.v2.convergence import PostgresMemoryV2DerivedCoordinator
-        from app.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
-        from app.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
-        from app.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
-        from app.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
-        from app.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
-        from app.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
-        from app.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
+        from app.platform.assistant_memory.v2.convergence import PostgresMemoryV2DerivedCoordinator
+        from app.platform.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
+        from app.platform.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
+        from app.platform.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
+        from app.platform.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
+        from app.platform.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
+        from app.platform.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
+        from app.platform.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
 
         self.database = database
         self.observations = PostgresMemoryV2ObservationStore(database)
@@ -169,7 +169,7 @@ class V2Store:
         self.coordinator = PostgresMemoryV2DerivedCoordinator(
             database, observation_store=self.observations, graph_store=self.graph, derived_store=self.derived,
         )
-        from app.assistant_memory.v2.embedding_index import PostgresMemoryV2EmbeddingIndex
+        from app.platform.assistant_memory.v2.embedding_index import PostgresMemoryV2EmbeddingIndex
 
         self.embeddings = PostgresMemoryV2EmbeddingIndex(database)
         self.retriever = UnifiedMemoryV2Retriever(
@@ -188,8 +188,8 @@ class V2Store:
         )
 
     def load(self, principal_id: str, records) -> object:
-        from app.assistant_memory.v2.convergence import DerivedPlanPayload
-        from app.assistant_memory.v2.legacy_shadow import LegacyMemoryV2Importer, legacy_seed_projector
+        from app.platform.assistant_memory.v2.convergence import DerivedPlanPayload
+        from app.platform.assistant_memory.v2.legacy_shadow import LegacyMemoryV2Importer, legacy_seed_projector
 
         importer = LegacyMemoryV2Importer(self.observations)
         importer.import_records(principal_id=principal_id, records=records)
@@ -207,7 +207,7 @@ class V2Store:
         return space
 
     def ask(self, space, question: str, *, words_only: bool = False) -> tuple[list[str], int]:
-        from app.assistant_memory.v2.contracts import RetrievalQuery, VisibilityScope
+        from app.platform.assistant_memory.v2.contracts import RetrievalQuery, VisibilityScope
 
         retriever = self.words_retriever if words_only else self.retriever
         result = retriever.retrieve(RetrievalQuery(
@@ -279,7 +279,7 @@ def main() -> int:
     apply_migrations(database)
     v2 = V2Store(database)
     principals: list[str] = []
-    from app.assistant_memory.v2.embeddings import MODEL_ID, default_embedder
+    from app.platform.assistant_memory.v2.embeddings import MODEL_ID, default_embedder
 
     embedder = default_embedder()
     report: dict = {"token_budget": TOKEN_BUDGET, "top_k": TOP_K, "questions": len(TARGETS),

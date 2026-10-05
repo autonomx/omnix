@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_profile_dossiers import (
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_profile_dossiers import (
     ProfileDossierCompilationError,
     dossier_policy,
     profile_dossier_issues,
     profile_dossier_report,
 )
-from app.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
 
 
 class _Document:

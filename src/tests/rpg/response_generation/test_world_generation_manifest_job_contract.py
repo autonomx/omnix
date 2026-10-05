@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.worlds.generation_jobs import (
+from app.apps.rpg.worlds.generation_jobs import (
     WorldTopicGenerationSettings,
     plan_ready_topic_jobs,
 )

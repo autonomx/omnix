@@ -3,9 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_evolution_state import get_npc_evolution
-from app.rpg.world.npc_reputation_state import get_npc_reputation
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_evolution_state import get_npc_evolution
+from app.apps.rpg.world.npc_reputation_state import get_npc_reputation
 
 
 def _safe_str(value: Any) -> str:

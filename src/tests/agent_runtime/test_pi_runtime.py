@@ -6,9 +6,9 @@ from io import StringIO
 from pathlib import Path
 import threading
 
-from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.pi_runtime import PiAgentRuntime, PiRpcSession, normalize_pi_event, pi_rpc_argv
-from app.agent_runtime.pi_runtime_core import _assistant_text_delta
+from app.platform.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.pi_runtime import PiAgentRuntime, PiRpcSession, normalize_pi_event, pi_rpc_argv
+from app.platform.agent_runtime.pi_runtime_core import _assistant_text_delta
 
 
 def test_pi_rpc_command_is_headless_and_guarded(tmp_path: Path) -> None:
@@ -655,7 +655,7 @@ def test_pi_stdout_reader_recovers_terminal_text_from_deltas() -> None:
 
 
 def test_tool_events_keep_revision_that_authorized_the_tool_call() -> None:
-    from app.agent_runtime.pi_runtime import normalize_pi_event
+    from app.platform.agent_runtime.pi_runtime import normalize_pi_event
 
     started = normalize_pi_event(
         "run-1",

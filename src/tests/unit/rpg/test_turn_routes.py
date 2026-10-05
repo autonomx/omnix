@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from tests.support.routers import include_router_registrar
 
 
@@ -20,7 +20,7 @@ def _turn_client() -> TestClient:
 
 
 def _record_apply_turn(monkeypatch) -> list[str]:
-    from app.rpg.session import interactive_first_call_runtime
+    from app.apps.rpg.session import interactive_first_call_runtime
 
     calls: list[str] = []
 
@@ -33,7 +33,7 @@ def _record_apply_turn(monkeypatch) -> list[str]:
 
 
 def test_turn_for_missing_session_is_rejected_before_any_turn_is_applied(monkeypatch) -> None:
-    from app.rpg.session import service
+    from app.apps.rpg.session import service
 
     calls = _record_apply_turn(monkeypatch)
     monkeypatch.setattr(service, "load_session", lambda session_id: None)
@@ -50,7 +50,7 @@ def test_turn_stages_run_off_the_event_loop(monkeypatch) -> None:
     # PostgreSQL or call a model; on the loop they stall every other request.
     import threading
 
-    from app.rpg.session import service
+    from app.apps.rpg.session import service
 
     threads: dict[str, int] = {}
 
@@ -89,11 +89,11 @@ def test_gateway_composition_uses_the_explicit_turn_pipeline_without_installers(
     # A fresh interpreter proves composition, not test import order, wires the pipeline.
     repo_root = Path(__file__).resolve().parents[4]
     script = """
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 create_gateway_app()
-from app.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
-from app.rpg.session import interactive_first_call_runtime as runtime
-from app.rpg.session.pipeline import TURN_PIPELINE
+from app.apps.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
+from app.apps.rpg.session import interactive_first_call_runtime as runtime
+from app.apps.rpg.session.pipeline import TURN_PIPELINE
 assert callable(execute_turn_with_job_mirror)
 assert [stage.name for stage in TURN_PIPELINE]
 assert not hasattr(runtime, '_omnix_rpg_turn_job_mirror_installed')

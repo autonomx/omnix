@@ -6,9 +6,9 @@ workflows including: recording phase, replay phase, and snapshot integration.
 
 import unittest
 
-from app.rpg.core.determinism import DeterminismConfig
-from app.rpg.core.effects import EffectManager, EffectPolicy
-from app.rpg.core.host_runtime_boundary import (
+from app.apps.rpg.core.determinism import DeterminismConfig
+from app.apps.rpg.core.effects import EffectManager, EffectPolicy
+from app.apps.rpg.core.host_runtime_boundary import (
     HostCallSpec,
     HostRuntimeGateway,
     HostRuntimeRecord,

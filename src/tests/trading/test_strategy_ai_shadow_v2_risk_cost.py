@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
-from app.trading.strategy_ai_shadow_v2_monitor import deterministic_risk_geometry
-from app.trading.strategy_ai_shadow_v2_hardening import _OBSERVED_SPREAD_BPS
+from app.apps.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
+from app.apps.trading.strategy_ai_shadow_v2_monitor import deterministic_risk_geometry
+from app.apps.trading.strategy_ai_shadow_v2_hardening import _OBSERVED_SPREAD_BPS
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

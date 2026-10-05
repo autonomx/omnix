@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_structured_recovery import recovery_review
-from app.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_structured_recovery import recovery_review
+from app.apps.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
 
 
 class StructuredRecoveryReviewMixin:

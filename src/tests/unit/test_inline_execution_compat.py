@@ -1,7 +1,7 @@
 from app.jobs.inline_execution import mark_inline_execution
 from app.jobs.models import CreateJobRequest, JobProgress, JobStatus, ResourceClass
 from app.persistence.job_store import PostgresJobStoreAdapter
-from app.chat.persistence.job_store import PostgresJobStoreAdapter as RuntimePostgresJobStoreAdapter
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter as RuntimePostgresJobStoreAdapter
 
 
 def test_mark_inline_execution_preserves_existing_compatibility_flags() -> None:

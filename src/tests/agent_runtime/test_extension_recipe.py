@@ -5,17 +5,17 @@ from types import MappingProxyType
 
 import pytest
 
-from app.agent_runtime import profiles
-from app.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities
-from app.assistant_tools import AssistantToolRequest, review_assistant_tool_request
-from app.assistant_tools import executor
-from app.assistant_tools.config_store import (
+from app.platform.agent_runtime import profiles
+from app.platform.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities
+from app.platform.assistant_tools import AssistantToolRequest, review_assistant_tool_request
+from app.platform.assistant_tools import executor
+from app.platform.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
 )
-from app.assistant_tools.models import AssistantToolResult
-from app.assistant_tools.registry import default_assistant_tools
+from app.platform.assistant_tools.models import AssistantToolResult
+from app.platform.assistant_tools.registry import default_assistant_tools
 from app.capabilities import registry
 
 

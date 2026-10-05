@@ -3,14 +3,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat.provider_metrics import merge_provider_response_metrics
-from app.live_voice.llm import stream as live_voice_stream
-from app.live_voice.llm.metrics import (
+from app.platform.chat.provider_metrics import merge_provider_response_metrics
+from app.platform.live_voice.llm import stream as live_voice_stream
+from app.platform.live_voice.llm.metrics import (
     is_lmstudio,
     stream_lmstudio_reply,
 )
-from app.live_voice.llm.stream import LowLatencyTextChunker
-from app.live_voice.llm.lmstudio_model_resolution import (
+from app.platform.live_voice.llm.stream import LowLatencyTextChunker
+from app.platform.live_voice.llm.lmstudio_model_resolution import (
     chat_completion_with_loaded_model,
 )
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
@@ -238,7 +238,7 @@ def test_default_provider_is_detected_as_lmstudio(monkeypatch) -> None:
 
 
 def test_lmstudio_metrics_use_feature_owned_model_resolution(monkeypatch) -> None:
-    from app.live_voice.llm import lmstudio_model_resolution, metrics
+    from app.platform.live_voice.llm import lmstudio_model_resolution, metrics
 
     provider = _provider()
     calls: list[tuple[Any, list[Any], dict[str, Any]]] = []
@@ -394,8 +394,8 @@ def test_lmstudio_prompt_stream_reconstructs_split_provider_deltas(monkeypatch) 
 
 
 def test_prompt_store_stream_composes_lmstudio_metrics_directly(monkeypatch) -> None:
-    from app.chat import prompt_store
-    from app.live_voice.llm import metrics as llm_metrics
+    from app.platform.chat import prompt_store
+    from app.platform.live_voice.llm import metrics as llm_metrics
 
     provider = SimpleNamespace(provider_name="lmstudio")
     monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
@@ -412,7 +412,7 @@ def test_prompt_store_stream_composes_lmstudio_metrics_directly(monkeypatch) -> 
 
     monkeypatch.setattr(llm_metrics, "stream_lmstudio_reply", stream_metrics)
 
-    from app.live_voice.chat_integration import create_live_voice_chat_port
+    from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 
     store = prompt_store.ChatSessionStore(
         live_voice_chat_port=create_live_voice_chat_port(),
@@ -433,8 +433,8 @@ def test_prompt_store_stream_composes_lmstudio_metrics_directly(monkeypatch) -> 
 
 
 def test_prompt_store_generation_composes_lmstudio_metrics_directly(monkeypatch) -> None:
-    from app.chat import prompt_store
-    from app.live_voice.llm import metrics as llm_metrics
+    from app.platform.chat import prompt_store
+    from app.platform.live_voice.llm import metrics as llm_metrics
 
     provider = SimpleNamespace(provider_name="lmstudio")
     monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
@@ -446,7 +446,7 @@ def test_prompt_store_generation_composes_lmstudio_metrics_directly(monkeypatch)
 
     monkeypatch.setattr(llm_metrics, "generate_lmstudio_reply", generate_metrics)
 
-    from app.live_voice.chat_integration import create_live_voice_chat_port
+    from app.platform.live_voice.chat_integration import create_live_voice_chat_port
 
     result = prompt_store.ChatSessionStore._generate_provider_reply(
         SimpleNamespace(live_voice_chat_port=create_live_voice_chat_port()),

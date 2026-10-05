@@ -50,7 +50,7 @@ def test_status_classes_are_bounded() -> None:
 
 
 def test_the_gateway_serves_the_catalog_to_metrics_admins(tmp_path: Path, monkeypatch) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from app.persistence import runtime
     from tests.support.in_memory_jobs import InMemoryJobStore
 
@@ -171,7 +171,7 @@ def test_scheduled_task_metrics_come_from_the_scheduler() -> None:
 
 
 def test_live_speech_turn_latency_is_measured_from_the_end_of_speech(monkeypatch) -> None:
-    from app.live_speech import metrics as speech
+    from app.platform.live_speech import metrics as speech
 
     def histogram(stage: str) -> tuple[float, float]:
         lines = _text().splitlines()

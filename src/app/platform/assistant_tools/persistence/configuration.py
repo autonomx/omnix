@@ -10,7 +10,7 @@ from app.persistence.document_schemas import register_document_schema
 
 
 def load_assistant_tools_config(path: Path | None = None):
-    from app.assistant_tools.config_store import (
+    from app.platform.assistant_tools.config_store import (
         AssistantToolsConfigPayload,
         _merge_known_config,
         default_assistant_tools_config,
@@ -31,8 +31,8 @@ def load_assistant_tools_config(path: Path | None = None):
 
 
 def save_assistant_tools_config(payload: Any, path: Path | None = None):
-    from app.assistant_tools.config_store import _merge_known_config
-    from app.assistant_tools.credentials import delete_tool_credential
+    from app.platform.assistant_tools.config_store import _merge_known_config
+    from app.platform.assistant_tools.credentials import delete_tool_credential
 
     if path is not None:
         raise RuntimeError(
@@ -51,7 +51,7 @@ def save_assistant_tools_config(payload: Any, path: Path | None = None):
 
 
 def _register_document_schemas() -> None:
-    from app.assistant_tools.config_store import AssistantToolsConfigPayload
+    from app.platform.assistant_tools.config_store import AssistantToolsConfigPayload
 
     register_document_schema("assistant-tools", "configuration", AssistantToolsConfigPayload)
 

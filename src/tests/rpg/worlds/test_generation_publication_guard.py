@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds import generation_publication_guard as guard
+from app.apps.rpg.worlds import generation_publication_guard as guard
 
 
 class _GenerationRepository:

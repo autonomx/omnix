@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
+from app.apps.trading.streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
 
 T0 = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
 

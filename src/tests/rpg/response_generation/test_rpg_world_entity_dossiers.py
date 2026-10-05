@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.rpg.session.genesis.world_forge_dossiers import (
+from app.apps.rpg.session.genesis.world_forge_dossiers import (
     DOSSIER_SCHEMA_VERSION,
     dossier_prompt_contract,
     placeholder_section_title_count,
     project_entity_dossier,
     validate_entity_dossier,
 )
-from app.rpg.worlds.authoring_presentations import entity_card
-from app.rpg.worlds.dossier_authoring import _preserve_canonical_related_entity_ids
+from app.apps.rpg.worlds.authoring_presentations import entity_card
+from app.apps.rpg.worlds.dossier_authoring import _preserve_canonical_related_entity_ids
 
 
 def test_legacy_race_projects_to_multi_section_dossier_without_migration() -> None:

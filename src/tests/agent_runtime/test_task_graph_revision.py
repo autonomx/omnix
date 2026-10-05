@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.contracts import ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
     TaskNode,
     TaskNodeRunState,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_revision import (
+from app.platform.agent_runtime.task_graph_revision import (
     merge_task_graph_additive_revision,
     merge_task_graph_continuation,
     plan_graph_revision,

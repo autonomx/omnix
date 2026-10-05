@@ -3,20 +3,20 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import MarketBar
-from app.trading.strategy_ai_shadow_v2 import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_ai_shadow_v2 import (
     AI_SHADOW_V2_POLICY_VERSION,
     CatalystIntelligenceSnapshot,
     derive_catalyst_influence,
 )
-from app.trading.strategy_ai_shadow_v2_hardening import (
+from app.apps.trading.strategy_ai_shadow_v2_hardening import (
     _active_stop_price,
     _lift_metrics,
     _morning_snapshot,
     _sanitized_alpha_feature,
     _stop_was_breached,
 )
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

@@ -5,22 +5,22 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.assistant_memory.jobs import (
+from app.platform.assistant_memory.jobs import (
     MEMORY_SUGGEST_JOB_TYPE,
     MemorySuggestionJobInput,
     process_memory_suggestion_job,
 )
-from app.assistant_memory.owner_defaults import default_memory_service
-from app.chat.contracts import CHAT_MEMORY
+from app.platform.assistant_memory.owner_defaults import default_memory_service
+from app.platform.chat.contracts import CHAT_MEMORY
 from app.events.outbox_relay import OutboxConsumer
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import JobRecord, ResourceClass
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
-from app.assistant_memory.persistence.repository_specs import (
+from app.platform.assistant_memory.persistence.repository_specs import (
     ASSISTANT_MEMORY_REPOSITORY_SPECS,
 )
-from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 
 from .routes import register_assistant_memory_routes
 
@@ -70,7 +70,7 @@ def _router(context: FeatureContext) -> APIRouter:
     kwargs = {"chat_store_factory": lambda: services.chat}
     settings_service = getattr(services, "settings", None)
     if settings_service is not None:
-        from app.assistant_memory.persistence.settings_store import (
+        from app.platform.assistant_memory.persistence.settings_store import (
             SettingsServiceAssistantMemorySettingsStore,
         )
 

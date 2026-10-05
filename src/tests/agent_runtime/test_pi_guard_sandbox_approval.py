@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-GUARD = Path(__file__).resolve().parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts"
+GUARD = Path(__file__).resolve().parents[2] / "app" / "platform" / "agent_runtime" / "pi_guard_extension.ts"
 
 SCRIPT = """
 import { createServer } from "node:http";

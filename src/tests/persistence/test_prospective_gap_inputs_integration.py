@@ -11,7 +11,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.prospective_gap_inputs import HandoffConflict, ProspectiveGapInputs
+from app.apps.trading.prospective_gap_inputs import HandoffConflict, ProspectiveGapInputs
 from src.tests.trading.test_prospective_gap_end_to_end_runtime import _scheduler_handoff_fixture
 
 pytestmark = [

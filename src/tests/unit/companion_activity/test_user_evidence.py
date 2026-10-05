@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.companion_activity.user_evidence import user_activity_propositions
+from app.platform.companion_activity.user_evidence import user_activity_propositions
 
 NOW = datetime(2026, 9, 15, 13, 0, tzinfo=timezone.utc)
 

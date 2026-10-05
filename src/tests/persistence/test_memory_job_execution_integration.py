@@ -10,13 +10,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_memory import jobs
+from app.platform.assistant_memory import jobs
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobStatus, ResourceClass
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.chat.persistence.job_store import PostgresJobStoreAdapter
-from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
+from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.platform.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
 from app.persistence.unit_of_work import unit_of_work
 
 pytestmark = pytest.mark.skipif(
@@ -112,9 +112,9 @@ def test_concurrent_enqueue_uses_durable_identity_without_recent_job_scan(runtim
 @pytest.mark.parametrize("fail_completion", [False, True])
 def test_derived_candidate_and_job_result_commit_together(runtime, monkeypatch, fail_completion):
     database, store = runtime
-    from app.assistant_memory.owner_service import OwnerAwareMemoryService
-    from app.chat.models import ChatMessage, ChatSession
-    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+    from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
+    from app.platform.chat.models import ChatMessage, ChatSession
+    from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
     monkeypatch.setenv("OMNIX_COMPANION_ROLLOUT_STAGE", "review_required")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")

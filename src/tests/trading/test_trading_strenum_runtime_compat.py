@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-TRADING_INIT = Path("src/app/trading/__init__.py")
+TRADING_INIT = Path("src/app/apps/trading/__init__.py")
 
 
 def test_trading_package_does_not_patch_stdlib_enum() -> None:

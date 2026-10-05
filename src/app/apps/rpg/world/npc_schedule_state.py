@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 
 DEFAULT_NPC_SCHEDULES: Dict[str, List[Dict[str, Any]]] = {
     "npc:Bran": [

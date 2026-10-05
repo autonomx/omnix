@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.characters.live_conversation_profile import (
+from app.platform.characters.live_conversation_profile import (
     LiveConversationProfile,
     LiveConversationProfileEnvelope,
     LiveConversationProfileStore,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.acceptance import evaluate_acceptance
-from app.agent_runtime.contracts import AgentArtifact, AgentEvent, AgentRunSpec, ModelRef, SuccessCriterion
+from app.platform.agent_runtime.acceptance import evaluate_acceptance
+from app.platform.agent_runtime.contracts import AgentArtifact, AgentEvent, AgentRunSpec, ModelRef, SuccessCriterion
 
 
 def test_acceptance_requires_model_evidence_to_be_verified_by_omnix() -> None:
@@ -57,7 +57,7 @@ def test_mutating_coding_run_requires_successful_test_by_default() -> None:
 
 
 def test_explicit_required_command_must_succeed() -> None:
-    from app.agent_runtime.contracts import AcceptancePlan
+    from app.platform.agent_runtime.contracts import AcceptancePlan
 
     spec = AgentRunSpec(
         run_id="run-required-command",
@@ -140,7 +140,7 @@ def test_ui_task_rejects_unrelated_diff_and_validation() -> None:
         name="workspace.diff",
         metadata={
             "byte_size": 120,
-            "modified_paths": ["src/app/live_speech/tts.py"],
+            "modified_paths": ["src/app/platform/live_speech/tts.py"],
             "baseline_conflicts": [],
         },
     )
@@ -602,8 +602,8 @@ def test_preexisting_dirty_file_changed_by_agent_fails_acceptance() -> None:
         name="workspace.diff",
         metadata={
             "byte_size": 100,
-            "modified_paths": ["src/app/agent_runtime/service.py"],
-            "baseline_conflicts": ["src/app/live_speech/tts.py"],
+            "modified_paths": ["src/app/platform/agent_runtime/service.py"],
+            "baseline_conflicts": ["src/app/platform/live_speech/tts.py"],
         },
     )
 
@@ -611,3 +611,13 @@ def test_preexisting_dirty_file_changed_by_agent_fails_acceptance() -> None:
 
     assert not result.passed
     assert "preexisting_dirty_paths_modified" in result.failures
+
+
+def test_a_pytest_command_counts_as_web_validation_only_when_it_names_a_web_path() -> None:
+    from app.platform.agent_runtime.acceptance import _is_web_ui_path, _is_web_ui_validation
+
+    assert _is_web_ui_validation("python -m pytest src/tests/app/test_css.py web/src/styles.css")
+    assert _is_web_ui_validation("npm --prefix web run build")
+    assert not _is_web_ui_validation("python -m pytest src/tests/test_webhook.py -q")
+    assert _is_web_ui_path("web/src/App.tsx")
+    assert not _is_web_ui_path("src/app/composition/gateway/web_routes.py")

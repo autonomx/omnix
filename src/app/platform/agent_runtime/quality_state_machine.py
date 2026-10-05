@@ -70,7 +70,7 @@ from .service import (
 )
 
 if TYPE_CHECKING:
-    from app.agent_runtime.service import AgentRunService
+    from app.platform.agent_runtime.service import AgentRunService
 
 
 # Returned by an extracted step that did not settle its caller.

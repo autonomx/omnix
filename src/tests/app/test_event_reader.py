@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 
 from app.events.event_reader import SUBSCRIBER_QUEUE_SIZE, EventCursor, EventReader
-from app.gateway.kernel_routes.live_event_stream import committed_event_stream
+from app.composition.gateway.kernel_routes.live_event_stream import committed_event_stream
 from app.runtime.tenant_context import local_tenant_context
 
 
@@ -77,7 +77,7 @@ def test_a_subscriber_that_falls_behind_is_told_to_resync() -> None:
 
 
 def test_stores_without_commit_order_read_the_id_part_of_a_cursor() -> None:
-    from app.gateway.kernel_routes.live_event_stream import legacy_event_id
+    from app.composition.gateway.kernel_routes.live_event_stream import legacy_event_id
 
     assert legacy_event_id(None) is None
     assert legacy_event_id("42") == 42

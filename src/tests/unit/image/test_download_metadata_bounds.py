@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.image.routes import models
+from app.platform.image.routes import models
 
 
 def test_image_download_metadata_is_bounded_expiring_and_clearable(monkeypatch) -> None:

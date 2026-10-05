@@ -11,8 +11,8 @@ from app.runtime.clock import utc_now
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.ability_system import DEFAULT_SKILL_XP_PER_ABILITY_USE, grant_skill_xp, tick_ability_state
-from app.rpg.session.world_effects import WORLD_SCALE_EFFECT_OPS, apply_world_scale_ability_to_state, build_world_scale_ability_templates
+from app.apps.rpg.session.ability_system import DEFAULT_SKILL_XP_PER_ABILITY_USE, grant_skill_xp, tick_ability_state
+from app.apps.rpg.session.world_effects import WORLD_SCALE_EFFECT_OPS, apply_world_scale_ability_to_state, build_world_scale_ability_templates
 
 WORLD_SCALE_TEMPLATE_VERSION = "world_scale_templates_v1"
 WORLD_SCALE_DEFAULT_LEVEL = 5

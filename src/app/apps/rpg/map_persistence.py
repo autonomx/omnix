@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from app.rpg.map_projection import MAP_STATE_SCHEMA_VERSION, initial_map_session_state
-from app.rpg.map_world_integration import integrate_canonical_world_map_state
+from app.apps.rpg.map_projection import MAP_STATE_SCHEMA_VERSION, initial_map_session_state
+from app.apps.rpg.map_world_integration import integrate_canonical_world_map_state
 
 _DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 _DEMO_STARTING_LOCATION_ID = "glimmerdeep_pass"

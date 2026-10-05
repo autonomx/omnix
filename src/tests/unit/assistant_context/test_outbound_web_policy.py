@@ -2,7 +2,7 @@ import gzip
 import httpx
 import pytest
 
-from app.research.outbound_web import OutboundWebPolicy, OutboundWebPolicyError
+from app.platform.research.outbound_web import OutboundWebPolicy, OutboundWebPolicyError
 
 
 def public_resolver(hostname: str, port: int):

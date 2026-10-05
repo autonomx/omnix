@@ -5,8 +5,8 @@ import logging
 
 from typing import Any, Dict, List
 
-from app.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
-from app.rpg.npc_dialogue.intelligence import (
+from app.apps.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
+from app.apps.rpg.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,

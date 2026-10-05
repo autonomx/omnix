@@ -1,4 +1,4 @@
-from app.image.contracts import ImageGenerateInput, normalize_image_provider_id
+from app.platform.image.contracts import ImageGenerateInput, normalize_image_provider_id
 
 
 def test_image_provider_normalization():

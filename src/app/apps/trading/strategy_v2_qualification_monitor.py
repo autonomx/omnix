@@ -34,8 +34,8 @@ from .strategy_v2_qualification import (
 )
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _STATE_KEY = "_omnix_trading_strategy_v2_qualification_monitor"

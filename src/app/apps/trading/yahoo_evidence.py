@@ -27,8 +27,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .evidence_storage import YahooEvidenceBackend, default_evidence_backend
 from .models import AdjustmentMode, MarketBar
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 _PREMARKET_OPEN = time(4, 0)

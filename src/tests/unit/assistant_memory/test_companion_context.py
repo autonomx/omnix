@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.assistant_memory import companion_context
-from app.assistant_memory.companion_context import (
+from app.platform.assistant_memory import companion_context
+from app.platform.assistant_memory.companion_context import (
     build_companion_context_packet,
     invalidate_companion_context,
 )
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.platform.chat.prompt_assembly import PromptMemoryItem
 
 
 def _session(**updates) -> SimpleNamespace:

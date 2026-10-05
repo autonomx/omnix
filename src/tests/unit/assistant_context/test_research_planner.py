@@ -10,8 +10,8 @@ from pydantic import ValidationError
 from app.providers.hermes_client import HermesSidecarClient
 from app.providers.base import ChatResponse
 from tests.support.http import mock_http_client
-import app.research.planner as planner_module
-from app.research.planner import (
+import app.platform.research.planner as planner_module
+from app.platform.research.planner import (
     ResearchOperation,
     ResearchPlan,
     ResearchPlanner,

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.security import provider_secret_store as store
-from app.research.api import create_research_credential_router
+from app.platform.research.api import create_research_credential_router
 
 
 _RESEARCH_ENV_KEYS = (

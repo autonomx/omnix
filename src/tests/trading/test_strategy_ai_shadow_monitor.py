@@ -6,16 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.execution import ExecutionObservation
-from app.trading.execution_observation_plane import ExecutionObservationPlane
-from app.trading.strategy_ai_shadow import (
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
+from app.apps.trading.strategy_ai_shadow import (
     AIShadowDecision,
     AIShadowPositionState,
     AIShadowResult,
 )
-from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
-from app.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

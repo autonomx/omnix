@@ -3,21 +3,21 @@ from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 
-from app.rpg.api.feature_routes.rpg_grid_performance_routes import register_rpg_grid_performance_routes
-from app.rpg.grid_runtime_performance import (
+from app.apps.rpg.api.feature_routes.rpg_grid_performance_routes import register_rpg_grid_performance_routes
+from app.apps.rpg.grid_runtime_performance import (
     GridRuntimeMetrics,
     GridRuntimeTimings,
     assess_grid_renderer,
     profile_grid_runtime,
 )
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import create_map_instance_snapshot
-from app.rpg.map_observer_runtime import ObserverPerceptionPolicy, observe_map
+from app.apps.rpg.map_instance_runtime import create_map_instance_snapshot
+from app.apps.rpg.map_observer_runtime import ObserverPerceptionPolicy, observe_map
 
 
 def _metrics(**overrides: int | str) -> GridRuntimeMetrics:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 
-from app.rpg.response_generation.contracts import (
+from app.apps.rpg.response_generation.contracts import (
     CandidateSource,
     ResponseCandidate,
     ResponseMode,
@@ -11,17 +11,17 @@ from app.rpg.response_generation.contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.rpg.response_generation.legacy_bridge import narrate_scene_canonical
-from app.rpg.response_generation import legacy_bridge
-from app.rpg.response_generation.orchestration import RpgResponseGenerator
-from app.rpg.response_generation.performance import (
+from app.apps.rpg.response_generation.legacy_bridge import narrate_scene_canonical
+from app.apps.rpg.response_generation import legacy_bridge
+from app.apps.rpg.response_generation.orchestration import RpgResponseGenerator
+from app.apps.rpg.response_generation.performance import (
     LatencyTrace,
     VersionedResponseCache,
     blocking_path_decision,
     evaluate_latency_benchmark,
 )
-from app.rpg.response_generation.profiled_generator import ProfiledRpgResponseGenerator
-from app.rpg.response_generation.profiles import (
+from app.apps.rpg.response_generation.profiled_generator import ProfiledRpgResponseGenerator
+from app.apps.rpg.response_generation.profiles import (
     ResponseProfileRegistry,
     validate_response_profile,
 )

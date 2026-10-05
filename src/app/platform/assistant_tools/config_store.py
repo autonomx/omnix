@@ -99,7 +99,7 @@ def _merge_known_config(payload: AssistantToolsConfigPayload) -> AssistantToolsC
 def load_assistant_tools_config(path: Path | None = None) -> AssistantToolsConfigPayload:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.assistant_tools.persistence.configuration import load_assistant_tools_config
+        from app.platform.assistant_tools.persistence.configuration import load_assistant_tools_config
         return load_assistant_tools_config(path)
     config_path = path or assistant_tool_config_path()
     if not config_path.exists():
@@ -117,7 +117,7 @@ def save_assistant_tools_config(
 ) -> AssistantToolsConfigPayload:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.assistant_tools.persistence.configuration import save_assistant_tools_config
+        from app.platform.assistant_tools.persistence.configuration import save_assistant_tools_config
         return save_assistant_tools_config(payload, path)
     config_path = path or assistant_tool_config_path()
     normalized = _merge_known_config(payload)

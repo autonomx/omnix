@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
-from app.agent_runtime.workflows import WorkflowStepDefinition
+from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
+from app.platform.agent_runtime.workflows import WorkflowStepDefinition
 
 
 def test_timeout_reports_unknown_outcome_and_is_not_safe_to_retry() -> None:

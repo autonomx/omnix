@@ -16,17 +16,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.chat_bridge import _select_profile, route_typed_chat_turn
-from app.agent_runtime.contracts import EvidenceDecision, EvidencePolicy
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.chat_bridge import _select_profile, route_typed_chat_turn
+from app.platform.agent_runtime.contracts import EvidenceDecision, EvidencePolicy
+from app.platform.agent_runtime.evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
     resolve_request_mode,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
 
 
 # ---------------------------------------------------------------------------

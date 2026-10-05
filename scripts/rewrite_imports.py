@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import re
 import subprocess
+import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,9 +29,12 @@ TEXT_SUFFIXES = {".md", ".toml", ".yml", ".yaml", ".json", ".bat", ".cmd", ".ps1
                  ".ts", ".tsx", ".mjs", ".js", ".html", ".sql", ".dockerfile"}
 TEXT_NAMES = {"Dockerfile", "Makefile", ".gitignore", ".dockerignore", "CODEOWNERS"}
 # Records of the past (roadmaps, progress, decisions, changelog) and generated measurements: never rewritten.
+# Nor are SQL migrations: their checksums are recorded.
 EXCLUDED = ("docs/measurements/", "docs/roadmap/", "docs/ENTERPRISE_ARCHITECTURE_", "docs/PLATFORM_ARCHITECTURE_ROADMAP_",
             "CHANGELOG.md", "resources/architecture/metrics-baseline.json",
             "resources/architecture/runtime-metrics.json", "resources/architecture/lint-baseline.json")
+# Dated reviews and reports (``docs/..._2026-09-26.md``) are records too.
+DATED_RECORD = re.compile(r"^docs/.*_\d{4}-\d{2}-\d{2}[./]")
 
 
 def _mapped(name: str, mapping: list[tuple[str, str]]) -> str | None:
@@ -97,17 +102,49 @@ def rewrite_python(source: str, mapping: list[tuple[str, str]]) -> str:
                 index = segment.find(node.value.encode("utf-8"))
                 if index >= 0:
                     edits.append((start + index, start + index + len(node.value.encode("utf-8")), new_value.encode("utf-8")))
+            elif any(old in node.value or _source_path(old) in node.value for old, _ in mapping):
+                # A command line, a URL-like target or a src/ path inside a one-line string.
+                start, end = span(node)
+                segment = raw[start:end].decode("utf-8")
+                updated = rewrite_text(segment, mapping)
+                if updated != segment:
+                    edits.append((start, end, updated.encode("utf-8")))
+    edits += _comment_edits(source, offsets, mapping)
     for start, end, value in sorted(set(edits), reverse=True):
         raw = raw[:start] + value + raw[end:]
     return raw.decode("utf-8")
 
 
+def _source_path(module: str) -> str:
+    return "src/" + module.replace(".", "/")
+
+
+def _comment_edits(source: str, offsets: list[int], mapping: list[tuple[str, str]]) -> list[tuple[int, int, bytes]]:
+    """Comments name modules and paths too; tokenize finds them (columns are characters, not bytes)."""
+    lines = source.split("\n")
+    edits = []
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, SyntaxError):
+        return edits
+    for token in tokens:
+        if token.type != tokenize.COMMENT:
+            continue
+        updated = rewrite_text(token.string, mapping)
+        if updated != token.string:
+            row, column = token.start
+            start = offsets[row - 1] + len(lines[row - 1][:column].encode("utf-8"))
+            edits.append((start, start + len(token.string.encode("utf-8")), updated.encode("utf-8")))
+    return edits
+
+
 def rewrite_text(text: str, mapping: list[tuple[str, str]]) -> str:
     for old, new in mapping:
         text = re.sub(rf"(?<![\w.]){re.escape(old)}(?=[.:\s'\"`)\],/]|$)", new, text, flags=re.M)
-        old_path, new_path = "src/" + old.replace(".", "/"), "src/" + new.replace(".", "/")
-        text = re.sub(rf"(?<![\w/]){re.escape(old_path)}\.py\b", new_path + ".py", text)
-        text = re.sub(rf"(?<![\w/]){re.escape(old_path)}(?=[/\s'\"`)\],:]|$)", new_path, text, flags=re.M)
+        old_path, new_path = _source_path(old), _source_path(new)
+        start = r"(?:(?<![\w/])|(?<=\.\./))"  # a relative link (../src/app/...) too, but not web/src/app
+        text = re.sub(rf"{start}{re.escape(old_path)}\.py\b", new_path + ".py", text)
+        text = re.sub(rf"{start}{re.escape(old_path)}(?=[/\s'\"`)\],:#<]|$)", new_path, text, flags=re.M)
         text = text.replace(old_path.replace("/", "\\") + "\\", new_path.replace("/", "\\") + "\\")
     return text
 
@@ -128,7 +165,9 @@ def main(argv: list[str] | None = None) -> int:
     mapping.sort(key=lambda pair: -len(pair[0]))  # the most specific prefix first
     changed = []
     for path in tracked_files():
-        if not path.is_file() or path.relative_to(ROOT).as_posix().startswith(EXCLUDED):
+        relative = path.relative_to(ROOT).as_posix()
+        if (not path.is_file() or relative.startswith(EXCLUDED) or DATED_RECORD.match(relative)
+                or ("/migrations/" in relative and relative.endswith(".sql"))):
             continue
         is_python = path.suffix == ".py"
         if not is_python and path.suffix.lower() not in TEXT_SUFFIXES and path.name not in TEXT_NAMES:
@@ -137,11 +176,11 @@ def main(argv: list[str] | None = None) -> int:
             source = path.read_bytes().decode("utf-8")  # line endings kept as they are
         except (UnicodeDecodeError, OSError):
             continue
-        if not any(old in source or "src/" + old.replace(".", "/") in source for old, _ in mapping):
+        if not any(old in source or _source_path(old) in source for old, _ in mapping):
             continue
         updated = rewrite_python(source, mapping) if is_python else rewrite_text(source, mapping)
         if updated != source:
-            changed.append(path.relative_to(ROOT).as_posix())
+            changed.append(relative)
             if not args.check:
                 path.write_bytes(updated.encode("utf-8"))
     for name in changed:

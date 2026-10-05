@@ -14,7 +14,7 @@ from typing import Any
 from app.config.env import environment
 from app.providers import service as provider_service
 from app.settings.access import current_settings_service
-from app.assistant_memory.contracts import (
+from app.platform.assistant_memory.contracts import (
     ASSISTANT_MEMORY_SETTINGS_KEY,
     AssistantMemoryRuntimeSettings,
     load_memory_runtime_settings,

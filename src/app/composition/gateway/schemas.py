@@ -61,7 +61,7 @@ class CompatibilityHandoffPayload(BaseModel):
     ok: bool = True
     format_version: str = GATEWAY_FORMAT_VERSION
     legacy_ui_status: Literal["retired"] = "retired"
-    existing_fastapi_app: str = "app.gateway.main:app"
+    existing_fastapi_app: str = "app.composition.gateway.main:app"
     domain_logic_policy: str = "delegate_to_existing_service_modules"
     migration_note: str = (
         "The classic browser UI and compatibility application server are retired. "

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
-from app.rpg.session.genesis import turn_grounding
-from app.rpg.session.genesis.runtime_lore_materialization import (
+from app.apps.rpg.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
+from app.apps.rpg.session.genesis import turn_grounding
+from app.apps.rpg.session.genesis.runtime_lore_materialization import (
     materialize_scene_lore,
     scene_lore_entity_is_rich,
 )
-from app.rpg.session.genesis.runtime_lore_store import ensure_turn_scene_lore
+from app.apps.rpg.session.genesis.runtime_lore_store import ensure_turn_scene_lore
 
 
 def _new_town_session() -> dict:
@@ -257,11 +257,11 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
     result = {"scene": {"location_id": "location:grayhaven"}}
 
     monkeypatch.setattr(
-        "app.rpg.session.genesis.runtime_lore_store.default_database",
+        "app.apps.rpg.session.genesis.runtime_lore_store.default_database",
         lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.runtime_lore_store._save_portable_projection",
+        "app.apps.rpg.session.genesis.runtime_lore_store._save_portable_projection",
         lambda value: value,
     )
 

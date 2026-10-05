@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_ingest_once
+from app.apps.audiobook.service import AudiobookService
+from app.apps.audiobook.worker import run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -22,8 +22,8 @@ def test_speech_exclusion_migration_binds_records_to_project_and_source_offsets(
 
 @pytest.mark.skipif(not os.environ.get("OMNIX_TEST_DATABASE_URL"), reason="OMNIX_TEST_DATABASE_URL is required")
 def test_removal_is_local_durable_source_bound_and_reversible(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
-    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.apps.audiobook.worker.local_structure_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3))
     try:
         apply_migrations(database)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_starter_region import (
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_starter_region import (
     StarterRegionCompilationError,
     require_valid_starter_region,
     starter_region_issues,

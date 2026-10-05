@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.abilities import normalize_ability_cooldowns
-from app.rpg.combat.conditions import normalize_status_effects
-from app.rpg.combat.positioning import normalize_position
+from app.apps.rpg.combat.abilities import normalize_ability_cooldowns
+from app.apps.rpg.combat.conditions import normalize_status_effects
+from app.apps.rpg.combat.positioning import normalize_position
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

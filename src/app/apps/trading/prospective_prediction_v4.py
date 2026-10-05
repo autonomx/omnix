@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import FrozenForecast
-from app.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 V4_PREDICTOR_VERSION = "prospective-gap-v4-shadow"

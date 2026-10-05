@@ -21,7 +21,7 @@ def _assert_clean(caplog) -> None:
 
 
 def test_request_credentials_are_not_logged(captured) -> None:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
     from tests.support.auth import FakeAuthenticator
 
     app = create_gateway_app(auth_service=FakeAuthenticator())

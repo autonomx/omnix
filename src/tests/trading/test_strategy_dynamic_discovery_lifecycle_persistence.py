@@ -6,12 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.strategy_discovery_acquisition import CausalMarketObservation
-from app.trading.strategy_discovery_replay import (
+from app.apps.trading.strategy_discovery_acquisition import CausalMarketObservation
+from app.apps.trading.strategy_discovery_replay import (
     DiscoveryReplayObservation,
     replay_dynamic_discovery,
 )
-from app.trading.strategy_dynamic_discovery import (
+from app.apps.trading.strategy_dynamic_discovery import (
     AttributionEvent,
     AttributionStage,
     CandidateLifecycleState,
@@ -23,14 +23,14 @@ from app.trading.strategy_dynamic_discovery import (
     ShadowQualificationEvidence,
     tier_candidates,
 )
-from app.trading.strategy_dynamic_discovery_monitor import run_dynamic_discovery_once
-from app.trading.strategy_dynamic_discovery_repository import (
+from app.apps.trading.strategy_dynamic_discovery_monitor import run_dynamic_discovery_once
+from app.apps.trading.strategy_dynamic_discovery_repository import (
     DynamicDiscoveryEventRepository,
     EVENT_ATTRIBUTION,
 )
-from app.trading.strategy_interday_attribution import bridge_strategy_events
-from app.trading.strategy_interday_learning_monitor import run_interday_learning_once
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_interday_attribution import bridge_strategy_events
+from app.apps.trading.strategy_interday_learning_monitor import run_interday_learning_once
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 SESSION = date(2026, 9, 11)

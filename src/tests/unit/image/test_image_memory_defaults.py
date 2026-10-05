@@ -1,4 +1,4 @@
-from app.image.providers.registry import get_image_provider_definition
+from app.platform.image.providers.registry import get_image_provider_definition
 
 
 def test_z_image_turbo_uses_offload_by_default():

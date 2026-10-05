@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.gateway.main import create_gateway_app
+from app.composition.gateway.main import create_gateway_app
 from app.jobs import JobRecord, JobStatus, ResourceClass
 from app.jobs.models import JobProgress, JobStage
 
@@ -50,7 +50,7 @@ def make_job(job_id: str, module: str, audio_payload: str) -> JobRecord:
 
 
 def test_voice_job_summary_route_bounds_inline_browser_payloads(monkeypatch) -> None:
-    from app.voice import voice_job_summary_routes
+    from app.platform.voice import voice_job_summary_routes
 
     audio = "data:audio/wav;base64," + ("A" * 1_000)
     jobs = [

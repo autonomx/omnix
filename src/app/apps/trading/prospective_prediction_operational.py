@@ -51,8 +51,8 @@ from .prospective_prediction_v4 import (
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import regular_close_time
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_close_time
 
 
 PROSPECTIVE_OPERATIONAL_VERSION = "prospective-gap-operational-v1"

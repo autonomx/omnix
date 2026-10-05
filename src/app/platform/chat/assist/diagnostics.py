@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from app.chat.assist.models import AssistantRequest
-from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
+from app.platform.chat.assist.models import AssistantRequest
+from app.platform.chat.assist.modes import ModeChatRequest, plan_mode_chat
 from app.providers.hermes_status import hermes_runtime_config, hermes_status_payload
 
 

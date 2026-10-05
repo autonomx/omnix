@@ -77,8 +77,8 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
 )
 from .trade_logging import trade_log
-from app.trading.us_equity_calendar import EASTERN as _ET
-from app.trading.us_equity_calendar import after_regular_close
+from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import after_regular_close
 
 logger = logging.getLogger(__name__)
 

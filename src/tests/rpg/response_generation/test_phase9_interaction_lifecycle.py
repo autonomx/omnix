@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.rpg.session.interaction_lifecycle import (
+from app.apps.rpg.session.interaction_lifecycle import (
     apply_narration_result_to_interaction,
     initialize_interaction_lifecycle,
 )
@@ -92,11 +92,11 @@ def test_completed_narration_enriches_same_interaction_only(monkeypatch: Any) ->
     saved: list[dict[str, Any]] = []
 
     monkeypatch.setattr(
-        "app.rpg.session.session_runtime_store.load_runtime_session",
+        "app.apps.rpg.session.session_runtime_store.load_runtime_session",
         lambda session_id: session,
     )
     monkeypatch.setattr(
-        "app.rpg.session.session_runtime_store.save_runtime_session",
+        "app.apps.rpg.session.session_runtime_store.save_runtime_session",
         lambda value: saved.append(deepcopy(value)) or value,
     )
 
@@ -132,8 +132,8 @@ def test_failed_narration_keeps_authoritative_response_and_marks_same_interactio
     lifecycle = initialize_interaction_lifecycle(session, result)
     authoritative = deepcopy(lifecycle["authoritative_response"])
 
-    monkeypatch.setattr("app.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
-    monkeypatch.setattr("app.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
+    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
+    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
 
     failed = apply_narration_result_to_interaction(
         "session:bran",
@@ -158,8 +158,8 @@ def test_late_narration_for_superseded_turn_is_ignored(monkeypatch: Any) -> None
     initialize_interaction_lifecycle(session, result)
     session["runtime_state"]["interaction_id_by_turn"]["turn:old"] = "interaction:1"
 
-    monkeypatch.setattr("app.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
-    monkeypatch.setattr("app.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
+    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.load_runtime_session", lambda session_id: session)
+    monkeypatch.setattr("app.apps.rpg.session.session_runtime_store.save_runtime_session", lambda value: value)
 
     late = apply_narration_result_to_interaction(
         "session:bran",

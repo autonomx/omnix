@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.chat import live_conversation_proactive
+from app.platform.chat import live_conversation_proactive
 
 
 class FakeProvider:

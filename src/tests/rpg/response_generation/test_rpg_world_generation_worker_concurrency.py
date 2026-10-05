@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import app.rpg.worlds.generation_worker as generation_worker
-from app.rpg.worlds.generation_worker import (
+import app.apps.rpg.worlds.generation_worker as generation_worker
+from app.apps.rpg.worlds.generation_worker import (
     _WorkerPoolState,
     _worker_loop,
     world_generation_worker_limit,

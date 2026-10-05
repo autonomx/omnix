@@ -4,9 +4,9 @@ import hashlib
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.service import CharacterService
-from app.characters.voice_consent import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.service import CharacterService
+from app.platform.characters.voice_consent import (
     ALL_VOICE_USES,
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
