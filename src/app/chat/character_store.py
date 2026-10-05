@@ -8,12 +8,7 @@ from typing import Any, Protocol
 from app.runtime.ports import Port, required
 
 from app.assistant_memory.contracts import default_memory_service, resolve_session_memory_scope
-from app.characters.contracts import (
-    InteractionSelection,
-    SetSessionInteractionRequest,
-    default_character_service,
-    resolve_interaction_context,
-)
+from app.conversation.contracts import InteractionSelection, SetSessionInteractionRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
@@ -393,8 +388,9 @@ def _resolve_request(
         shared_memory_access=shared_memory_access,
         transcript_policy=transcript_policy,
     )
-    character_profile = default_character_service().resolve_snapshot(character_id or "") if interaction_mode == "character" else None
-    return resolve_interaction_context(selection, character=character_profile), character_profile
+    from .session_identity import resolve_selection
+
+    return resolve_selection(selection)
 
 
 def _attach_character_snapshot(session: ChatSession) -> None:

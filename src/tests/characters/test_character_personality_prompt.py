@@ -1,7 +1,5 @@
-from app.characters.interaction import (
-    LEGACY_MAYA_SYSTEM_PROMPT,
-    resolve_interaction_context,
-)
+from app.characters.interaction import resolve_interaction_context
+from app.chat.session_identity import LEGACY_MAYA_SYSTEM_PROMPT
 from app.characters.models import CharacterProfileSnapshot, InteractionSelection
 from app.chat import prompt_assembly as prompt_assembly_module
 from app.chat.models import ChatMessage, ChatSession

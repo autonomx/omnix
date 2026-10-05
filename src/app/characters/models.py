@@ -5,16 +5,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversation.contracts import InteractionMode, SharedMemoryAccess, TranscriptPolicy
+from app.conversation.contracts import InteractionMode, SharedMemoryAccess, TranscriptPolicy  # noqa: F401 - re-exported
+# The interaction types are the kernel's (PA-1.3); characters re-exports them.
+from app.conversation.contracts import (  # noqa: F401
+    SYSTEM_ASSISTANT_ID,
+    SYSTEM_ASSISTANT_IDENTITY,
+    SYSTEM_ASSISTANT_NAME,
+    InteractionSelection,
+    ResolvedInteractionContext,
+)
 
 CharacterStatus = Literal["active", "archived"]
-
-SYSTEM_ASSISTANT_ID = "system-assistant"
-SYSTEM_ASSISTANT_NAME = "System Assistant"
-SYSTEM_ASSISTANT_IDENTITY = (
-    "You are the user's configurable System Assistant. Follow the selected assistant "
-    "style while remaining clear, accurate, practical, and honest about uncertainty."
-)
 DEFAULT_CHARACTER_IDENTITY_POLICY: dict[str, Any] = {
     "may_claim_to_be_human": False,
     "may_claim_real_world_experiences": False,
@@ -142,39 +143,3 @@ class UpdateCharacterRequest(BaseModel):
 class ArchiveCharacterResponse(BaseModel):
     ok: bool = True
     character: CharacterProfile
-
-
-
-
-class InteractionSelection(BaseModel):
-    """Untrusted client selection before server-side profile resolution."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    interaction_mode: InteractionMode = "system"
-    character_id: str | None = Field(default=None, max_length=160)
-    voice_asset_id: str | None = Field(default=None, max_length=240)
-    read_memory: bool = False
-    write_memory: bool = False
-    shared_memory_access: SharedMemoryAccess = "none"
-    transcript_policy: TranscriptPolicy = "persistent"
-
-
-class ResolvedInteractionContext(BaseModel):
-    """Trusted effective interaction identity produced only by the backend."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    interaction_mode: InteractionMode
-    owner_type: Literal["system", "character"]
-    owner_id: str
-    display_name: str
-    character_id: str | None = None
-    voice_asset_id: str | None = None
-    read_memory: bool = False
-    write_memory: bool = False
-    shared_memory_access: SharedMemoryAccess = "none"
-    transcript_policy: TranscriptPolicy = "persistent"
-    character_profile_version: int | None = Field(default=None, ge=1)
-    assistant_identity: list[str] = Field(default_factory=list)
-    effective_identity_hash: str = Field(min_length=64, max_length=64)

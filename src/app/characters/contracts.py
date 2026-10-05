@@ -7,7 +7,6 @@ from typing import Any
 from app.characters.interaction import (
     InteractionSelection,
     character_mode_enabled,
-    neutralize_legacy_system_prompt,
     resolve_interaction_context,
     resolve_shared_memory_categories,
     resolve_system_session_identity,
@@ -34,7 +33,6 @@ __all__ = [
     "character_mode_enabled",
     "default_character_service",
     "default_live_conversation_profile_store",
-    "neutralize_legacy_system_prompt",
     "resolve_interaction_context",
     "resolve_shared_memory_categories",
     "resolve_system_session_identity",

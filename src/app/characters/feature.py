@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from typing import Any
 
 from app.runtime.features import FeatureContext, FeatureModule
+from app.chat.contracts import CHARACTER_RESOLVER
 from app.image.contracts import CHARACTER_AVATAR_FINISHER
 from app.runtime.ports import ContributionSpec
 from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
@@ -95,6 +96,12 @@ class _AvatarFinisher:
         _avatar_generation_completed(job)
 
 
+def _character_resolver(_context: FeatureContext) -> object:
+    from .interaction import CharacterChatResolver
+
+    return CharacterChatResolver()
+
+
 FEATURE = FeatureModule(
     id="characters",
     title="Characters",
@@ -103,5 +110,8 @@ FEATURE = FeatureModule(
     depends_on=("chat", "assistant-memory", "companion-activity", "image"),
     routers=(_router,),
     repositories=CHARACTER_REPOSITORY_SPECS,
-    contributions=(ContributionSpec(CHARACTER_AVATAR_FINISHER, lambda _context: _AvatarFinisher()),),
+    contributions=(
+        ContributionSpec(CHARACTER_AVATAR_FINISHER, lambda _context: _AvatarFinisher()),
+        ContributionSpec(CHARACTER_RESOLVER, _character_resolver),
+    ),
 )

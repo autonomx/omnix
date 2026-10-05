@@ -6,7 +6,6 @@ from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from pydantic import ValidationError
 
 from app.chat.assist.live_agent import (
     LiveAgentUnavailable,
@@ -20,14 +19,9 @@ from app.chat.assist.modes import ModeChatRequest, plan_mode_chat
 from app.capabilities.approvals import ApproverNotAllowed, current_approver
 from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.security import audit
-from app.assistant_tools.contracts import (
-    AssistantToolRequest,
-    first_pending_kasa_write,
-    live_agent_planner_context,
-    live_agent_tool_proposals,
-)
 
 from .assistant_turns import default_assistant_turn_coordinator
+from app.capabilities.executor import live_agent_tools
 from .models import ChatMessage, ChatSession
 from .routing_deadline import provider_turn_deadline
 from .store import _pop_ready_sentences
@@ -282,7 +276,7 @@ def stream_live_agent_turn(
                     session_id=session.id,
                     context={
                         "route_reason": decision.reason,
-                        **live_agent_planner_context(),
+                        **live_agent_tools().planner_context(),
                     },
                     timeout_seconds=(
                         live_agent_runtime_config().planner_timeout_seconds
@@ -392,13 +386,14 @@ def _agent_events(
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     payload = response.result
-    tool_proposals = live_agent_tool_proposals(
+    tools = live_agent_tools()
+    tool_proposals = tools.tool_proposals(
         user_request=user_message.content,
         session_id=session_id,
         source_message_id=user_message.id,
         mode_result=payload,
     )
-    pending = first_pending_kasa_write(
+    pending = tools.first_pending_write(
         payload,
         session_id=session_id,
     )
@@ -579,7 +574,7 @@ def _patch_message_metadata(
 def _pending_governed_proposal(
     session: ChatSession,
     current_user_message_id: str,
-) -> tuple[ChatMessage, AssistantToolRequest] | None:
+) -> tuple[ChatMessage, Any] | None:
     for message in reversed(session.messages):
         if message.id == current_user_message_id or message.role != "assistant":
             continue
@@ -589,8 +584,8 @@ def _pending_governed_proposal(
         if not isinstance(raw, dict):
             continue
         try:
-            return message, AssistantToolRequest.model_validate(raw)
-        except ValidationError:
+            return message, live_agent_tools().parse_request(raw)
+        except ValueError:
             continue
     return None
 
@@ -683,7 +678,7 @@ def _governed_execution_events(user_message: ChatMessage, payload):
         raise
 
 
-def _governed_rejection_events(user_message: ChatMessage, request: AssistantToolRequest):
+def _governed_rejection_events(user_message: ChatMessage, request: Any):
     coordinator = default_assistant_turn_coordinator()
     assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
     if assistant_turn_id:
@@ -712,7 +707,7 @@ def _governed_rejection_events(user_message: ChatMessage, request: AssistantTool
 def _pending_kasa_proposal(
     session: ChatSession,
     current_user_message_id: str,
-) -> tuple[ChatMessage, AssistantToolRequest] | None:
+) -> tuple[ChatMessage, Any] | None:
     for message in reversed(session.messages):
         if message.id == current_user_message_id or message.role != "assistant":
             continue
@@ -722,8 +717,8 @@ def _pending_kasa_proposal(
         if not isinstance(raw, dict):
             continue
         try:
-            request = AssistantToolRequest.model_validate(raw)
-        except ValidationError:
+            request = live_agent_tools().parse_request(raw)
+        except ValueError:
             continue
         if request.tool_id == "kasa" and request.action_id in {
             "kasa.turn_on",
@@ -794,7 +789,7 @@ def _kasa_execution_events(user_message: ChatMessage, payload):
 
 def _kasa_rejection_events(
     user_message: ChatMessage,
-    request: AssistantToolRequest,
+    request: Any,
 ):
     assistant_turn_id = str(
         user_message.metadata.get("assistant_turn_id") or ""
@@ -828,7 +823,7 @@ def _confirmation_choice(content: str) -> str | None:
     return None
 
 
-def _confirmation_prompt(request: AssistantToolRequest) -> str:
+def _confirmation_prompt(request: Any) -> str:
     action = "turn on" if request.action_id == "kasa.turn_on" else "turn off"
     target = str(request.input.get("target") or "the selected Kasa plug")
     return (

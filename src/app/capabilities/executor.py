@@ -79,8 +79,69 @@ def execute_capability(grant: CapabilityGrant, request: Any, *, user_request: st
     return runtime(grant, request, user_request=user_request)
 
 
+# The tools a live agent plans with (PA-1.3). Assistant tools implements it;
+# without it the live agent plans with no tools. Planning grants nothing:
+# execution still goes through ``execute_capability``.
+class LiveAgentTools(Protocol):
+    @property
+    def read_tool_names(self) -> frozenset[str]:
+        """Tool names the live agent may run without confirmation (device reads)."""
+
+    def is_device_tool(self, name: str) -> bool:
+        """Whether a planned tool call addresses a device."""
+
+    def read_request(self, call: Any, *, session_id: str) -> Any | None:
+        """The capability request a planned read runs as, or ``None``."""
+
+    def planner_context(self) -> dict[str, str]:
+        """Context the planner needs to plan tool calls (date, timezone, rules)."""
+
+    def tool_proposals(self, *, user_request: str, session_id: str, source_message_id: str,
+                       mode_result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Governed tool proposals for a planner result."""
+
+    def first_pending_write(self, mode_result: dict[str, Any], *, session_id: str) -> Any | None:
+        """The first planned write that waits for the user's confirmation, or ``None``."""
+
+    def parse_request(self, raw: dict[str, Any]) -> Any:
+        """A stored pending request; raises ``ValueError`` when it is not one."""
+
+
+LIVE_AGENT_TOOLS: Port[LiveAgentTools] = Port("capabilities.live_agent_tools", LiveAgentTools, "at_most_one")
+
+
+class _NoTools:
+    read_tool_names: frozenset[str] = frozenset()
+
+    def is_device_tool(self, name: str) -> bool:
+        return False
+
+    def read_request(self, call: Any, *, session_id: str) -> Any | None:
+        return None
+
+    def planner_context(self) -> dict[str, str]:
+        return {}
+
+    def tool_proposals(self, *, user_request: str, session_id: str, source_message_id: str,
+                       mode_result: dict[str, Any]) -> list[dict[str, Any]]:
+        return []
+
+    def first_pending_write(self, mode_result: dict[str, Any], *, session_id: str) -> Any | None:
+        return None
+
+    def parse_request(self, raw: dict[str, Any]) -> Any:
+        raise ValueError("assistant tools are disabled")
+
+
+def live_agent_tools() -> LiveAgentTools:
+    return optional(LIVE_AGENT_TOOLS) or _NoTools()
+
+
 __all__ = [
     "CAPABILITY_RUNTIME",
+    "LIVE_AGENT_TOOLS",
+    "LiveAgentTools",
+    "live_agent_tools",
     "LEGACY_APPROVER",
     "CapabilityExecutor",
     "CapabilityGrant",

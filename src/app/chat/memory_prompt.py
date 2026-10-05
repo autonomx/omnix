@@ -15,11 +15,11 @@ from app.assistant_memory.contracts import (
 )
 from app.assistant_memory.contracts import estimate_memory_tokens, load_memory_runtime_settings
 from app.assistant_memory_v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
-from app.characters.contracts import resolve_shared_memory_categories
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import prompt_budget_from_env
 from .models import ChatSession
+from .session_identity import resolve_shared_memory_categories
 
 
 def chat_memory_enabled() -> bool:

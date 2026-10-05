@@ -9,10 +9,9 @@ from app.characters import (
     CharacterProfileSnapshot,
     CharacterResolutionError,
     InteractionSelection,
-    neutralize_legacy_system_prompt,
     resolve_interaction_context,
 )
-from app.characters.interaction import LEGACY_MAYA_SYSTEM_PROMPT
+from app.chat.session_identity import LEGACY_MAYA_SYSTEM_PROMPT, neutralize_legacy_system_prompt
 from app.chat.models import ChatMessage, ChatSession, CreateChatSessionRequest
 from app.chat.prompt_assembly import build_prompt_assembly
 

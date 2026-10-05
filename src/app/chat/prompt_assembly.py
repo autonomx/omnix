@@ -8,14 +8,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.characters.contracts import (
-    neutralize_legacy_system_prompt,
-    resolve_system_session_identity,
-)
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_for_model, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
+from .session_identity import neutralize_legacy_system_prompt, resolve_system_session_identity
 
 logger = logging.getLogger(__name__)
 

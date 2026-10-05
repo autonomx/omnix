@@ -1,48 +1,29 @@
-"""Pure server-side Character Mode identity resolution."""
+"""Pure server-side Character Mode identity resolution.
+
+The system assistant's identity and the interaction types are the kernel's
+(``app.conversation.contracts``, PA-1.3); this resolves characters.
+"""
 from __future__ import annotations
+
+from typing import Any
 from app.config.env import env_str as _env_str
 
-import hashlib
-import json
+from app.conversation.contracts import (
+    CharacterInteractionError,
+    CharacterModeDisabledError,
+    CharacterResolutionError,
+    interaction_identity_hash,
+    resolve_system_interaction,
+    session_interaction_selection,
+)
 
 from .models import (
-    SYSTEM_ASSISTANT_ID,
-    SYSTEM_ASSISTANT_IDENTITY,
-    SYSTEM_ASSISTANT_NAME,
     CharacterProfileSnapshot,
     InteractionSelection,
     ResolvedInteractionContext,
 )
-from app.prompts import prompt_template
 
-
-LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE = prompt_template(
-    'characters.interaction.legacy_maya_system_prompt', "1",
-    (
-        'You are Maya, a warm, friendly, emotionally aware AI. Keep responses short (1-3 '
-        "sentences for voice, 5 for text), match the user's emotional tone, avoid filler and "
-        'tangents. Be clear and concise, admit uncertainty when needed, and maintain a natural, '
-        'human-like presence.'
-    ),
-)
-
-
-LEGACY_MAYA_SYSTEM_PROMPT = (
-    LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE.text
-)
 _ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
-
-
-class CharacterInteractionError(ValueError):
-    """Base error for rejected character interaction selections."""
-
-
-class CharacterModeDisabledError(CharacterInteractionError):
-    pass
-
-
-class CharacterResolutionError(CharacterInteractionError):
-    pass
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -86,20 +67,6 @@ def resolve_shared_memory_categories(session: object) -> list[str]:
     return _validate_shared_memory_policy(character)
 
 
-def neutralize_legacy_system_prompt(prompt: str) -> str:
-    """Replace only the old built-in Maya default, preserving user custom prompts."""
-
-    text = (prompt or "").strip()
-    if text == LEGACY_MAYA_SYSTEM_PROMPT:
-        return SYSTEM_ASSISTANT_IDENTITY
-    return text or SYSTEM_ASSISTANT_IDENTITY
-
-
-def _identity_hash(payload: dict[str, object]) -> str:
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
 def _validate_shared_memory_policy(character: CharacterProfileSnapshot) -> list[str]:
     policy = dict(character.shared_memory_policy or {})
     if policy.get("access") != "read_only":
@@ -135,21 +102,7 @@ def resolve_interaction_context(
     """Resolve an untrusted selection into a trusted, reproducible identity context."""
 
     if selection.interaction_mode == "system":
-        if selection.character_id:
-            raise CharacterResolutionError("system mode cannot select a character")
-        payload = {
-            "interaction_mode": "system",
-            "owner_type": "system",
-            "owner_id": SYSTEM_ASSISTANT_ID,
-            "display_name": SYSTEM_ASSISTANT_NAME,
-            "voice_asset_id": selection.voice_asset_id,
-            "read_memory": selection.read_memory,
-            "write_memory": selection.write_memory,
-            "shared_memory_access": "none",
-            "transcript_policy": selection.transcript_policy,
-            "assistant_identity": [SYSTEM_ASSISTANT_IDENTITY],
-        }
-        return ResolvedInteractionContext(**payload, effective_identity_hash=_identity_hash(payload))
+        return resolve_system_interaction(selection)
 
     if not character_mode_enabled():
         raise CharacterModeDisabledError("Character Mode is disabled")
@@ -191,21 +144,13 @@ def resolve_interaction_context(
         "character_profile_version": character.version,
         "assistant_identity": assistant_identity,
     }
-    return ResolvedInteractionContext(**payload, effective_identity_hash=_identity_hash(payload))
+    return ResolvedInteractionContext(**payload, effective_identity_hash=interaction_identity_hash(payload))
 
 
 def resolve_system_session_identity(session: object) -> ResolvedInteractionContext:
     """Resolve a persisted Chat session through backend-owned identity data."""
 
-    selection = InteractionSelection(
-        interaction_mode=getattr(session, "interaction_mode", "system"),
-        character_id=getattr(session, "character_id", None),
-        voice_asset_id=getattr(session, "voice_asset_id", None),
-        read_memory=bool(getattr(session, "read_memory", False)),
-        write_memory=bool(getattr(session, "write_memory", False)),
-        shared_memory_access=getattr(session, "shared_memory_access", "none"),
-        transcript_policy=getattr(session, "transcript_policy", "persistent"),
-    )
+    selection = session_interaction_selection(session)
     character = None
     if selection.interaction_mode == "character":
         try:
@@ -215,3 +160,20 @@ def resolve_system_session_identity(session: object) -> ResolvedInteractionConte
         except Exception as exc:
             raise CharacterResolutionError("persisted character profile could not be resolved") from exc
     return resolve_interaction_context(selection, character=character)
+
+
+class CharacterChatResolver:
+    def mode_enabled(self) -> bool:
+        return character_mode_enabled()
+
+    def resolve_snapshot(self, character_id: str) -> Any:
+        """Characters' implementation of chat's ``CHARACTER_RESOLVER`` port (PA-1.3)."""
+        from .service import default_character_service
+
+        return default_character_service().resolve_snapshot(character_id)
+
+    def resolve_character(self, selection: InteractionSelection, snapshot: Any) -> ResolvedInteractionContext:
+        return resolve_interaction_context(selection, character=snapshot)
+
+    def shared_memory_categories(self, session: object) -> list[str]:
+        return resolve_shared_memory_categories(session)

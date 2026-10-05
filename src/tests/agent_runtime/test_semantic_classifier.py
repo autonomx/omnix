@@ -35,7 +35,7 @@ from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 
 def _use_memory_character_service(tmp_path, monkeypatch) -> None:
     service = CharacterService(InMemoryCharacterRepository(tmp_path / "characters.sqlite3"))
-    monkeypatch.setattr(character_store, "default_character_service", lambda: service)
+    monkeypatch.setattr("app.characters.service.default_character_service", lambda: service)
     monkeypatch.setattr(
         character_store,
         "default_assistant_turn_coordinator",

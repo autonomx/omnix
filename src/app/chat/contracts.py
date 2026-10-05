@@ -27,6 +27,7 @@ from app.chat.prompt_window import (
     normal_chat_recent_message_limit,
 )
 from app.chat.provider_routing import resolve_effective_provider_id
+from app.chat.session_identity import CHARACTER_RESOLVER, CharacterResolver
 from app.chat.prompt_rendering import (
     RenderedPrompt,
     RenderedPromptMessage,
@@ -129,6 +130,8 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "CHARACTER_RESOLVER",
+    "CharacterResolver",
     "TYPED_TURN_ROUTER",
     "TypedTurnRouter",
     "route_typed_turn",

@@ -317,6 +317,7 @@
         "app.chat.retention_policy",
         "app.chat.routing_context",
         "app.chat.routing_deadline",
+        "app.chat.session_identity",
         "app.chat.sqlite_store",
         "app.chat.store",
         "app.companion_activity",
@@ -2132,7 +2133,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8325,
+      "collected_tests": 8330,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2957,14 +2958,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T10:28:49.314028+00:00",
+  "measured_at": "2026-10-05T11:21:36.723348+00:00",
   "metrics": {
-    "boot_imported_modules": 2077,
+    "boot_imported_modules": 2078,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "8e9c86a325e011ad6776e02f582d9c9b00e7199e0593e97e9eeb36e6af9cad08"
+  "source_digest": "13772b6b161060d167da49f88931158f47173c14a34d7105648a88f50521dab5"
 }

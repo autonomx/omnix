@@ -33,27 +33,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.contracts",
-      "lines": [
-        10
-      ],
-      "path": "src/app/chat/assist/live_agent.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
         10
-      ],
-      "path": "src/app/chat/character_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.characters.contracts",
-      "lines": [
-        11
       ],
       "path": "src/app/chat/character_store.py",
       "rule": "AL001"
@@ -87,15 +69,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.contracts",
-      "lines": [
-        23
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_memory.contracts",
       "lines": [
         9
@@ -124,38 +97,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.characters.contracts",
-      "lines": [
-        18
-      ],
-      "path": "src/app/chat/memory_prompt.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "_memory_v2_runtime:app.assistant_memory_v2.runtime",
       "lines": [
         37
       ],
       "path": "src/app/chat/memory_prompt.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.characters.contracts",
-      "lines": [
-        12
-      ],
-      "path": "src/app/chat/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.characters.contracts",
-      "lines": [
-        11
-      ],
-      "path": "src/app/chat/prompt_assembly.py",
       "rule": "AL001"
     },
     {

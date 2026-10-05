@@ -5,7 +5,7 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 22,
+      "AL001": 16,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -371,6 +371,7 @@
       "app.chat.routing_deadline",
       "app.chat.segments",
       "app.chat.session_defaults",
+      "app.chat.session_identity",
       "app.chat.sqlite_store",
       "app.chat.store",
       "app.chat.turn_events",
@@ -2532,19 +2533,13 @@
       "module_repositories_in_kernel": [],
       "platform_feature_specific_files": [],
       "reverse_contract_imports": [
-        "src/app/chat/assist/live_agent.py:10:app.assistant_tools.contracts",
         "src/app/chat/character_store.py:10:app.assistant_memory.contracts",
-        "src/app/chat/character_store.py:11:app.characters.contracts",
         "src/app/chat/compaction.py:18:app.assistant_memory.contracts",
         "src/app/chat/context_budget.py:9:app.assistant_memory.contracts",
         "src/app/chat/history_search.py:13:app.assistant_memory.contracts",
-        "src/app/chat/live_agent_store.py:23:app.assistant_tools.contracts",
         "src/app/chat/memory_commands.py:9:app.assistant_memory.contracts",
         "src/app/chat/memory_prompt.py:16:app.assistant_memory.contracts",
-        "src/app/chat/memory_prompt.py:18:app.characters.contracts",
         "src/app/chat/memory_prompt.py:8:app.assistant_memory.contracts",
-        "src/app/chat/models.py:12:app.characters.contracts",
-        "src/app/chat/prompt_assembly.py:11:app.characters.contracts",
         "src/app/chat/prompt_store.py:14:app.assistant_memory.contracts",
         "src/app/chat/retention_policy.py:6:app.assistant_memory.contracts",
         "src/app/chat/sqlite_store.py:9:app.assistant_memory.contracts"
@@ -3139,7 +3134,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 45,
+        "line": 42,
         "path": "src/app/characters/repository.py",
         "reason": "This is the provider-free character repository; production character services use the PostgreSQL repository.",
         "symbol": "_STATES"
@@ -3148,7 +3143,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 46,
+        "line": 43,
         "path": "src/app/characters/repository.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_STATES_LOCK"
@@ -6557,7 +6552,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 2077
+      "value": 2078
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -6662,7 +6657,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 22
+      "value": 16
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6722,7 +6717,7 @@
     "reverse_contract_imports": {
       "direction": "lower",
       "target": 0,
-      "value": 16
+      "value": 10
     },
     "rls_coverage_pct": {
       "direction": "higher",
@@ -6872,5 +6867,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "8e9c86a325e011ad6776e02f582d9c9b00e7199e0593e97e9eeb36e6af9cad08"
+  "source_digest": "13772b6b161060d167da49f88931158f47173c14a34d7105648a88f50521dab5"
 }

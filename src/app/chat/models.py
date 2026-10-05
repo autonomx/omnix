@@ -9,7 +9,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.characters.contracts import character_mode_enabled
 from app.conversation.contracts import (
     DEFAULT_PROFILE_ID,  # noqa: F401 - compatibility re-export
     DEFAULT_WORKSPACE_ID,  # noqa: F401 - compatibility re-export
@@ -187,7 +186,9 @@ class CreateChatSessionRequest(BaseModel):
             raise ValueError("character mode requires character_id")
         if self.system_prompt:
             raise ValueError("character prompts are resolved by the server")
-        if not character_mode_enabled():
+        from .session_identity import character_mode_available
+
+        if not character_mode_available():
             raise ValueError("Character Mode is disabled")
         return self
 

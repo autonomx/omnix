@@ -167,10 +167,6 @@
     "sha256": "52a17b04a21cbef53f0bac6e09e9e119fdfacd1331fc1c69db8acaab49cee17b",
     "version": "1"
   },
-  "characters.interaction.legacy_maya_system_prompt": {
-    "sha256": "2f77d81e36cf445bbd1129649098ce9f236081dfc64076b1741b26099c9f445e",
-    "version": "1"
-  },
   "chat.assist.hermes_planner_prompt": {
     "sha256": "e4d970bda5a228daa63eefb34738419c69ff90d14d18ab96aeb653158d9f4872",
     "version": "1"
@@ -209,6 +205,10 @@
   },
   "chat.session_defaults.legacy_default_prompt": {
     "sha256": "2b989968611695b3eddbd4dbb13e3a0bb882b1da749e66e823dedc9a64f3e1f5",
+    "version": "1"
+  },
+  "chat.session_identity.legacy_maya_system_prompt": {
+    "sha256": "2f77d81e36cf445bbd1129649098ce9f236081dfc64076b1741b26099c9f445e",
     "version": "1"
   },
   "desktop_companion.commentary.desktop_commentary_prompt": {
