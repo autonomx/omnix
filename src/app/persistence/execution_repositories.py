@@ -4,7 +4,7 @@ import json
 import math
 import random
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from app.jobs.errors import JobClaimConflict
@@ -295,6 +295,66 @@ class PostgresJobRepository:
                     (context.workspace_id, result["id"], _json(result["error"] or {})),
                 )
         return results
+
+    def fail_retired_jobs(self, context: TenantContext, job_types: Iterable[str]) -> list[dict[str, Any]]:
+        """Move this workspace's unfinished jobs of retired types to ``failed`` (reason ``module_retired``), once (PA-4.3).
+
+        A retired type's handler is gone, so nothing would ever finish the job;
+        a job of a merely disabled or unknown type is left alone.
+        """
+        types = sorted(set(job_types))
+        if not types:
+            return []
+        error = {"code": "module_retired", "retryable": False}
+        rows = self.connection.execute(
+            f"""UPDATE omnix_jobs
+                   SET status = 'failed', error = %s::jsonb,
+                       lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
+                       completed_at = clock_timestamp(), updated_at = clock_timestamp()
+                 WHERE id IN (
+                       SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND job_type = ANY(%s)
+                          AND status IN ('queued', 'retrying', 'waiting', 'leased', 'running', 'cancel_requested')
+                        ORDER BY created_at, id
+                        LIMIT %s
+                        FOR UPDATE SKIP LOCKED)
+                RETURNING {_JOB_COLUMNS}""",
+            # The recovery task runs every minute; the rest follow then.
+            (_json(error), context.workspace_id, types, EXPIRED_LEASE_BATCH),
+        ).fetchall()
+        results = [_job(row) for row in rows]
+        for result in results:
+            self.connection.execute(
+                """UPDATE omnix_job_attempts SET status = 'failed', completed_at = CURRENT_TIMESTAMP, error = %s::jsonb
+                    WHERE job_id = %s AND attempt = %s AND status IN ('leased', 'running')""",
+                (_json(error), result["id"], result["attempt_count"]),
+            )
+            self._event(context, result["id"], "job.failed", {"attempt": result["attempt_count"], "error": error})
+            self.connection.execute(
+                "INSERT INTO omnix_dead_letters (workspace_id, job_id, reason, payload) VALUES (%s, %s, 'module_retired', %s::jsonb)",
+                (context.workspace_id, result["id"], _json(error)),
+            )
+        return results
+
+    def unclaimed_job_types(
+        self, context: TenantContext, *, older_than_seconds: float, known_types: Iterable[str],
+    ) -> dict[str, float]:
+        """Job types without a handler here whose oldest waiting job is older than the threshold: type -> age in seconds.
+
+        Workers claim only types they handle, so such a job waits (a disabled
+        feature, or a newer gateway during a rolling upgrade); past the
+        threshold it is worth an alert, never a failure.
+        """
+        rows = self.connection.execute(
+            """SELECT job_type, EXTRACT(EPOCH FROM clock_timestamp() - MIN(available_at))
+                 FROM omnix_jobs
+                WHERE workspace_id = %s AND status IN ('queued', 'retrying')
+                  AND available_at < clock_timestamp() - (%s * INTERVAL '1 second')
+                  AND NOT (job_type = ANY(%s))
+                GROUP BY job_type ORDER BY job_type LIMIT 100""",
+            (context.workspace_id, max(0.0, float(older_than_seconds)), sorted(set(known_types))),
+        ).fetchall()
+        return {str(row[0]): float(row[1]) for row in rows}
 
     def claim_next(
         self,

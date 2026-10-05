@@ -315,6 +315,46 @@ def create_production_app(config: RuntimeConfig | None = None):
                 executor="thread",
             )
         )
+        async def recover_retired_and_unclaimed_jobs(_task_context) -> None:
+            """Fail unfinished jobs of retired modules once; alert on other jobs nobody here can claim (PA-4.3)."""
+            from app.config.env import env_int
+            from app.persistence.declarations import retired_job_types
+            from app.persistence.unit_of_work import unit_of_work
+
+            def recover() -> None:
+                registry = getattr(gateway.state, "job_handler_registry", None)
+                retired = retired_job_types()
+                known = (*(registry.types() if registry is not None else ()), *retired)
+                with unit_of_work(services.jobs.database) as work:
+                    work.jobs.fail_retired_jobs(services.jobs.context, retired)
+                    unclaimed = work.jobs.unclaimed_job_types(
+                        services.jobs.context,
+                        older_than_seconds=env_int("OMNIX_JOB_UNCLAIMED_ALERT_SECONDS", 900, minimum=60),
+                        known_types=known,
+                    )
+                    work.commit()
+                for job_type, age_seconds in unclaimed.items():
+                    logging.getLogger(__name__).warning(
+                        "job_unclaimed_too_long job_type=%s age_seconds=%.0f", job_type, age_seconds,
+                    )
+
+            await asyncio.to_thread(recover)
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="platform.retired-job-recovery",
+                per_workspace=True,
+                run=recover_retired_and_unclaimed_jobs,
+                interval_seconds=60,
+                timeout_seconds=60,
+                requires=frozenset(
+                    {
+                        RuntimeCapability.RUN_SCHEDULERS,
+                        RuntimeCapability.RUN_RECOVERY,
+                    }
+                ),
+            )
+        )
         scheduler.register_task(
             ScheduledTaskSpec(
                 task_id="platform.job-lease-recovery",
