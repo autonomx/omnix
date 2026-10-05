@@ -4,7 +4,7 @@ import json
 import uuid
 from pathlib import Path
 
-import tts_server
+from services.tts import tts_server
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 

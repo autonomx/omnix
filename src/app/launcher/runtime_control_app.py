@@ -28,7 +28,7 @@ def build_runtime_service_specs():
                 replace(
                     spec,
                     label="Nemotron + Parakeet EOU STT",
-                    command=[spec.command[0], str(root / "src" / "nemotron_eou_stt_server.py")],
+                    command=[spec.command[0], "-m", "services.stt.nemotron_eou_stt_server"],
                     description=(
                         "Nemotron transcript + Parakeet EOU websocket service "
                         "on 127.0.0.1:5201."

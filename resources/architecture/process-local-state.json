@@ -709,7 +709,7 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/image_service_runtime.py",
+      "path": "src/services/image/image_service_runtime.py",
       "symbol": "_MODEL_OPERATION_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

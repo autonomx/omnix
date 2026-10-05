@@ -3,7 +3,7 @@
 The historic Parakeet launcher imports this module, so keep the filename stable
 while replacing the transcriber architecture underneath it.
 """
-from nemotron_eou_stt_server import app, main
+from services.stt.nemotron_eou_stt_server import app, main
 
 __all__ = ["app", "main"]
 

@@ -23,7 +23,7 @@ def test_launcher_starts_lightweight_image_service_without_preload(monkeypatch):
     assert image.env["OMNIX_IMAGE_WARMUP"] == "0"
     assert image.env["OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD"] == "1"
     assert image.env["OMNIX_IMAGE_URL"] == ""
-    assert "app.image_service_app:app" in image.command
+    assert "services.image.image_service_app:app" in image.command
 
     assert Path(gateway.command[1]).parts[-2:] == ("scripts", "run_omnix_gateway.py")
     assert gateway.command[gateway.command.index("--app") + 1] == "app.gateway.runtime_app:app"

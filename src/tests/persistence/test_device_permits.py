@@ -394,7 +394,7 @@ def test_live_fake_tts_load_scales_with_device_capacity_and_returns_429(monkeypa
     from app.security.service_token import service_headers
     from app.security.tenant_context import install_process_tenant
 
-    import tts_server
+    from services.tts import tts_server
 
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
     monkeypatch.setenv("OMNIX_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")

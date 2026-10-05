@@ -85,21 +85,21 @@ if [ ! -f "$RPG_STT_PYTHON" ]; then
     fi
 fi
 
-if [ ! -f "requirements/image.linux.lock.txt" ]; then
+if [ ! -f "src/services/image/image.linux.lock.txt" ]; then
     echo "ERROR: Hashed image runtime lock not found"
-    echo "Expected: requirements/image.linux.lock.txt"
+    echo "Expected: src/services/image/image.linux.lock.txt"
     error
 fi
 
-if [ ! -f "requirements/tts.linux.lock.txt" ]; then
+if [ ! -f "src/services/tts/tts.linux.lock.txt" ]; then
     echo "ERROR: Hashed TTS runtime lock not found"
-    echo "Expected: requirements/tts.linux.lock.txt"
+    echo "Expected: src/services/tts/tts.linux.lock.txt"
     error
 fi
 
-if [ ! -f "requirements/stt.linux.lock.txt" ]; then
+if [ ! -f "src/services/stt/stt.linux.lock.txt" ]; then
     echo "ERROR: Hashed STT runtime lock not found"
-    echo "Expected: requirements/stt.linux.lock.txt"
+    echo "Expected: src/services/stt/stt.linux.lock.txt"
     error
 fi
 
@@ -156,7 +156,7 @@ echo "[2/10][FLUX] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/10][FLUX] Installing the hashed image runtime lock..."
-"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/image.linux.lock.txt
+"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src/services/image/image.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked image runtime into $RPG_FLUX_ENV"
     error
@@ -190,16 +190,16 @@ fi
 echo "[FLUX] Cleanup complete."
 
 echo ""
-echo "[4/10][FLUX] Gateway requirements are included in requirements/image.linux.lock.txt."
+echo "[4/10][FLUX] Gateway requirements are included in src/services/image/image.linux.lock.txt."
 
 echo ""
-echo "[5/10][FLUX] FLUX requirements are included in requirements/image.linux.lock.txt."
+echo "[5/10][FLUX] FLUX requirements are included in src/services/image/image.linux.lock.txt."
 
 echo ""
 echo "[6/10][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
 
 echo ""
-echo "[7/10][FLUX] Runtime dependency pins are managed by requirements/image.in and its hashed lock."
+echo "[7/10][FLUX] Runtime dependency pins are managed by src/services/image/image.in and its hashed lock."
 
 echo ""
 echo "[8/10][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."
@@ -262,7 +262,7 @@ echo "[2/7][TTS] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/7][TTS] Installing the hashed TTS runtime lock..."
-"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/tts.linux.lock.txt
+"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src/services/tts/tts.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked TTS runtime into $RPG_TTS_ENV"
     error
@@ -276,7 +276,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[5/7][TTS] TTS requirements and torch pins are included in requirements/tts.linux.lock.txt."
+echo "[5/7][TTS] TTS requirements and torch pins are included in src/services/tts/tts.linux.lock.txt."
 
 echo ""
 echo "============================================="
@@ -314,21 +314,21 @@ fi
 
 echo ""
 echo "[POST-CHECK][TTS] Verifying tts_server import..."
-"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); import tts_server; print('tts_server import OK')"
+"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); from services.tts import tts_server; print('tts_server import OK')"
 if [ $? -ne 0 ]; then
     error
 fi
 
 echo ""
 echo "[POST-CHECK][TTS] Verifying HTTP TTS contract boot path..."
-"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); import tts_server; app = tts_server.app; print('tts_server app OK')"
+"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); from services.tts import tts_server; app = tts_server.app; print('tts_server app OK')"
 if [ $? -ne 0 ]; then
     error
 fi
 
 echo ""
 echo "[POST-CHECK][TTS] Verifying provider status helper..."
-"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
+"$RPG_TTS_PYTHON" -c "import sys; sys.path.insert(0, '$OMNIX_REPO_ROOT/src'); from services.tts import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
 if [ $? -ne 0 ]; then
     error
 fi
@@ -353,14 +353,14 @@ echo "[2/7][STT] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/7][STT] Installing the hashed STT runtime lock..."
-"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/stt.linux.lock.txt
+"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src/services/stt/stt.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked STT runtime into $RPG_STT_ENV"
     error
 fi
 
 echo ""
-echo "[5/7][STT] Torch and Transformers pins are included in requirements/stt.linux.lock.txt."
+echo "[5/7][STT] Torch and Transformers pins are included in src/services/stt/stt.linux.lock.txt."
 
 echo ""
 echo "[7/7][STT] Pre-downloading Parakeet model..."

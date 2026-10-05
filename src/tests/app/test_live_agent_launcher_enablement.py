@@ -24,18 +24,18 @@ def test_the_launcher_enables_the_proposal_only_live_agent_pilot(tmp_path) -> No
 
 def test_kasa_requirement_matches_launcher_python_version() -> None:
     gateway_input = (ROOT / "requirements" / "gateway.in").read_text(encoding="utf-8")
-    image_input = (ROOT / "requirements" / "image.in").read_text(encoding="utf-8")
+    image_input = (ROOT / "src" / "services" / "image" / "image.in").read_text(encoding="utf-8")
     gateway_lock = (ROOT / "requirements" / "gateway.lock.txt").read_text(encoding="utf-8")
     general_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     setup = (ROOT / "setup.bat").read_text(encoding="utf-8")
     launcher = (ROOT / "src" / "app" / "launcher" / "__main__.py").read_text(encoding="utf-8")
 
     assert "python-kasa" in gateway_input
-    assert "-r gateway.in" in image_input
+    assert "-r ../../../requirements/gateway.in" in image_input
     assert "-r requirements/gateway.lock.txt" in general_requirements
     assert "python-kasa==" in gateway_lock
     assert "python=3.11" in setup
-    assert "--require-hashes -r requirements\\image.lock.txt" in setup
+    assert "--require-hashes -r src\\services\\image\\image.lock.txt" in setup
     assert "python-kasa could not be imported" in launcher
     assert "hash-locked image runtime" in launcher
 

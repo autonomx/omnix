@@ -118,8 +118,8 @@ jobs:
             src/app/providers/stt_live_websocket.py \
             src/app/providers/stt_segment_scheduler.py \
             src/app/providers/stt_streaming_audio.py \
-            src/parakeet_stt_runtime.py \
-            src/parakeet_stt_server.py \
+            src/services/stt/parakeet_stt_runtime.py \
+            src/services/stt/parakeet_stt_server.py \
             src/tests/app/test_chat_response_metrics.py \
             src/tests/desktop_companion/test_desktop_companion_identity_api.py \
             src/tests/api/gateway/test_event_loop_lag.py \

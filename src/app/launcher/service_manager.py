@@ -533,7 +533,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="stt",
             label="Parakeet STT",
-            command=[stt_python, str(root / "src" / "parakeet_stt_server.py")],
+            command=[stt_python, "-m", "services.stt.parakeet_stt_server"],
             cwd=root,
             env=dict(common),
             ports=(5201,),
@@ -543,7 +543,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="tts",
             label="Omnix TTS",
-            command=[tts_python, str(root / "src" / "tts_server.py")],
+            command=[tts_python, "-m", "services.tts.tts_server"],
             cwd=root,
             env={**common, "OMNIX_TTS_MODEL_DIR": tts_model_dir, "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir},
             ports=(5101,),
@@ -630,7 +630,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="image",
             label="Image Service",
-            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", host, "--port", "5301"],
+            command=[app_python, "-m", "uvicorn", "services.image.image_service_app:app", "--host", host, "--port", "5301"],
             cwd=root,
             env={
                 **common,

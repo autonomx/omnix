@@ -33,5 +33,5 @@ def test_the_tts_and_image_servers_install_it_at_startup():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
-    assert "install_database_settings_service(default_database())" in (root / "src/tts_server.py").read_text(encoding="utf-8")
-    assert "install_database_settings_service(database)" in (root / "src/app/image_service_runtime.py").read_text(encoding="utf-8")
+    assert "install_database_settings_service(default_database())" in (root / "src/services/tts/tts_server.py").read_text(encoding="utf-8")
+    assert "install_database_settings_service(database)" in (root / "src/services/image/image_service_runtime.py").read_text(encoding="utf-8")

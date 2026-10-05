@@ -78,23 +78,23 @@ if not exist "%RPG_STT_PYTHON%" (
     )
 )
 
-if not exist "requirements\image.lock.txt" (
+if not exist "src\services\image\image.lock.txt" (
     echo ERROR: Hashed image runtime lock not found
-    echo Expected: requirements\image.lock.txt
+    echo Expected: src\services\image\image.lock.txt
     pause
     exit /b 1
 )
 
-if not exist "requirements\tts.lock.txt" (
+if not exist "src\services\tts\tts.lock.txt" (
     echo ERROR: Hashed TTS runtime lock not found
-    echo Expected: requirements\tts.lock.txt
+    echo Expected: src\services\tts\tts.lock.txt
     pause
     exit /b 1
 )
 
-if not exist "requirements\stt.lock.txt" (
+if not exist "src\services\stt\stt.lock.txt" (
     echo ERROR: Hashed STT runtime lock not found
-    echo Expected: requirements\stt.lock.txt
+    echo Expected: src\services\stt\stt.lock.txt
     pause
     exit /b 1
 )
@@ -148,7 +148,7 @@ echo [2/10][FLUX] Removing conflicting torch packages...
 
 echo.
 echo [3/10][FLUX] Installing the hashed image runtime lock...
-"%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements\image.lock.txt
+"%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src\services\image\image.lock.txt
 if errorlevel 1 (
     echo ERROR: Failed to install the locked image runtime into %RPG_FLUX_ENV%
     goto :error
@@ -191,17 +191,17 @@ REM rmdir /s /q "%USERPROFILE%\.cache\huggingface\modules\transformers_modules" 
 echo [FLUX] Cleanup complete.
 
 echo.
-echo [4/10][FLUX] Gateway requirements are included in requirements\image.lock.txt.
+echo [4/10][FLUX] Gateway requirements are included in src\services\image\image.lock.txt.
 
 
 echo.
-echo [5/10][FLUX] FLUX requirements are included in requirements\image.lock.txt.
+echo [5/10][FLUX] FLUX requirements are included in src\services\image\image.lock.txt.
 
 echo.
 echo [6/10][FLUX] TTS moved to dedicated %RPG_TTS_ENV% environment
 
 echo.
-echo [7/10][FLUX] Runtime dependency pins are managed by requirements\image.in and its hashed lock.
+echo [7/10][FLUX] Runtime dependency pins are managed by src\services\image\image.in and its hashed lock.
 
 echo.
 echo [8/10][FLUX] Downloading default LLM (Qwen3-4B Q8_0)...
@@ -256,7 +256,7 @@ echo [2/7][TTS] Removing conflicting torch packages...
 
 echo.
 echo [3/7][TTS] Installing the hashed TTS runtime lock...
-"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements\tts.lock.txt
+"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src\services\tts\tts.lock.txt
 if errorlevel 1 (
     echo ERROR: Failed to install the locked TTS runtime into %RPG_TTS_ENV%
     goto :error
@@ -268,7 +268,7 @@ echo [4/7][TTS] Verifying torch CUDA build...
 if errorlevel 1 goto :error
 
 echo.
-echo [5/7][TTS] TTS requirements and torch pins are included in requirements\tts.lock.txt.
+echo [5/7][TTS] TTS requirements and torch pins are included in src\services\tts\tts.lock.txt.
 
 echo.
 echo =============================================
@@ -295,17 +295,17 @@ if errorlevel 1 goto :error
 
 echo.
 echo [POST-CHECK][TTS] Verifying tts_server import...
-"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; print('tts_server import OK')"
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); from services.tts import tts_server; print('tts_server import OK')"
 if errorlevel 1 goto :error
 
 echo.
 echo [POST-CHECK][TTS] Verifying HTTP TTS contract boot path...
-"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; app = tts_server.app; print('tts_server app OK')"
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); from services.tts import tts_server; app = tts_server.app; print('tts_server app OK')"
 if errorlevel 1 goto :error
 
 echo.
 echo [POST-CHECK][TTS] Verifying provider status helper...
-"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); from services.tts import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
 if errorlevel 1 goto :error
 
 echo [TTS] Runtime verification complete.
@@ -329,14 +329,14 @@ echo [2/7][STT] Removing conflicting torch packages...
 
 echo.
 echo [3/7][STT] Installing the hashed STT runtime lock...
-"%RPG_STT_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements\stt.lock.txt
+"%RPG_STT_PYTHON%" -m pip install --no-cache-dir --force-reinstall --require-hashes -r src\services\stt\stt.lock.txt
 if errorlevel 1 (
     echo ERROR: Failed to install the locked STT runtime into %RPG_STT_ENV%
     goto :error
 )
 
 echo.
-echo [5/7][STT] Torch and Transformers pins are included in requirements\stt.lock.txt.
+echo [5/7][STT] Torch and Transformers pins are included in src\services\stt\stt.lock.txt.
 
 echo.
 echo [7/7][STT] Pre-downloading Parakeet model...

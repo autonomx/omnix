@@ -8,7 +8,7 @@ on:
       - "src/app/characters/service.py"
       - "src/app/tts_http_client.py"
       - "src/app/voice_debug.py"
-      - "src/tts_server.py"
+      - "src/services/tts/tts_server.py"
       - "src/tests/unit/assets/test_canonical_voice_clone_resolution.py"
       - "src/tests/unit/characters/test_live_call.py"
       - "src/tests/unit/test_voice_resolution_debug_logging.py"
@@ -69,7 +69,7 @@ jobs:
             src/tests/unit/assets/test_canonical_voice_clone_resolution.py \
             src/tests/unit/characters/test_live_call.py \
             src/tests/unit/test_voice_resolution_debug_logging.py
-          python -m py_compile src/tts_server.py
+          python -m py_compile src/services/tts/tts_server.py
       - name: Verify canonical and live-call voice resolution
         run: >-
           pytest -q

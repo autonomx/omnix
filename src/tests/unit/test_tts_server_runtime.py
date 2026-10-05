@@ -21,7 +21,7 @@ def issued_service_token(monkeypatch):
 
 
 def test_initialize_tts_provider_passes_config(monkeypatch):
-    import tts_server
+    from services.tts import tts_server
 
     captured: Dict[str, Any] = {}
 
@@ -57,7 +57,7 @@ def test_initialize_tts_provider_passes_config(monkeypatch):
 
 
 def test_get_tts_service_status_returns_ready_details():
-    import tts_server
+    from services.tts import tts_server
 
     class FakeProvider:
         provider_name = "qwen3_tts"
@@ -82,7 +82,7 @@ def test_get_tts_service_status_returns_ready_details():
 
 
 def test_generate_stream_audio_returns_chunks_on_success():
-    import tts_server
+    from services.tts import tts_server
 
     class FakeProvider:
         def generate_audio_stream(
@@ -126,7 +126,7 @@ def test_generate_stream_audio_returns_chunks_on_success():
 
 
 def test_generate_stream_audio_surfaces_missing_sox_error():
-    import tts_server
+    from services.tts import tts_server
 
     class FakeProvider:
         def generate_audio_stream(self, **_: Any):
@@ -161,7 +161,7 @@ def test_generate_stream_audio_surfaces_missing_sox_error():
 
 
 def test_generate_audio_surfaces_missing_sox_error():
-    import tts_server
+    from services.tts import tts_server
 
     class FakeProvider:
         def generate_audio(self, **_: Any):
@@ -196,7 +196,7 @@ def test_generate_audio_surfaces_missing_sox_error():
 
 def test_live_call_endpoint_streams_binary_pcm_while_holding_device_permit(monkeypatch):
     import numpy as np
-    import tts_server
+    from services.tts import tts_server
 
     events = []
 
@@ -234,7 +234,7 @@ def test_live_call_endpoint_streams_binary_pcm_while_holding_device_permit(monke
 def test_live_call_endpoint_rejects_saturation_with_retry_after(monkeypatch):
     from contextlib import contextmanager
 
-    import tts_server
+    from services.tts import tts_server
     from app.persistence.device_permits import DevicePermitUnavailable
 
     class FakeProvider:
@@ -263,7 +263,7 @@ def test_live_call_endpoint_rejects_saturation_with_retry_after(monkeypatch):
 
 @pytest.mark.anyio
 async def test_cancelled_live_admission_releases_a_late_permit():
-    from tts_server import _enter_device_permit
+    from services.tts.tts_server import _enter_device_permit
 
     entered = threading.Event()
     finish_enter = threading.Event()
@@ -290,7 +290,7 @@ async def test_cancelled_live_admission_releases_a_late_permit():
 
 @pytest.mark.anyio
 async def test_live_tts_background_closes_stream_and_releases_unstarted_permit(monkeypatch):
-    import tts_server
+    from services.tts import tts_server
 
     acquired = threading.Event()
     released = threading.Event()
@@ -336,7 +336,7 @@ async def test_live_tts_background_closes_stream_and_releases_unstarted_permit(m
 
 def test_synthesis_runs_on_the_dedicated_pool_and_health_stays_responsive():
     import httpx
-    import tts_server
+    from services.tts import tts_server
 
     entered, release = threading.Event(), threading.Event()
     synthesis_threads: list[str] = []
@@ -386,7 +386,7 @@ def test_synthesis_runs_on_the_dedicated_pool_and_health_stays_responsive():
 def test_the_gateway_voice_clone_client_and_the_tts_server_agree(monkeypatch):
     """The client uploads multipart; the server must accept exactly that (WP-7.3)."""
     import httpx
-    import tts_server
+    from services.tts import tts_server
 
     from app import tts_http_client
     from app.runtime.http_client import HttpPolicy, PooledHttpClient
@@ -430,7 +430,7 @@ def test_gateway_synthesis_receives_wav_bytes_not_base64_json():
     import base64
 
     import httpx
-    import tts_server
+    from services.tts import tts_server
 
     from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
     from app.runtime.http_client import HttpPolicy, PooledHttpClient

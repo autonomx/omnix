@@ -81,7 +81,7 @@ jobs:
             src/app/live_voice/speech/startup_frame_policy.py \
             src/app/live_voice/transport/websocket.py \
             src/app/conversation/tts_stream_contract.py \
-            src/nemotron_eou_stt_server.py \
+            src/services/stt/nemotron_eou_stt_server.py \
             src/tests/app/test_runtime_launcher_services.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/live_voice/test_live_voice_hardware_policy.py \

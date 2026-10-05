@@ -6,7 +6,7 @@ for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
 
 if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
 set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
-set "STT_SERVER=%OMNIX_REPO_ROOT%\src\parakeet_stt_server.py"
+set "STT_SERVER=%OMNIX_REPO_ROOT%\src\services\stt\parakeet_stt_server.py"
 
 if not exist "%RPG_STT_PYTHON%" (
     echo ERROR: rpg-stt python not found:
@@ -35,7 +35,7 @@ echo.
 if errorlevel 1 (
     echo.
     echo ERROR: The rpg-stt environment is missing a required dependency or has an old NeMo version.
-    echo Run setup.bat to install the hash-locked STT runtime from requirements\stt.lock.txt.
+    echo Run setup.bat to install the hash-locked STT runtime from src\services\stt\stt.lock.txt.
     pause
     exit /b 1
 )
@@ -45,6 +45,7 @@ if not defined OMNIX_STT_STREAM_CHUNK_MS set "OMNIX_STT_STREAM_CHUNK_MS=160"
 if not defined OMNIX_NEMOTRON_RIGHT_CONTEXT set "OMNIX_NEMOTRON_RIGHT_CONTEXT=1"
 if not defined OMNIX_EOU_RIGHT_CONTEXT set "OMNIX_EOU_RIGHT_CONTEXT=1"
 if not defined OMNIX_STT_DEVICE set "OMNIX_STT_DEVICE=auto"
-"%RPG_STT_PYTHON%" "%STT_SERVER%"
+set "PYTHONPATH=%OMNIX_REPO_ROOT%\src"
+"%RPG_STT_PYTHON%" -m services.stt.parakeet_stt_server
 
 endlocal

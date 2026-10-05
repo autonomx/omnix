@@ -318,7 +318,7 @@ class TestTtsIntegration:
 def test_initialize_tts_provider_fails_when_startup_not_running(monkeypatch):
     import sys
     sys.path.insert(0, "src")
-    import tts_server
+    from services.tts import tts_server
 
     class _BadProvider:
         provider_name = "qwen3_tts"

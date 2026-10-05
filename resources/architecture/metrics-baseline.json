@@ -2506,12 +2506,7 @@
       "module_repositories_in_kernel": [],
       "platform_feature_specific_files": [],
       "reverse_contract_imports": [],
-      "src_root_service_entrypoints": [
-        "src/nemotron_eou_stt_server.py",
-        "src/parakeet_stt_runtime.py",
-        "src/parakeet_stt_server.py",
-        "src/tts_server.py"
-      ],
+      "src_root_service_entrypoints": [],
       "string_runtime_hooks": [],
       "tables_without_owner": [],
       "tracked_runtime_data_in_src": [
@@ -3565,15 +3560,6 @@
         "path": "src/app/image/routes/models.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DOWNLOAD_TOTALS_LOCK"
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "kind": "lock",
-        "line": 61,
-        "path": "src/app/image_service_runtime.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_MODEL_OPERATION_LOCK"
       },
       {
         "approved": true,
@@ -4701,6 +4687,15 @@
         "path": "src/app/voice_debug.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LOGGER_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "lock",
+        "line": 61,
+        "path": "src/services/image/image_service_runtime.py",
+        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
+        "symbol": "_MODEL_OPERATION_LOCK"
       }
     ],
     "process_local_state_candidates": [
@@ -5203,11 +5198,6 @@
         "approved": true,
         "path": "src/app/image/routes/models.py",
         "symbol": "_DOWNLOAD_TOTALS_LOCK"
-      },
-      {
-        "approved": true,
-        "path": "src/app/image_service_runtime.py",
-        "symbol": "_MODEL_OPERATION_LOCK"
       },
       {
         "approved": true,
@@ -5743,6 +5733,11 @@
         "approved": true,
         "path": "src/app/voice_debug.py",
         "symbol": "_LOGGER_LOCK"
+      },
+      {
+        "approved": true,
+        "path": "src/services/image/image_service_runtime.py",
+        "symbol": "_MODEL_OPERATION_LOCK"
       }
     ],
     "process_local_state_inventory_kind": "module_scope_scan_plus_reviewed_entries",
@@ -6708,7 +6703,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 27
+      "value": 21
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -6728,7 +6723,7 @@
     "src_root_service_entrypoints": {
       "direction": "lower",
       "target": 0,
-      "value": 4
+      "value": 0
     },
     "star_imports": {
       "direction": "lower",
@@ -6848,5 +6843,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "e10ea2f39609d20f5d420569c1901c853caaf78043f2b7c960f82b686fad8b55"
+  "source_digest": "32198cc6fb2e044a9a3f8ad70f5e84ed0ae0eda53e522528336569c0d9c6aaef"
 }

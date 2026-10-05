@@ -1,4 +1,4 @@
--r gateway.in
+-r ../../../requirements/gateway.in
 
 # Local image stack. Krea 2 requires diffusers 0.39 and PyTorch 2.6+.
 numpy==1.26.4

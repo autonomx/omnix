@@ -6,6 +6,9 @@ inputs; install them with `--require-hashes` so pip verifies every distribution.
 - `requirements.txt` delegates to the gateway lock.
 - `dev.lock.txt` adds test and repository tooling.
 - `worker.lock.txt` delegates to the gateway lock plus worker-only packages.
+- The model services keep their inputs and locks with their code (PA-5.1):
+  `src/services/tts/`, `src/services/stt/` and `src/services/image/` hold
+  `<name>.in`, `<name>.lock.txt` and `<name>.linux.lock.txt`.
 - `tts.linux.lock.txt`, `stt.linux.lock.txt` and `image.linux.lock.txt` are
   the Linux installs of the GPU locks for the container images. pip-tools
   writes only the dependencies of the platform it runs on, and Torch and
@@ -20,11 +23,12 @@ inputs; install them with `--require-hashes` so pip verifies every distribution.
   runtimes. GPU locks use the PyTorch CUDA 12.4 index and pin one Torch version.
 
 Regenerate locks after editing the matching `.in` file with pip-tools 7.6.1.
-Use `pip-compile --generate-hashes --output-file requirements/<name>.lock.txt
-requirements/<name>.in`; add `--allow-unsafe` for dev and GPU locks. For GPU
+Use `pip-compile --generate-hashes --output-file <folder>/<name>.lock.txt
+<folder>/<name>.in` (the folder is `requirements/`, or `src/services/<name>/` for a
+model service); add `--allow-unsafe` for dev and GPU locks. For GPU
 locks, also pass `--extra-index-url https://download.pytorch.org/whl/cu124`.
 Review the complete resolver diff and validate installations with
-`python -m pip install --require-hashes -r requirements/<name>.lock.txt` on
+`python -m pip install --require-hashes -r <folder>/<name>.lock.txt` on
 Linux and Windows. The gateway inputs pin Uvicorn's `uvloop` extra behind a
 non-Windows platform marker; preserve that hashed entry when compiling from a
 Windows environment, where the marker is inactive.

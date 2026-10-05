@@ -127,7 +127,7 @@ def test_invalid_host_configuration_fails_closed(monkeypatch, value):
         RequestGuardMiddleware(FastAPI())
 
 
-@pytest.mark.parametrize("module", ["tts_server", "nemotron_eou_stt_server", "app.image_service_runtime", "app.launcher.control_app"])
+@pytest.mark.parametrize("module", ["services.tts.tts_server", "services.stt.nemotron_eou_stt_server", "services.image.image_service_runtime", "app.launcher.control_app"])
 def test_service_composition_protects_routes(monkeypatch, module):
     monkeypatch.delenv("OMNIX_ALLOWED_HOSTS", raising=False)
     monkeypatch.delenv("OMNIX_ALLOWED_ORIGINS", raising=False)

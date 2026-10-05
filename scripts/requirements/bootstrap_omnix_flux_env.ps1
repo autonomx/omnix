@@ -49,12 +49,12 @@ function InEnv($command) {
     conda run -n $EnvName powershell -NoProfile -Command $command
 }
 
-if (Test-Path "requirements/image.lock.txt") {
+if (Test-Path "src/services/image/image.lock.txt") {
     Step "Installing the hash-locked image runtime"
-    InEnv "python -m pip install --require-hashes -r requirements/image.lock.txt"
+    InEnv "python -m pip install --require-hashes -r src/services/image/image.lock.txt"
     Ok "Hash-locked image runtime installed"
 } else {
-    Fail "requirements/image.lock.txt was not found. Run the lock generation step first."
+    Fail "src/services/image/image.lock.txt was not found. Run the lock generation step first."
 }
 
 Step "Printing interpreter path"

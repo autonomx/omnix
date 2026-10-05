@@ -8,6 +8,7 @@ This module contains concrete implementations of audio providers:
 import json
 import logging
 import os
+from app.config.env import environment_copy
 import subprocess
 import time
 from pathlib import Path
@@ -64,12 +65,15 @@ class ParakeetSTT(BaseSTTProvider):
             return {"running": True, "message": "Service already running"}
         
         try:
-            script_path = Path(__file__).parent.parent.parent / "parakeet_stt_server.py"
+            source_root = Path(__file__).resolve().parents[2]
+            script_path = source_root / "services" / "stt" / "parakeet_stt_server.py"
             if not script_path.exists():
                 return {"running": False, "message": f"Server script not found: {script_path}"}
             
             self.process = subprocess.Popen(
-                ['python', str(script_path)],
+                ['python', '-m', 'services.stt.parakeet_stt_server'],
+                cwd=str(source_root),
+                env={**environment_copy(), "PYTHONPATH": str(source_root)},
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

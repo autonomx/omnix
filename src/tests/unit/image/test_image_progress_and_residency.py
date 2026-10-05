@@ -159,9 +159,9 @@ def test_only_the_launched_service_process_coordinates_permits():
     # the shared app, which must not leak into this test session.
     script = (
         "import json\n"
-        "from app import image_service_runtime as runtime\n"
+        "from services.image import image_service_runtime as runtime\n"
         "before = [hook.__name__ for hook in runtime.app.router.on_startup]\n"
-        "from app import image_service_app\n"
+        "from services.image import image_service_app\n"
         "after = [hook.__name__ for hook in image_service_app.app.router.on_startup]\n"
         "print(json.dumps([before, after]))\n"
     )

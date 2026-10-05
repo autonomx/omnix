@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 
 def test_load_qwen3_provider_passes_settings_config():
-    import tts_server
+    from services.tts import tts_server
 
     captured = {}
 
@@ -34,9 +34,9 @@ def test_load_qwen3_provider_passes_settings_config():
 
 
 def test_initialize_tts_provider_returns_error_payload_when_provider_init_fails():
-    import tts_server
+    from services.tts import tts_server
 
-    with patch("tts_server._load_qwen3_provider", side_effect=TypeError("missing config")):
+    with patch("services.tts.tts_server._load_qwen3_provider", side_effect=TypeError("missing config")):
         result = tts_server.initialize_tts_provider()
 
     assert result["ok"] is False
@@ -46,7 +46,7 @@ def test_initialize_tts_provider_returns_error_payload_when_provider_init_fails(
 
 
 def test_health_reports_not_ready_when_provider_is_not_initialized():
-    import tts_server
+    from services.tts import tts_server
 
     tts_server._TTS_PROVIDER = None
     tts_server._TTS_PROVIDER_ERROR = "provider_not_initialized"
@@ -59,7 +59,7 @@ def test_health_reports_not_ready_when_provider_is_not_initialized():
 
 
 def test_model_owner_loss_stops_provider_and_marks_server_not_ready():
-    import tts_server
+    from services.tts import tts_server
 
     class FakeProvider:
         stopped = False
@@ -95,7 +95,7 @@ def test_model_owner_loss_stops_provider_and_marks_server_not_ready():
 def test_one_request_synthesizes_a_bounded_amount_of_text():
     import pydantic
     import pytest
-    import tts_server
+    from services.tts import tts_server
 
     limit = tts_server.MAX_TTS_TEXT_CHARS
     for model in (tts_server.TtsGenerateRequest, tts_server.TtsGenerateStreamRequest):

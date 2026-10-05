@@ -14,9 +14,7 @@ def test_runtime_dashboard_uses_hybrid_stt(monkeypatch) -> None:
     assert by_id["stt"].enabled is True
     assert by_id["stt"].auto_start is True
     assert by_id["stt"].env["OMNIX_STT_URL"] == "http://127.0.0.1:5201"
-    assert by_id["stt"].command[-1].replace("\\", "/").endswith(
-        "/src/nemotron_eou_stt_server.py"
-    )
+    assert by_id["stt"].command[1:] == ["-m", "services.stt.nemotron_eou_stt_server"]
     assert by_id["gateway"].env["OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"] == "true"
     assert by_id["gateway"].env["OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS"] == "2"
     assert by_id["web"].env["VITE_ASSISTANT_STT_URL"].startswith(

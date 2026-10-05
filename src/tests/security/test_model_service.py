@@ -186,7 +186,7 @@ def test_invalid_upload_configuration_fails_closed(monkeypatch, raw):
         max_upload_bytes()
 
 
-@pytest.mark.parametrize("module", ["tts_server", "nemotron_eou_stt_server", "app.image_service_runtime"])
+@pytest.mark.parametrize("module", ["services.tts.tts_server", "services.stt.nemotron_eou_stt_server", "services.image.image_service_runtime"])
 def test_every_composed_model_route_is_authenticated(monkeypatch, module):
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
     app = importlib.import_module(module).app
@@ -208,7 +208,7 @@ def test_every_composed_model_route_is_authenticated(monkeypatch, module):
 
 
 def test_health_does_not_expose_provider_failure(monkeypatch):
-    import tts_server
+    from services.tts import tts_server
     monkeypatch.setattr(tts_server, "_TTS_PROVIDER", None)
     monkeypatch.setattr(tts_server, "_TTS_PROVIDER_ERROR", "Traceback: private path and credential")
     response = TestClient(tts_server.app, base_url="http://127.0.0.1").get("/health")

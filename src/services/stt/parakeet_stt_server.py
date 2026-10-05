@@ -1,5 +1,5 @@
 """Compatibility entrypoint for the optimized Omnix Parakeet runtime."""
-from parakeet_stt_runtime import app, main
+from services.stt.parakeet_stt_runtime import app, main
 
 __all__ = ["app", "main"]
 

@@ -225,7 +225,7 @@ def scan_process_local_state(sources: dict[str, str]) -> list[dict[str, Any]]:
     """Find module-owned mutable containers, locks and unbounded function caches."""
     findings: dict[tuple[str, str], dict[str, Any]] = {}
     for path, source in sorted(sources.items()):
-        if not path.startswith("src/app/") or not path.endswith(".py"):
+        if not path.startswith(("src/app/", "src/services/")) or not path.endswith(".py"):
             continue
         try:
             tree = ast.parse(source)

@@ -18,7 +18,7 @@ tier = "app"
 may_import = ["kernel", "shared_services"]
 
 [layers.composition]
-packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "app.image_service_app", "app.image_service_runtime"]
+packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition", "services"]
 may_import = ["*"]
 
 [modules]
@@ -42,4 +42,4 @@ tenant_bootstrap = ["app/persistence/identity_service.py", "app/persistence/star
 packages = ["app.rpg.core", "app.rpg.session", "app.rpg.combat", "app.rpg.economy", "app.rpg.items", "app.rpg.world", "app.rpg.social", "app.rpg.action_resolver"]
 
 [production]
-entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/nemotron_eou_stt_server.py", "src/parakeet_stt_runtime.py", "src/parakeet_stt_server.py", "src/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]
+entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/services/stt/nemotron_eou_stt_server.py", "src/services/stt/parakeet_stt_runtime.py", "src/services/stt/parakeet_stt_server.py", "src/services/tts/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]

@@ -15,6 +15,7 @@ on:
       - "deploy/docker/**"
       - ".dockerignore"
       - "requirements/*.lock.txt"
+      - "src/services/**/*.lock.txt"
       - "docker-compose.yml"
 
 permissions:
