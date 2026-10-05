@@ -59,7 +59,6 @@ def test_reuses_character_snapshot_preloaded_by_live_call(monkeypatch) -> None:
 
 def test_character_service_snapshot_events_seed_and_invalidate_prompt_cache() -> None:
     prompt_cache._reset_live_prompt_cache_for_tests()
-    prompt_cache.ensure_character_snapshot_observers()
     snapshot = SimpleNamespace(id="sofia", version=7)
 
     class Repository:

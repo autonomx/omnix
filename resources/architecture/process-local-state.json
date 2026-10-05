@@ -415,12 +415,6 @@
       "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
     },
     {
-      "path": "src/app/characters/service.py",
-      "symbol": "_SNAPSHOT_CACHE_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
       "path": "src/app/chat/assistant_turns.py",
       "symbol": "_default_lock",
       "category": "cache",

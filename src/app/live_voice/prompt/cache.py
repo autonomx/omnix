@@ -16,7 +16,6 @@ from app.characters.contracts import (
     LiveConversationProfileStore,
     default_character_service,
     resolve_interaction_context,
-    subscribe_character_snapshot_cache,
 )
 from app.chat.contracts import resolve_system_session_identity
 from app.observability.tts_stream_diagnostics import stream_log
@@ -39,7 +38,6 @@ _PROMPT_STAGE_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_stage_timings",
     default=None,
 )
-_SNAPSHOT_OBSERVERS_READY = False
 
 
 def _clone(value: Any) -> Any:
@@ -112,18 +110,14 @@ def _invalidate_character(character_id: str) -> None:
             _IDENTITY_CONTEXTS.pop(key, None)
 
 
-def ensure_character_snapshot_observers() -> None:
-    global _SNAPSHOT_OBSERVERS_READY
-    if _SNAPSHOT_OBSERVERS_READY:
-        return
-    with _CACHE_LOCK:
-        if _SNAPSHOT_OBSERVERS_READY:
-            return
-        subscribe_character_snapshot_cache(
-            on_resolve=cache_character_snapshot,
-            on_change=_invalidate_character,
-        )
-        _SNAPSHOT_OBSERVERS_READY = True
+class CharacterSnapshotCacheObserver:
+    """Keeps the prompt cache in step with characters (characters' snapshot observer port, PA-3.4)."""
+
+    def on_resolve(self, snapshot: Any) -> None:
+        cache_character_snapshot(snapshot)
+
+    def on_change(self, character_id: str) -> None:
+        _invalidate_character(character_id)
 
 
 def _identity_key(session: Any) -> tuple[Any, ...]:
@@ -158,7 +152,6 @@ def _record_flag(name: str, value: bool) -> None:
 
 def resolve_system_session_identity_cached(session: Any) -> Any:
     """Resolve identity using a version-keyed snapshot and a bounded LRU."""
-    ensure_character_snapshot_observers()
     started = time.perf_counter()
     key = _identity_key(session)
     with _CACHE_LOCK:
@@ -297,7 +290,7 @@ __all__ = [
     "_reset_live_prompt_cache_for_tests",
     "cache_character_snapshot",
     "end_prompt_stage_timings",
-    "ensure_character_snapshot_observers",
+    "CharacterSnapshotCacheObserver",
     "get_live_conversation_profile_cached",
     "record_prompt_stage_time",
     "resolve_system_session_identity_cached",

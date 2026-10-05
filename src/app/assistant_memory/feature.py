@@ -1,6 +1,8 @@
 """Assistant-memory feature declaration."""
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from app.assistant_memory.jobs import (
@@ -9,6 +11,7 @@ from app.assistant_memory.jobs import (
     process_memory_suggestion_job,
 )
 from app.assistant_memory.owner_defaults import default_memory_service
+from app.events.outbox_relay import OutboxConsumer
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import JobRecord, ResourceClass
 from app.runtime.features import FeatureContext, FeatureModule
@@ -36,6 +39,21 @@ def _execute_memory_suggestion(
         already_claimed=job.lease is not None,
     )
     return context.job_store.get_job(job.id) or job
+
+
+def _suggest_memories_after_turn(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+    from .turn_reactions import suggest_memories_after_turn
+
+    return suggest_memories_after_turn(connection, event)
+
+
+# Memory suggestions follow chat's completed turns through the outbox (PA-3.4).
+_TURN_SUGGESTIONS = OutboxConsumer(
+    consumer_name="assistant-memory.turn-suggestions",
+    aggregate_types=frozenset({"chat_session"}),
+    handler=_suggest_memories_after_turn,
+    event_type_pattern="chat.turn.completed",
+)
 
 
 def _router(context: FeatureContext) -> APIRouter:
@@ -72,6 +90,7 @@ FEATURE = FeatureModule(
             max_attempts=3,
         ),
     ),
+    outbox_consumers=(_TURN_SUGGESTIONS,),
     repositories=ASSISTANT_MEMORY_REPOSITORY_SPECS,
     settings=(assistant_memory_setting_spec(),),
 )

@@ -121,7 +121,14 @@ class PostgresOutboxRepository:
         correlation_id: str | None = None,
         causation_id: str | None = None,
         event_key: str | None = None,
+        skip_existing: bool = False,
     ) -> int:
+        """Append one event; returns its id.
+
+        With ``skip_existing`` an event whose ``event_key`` is already in the
+        outbox is not appended again, and the existing event's id is returned:
+        a producer that may publish twice (a retried turn) publishes once.
+        """
         key = event_key or uuid.uuid4().hex
         sequence = (
             self._next_sequence(context.workspace_id, ordering_key)
@@ -138,8 +145,9 @@ class PostgresOutboxRepository:
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
                 CURRENT_TIMESTAMP
             )
-            RETURNING id
-            """,
+            """
+            + (" ON CONFLICT (event_key) DO NOTHING" if skip_existing else "")
+            + " RETURNING id",
             (
                 key,
                 context.workspace_id,
@@ -154,6 +162,10 @@ class PostgresOutboxRepository:
                 _json(payload),
             ),
         ).fetchone()
+        if row is None:
+            row = self.connection.execute(
+                "SELECT id FROM omnix_outbox_events WHERE event_key = %s", (key,),
+            ).fetchone()
         return int(row[0])
 
     def claim_batch(

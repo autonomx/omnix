@@ -26,6 +26,7 @@ from app.chat.memory_commands import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
 from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
+from app.chat.prompt_store import turn_completed_event
 from app.chat.retention_policy import transcript_retention_allowed
 from app.chat.store import _context_source_summaries
 from app.conversation.contracts import (
@@ -669,6 +670,28 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
     """Preserve chat orchestration while making PostgreSQL the transcript authority."""
 
     _durable_chat_mutations = True
+
+    def _publish_turn_completed(self, session: ChatSession, user_message_id: str) -> None:
+        """Append ``chat.turn.completed`` to the outbox, once per user message (PA-3.4).
+
+        Called after the turn's own transaction commits, as the memory call it
+        replaces was; the outbox then delivers it to every consumer.
+        """
+        from app.chat.turn_events import CHAT_TURN_COMPLETED, turn_completed_event_key
+
+        context = self._repository.context
+        event = turn_completed_event(session, user_message_id, user_id=context.user_id)
+        with unit_of_work(self._repository.database) as work:
+            work.outbox.append(
+                context,
+                aggregate_type="chat_session",
+                aggregate_id=session.id,
+                event_type=CHAT_TURN_COMPLETED,
+                payload=event.model_dump(mode="json"),
+                event_key=turn_completed_event_key(user_message_id),
+                skip_existing=True,
+            )
+            work.commit()
 
     def __init__(
         self,

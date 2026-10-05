@@ -174,6 +174,11 @@ __all__ = [
 
 # Services apps import through this contract, loaded on first use (ADR-0016).
 _LAZY_EXPORTS = {
+    # Events chat publishes through the outbox (PA-3.4).
+    "CHAT_SESSION_AGGREGATE": "turn_events",
+    "CHAT_TURN_COMPLETED": "turn_events",
+    "ChatTurnCompleted": "turn_events",
+    "turn_completed_event_key": "turn_events",
     "build_chat_routing_context": "routing_context",
     "stream_live_call_greeting_chunks": "live_call_greeting",
     "ProactiveDeliveryRequest": "live_conversation_proactive",

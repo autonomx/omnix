@@ -14,7 +14,6 @@ from typing import Any
 from app.assistant_memory.contracts import (
     MemoryService,
     default_memory_service,
-    enqueue_memory_suggestion_job,
 )
 from app.conversation.contracts import (
     AcceptedChatActivityRecorder,
@@ -225,6 +224,18 @@ def _recent_message_limit_after_summary(
 
 def _memory_suggestions_allowed(session: ChatSession) -> bool:
     return session.interaction_mode != "character" or session.write_memory
+
+
+def turn_completed_event(session: ChatSession, user_message_id: str, *, user_id: str) -> Any:
+    """The ``ChatTurnCompleted`` event a completed turn publishes (PA-3.4)."""
+    from .turn_events import ChatTurnCompleted
+
+    return ChatTurnCompleted(
+        session_id=session.id,
+        user_message_id=user_message_id,
+        user_id=user_id,
+        memory_writes_allowed=_memory_suggestions_allowed(session),
+    )
 
 
 class ChatSessionStore(JsonChatSessionStore):
@@ -481,30 +492,23 @@ class ChatSessionStore(JsonChatSessionStore):
                 self._save_session(session)
                 return
 
-    def _enqueue_memory_suggestion_job(self, session_id: str, user_message_id: str) -> None:
-        job = enqueue_memory_suggestion_job(
-            session_id,
-            user_message_id,
-            job_store=self.job_service,
-        )
-        if job is None:
-            return
-        logger.info(
-            "Memory suggestion job queued: job_id=%s session_id=%s",
-            job.id,
-            session_id,
-        )
+    def _publish_turn_completed(self, session: ChatSession, user_message_id: str) -> None:
+        """Tell other modules a turn completed (PA-3.4).
+
+        The PostgreSQL store appends the event to the outbox, which delivers
+        it to its consumers (assistant memory suggests memories from it); a
+        store without the outbox has no consumers to reach.
+        """
 
     def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
-        """Run optional memory maintenance without changing chat delivery success."""
-        if _memory_suggestions_allowed(session):
-            try:
-                self._enqueue_memory_suggestion_job(session.id, user_message_id)
-            except Exception:
-                logger.warning(
-                    "memory suggestion maintenance unavailable after completed chat turn",
-                    exc_info=True,
-                )
+        """Publish the completed turn and run chat's own maintenance, without changing delivery success."""
+        try:
+            self._publish_turn_completed(session, user_message_id)
+        except Exception:
+            logger.warning(
+                "turn completed event unavailable after completed chat turn",
+                exc_info=True,
+            )
         try:
             enqueue_compaction_job(session)
         except Exception:

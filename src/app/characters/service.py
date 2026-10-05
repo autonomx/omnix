@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import logging
-import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 from app.assets.content import asset_available
 from app.assets import (
@@ -24,6 +23,8 @@ from .models import (
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
+from app.runtime.ports import Port, implementations
+
 from .repository import (
     CharacterConflictError,
     CharacterNotFoundError,
@@ -32,39 +33,39 @@ from .repository import (
 from .voice_consent import governance_from_asset
 
 LOGGER = logging.getLogger("uvicorn.error")
-_SNAPSHOT_CACHE_LOCK = threading.RLock()
-_SNAPSHOT_CACHE_WRITER: Callable[[Any], None] | None = None
-_SNAPSHOT_CACHE_INVALIDATOR: Callable[[str], None] | None = None
 
 
-def subscribe_character_snapshot_cache(
-    *,
-    on_resolve: Callable[[Any], None],
-    on_change: Callable[[str], None],
-) -> None:
-    """Register bounded-cache ports for immutable snapshots and mutations."""
-    global _SNAPSHOT_CACHE_WRITER, _SNAPSHOT_CACHE_INVALIDATOR
-    with _SNAPSHOT_CACHE_LOCK:
-        _SNAPSHOT_CACHE_WRITER = on_resolve
-        _SNAPSHOT_CACHE_INVALIDATOR = on_change
+class CharacterSnapshotObserver(Protocol):
+    """Follows character snapshots and changes in this process (ADR-0016 port, PA-3.4).
+
+    Called right after a snapshot is resolved or a character changes; an
+    observer that fails is logged and never fails the character operation.
+    """
+
+    def on_resolve(self, snapshot: Any) -> None:
+        """A version-pinned snapshot was resolved."""
+
+    def on_change(self, character_id: str) -> None:
+        """The character was created, updated or archived."""
+
+
+CHARACTER_SNAPSHOT_OBSERVERS: Port[CharacterSnapshotObserver] = Port(
+    "characters.snapshot_observers", CharacterSnapshotObserver, "many",
+)
 
 
 def _publish_snapshot(snapshot: Any) -> None:
-    with _SNAPSHOT_CACHE_LOCK:
-        writer = _SNAPSHOT_CACHE_WRITER
-    if writer is not None:
+    for observer in implementations(CHARACTER_SNAPSHOT_OBSERVERS):
         try:
-            writer(snapshot)
+            observer.on_resolve(snapshot)
         except Exception:
             LOGGER.warning("character snapshot cache observer failed", exc_info=True)
 
 
 def _invalidate_snapshot_caches(character_id: str) -> None:
-    with _SNAPSHOT_CACHE_LOCK:
-        invalidate = _SNAPSHOT_CACHE_INVALIDATOR
-    if invalidate is not None:
+    for observer in implementations(CHARACTER_SNAPSHOT_OBSERVERS):
         try:
-            invalidate(character_id)
+            observer.on_change(character_id)
         except Exception:
             LOGGER.warning("character snapshot cache invalidator failed", exc_info=True)
 
@@ -204,10 +205,11 @@ def default_character_service() -> CharacterService:
 
 
 __all__ = [
+    "CHARACTER_SNAPSHOT_OBSERVERS",
+    "CharacterSnapshotObserver",
     "CharacterConflictError",
     "CharacterNotFoundError",
     "CharacterService",
     "CharacterVoiceAssetError",
     "default_character_service",
-    "subscribe_character_snapshot_cache",
 ]

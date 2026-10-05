@@ -2115,6 +2115,13 @@
       "outbox_consumers": [
         {
           "aggregate_types": [
+            "chat_session"
+          ],
+          "consumer": "assistant-memory.turn-suggestions",
+          "event_type_pattern": "chat.turn.completed"
+        },
+        {
+          "aggregate_types": [
             "agent_run",
             "task_graph_run",
             "workflow_run"
@@ -2125,7 +2132,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8318,
+      "collected_tests": 8324,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2920,6 +2927,13 @@
       "consumers": [
         {
           "aggregate_types": [
+            "chat_session"
+          ],
+          "consumer": "assistant-memory.turn-suggestions",
+          "event_type_pattern": "chat.turn.completed"
+        },
+        {
+          "aggregate_types": [
             "agent_run",
             "task_graph_run",
             "workflow_run"
@@ -2930,18 +2944,20 @@
       ],
       "covered_aggregate_types": [
         "agent_run",
+        "chat_session",
         "task_graph_run",
         "workflow_run"
       ],
       "uncovered_aggregate_types": [],
       "written_aggregate_types": [
         "agent_run",
+        "chat_session",
         "task_graph_run",
         "workflow_run"
       ]
     }
   },
-  "measured_at": "2026-10-05T09:45:23.168814+00:00",
+  "measured_at": "2026-10-05T10:10:27.324448+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2966,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "29019b316275a0772685b2614194c7139eb5b273e19f622b02f61c537d366b19"
+  "source_digest": "ee14920ae9b952a12d8ecdb458268c0dea7f84b11a76d6ae5c7d033be9a059af"
 }

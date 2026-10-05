@@ -18,12 +18,15 @@ from app.characters.live_conversation_profile import (
     default_live_conversation_profile_store,
 )
 from app.characters.service import (
+    CHARACTER_SNAPSHOT_OBSERVERS,
+    CharacterSnapshotObserver,
     default_character_service,
-    subscribe_character_snapshot_cache,
 )
 from app.characters.session_models import SetSessionInteractionRequest
 
 __all__ = [
+    "CHARACTER_SNAPSHOT_OBSERVERS",
+    "CharacterSnapshotObserver",
     "InteractionSelection",
     "LiveConversationProfile",
     "LiveConversationProfileStore",
@@ -35,7 +38,6 @@ __all__ = [
     "resolve_interaction_context",
     "resolve_shared_memory_categories",
     "resolve_system_session_identity",
-    "subscribe_character_snapshot_cache",
 ]
 
 

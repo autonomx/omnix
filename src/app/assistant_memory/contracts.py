@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from importlib import import_module
 
-from app.assistant_memory.jobs import enqueue_memory_suggestion_job
 from app.assistant_memory.owner_defaults import default_memory_service
 from app.assistant_memory.selection import estimate_memory_tokens, select_memory_records
 from app.assistant_memory.service import MemoryService
@@ -41,7 +40,6 @@ __all__ = [
     "build_companion_context_packet",
     "companion_rollout_policy",
     "default_memory_service",
-    "enqueue_memory_suggestion_job",
     "estimate_memory_tokens",
     "initiative_prompt_directive",
     "load_memory_runtime_settings",
