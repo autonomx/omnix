@@ -1,15 +1,16 @@
 """PostgreSQL authority for legacy chat-session compatibility."""
 from __future__ import annotations
 
-import json
 from typing import Any, Callable, TypeVar
 
 from app.persistence.database import default_database
 from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.module_repositories import PostgresModuleRecordRepository
 from app.persistence.document_schemas import register_document_schema
 from app.security.tenant_context import current_tenant
 
 _T = TypeVar("_T")
+_LEGACY_SESSIONS = {"module": "platform", "record_type": "legacy-chat-sessions", "record_id": "default"}
 
 
 def load_legacy_chat_sessions() -> dict[str, Any]:
@@ -35,37 +36,11 @@ def mutate_legacy_chat_sessions(
     database = default_database()
     context = current_tenant()
     with database.transaction() as connection:
-        connection.execute(
-            """
-            INSERT INTO omnix_module_records (
-                workspace_id, module, record_type, record_id, owner_user_id, payload
-            ) VALUES (%s, 'platform', 'legacy-chat-sessions', 'default', %s, '{}'::jsonb)
-            ON CONFLICT (workspace_id, module, record_type, record_id) DO NOTHING
-            """,
-            (context.workspace_id, context.user_id),
-        )
-        row = connection.execute(
-            """
-            SELECT payload
-              FROM omnix_module_records
-             WHERE workspace_id = %s AND module = 'platform'
-               AND record_type = 'legacy-chat-sessions' AND record_id = 'default'
-             FOR UPDATE
-            """,
-            (context.workspace_id,),
-        ).fetchone()
-        current = dict(row[0] or {}) if row is not None else {}
+        records = PostgresModuleRecordRepository(connection)
+        records.ensure(context, payload={}, **_LEGACY_SESSIONS)
+        current = dict(records.payload(context, **_LEGACY_SESSIONS, lock=True) or {})
         result = mutator(current)
-        connection.execute(
-            """
-            UPDATE omnix_module_records
-               SET payload = %s::jsonb, status = 'active',
-                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-             WHERE workspace_id = %s AND module = 'platform'
-               AND record_type = 'legacy-chat-sessions' AND record_id = 'default'
-            """,
-            (json.dumps(current), context.workspace_id),
-        )
+        records.upsert(context, payload=current, **_LEGACY_SESSIONS)
     return current, result
 
 

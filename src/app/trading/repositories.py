@@ -135,30 +135,16 @@ class TradingDocumentRepository:
     ) -> dict[str, Any]:
         clean_type = self._require_type(record_type)
         with self.uow_factory() as uow:
-            row = uow.connection.execute(
-                """
-                UPDATE omnix_module_records
-                   SET status = 'archived', revision = revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s AND revision = %s AND status = 'active'
-                RETURNING module, record_type, record_id, owner_user_id, payload,
-                          status, revision, expires_at, created_at, updated_at
-                """,
-                (
-                    self.context.workspace_id,
-                    TRADING_MODULE,
-                    clean_type,
-                    record_id,
-                    expected_revision,
-                ),
-            ).fetchone()
-            if row is None:
+            record = uow.module_records.archive(
+                self.context, module=TRADING_MODULE, record_type=clean_type, record_id=record_id,
+                expected_revision=expected_revision,
+            )
+            if record is None:
                 raise RevisionConflict(
                     f"Trading document expected revision {expected_revision}: {clean_type}/{record_id}"
                 )
             uow.commit()
-            return _record(row)
+            return record
 
 
 RepositoryFactory = Callable[[], TradingDocumentRepository]

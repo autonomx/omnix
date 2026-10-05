@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,6 +7,7 @@ from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAva
 from app.characters.repository import CharacterConflictError
 
 from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.module_repositories import PostgresModuleRecordRepository
 from app.persistence.document_schemas import register_document_schema
 from app.security.tenant_context import RequestTenant
 
@@ -20,9 +20,6 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
 
 class PostgresCharacterAvatarRepositoryAdapter:
     """Tenant-scoped avatar-pack repository over bounded PostgreSQL documents."""
@@ -34,17 +31,10 @@ class PostgresCharacterAvatarRepositoryAdapter:
 
     def get(self, character_id: str) -> CharacterAvatarPack | None:
         with self.database.connection() as connection:
-            row = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s AND status = 'active'
-                """,
-                (self.context.workspace_id, _MODULE, _RECORD_TYPE, character_id),
-            ).fetchone()
-        if row is None:
-            return None
-        return CharacterAvatarPack.model_validate(dict(row[0]))
+            payload = PostgresModuleRecordRepository(connection).payload(
+                self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id,
+            )
+        return CharacterAvatarPack.model_validate(payload) if payload is not None else None
 
     def upsert(
         self,
@@ -106,53 +96,21 @@ class PostgresCharacterAvatarRepositoryAdapter:
 
     def delete(self, character_id: str) -> bool:
         with self.database.transaction() as connection:
-            cursor = connection.execute(
-                """
-                DELETE FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s
-                """,
-                (self.context.workspace_id, _MODULE, _RECORD_TYPE, character_id),
+            return PostgresModuleRecordRepository(connection).delete(
+                self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id,
             )
-        return cursor.rowcount == 1
 
     def _locked_get(self, connection: Any, character_id: str) -> CharacterAvatarPack | None:
-        row = connection.execute(
-            """
-            SELECT payload FROM omnix_module_records
-             WHERE workspace_id = %s AND module = %s AND record_type = %s
-               AND record_id = %s AND status = 'active'
-             FOR UPDATE
-            """,
-            (self.context.workspace_id, _MODULE, _RECORD_TYPE, character_id),
-        ).fetchone()
-        if row is None:
-            return None
-        return CharacterAvatarPack.model_validate(dict(row[0]))
+        payload = PostgresModuleRecordRepository(connection).payload(
+            self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=character_id, lock=True,
+        )
+        return CharacterAvatarPack.model_validate(payload) if payload is not None else None
 
     def _write(self, connection: Any, pack: CharacterAvatarPack) -> None:
-        connection.execute(
-            """
-            INSERT INTO omnix_module_records (
-                workspace_id, module, record_type, record_id, owner_user_id,
-                payload, status
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'active')
-            ON CONFLICT (workspace_id, module, record_type, record_id)
-            DO UPDATE SET payload = EXCLUDED.payload,
-                          status = 'active',
-                          revision = omnix_module_records.revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-            """,
-            (
-                self.context.workspace_id,
-                _MODULE,
-                _RECORD_TYPE,
-                pack.character_id,
-                self.context.user_id,
-                _json(pack.model_dump(mode="json")),
-            ),
+        PostgresModuleRecordRepository(connection).upsert(
+            self.context, module=_MODULE, record_type=_RECORD_TYPE, record_id=pack.character_id,
+            payload=pack.model_dump(mode="json"),
         )
-
 
 __all__ = ["PostgresCharacterAvatarRepositoryAdapter"]
 

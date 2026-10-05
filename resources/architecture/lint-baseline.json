@@ -251,15 +251,6 @@
       "rule": "AL016"
     },
     {
-      "count": 1,
-      "fingerprint": "AssistantToolProposalService.execute:omnix_module_records",
-      "lines": [
-        153
-      ],
-      "path": "src/app/assistant_tools/proposals.py",
-      "rule": "AL016"
-    },
-    {
       "count": 2,
       "fingerprint": "_assemble_claimed:omnix_assets",
       "lines": [
@@ -408,114 +399,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._get:omnix_module_records",
-      "lines": [
-        105
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._list:omnix_module_records",
-      "lines": [
-        117
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._locked_get:omnix_module_records",
-      "lines": [
-        130
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarGenerationRepositoryAdapter._write:omnix_module_records",
-      "lines": [
-        142
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter._write:omnix_module_records",
-      "lines": [
-        265
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.get:omnix_module_records",
-      "lines": [
-        192
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.list:omnix_module_records",
-      "lines": [
-        204
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterVisemeGenerationRepositoryAdapter.update:omnix_module_records",
-      "lines": [
-        229
-      ],
-      "path": "src/app/characters/persistence/avatar_generation_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter._locked_get:omnix_module_records",
-      "lines": [
-        121
-      ],
-      "path": "src/app/characters/persistence/avatar_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter._write:omnix_module_records",
-      "lines": [
-        135
-      ],
-      "path": "src/app/characters/persistence/avatar_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter.delete:omnix_module_records",
-      "lines": [
-        110
-      ],
-      "path": "src/app/characters/persistence/avatar_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterAvatarRepositoryAdapter.get:omnix_module_records",
-      "lines": [
-        38
-      ],
-      "path": "src/app/characters/persistence/avatar_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
       "fingerprint": "PostgresCharacterRepositoryAdapter.close_segment:omnix_conversation_segments",
       "lines": [
         205
@@ -539,17 +422,6 @@
         221
       ],
       "path": "src/app/characters/persistence/character_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 3,
-      "fingerprint": "mutate_legacy_chat_sessions:omnix_module_records",
-      "lines": [
-        39,
-        48,
-        60
-      ],
-      "path": "src/app/chat/persistence/legacy_sessions.py",
       "rule": "AL016"
     },
     {
@@ -668,15 +540,6 @@
         84
       ],
       "path": "src/app/research/persistence/report_repository.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingDocumentRepository.archive:omnix_module_records",
-      "lines": [
-        139
-      ],
-      "path": "src/app/trading/repositories.py",
       "rule": "AL016"
     }
   ]

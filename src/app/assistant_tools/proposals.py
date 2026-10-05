@@ -149,16 +149,12 @@ class AssistantToolProposalService:
             "error": result.error, "state_changed": result.state_changed, "result_summary": result.result_summary,
         })
         with unit_of_work(self.database) as work:
-            cursor = work.connection.execute(
-                """UPDATE omnix_module_records SET payload = %s::jsonb,
-                          revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND module = 'assistant-tools'
-                       AND record_type = 'execution-ledger' AND record_id = %s
-                       AND payload->>'proposal_id' = %s
-                       AND payload->>'error' = 'execution_reserved'""",
-                (entry.model_dump_json(), self.context.workspace_id, entry.execution_id, identifier),
+            settled = work.module_records.replace_payload_where(
+                self.context, module="assistant-tools", record_type="execution-ledger", record_id=entry.execution_id,
+                payload=entry.model_dump(mode="json"),
+                matching={"proposal_id": identifier, "error": "execution_reserved"},
             )
-            if cursor.rowcount != 1:
+            if not settled:
                 raise CapabilityApprovalConflict("execution_ledger_reservation_lost")
             work.commit()
         return HermesAssistantToolExecutePayload(

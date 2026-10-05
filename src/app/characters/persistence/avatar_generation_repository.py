@@ -1,7 +1,6 @@
 """PostgreSQL-backed avatar generation batch repositories."""
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +12,7 @@ from app.characters.avatar_generation_models import (
 from app.characters.avatar_viseme_generation import CharacterVisemeGenerationBatch
 from app.persistence.document_schemas import register_document_schema
 from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.module_repositories import PostgresModuleRecordRepository
 from app.security.tenant_context import RequestTenant
 
 
@@ -20,9 +20,6 @@ _MODULE = "character-avatar"
 _AVATAR_BATCH_TYPE = "generation-batch"
 _VISEME_BATCH_TYPE = "viseme-generation-batch"
 
-
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _utcnow() -> str:
@@ -101,65 +98,27 @@ class PostgresCharacterAvatarGenerationRepositoryAdapter:
 
     def _get(self, record_type: str, record_id: str) -> dict[str, Any] | None:
         with self.database.connection() as connection:
-            row = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s AND status = 'active'
-                """,
-                (self.context.workspace_id, _MODULE, record_type, record_id),
-            ).fetchone()
-        return dict(row[0]) if row is not None else None
+            return PostgresModuleRecordRepository(connection).payload(
+                self.context, module=_MODULE, record_type=record_type, record_id=record_id,
+            )
 
     def _list(self, record_type: str, character_id: str) -> list[dict[str, Any]]:
         with self.database.connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND status = 'active' AND payload->>'character_id' = %s
-                 ORDER BY payload->>'created_at' DESC, record_id DESC
-                 LIMIT 200
-                """,
-                (self.context.workspace_id, _MODULE, record_type, character_id),
-            ).fetchall()
-        return [dict(row[0]) for row in rows]
+            return PostgresModuleRecordRepository(connection).payloads_where(
+                self.context, module=_MODULE, record_type=record_type,
+                field="character_id", value=character_id, newest_first_by="created_at",
+            )
 
     def _locked_get(self, connection: Any, record_type: str, record_id: str) -> dict[str, Any] | None:
-        row = connection.execute(
-            """
-            SELECT payload FROM omnix_module_records
-             WHERE workspace_id = %s AND module = %s AND record_type = %s
-               AND record_id = %s AND status = 'active'
-             FOR UPDATE
-            """,
-            (self.context.workspace_id, _MODULE, record_type, record_id),
-        ).fetchone()
-        return dict(row[0]) if row is not None else None
-
-    def _write(self, connection: Any, record_type: str, record_id: str, record: Any) -> None:
-        connection.execute(
-            """
-            INSERT INTO omnix_module_records (
-                workspace_id, module, record_type, record_id, owner_user_id,
-                payload, status
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'active')
-            ON CONFLICT (workspace_id, module, record_type, record_id)
-            DO UPDATE SET payload = EXCLUDED.payload,
-                          status = 'active',
-                          revision = omnix_module_records.revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-            """,
-            (
-                self.context.workspace_id,
-                _MODULE,
-                record_type,
-                record_id,
-                self.context.user_id,
-                _json(record.model_dump(mode="json")),
-            ),
+        return PostgresModuleRecordRepository(connection).payload(
+            self.context, module=_MODULE, record_type=record_type, record_id=record_id, lock=True,
         )
 
+    def _write(self, connection: Any, record_type: str, record_id: str, record: Any) -> None:
+        PostgresModuleRecordRepository(connection).upsert(
+            self.context, module=_MODULE, record_type=record_type, record_id=record_id,
+            payload=record.model_dump(mode="json"),
+        )
 
 class PostgresCharacterVisemeGenerationRepositoryAdapter:
     """Persist generated viseme batches in the shared module-record authority."""
@@ -188,29 +147,18 @@ class PostgresCharacterVisemeGenerationRepositoryAdapter:
 
     def get(self, batch_id: str) -> CharacterVisemeGenerationBatch | None:
         with self.database.connection() as connection:
-            row = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s AND status = 'active'
-                """,
-                (self.context.workspace_id, _MODULE, _VISEME_BATCH_TYPE, batch_id),
-            ).fetchone()
-        return CharacterVisemeGenerationBatch.model_validate(dict(row[0])) if row is not None else None
+            payload = PostgresModuleRecordRepository(connection).payload(
+                self.context, module=_MODULE, record_type=_VISEME_BATCH_TYPE, record_id=batch_id,
+            )
+        return CharacterVisemeGenerationBatch.model_validate(payload) if payload is not None else None
 
     def list(self, character_id: str) -> list[CharacterVisemeGenerationBatch]:
         with self.database.connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND status = 'active' AND payload->>'character_id' = %s
-                 ORDER BY payload->>'created_at' DESC, record_id DESC
-                 LIMIT 200
-                """,
-                (self.context.workspace_id, _MODULE, _VISEME_BATCH_TYPE, character_id),
-            ).fetchall()
-        return [CharacterVisemeGenerationBatch.model_validate(dict(row[0])) for row in rows]
+            payloads = PostgresModuleRecordRepository(connection).payloads_where(
+                self.context, module=_MODULE, record_type=_VISEME_BATCH_TYPE,
+                field="character_id", value=character_id, newest_first_by="created_at",
+            )
+        return [CharacterVisemeGenerationBatch.model_validate(item) for item in payloads]
 
     def update(
         self,
@@ -225,18 +173,11 @@ class PostgresCharacterVisemeGenerationRepositoryAdapter:
         error: str | None = None,
     ) -> CharacterVisemeGenerationBatch:
         with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                SELECT payload FROM omnix_module_records
-                 WHERE workspace_id = %s AND module = %s AND record_type = %s
-                   AND record_id = %s AND status = 'active'
-                 FOR UPDATE
-                """,
-                (self.context.workspace_id, _MODULE, _VISEME_BATCH_TYPE, batch_id),
-            ).fetchone()
-            if row is None:
+            current = PostgresModuleRecordRepository(connection).payload(
+                self.context, module=_MODULE, record_type=_VISEME_BATCH_TYPE, record_id=batch_id, lock=True,
+            )
+            if current is None:
                 raise KeyError(batch_id)
-            current = dict(row[0])
             updated = CharacterVisemeGenerationBatch.model_validate(current).model_copy(
                 update={
                     "status": status or current["status"],
@@ -261,28 +202,10 @@ class PostgresCharacterVisemeGenerationRepositoryAdapter:
         return updated
 
     def _write(self, connection: Any, record_id: str, record: Any) -> None:
-        connection.execute(
-            """
-            INSERT INTO omnix_module_records (
-                workspace_id, module, record_type, record_id, owner_user_id,
-                payload, status
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'active')
-            ON CONFLICT (workspace_id, module, record_type, record_id)
-            DO UPDATE SET payload = EXCLUDED.payload,
-                          status = 'active',
-                          revision = omnix_module_records.revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-            """,
-            (
-                self.context.workspace_id,
-                _MODULE,
-                _VISEME_BATCH_TYPE,
-                record_id,
-                self.context.user_id,
-                _json(record.model_dump(mode="json")),
-            ),
+        PostgresModuleRecordRepository(connection).upsert(
+            self.context, module=_MODULE, record_type=_VISEME_BATCH_TYPE, record_id=record_id,
+            payload=record.model_dump(mode="json"),
         )
-
 
 __all__ = [
     "PostgresCharacterAvatarGenerationRepositoryAdapter",

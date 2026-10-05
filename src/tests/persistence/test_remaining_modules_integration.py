@@ -328,3 +328,41 @@ def test_remaining_module_writes_share_unit_of_work_rollback() -> None:
             work.rollback()
     finally:
         database.close()
+
+
+def test_module_record_operations_run_inside_the_callers_transaction() -> None:
+    """The operations modules use instead of SQL on omnix_module_records (PA-2.2)."""
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        kind = {"module": "rpg", "record_type": "npc-evolution-profile"}
+        with unit_of_work(database) as work:
+            records = work.module_records
+            records.ensure(context, record_id="npc:a", payload={"trust": 1}, **kind)
+            records.ensure(context, record_id="npc:a", payload={"trust": 99}, **kind)
+            assert records.payload(context, record_id="npc:a", **kind) == {"trust": 1}
+            records.upsert(context, record_id="npc:a", payload={"trust": 2, "group": "x", "created_at": "1"}, **kind)
+            records.upsert(context, record_id="npc:b", payload={"trust": 3, "group": "x", "created_at": "2"}, **kind)
+            records.upsert(context, record_id="npc:c", payload={"trust": 4, "group": "y", "created_at": "3"}, **kind)
+            assert records.payload(context, record_id="npc:a", lock=True, **kind)["trust"] == 2
+            listed = records.payloads_where(context, field="group", value="x", newest_first_by="created_at", **kind)
+            assert [item["trust"] for item in listed] == [3, 2]
+            assert records.replace_payload_where(
+                context, record_id="npc:b", payload={"trust": 30, "group": "x"}, matching={"group": "x"}, **kind,
+            )
+            assert not records.replace_payload_where(
+                context, record_id="npc:b", payload={"trust": 31}, matching={"group": "y"}, **kind,
+            )
+            assert records.payload(context, record_id="npc:b", **kind)["trust"] == 30
+            current = records.get(context, record_id="npc:c", **kind)
+            assert records.archive(context, record_id="npc:c", expected_revision=current["revision"] + 5, **kind) is None
+            archived = records.archive(context, record_id="npc:c", expected_revision=current["revision"], **kind)
+            assert archived["status"] == "archived" and records.payload(context, record_id="npc:c", **kind) is None
+            assert records.delete(context, record_id="npc:a", **kind)
+            assert not records.delete(context, record_id="npc:a", **kind)
+            work.rollback()
+        with unit_of_work(database) as work:
+            assert work.module_records.payload(context, record_id="npc:b", **kind) is None
+    finally:
+        database.close()

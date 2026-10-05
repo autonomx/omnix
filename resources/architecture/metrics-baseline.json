@@ -2491,7 +2491,6 @@
       "composition_imports_outside_composition": [],
       "cross_module_sql": [
         "src/app/assistant_memory/persistence/owner_memory_store.py:38:PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions",
-        "src/app/assistant_tools/proposals.py:153:AssistantToolProposalService.execute:omnix_module_records",
         "src/app/audiobook/assembly_service.py:112:_assemble_claimed:omnix_assets",
         "src/app/audiobook/assembly_service.py:94:_assemble_claimed:omnix_assets",
         "src/app/audiobook/export_service.py:126:start_export:omnix_assets",
@@ -2511,24 +2510,9 @@
         "src/app/audiobook/report.py:38:audit_export:omnix_assets",
         "src/app/audiobook/repository.py:138:PostgresAudiobookRepository.append_source_revision:omnix_assets",
         "src/app/audiobook/worker.py:181:_ingest_claimed:omnix_assets",
-        "src/app/characters/persistence/avatar_generation_repository.py:105:PostgresCharacterAvatarGenerationRepositoryAdapter._get:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:117:PostgresCharacterAvatarGenerationRepositoryAdapter._list:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:130:PostgresCharacterAvatarGenerationRepositoryAdapter._locked_get:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:142:PostgresCharacterAvatarGenerationRepositoryAdapter._write:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:192:PostgresCharacterVisemeGenerationRepositoryAdapter.get:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:204:PostgresCharacterVisemeGenerationRepositoryAdapter.list:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:229:PostgresCharacterVisemeGenerationRepositoryAdapter.update:omnix_module_records",
-        "src/app/characters/persistence/avatar_generation_repository.py:265:PostgresCharacterVisemeGenerationRepositoryAdapter._write:omnix_module_records",
-        "src/app/characters/persistence/avatar_store.py:110:PostgresCharacterAvatarRepositoryAdapter.delete:omnix_module_records",
-        "src/app/characters/persistence/avatar_store.py:121:PostgresCharacterAvatarRepositoryAdapter._locked_get:omnix_module_records",
-        "src/app/characters/persistence/avatar_store.py:135:PostgresCharacterAvatarRepositoryAdapter._write:omnix_module_records",
-        "src/app/characters/persistence/avatar_store.py:38:PostgresCharacterAvatarRepositoryAdapter.get:omnix_module_records",
         "src/app/characters/persistence/character_store.py:175:PostgresCharacterRepositoryAdapter.create_segment:omnix_conversation_segments",
         "src/app/characters/persistence/character_store.py:205:PostgresCharacterRepositoryAdapter.close_segment:omnix_conversation_segments",
         "src/app/characters/persistence/character_store.py:221:PostgresCharacterRepositoryAdapter.segments:omnix_conversation_segments",
-        "src/app/chat/persistence/legacy_sessions.py:39:mutate_legacy_chat_sessions:omnix_module_records",
-        "src/app/chat/persistence/legacy_sessions.py:48:mutate_legacy_chat_sessions:omnix_module_records",
-        "src/app/chat/persistence/legacy_sessions.py:60:mutate_legacy_chat_sessions:omnix_module_records",
         "src/app/persistence/complete_cutover.py:118:CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_snapshots",
         "src/app/persistence/complete_cutover.py:141:CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_snapshot_items",
         "src/app/persistence/complete_cutover.py:159:CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_events",
@@ -2542,8 +2526,7 @@
         "src/app/persistence/cutover.py:530:PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
         "src/app/persistence/cutover.py:552:PostgresLegacyImporter._dispatch:omnix_rpg_participants",
         "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions",
-        "src/app/research/persistence/report_repository.py:84:PostgresResearchReportRepository.create_report:omnix_reports",
-        "src/app/trading/repositories.py:139:TradingDocumentRepository.archive:omnix_module_records"
+        "src/app/research/persistence/report_repository.py:84:PostgresResearchReportRepository.create_report:omnix_reports"
       ],
       "historical_owner_map_additions": [],
       "kernel_named_module_tables": [
@@ -6587,7 +6570,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 54
+      "value": 37
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6872,5 +6855,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "ab503a3640996ce2ba6f0b5c67cbe81c83e8c0ef3a010b36dda3e02d7c7fe456"
+  "source_digest": "bf6fa80c3f218ee28c78a394836780b6f2aad28024376a4a0aa54c48980a1e36"
 }

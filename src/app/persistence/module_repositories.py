@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 from typing import Any
 
@@ -156,6 +157,131 @@ class PostgresModuleRecordRepository:
             ),
         ).fetchall()
         return [self._record(row) for row in rows]
+
+    # Operations modules run inside their own transaction (PA-2.2): a module
+    # stores its documents here instead of writing SQL against this table.
+
+    def payload(
+        self, context: TenantContext, *, module: str, record_type: str, record_id: str, lock: bool = False,
+    ) -> Any | None:
+        """An active record's payload, or ``None``; ``lock`` holds the row until the transaction ends."""
+        row = self.connection.execute(
+            """
+            SELECT payload FROM omnix_module_records
+             WHERE workspace_id = %s AND module = %s AND record_type = %s
+               AND record_id = %s AND status = 'active'
+            """ + (" FOR UPDATE" if lock else ""),
+            (context.workspace_id, module, record_type, record_id),
+        ).fetchone()
+        if row is None:
+            return None
+        value = row[0]
+        return dict(value) if isinstance(value, dict) else list(value) if isinstance(value, list) else value
+
+    def upsert(self, context: TenantContext, *, module: str, record_type: str, record_id: str, payload: Any) -> None:
+        """Store an active record, creating it or replacing its payload (revision + 1)."""
+        validate_document(module, record_type, payload)
+        self.connection.execute(
+            """
+            INSERT INTO omnix_module_records (
+                workspace_id, module, record_type, record_id, owner_user_id,
+                payload, status
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'active')
+            ON CONFLICT (workspace_id, module, record_type, record_id)
+            DO UPDATE SET payload = EXCLUDED.payload,
+                          status = 'active',
+                          revision = omnix_module_records.revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+            """,
+            (context.workspace_id, module, record_type, record_id, context.user_id, _json(payload)),
+        )
+
+    def ensure(self, context: TenantContext, *, module: str, record_type: str, record_id: str, payload: Any) -> None:
+        """Create the record with ``payload`` unless it already exists."""
+        self.connection.execute(
+            """
+            INSERT INTO omnix_module_records (
+                workspace_id, module, record_type, record_id, owner_user_id, payload
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (workspace_id, module, record_type, record_id) DO NOTHING
+            """,
+            (context.workspace_id, module, record_type, record_id, context.user_id, _json(payload)),
+        )
+
+    def payloads_where(
+        self,
+        context: TenantContext,
+        *,
+        module: str,
+        record_type: str,
+        field: str,
+        value: str,
+        newest_first_by: str,
+        limit: int = 200,
+    ) -> builtins.list[Any]:
+        """Active payloads whose ``field`` equals ``value``, newest ``newest_first_by`` first."""
+        rows = self.connection.execute(
+            """
+            SELECT payload FROM omnix_module_records
+             WHERE workspace_id = %s AND module = %s AND record_type = %s
+               AND status = 'active' AND payload->>%s = %s
+             ORDER BY payload->>%s DESC, record_id DESC
+             LIMIT %s
+            """,
+            (context.workspace_id, module, record_type, field, value, newest_first_by, page_limit(limit, default=200)),
+        ).fetchall()
+        return [dict(row[0]) for row in rows]
+
+    def replace_payload_where(
+        self,
+        context: TenantContext,
+        *,
+        module: str,
+        record_type: str,
+        record_id: str,
+        payload: Any,
+        matching: dict[str, str],
+    ) -> bool:
+        """Replace the payload only while every ``matching`` payload field still has its value."""
+        conditions = "".join(" AND payload->>%s = %s" for _ in matching)
+        cursor = self.connection.execute(
+            """UPDATE omnix_module_records SET payload = %s::jsonb,
+                      revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND module = %s
+                   AND record_type = %s AND record_id = %s""" + conditions,
+            (_json(payload), context.workspace_id, module, record_type, record_id,
+             *(item for pair in matching.items() for item in pair)),
+        )
+        return cursor.rowcount == 1
+
+    def delete(self, context: TenantContext, *, module: str, record_type: str, record_id: str) -> bool:
+        cursor = self.connection.execute(
+            """
+            DELETE FROM omnix_module_records
+             WHERE workspace_id = %s AND module = %s AND record_type = %s
+               AND record_id = %s
+            """,
+            (context.workspace_id, module, record_type, record_id),
+        )
+        return cursor.rowcount == 1
+
+    def archive(
+        self, context: TenantContext, *, module: str, record_type: str, record_id: str, expected_revision: int,
+    ) -> dict[str, Any] | None:
+        """Archive an active record still at ``expected_revision``; ``None`` when it is not."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_module_records
+               SET status = 'archived', revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND module = %s AND record_type = %s
+               AND record_id = %s AND revision = %s AND status = 'active'
+            RETURNING module, record_type, record_id, owner_user_id, payload,
+                      status, revision, expires_at, created_at, updated_at
+            """,
+            (context.workspace_id, module, record_type, record_id, expected_revision),
+        ).fetchone()
+        return self._record(row) if row is not None else None
 
     @staticmethod
     def _record(row: Any) -> dict[str, Any]:
