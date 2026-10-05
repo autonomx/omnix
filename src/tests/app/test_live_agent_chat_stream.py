@@ -5,7 +5,7 @@ import json
 from fastapi.testclient import TestClient
 
 from app.chat.assist.modes import ModeChatResponse
-from app.characters.repository import InMemoryCharacterRepository
+from app.chat.segments import InMemoryConversationSegments
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
@@ -66,11 +66,7 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
         tmp_path / "chat.json",
         live_agent_planner=planner,
     )
-    characters = InMemoryCharacterRepository(tmp_path / "characters.sqlite3")
-    monkeypatch.setattr(
-        "app.chat.character_store._character_repository",
-        lambda: characters,
-    )
+    monkeypatch.setattr("app.chat.character_store.conversation_segments", InMemoryConversationSegments)
     session = store.create_session(CreateChatSessionRequest(title="Live Agent"))
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(

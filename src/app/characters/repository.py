@@ -17,11 +17,7 @@ from pathlib import Path
 from .models import (
     CharacterProfile,
     CharacterProfileVersion,
-    ConversationSegment,
     CreateCharacterRequest,
-    InteractionMode,
-    SharedMemoryAccess,
-    TranscriptPolicy,
     UpdateCharacterRequest,
 )
 
@@ -41,7 +37,6 @@ class _State:
     lock: threading.RLock = field(default_factory=threading.RLock)
     profiles: dict[str, CharacterProfile] = field(default_factory=dict)
     versions: dict[str, list[CharacterProfileVersion]] = field(default_factory=dict)
-    segments: dict[str, ConversationSegment] = field(default_factory=dict)
 
 
 _STATES: dict[str, _State] = {}
@@ -157,55 +152,6 @@ class InMemoryCharacterRepository:
             values.sort(key=lambda item: item.version, reverse=True)
             return deepcopy(values)
 
-    def create_segment(
-        self,
-        *,
-        session_id: str,
-        interaction_mode: InteractionMode,
-        character_id: str | None,
-        profile_version: int | None,
-        transcript_policy: TranscriptPolicy,
-        read_memory: bool,
-        write_memory: bool,
-        shared_memory_access: SharedMemoryAccess,
-        carryover_summary: str | None = None,
-    ) -> ConversationSegment:
-        if interaction_mode == "character" and not character_id:
-            raise ValueError("character segment requires character_id")
-        if interaction_mode == "system" and character_id:
-            raise ValueError("system segment cannot have character_id")
-        segment = ConversationSegment(
-            id=f"segment:{uuid.uuid4().hex}",
-            session_id=session_id,
-            interaction_mode=interaction_mode,
-            character_id=character_id,
-            profile_version=profile_version,
-            transcript_policy=transcript_policy,
-            read_memory=read_memory,
-            write_memory=write_memory,
-            shared_memory_access=shared_memory_access,
-            carryover_summary=carryover_summary,
-            started_at=_utcnow(),
-        )
-        with self._state.lock:
-            self._state.segments[segment.id] = deepcopy(segment)
-        return deepcopy(segment)
-
-    def close_segment(self, segment_id: str) -> ConversationSegment | None:
-        with self._state.lock:
-            current = self._state.segments.get(segment_id)
-            if current is None:
-                return None
-            if current.ended_at is None:
-                current = current.model_copy(update={"ended_at": _utcnow()})
-                self._state.segments[segment_id] = deepcopy(current)
-            return deepcopy(current)
-
-    def segments(self, session_id: str) -> list[ConversationSegment]:
-        with self._state.lock:
-            values = [item for item in self._state.segments.values() if item.session_id == session_id]
-            values.sort(key=lambda item: (item.started_at, item.id))
-            return deepcopy(values)
 
 
 CharacterRepository = InMemoryCharacterRepository

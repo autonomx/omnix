@@ -10,13 +10,13 @@ class _Segment:
     id = "segment:test"
 
 
-class _CharacterRepository:
+class _Segments:
     def create_segment(self, **_kwargs):
         return _Segment()
 
 
 def _use_memory_character_repository(monkeypatch) -> None:
-    monkeypatch.setattr(character_store, "_character_repository", _CharacterRepository)
+    monkeypatch.setattr(character_store, "conversation_segments", _Segments)
     monkeypatch.setattr(character_store, "_attach_character_snapshot", lambda _session: None)
 
 

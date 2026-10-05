@@ -9,7 +9,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.characters.contracts import (
-    default_character_service,
     neutralize_legacy_system_prompt,
     resolve_system_session_identity,
 )
@@ -75,7 +74,9 @@ def _active_segment_summary(session: ChatSession) -> str | None:
     if not session.active_segment_id:
         return None
     try:
-        segments = default_character_service().repository.segments(session.id)
+        from app.chat.segments import conversation_segments
+
+        segments = conversation_segments().segments(session.id)
     except Exception:
         logger.debug("suppressed error in %s", "_active_segment_summary", exc_info=True)
         return None

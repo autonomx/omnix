@@ -144,23 +144,6 @@ class ArchiveCharacterResponse(BaseModel):
     character: CharacterProfile
 
 
-class ConversationSegment(BaseModel):
-    """Persisted provider-context identity boundary."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1, max_length=200)
-    session_id: str = Field(min_length=1, max_length=200)
-    interaction_mode: InteractionMode
-    character_id: str | None = Field(default=None, max_length=160)
-    profile_version: int | None = Field(default=None, ge=1)
-    transcript_policy: TranscriptPolicy = "persistent"
-    read_memory: bool = False
-    write_memory: bool = False
-    shared_memory_access: SharedMemoryAccess = "none"
-    carryover_summary: str | None = Field(default=None, max_length=16_000)
-    started_at: str
-    ended_at: str | None = None
 
 
 class InteractionSelection(BaseModel):

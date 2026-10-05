@@ -403,6 +403,18 @@
       "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
     },
     {
+      "path": "src/app/chat/segments.py",
+      "symbol": "_SEGMENTS",
+      "category": "coordination",
+      "reason": "Conversation segments of the provider-free chat runtime (tests and local development without PostgreSQL); production segments are rows in omnix_conversation_segments."
+    },
+    {
+      "path": "src/app/chat/segments.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free chat runtime's conversation segments; PostgreSQL remains the production authority for them."
+    },
+    {
       "path": "src/app/characters/repository.py",
       "symbol": "_STATES",
       "category": "coordination",

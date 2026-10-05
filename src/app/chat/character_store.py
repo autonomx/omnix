@@ -36,7 +36,18 @@ def _record_accepted_activity(
         recorder(session, user_message)
 
 
+def conversation_segments() -> Any:
+    """Chat's segment repository, loaded when a session first needs it."""
+    from app.chat.segments import conversation_segments as segments
+
+    return segments()
+
+
 class _CharacterSessionMixin:
+    def segments(self, session_id: str) -> list[Any]:
+        """The session's conversation segments, oldest first."""
+        return conversation_segments().segments(session_id)
+
     @serialized_chat_mutation
     def create_session(self, request: CreateChatSessionRequest) -> ChatSession:
         now = _utcnow()
@@ -50,7 +61,7 @@ class _CharacterSessionMixin:
             request.write_memory if request.interaction_mode == "character" else False,
             request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
-        segment = _character_repository().create_segment(
+        segment = conversation_segments().create_segment(
             session_id=session_id,
             interaction_mode=interaction.interaction_mode,
             character_id=interaction.character_id,
@@ -114,8 +125,8 @@ class _CharacterSessionMixin:
         if context_changed:
             carryover = _neutral_topic_carryover(session) if request.continue_topic else None
             if session.active_segment_id:
-                _character_repository().close_segment(session.active_segment_id)
-            segment = _character_repository().create_segment(
+                conversation_segments().close_segment(session.active_segment_id)
+            segment = conversation_segments().create_segment(
                 session_id=session.id,
                 interaction_mode=interaction.interaction_mode,
                 character_id=interaction.character_id,
@@ -362,10 +373,6 @@ def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
     if chat_sqlite_store_enabled():
         return InMemoryChatSessionStore()
     raise RuntimeError("PostgreSQL chat persistence is required when local memory storage is disabled")
-
-
-def _character_repository():
-    return default_character_service().repository
 
 
 def _resolve_request(

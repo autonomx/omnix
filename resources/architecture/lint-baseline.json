@@ -252,33 +252,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "PostgresCharacterRepositoryAdapter.close_segment:omnix_conversation_segments",
-      "lines": [
-        205
-      ],
-      "path": "src/app/characters/persistence/character_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterRepositoryAdapter.create_segment:omnix_conversation_segments",
-      "lines": [
-        175
-      ],
-      "path": "src/app/characters/persistence/character_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresCharacterRepositoryAdapter.segments:omnix_conversation_segments",
-      "lines": [
-        221
-      ],
-      "path": "src/app/characters/persistence/character_store.py",
-      "rule": "AL016"
-    },
-    {
-      "count": 1,
       "fingerprint": "CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_candidates",
       "lines": [
         83

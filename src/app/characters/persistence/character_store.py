@@ -5,11 +5,7 @@ from typing import Any
 from app.characters.models import (
     CharacterProfile,
     CharacterProfileVersion,
-    ConversationSegment,
     CreateCharacterRequest,
-    InteractionMode,
-    SharedMemoryAccess,
-    TranscriptPolicy,
     UpdateCharacterRequest,
 )
 from app.characters.repository import CharacterConflictError, CharacterNotFoundError
@@ -21,10 +17,6 @@ from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.runtime.pagination import MAX_PAGE_SIZE
 from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
-
-# Segments of one session returned by a read; the newest are kept.
-MAX_SESSION_SEGMENTS = 1000
-
 
 class PostgresCharacterRepositoryAdapter:
     context = RequestTenant()
@@ -150,90 +142,6 @@ class PostgresCharacterRepositoryAdapter:
             for record in records
         ]
 
-    def create_segment(
-        self,
-        *,
-        session_id: str,
-        interaction_mode: InteractionMode,
-        character_id: str | None,
-        profile_version: int | None,
-        transcript_policy: TranscriptPolicy,
-        read_memory: bool,
-        write_memory: bool,
-        shared_memory_access: SharedMemoryAccess,
-        carryover_summary: str | None = None,
-    ) -> ConversationSegment:
-        import uuid
-
-        if interaction_mode == "character" and not character_id:
-            raise ValueError("character segment requires character_id")
-        if interaction_mode == "system" and character_id:
-            raise ValueError("system segment cannot have character_id")
-        segment_id = f"segment:{uuid.uuid4().hex}"
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                INSERT INTO omnix_conversation_segments (
-                    id, workspace_id, session_id, interaction_mode, character_id,
-                    character_version, transcript_policy, read_memory, write_memory,
-                    shared_memory_access, carryover_summary
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, session_id, interaction_mode, character_id,
-                          character_version, transcript_policy, read_memory,
-                          write_memory, shared_memory_access, carryover_summary,
-                          started_at, ended_at
-                """,
-                (
-                    segment_id,
-                    self.context.workspace_id,
-                    session_id,
-                    interaction_mode,
-                    character_id,
-                    profile_version,
-                    transcript_policy,
-                    read_memory,
-                    write_memory,
-                    shared_memory_access,
-                    carryover_summary,
-                ),
-            ).fetchone()
-        return self._segment(row)
-
-    def close_segment(self, segment_id: str) -> ConversationSegment | None:
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                UPDATE omnix_conversation_segments
-                   SET ended_at = COALESCE(ended_at, CURRENT_TIMESTAMP)
-                 WHERE id = %s AND workspace_id = %s
-                RETURNING id, session_id, interaction_mode, character_id,
-                          character_version, transcript_policy, read_memory,
-                          write_memory, shared_memory_access, carryover_summary,
-                          started_at, ended_at
-                """,
-                (segment_id, self.context.workspace_id),
-            ).fetchone()
-        return self._segment(row) if row is not None else None
-
-    def segments(self, session_id: str) -> list[ConversationSegment]:
-        with self.database.connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM (
-                    SELECT id, session_id, interaction_mode, character_id,
-                           character_version, transcript_policy, read_memory,
-                           write_memory, shared_memory_access, carryover_summary,
-                           started_at, ended_at
-                      FROM omnix_conversation_segments
-                     WHERE workspace_id = %s AND session_id = %s
-                     ORDER BY started_at DESC, id DESC LIMIT %s
-                ) AS newest ORDER BY started_at ASC, id ASC
-                """,
-                # The newest segments of a session, oldest first (WP-5.5).
-                (self.context.workspace_id, session_id, MAX_SESSION_SEGMENTS),
-            ).fetchall()
-        return [self._segment(row) for row in rows]
-
     @staticmethod
     def _normalize_id(value: str) -> str:
         import re
@@ -268,22 +176,6 @@ class PostgresCharacterRepositoryAdapter:
             updated_at=record["updated_at"],
         )
 
-    @staticmethod
-    def _segment(row: Any) -> ConversationSegment:
-        return ConversationSegment(
-            id=str(row[0]),
-            session_id=str(row[1]),
-            interaction_mode=str(row[2]),
-            character_id=str(row[3]) if row[3] is not None else None,
-            profile_version=int(row[4]) if row[4] is not None else None,
-            transcript_policy=str(row[5]),
-            read_memory=bool(row[6]),
-            write_memory=bool(row[7]),
-            shared_memory_access=str(row[8]),
-            carryover_summary=str(row[9]) if row[9] is not None else None,
-            started_at=row[10].isoformat(),
-            ended_at=row[11].isoformat() if row[11] is not None else None,
-        )
 
 
 def production_character_repository() -> PostgresCharacterRepositoryAdapter:

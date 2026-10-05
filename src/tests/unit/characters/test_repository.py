@@ -92,25 +92,3 @@ def test_voice_can_be_explicitly_cleared(tmp_path: Path) -> None:
 
     assert updated.default_voice_asset_id is None
     assert updated.active_version == 2
-
-
-def test_repository_persists_identity_segments(tmp_path: Path) -> None:
-    repository = CharacterRepository(tmp_path / "characters.sqlite3")
-    created = repository.create(_create_request())
-    segment = repository.create_segment(
-        session_id="chat:one",
-        interaction_mode="character",
-        character_id=created.id,
-        profile_version=created.active_version,
-        transcript_policy="persistent",
-        read_memory=False,
-        write_memory=False,
-        shared_memory_access="none",
-    )
-
-    closed = repository.close_segment(segment.id)
-    loaded = CharacterRepository(tmp_path / "characters.sqlite3").segments("chat:one")
-
-    assert closed is not None
-    assert closed.ended_at is not None
-    assert loaded == [closed]

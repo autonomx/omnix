@@ -174,7 +174,6 @@ class CharacterManagementService:
 
     def _session_summaries(self, character_id: str) -> list[CharacterSessionSummary]:
         summaries: list[CharacterSessionSummary] = []
-        repository = self.character_service.repository
         cursor = None
         while True:
             page = self.chat_store.list_sessions(limit=100, cursor=cursor)
@@ -184,7 +183,7 @@ class CharacterManagementService:
                     continue
                 segment_ids = {
                     segment.id
-                    for segment in repository.segments(session.id)
+                    for segment in self.chat_store.segments(session.id)
                     if segment.character_id == character_id
                 }
                 character_messages = sum(
@@ -217,7 +216,6 @@ class CharacterManagementService:
         )
 
     def _delete_character_transcripts(self, character_id: str) -> int:
-        repository = self.character_service.repository
         deleted = 0
         cursor = None
         while True:
@@ -228,7 +226,7 @@ class CharacterManagementService:
                     continue
                 segment_ids = {
                     segment.id
-                    for segment in repository.segments(session.id)
+                    for segment in self.chat_store.segments(session.id)
                     if segment.character_id == character_id
                 }
                 message_ids = [
