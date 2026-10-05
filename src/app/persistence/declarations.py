@@ -85,6 +85,19 @@ class FeaturePermissions:
     write: PermissionDeclaration
 
 
+# (unit of work, tenant context, stable id, legacy item): restores what a legacy
+# bundle nests in an aggregate into the module's own tables, idempotently.
+LegacyRestore = Callable[[Any, Any, str, dict[str, Any]], None]
+
+
+@dataclass(frozen=True)
+class LegacyImport:
+    """A step of the legacy cutover importer a module owns (PA-2.2): its name and restore handler."""
+
+    name: str
+    restore: LegacyRestore
+
+
 def _declaration_files() -> list[tuple[str, Path]]:
     """Every module's ``declarations.py`` next to its ``feature.py``, then every retired module's tombstone."""
     app_root = Path(__file__).resolve().parents[1]
@@ -149,6 +162,14 @@ def module_capacity_counts() -> Mapping[str, CapacityCount]:
 def module_permissions() -> tuple[FeaturePermissions, ...]:
     """Every module's declared route permissions, enabled or not (PA-4.2)."""
     return tuple(_unique("PERMISSIONS", lambda item: item.feature_id).values())
+
+
+def legacy_import(name: str) -> LegacyRestore:
+    """The restore handler of a module's legacy import step; a missing step fails the import."""
+    step = _unique("LEGACY_IMPORTS", lambda item: item.name).get(name)
+    if step is None:
+        raise LookupError(f"no module declares the legacy import step {name!r}")
+    return step.restore
 
 
 def retired_job_types() -> frozenset[str]:

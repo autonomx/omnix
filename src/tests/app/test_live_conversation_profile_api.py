@@ -11,6 +11,25 @@ import pytest
 pytestmark = pytest.mark.postgres
 
 
+@pytest.fixture(autouse=True)
+def fresh_profile_defaults():
+    """The workspace's profile defaults are shared state; start and end without them."""
+    from app.persistence.module_repositories import PostgresModuleRecordRepository
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    def clear() -> None:
+        with unit_of_work() as work:
+            PostgresModuleRecordRepository(work.connection).delete(
+                current_tenant(), module="live-chat", record_type="conversation-profiles", record_id="default",
+            )
+            work.commit()
+
+    clear()
+    yield
+    clear()
+
+
 def _create_session(client: TestClient) -> str:
     response = client.post(
         "/api/chat/sessions",

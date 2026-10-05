@@ -10,6 +10,7 @@ from typing import Any
 from .authority import AuthorityOperation
 from .blob_store import default_blob_store
 from .contracts import BlobStore
+from .declarations import legacy_import
 from .database import PostgresDatabase
 from .errors import PersistenceError
 from .tenant import TenantContext
@@ -523,39 +524,7 @@ class PostgresLegacyImporter:
             work.jobs.import_job(context, job_id=stable_id, item=item)
             return "omnix_jobs", stable_id, None
         if entity_type == "rpg_campaigns":
-            state = dict(item.get("state") or {})
-            digest = str(item.get("state_hash") or state_hash(state))
-            revision = int(item.get("revision", 0))
-            work.connection.execute(
-                """
-                INSERT INTO omnix_rpg_campaigns (
-                    id, workspace_id, owner_user_id, title, revision, state_jsonb,
-                    state_hash, engine_version, schema_version, seed, status, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s::jsonb)
-                """,
-                (
-                    stable_id,
-                    context.workspace_id,
-                    context.user_id,
-                    item.get("title", stable_id),
-                    revision,
-                    canonical_json(state),
-                    digest,
-                    item.get("engine_version", "legacy"),
-                    item.get("schema_version", "legacy"),
-                    str(item.get("seed") or "legacy"),
-                    item.get("status", "active"),
-                    _canonical({**dict(item.get("metadata") or {}), "legacy_import": True}),
-                ),
-            )
-            work.connection.execute(
-                """
-                INSERT INTO omnix_rpg_participants
-                    (campaign_id, user_id, role, permissions)
-                VALUES (%s, %s, 'owner', ARRAY['read', 'write', 'admin'])
-                """,
-                (stable_id, context.user_id),
-            )
+            legacy_import("rpg.campaign")(work, context, stable_id, item)
             return "omnix_rpg_campaigns", stable_id, None
         if entity_type == "settings":
             work.settings.put(
