@@ -18,6 +18,7 @@ from app.persistence.module_retirement import (
     cancel_remaining,
     fail_unfinished_jobs,
     in_flight_work,
+    reactivate,
     set_state,
 )
 from app.persistence.module_states import read_module_state
@@ -135,3 +136,13 @@ def test_the_module_state_moves_to_retired(database) -> None:
     with database.connection() as connection:
         state = read_module_state(connection, module_id)
     assert state.state == "retired" and not state.accepts_follow_up()
+
+
+def test_a_stopped_retirement_can_be_undone_but_a_finished_one_cannot(database) -> None:
+    module_id = f"gone-{uuid.uuid4().hex[:8]}"
+    set_state(database, module_id, "draining")
+
+    assert reactivate(database, module_id).accepts_new_work
+    set_state(database, module_id, "retired")
+    with pytest.raises(ValueError, match="already retired"):
+        reactivate(database, module_id)

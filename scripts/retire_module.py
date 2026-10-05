@@ -2,6 +2,7 @@
 
     python scripts/retire_module.py <module-id> [--drain-timeout 600] [--cancel-grace 30]
                                     [--database-only | --files-only] [--no-generate]
+    python scripts/retire_module.py <module-id> --reactivate
 
 Refuses first if another catalog module or web feature depends on, uses or
 imports the module. Then, in the database (``OMNIX_DATABASE_URL``), across
@@ -25,8 +26,9 @@ Then, in the checkout:
    values, and its job types, outbox consumers and tools;
 7. refreshes the generated contract files (skipped with ``--no-generate``).
 
-Deleting the module's data is a separate, owner-approved contract migration
-in the tombstone folder.
+A retirement that stops at step 3 leaves the module draining: rerun it once
+the remaining work is final, or ``--reactivate`` it. Deleting the module's
+data is a separate, owner-approved contract migration in the tombstone folder.
 """
 from __future__ import annotations
 
@@ -45,6 +47,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from app.persistence.authority import PostgresAuthorityError  # noqa: E402
 from new_module import CATALOG, WEB, WEB_MANIFESTS, generate  # noqa: E402
 
 APP = ROOT / "src" / "app"
@@ -280,10 +283,21 @@ def main(argv: list[str] | None = None) -> int:
     phase = parser.add_mutually_exclusive_group()
     phase.add_argument("--database-only", action="store_true")
     phase.add_argument("--files-only", action="store_true")
+    phase.add_argument("--reactivate", action="store_true", help="set a draining module active again")
     parser.add_argument("--no-generate", action="store_true")
     args = parser.parse_args(argv)
     try:
         package = module_package(args.module_id)
+        if args.reactivate:
+            from app.persistence.database import default_database
+            from app.persistence.module_retirement import reactivate
+
+            try:
+                reactivate(default_database(), args.module_id)
+            except ValueError as error:
+                raise RetirementError(str(error)) from error
+            _log(f"{args.module_id} is active again")
+            return 0
         blockers = dependents(args.module_id, package)
         if blockers:
             raise RetirementError("refused, the module is still needed:\n  " + "\n  ".join(blockers))
@@ -301,6 +315,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"skipped: {item}")
     except RetirementError as error:
         print(f"retire_module: {error}", file=sys.stderr)
+        return 2
+    except PostgresAuthorityError as error:
+        print(f"retire_module: the database takes no runtime writes yet; start Omnix against it first ({error})",
+              file=sys.stderr)
         return 2
     return 0
 

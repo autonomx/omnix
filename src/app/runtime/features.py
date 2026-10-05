@@ -17,16 +17,27 @@ from app.runtime.contracts import KernelServices
 
 
 class JobHandlerSpec(Protocol):
-    """Structural job-handler contract without importing the jobs kernel."""
+    """Structural job-handler contract without importing the jobs kernel.
 
-    type: str
-    handler: Callable[..., object]
-    input_model: type[BaseModel]
-    resource_class: object
-    timeout_seconds: float
-    max_attempts: int
-    retry_backoff: object
-    submission_policy: Callable[..., object] | None
+    Read-only, so the jobs kernel's frozen ``JobHandlerSpec`` satisfies it.
+    """
+
+    @property
+    def type(self) -> str: ...
+    @property
+    def handler(self) -> Callable[..., object]: ...
+    @property
+    def input_model(self) -> type[BaseModel]: ...
+    @property
+    def resource_class(self) -> object: ...
+    @property
+    def timeout_seconds(self) -> float: ...
+    @property
+    def max_attempts(self) -> int: ...
+    @property
+    def retry_backoff(self) -> object: ...
+    @property
+    def submission_policy(self) -> Callable[..., object] | None: ...
 
 
 class JobObserverFactory(Protocol):
@@ -67,10 +78,16 @@ class RepositorySpec(Protocol):
 
 
 class OutboxConsumerSpec(Protocol):
-    """Structural contract for a feature-owned outbox consumer."""
+    """Structural contract for a feature-owned outbox consumer (``app.events.outbox_relay.OutboxConsumer``)."""
 
-    event_type: str
-    consume: Callable[..., object]
+    @property
+    def consumer_name(self) -> str: ...
+    @property
+    def aggregate_types(self) -> frozenset[str]: ...
+    @property
+    def handler(self) -> Callable[..., object]: ...
+    @property
+    def event_type_pattern(self) -> str: ...
 
 
 class SettingSpec(Protocol):

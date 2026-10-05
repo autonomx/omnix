@@ -1,95 +1,201 @@
-# FeatureModule guide
+# Adding and retiring an app
 
-A feature is an optional Omnix capability (audiobook, image, trading, …) that the gateway composes from a declaration. The catalog at `app.runtime.feature_catalog.FEATURE_CATALOG` is the only list of features. Audiobook (`src/app/audiobook/`) is the reference implementation: copy its structure, and use the checklist at the end to review a new feature.
+A module is an optional Omnix capability (audiobook, image, trading, …) that the gateway composes from one declaration. [ADR-0016](ADR-0016-platform-tiers.md) sets the rules every module follows:
 
-[ADR-0016](ADR-0016-platform-tiers.md) defines the tiers and boundaries every feature follows: a feature is a platform capability or an app, imports other features only through their contracts in the `depends_on` direction, and apps never import apps. The [platform architecture roadmap](../PLATFORM_ARCHITECTURE_ROADMAP_2026-10-04.md) is migrating the codebase to it; this guide will become "Adding and retiring an app" (PA-4.4).
+- **Tiers.** A module is a platform capability, which other modules build on, or an app, which is a product no other module imports.
+- **Imports.** Modules import each other only through `contracts.py`, and only in the `depends_on` or `uses` direction.
+- **Two registration lines.** Outside its own folders, a module is registered by one line in `src/app/runtime/feature_catalog.py` and, if it has a web side, one line in `src/apps/web/src/app/modulesManifest.ts`.
 
-## Composition
+Two scripts add and remove those lines and everything around them:
 
-A feature package exposes `feature.py` with one `FEATURE = FeatureModule(...)` value and a catalog entry pointing at it (`"audiobook": "app.audiobook.feature:FEATURE"`). The declaration is all the gateway knows about the feature:
+- `scripts/new_module.py` scaffolds a working module.
+- `scripts/retire_module.py` takes one out without stranding its data or its in-flight work.
+
+This guide walks through both. Run the commands from the repository root, with `OMNIX_DATABASE_URL` pointing at your development database. The recipe tests `src/tests/kernel/test_module_recipe.py` and `test_module_retirement_recipe.py` run the same steps on every change.
+
+## Adding an app
+
+### 1. Scaffold
+
+```sh
+python scripts/new_module.py field-notes --tier app --web
+```
+
+The id is lowercase words joined by `-`, and the Python package is the id with `_` (`field_notes`). Use `--tier platform` for a capability other modules will build on. Leave out `--web` for a backend-only module.
+
+The script writes a small working module:
+
+| Path | What it is |
+|---|---|
+| `src/app/field_notes/feature.py` | The `FEATURE = FeatureModule(...)` declaration, and nothing else. |
+| `contracts.py` | What other modules may import: DTOs and ports. |
+| `declarations.py` | What the kernel reads without loading the module. It imports kernel modules only. It holds the settings section (`SETTINGS`), retention handlers (`RETENTION`), capacity counts (`CAPACITY`) and the read and write permissions (`PERMISSIONS`). |
+| `service.py`, `repository.py` | Workflow and transactions, and the SQL, one method per intent. |
+| `jobs.py` | An example durable job (`field_notes.note`) on the shared worker. |
+| `routes.py` (with `--web`) | The HTTP API under `/api/field-notes`. |
+| `migrations/NNNN_field_notes_initial.sql` | A workspace-owned table under row-level security, a child table that follows its parent row, and the retention policy row. |
+| `src/tests/field_notes/` | The module's tests. `scripts/test_module.py` runs them. |
+| `src/apps/web/src/features/field-notes/` (with `--web`) | `module.ts` (the manifest: route, `backendModules`, `apiPrefixes`) and its test, `index.ts`, `api/gateway.ts` (the typed client) and the workspace component. |
+
+It also edits the two registration files and regenerates the API contract files: `openapi.json`, `route-owners.json`, the core types and each feature's `api/generated.ts`. If the web packages are not installed, it skips the web types and says so. Run `npm --prefix src/apps/web run api:types` once they are installed.
+
+### 2. Migrate and run
+
+```sh
+PYTHONPATH=src python -m app.persistence migrate
+```
+
+The runner finds the module's `migrations/` folder by convention, enabled or not, because the schema is a release artifact and not a feature flag. Start the gateway as usual. The module is on with `OMNIX_FEATURES=all` (the default) and off with `OMNIX_FEATURES_DISABLED=field-notes`.
+
+### 3. Build the module
+
+Replace the example item and note with your own model, keeping these rules.
+
+**Declaration.** `feature.py` lists what the module contributes:
 
 | Field | Use |
 |---|---|
-| `tier` | Required: `"platform"` (a capability other features build on) or `"app"` (a product no other feature imports); see ADR-0016. |
-| `routers` | Router factories for the public HTTP and WebSocket API. |
-| `internal_routers` | Service-token or other internal HTTP surfaces only. |
-| `background_workers` | Long-running loops owned by the background runtime. |
-| `job_handlers` | Durable jobs executed by the shared durable worker. |
-| `scheduled_tasks`, `outbox_consumers` | Periodic work and outbox delivery. |
-| `contributions` | Implementations of typed ports (`app.runtime.ports`) declared in another module's contract; the composition root binds them. |
-| `repositories`, `settings`, `permissions` | Persistence, configuration and permission declarations. |
-| `depends_on`, `requires` | Other features and runtime capabilities the feature needs. A feature imports another only through its `contracts` module, and only in the `depends_on` direction. |
-| `uses` | Features whose contracts this feature imports but can run without; unlike `depends_on`, they may be disabled, so the code must handle their absence. |
+| `tier` | `"platform"` or `"app"`. |
+| `routers`, `internal_routers` | Router factories: the public HTTP and WebSocket API, and service-token-only surfaces. |
+| `job_handlers` | Durable jobs on the shared worker, which claims them, renews leases and handles cancellation. |
+| `scheduled_tasks`, `background_workers` | Periodic work, and long-running loops owned by the background runtime. |
+| `outbox_consumers` | Durable consumers of outbox events (`app.events.outbox_relay.OutboxConsumer`). |
+| `contributions` | Implementations of typed ports declared in another module's contract (`app.runtime.ports`), such as an assistant tool for `TOOL_DECLARATIONS`. Declaring a tool grants nothing: grants, approvals and the tool policy still decide. |
+| `repositories` | Repository specs the kernel builds per unit of work. |
+| `depends_on` | Modules this one cannot run without. Startup fails if one is disabled. |
+| `uses` | Modules whose contracts this one imports but can run without. The code must handle their absence. |
+| `requires` | Runtime capabilities the module needs (`SERVE_API`, `RUN_JOB_WORKERS`, …). |
 
-Factories receive a `FeatureContext` (runtime configuration, capabilities, kernel services, a feature logger). A feature never imports the gateway composition root and never patches other packages at import time.
+Factories receive a `FeatureContext`: runtime configuration, capabilities, kernel services and a logger. A module never imports the gateway composition root and never patches other packages at import time.
 
-`OMNIX_FEATURES` and `OMNIX_FEATURES_DISABLED` control enablement. Startup fails if an enabled feature depends on a disabled one. A disabled feature's modules are not imported, and its routes and job handlers are absent, while kernel health and readiness routes stay available (`src/tests/app/test_feature_matrix.py` checks every optional feature).
+**Routes.**
 
-## Package layout
+- Use a module-level `router = APIRouter()` with module-level handlers, never handlers defined inside a factory.
+- Request bodies are Pydantic models. Declare a `response_model` for every route.
+- Handlers translate domain exceptions to status codes (missing → 404, validation → 422, state conflict → 409) and hold no business logic.
+- Blocking work runs off the event loop: plain `def` handlers run in the threadpool, and `async def` handlers call blocking services through `asyncio.to_thread`.
+- Stream uploads with a hard cap that also holds for chunked bodies, and stream downloads. `src/app/audiobook/routes.py` shows both.
 
-| Module | Owns | Audiobook |
-|---|---|---|
-| `feature.py` | The declaration and nothing else. | `audiobook/feature.py` |
-| `routes.py` | HTTP: request models, status codes, streaming bodies. | `audiobook/routes.py` |
-| `service.py` | Workflow decisions and transaction boundaries. No SQL. | `audiobook/service.py` |
-| `*_repository.py` | Every SQL statement, one method per intent. | `audiobook/project_repository.py`, `repository.py`, `review_repository.py`, `analysis_repository.py`, `document_structure_repository.py` |
-| job modules | Claiming and executing durable jobs. | `audiobook/worker.py`, `render_service.py`, `assembly_service.py`, `export_service.py` |
-
-### Routes
-
-- A module-level `router = APIRouter()` with module-level handler functions; the router factory in `feature.py` returns it. No handlers defined inside a factory function.
-- Request bodies are Pydantic models. Keep existing public URLs when restructuring.
-- Handlers translate domain exceptions to status codes (`KeyError` → 404, validation `ValueError` → 422, state conflicts → 409). They hold no business logic.
-- Blocking work runs off the event loop: plain `def` handlers run in the threadpool; `async def` handlers call blocking services through `asyncio.to_thread`.
-- Uploads are read as a stream with a hard cap that also holds for chunked bodies without a Content-Length, and large bodies spill to a temporary file instead of memory (`_spool_body`). Declare the raw body for the OpenAPI contract with `openapi_extra` (`_octet_stream_body`).
-- Downloads stream from the blob store (`StreamingResponse`) with integrity verification.
-
-### Service and repositories
+**Service and repositories.**
 
 - The service opens a `unit_of_work`, takes the locks a decision needs, and commits once. It never calls `connection.execute`.
-- Repositories take the connection, filter every statement by `workspace_id`, and return rows; methods are named by what they mean (`lock_render_settings`, `reset_render`), not by the SQL.
-- Feature tables carry `workspace_id` and are covered by row-level security (migration `0106_row_level_security.sql`). Schema changes are forward migrations with a checksum entry in `resources/architecture/migration-checksums.json`; a new JSONB column read by queries needs a decision in `resources/architecture/jsonb-decisions.json`.
-- Assets and blobs go through the platform stores (`work.assets`, `BlobStore`); `put_stream` stores large content in bounded memory.
+- Repositories take the connection, filter every statement by `workspace_id`, and are named by meaning (`lock_render_settings`), not by SQL.
+- A module touches only its own tables. It reaches kernel and other modules' data through their repositories and contracts. The architecture lint enforces this (AL016).
 
-### Durable jobs and background work
+**Schema.**
 
-- Prefer `job_handlers` on the shared durable worker: it claims, renews leases and handles cancellation for you.
-- A feature that needs its own claim loops (audiobook does: render jobs checkpoint per synthesized unit and yield to higher-priority speech) follows the audiobook lease pattern:
-  - claim with a short lease (`leases.JOB_LEASE_SECONDS`, two minutes) and run the claimed job inside `lease_heartbeat`, which renews it every 30 seconds, so a crashed worker's job is reclaimable quickly;
-  - publish results only in transactions that renew the lease with the job's own worker id and lease token, so a worker that lost its lease cannot publish;
-  - make retries resume from durable checkpoints rather than restart.
-- A background worker is a small class with `start` and `stop`, declared through `background_workers` with the capability it needs (`RuntimeCapability.RUN_JOB_WORKERS`). Its loops call `require_background_owner()` before each claim and exit when ownership is revoked; `stop` joins its threads within a deadline.
+- Migrations are forward-only, in the module's `migrations/` folder, with the `-- omnix-migration: phase=… transactional=…` header and a number above every existing one.
+- Every table either has forced row-level security with the tenant policy, as in the scaffold, or states why it holds no workspace data in an `omnix:tenant-exempt:` table comment.
+- A JSONB column read by queries needs an entry in `resources/architecture/jsonb-decisions.json`.
 
-### Providers
+**Durable work.**
 
-Depend on provider ports, not on a concrete provider module. Audiobook asks `app.providers.tts_artifacts.local_model_artifacts(provider_id)` where the installed TTS model lives (to pin renders to a model revision) and `app.providers.service.get_tts_provider` for synthesis. Import heavy provider code on demand so registering the feature's routes stays cheap.
+- Prefer `job_handlers` on the shared worker.
+- A job a handler submits while it runs is recorded as that job's follow-up.
+- A module with its own claim loops follows the audiobook lease pattern: claim with a short lease, renew it from a heartbeat, publish results only with the job's own lease token, and resume retries from durable checkpoints.
 
-### Permissions
+**Providers.** Depend on provider ports (`app.providers.*`), not on a concrete provider module. Import heavy provider code on demand, so registering the module's routes stays cheap.
 
-Add the feature's read and write permissions to `app.security.permissions` (`CATALOG`, `FEATURE_DEFAULTS`, and `WEBSOCKET_PERMISSIONS` for sockets). Feature routes are guarded by `feature_permission_guard`: reads need the read permission, everything else the write permission, unless a route declares its own with `requires(...)`.
+**Settings.** Read your section with `module_settings("field_notes", FieldNotesSettingsProfile)` from `app.settings.effective_defaults`. It returns the section typed as the model `declarations.py` declares.
 
-## Tests
+**Permissions.** `declarations.py` declares the module's `<package>:read` and `<package>:write` permissions (`FeaturePermissions`). Reads need the read permission, and every other method needs the write permission. A route can require its own permission with `requires(...)`.
 
-- Unit tests fake the seams: `unit_of_work` or the repository for services, the service for routes (`_service_and_context`), the claim functions for workers.
-- PostgreSQL integration tests run the real SQL, migrations and row-level security (`src/tests/persistence/test_audiobook_*.py`).
-- Route tests cover status mapping and streaming limits (`src/tests/unit/audiobook/test_routes.py`, `test_uploads.py`).
-- The feature matrix test proves the feature can be disabled.
+**Web.** The feature imports only its own `api/gateway.ts` client and the kernel's shared code. Keep `backendModules` and `apiPrefixes` in `module.ts` in step with the routes. Rerun the generators after changing routes:
 
-## Checklist
+```sh
+python scripts/export_gateway_openapi.py src/apps/web/src/api/generated/openapi.json
+npm --prefix src/apps/web run api:types
+```
 
-| # | Requirement | Audiobook |
-|---|---|---|
-| 1 | One `FEATURE` declaration and a catalog entry. | `feature.py`; `FEATURE_CATALOG["audiobook"]` |
-| 2 | Disabling the feature removes its routes and workers; kernel routes remain. | `test_feature_matrix.py` |
-| 3 | Module-level routes; no handlers defined in closures. | `routes.py` |
-| 4 | Request models for request bodies; existing URLs preserved. | `routes.py`; OpenAPI unchanged by WP-8.7 |
-| 5 | No SQL in the service; every statement in a repository and scoped by workspace. | `service.py` has no `execute`; `project_repository.py` |
-| 6 | Feature tables under row-level security; forward migrations only. | `0085`–`0106` |
-| 7 | Uploads streamed with a hard cap; downloads streamed. | `_spool_body`, `submit_source(content=stream)`, `StreamingResponse` |
-| 8 | Durable jobs with short leases, renewal, and lease-fenced writes. | `leases.py`; fenced `renew_lease` at each checkpoint |
-| 9 | Background loops start and stop with background ownership. | `_AudiobookWorkers`; `test_audiobook_background_ownership.py` |
-| 10 | Providers reached through ports, imported on demand. | `model_identity.py` → `tts_artifacts` |
-| 11 | Read and write permissions declared. | `audiobook:read`, `audiobook:write` |
-| 12 | Unit, route and PostgreSQL integration tests. | `src/tests/unit/audiobook/`, `src/tests/persistence/test_audiobook_*.py` |
+### 4. Check
 
-Not yet part of the reference: typed response models. Audiobook routes return dictionaries, so their OpenAPI response schemas are generic; new features should declare `response_model`s.
+```sh
+git add src/app/field_notes src/tests/field_notes src/apps/web/src/features/field-notes
+python scripts/check_module.py field-notes
+```
+
+The architecture lint and conformance read only files git knows about, so stage the new module first. The script reports each of these steps:
+
+1. that git knows every file of the module;
+2. the architecture lint, failing only on new violations in the module's files;
+3. module conformance (feature, contract, migrations, declarations, tests, web), with no gap beyond the module's entry in `resources/architecture/module-conformance-baseline.json`;
+4. mypy on the package;
+5. `scripts/test_module.py field-notes`, which runs the module's tests and its characterization scenarios;
+6. with a web side, the tests of each web feature that lists the module in `backendModules`, and the web typecheck.
+
+Use `--skip-web` while the web side is not yet ready. Before you open a pull request, also run the repository gates the module touches: `python scripts/architecture_lint.py --check`, `python scripts/architecture_metrics.py --check`, and `npm --prefix src/apps/web run build` for web changes.
+
+## Retiring an app
+
+Retiring removes a module's code while its data and history stay consistent:
+
+- its migrations stay known to the runner;
+- its tables keep an owner;
+- its unfinished work reaches a final state in PostgreSQL;
+- its stored settings survive.
+
+Deleting the code by hand breaks all four: the runner rejects a database with an applied migration it cannot find, and recovery would keep retrying jobs whose handler is gone.
+
+### 1. Make sure nothing needs it
+
+`retire_module.py` refuses a module, and lists the reasons, while any of these is true:
+
+- another catalog module lists it in `depends_on` or `uses`;
+- another web feature lists it in `backendModules`;
+- code outside the module's own package and tests imports it.
+
+Remove those dependencies first, in their own change.
+
+### 2. Retire
+
+On a development machine, with one database and one checkout:
+
+```sh
+python scripts/retire_module.py field-notes
+```
+
+In a deployment, the database step runs against the live database while the current release, which still has the module, keeps running. The file step then ships in the next release:
+
+```sh
+OMNIX_DATABASE_URL=<deployment database> python scripts/retire_module.py field-notes --database-only
+python scripts/retire_module.py field-notes --files-only    # in the checkout; review, commit, release
+```
+
+**The database step**, across every workspace:
+
+1. **Drain.** The script marks the module `draining` in `omnix_module_states`, a state every process reads and that overrides the runtime configuration. In that state:
+   - the module's routes answer reads and refuse writes with `503` and `Retry-After`;
+   - its scheduled tasks start no new runs;
+   - new jobs are refused, except follow-ups its own running jobs submit;
+   - its handlers and consumers stay registered, so work in flight can finish.
+
+   The script waits, up to `--drain-timeout` (default 600 seconds), for the module's running jobs to finish and its outbox consumers' deliveries to be consumed.
+2. **Cancel what is left,** through the kernel repositories, with reason `module_retired`:
+   - waiting jobs are canceled;
+   - running jobs are asked to stop, and after `--cancel-grace` (default 30 seconds) any still unfinished are failed;
+   - each of its consumers' undelivered events is dead-lettered for that consumer only, so other modules' consumers still receive it;
+   - its tools' pending or approved proposals expire.
+
+   Nothing is deleted.
+3. **Check.** If any of that work is still not final, the script stops and the module stays `draining`. Rerun the script once the work is final, or undo the retirement with `python scripts/retire_module.py field-notes --reactivate`.
+4. **Retire.** The module is marked `retired`. From then on it takes no work in any process.
+
+**The file step:**
+
+- It removes the catalog line and the web manifest line, the module's package, `src/tests/field_notes/` and the web feature folder.
+- It removes the module's entry from the conformance baseline.
+- It moves `migrations/` to `src/app/persistence/retired/field_notes/migrations/`, where the runner still finds every applied version and the module's tables are owned by `retired:field-notes`.
+- It writes the kernel-only `src/app/persistence/retired/field_notes/tombstone.py`:
+  - `MODULE_ID`;
+  - a settings section stub with the same field, order and alias, which keeps the stored values;
+  - the retired `JOB_TYPES`, `OUTBOX_CONSUMERS`, `TOOL_IDS` and `CAPABILITY_IDS`.
+- It regenerates the API contract files, unless you pass `--no-generate`.
+
+Review the diff. Outside the module's folders and the tombstone, it touches only the two registration files and the generated contracts.
+
+### 3. What happens afterwards
+
+- **Recovery.** Every minute, recovery fails any job of a tombstone's `JOB_TYPES` that is still unfinished, once, with `module_retired`. Jobs of any other type that no process here handles are not failed: they wait, because the feature may only be disabled or newer than this worker. If one waits longer than `OMNIX_JOB_UNCLAIMED_ALERT_SECONDS` (default 900), recovery logs `job_unclaimed_too_long` with the type and its age.
+- **Configuration.** A configuration that still names the module (`OMNIX_FEATURES`, `OMNIX_FEATURES_DISABLED`) still starts. The id is dropped.
+- **Tools and grants.** The module's tools leave the catalog. Stored grants and agent-run approvals for them fail closed, because the capability no longer exists.
+- **Data.** The module's tables and rows stay. To delete them, add a contract migration to the tombstone's `migrations/` folder that drops them. This needs the owner's approval and ships under the normal expand and contract rules. The tombstone stays after it is applied.

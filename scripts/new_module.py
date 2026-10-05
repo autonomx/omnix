@@ -297,10 +297,11 @@ from pydantic import BaseModel
 
 from app.persistence.database import default_database
 from app.runtime.tenant_context import current_tenant
-from app.settings.effective_defaults import load_effective_profile
+from app.settings.effective_defaults import module_settings
 
 from . import service
 from .contracts import {pascal}Item
+from .declarations import {pascal}SettingsProfile
 
 router = APIRouter()
 
@@ -329,7 +330,7 @@ def create_item(request: Create{pascal}ItemRequest) -> {pascal}Item:
 
 @router.get("/api/{mid}/settings", response_model={pascal}Settings)
 def settings() -> {pascal}Settings:
-    return {pascal}Settings(greeting=load_effective_profile().{pkg}.greeting)
+    return {pascal}Settings(greeting=module_settings("{pkg}", {pascal}SettingsProfile).greeting)
 '''
 
 
@@ -429,6 +430,17 @@ export const {camel}Module = defineModule({{
   backendModules: ['{mid}'],
   apiPrefixes: ['/api/{mid}'],
   loadWorkspace: () => import('./{pascal}Workspace').then((module) => module.{pascal}Workspace),
+}});
+''',
+        base / "module.test.ts": f'''import {{ describe, expect, it }} from 'vitest';
+import {{ {camel}Module }} from './module';
+
+describe('{title} module', () => {{
+  it('serves the {mid} backend module under its own API prefix', () => {{
+    expect({camel}Module.id).toBe('{mid}');
+    expect({camel}Module.backendModules).toEqual(['{mid}']);
+    expect({camel}Module.apiPrefixes).toEqual(['/api/{mid}']);
+  }});
 }});
 ''',
         base / "index.ts": f'''/** The {mid} feature's public API. */

@@ -1050,6 +1050,13 @@
     "type": "integer"
   },
   {
+    "default": "900",
+    "description": "Controls job unclaimed alert seconds for production.py.",
+    "feature": "production.py",
+    "name": "OMNIX_JOB_UNCLAIMED_ALERT_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": "127.0.0.1",
     "description": "Controls job worker metrics host for worker.",
     "feature": "worker",

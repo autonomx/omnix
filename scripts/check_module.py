@@ -4,11 +4,13 @@
 
 Runs, and reports each step:
 
-1. the architecture lint, failing only on new violations in the module's files;
-2. module conformance (PA-4.1): no gap beyond the module's baseline entry;
-3. mypy on the module's package;
-4. ``scripts/test_module.py`` (its test directory and characterization scenarios);
-5. for each web feature whose manifest lists the module in ``backendModules``,
+1. that git knows every file of the module: the lint and conformance read
+   tracked files only, so ``git add`` a new module first;
+2. the architecture lint, failing only on new violations in the module's files;
+3. module conformance (PA-4.1): no gap beyond the module's baseline entry;
+4. mypy on the module's package;
+5. ``scripts/test_module.py`` (its test directory and characterization scenarios);
+6. for each web feature whose manifest lists the module in ``backendModules``,
    that feature's web tests and the web typecheck.
 """
 from __future__ import annotations
@@ -31,6 +33,16 @@ import test_module  # noqa: E402
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+def tracked_step(module_id: str, package: str) -> tuple[bool, str]:
+    folders = [f"src/{package.replace('.', '/')}", f"src/tests/{package.replace('.', '_')}",
+               f"src/apps/web/src/features/{module_id}"]
+    result = _run(["git", "ls-files", "--others", "--exclude-standard", "--", *folders])
+    untracked = result.stdout.split()
+    if untracked:
+        return False, f"{len(untracked)} files git does not know, which the lint and conformance cannot see; git add them"
+    return True, "every file is known to git"
 
 
 def lint_step(package: str) -> tuple[bool, str]:
@@ -103,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     package = packages[args.module_id]
     steps = [
+        ("git", *tracked_step(args.module_id, package)),
         ("architecture lint", *lint_step(package)),
         ("conformance", *conformance_step(args.module_id)),
         ("mypy", *mypy_step(package)),

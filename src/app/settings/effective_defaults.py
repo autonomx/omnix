@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
 
 from app.settings.access import load_settings
 
 from app.settings.profile_experience import AgentRunSettingsProfile
 from app.settings.profile_models import SettingsProfile
 from app.settings.profile_repository import load_settings_profile
+
+SectionT = TypeVar("SectionT", bound=BaseModel)
 
 
 _LEGACY_STORY_TONE = "Cozy"
@@ -24,6 +28,18 @@ _LEGACY_PODCAST_DEFAULTS: dict[str, Any] = {
 
 def load_effective_profile() -> SettingsProfile:
     return load_settings_profile(load_settings(allow_defaults_without_service=True))
+
+
+def module_settings(field: str, model: type[SectionT]) -> SectionT:
+    """A module's section of the effective profile, as the model its ``declarations.py`` declares (PA-2.1).
+
+    The profile is composed from the declared sections at startup, so a type
+    checker cannot see ``profile.<field>``; this reads it with its type.
+    """
+    section = getattr(load_effective_profile(), field)
+    if not isinstance(section, model):
+        raise TypeError(f"settings section {field} is {type(section).__name__}, not {model.__name__}")
+    return section
 
 
 def agent_run_settings() -> AgentRunSettingsProfile:

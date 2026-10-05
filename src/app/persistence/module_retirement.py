@@ -16,7 +16,7 @@ from typing import Any
 
 from .capability_approval_repository import PostgresCapabilityApprovalRepository
 from .identity_service import list_active_workspace_contexts
-from .module_states import ModuleState, State, set_module_state
+from .module_states import ModuleState, State, read_module_state, set_module_state
 from .tenant import TenantContext
 from .tenant_scope import system_scope
 from .unit_of_work import unit_of_work
@@ -98,6 +98,16 @@ def set_state(database: Any, module_id: str, state: State, *, drain_deadline: da
     return result
 
 
+def reactivate(database: Any, module_id: str) -> ModuleState:
+    """Undo a retirement that stopped: a draining module takes new work again. A retired module stays retired."""
+    with system_scope("operator.cli"), unit_of_work(database) as work:
+        if read_module_state(work.connection, module_id).state == "retired":
+            raise ValueError(f"{module_id} is already retired")
+        result = set_module_state(work.connection, module_id, "active")
+        work.commit()
+    return result
+
+
 def in_flight_work(database: Any, subject: RetirementSubject) -> InFlightWork:
     """What of the module's work is not final yet, across every workspace."""
     with system_scope("operator.cli"), unit_of_work(database) as work:
@@ -166,5 +176,6 @@ __all__ = [
     "cancel_remaining",
     "fail_unfinished_jobs",
     "in_flight_work",
+    "reactivate",
     "set_state",
 ]

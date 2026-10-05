@@ -154,6 +154,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
 | `OMNIX_INSTANCE_NAME` | string | — | observability | Controls instance name for observability. |
 | `OMNIX_JOB_PRIORITY_AGING_SECONDS` | integer | `60` | kernel | Controls job priority aging seconds for kernel. |
+| `OMNIX_JOB_UNCLAIMED_ALERT_SECONDS` | integer | `900` | production.py | Controls job unclaimed alert seconds for production.py. |
 | `OMNIX_JOB_WORKER_METRICS_HOST` | string | `127.0.0.1` | worker | Controls job worker metrics host for worker. |
 | `OMNIX_JOB_WORKER_METRICS_PORT` | integer | `8090` | worker | Controls job worker metrics port for worker. |
 | `OMNIX_JOB_WORKER_POOLS` | string | — | worker | Controls job worker pools for worker. |
