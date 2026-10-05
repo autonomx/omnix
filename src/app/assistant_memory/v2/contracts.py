@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.memory_policy import Sensitivity, TrustLevel
+from app.conversation.memory_policy import Sensitivity, TrustLevel
 
 SYSTEM_MEMORY_OWNER_ID = "system-assistant"
 

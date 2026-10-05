@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.memory_contracts import MemoryRecord
+from app.conversation.memory_contracts import MemoryRecord
 from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 from app.runtime.pagination import bounded_count
 

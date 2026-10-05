@@ -24182,7 +24182,7 @@
         "properties": {
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/app__memory_contracts__MemoryCandidate"
+              "$ref": "#/components/schemas/app__conversation__memory_contracts__MemoryCandidate"
             },
             "title": "Candidates",
             "type": "array"
@@ -24210,7 +24210,7 @@
         "properties": {
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/app__memory_contracts__MemoryCandidate"
+              "$ref": "#/components/schemas/app__conversation__memory_contracts__MemoryCandidate"
             },
             "title": "Candidates",
             "type": "array"
@@ -51062,7 +51062,7 @@
         "title": "MemoryCandidate",
         "type": "object"
       },
-      "app__memory_contracts__MemoryCandidate": {
+      "app__conversation__memory_contracts__MemoryCandidate": {
         "additionalProperties": false,
         "description": "Non-prompt-eligible proposal awaiting an explicit resolution.",
         "properties": {
@@ -53844,7 +53844,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__memory_contracts__MemoryCandidate"
+                  "$ref": "#/components/schemas/app__conversation__memory_contracts__MemoryCandidate"
                 }
               }
             },

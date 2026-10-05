@@ -11,7 +11,7 @@ from typing import Any, Iterator
 from pydantic import BaseModel, Field, model_validator
 
 from app.conversation.performance_contract import SpeechPerformancePlan
-from app.text import remove_emojis
+from app.conversation.text import remove_emojis
 
 np: ModuleType | None
 try:

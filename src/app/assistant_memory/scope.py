@@ -8,7 +8,7 @@ import os
 import re
 from typing import Any
 
-from app.memory_contracts import MemoryOwnerType, MemoryScope, MemoryScopeContext, SYSTEM_MEMORY_OWNER_ID
+from app.conversation.memory_contracts import MemoryOwnerType, MemoryScope, MemoryScopeContext, SYSTEM_MEMORY_OWNER_ID
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
 

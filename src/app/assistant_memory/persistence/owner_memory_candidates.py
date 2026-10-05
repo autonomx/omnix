@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
 from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 from app.runtime.pagination import bounded_count
 

@@ -981,50 +981,50 @@
   },
   {
     "default": null,
-    "description": "Controls image enabled for image, image-http-client.py, launcher.",
-    "feature": "image, image-http-client.py, launcher",
+    "description": "Controls image enabled for image, launcher.",
+    "feature": "image, launcher",
     "name": "OMNIX_IMAGE_ENABLED",
     "type": "string"
   },
   {
     "default": "0",
-    "description": "Controls image preload for image-service-runtime.py, launcher.",
-    "feature": "image-service-runtime.py, launcher",
+    "description": "Controls image preload for launcher, tooling.",
+    "feature": "launcher, tooling",
     "name": "OMNIX_IMAGE_PRELOAD",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls image provider for image-service-runtime.py.",
-    "feature": "image-service-runtime.py",
+    "description": "Controls image provider for tooling.",
+    "feature": "tooling",
     "name": "OMNIX_IMAGE_PROVIDER",
     "type": "string"
   },
   {
     "default": "1",
-    "description": "Controls image require explicit load for image, image-service-runtime.py, launcher.",
-    "feature": "image, image-service-runtime.py, launcher",
+    "description": "Controls image require explicit load for image, launcher, tooling.",
+    "feature": "image, launcher, tooling",
     "name": "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD",
     "type": "string"
   },
   {
     "default": null,
-    "description": "Controls image service mode for image, image-service-runtime.py.",
-    "feature": "image, image-service-runtime.py",
+    "description": "Controls image service mode for image, tooling.",
+    "feature": "image, tooling",
     "name": "OMNIX_IMAGE_SERVICE_MODE",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls image url for image-http-client.py.",
-    "feature": "image-http-client.py",
+    "description": "Controls image url for image.",
+    "feature": "image",
     "name": "OMNIX_IMAGE_URL",
     "type": "string"
   },
   {
     "default": "0",
-    "description": "Controls image warmup for image-service-runtime.py, launcher.",
-    "feature": "image-service-runtime.py, launcher",
+    "description": "Controls image warmup for launcher, tooling.",
+    "feature": "launcher, tooling",
     "name": "OMNIX_IMAGE_WARMUP",
     "type": "string"
   },
@@ -1135,8 +1135,8 @@
   },
   {
     "default": "",
-    "description": "Controls launcher url for image-http-client.py.",
-    "feature": "image-http-client.py",
+    "description": "Controls launcher url for image.",
+    "feature": "image",
     "name": "OMNIX_LAUNCHER_URL",
     "type": "string"
   },
@@ -2206,15 +2206,15 @@
   },
   {
     "default": "1",
-    "description": "Controls voice debug logging for voice-debug.py.",
-    "feature": "voice-debug.py",
+    "description": "Controls voice debug logging for providers.",
+    "feature": "providers",
     "name": "OMNIX_VOICE_DEBUG_LOGGING",
     "type": "string"
   },
   {
     "default": "",
-    "description": "Controls voice debug log dir for voice-debug.py.",
-    "feature": "voice-debug.py",
+    "description": "Controls voice debug log dir for providers.",
+    "feature": "providers",
     "name": "OMNIX_VOICE_DEBUG_LOG_DIR",
     "type": "string"
   },

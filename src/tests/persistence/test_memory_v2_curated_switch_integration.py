@@ -22,7 +22,7 @@ from app.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
 from app.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
 from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime, UnsafeMemoryRollbackError
 from app.assistant_memory.v2.shadow_runner import run_shadow
-from app.memory_contracts import MemoryConflictError, MemoryRecord
+from app.conversation.memory_contracts import MemoryConflictError, MemoryRecord
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.tenant_scope import system_scope

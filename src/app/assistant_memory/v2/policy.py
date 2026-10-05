@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
-from app.memory_policy import sensitivity_allows, strongest_sensitivity, weakest_trust
+from app.conversation.memory_policy import sensitivity_allows, strongest_sensitivity, weakest_trust
 
 from .contracts import (
     DerivedPolicyEnvelope,

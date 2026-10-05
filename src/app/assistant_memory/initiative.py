@@ -16,7 +16,7 @@ from app.assistant_tools.contracts import (
 )
 from app.conversation.live_profile import LiveConversationProfile
 
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from .temporal_retrieval import TemporalRetrievalItem, TemporalRetrievalResult
 from app.prompts import prompt_template
 

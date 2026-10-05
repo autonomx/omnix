@@ -388,7 +388,7 @@ def test_the_gateway_voice_clone_client_and_the_tts_server_agree(monkeypatch):
     import httpx
     from services.tts import tts_server
 
-    from app import tts_http_client
+    from app.providers import tts_http_client
     from app.runtime.http_client import HttpPolicy, PooledHttpClient
 
     received: dict[str, Any] = {}

@@ -275,7 +275,7 @@ created_character = characters.create(CreateCharacterRequest(
 assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
-from app.memory_contracts import MemoryRecord
+from app.conversation.memory_contracts import MemoryRecord
 from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()

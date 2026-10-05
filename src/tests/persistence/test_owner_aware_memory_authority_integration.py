@@ -57,7 +57,7 @@ _WRITE_SCRIPT = r"""
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
-from app.memory_contracts import MemoryScopeContext
+from app.conversation.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_defaults import (
     default_memory_service,
     reset_default_memory_service,
@@ -124,7 +124,7 @@ _READ_SCRIPT = r"""
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
-from app.memory_contracts import MemoryScopeContext
+from app.conversation.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_defaults import default_memory_service
 
 system = MemoryScopeContext(

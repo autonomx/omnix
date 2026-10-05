@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from .settings import load_memory_runtime_settings
 from .service import MemoryService
 

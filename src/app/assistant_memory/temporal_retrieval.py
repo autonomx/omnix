@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.conversation.contracts import PromptMemoryItem
 
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")

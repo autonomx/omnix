@@ -16,7 +16,7 @@ export type CompanionRolloutStage =
 
 export type ManagedMemoryRecord = components['schemas']['MemoryRecord'];
 
-export type ManagedMemoryCandidate = components['schemas']['app__memory_contracts__MemoryCandidate'];
+export type ManagedMemoryCandidate = components['schemas']['app__conversation__memory_contracts__MemoryCandidate'];
 
 export type MemoryCandidateReviewResult = ManagedMemoryRecord | ManagedMemoryCandidate;
 

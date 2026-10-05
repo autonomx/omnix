@@ -144,13 +144,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IBKR_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls ibkr monitor in tests for trading. |
 | `OMNIX_IBKR_PORT` | string | — | trading | Controls ibkr port for trading. |
 | `OMNIX_IBKR_RECOVERY_AUTHORITY` | string | — | trading | Controls ibkr recovery authority for trading. |
-| `OMNIX_IMAGE_ENABLED` | string | — | image, image-http-client.py, launcher | Controls image enabled for image, image-http-client.py, launcher. |
-| `OMNIX_IMAGE_PRELOAD` | string | `0` | image-service-runtime.py, launcher | Controls image preload for image-service-runtime.py, launcher. |
-| `OMNIX_IMAGE_PROVIDER` | string | — | image-service-runtime.py | Controls image provider for image-service-runtime.py. |
-| `OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD` | string | `1` | image, image-service-runtime.py, launcher | Controls image require explicit load for image, image-service-runtime.py, launcher. |
-| `OMNIX_IMAGE_SERVICE_MODE` | string | — | image, image-service-runtime.py | Controls image service mode for image, image-service-runtime.py. |
-| `OMNIX_IMAGE_URL` | string | — | image-http-client.py | Controls image url for image-http-client.py. |
-| `OMNIX_IMAGE_WARMUP` | string | `0` | image-service-runtime.py, launcher | Controls image warmup for image-service-runtime.py, launcher. |
+| `OMNIX_IMAGE_ENABLED` | string | — | image, launcher | Controls image enabled for image, launcher. |
+| `OMNIX_IMAGE_PRELOAD` | string | `0` | launcher, tooling | Controls image preload for launcher, tooling. |
+| `OMNIX_IMAGE_PROVIDER` | string | — | tooling | Controls image provider for tooling. |
+| `OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD` | string | `1` | image, launcher, tooling | Controls image require explicit load for image, launcher, tooling. |
+| `OMNIX_IMAGE_SERVICE_MODE` | string | — | image, tooling | Controls image service mode for image, tooling. |
+| `OMNIX_IMAGE_URL` | string | — | image | Controls image url for image. |
+| `OMNIX_IMAGE_WARMUP` | string | `0` | launcher, tooling | Controls image warmup for launcher, tooling. |
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
 | `OMNIX_INSTANCE_NAME` | string | — | observability | Controls instance name for observability. |
 | `OMNIX_JOB_PRIORITY_AGING_SECONDS` | integer | `60` | kernel | Controls job priority aging seconds for kernel. |
@@ -166,7 +166,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LAUNCHER_AUTO_START` | string | `0` | launcher | Controls launcher auto start for launcher. |
 | `OMNIX_LAUNCHER_KILL_PORT` | boolean | `false` | tooling | Controls launcher kill port for tooling. |
 | `OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT` | string | `8` | tooling | Controls launcher port release timeout for tooling. |
-| `OMNIX_LAUNCHER_URL` | string | — | image-http-client.py | Controls launcher url for image-http-client.py. |
+| `OMNIX_LAUNCHER_URL` | string | — | image | Controls launcher url for image. |
 | `OMNIX_LEGACY_AUDIO_DIRS` | string | — | assets | Controls legacy audio dirs for assets. |
 | `OMNIX_LEGACY_DOCUMENT_DIRS` | string | — | assets | Controls legacy document dirs for assets. |
 | `OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED` | boolean | — | chat | Controls live agent auto route enabled for chat. |
@@ -319,8 +319,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_VISUAL_PROVIDER` | string | — | rpg | Controls visual provider for rpg. |
 | `OMNIX_VOICE_CLONES_DIR` | string | — | assets | Controls voice clones dir for assets. |
 | `OMNIX_VOICE_CLONES_FILE` | string | — | assets | Controls voice clones file for assets. |
-| `OMNIX_VOICE_DEBUG_LOGGING` | string | `1` | voice-debug.py | Controls voice debug logging for voice-debug.py. |
-| `OMNIX_VOICE_DEBUG_LOG_DIR` | string | — | voice-debug.py | Controls voice debug log dir for voice-debug.py. |
+| `OMNIX_VOICE_DEBUG_LOGGING` | string | `1` | providers | Controls voice debug logging for providers. |
+| `OMNIX_VOICE_DEBUG_LOG_DIR` | string | — | providers | Controls voice debug log dir for providers. |
 | `OMNIX_WEB_SEARCH_API_KEY` | string | — | research, security | Controls web search api key for research, security. |
 | `OMNIX_WEB_SEARCH_PROVIDER` | string | — | research, security | Controls web search provider for research, security. |
 | `OMNIX_WEB_SEARCH_TIMEOUT_SECONDS` | string | `8.0` | research | Controls web search timeout seconds for research. |

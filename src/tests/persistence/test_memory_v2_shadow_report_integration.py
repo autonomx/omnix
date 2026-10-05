@@ -17,7 +17,7 @@ from app.assistant_memory.v2.legacy_shadow import (
 )
 from app.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
 from app.assistant_memory.v2.shadow_report import build_shadow_report, main
-from app.memory_contracts import MemoryRecord
+from app.conversation.memory_contracts import MemoryRecord
 from app.persistence.migrations import apply_migrations
 from app.persistence.tenant_scope import system_scope
 from tests.persistence.test_memory_v2_authority_cutover_integration import (

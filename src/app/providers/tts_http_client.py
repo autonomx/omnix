@@ -13,7 +13,7 @@ import httpx
 from app.runtime.http_client import PooledHttpClient, shared_http_client
 from app.security.service_token import service_headers
 
-from app.voice_debug import voice_debug_log, voice_debug_log_path
+from app.providers.voice_debug import voice_debug_log, voice_debug_log_path
 
 
 def _normalize_base_url(value: str | None, default: str) -> str:

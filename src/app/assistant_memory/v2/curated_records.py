@@ -23,7 +23,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
-from app.memory_contracts import (
+from app.conversation.memory_contracts import (
     MemoryConflictError,
     MemoryNotFoundError,
     MemoryRecord,

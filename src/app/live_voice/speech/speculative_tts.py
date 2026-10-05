@@ -16,7 +16,7 @@ from app.conversation.performance_contract import (
     apply_performance_plan_to_provider,
     resolve_tts_provider_capabilities,
 )
-from app.text import remove_emojis
+from app.conversation.text import remove_emojis
 from app.live_voice.hardware_policy import should_defer_speculative_tts
 
 from .tts_lane import (

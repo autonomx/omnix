@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
 from app.runtime.pagination import MAX_PAGE_SIZE
 
 # Safety stop for a runaway walk.

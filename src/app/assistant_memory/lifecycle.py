@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.memory_contracts import MemoryScopeContext
+from app.conversation.memory_contracts import MemoryScopeContext
 from .policy import prompt_eligibility
 from .service import MemoryService
 

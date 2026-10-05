@@ -1,9 +1,9 @@
 [layers.kernel]
-packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.memory_contracts", "app.memory_policy", "app.errors", "app.text"]
+packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.errors"]
 may_import = ["kernel"]
 
 [layers.shared_services]
-packages = ["app.providers", "app.prompts", "app.models", "app.tts_http_client", "app.tts_stream_audio", "app.voice_debug"]
+packages = ["app.providers", "app.prompts", "app.models"]
 may_import = ["kernel", "shared_services"]
 
 # ADR-0016: platform and app modules are not listed here. Each feature package
@@ -31,7 +31,6 @@ contract_module = "contracts"
 # package. Empty after PA-1.5 (replay), PA-3.2 (memory v2) and PA-5.2 (loose files).
 [modules.package_owners]
 "app.replay" = "app.rpg"
-"app.image_http_client" = "app.image"
 
 [owners]
 platform_table_sql = ["app/persistence/job_repository.py", "app/persistence/execution_repositories.py", "app/persistence/outbox_repository.py", "app/persistence/identity_service.py", "app/persistence/audit.py", "app/persistence/migrations.py", "app/persistence/retention.py"]

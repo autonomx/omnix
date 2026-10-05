@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from .hermes_adapter import default_hermes_memory_dir
 from .service import MemoryService
 

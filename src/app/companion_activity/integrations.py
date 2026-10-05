@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from app.memory_policy import Sensitivity, TrustLevel
+from app.conversation.memory_policy import Sensitivity, TrustLevel
 
 from .contracts import EvidenceProposition, FrozenContract
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.conversation.contracts import ChatSession, TranscriptReader
 
-from app.memory_contracts import (
+from app.conversation.memory_contracts import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,

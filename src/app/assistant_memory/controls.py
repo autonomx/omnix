@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.conversation.contracts import TranscriptReader
 
 from .companion_context import invalidate_companion_context
-from app.memory_contracts import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
 from .paging import iter_candidates, iter_records
 from .policy import is_visible_in_scope
 from .service import MemoryPolicyError, MemoryService

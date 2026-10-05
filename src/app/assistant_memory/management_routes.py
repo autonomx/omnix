@@ -37,7 +37,7 @@ from .management import (
     resolve_session_scope,
     session_record,
 )
-from app.memory_contracts import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
+from app.conversation.memory_contracts import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
 from .observability import MemoryUsageResponse, memory_usage_snapshot
 from .paging import iter_records
 from .repository import MemoryConflictError, MemoryNotFoundError

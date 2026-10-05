@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
 from .structured_extraction import StructuredMemoryProposal
 from .typed_memory import create_typed_memory, supersede_typed_memory

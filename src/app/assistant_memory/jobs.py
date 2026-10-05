@@ -14,7 +14,7 @@ from app.jobs import (
     default_job_store,
 )
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope

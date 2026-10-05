@@ -24,7 +24,7 @@ from app.image.reference_assets import (
 )
 from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
 from app.image.style import apply_image_style
-from app.image_http_client import generate_image_via_service, is_image_service_enabled
+from app.image.image_http_client import generate_image_via_service, is_image_service_enabled
 from app.persistence.device_permits import device_permit_slot
 
 _GIB = float(1024**3)

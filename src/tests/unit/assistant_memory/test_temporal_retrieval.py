@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory import temporal_retrieval
 from app.assistant_memory.temporal_retrieval import (
     invalidate_temporal_retrieval,

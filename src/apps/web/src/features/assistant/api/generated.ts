@@ -7352,7 +7352,7 @@ export interface components {
         /** MemoryCandidateListResponse */
         MemoryCandidateListResponse: {
             /** Candidates */
-            candidates: components["schemas"]["app__memory_contracts__MemoryCandidate"][];
+            candidates: components["schemas"]["app__conversation__memory_contracts__MemoryCandidate"][];
             /** Session Id */
             session_id: string;
             /** Total */
@@ -7361,7 +7361,7 @@ export interface components {
         /** MemoryExportResponse */
         MemoryExportResponse: {
             /** Candidates */
-            candidates: components["schemas"]["app__memory_contracts__MemoryCandidate"][];
+            candidates: components["schemas"]["app__conversation__memory_contracts__MemoryCandidate"][];
             /** Exported At */
             exported_at: string;
             /** Owner Id */
@@ -9738,7 +9738,7 @@ export interface components {
          * MemoryCandidate
          * @description Non-prompt-eligible proposal awaiting an explicit resolution.
          */
-        app__memory_contracts__MemoryCandidate: {
+        app__conversation__memory_contracts__MemoryCandidate: {
             /** Candidate Fingerprint */
             candidate_fingerprint: string;
             /**
@@ -11228,7 +11228,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__memory_contracts__MemoryCandidate"];
+                    "application/json": components["schemas"]["app__conversation__memory_contracts__MemoryCandidate"];
                 };
             };
             /** @description Validation Error */

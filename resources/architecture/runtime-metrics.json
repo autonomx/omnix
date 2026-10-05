@@ -349,9 +349,12 @@
         "app.conversation.contracts",
         "app.conversation.legacy_sessions",
         "app.conversation.live_profile",
+        "app.conversation.memory_contracts",
+        "app.conversation.memory_policy",
         "app.conversation.performance_contract",
         "app.conversation.privacy",
         "app.conversation.research_compatibility",
+        "app.conversation.text",
         "app.conversation.tts_stream_contract",
         "app.desktop_companion",
         "app.desktop_companion.activity_bridge",
@@ -399,6 +402,7 @@
         "app.image.contracts",
         "app.image.downloads",
         "app.image.feature",
+        "app.image.image_http_client",
         "app.image.jobs",
         "app.image.providers",
         "app.image.providers.registry",
@@ -408,7 +412,6 @@
         "app.image.routes.models",
         "app.image.routes.references",
         "app.image.routes.workspace",
-        "app.image_http_client",
         "app.jobs",
         "app.jobs.errors",
         "app.jobs.executor",
@@ -443,8 +446,6 @@
         "app.live_voice.transport.diagnostics_routes",
         "app.live_voice.transport.sse",
         "app.live_voice.transport.websocket",
-        "app.memory_contracts",
-        "app.memory_policy",
         "app.observability",
         "app.observability.agent_logging",
         "app.observability.content_free_diagnostics",
@@ -524,6 +525,7 @@
         "app.providers.structured.schema_projection",
         "app.providers.structured.transport",
         "app.providers.tts_service",
+        "app.providers.voice_debug",
         "app.replay",
         "app.replay.models",
         "app.replay.rpg_adapter",
@@ -1290,7 +1292,6 @@
         "app.story.declarations",
         "app.story.feature",
         "app.story.jobs",
-        "app.text",
         "app.trading",
         "app.trading.alerts",
         "app.trading.alerts_api",
@@ -1523,7 +1524,6 @@
         "app.voice.voice_cloning_defaults",
         "app.voice.voice_job_summary_routes",
         "app.voice.voice_library_routes",
-        "app.voice_debug",
         "asyncio",
         "asyncio.base_events",
         "asyncio.base_futures",
@@ -2133,7 +2133,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8340,
+      "collected_tests": 8341,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2958,7 +2958,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T16:02:27.641710+00:00",
+  "measured_at": "2026-10-05T16:19:22.916093+00:00",
   "metrics": {
     "boot_imported_modules": 2078,
     "collection_errors": 0,
@@ -2967,5 +2967,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "32198cc6fb2e044a9a3f8ad70f5e84ed0ae0eda53e522528336569c0d9c6aaef"
+  "source_digest": "fa022d2668c5cccce43b4bd97e69b868a1247f9947ee40ccdac2bf328e06611e"
 }

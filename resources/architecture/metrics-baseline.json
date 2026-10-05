@@ -443,6 +443,7 @@
       "app.image.downloads",
       "app.image.feature",
       "app.image.flux_pipeline_loading",
+      "app.image.image_http_client",
       "app.image.jobs",
       "app.image.lifecycle",
       "app.image.models",
@@ -624,8 +625,10 @@
       "app.providers.stt_segment_scheduler",
       "app.providers.stt_streaming_audio",
       "app.providers.tts_artifacts",
+      "app.providers.tts_http_client",
       "app.providers.tts_priority",
       "app.providers.tts_service",
+      "app.providers.voice_debug",
       "app.replay",
       "app.replay.models",
       "app.replay.rpg_adapter",
@@ -2509,10 +2512,7 @@
       "src_root_service_entrypoints": [],
       "string_runtime_hooks": [],
       "tables_without_owner": [],
-      "tracked_runtime_data_in_src": [
-        "src/app/data/sessions.json",
-        "src/app/data/voice_clones.json"
-      ],
+      "tracked_runtime_data_in_src": [],
       "uncovered_app_modules": [],
       "web_feature_clients_in_shared_api": []
     },
@@ -4105,6 +4105,27 @@
       {
         "approved": true,
         "category": "cache",
+        "invalidation": "clear_voice_debug_loggers",
+        "kind": "container",
+        "line": 37,
+        "max_entries": 64,
+        "path": "src/app/providers/voice_debug.py",
+        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+        "symbol": "_LOGGERS",
+        "ttl_seconds": 3600.0
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "lock",
+        "line": 34,
+        "path": "src/app/providers/voice_debug.py",
+        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
+        "symbol": "_LOGGER_LOCK"
+      },
+      {
+        "approved": true,
+        "category": "cache",
         "kind": "lock",
         "line": 21,
         "path": "src/app/research/cache.py",
@@ -4666,27 +4687,6 @@
         "path": "src/app/voice/tts_runtime_state.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "STATE_LOCK"
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "invalidation": "clear_voice_debug_loggers",
-        "kind": "container",
-        "line": 37,
-        "max_entries": 64,
-        "path": "src/app/voice_debug.py",
-        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-        "symbol": "_LOGGERS",
-        "ttl_seconds": 3600.0
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "kind": "lock",
-        "line": 34,
-        "path": "src/app/voice_debug.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_LOGGER_LOCK"
       },
       {
         "approved": true,
@@ -5456,6 +5456,16 @@
       },
       {
         "approved": true,
+        "path": "src/app/providers/voice_debug.py",
+        "symbol": "_LOGGERS"
+      },
+      {
+        "approved": true,
+        "path": "src/app/providers/voice_debug.py",
+        "symbol": "_LOGGER_LOCK"
+      },
+      {
+        "approved": true,
         "path": "src/app/research/cache.py",
         "symbol": "_CACHE_LOCK"
       },
@@ -5723,16 +5733,6 @@
         "approved": true,
         "path": "src/app/voice/tts_runtime_state.py",
         "symbol": "STATE_LOCK"
-      },
-      {
-        "approved": true,
-        "path": "src/app/voice_debug.py",
-        "symbol": "_LOGGERS"
-      },
-      {
-        "approved": true,
-        "path": "src/app/voice_debug.py",
-        "symbol": "_LOGGER_LOCK"
       },
       {
         "approved": true,
@@ -6743,7 +6743,7 @@
     "tracked_runtime_data_in_src": {
       "direction": "lower",
       "target": 0,
-      "value": 2
+      "value": 0
     },
     "unbounded_fetchall": {
       "direction": "lower",
@@ -6843,5 +6843,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "32198cc6fb2e044a9a3f8ad70f5e84ed0ae0eda53e522528336569c0d9c6aaef"
+  "source_digest": "fa022d2668c5cccce43b4bd97e69b868a1247f9947ee40ccdac2bf328e06611e"
 }

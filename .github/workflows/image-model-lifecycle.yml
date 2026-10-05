@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "src/app/image/**"
-      - "src/app/image_http_client.py"
+      - "src/app/image/image_http_client.py"
       - "src/services/image/image_service_app.py"
       - "src/services/image/image_service_runtime.py"
       - "src/app/image/routes/models.py"
@@ -32,7 +32,7 @@ on:
   push:
     paths:
       - "src/app/image/**"
-      - "src/app/image_http_client.py"
+      - "src/app/image/image_http_client.py"
       - "src/services/image/image_service_app.py"
       - "src/services/image/image_service_runtime.py"
       - "src/app/image/routes/models.py"

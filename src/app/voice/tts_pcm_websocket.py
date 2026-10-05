@@ -14,7 +14,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.providers.service import get_tts_provider
-from app.text import remove_emojis
+from app.conversation.text import remove_emojis
 
 from app.observability.tts_stream_diagnostics import (
     begin_stream,

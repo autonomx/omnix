@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
+from app.conversation.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
 
 from .contracts import EvidenceProposition, FrozenContract
 from .runtime import ActivityRuntimeResult

@@ -51,3 +51,7 @@ def test_docstrings_get_their_command_lines_rewritten() -> None:
     source = '"""Usage:\n\n    python -m app.old_pkg.cutover status\n"""\nX = 1\n'
 
     assert rewrite_python(source, MAPPING) == '"""Usage:\n\n    python -m app.new.pkg.cutover status\n"""\nX = 1\n'
+
+
+def test_file_paths_with_their_suffix_are_rewritten() -> None:
+    assert rewrite_text("- \"src/app/old_pkg.py\"\n", MAPPING) == "- \"src/app/new/pkg.py\"\n"

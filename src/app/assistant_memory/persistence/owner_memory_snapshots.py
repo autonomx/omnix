@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.memory_contracts import MemorySnapshot
+from app.conversation.memory_contracts import MemorySnapshot
 from app.runtime.pagination import bounded_count
 
 from .owner_memory_rows import OwnerMemoryRowSupport

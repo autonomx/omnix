@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from app.memory_contracts import MemoryRecord
+from app.conversation.memory_contracts import MemoryRecord
 from app.persistence.database import PostgresDatabase, default_database
 
 from .contracts import (
@@ -185,7 +185,7 @@ def curated_projector(observations: tuple[Observation, ...]) -> tuple[GraphAsser
 
     Imported v1 records and curated records alike: only active, non-secret,
     approved records are derived (the record-level rule of
-    ``app.memory_contracts.record_prompt_block_reason``); expiry becomes
+    ``app.conversation.memory_contracts.record_prompt_block_reason``); expiry becomes
     ``valid_until`` instead of a clock check, so replay stays exact.
     """
     assertions: list[GraphAssertion] = []

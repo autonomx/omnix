@@ -10,7 +10,7 @@ from app.config.env import env_str as _env_str
 from copy import deepcopy
 from pathlib import Path
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
 from app.runtime.pagination import bounded_count
 from .repository import InMemoryMemoryRepository
 

@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from app.conversation.performance_contract import apply_performance_plan_to_provider
 from app.live_voice.capacity import live_call_capacity
-from app.text import remove_emojis
+from app.conversation.text import remove_emojis
 from app.voice.contracts import TTSProviderResolver
 from app.live_voice.speech.pcm_diagnostics import (
     measured_pcm_block_streamer,

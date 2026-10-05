@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from app.conversation.performance_contract import apply_performance_plan_to_provider
-from app.text import remove_emojis
+from app.conversation.text import remove_emojis
 
 from app.conversation.tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
 from app.observability.tts_stream_diagnostics import stream_log

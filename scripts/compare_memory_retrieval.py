@@ -103,7 +103,7 @@ def require_disposable(url: str) -> None:
 
 
 def _record(record_id: str, category: str, content: str, *, days_ago: float, confidence: float):
-    from app.memory_contracts import MemoryRecord
+    from app.conversation.memory_contracts import MemoryRecord
 
     stamp = (NOW - timedelta(days=days_ago)).isoformat()
     return MemoryRecord(
@@ -130,7 +130,7 @@ def build_store(size: int, rng: random.Random) -> tuple[list, dict[str, str]]:
 
 
 def _scope_context():
-    from app.memory_contracts import MemoryScopeContext
+    from app.conversation.memory_contracts import MemoryScopeContext
 
     return MemoryScopeContext(profile_id=PROFILE_ID, workspace_id="workspace:benchmark", session_id="session:benchmark")
 

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.memory_contracts import MemoryRecord
+from app.conversation.memory_contracts import MemoryRecord
 from app.assistant_memory.v2 import (
     AffectObservation,
     Episode,

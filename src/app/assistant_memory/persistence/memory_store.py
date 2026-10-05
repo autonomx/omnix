@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.memory_contracts import (
+from app.conversation.memory_contracts import (
     MemoryCandidate,
     MemoryRecord,
     MAX_MEMORY_SNAPSHOT_ITEMS,

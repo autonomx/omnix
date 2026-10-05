@@ -9,7 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.conversation.contracts import ChatSession
-from app.voice_debug import voice_debug_log
+from app.providers.voice_debug import voice_debug_log
 
 from .avatar_models import CharacterAvatarPack
 from .avatar_service import CharacterAvatarService, default_character_avatar_service

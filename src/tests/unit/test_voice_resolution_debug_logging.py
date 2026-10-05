@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from services.tts import tts_server
-from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
+from app.providers.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 
 def test_voice_debug_log_writes_json_without_speech_content(tmp_path: Path, monkeypatch) -> None:
@@ -35,7 +35,7 @@ def test_voice_debug_logger_cache_is_bounded_expiring_and_clearable(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import app.voice_debug as voice_debug
+    import app.providers.voice_debug as voice_debug
 
     voice_debug.clear_voice_debug_loggers()
     monkeypatch.setenv("OMNIX_VOICE_DEBUG_LOG_DIR", str(tmp_path))

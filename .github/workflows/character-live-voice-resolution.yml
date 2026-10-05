@@ -6,8 +6,8 @@ on:
       - "src/app/assets/canonical_voice_clones.py"
       - "src/app/characters/live_call.py"
       - "src/app/characters/service.py"
-      - "src/app/tts_http_client.py"
-      - "src/app/voice_debug.py"
+      - "src/app/providers/tts_http_client.py"
+      - "src/app/providers/voice_debug.py"
       - "src/services/tts/tts_server.py"
       - "src/tests/unit/assets/test_canonical_voice_clone_resolution.py"
       - "src/tests/unit/characters/test_live_call.py"
@@ -64,8 +64,8 @@ jobs:
             src/app/assets/canonical_voice_clones.py \
             src/app/characters/live_call.py \
             src/app/characters/service.py \
-            src/app/tts_http_client.py \
-            src/app/voice_debug.py \
+            src/app/providers/tts_http_client.py \
+            src/app/providers/voice_debug.py \
             src/tests/unit/assets/test_canonical_voice_clone_resolution.py \
             src/tests/unit/characters/test_live_call.py \
             src/tests/unit/test_voice_resolution_debug_logging.py

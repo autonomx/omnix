@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.memory_contracts import (
+from app.conversation.memory_contracts import (
     PROMPT_TRUST_LEVELS,
     MemoryCandidate,
     MemoryPolicyDecision,

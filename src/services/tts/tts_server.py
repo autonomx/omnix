@@ -35,7 +35,7 @@ from app.runtime.model_executor import ModelExecutor
 from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
-from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
+from app.providers.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 logger = logging.getLogger(__name__)
 

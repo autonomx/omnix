@@ -48,7 +48,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.memory_contracts import MemoryRecord, record_prompt_block_reason
+from app.conversation.memory_contracts import MemoryRecord, record_prompt_block_reason
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.tenant_scope import system_scope
 

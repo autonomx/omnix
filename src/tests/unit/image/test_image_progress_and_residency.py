@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app import image_http_client
+from app.image import image_http_client
 from app.image import lifecycle, service
 from app.persistence import device_permits
 

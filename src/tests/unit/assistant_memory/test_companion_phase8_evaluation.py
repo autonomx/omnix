@@ -12,7 +12,7 @@ from app.assistant_memory.initiative import (
     plan_companion_initiative,
     reset_initiative_surface_history,
 )
-from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.observability import (
     companion_metrics_snapshot,
     memory_usage_snapshot,

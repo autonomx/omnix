@@ -1462,7 +1462,7 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/voice_debug.py",
+      "path": "src/app/providers/voice_debug.py",
       "symbol": "_LOGGERS",
       "category": "cache",
       "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -1471,7 +1471,7 @@
       "invalidation": "clear_voice_debug_loggers"
     },
     {
-      "path": "src/app/voice_debug.py",
+      "path": "src/app/providers/voice_debug.py",
       "symbol": "_LOGGER_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

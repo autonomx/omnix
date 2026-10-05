@@ -26,8 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_SUFFIXES = {".md", ".toml", ".yml", ".yaml", ".json", ".bat", ".cmd", ".ps1", ".sh", ".txt", ".ini", ".cfg",
                  ".ts", ".tsx", ".mjs", ".js", ".html", ".sql", ".dockerfile"}
 TEXT_NAMES = {"Dockerfile", "Makefile", ".gitignore", ".dockerignore", "CODEOWNERS"}
-# Records of the past and generated measurements: never rewritten (regenerate the measurements instead).
-EXCLUDED = ("docs/measurements/", "resources/architecture/metrics-baseline.json",
+# Records of the past (roadmaps, progress, decisions, changelog) and generated measurements: never rewritten.
+EXCLUDED = ("docs/measurements/", "docs/roadmap/", "docs/ENTERPRISE_ARCHITECTURE_", "docs/PLATFORM_ARCHITECTURE_ROADMAP_",
+            "CHANGELOG.md", "resources/architecture/metrics-baseline.json",
             "resources/architecture/runtime-metrics.json", "resources/architecture/lint-baseline.json")
 
 
@@ -105,6 +106,7 @@ def rewrite_text(text: str, mapping: list[tuple[str, str]]) -> str:
     for old, new in mapping:
         text = re.sub(rf"(?<![\w.]){re.escape(old)}(?=[.:\s'\"`)\],/]|$)", new, text, flags=re.M)
         old_path, new_path = "src/" + old.replace(".", "/"), "src/" + new.replace(".", "/")
+        text = re.sub(rf"(?<![\w/]){re.escape(old_path)}\.py\b", new_path + ".py", text)
         text = re.sub(rf"(?<![\w/]){re.escape(old_path)}(?=[/\s'\"`)\],:]|$)", new_path, text, flags=re.M)
         text = text.replace(old_path.replace("/", "\\") + "\\", new_path.replace("/", "\\") + "\\")
     return text

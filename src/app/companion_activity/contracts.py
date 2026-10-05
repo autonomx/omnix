@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
+from app.conversation.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
 
 EvidenceRelation = Literal[
     "supports",

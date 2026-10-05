@@ -2,7 +2,7 @@ import secrets
 
 import pytest
 
-from app.tts_http_client import _tts_base_url
+from app.providers.tts_http_client import _tts_base_url
 
 
 @pytest.fixture(autouse=True)
