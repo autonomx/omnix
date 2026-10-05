@@ -133,6 +133,39 @@ def _persist_portable_without_replacing(
     return hydrated
 
 
+def _pregenerate_scene_lore(
+    db: Any,
+    context: Any,
+    campaign_id: str,
+    session: Mapping[str, Any],
+    result: Mapping[str, Any],
+    portable: Mapping[str, Any],
+    *,
+    explicit_entity_ids: Sequence[str],
+    llm_gateway: Any | None,
+) -> dict[str, Mapping[str, Any]]:
+    """The scene's missing-canon bundles, generated from an unlocked read of the bible."""
+    with unit_of_work(db) as work:
+        stored = work.campaign_bibles.get(context, campaign_id)
+        bible = deepcopy(stored["document"] if stored is not None else portable)
+        world_canon = _pinned_world_canon(work, context, campaign_id)
+        if world_canon:
+            bible = _merge_published_world_canon(world_canon, bible, campaign_id=campaign_id)
+        next_revision = int(stored["revision"]) + 1 if stored is not None else 1
+    bundles: dict[str, Mapping[str, Any]] = {}
+    materialize_scene_lore(
+        bible,
+        session,
+        result,
+        campaign_id=campaign_id,
+        explicit_entity_ids=explicit_entity_ids,
+        canon_revision=next_revision,
+        llm_gateway=llm_gateway,
+        generated=bundles,
+    )
+    return bundles
+
+
 def ensure_turn_scene_lore(
     session_id: str,
     session: Mapping[str, Any],
@@ -169,6 +202,19 @@ def ensure_turn_scene_lore(
     try:
         db = database or default_database()
         context = current_tenant()
+        # The model calls run before the campaign and bible rows are locked, so
+        # other turns of this campaign do not wait on them (WP-8.6). The locked
+        # pass merges those bundles into the current bible without a model call.
+        bundles = _pregenerate_scene_lore(
+            db,
+            context,
+            campaign_id,
+            session,
+            result,
+            portable,
+            explicit_entity_ids=explicit_entity_ids,
+            llm_gateway=llm_gateway,
+        )
         with unit_of_work(db) as work:
             _campaign_exists(work, context, campaign_id, session)
             stored = work.campaign_bibles.get(context, campaign_id, for_update=True)
@@ -188,7 +234,8 @@ def ensure_turn_scene_lore(
                 campaign_id=campaign_id,
                 explicit_entity_ids=explicit_entity_ids,
                 canon_revision=next_revision,
-                llm_gateway=llm_gateway,
+                llm_gateway=False,
+                pregenerated=bundles,
             )
             _assert_materialized(bible, session, result, explicit_entity_ids)
             should_write = (

@@ -335,3 +335,74 @@ def test_turn_grounding_fails_closed_when_materialized_canon_cannot_be_loaded(mo
             campaign_id="campaign:lost-town",
             player_input="What is this place?",
         )
+
+
+def test_pregenerated_bundles_merge_without_a_model_call() -> None:
+    # WP-8.6: generate outside the row locks, merge under them.
+    class Gateway:
+        calls = 0
+
+        def generate(self, *_args, **_kwargs):
+            self.calls += 1
+            return "{}"
+
+    session = _new_town_session()
+    result = {"scene": {"location_id": "location:grayhaven"}}
+    generated: dict = {}
+    first, _ = materialize_scene_lore({}, session, result, campaign_id="campaign:new-town",
+                                      llm_gateway=False, generated=generated)
+    assert set(generated) == {"location:grayhaven"}
+
+    gateway = Gateway()
+    second, report = materialize_scene_lore({}, session, result, campaign_id="campaign:new-town",
+                                            llm_gateway=gateway, pregenerated=generated)
+    assert gateway.calls == 0
+    assert report["changed"] is True
+    assert second["entities"] == first["entities"]
+
+
+@pytest.mark.postgres
+def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> None:
+    import os
+
+    if not os.environ.get("OMNIX_TEST_DATABASE_URL"):
+        pytest.skip("OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    from contextlib import contextmanager
+
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.apps.rpg.session.genesis import runtime_lore_store
+
+    bootstrap_postgresql_runtime()
+    real_unit_of_work = runtime_lore_store.unit_of_work
+    open_transactions = []
+
+    @contextmanager
+    def counted_unit_of_work(*args, **kwargs):
+        open_transactions.append(1)
+        try:
+            with real_unit_of_work(*args, **kwargs) as work:
+                yield work
+        finally:
+            open_transactions.pop()
+
+    class Gateway:
+        seen_open: list[int] = []
+
+        def generate(self, *_args, **_kwargs):
+            self.seen_open.append(len(open_transactions))
+            return "{}"
+
+    monkeypatch.setattr(runtime_lore_store, "unit_of_work", counted_unit_of_work)
+    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value: value)
+    import uuid
+
+    campaign_id = f"campaign:lock-{uuid.uuid4().hex[:12]}"
+    session = _new_town_session()
+    session["manifest"] = {"id": campaign_id, "session_id": campaign_id}
+    gateway = Gateway()
+    _, report = ensure_turn_scene_lore(
+        campaign_id, session, {"scene": {"location_id": "location:grayhaven"}}, llm_gateway=gateway,
+    )
+
+    assert report["mode"] == "postgresql_authority"
+    assert gateway.seen_open and set(gateway.seen_open) == {0}

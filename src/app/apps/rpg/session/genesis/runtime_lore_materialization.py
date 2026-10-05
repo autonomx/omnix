@@ -995,8 +995,15 @@ def materialize_scene_lore(
     explicit_entity_ids: Sequence[str] = (),
     canon_revision: int | None = None,
     llm_gateway: Any | None = None,
+    pregenerated: Mapping[str, Mapping[str, Any]] | None = None,
+    generated: dict[str, Mapping[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Generate and merge missing current-scene canon once."""
+    """Generate and merge missing current-scene canon once.
+
+    ``generated`` collects each target's bundle; ``pregenerated`` supplies bundles
+    produced earlier, so a caller can generate outside its row locks and merge
+    under them (WP-8.6).
+    """
 
     candidate = deepcopy(dict(bible))
     candidate.setdefault("documents", [])
@@ -1019,12 +1026,16 @@ def materialize_scene_lore(
         )
         if _rich_entity(existing) and documented:
             continue
-        bundle = _generate_bundle(
-            candidate,
-            campaign_id,
-            target,
-            llm_gateway=llm_gateway,
-        )
+        bundle = (pregenerated or {}).get(target.entity_id)
+        if bundle is None:
+            bundle = _generate_bundle(
+                candidate,
+                campaign_id,
+                target,
+                llm_gateway=llm_gateway,
+            )
+        if generated is not None:
+            generated[target.entity_id] = bundle
         entity_ids, document_ids = _merge_bundle(
             candidate,
             bundle,
