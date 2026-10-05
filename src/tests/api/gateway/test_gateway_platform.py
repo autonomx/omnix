@@ -251,8 +251,7 @@ def test_gateway_settings_post_uses_revisioned_typed_patch() -> None:
 
 
 def test_gateway_reports_endpoint_lists_artifacts(tmp_path: Path) -> None:
-    from app.platform import reports as reports_module
-
+    from app.observability import reports as reports_module
     report = tmp_path / "run-1" / "report.json"
     report.parent.mkdir(parents=True)
     report.write_text("{}", encoding="utf-8")
@@ -272,7 +271,7 @@ def test_gateway_diagnostics_endpoint_reports_worker_summary() -> None:
     with (
         patch.dict("os.environ", {}, clear=True),
         patch(
-            "app.platform.diagnostics.get_provider_model_cache_status",
+            "app.gateway.diagnostics.get_provider_model_cache_status",
             return_value=ProviderModelCachePayload(status="ready"),
         ),
     ):

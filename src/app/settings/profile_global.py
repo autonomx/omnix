@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from .settings_profile_core import ModelDefaults, ProviderDefaults, RoutingDefaults
+from app.settings.profile_core import ModelDefaults, ProviderDefaults, RoutingDefaults
 
 
 class GlobalSettingsProfile(BaseModel):

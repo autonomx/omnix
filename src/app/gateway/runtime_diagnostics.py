@@ -6,7 +6,7 @@ import logging
 import os
 import time
 
-from .diagnostics import RuntimeDiagnostics
+from app.gateway.diagnostics import RuntimeDiagnostics
 
 
 def _durable_snapshot(services):

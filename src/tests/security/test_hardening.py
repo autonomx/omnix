@@ -169,7 +169,7 @@ def test_hostnames_are_checked_at_connect_time() -> None:
 
 
 def test_saving_a_blocked_provider_endpoint_is_refused() -> None:
-    from app.platform.settings_profile_repository import SettingsProfileValidationError, save_settings_profile
+    from app.settings.profile_repository import SettingsProfileValidationError, save_settings_profile
 
     settings: dict = {}
     with pytest.raises(SettingsProfileValidationError) as refused:

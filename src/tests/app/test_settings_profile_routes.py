@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.platform.settings_profile_core import SETTINGS_PROFILE_KEY
+from app.settings.profile_core import SETTINGS_PROFILE_KEY
 from tests.support.settings_runtime import install_settings_test_runtime
 
 

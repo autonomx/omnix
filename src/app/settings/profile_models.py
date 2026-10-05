@@ -6,10 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from app.persistence.declarations import module_settings_sections
 
-from .settings_profile_capture import ImageSettingsProfile, StorageSettingsProfile, SttSettingsProfile
-from .settings_profile_core import SETTINGS_SCHEMA_VERSION, ProviderConfigs
-from .settings_profile_experience import AgentRunSettingsProfile, AppearanceSettingsProfile, AssistantSettingsProfile
-from .settings_profile_global import GlobalSettingsProfile
+from app.settings.profile_capture import ImageSettingsProfile, StorageSettingsProfile, SttSettingsProfile
+from app.settings.profile_core import SETTINGS_SCHEMA_VERSION, ProviderConfigs
+from app.settings.profile_experience import AgentRunSettingsProfile, AppearanceSettingsProfile, AssistantSettingsProfile
+from app.settings.profile_global import GlobalSettingsProfile
 
 
 class _SettingsProfileBase(BaseModel):

@@ -98,7 +98,7 @@ CASES = [
     ("kernel_tools_naming_apps", {APP + "trading/feature.py": "FEATURE = FeatureModule(id='trading', title='Trading', tier='app')",
                                   APP + "capabilities/registry.py": "_cap('trading.quote', 'Quote', 'd', category='trading')\n_cap('market.status', 'Status', 'd', category='trading')\n_cap('hermes.get_status', 'Status', 'd', category='platform')\n_cap('calendar.read', 'Read', 'd', category='productivity')"}, 2),
     ("platform_feature_specific_files", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
-                                         APP + "platform/settings_profile_rpg.py": "", APP + "platform/settings_profile_core.py": ""}, 1),
+                                         APP + "settings/profile_rpg.py": "", APP + "settings/profile_core.py": ""}, 1),
     ("module_repositories_in_kernel", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",
                                        APP + "persistence/rpg_turn_repository.py": "", APP + "persistence/job_repository.py": ""}, 1),
     ("web_feature_clients_in_shared_api", {APP + "rpg/feature.py": "FEATURE = FeatureModule(id='rpg', title='RPG', tier='app')",

@@ -124,7 +124,7 @@ def get_runtime_diagnostics_payload(
 ) -> DiagnosticsPayload:
     """Keep local ownership diagnostics available when durable reads fail."""
     from app.jobs.residency import GpuResidencyPolicy
-    from .runtime_diagnostics import runtime_diagnostics
+    from app.gateway.runtime_diagnostics import runtime_diagnostics
 
     runtime = runtime_diagnostics(state)
     error_class = runtime.postgresql.get('error_class')

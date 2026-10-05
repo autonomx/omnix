@@ -69,7 +69,7 @@ def load_research_runtime_settings() -> ResearchRuntimeSettings:
     environment_policy = research_policy_from_env()
     try:
         from app.settings.access import load_settings
-        from app.platform.settings_profile_repository import load_settings_profile
+        from app.settings.profile_repository import load_settings_profile
 
         profile = load_settings_profile(load_settings())
         assistant = profile.assistant

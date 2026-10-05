@@ -1,6 +1,6 @@
 import pytest
 
-from app.platform.settings_profile_repository import SettingsProfileValidationError, load_settings_profile, save_settings_profile
+from app.settings.profile_repository import SettingsProfileValidationError, load_settings_profile, save_settings_profile
 
 
 def test_profile_validation_error_path() -> None:

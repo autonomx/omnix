@@ -7,8 +7,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .settings_profile_core import SETTINGS_PROFILE_KEY, SETTINGS_SCHEMA_VERSION
-from .settings_profile_models import SettingsProfile
+from app.settings.profile_core import ProviderConfigs, SETTINGS_PROFILE_KEY, SETTINGS_SCHEMA_VERSION
+from app.settings.profile_models import SettingsProfile
 
 
 class SettingsProfileValidationError(ValueError):
@@ -201,14 +201,20 @@ def _validate_profile(profile: SettingsProfile) -> None:
         raise SettingsProfileValidationError(errors)
 
 
+def _providers_with_api_keys() -> list[str]:
+    """The provider configurations with an ``apiKey`` field: the profile model, not the provider catalog, says."""
+    return sorted(
+        name for name, field in ProviderConfigs.model_fields.items()
+        if "api_key" in getattr(field.annotation, "model_fields", {})
+    )
+
+
 def load_settings_profile(settings: dict[str, Any]) -> SettingsProfile:
     raw = settings.get(SETTINGS_PROFILE_KEY)
     legacy = _legacy_seed(settings)
     default_profile = SettingsProfile.model_validate(legacy).model_dump(mode="json", by_alias=True)
     source = _merge_known(default_profile, raw) if isinstance(raw, dict) else default_profile
-    from app.providers.catalog import API_KEY, providers_with
-
-    for key in providers_with(API_KEY):
+    for key in _providers_with_api_keys():
         legacy_key = str(_record(_record(legacy.get("providerConfigs")).get(key)).get("apiKey") or "")
         source_provider_configs = _record(source.get("providerConfigs"))
         source_config = _record(source_provider_configs.get(key))

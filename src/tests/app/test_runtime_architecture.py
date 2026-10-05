@@ -111,7 +111,7 @@ def test_background_connection_loss_stops_workers_and_latches_authority(monkeypa
 
 
 def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
-    from app.platform.runtime_diagnostics import runtime_diagnostics
+    from app.gateway.runtime_diagnostics import runtime_diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
     @contextmanager
     def connection():
@@ -137,7 +137,7 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
 
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):
     from app.runtime.worker_health import WorkerHealthPayload
-    from app.platform import diagnostics
+    from app.gateway import diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
     @contextmanager
     def connection():
@@ -177,7 +177,7 @@ def test_compatibility_modules_are_allowlisted():
 
 def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
     import logging
-    from app.platform.diagnostics import redact_diagnostics
+    from app.gateway.diagnostics import redact_diagnostics
     from app.runtime.logging import runtime_transition
     value = {'nested': [{'api_key': 'private', 'password': 'private',
                          'endpoint': 'postgresql://user:private@host/db'}]}

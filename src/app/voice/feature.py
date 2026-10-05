@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.platform.effective_defaults import apply_job_defaults
-from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
+from app.settings.effective_defaults import apply_job_defaults
+from app.voice.voice_cloning_defaults import apply_voice_cloning_defaults
 from app.runtime.features import FeatureModule
 
 from .jobs import execute_voice_studio_job, store_inline_clone_sample

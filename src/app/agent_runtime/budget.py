@@ -22,7 +22,7 @@ _ZERO_COST_PROVIDERS = {"lmstudio", "llamacpp", "chatgpt_codex"}
 
 
 def _agent_run_settings():
-    from app.platform.effective_defaults import agent_run_settings
+    from app.settings.effective_defaults import agent_run_settings
 
     return agent_run_settings()
 

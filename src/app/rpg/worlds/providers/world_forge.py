@@ -152,7 +152,7 @@ def build_production_world_forge_generator(
         "disabled",
     }:
         try:
-            from app.platform.effective_defaults import (
+            from app.settings.effective_defaults import (
                 effective_llm_route,
                 load_effective_profile,
             )

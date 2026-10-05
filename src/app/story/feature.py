@@ -5,7 +5,7 @@ from fastapi import APIRouter
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.platform.effective_defaults import apply_job_defaults
+from app.settings.effective_defaults import apply_job_defaults
 from app.runtime.features import FeatureContext, FeatureModule
 
 from .jobs import PodcastGenerateInput, StoryGenerateInput, execute_story_job

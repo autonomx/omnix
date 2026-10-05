@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.platform.effective_defaults import apply_job_defaults
+from app.settings.effective_defaults import apply_job_defaults
 from app.assets.store import LEGACY_IMAGE_MANIFEST
 from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureContext, FeatureModule

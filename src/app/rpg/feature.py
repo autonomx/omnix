@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.platform.effective_defaults import apply_job_defaults
+from app.settings.effective_defaults import apply_job_defaults
 from app.runtime.background import BackgroundWorker
 from app.runtime.capabilities import RuntimeCapability
 from app.providers.facade import PROVIDER_CATALOGS

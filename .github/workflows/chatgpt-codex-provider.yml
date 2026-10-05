@@ -19,8 +19,8 @@ on:
       - "src/app/providers/registry.py"
       - "src/app/providers/facade.py"
       - "src/app/providers/__init__.py"
-      - "src/app/platform/settings_control.py"
-      - "src/app/platform/settings_profile_core.py"
+      - "src/app/gateway/settings_control.py"
+      - "src/app/settings/profile_core.py"
       - "src/apps/web/src/api/client.ts"
       - "src/apps/web/src/api/generated/**"
       - "src/apps/web/src/features/settings/**"
@@ -100,8 +100,8 @@ jobs:
             src/app/providers/chatgpt_codex_provider.py \
             src/app/providers/registry.py \
             src/app/providers/facade.py \
-            src/app/platform/settings_control.py \
-            src/app/platform/settings_profile_core.py \
+            src/app/gateway/settings_control.py \
+            src/app/settings/profile_core.py \
             src/tests/api/gateway/test_gateway_codex_auth.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
             src/tests/unit/chat/test_chatgpt_codex_session_routing.py \

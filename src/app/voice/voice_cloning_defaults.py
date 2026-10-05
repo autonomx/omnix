@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from .effective_defaults import load_effective_profile
+from app.settings.effective_defaults import load_effective_profile
 
 
 def _missing(value: Any) -> bool:

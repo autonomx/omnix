@@ -256,7 +256,7 @@ def test_token_reporting_distinguishes_missing_from_reported_zero() -> None:
 
 def test_priced_providers_are_metered_against_the_cost_limit(monkeypatch) -> None:
     from app.agent_runtime import budget as budget_module
-    from app.platform.settings_profile_experience import AgentProviderPrice, AgentRunSettingsProfile
+    from app.settings.profile_experience import AgentProviderPrice, AgentRunSettingsProfile
 
     settings = AgentRunSettingsProfile(provider_prices={
         "openrouter": AgentProviderPrice(input_usd_per_million=1.0, output_usd_per_million=10.0),

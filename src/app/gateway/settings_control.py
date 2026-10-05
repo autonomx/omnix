@@ -15,11 +15,11 @@ from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.providers.catalog import API_KEY, providers_with
 from app.providers.service import invalidate_provider_cache
 
-from .audio_cache import invalidate_changed_audio_caches
-from .settings import SettingsPayload, SettingsSaveResponse, apply_settings_payload
-from .settings import get_settings_payload as get_legacy_settings_payload
-from .settings_profile_core import SETTINGS_PROFILE_KEY
-from .settings_profile_repository import (
+from app.voice.audio_cache import invalidate_changed_audio_caches
+from app.gateway.legacy_settings_payload import SettingsPayload, SettingsSaveResponse, apply_settings_payload
+from app.gateway.legacy_settings_payload import get_settings_payload as get_legacy_settings_payload
+from app.settings.profile_core import SETTINGS_PROFILE_KEY
+from app.settings.profile_repository import (
     SettingsProfileRevisionConflict,
     SettingsProfileValidationError,
     load_settings_profile,

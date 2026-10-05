@@ -14,8 +14,10 @@ from app.assistant_tools import (
     assistant_tool_registry_payload,
 )
 from app.jobs import JobRecord, ModelResidencyDiagnostics, ModelResidencyRecord
-from app.platform import (
+from app.gateway.diagnostics import (
     DiagnosticsPayload,
+)
+from app.chat.legacy_session_api import (
     LegacyGenerateTitleRequest,
     LegacyGenerateTitleResponse,
     LegacySessionCreateResponse,
@@ -23,18 +25,22 @@ from app.platform import (
     LegacySessionResponse,
     LegacySessionUpdateRequest,
     LegacySuccessResponse,
-    ReportListResponse,
-    SettingsPayload,
-    SettingsSaveResponse,
     create_legacy_session,
     delete_legacy_session,
     generate_legacy_session_title,
     get_legacy_session,
-    get_settings_payload,
     list_legacy_sessions,
-    list_report_artifacts,
-    save_settings_payload,
     update_legacy_session,
+)
+from app.observability.reports import (
+    ReportListResponse,
+    list_report_artifacts,
+)
+from app.gateway.settings_control import (
+    SettingsPayload,
+    SettingsSaveResponse,
+    get_settings_payload,
+    save_settings_payload,
 )
 from app.prompts import (
     PromptRenderError,
@@ -67,7 +73,7 @@ from app.settings.models import SettingsProfileSaveRequest
 from app.persistence.document_store import DocumentRevisionConflict
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.settings.access import load_settings
-from app.platform.settings_profile_repository import load_settings_profile
+from app.settings.profile_repository import load_settings_profile
 from app.voice.legacy_clone_files import delete_legacy_voice_clone_files
 
 from .core_assets_routes import _asset_by_id
@@ -320,7 +326,7 @@ def create_kernel_router(
         "/api/diagnostics", response_model=DiagnosticsPayload, tags=["diagnostics"]
     )
     def diagnostics() -> DiagnosticsPayload:
-        from app.platform.diagnostics import get_runtime_diagnostics_payload
+        from app.gateway.diagnostics import get_runtime_diagnostics_payload
         return get_runtime_diagnostics_payload(
             state, model_residency_store_factory=get_model_residency_store,
             allow_offline_store=allow_offline_model_residency_store,
@@ -349,7 +355,7 @@ def create_kernel_router(
             collectors.append(CapacityCollector(permits.metrics_snapshot))
         if database is not None:
             # In-memory runtimes (tests, benchmarks) have no pool or durable queue.
-            from app.platform.runtime_diagnostics import durable_metrics_snapshot
+            from app.gateway.runtime_diagnostics import durable_metrics_snapshot
 
             collectors.append(PoolCollector(database.pool_statistics))
             collectors.append(DurableStateCollector(lambda: durable_metrics_snapshot(services)))

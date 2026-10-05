@@ -577,7 +577,11 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
 
 
 def test_disabled_features_are_not_imported():
-    """Composing without RPG and trading imports neither package (WP-7.7)."""
+    """Composing without RPG and trading imports neither module (WP-7.7).
+
+    Only their kernel-only declarations may load, with the package that holds
+    them: the settings profile reads every module's section, enabled or not (PA-2.1).
+    """
     import os
     import subprocess
     import sys
@@ -589,7 +593,8 @@ def test_disabled_features_are_not_imported():
         "from app.config.runtime import RuntimeConfig\n"
         "from app.gateway.main import create_gateway_app\n"
         "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
-        "loaded = sorted(m for m in sys.modules if m.startswith(('app.rpg', 'app.trading')))\n"
+        "declarations = {'app.rpg', 'app.rpg.declarations', 'app.trading', 'app.trading.declarations'}\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith(('app.rpg', 'app.trading')) and m not in declarations)\n"
         "print(len(loaded), loaded[:5])\n"
     )
     environment = {**os.environ, "PYTHONPATH": str(src), "OMNIX_ALLOWED_HOSTS": "localhost"}

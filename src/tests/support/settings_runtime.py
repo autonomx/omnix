@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.platform import settings_control
+from app.gateway import settings_control
 from app.settings import access as settings_access
 from app.settings.registry import CORE_SETTING_SPECS
 from app.settings.service import SettingsPatch

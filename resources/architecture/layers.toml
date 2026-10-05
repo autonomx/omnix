@@ -3,7 +3,7 @@ packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.sec
 may_import = ["kernel"]
 
 [layers.shared_services]
-packages = ["app.providers", "app.prompts", "app.platform", "app.models", "app.tts_http_client", "app.tts_stream_audio", "app.voice_debug"]
+packages = ["app.providers", "app.prompts", "app.models", "app.tts_http_client", "app.tts_stream_audio", "app.voice_debug"]
 may_import = ["kernel", "shared_services"]
 
 # ADR-0016: platform and app modules are not listed here. Each feature package

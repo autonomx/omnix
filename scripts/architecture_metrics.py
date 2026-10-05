@@ -1154,8 +1154,8 @@ def platform_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str
     evidence["kernel_tools_naming_apps"] = _kernel_tools_naming_modules(analysis)
     evidence["platform_feature_specific_files"] = sorted(
         path for path in analysis.sources
-        if path.startswith("src/app/platform/settings_profile_") and path.endswith(".py")
-        and PurePosixPath(path).stem.removeprefix("settings_profile_") in words
+        if path.startswith("src/app/settings/profile_") and path.endswith(".py")
+        and PurePosixPath(path).stem.removeprefix("profile_") in words
     )
     evidence["module_repositories_in_kernel"] = sorted(
         path for path in analysis.trees

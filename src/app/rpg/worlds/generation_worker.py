@@ -79,7 +79,7 @@ def _configured_world_forge_provider(
     if dedicated:
         return dedicated
     try:
-        from app.platform.effective_defaults import (
+        from app.settings.effective_defaults import (
             effective_llm_route,
             load_effective_profile,
         )

@@ -39,13 +39,13 @@ def test_a_modules_declarations_load_only_the_kernel(module: str) -> None:
 
 
 def test_building_the_settings_profile_imports_no_feature() -> None:
-    loaded = _loaded_app_modules("import app.platform.settings_profile_models")
+    loaded = _loaded_app_modules("import app.settings.profile_models")
 
     assert [name for name in loaded if name.endswith(".feature")] == []
 
 
 def test_stored_settings_documents_are_unchanged() -> None:
-    from app.platform.settings_profile_models import SettingsProfile
+    from app.settings.profile_models import SettingsProfile
 
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
 
@@ -55,7 +55,7 @@ def test_stored_settings_documents_are_unchanged() -> None:
 
 
 def test_every_declared_section_is_in_the_profile_whatever_is_enabled() -> None:
-    from app.platform.settings_profile_models import SettingsProfile
+    from app.settings.profile_models import SettingsProfile
 
     fields = set(SettingsProfile.model_fields)
 
@@ -64,8 +64,8 @@ def test_every_declared_section_is_in_the_profile_whatever_is_enabled() -> None:
 
 
 def test_saving_one_section_keeps_another_modules_section_exactly() -> None:
-    from app.platform.settings_profile_core import SETTINGS_PROFILE_KEY
-    from app.platform.settings_profile_repository import save_settings_profile
+    from app.settings.profile_core import SETTINGS_PROFILE_KEY
+    from app.settings.profile_repository import save_settings_profile
 
     rpg = {"difficulty": "harsh", "worldActivity": "living_world", "campaignDefaults": {"tone": "grim"}}
     settings: dict = {SETTINGS_PROFILE_KEY: {"rpg": rpg}}

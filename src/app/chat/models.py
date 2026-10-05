@@ -171,7 +171,7 @@ class CreateChatSessionRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def apply_central_defaults(cls, value: Any) -> Any:
-        from app.platform.effective_defaults import apply_chat_session_defaults
+        from app.chat.session_defaults import apply_chat_session_defaults
 
         return apply_chat_session_defaults(value)
 

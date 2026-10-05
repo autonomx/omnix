@@ -63,7 +63,7 @@ def _model_key(value: Any) -> str:
 
 def _settings_route() -> tuple[str, str]:
     try:
-        from app.platform.effective_defaults import effective_llm_route, load_effective_profile
+        from app.settings.effective_defaults import effective_llm_route, load_effective_profile
 
         provider_id, model_id = effective_llm_route(
             load_effective_profile(),

@@ -65,7 +65,7 @@ def test_metrics_read_the_pool_jobs_and_outbox_of_a_postgresql_runtime(store) ->
     from types import SimpleNamespace
 
     from app.observability.metrics import DurableStateCollector, PoolCollector, exposition
-    from app.platform.runtime_diagnostics import durable_metrics_snapshot
+    from app.gateway.runtime_diagnostics import durable_metrics_snapshot
 
     adapter, module = store
     adapter.create_job(CreateJobRequest(module=module, type=f"{module}.probe", resource_class=ResourceClass.CPU))

@@ -29,7 +29,7 @@ DOCUMENT_SCHEMA_OWNERS = (
     "app.chat.persistence.evaluation_store",
     "app.chat.persistence.legacy_sessions",
     "app.persistence.model_residency",
-    "app.platform.legacy_sessions",
+    "app.chat.legacy_session_api",
     "app.providers.persistence.model_refresh",
     "app.research.persistence.source_store",
     "app.rpg.persistence.rpg_feature_compat",

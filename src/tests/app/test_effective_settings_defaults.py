@@ -104,7 +104,7 @@ def _settings() -> dict:
 
 
 def _install(monkeypatch) -> None:
-    import app.platform.effective_defaults as defaults
+    import app.settings.effective_defaults as defaults
 
     settings = _settings()
     monkeypatch.setattr(defaults, "load_settings", lambda **_kwargs: deepcopy(settings))
@@ -145,7 +145,7 @@ def test_chat_session_falls_back_to_selected_provider_model(monkeypatch) -> None
     settings["settings_control_center"]["providerConfigs"] = {
         "chatgptCodex": {"model": "gpt-5.6-luna"},
     }
-    import app.platform.effective_defaults as defaults
+    import app.settings.effective_defaults as defaults
 
     monkeypatch.setattr(defaults, "load_settings", lambda **_kwargs: deepcopy(settings))
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.platform.audio_cache import invalidate_changed_audio_caches
+from app.voice.audio_cache import invalidate_changed_audio_caches
 
 
 class _Provider:

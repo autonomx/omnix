@@ -207,6 +207,10 @@
     "sha256": "fb153065e725d60a888f62108a177ec5d47ece55a08e0f6306faed6514731c33",
     "version": "1"
   },
+  "chat.session_defaults.legacy_default_prompt": {
+    "sha256": "2b989968611695b3eddbd4dbb13e3a0bb882b1da749e66e823dedc9a64f3e1f5",
+    "version": "1"
+  },
   "desktop_companion.commentary.desktop_commentary_prompt": {
     "sha256": "610b314523f22db2d654443bd3ae0afd15068cd121b2138e094f8fef4a3b2a61",
     "version": "1"
@@ -221,10 +225,6 @@
   },
   "desktop_companion.observation.structured_observation_prompt_2": {
     "sha256": "d4dff7c18aea142e36f60d07e1ab2a699368a672a65b812d0e3f9bbf25840691",
-    "version": "1"
-  },
-  "platform.effective_defaults.legacy_chat_default_prompt": {
-    "sha256": "2b989968611695b3eddbd4dbb13e3a0bb882b1da749e66e823dedc9a64f3e1f5",
     "version": "1"
   },
   "providers.chatgpt_codex_provider.turn_prompt": {
