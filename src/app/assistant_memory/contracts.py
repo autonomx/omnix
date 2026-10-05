@@ -59,7 +59,13 @@ __all__ = [
 
 
 def owner_memory_repository():
-    """The owner-aware memory repository for the PostgreSQL runtime (public API)."""
+    """The owner-aware memory repository of this runtime: PostgreSQL when it is the authority (public API)."""
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if not uses_postgresql_runtime():
+        from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+
+        return OwnerAwareInMemoryMemoryRepository()
     from app.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 
     return production_owner_memory_repository()
@@ -70,6 +76,12 @@ _LAZY_EXPORTS = {
     "CharacterHermesSyncStatus": "character_hermes_adapter",
     "export_character_memory_to_hermes": "character_hermes_adapter",
     "import_character_hermes_memory": "character_hermes_adapter",
+    # Memory v2's observation API, for modules that record observations (PA-3.2).
+    "MemorySpaceKey": "v2.contracts",
+    "ObservationProvenance": "v2.contracts",
+    "VisibilityScope": "v2.contracts",
+    "ObservationAppendRequest": "v2.observation_store",
+    "PostgresMemoryV2Runtime": "v2.runtime",
 }
 
 

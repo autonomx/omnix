@@ -6,7 +6,7 @@ from app.config.env import environment
 from pydantic import BaseModel, ConfigDict, Field
 from app.conversation.contracts import estimate_tokens
 
-from app.assistant_memory.contracts import load_memory_runtime_settings
+from .memory_port import memory_runtime_settings as load_memory_runtime_settings
 
 DEFAULT_INPUT_TOKEN_BUDGET = 65_536
 DEFAULT_OUTPUT_TOKEN_RESERVE = 4_096

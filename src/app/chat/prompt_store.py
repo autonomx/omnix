@@ -11,10 +11,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from app.assistant_memory.contracts import (
-    MemoryService,
-    default_memory_service,
-)
 from app.conversation.contracts import (
     AcceptedChatActivityRecorder,
     LiveVoiceChatPort,
@@ -32,8 +28,12 @@ from .history_search import (
     default_history_search_service,
     history_recall_enabled,
 )
-from .memory_commands import execute_memory_command, parse_memory_command
-from .memory_prompt import resolve_prompt_memory
+from .memory_port import (
+    chat_memory_service as default_memory_service,
+    execute_memory_command,
+    parse_memory_command,
+    resolve_prompt_memory,
+)
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
@@ -245,7 +245,7 @@ class ChatSessionStore(JsonChatSessionStore):
         self,
         path: str | Path | None = None,
         *,
-        memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+        memory_service_factory: Callable[[], Any] = default_memory_service,
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         job_service: Any | None = None,

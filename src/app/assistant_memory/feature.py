@@ -11,10 +11,12 @@ from app.assistant_memory.jobs import (
     process_memory_suggestion_job,
 )
 from app.assistant_memory.owner_defaults import default_memory_service
+from app.chat.contracts import CHAT_MEMORY
 from app.events.outbox_relay import OutboxConsumer
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import JobRecord, ResourceClass
 from app.runtime.features import FeatureContext, FeatureModule
+from app.runtime.ports import ContributionSpec
 from app.assistant_memory.persistence.repository_specs import (
     ASSISTANT_MEMORY_REPOSITORY_SPECS,
 )
@@ -56,6 +58,12 @@ _TURN_SUGGESTIONS = OutboxConsumer(
 )
 
 
+def _chat_memory(_context: FeatureContext) -> Any:
+    from .chat_prompt import AssistantChatMemory
+
+    return AssistantChatMemory()
+
+
 def _router(context: FeatureContext) -> APIRouter:
     router = APIRouter()
     services = context.services
@@ -91,6 +99,8 @@ FEATURE = FeatureModule(
         ),
     ),
     outbox_consumers=(_TURN_SUGGESTIONS,),
+    # Chat's memory: prompt memory, memory commands, snapshots and settings (PA-3.2).
+    contributions=(ContributionSpec(CHAT_MEMORY, _chat_memory),),
     repositories=ASSISTANT_MEMORY_REPOSITORY_SPECS,
     settings=(assistant_memory_setting_spec(),),
 )

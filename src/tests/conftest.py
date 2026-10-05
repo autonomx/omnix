@@ -111,7 +111,8 @@ def capability_runtime_installed():
     from app.chat.contracts import TYPED_TURN_ROUTER
     from app.characters.contracts import CHARACTER_SNAPSHOT_OBSERVERS
     from app.characters.interaction import CharacterChatResolver
-    from app.chat.contracts import CHARACTER_RESOLVER
+    from app.chat.contracts import CHARACTER_RESOLVER, CHAT_MEMORY
+    from app.assistant_memory.chat_prompt import AssistantChatMemory
     from app.capabilities.executor import LIVE_AGENT_TOOLS
     from app.assistant_tools.live_agent_proposals import AssistantLiveAgentTools
     from app.live_voice.prompt.cache import CharacterSnapshotCacheObserver
@@ -131,6 +132,7 @@ def capability_runtime_installed():
         PortBinding(SECURITY_INSTRUMENTS, TradingSecurityInstruments(), owner="trading"),
         PortBinding(CHARACTER_SNAPSHOT_OBSERVERS, CharacterSnapshotCacheObserver(), owner="live-voice"),
         PortBinding(CHARACTER_RESOLVER, CharacterChatResolver(), owner="characters"),
+        PortBinding(CHAT_MEMORY, AssistantChatMemory(), owner="assistant-memory"),
         PortBinding(LIVE_AGENT_TOOLS, AssistantLiveAgentTools(), owner="assistant-tools"),
         *composition_port_bindings(),
     ]))

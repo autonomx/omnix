@@ -1,25 +1,24 @@
-"""Resolve authoritative memory into trusted prompt items."""
+"""Resolve authoritative memory into trusted chat prompt items (chat calls it through CHAT_MEMORY, PA-3.2)."""
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from app.assistant_memory.contracts import (
+from app.chat.contracts import prompt_budget_from_env, resolve_shared_memory_categories
+from app.conversation.contracts import ChatSession, PromptMemoryItem
+
+from .contracts import (
     MemoryService,
     default_memory_service,
+    estimate_memory_tokens,
+    load_memory_runtime_settings,
     resolve_chat_scope,
     resolve_session_memory_scope,
     resolve_snapshot_view,
     select_memory_records,
 )
-from app.assistant_memory.contracts import estimate_memory_tokens, load_memory_runtime_settings
-from app.assistant_memory.v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
-from app.conversation.contracts import PromptMemoryItem
-
-from .context_budget import prompt_budget_from_env
-from .models import ChatSession
-from .session_identity import resolve_shared_memory_categories
+from .v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
 
 
 def chat_memory_enabled() -> bool:
@@ -417,3 +416,31 @@ def resolve_prompt_memory(
         "shared_excluded_reason_counts": shared_excluded,
     })
     return selected, diagnostics
+
+
+class AssistantChatMemory:
+    """Assistant memory's implementation of chat's ``CHAT_MEMORY`` port (PA-3.2)."""
+
+    def runtime_settings(self) -> Any:
+        return load_memory_runtime_settings()
+
+    def service(self) -> Any:
+        return default_memory_service()
+
+    def resolve_prompt_memory(self, session: Any, **options: Any) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
+        return resolve_prompt_memory(session, **options)
+
+    def parse_command(self, content: str) -> Any | None:
+        from .chat_commands import parse_memory_command
+
+        return parse_memory_command(content)
+
+    def execute_command(self, store: Any, service: Any, session_id: str, user_message_id: str, command: Any) -> Any:
+        from .chat_commands import execute_memory_command
+
+        return execute_memory_command(store, service, session_id, user_message_id, command)
+
+    def create_session_snapshot(self, session: Any, *, token_budget: int) -> Any:
+        return default_memory_service().create_session_snapshot(
+            resolve_session_memory_scope(session), token_budget=token_budget,
+        )

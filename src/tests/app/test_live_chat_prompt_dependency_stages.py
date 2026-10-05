@@ -78,7 +78,7 @@ def test_memory_prompt_loader_uses_settings_service_cache(monkeypatch):
         return AssistantMemoryRuntimeSettings(curated_memory_enabled=True)
 
     _use_test_settings(monkeypatch, fake_load)
-    from app.chat.memory_prompt import chat_memory_enabled
+    from app.assistant_memory.chat_prompt import chat_memory_enabled
 
     with dependency_stages.use_cached_memory_runtime_settings():
         assert chat_memory_enabled() is True

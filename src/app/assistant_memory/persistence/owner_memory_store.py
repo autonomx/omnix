@@ -34,13 +34,6 @@ class PostgresOwnerAwareMemoryRepository(
                     (self.workspace_id, owner_type, owner_id),
                 ).fetchone()[0]
             )
-            connection.execute(
-                "UPDATE omnix_chat_sessions SET memory_snapshot_id = NULL "
-                "WHERE workspace_id = %s AND memory_snapshot_id IN ("
-                "SELECT id FROM omnix_memory_snapshots "
-                "WHERE workspace_id = %s AND owner_type = %s AND owner_id = %s)",
-                (self.workspace_id, self.workspace_id, owner_type, owner_id),
-            )
             candidate_count = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM omnix_memory_candidates "
@@ -62,6 +55,8 @@ class PostgresOwnerAwareMemoryRepository(
                 "AND proposed_owner_id = %s",
                 (self.workspace_id, owner_type, owner_id),
             )
+            # Chat sessions pinned to these snapshots are cleared by their foreign key
+            # (memory_snapshot_id ... ON DELETE SET NULL), in this transaction.
             connection.execute(
                 "DELETE FROM omnix_memory_snapshots "
                 "WHERE workspace_id = %s AND owner_type = %s AND owner_id = %s",

@@ -1,4 +1,4 @@
-"""Deterministic explicit Chat memory commands."""
+"""Deterministic explicit chat memory commands (chat calls them through CHAT_MEMORY, PA-3.2)."""
 from __future__ import annotations
 
 import re
@@ -6,14 +6,15 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_memory.contracts import (
+from app.chat.contracts import explicit_memory_mutation_allowed
+from app.conversation.contracts import ChatSession
+
+from .contracts import (
     MemoryService,
     RefreshSessionMemoryRequest,
     refresh_session_memory,
     resolve_session_memory_scope,
 )
-from .models import ChatSession
-from .retention_policy import explicit_memory_mutation_allowed
 
 MemoryCommandKind = Literal["save", "list", "forget", "refresh", "disable", "update"]
 

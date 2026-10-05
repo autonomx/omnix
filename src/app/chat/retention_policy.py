@@ -3,10 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.assistant_memory.contracts import (
-    AssistantMemoryRuntimeSettings,
-    load_memory_runtime_settings,
-)
+from .memory_port import memory_runtime_settings as load_memory_runtime_settings
 from app.conversation.privacy import (
     automatic_memory_derivation_allowed,
     private_session,
@@ -15,7 +12,7 @@ from app.conversation.privacy import (
 def transcript_retention_allowed(
     session: Any,
     *,
-    settings: AssistantMemoryRuntimeSettings | None = None,
+    settings: Any | None = None,
 ) -> bool:
     """Decide whether new transcript and summary material may be persisted."""
 

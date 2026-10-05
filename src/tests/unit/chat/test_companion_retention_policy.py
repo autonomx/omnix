@@ -7,7 +7,7 @@ from app.assistant_memory.jobs import (
     process_memory_suggestion_job,
 )
 from app.chat.compaction import build_deterministic_summary, enqueue_compaction_job
-from app.chat.memory_commands import MemoryCommand, execute_memory_command
+from app.assistant_memory.chat_commands import MemoryCommand, execute_memory_command
 from app.chat.models import ChatMessage, ChatSession
 from app.chat.retention_policy import (
     automatic_memory_derivation_allowed,

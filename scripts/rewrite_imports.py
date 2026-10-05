@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_SUFFIXES = {".md", ".toml", ".yml", ".yaml", ".json", ".bat", ".cmd", ".ps1", ".sh", ".txt", ".ini", ".cfg",
                  ".ts", ".tsx", ".mjs", ".js", ".html", ".sql", ".dockerfile"}
 TEXT_NAMES = {"Dockerfile", "Makefile", ".gitignore", ".dockerignore", "CODEOWNERS"}
+# Records of the past and generated measurements: never rewritten (regenerate the measurements instead).
+EXCLUDED = ("docs/measurements/", "resources/architecture/metrics-baseline.json",
+            "resources/architecture/runtime-metrics.json", "resources/architecture/lint-baseline.json")
 
 
 def _mapped(name: str, mapping: list[tuple[str, str]]) -> str | None:
@@ -123,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     mapping.sort(key=lambda pair: -len(pair[0]))  # the most specific prefix first
     changed = []
     for path in tracked_files():
-        if not path.is_file():
+        if not path.is_file() or path.relative_to(ROOT).as_posix().startswith(EXCLUDED):
             continue
         is_python = path.suffix == ".py"
         if not is_python and path.suffix.lower() not in TEXT_SUFFIXES and path.name not in TEXT_NAMES:

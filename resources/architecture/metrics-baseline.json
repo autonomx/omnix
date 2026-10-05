@@ -5,7 +5,6 @@
     "absolute_storage_path_read_sites": [],
     "capped_500_query_sites": [],
     "lint_counts": {
-      "AL001": 16,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -119,6 +118,8 @@
       "app.assets.voice_clone_identity",
       "app.assistant_memory",
       "app.assistant_memory.character_hermes_adapter",
+      "app.assistant_memory.chat_commands",
+      "app.assistant_memory.chat_prompt",
       "app.assistant_memory.companion_context",
       "app.assistant_memory.consolidation",
       "app.assistant_memory.contracts",
@@ -342,8 +343,7 @@
       "app.chat.live_conversation_proactive",
       "app.chat.live_material_context",
       "app.chat.live_observation_generation",
-      "app.chat.memory_commands",
-      "app.chat.memory_prompt",
+      "app.chat.memory_port",
       "app.chat.models",
       "app.chat.persistence.assistant_turn_store",
       "app.chat.persistence.chat_execution",
@@ -2499,26 +2499,13 @@
       "app_migrations_in_kernel_dir": [],
       "app_to_app_imports": [],
       "composition_imports_outside_composition": [],
-      "cross_module_sql": [
-        "src/app/assistant_memory/persistence/owner_memory_store.py:38:PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions"
-      ],
+      "cross_module_sql": [],
       "historical_owner_map_additions": [],
       "kernel_named_module_tables": [],
       "kernel_tools_naming_apps": [],
       "module_repositories_in_kernel": [],
       "platform_feature_specific_files": [],
-      "reverse_contract_imports": [
-        "src/app/chat/character_store.py:10:app.assistant_memory.contracts",
-        "src/app/chat/compaction.py:18:app.assistant_memory.contracts",
-        "src/app/chat/context_budget.py:9:app.assistant_memory.contracts",
-        "src/app/chat/history_search.py:13:app.assistant_memory.contracts",
-        "src/app/chat/memory_commands.py:9:app.assistant_memory.contracts",
-        "src/app/chat/memory_prompt.py:16:app.assistant_memory.contracts",
-        "src/app/chat/memory_prompt.py:8:app.assistant_memory.contracts",
-        "src/app/chat/prompt_store.py:14:app.assistant_memory.contracts",
-        "src/app/chat/retention_policy.py:6:app.assistant_memory.contracts",
-        "src/app/chat/sqlite_store.py:9:app.assistant_memory.contracts"
-      ],
+      "reverse_contract_imports": [],
       "src_root_service_entrypoints": [
         "src/nemotron_eou_stt_server.py",
         "src/parakeet_stt_runtime.py",
@@ -6576,7 +6563,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 1
+      "value": 0
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6651,7 +6638,7 @@
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 16
+      "value": 0
     },
     "local_blob_store_constructions": {
       "direction": "lower",
@@ -6711,7 +6698,7 @@
     "reverse_contract_imports": {
       "direction": "lower",
       "target": 0,
-      "value": 10
+      "value": 0
     },
     "rls_coverage_pct": {
       "direction": "higher",
@@ -6861,5 +6848,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "50282d98d950786539e64981b89f0b4d5c57a5dd7a5c5729db77521a38b878d5"
+  "source_digest": "e10ea2f39609d20f5d420569c1901c853caaf78043f2b7c960f82b686fad8b55"
 }

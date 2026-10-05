@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory.contracts import load_memory_runtime_settings
+from .memory_port import memory_runtime_settings as load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, default_job_store
 
 from .models import MessageContentPurpose, project_message_content

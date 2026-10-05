@@ -12,7 +12,8 @@ from app.chat.compaction import build_deterministic_summary, compaction_enabled
 from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.chat.live_call_prewarm import live_call_provider_affinity
 from app.chat.live_chat_async_sse_bridge import eager_async_sse_stream
-from app.chat.memory_prompt import resolve_prompt_memory
+from app.chat.memory_port import CHAT_MEMORY, ChatMemory, resolve_prompt_memory
+from app.chat.retention_policy import explicit_memory_mutation_allowed
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest, SendChatMessageResponse
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.character_store import CHAT_STORE_FACTORY
@@ -27,7 +28,7 @@ from app.chat.prompt_window import (
     normal_chat_recent_message_limit,
 )
 from app.chat.provider_routing import resolve_effective_provider_id
-from app.chat.session_identity import CHARACTER_RESOLVER, CharacterResolver
+from app.chat.session_identity import CHARACTER_RESOLVER, CharacterResolver, resolve_shared_memory_categories
 from app.chat.prompt_rendering import (
     RenderedPrompt,
     RenderedPromptMessage,
@@ -130,6 +131,10 @@ def hermes_assist_readout_payload(name: str, args: dict) -> dict:
     return readout_payload(name, args)
 
 __all__ = [
+    "CHAT_MEMORY",
+    "ChatMemory",
+    "explicit_memory_mutation_allowed",
+    "resolve_shared_memory_categories",
     "CHARACTER_RESOLVER",
     "CharacterResolver",
     "TYPED_TURN_ROUTER",

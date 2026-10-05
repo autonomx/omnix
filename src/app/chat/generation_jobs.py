@@ -1083,7 +1083,7 @@ def _generate_reply(
 ) -> dict[str, Any]:
     """Use the established non-streaming generation boundary in the worker."""
 
-    from .memory_commands import execute_memory_command, parse_memory_command
+    from .memory_port import execute_memory_command, parse_memory_command
 
     command = parse_memory_command(user_message.content)
     if command is not None:

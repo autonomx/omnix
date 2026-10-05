@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.chat.memory_commands import parse_memory_command
+from app.assistant_memory.chat_commands import parse_memory_command
 from app.providers import service as provider_service
 
 import pytest

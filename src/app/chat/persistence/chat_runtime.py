@@ -22,7 +22,7 @@ from app.chat.character_store import (
 from app.chat.compaction import ConversationSummary
 from app.persistence.document_schemas import register_document_schema
 from app.chat.history_search import HistorySearchResult, HistorySearchStatus
-from app.chat.memory_commands import parse_memory_command
+from app.chat.memory_port import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
 from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore

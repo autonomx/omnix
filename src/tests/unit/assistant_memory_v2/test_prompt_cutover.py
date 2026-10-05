@@ -17,7 +17,7 @@ from app.assistant_memory.v2 import (
     RetrievalResult,
     RetrievalScore,
 )
-from app.chat import memory_prompt
+from app.assistant_memory import chat_prompt as memory_prompt
 from app.memory_contracts import MemoryRecord
 from app.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
 from app.chat.prompt_rendering import _memory_section

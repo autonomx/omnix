@@ -96,15 +96,8 @@ def register_character_integration_routes(
     if memory_repository_factory is None:
 
         def memory_repository_factory():
-            from app.persistence.runtime import uses_postgresql_runtime
-
-            if not uses_postgresql_runtime():
-                from app.assistant_memory.owner_repository import (
-                    OwnerAwareInMemoryMemoryRepository,
-                )
-
-                return OwnerAwareInMemoryMemoryRepository()
             from app.assistant_memory.contracts import owner_memory_repository
+
             return owner_memory_repository()
 
     def character_hermes_context(character_id: str):

@@ -7,7 +7,6 @@ from typing import Any, Protocol
 
 from app.runtime.ports import Port, required
 
-from app.assistant_memory.contracts import default_memory_service, resolve_session_memory_scope
 from app.conversation.contracts import InteractionSelection, SetSessionInteractionRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
@@ -396,9 +395,12 @@ def _resolve_request(
 def _attach_character_snapshot(session: ChatSession) -> None:
     if session.interaction_mode != "character" or not session.read_memory or session.memory_snapshot_id:
         return
-    snapshot = default_memory_service().create_session_snapshot(
-        resolve_session_memory_scope(session), token_budget=4_000
-    )
+    from .memory_port import chat_memory
+
+    memory = chat_memory()
+    if memory is None:
+        return
+    snapshot = memory.create_session_snapshot(session, token_budget=4_000)
     session.memory_snapshot_id = snapshot.id
     session.memory_snapshot_revision = snapshot.revision
     session.memory_record_count = len(snapshot.items)

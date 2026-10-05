@@ -120,6 +120,7 @@
         "app.assets.voice_clone_assets",
         "app.assistant_memory",
         "app.assistant_memory.character_hermes_adapter",
+        "app.assistant_memory.chat_prompt",
         "app.assistant_memory.companion_context",
         "app.assistant_memory.contracts",
         "app.assistant_memory.controls",
@@ -291,8 +292,7 @@
         "app.chat.live_conversation_proactive",
         "app.chat.live_material_context",
         "app.chat.live_observation_generation",
-        "app.chat.memory_commands",
-        "app.chat.memory_prompt",
+        "app.chat.memory_port",
         "app.chat.models",
         "app.chat.persistence",
         "app.chat.persistence.chat_execution",
@@ -2133,7 +2133,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8335,
+      "collected_tests": 8340,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2958,7 +2958,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T11:53:36.273010+00:00",
+  "measured_at": "2026-10-05T15:41:15.364205+00:00",
   "metrics": {
     "boot_imported_modules": 2078,
     "collection_errors": 0,
@@ -2967,5 +2967,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "50282d98d950786539e64981b89f0b4d5c57a5dd7a5c5729db77521a38b878d5"
+  "source_digest": "e10ea2f39609d20f5d420569c1901c853caaf78043f2b7c960f82b686fad8b55"
 }

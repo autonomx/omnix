@@ -1,12 +1,14 @@
 """ChatSessionStore adapter backed by the provider-free Chat repository."""
 from __future__ import annotations
 
+from typing import Any
+
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 
-from app.assistant_memory.contracts import MemoryService, default_memory_service
+from .memory_port import chat_memory_service as default_memory_service
 from app.conversation.contracts import AcceptedChatActivityRecorder, LiveVoiceChatPort
 
 from .compaction import InMemoryConversationSummaryRepository
@@ -24,7 +26,7 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         *,
         legacy_json_path: str | Path | None = None,
         import_legacy: bool = True,
-        memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+        memory_service_factory: Callable[[], Any] = default_memory_service,
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         live_voice_chat_port: LiveVoiceChatPort | None = None,

@@ -9,7 +9,7 @@ from app.assistant_memory.settings import AssistantMemorySettingsUpdate
 from app.chat.compaction import compaction_enabled
 from app.chat.context_budget import prompt_budget_from_env
 from app.chat.history_search import history_recall_enabled
-from app.chat.memory_prompt import chat_memory_enabled
+from app.assistant_memory.chat_prompt import chat_memory_enabled
 from app.assistant_memory.jobs import memory_suggestions_enabled
 from app.assistant_memory.hermes_adapter import hermes_memory_sync_enabled
 from tests.support.assistant_memory_settings import (
