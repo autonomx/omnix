@@ -123,17 +123,17 @@ def start_export(database: PostgresDatabase, blobs: BlobStore,
                 raise ValueError(f"chapter {ordinal} has no completed assembly")
             assembly_id = job["output_refs"][0]["assembly_id"]
             assembly = work.connection.execute(
-                """SELECT ca.assembly_key, ca.render_ids, ca.audio_asset_id,
-                          ca.audio_checksum, ca.duration_seconds, ca.sample_rate,
-                          ca.pause_policy, ca.loudness, ca.timeline,
-                          a.storage_key
-                     FROM omnix_audiobook_chapter_assemblies ca
-                     JOIN omnix_assets a ON a.id = ca.audio_asset_id
-                    WHERE ca.workspace_id = %s AND ca.id = %s
-                      AND ca.chapter_id = %s AND a.lifecycle_status = 'active'""",
+                """SELECT assembly_key, render_ids, audio_asset_id,
+                          audio_checksum, duration_seconds, sample_rate,
+                          pause_policy, loudness, timeline
+                     FROM omnix_audiobook_chapter_assemblies
+                    WHERE workspace_id = %s AND id = %s AND chapter_id = %s""",
                 (context.workspace_id, assembly_id, chapter_id),
             ).fetchone()
-            if assembly is None:
+            audio = work.assets.asset_fields(context, str(assembly[2]), active_only=True) if assembly else None
+            if audio is not None:
+                assembly = (*assembly, audio["storage_key"])
+            if assembly is None or audio is None:
                 raise ValueError(f"chapter {ordinal} assembly asset is missing")
             with blobs.open_verified(str(assembly[9]), expected_checksum=str(assembly[3])):
                 pass
@@ -174,17 +174,12 @@ def start_export(database: PostgresDatabase, blobs: BlobStore,
             })
         cover = None
         if project[4]:
-            row = work.connection.execute(
-                """SELECT id, checksum_sha256, mime_type, storage_key
-                    FROM omnix_assets WHERE workspace_id = %s AND id = %s
-                      AND lifecycle_status = 'active'""",
-                (context.workspace_id, project[4]),
-            ).fetchone()
+            row = work.assets.asset_fields(context, project[4], active_only=True)
             if row is None:
                 raise ValueError("project cover asset is missing")
-            with blobs.open_verified(str(row[3]), expected_checksum=str(row[1])):
+            with blobs.open_verified(str(row["storage_key"]), expected_checksum=str(row["checksum_sha256"])):
                 pass
-            cover = {"asset_id": row[0], "checksum": row[1], "mime_type": row[2]}
+            cover = {"asset_id": row["id"], "checksum": row["checksum_sha256"], "mime_type": row["mime_type"]}
         cast_rows = work.connection.execute(
             """SELECT display_name FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s AND status = 'active'
@@ -262,24 +257,17 @@ def _export_claimed(
             manifest = row[0]
             assets = []
             for chapter in manifest["chapters"]:
-                asset = work.connection.execute(
-                    """SELECT storage_key, checksum_sha256 FROM omnix_assets
-                        WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'""",
-                    (context.workspace_id, chapter["audio_asset_id"]),
-                ).fetchone()
-                if asset is None or asset[1] != chapter["audio_checksum"]:
+                asset = work.assets.asset_fields(context, chapter["audio_asset_id"], active_only=True)
+                if asset is None or asset["checksum_sha256"] != chapter["audio_checksum"]:
                     raise ValueError("frozen chapter asset is unavailable")
-                assets.append((str(asset[0]), str(asset[1])))
+                assets.append((str(asset["storage_key"]), str(asset["checksum_sha256"])))
             cover_asset = None
             if manifest.get("cover"):
                 cover = manifest["cover"]
-                cover_asset = work.connection.execute(
-                    """SELECT storage_key, checksum_sha256 FROM omnix_assets
-                        WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'""",
-                    (context.workspace_id, cover["asset_id"]),
-                ).fetchone()
-                if cover_asset is None or cover_asset[1] != cover["checksum"]:
+                stored_cover = work.assets.asset_fields(context, cover["asset_id"], active_only=True)
+                if stored_cover is None or stored_cover["checksum_sha256"] != cover["checksum"]:
                     raise ValueError("frozen cover asset is unavailable")
+                cover_asset = (stored_cover["storage_key"], stored_cover["checksum_sha256"])
             work.rollback()
         executable = ffmpeg_binary()
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:

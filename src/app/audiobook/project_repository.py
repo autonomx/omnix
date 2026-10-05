@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
 
 from .hashing import canonical_json
@@ -15,6 +16,7 @@ from .hashing import canonical_json
 class PostgresAudiobookProjectRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
+        self.assets = PostgresAssetRepository(connection)
 
     # -- project row: locks and reads -------------------------------------
 
@@ -275,31 +277,31 @@ class PostgresAudiobookProjectRepository:
 
     def cover_summary(self, context: TenantContext, project_id: str) -> Any:
         """``(cover_asset_id, settings, cover_created_at)``."""
-        return self.connection.execute(
-            """SELECT p.cover_asset_id, p.settings, a.created_at
-                 FROM omnix_audiobook_projects p
-                 LEFT JOIN omnix_assets a
-                   ON a.workspace_id = p.workspace_id AND a.id = p.cover_asset_id
-                  AND a.lifecycle_status = 'active'
-                WHERE p.workspace_id = %s AND p.id = %s""",
+        project = self.connection.execute(
+            """SELECT cover_asset_id, settings FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s""",
             (context.workspace_id, project_id),
         ).fetchone()
+        if project is None:
+            return None
+        cover = self.assets.asset_fields(context, project[0], active_only=True)
+        return (project[0], project[1], cover["created_at"] if cover else None)
 
     def source_summary(self, context: TenantContext, project_id: str) -> Any:
         """``(source_format, filename, byte_size, created_at)`` of the current source."""
-        return self.connection.execute(
-            """SELECT r.source_format, a.metadata->>'filename', a.byte_size, a.created_at
+        source = self.connection.execute(
+            """SELECT r.source_format, r.original_asset_id
                  FROM omnix_audiobook_projects p
-                 LEFT JOIN omnix_audiobook_source_revisions r
+                 JOIN omnix_audiobook_source_revisions r
                    ON r.workspace_id = p.workspace_id
                   AND r.id = p.current_source_revision_id
-                 JOIN omnix_assets a
-                   ON a.workspace_id = r.workspace_id
-                  AND a.id = r.original_asset_id
-                WHERE p.workspace_id = %s AND p.id = %s
-                  AND a.lifecycle_status = 'active'""",
+                WHERE p.workspace_id = %s AND p.id = %s""",
             (context.workspace_id, project_id),
         ).fetchone()
+        asset = self.assets.asset_fields(context, source[1], active_only=True) if source else None
+        if asset is None:
+            return None
+        return (source[0], asset["metadata"].get("filename"), asset["byte_size"], asset["created_at"])
 
     def chapter_summaries(self, context: TenantContext, source_revision_id: str) -> list[Any]:
         """``(id, ordinal, title, canonical_hash, character_count, span_count)`` per chapter."""
@@ -546,42 +548,39 @@ class PostgresAudiobookProjectRepository:
 
     def cover_blob(self, context: TenantContext, project_id: str) -> Any:
         """``(storage_key, checksum_sha256, mime_type)`` of the active cover."""
-        return self.connection.execute(
-            """SELECT a.storage_key, a.checksum_sha256, a.mime_type
-                 FROM omnix_audiobook_projects p
-                 JOIN omnix_assets a ON a.workspace_id = p.workspace_id
-                                    AND a.id = p.cover_asset_id
-                WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
-                  AND a.lifecycle_status = 'active'""",
+        project = self.connection.execute(
+            """SELECT cover_asset_id FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
             (context.workspace_id, project_id),
         ).fetchone()
+        cover = self.assets.asset_fields(context, project[0], active_only=True) if project else None
+        if cover is None:
+            return None
+        return (cover["storage_key"], cover["checksum_sha256"], cover["mime_type"])
 
     def current_source_blob(self, context: TenantContext, project_id: str) -> Any:
         """``(storage_key, checksum_sha256, mime_type, source_format, filename)``."""
-        return self.connection.execute(
-            """SELECT a.storage_key, a.checksum_sha256, a.mime_type,
-                      r.source_format, a.metadata->>'filename'
+        source = self.connection.execute(
+            """SELECT r.source_format, r.original_asset_id
                  FROM omnix_audiobook_projects p
                  JOIN omnix_audiobook_source_revisions r
                    ON r.workspace_id = p.workspace_id
                   AND r.id = p.current_source_revision_id
-                 JOIN omnix_assets a
-                   ON a.workspace_id = r.workspace_id
-                  AND a.id = r.original_asset_id
-                WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
-                  AND a.lifecycle_status = 'active'""",
+                WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL""",
             (context.workspace_id, project_id),
         ).fetchone()
+        asset = self.assets.asset_fields(context, source[1], active_only=True) if source else None
+        if asset is None:
+            return None
+        return (asset["storage_key"], asset["checksum_sha256"], asset["mime_type"],
+                source[0], asset["metadata"].get("filename"))
 
     def lock_asset(self, context: TenantContext, asset_id: str) -> Any:
         """``(id, storage_key, revision, lifecycle_status)``, locked."""
-        return self.connection.execute(
-            """SELECT id, storage_key, revision, lifecycle_status
-                 FROM omnix_assets
-                WHERE workspace_id = %s AND id = %s
-                FOR UPDATE""",
-            (context.workspace_id, asset_id),
-        ).fetchone()
+        asset = self.assets.asset_fields(context, asset_id, lock=True)
+        if asset is None:
+            return None
+        return (asset["id"], asset["storage_key"], asset["revision"], asset["lifecycle_status"])
 
     def is_export_output(self, context: TenantContext, project_id: str,
                          asset_id: str) -> bool:
@@ -615,24 +614,28 @@ class PostgresAudiobookProjectRepository:
     def list_exports(self, context: TenantContext, project_id: str) -> list[Any]:
         """``(id, format, manifest_hash, output_asset_id, created_at, byte_size,
         asset_created_at)`` for active exports, newest first."""
-        return self.connection.execute(
-            """SELECT e.id, e.format, e.manifest_hash, e.output_asset_id,
-                      e.created_at, a.byte_size, a.created_at
-                 FROM omnix_audiobook_exports e
-                 JOIN omnix_assets a ON a.id = e.output_asset_id AND a.workspace_id = e.workspace_id
-                WHERE e.workspace_id = %s AND e.project_id = %s
-                  AND a.lifecycle_status = 'active'
-                ORDER BY e.created_at DESC""",
+        exports = self.connection.execute(
+            """SELECT id, format, manifest_hash, output_asset_id, created_at
+                 FROM omnix_audiobook_exports
+                WHERE workspace_id = %s AND project_id = %s
+                ORDER BY created_at DESC""",
             (context.workspace_id, project_id),
         ).fetchall()
+        rows = []
+        for export in exports:
+            asset = self.assets.asset_fields(context, export[3], active_only=True)
+            if asset is not None:
+                rows.append((*export, asset["byte_size"], asset["created_at"]))
+        return rows
 
     def export_blob(self, context: TenantContext, project_id: str, export_id: str) -> Any:
         """``(format, storage_key, checksum_sha256)`` of an active export."""
-        return self.connection.execute(
-            """SELECT e.format, a.storage_key, a.checksum_sha256
-                 FROM omnix_audiobook_exports e
-                 JOIN omnix_assets a ON a.id = e.output_asset_id
-                WHERE e.workspace_id = %s AND e.project_id = %s AND e.id = %s
-                  AND a.lifecycle_status = 'active'""",
+        export = self.connection.execute(
+            """SELECT format, output_asset_id FROM omnix_audiobook_exports
+                WHERE workspace_id = %s AND project_id = %s AND id = %s""",
             (context.workspace_id, project_id, export_id),
         ).fetchone()
+        asset = self.assets.asset_fields(context, export[1], active_only=True) if export else None
+        if asset is None:
+            return None
+        return (export[0], asset["storage_key"], asset["checksum_sha256"])

@@ -6,6 +6,7 @@ from typing import Any
 from app.persistence.blob_store import BlobIntegrityError
 from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
+from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -16,16 +17,12 @@ from .models import CanonicalChapter, SourceRevision, SourceSpan
 
 def _asset_check(connection: Any, blobs: BlobStore, context: TenantContext,
                  asset_id: str, checksum: str) -> bool:
-    row = connection.execute(
-        """SELECT checksum_sha256, storage_provider, storage_key, lifecycle_status
-             FROM omnix_assets WHERE workspace_id = %s AND id = %s""",
-        (context.workspace_id, asset_id),
-    ).fetchone()
-    if (row is None or row[0] != checksum or row[1] != blobs.provider
-            or row[3] != "active"):
+    asset = PostgresAssetRepository(connection).asset_fields(context, asset_id)
+    if (asset is None or asset["checksum_sha256"] != checksum or asset["storage_provider"] != blobs.provider
+            or asset["lifecycle_status"] != "active"):
         return False
     try:
-        return bool(blobs.read_bytes(str(row[2]), expected_checksum=checksum))
+        return bool(blobs.read_bytes(str(asset["storage_key"]), expected_checksum=checksum))
     except (BlobIntegrityError, FileNotFoundError, OSError):
         return False
 
@@ -35,13 +32,13 @@ def audit_export(database: PostgresDatabase, blobs: BlobStore,
                  export_id: str) -> dict[str, Any]:
     with unit_of_work(database) as work:
         export = work.connection.execute(
-            """SELECT e.source_revision_id, e.manifest, e.manifest_hash,
-                      e.output_asset_id, a.checksum_sha256
-                 FROM omnix_audiobook_exports e
-                 JOIN omnix_assets a ON a.id = e.output_asset_id
-                WHERE e.workspace_id = %s AND e.project_id = %s AND e.id = %s""",
+            """SELECT source_revision_id, manifest, manifest_hash, output_asset_id
+                 FROM omnix_audiobook_exports
+                WHERE workspace_id = %s AND project_id = %s AND id = %s""",
             (context.workspace_id, project_id, export_id),
         ).fetchone()
+        output = work.assets.asset_fields(context, str(export[3])) if export else None
+        export = (*export, output["checksum_sha256"]) if export and output else None
         if export is None:
             raise KeyError(export_id)
         source = work.connection.execute(

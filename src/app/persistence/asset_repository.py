@@ -36,6 +36,7 @@ byte_size, checksum_sha256, storage_provider, storage_key,
 lifecycle_status, generation_job_id, revision, created_at, updated_at,
 metadata, compat
 """
+_ASSET_COLUMN_NAMES = tuple(name.strip() for name in _ASSET_COLUMNS.split(","))
 
 
 class PostgresAssetRepository:
@@ -99,6 +100,25 @@ class PostgresAssetRepository:
             (asset_id, context.workspace_id),
         ).fetchone()
         return _asset(row) if row is not None else None
+
+    def asset_fields(
+        self, context: TenantContext, asset_id: str | None, *, active_only: bool = False, lock: bool = False,
+    ) -> dict[str, Any] | None:
+        """One asset's columns with their database types (datetimes, ints), for a module's own transaction.
+
+        A module reads asset metadata here instead of joining ``omnix_assets``
+        (PA-2.2). ``active_only`` skips an asset that is not active; ``lock``
+        holds its row until the transaction ends.
+        """
+        if not asset_id:
+            return None
+        row = self.connection.execute(
+            f"SELECT {_ASSET_COLUMNS} FROM omnix_assets WHERE workspace_id = %s AND id = %s"
+            + (" AND lifecycle_status = 'active'" if active_only else "")
+            + (" FOR UPDATE" if lock else ""),
+            (context.workspace_id, asset_id),
+        ).fetchone()
+        return dict(zip(_ASSET_COLUMN_NAMES, row)) if row is not None else None
 
     def find_by_storage(
         self,

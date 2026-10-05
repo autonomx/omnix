@@ -2491,25 +2491,6 @@
       "composition_imports_outside_composition": [],
       "cross_module_sql": [
         "src/app/assistant_memory/persistence/owner_memory_store.py:38:PostgresOwnerAwareMemoryRepository.delete_owner:omnix_chat_sessions",
-        "src/app/audiobook/assembly_service.py:112:_assemble_claimed:omnix_assets",
-        "src/app/audiobook/assembly_service.py:94:_assemble_claimed:omnix_assets",
-        "src/app/audiobook/export_service.py:126:start_export:omnix_assets",
-        "src/app/audiobook/export_service.py:178:start_export:omnix_assets",
-        "src/app/audiobook/export_service.py:266:_export_claimed:omnix_assets",
-        "src/app/audiobook/export_service.py:277:_export_claimed:omnix_assets",
-        "src/app/audiobook/project_repository.py:279:PostgresAudiobookProjectRepository.cover_summary:omnix_assets",
-        "src/app/audiobook/project_repository.py:291:PostgresAudiobookProjectRepository.source_summary:omnix_assets",
-        "src/app/audiobook/project_repository.py:550:PostgresAudiobookProjectRepository.cover_blob:omnix_assets",
-        "src/app/audiobook/project_repository.py:562:PostgresAudiobookProjectRepository.current_source_blob:omnix_assets",
-        "src/app/audiobook/project_repository.py:579:PostgresAudiobookProjectRepository.lock_asset:omnix_assets",
-        "src/app/audiobook/project_repository.py:619:PostgresAudiobookProjectRepository.list_exports:omnix_assets",
-        "src/app/audiobook/project_repository.py:632:PostgresAudiobookProjectRepository.export_blob:omnix_assets",
-        "src/app/audiobook/render_cache.py:33:find_valid_render:omnix_assets",
-        "src/app/audiobook/render_service.py:584:_complete_span_preview:omnix_assets",
-        "src/app/audiobook/report.py:20:_asset_check:omnix_assets",
-        "src/app/audiobook/report.py:38:audit_export:omnix_assets",
-        "src/app/audiobook/repository.py:138:PostgresAudiobookRepository.append_source_revision:omnix_assets",
-        "src/app/audiobook/worker.py:181:_ingest_claimed:omnix_assets",
         "src/app/characters/persistence/character_store.py:175:PostgresCharacterRepositoryAdapter.create_segment:omnix_conversation_segments",
         "src/app/characters/persistence/character_store.py:205:PostgresCharacterRepositoryAdapter.close_segment:omnix_conversation_segments",
         "src/app/characters/persistence/character_store.py:221:PostgresCharacterRepositoryAdapter.segments:omnix_conversation_segments",
@@ -6570,7 +6551,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 37
+      "value": 18
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6855,5 +6836,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "bf6fa80c3f218ee28c78a394836780b6f2aad28024376a4a0aa54c48980a1e36"
+  "source_digest": "dff98492d2bb1741d5645f219aae24879b7edf75d31f9cfe676fdd4ff39aeb04"
 }

@@ -5,6 +5,7 @@ from typing import Any
 
 from app.persistence.blob_store import BlobIntegrityError
 from app.persistence.contracts import BlobStore
+from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
 
 
@@ -31,22 +32,22 @@ def find_valid_render(
 ) -> dict[str, Any] | None:
     rows = connection.execute(
         """
-        SELECT r.id, r.audio_asset_id, r.audio_checksum, r.duration_seconds,
-               r.sample_rate, a.id, a.module, a.lifecycle_status,
-               a.checksum_sha256, a.storage_provider, a.storage_key
-          FROM omnix_audiobook_renders AS r
-          JOIN omnix_assets AS a ON a.id = r.audio_asset_id AND a.workspace_id = r.workspace_id
-         WHERE r.workspace_id = %s AND r.render_key = %s AND r.status = 'completed'
-         ORDER BY r.created_at DESC, r.id DESC
+        SELECT id, audio_asset_id, audio_checksum, duration_seconds, sample_rate
+          FROM omnix_audiobook_renders
+         WHERE workspace_id = %s AND render_key = %s AND status = 'completed'
+         ORDER BY created_at DESC, id DESC
         """, (context.workspace_id, render_key),
     ).fetchall()
+    assets = PostgresAssetRepository(connection)
     for row in rows:
+        stored = assets.asset_fields(context, str(row[1]))
+        if stored is None:
+            continue
         render = {"id": str(row[0]), "audio_asset_id": str(row[1]),
                   "audio_checksum": str(row[2]), "duration_seconds": float(row[3]),
                   "sample_rate": int(row[4]), "render_key": render_key}
-        asset = {"id": str(row[5]), "module": str(row[6]),
-                 "lifecycle_status": str(row[7]), "checksum_sha256": str(row[8]),
-                 "storage_provider": str(row[9]), "storage_key": str(row[10])}
+        asset = {key: str(stored[key]) for key in
+                 ("id", "module", "lifecycle_status", "checksum_sha256", "storage_provider", "storage_key")}
         if valid_render_blob(render, asset, blobs):
             return render
     return None

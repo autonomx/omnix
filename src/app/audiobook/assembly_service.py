@@ -90,17 +90,13 @@ def _assemble_claimed(
                 render = find_valid_render(work.connection, context, blobs, key)
                 if render is None:
                     raise ValueError(f"render is missing or corrupt for span {unit.span_id}")
-                asset = work.connection.execute(
-                    """SELECT storage_key, byte_size FROM omnix_assets
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, render["audio_asset_id"]),
-                ).fetchone()
+                asset = work.assets.asset_fields(context, render["audio_asset_id"])
                 if asset is None:
                     raise ValueError("render asset disappeared")
-                input_audio_bytes += int(asset[1])
+                input_audio_bytes += int(asset["byte_size"])
                 spans.append(AudioFileSpan(
                     render["id"], key, unit.speaker_id,
-                    unit.speech_plan.source_text, str(asset[0]),
+                    unit.speech_plan.source_text, str(asset["storage_key"]),
                     render["audio_checksum"], unit.span_id,
                 ))
                 render_ids.append(render["id"])
@@ -108,15 +104,18 @@ def _assemble_claimed(
         policy = PausePolicy()
         desired_key = assembly_key_for(spans, policy=policy)
         with unit_of_work(database) as work:
-            cached = work.connection.execute(
-                """SELECT ca.id, ca.audio_asset_id, ca.audio_checksum,
-                          a.storage_key, a.byte_size
-                     FROM omnix_audiobook_chapter_assemblies ca
-                     JOIN omnix_assets a ON a.id = ca.audio_asset_id AND a.workspace_id = ca.workspace_id
-                    WHERE ca.workspace_id = %s AND ca.chapter_id = %s AND ca.assembly_key = %s
-                    ORDER BY ca.created_at DESC""",
+            assemblies = work.connection.execute(
+                """SELECT id, audio_asset_id, audio_checksum
+                     FROM omnix_audiobook_chapter_assemblies
+                    WHERE workspace_id = %s AND chapter_id = %s AND assembly_key = %s
+                    ORDER BY created_at DESC""",
                 (context.workspace_id, payload["chapter_id"], desired_key),
             ).fetchall()
+            cached = []
+            for assembly in assemblies:
+                asset = work.assets.asset_fields(context, str(assembly[1]))
+                if asset is not None:
+                    cached.append((*assembly, asset["storage_key"], asset["byte_size"]))
             selected = None
             for row in cached:
                 try:

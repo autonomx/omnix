@@ -177,16 +177,11 @@ def _ingest_claimed(
                 return True
             work.rollback()
         with unit_of_work(database) as work:
-            row = work.connection.execute(
-                """
-                SELECT storage_key, checksum_sha256 FROM omnix_assets
-                 WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'
-                """, (context.workspace_id, payload["source_asset_id"]),
-            ).fetchone()
+            row = work.assets.asset_fields(context, payload["source_asset_id"], active_only=True)
             work.rollback()
         if row is None:
             raise UnsupportedSource("source asset is missing")
-        content = blobs.read_bytes(str(row[0]), expected_checksum=str(row[1]))
+        content = blobs.read_bytes(str(row["storage_key"]), expected_checksum=str(row["checksum_sha256"]))
         revision = extract_source(
             project_id=payload["project_id"], content=content,
             source_format=payload["source_format"],

@@ -569,6 +569,11 @@ def _render_claimed(
     return True
 
 
+def _storage(asset: dict[str, Any] | None) -> tuple[Any, Any] | None:
+    """``(storage_key, checksum_sha256)`` of an asset, or ``None``."""
+    return (asset["storage_key"], asset["checksum_sha256"]) if asset is not None else None
+
+
 def _complete_span_preview(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext, *,
     job_id: str, worker_id: str, lease_token: str, refs: list[dict[str, str]],
@@ -580,12 +585,8 @@ def _complete_span_preview(
     try:
         if len(refs) > 1:
             with unit_of_work(database) as work:
-                assets = [work.connection.execute(
-                    """SELECT storage_key, checksum_sha256 FROM omnix_assets
-                        WHERE workspace_id = %s AND id = %s
-                          AND lifecycle_status = 'active'""",
-                    (context.workspace_id, ref["audio_asset_id"]),
-                ).fetchone() for ref in refs]
+                assets = [_storage(work.assets.asset_fields(context, ref["audio_asset_id"], active_only=True))
+                          for ref in refs]
                 work.rollback()
             with tempfile.TemporaryDirectory(prefix="omnix-preview-", dir=blobs.scratch_dir()) as temporary:
                 path = Path(temporary) / "preview.wav"

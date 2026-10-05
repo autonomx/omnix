@@ -314,7 +314,10 @@ def test_combined_preview_publication_honors_cancellation(tmp_path, monkeypatch,
     @contextmanager
     def work(database):
         yield SimpleNamespace(
-            connection=Connection(), assets=SimpleNamespace(create=lambda context, record: created.append(record)),
+            connection=Connection(), assets=SimpleNamespace(
+                create=lambda context, record: created.append(record),
+                asset_fields=lambda context, asset_id, **_kwargs: dict(zip(("storage_key", "checksum_sha256"), records[asset_id])),
+            ),
             jobs=SimpleNamespace(
                 get_job=lambda *args: {"status": "cancel_requested" if canceled else "running"},
                 acknowledge_cancel=lambda *args, **kwargs: acknowledged.append(kwargs["job_id"]),

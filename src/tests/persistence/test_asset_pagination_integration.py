@@ -117,3 +117,23 @@ def test_updating_an_asset_keeps_its_provenance(store) -> None:
     assert first.source_job_id == "job:render-1"
     assert second.metadata == {"title": "second"}
     assert second.source_job_id == "job:render-1"  # not erased by an update without one
+
+
+def test_asset_fields_reads_one_asset_with_database_types(store) -> None:
+    """Modules read asset metadata here instead of joining omnix_assets (PA-2.2)."""
+    from datetime import datetime
+
+    from app.persistence.asset_repository import PostgresAssetRepository
+
+    adapter, tenant, module = store
+    _insert(tenant, module, [(f"{module}:live", "audio", 0), (f"{module}:gone", "audio", 0)])
+    with psycopg.connect(admin_database_url(), autocommit=True) as admin:
+        admin.execute("UPDATE omnix_assets SET lifecycle_status = 'deleted' WHERE id = %s", (f"{module}:gone",))
+    with adapter.database.transaction() as connection:
+        assets = PostgresAssetRepository(connection)
+        live = assets.asset_fields(tenant, f"{module}:live", lock=True)
+        assert live["storage_key"] == f"{module}:live" and live["byte_size"] == 1
+        assert isinstance(live["created_at"], datetime)
+        assert assets.asset_fields(tenant, f"{module}:gone")["lifecycle_status"] == "deleted"
+        assert assets.asset_fields(tenant, f"{module}:gone", active_only=True) is None
+        assert assets.asset_fields(tenant, None) is None

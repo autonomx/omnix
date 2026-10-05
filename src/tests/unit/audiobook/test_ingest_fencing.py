@@ -7,6 +7,10 @@ from app.audiobook.worker import run_ingest_once
 from app.persistence.tenant import local_tenant_context
 
 
+_SOURCE_ASSET = SimpleNamespace(
+    asset_fields=lambda *_args, **_kwargs: {"storage_key": "source-key", "checksum_sha256": "checksum"},
+)
+
 class Connection:
     def __init__(self, current, latest=None):
         self.current = current
@@ -87,7 +91,7 @@ def test_reclaimed_superseded_ingest_is_canceled_before_extraction(monkeypatch):
 
     @contextmanager
     def work(database):
-        yield SimpleNamespace(jobs=jobs, connection=Connection(("new-job",)),
+        yield SimpleNamespace(jobs=jobs, connection=Connection(("new-job",)), assets=_SOURCE_ASSET,
                               commit=lambda: None, rollback=lambda: None)
 
     monkeypatch.setattr("app.audiobook.worker.unit_of_work", work)
@@ -113,7 +117,7 @@ def test_ingest_superseded_during_extraction_cannot_publish(monkeypatch):
 
     @contextmanager
     def work(database):
-        yield SimpleNamespace(jobs=jobs, connection=connection,
+        yield SimpleNamespace(jobs=jobs, connection=connection, assets=_SOURCE_ASSET,
                               commit=lambda: None, rollback=lambda: None)
 
     def extract(**kwargs):

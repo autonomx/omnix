@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
 from app.runtime.pagination import page_limit
 
@@ -134,11 +135,8 @@ class PostgresAudiobookRepository:
         project = self.get_project(context, revision.project_id)
         if project is None:
             raise KeyError(revision.project_id)
-        asset = self.connection.execute(
-            "SELECT checksum_sha256 FROM omnix_assets WHERE workspace_id = %s AND id = %s AND lifecycle_status = 'active'",
-            (context.workspace_id, original_asset_id),
-        ).fetchone()
-        if asset is None or str(asset[0]) != revision.original_asset_hash:
+        asset = PostgresAssetRepository(self.connection).asset_fields(context, original_asset_id, active_only=True)
+        if asset is None or str(asset["checksum_sha256"]) != revision.original_asset_hash:
             raise ValueError("original asset is missing or its checksum differs")
         existing = self.connection.execute(
             """SELECT original_asset_hash, source_format, extractor_version,
