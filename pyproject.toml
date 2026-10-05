@@ -149,3 +149,20 @@ module = [
 ignore_errors = false
 disallow_untyped_defs = true
 no_implicit_optional = true
+
+# PA-3.1: each platform capability's contract is strict-typed, though the
+# module behind it is not yet (exact names win over the wildcards above).
+[[tool.mypy.overrides]]
+module = [
+  "app.agent_runtime.contracts",
+  "app.assistant_tools.contracts",
+  "app.characters.contracts",
+  "app.chat.contracts",
+  "app.companion_activity.contracts",
+  "app.image.contracts",
+  "app.live_voice.contracts",
+  "app.research.contracts",
+]
+ignore_errors = false
+disallow_untyped_defs = true
+no_implicit_optional = true
