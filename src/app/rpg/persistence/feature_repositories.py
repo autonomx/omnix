@@ -1,6 +1,8 @@
 """Repository registrations owned by the RPG feature."""
 from __future__ import annotations
 
+from typing import Any
+
 from app.persistence.repository_registry import RepositorySpec
 
 from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
@@ -18,6 +20,14 @@ from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
 from .rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
 from .rpg_world_library_repository import PostgresRpgWorldLibraryRepository
 
+
+def _foreground_submissions(connection: Any) -> Any:
+    # Imported on first use: only foreground turns need it, not gateway startup.
+    from .foreground_submission_repository import PostgresForegroundSubmissionRepository
+
+    return PostgresForegroundSubmissionRepository(connection)
+
+
 RPG_REPOSITORY_SPECS = (
     RepositorySpec(PostgresRpgRepository, PostgresRpgRepository, "rpg"),
     RepositorySpec(PostgresRpgCampaignBibleRepository, PostgresRpgCampaignBibleRepository, "campaign_bibles"),
@@ -33,4 +43,5 @@ RPG_REPOSITORY_SPECS = (
     RepositorySpec(PostgresRpgNarrativeResponseRepository, PostgresRpgNarrativeResponseRepository, "narrative_responses"),
     RepositorySpec(PostgresRpgNarrativeDeliveryRepository, PostgresRpgNarrativeDeliveryRepository, "narrative_deliveries"),
     RepositorySpec(PostgresRpgNarrativeRetirementRepository, PostgresRpgNarrativeRetirementRepository, "narrative_retirement"),
+    RepositorySpec("rpg.foreground_submissions", _foreground_submissions, "foreground_submissions"),
 )

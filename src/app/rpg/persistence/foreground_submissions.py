@@ -6,9 +6,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from .database import PostgresDatabase, default_database
+from app.persistence.database import PostgresDatabase, default_database
 from app.runtime.tenant_context import RequestTenant
-from .unit_of_work import unit_of_work
+from app.persistence.unit_of_work import unit_of_work
 
 _TERMINAL = {"completed", "failed"}
 

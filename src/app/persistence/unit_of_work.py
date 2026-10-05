@@ -18,7 +18,6 @@ from .asset_repository import (
 )
 from .audit import PostgresAuditRepository
 from .database import PostgresDatabase, default_database
-from .execution_repositories import PostgresForegroundSubmissionRepository
 from .job_repository import PostgresJobRepository
 from .outbox_repository import (
     PostgresOutboxConsumerRepository,
@@ -66,7 +65,6 @@ class PostgresUnitOfWork:
         self.outbox: PostgresOutboxRepository
         self.outbox_consumers: PostgresOutboxConsumerRepository
         self.side_effects: PostgresSideEffectRepository
-        self.foreground_submissions: PostgresForegroundSubmissionRepository
         self._connection_context: Any | None = None
         self._transaction_scope_context: Any | None = None
         self._completed = False
@@ -107,7 +105,6 @@ class PostgresUnitOfWork:
         self.outbox = PostgresOutboxRepository(self.connection)
         self.outbox_consumers = PostgresOutboxConsumerRepository(self.connection)
         self.side_effects = PostgresSideEffectRepository(self.connection)
-        self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         return self
 
     def repository(self, repo_type: Hashable) -> Any:

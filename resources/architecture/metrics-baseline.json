@@ -545,7 +545,6 @@
       "app.persistence.document_store",
       "app.persistence.errors",
       "app.persistence.execution_repositories",
-      "app.persistence.foreground_submissions",
       "app.persistence.gateway_runtime",
       "app.persistence.identity_service",
       "app.persistence.job_repository",
@@ -1191,6 +1190,8 @@
       "app.rpg.performance_trace",
       "app.rpg.persistence",
       "app.rpg.persistence.feature_repositories",
+      "app.rpg.persistence.foreground_submission_repository",
+      "app.rpg.persistence.foreground_submissions",
       "app.rpg.persistence.migration_manager",
       "app.rpg.persistence.migrations",
       "app.rpg.persistence.migrations.v1_to_v2",
@@ -2544,15 +2545,6 @@
         "src/app/persistence/cutover.py:530:PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
         "src/app/persistence/cutover.py:552:PostgresLegacyImporter._dispatch:omnix_rpg_participants",
         "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:827:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:842:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:866:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:889:PostgresForegroundSubmissionRepository.attach_job:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:916:PostgresForegroundSubmissionRepository.start_execution:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:939:PostgresForegroundSubmissionRepository.complete:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:969:PostgresForegroundSubmissionRepository.fail:omnix_rpg_foreground_submissions",
-        "src/app/persistence/foreground_submissions.py:60:PostgresForegroundSubmissionStoreAdapter.get:omnix_rpg_foreground_submissions",
-        "src/app/persistence/foreground_submissions.py:82:PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions",
         "src/app/persistence/module_repositories.py:263:PostgresProviderRepository.create:omnix_provider_configs",
         "src/app/persistence/module_repositories.py:285:PostgresProviderRepository.get:omnix_provider_configs",
         "src/app/persistence/module_repositories.py:308:PostgresProviderRepository.update:omnix_provider_configs",
@@ -2577,16 +2569,7 @@
         "src/app/persistence/complete_cutover.py:83:CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_candidates",
         "src/app/persistence/cutover.py:530:PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
         "src/app/persistence/cutover.py:552:PostgresLegacyImporter._dispatch:omnix_rpg_participants",
-        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:827:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:842:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:866:PostgresForegroundSubmissionRepository.claim:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:889:PostgresForegroundSubmissionRepository.attach_job:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:916:PostgresForegroundSubmissionRepository.start_execution:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:939:PostgresForegroundSubmissionRepository.complete:omnix_rpg_foreground_submissions",
-        "src/app/persistence/execution_repositories.py:969:PostgresForegroundSubmissionRepository.fail:omnix_rpg_foreground_submissions",
-        "src/app/persistence/foreground_submissions.py:60:PostgresForegroundSubmissionStoreAdapter.get:omnix_rpg_foreground_submissions",
-        "src/app/persistence/foreground_submissions.py:82:PostgresForegroundSubmissionStoreAdapter.renew:omnix_rpg_foreground_submissions"
+        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions"
       ],
       "kernel_tools_naming_apps": [],
       "module_repositories_in_kernel": [],
@@ -6619,7 +6602,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 70
+      "value": 61
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6679,7 +6662,7 @@
     "kernel_named_module_tables": {
       "direction": "lower",
       "target": 0,
-      "value": 22
+      "value": 13
     },
     "kernel_tools_naming_apps": {
       "direction": "lower",
@@ -6904,5 +6887,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "ba63ff78d9cdab23a2fffd66a0241620f92c7b5acf9b82f19d15a8124c8a5aeb"
+  "source_digest": "8277ca46d2a215ea643cbb2ab7ce9dd19a1dd6d758c3ff20adda1dbc52dd3fd4"
 }
