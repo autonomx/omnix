@@ -34,7 +34,7 @@ PREFIX_OWNERS = {
 # Tables whose prefix does not name their owner.
 TABLE_OWNERS = {
     "omnix_prompt_templates": "shared", "omnix_provider_configs": "shared",
-    "omnix_provider_status_projections": "shared", "omnix_reports": "shared",
+    "omnix_provider_status_projections": "shared", "omnix_reports": "research",
 }
 _CREATE = re.compile(r"create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)", re.I)
 _DROP = re.compile(r"drop\s+table\s+(?:if\s+exists\s+)?([a-z_][a-z0-9_]*)", re.I)

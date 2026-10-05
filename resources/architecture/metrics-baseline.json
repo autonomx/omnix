@@ -2506,8 +2506,7 @@
         "src/app/persistence/complete_cutover.py:83:CompletePostgresLegacyImporter._memory_lifecycle:omnix_memory_candidates",
         "src/app/persistence/cutover.py:530:PostgresLegacyImporter._dispatch:omnix_rpg_campaigns",
         "src/app/persistence/cutover.py:552:PostgresLegacyImporter._dispatch:omnix_rpg_participants",
-        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions",
-        "src/app/research/persistence/report_repository.py:84:PostgresResearchReportRepository.create_report:omnix_reports"
+        "src/app/persistence/execution_repositories.py:79:<module>:omnix_rpg_foreground_submissions"
       ],
       "historical_owner_map_additions": [],
       "kernel_named_module_tables": [
@@ -6551,7 +6550,7 @@
     "cross_module_sql": {
       "direction": "lower",
       "target": 0,
-      "value": 18
+      "value": 17
     },
     "direct_requests_calls": {
       "direction": "lower",
@@ -6836,5 +6835,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "dff98492d2bb1741d5645f219aae24879b7edf75d31f9cfe676fdd4ff39aeb04"
+  "source_digest": "a1186bf202f32621d28671d00b7ece60078dac354bad56f65e619005dca84f57"
 }

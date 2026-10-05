@@ -385,15 +385,6 @@
       ],
       "path": "src/app/persistence/execution_repositories.py",
       "rule": "AL016"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresResearchReportRepository.create_report:omnix_reports",
-      "lines": [
-        84
-      ],
-      "path": "src/app/research/persistence/report_repository.py",
-      "rule": "AL016"
     }
   ]
 }
