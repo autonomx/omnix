@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -11,7 +11,7 @@ from app.assistant_memory_v2 import (
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory_v2.temporal import TemporalClaim, apply_temporal_claim
+from app.assistant_memory.v2.temporal import TemporalClaim, apply_temporal_claim
 
 SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="sofia")
 USER = GraphEntityRef(entity_id="user:alice", entity_type="user")

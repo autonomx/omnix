@@ -4,13 +4,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     MemorySpaceKey,
     RetrievalQuery,
     RetrievalResult,
     VisibilityScope,
 )
-from app.assistant_memory_v2.speculative_prefetch import (
+from app.assistant_memory.v2.speculative_prefetch import (
     SpeculativeMemoryPrefetchController,
 )
 

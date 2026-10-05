@@ -10,7 +10,7 @@ from app.assistant_memory.service import (
     LegacyMemoryReadOnlyError,
     default_memory_service,
 )
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     MemoryGrant,
     MemorySpaceKey,
     RetrievalCandidate,
@@ -333,7 +333,7 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
 
 
 def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
-    import app.assistant_memory_v2.authority as authority_module
+    import app.assistant_memory.v2.authority as authority_module
     from app.persistence import runtime
 
     monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: True)

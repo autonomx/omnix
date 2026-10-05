@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     GraphEntityRef,
     MemorySpaceKey,
     ObservationProvenance,
@@ -14,11 +14,11 @@ from app.assistant_memory_v2 import (
     RelationshipState,
     VisibilityScope,
 )
-from app.assistant_memory_v2.observation_store import (
+from app.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )
-from app.assistant_memory_v2.relationship_store import (
+from app.assistant_memory.v2.relationship_store import (
     PostgresMemoryV2RelationshipStore,
     RelationshipEvidenceError,
 )

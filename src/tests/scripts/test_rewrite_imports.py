@@ -45,3 +45,9 @@ def test_text_files_get_the_dotted_and_file_paths() -> None:
     assert rewrite_text(text, MAPPING) == (
         "python -m app.new.pkg.cutover status\npaths: src/app/new/pkg/ and src/app/old_pkg_extra/\n"
     )
+
+
+def test_docstrings_get_their_command_lines_rewritten() -> None:
+    source = '"""Usage:\n\n    python -m app.old_pkg.cutover status\n"""\nX = 1\n'
+
+    assert rewrite_python(source, MAPPING) == '"""Usage:\n\n    python -m app.new.pkg.cutover status\n"""\nX = 1\n'

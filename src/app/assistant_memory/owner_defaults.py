@@ -75,7 +75,7 @@ def _runtime_repository_factory() -> RepositoryFactory | None:
 def _legacy_memory_write_guard() -> None:
     """Keep the resident v1 service readable but immutable after v2 cutover."""
 
-    from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
+    from app.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
 
     authority = PostgresMemoryV2AuthorityStore().current().epoch.authority
     if authority != "v1":

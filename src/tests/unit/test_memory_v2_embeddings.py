@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.assistant_memory_v2 import embeddings
+from app.assistant_memory.v2 import embeddings
 
 
 def test_without_the_model_there_is_no_embedder(monkeypatch, tmp_path: Path) -> None:
@@ -41,7 +41,7 @@ def test_a_download_with_the_wrong_checksum_is_refused(monkeypatch, tmp_path: Pa
 
 @pytest.mark.skipif(
     not embeddings.model_installed(Path(os.environ.get("OMNIX_MEMORY_EMBEDDING_MODEL_DIR", "/nonexistent"))),
-    reason="the e5 model is not installed (python -m app.assistant_memory_v2.embeddings download)",
+    reason="the e5 model is not installed (python -m app.assistant_memory.v2.embeddings download)",
 )
 def test_the_real_model_puts_a_paraphrase_next_to_its_memory() -> None:
     embedder = embeddings.default_embedder()

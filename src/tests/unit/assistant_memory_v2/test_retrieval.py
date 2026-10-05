@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     Episode,
     GraphAssertion,
     GraphEntityRef,
@@ -14,7 +14,7 @@ from app.assistant_memory_v2 import (
     RetrievalQuery,
     VisibilityScope,
 )
-from app.assistant_memory_v2.retrieval import UnifiedMemoryV2Retriever
+from app.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
 
 SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="sofia")
 GLOBAL = VisibilityScope(kind="global", scope_id="global")

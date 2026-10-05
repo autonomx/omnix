@@ -390,7 +390,7 @@ def _default_legacy_write_guard() -> None:
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return
-    from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
+    from app.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
 
     if PostgresMemoryV2AuthorityStore().current().epoch.authority != "v1":
         raise LegacyMemoryReadOnlyError(

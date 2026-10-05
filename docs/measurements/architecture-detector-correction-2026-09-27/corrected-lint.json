@@ -274,7 +274,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "_legacy_memory_write_guard:app.assistant_memory_v2.authority",
+      "fingerprint": "_legacy_memory_write_guard:app.assistant_memory.v2.authority",
       "lines": [
         69
       ],
@@ -310,7 +310,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "_default_legacy_write_guard:app.assistant_memory_v2.authority",
+      "fingerprint": "_default_legacy_write_guard:app.assistant_memory.v2.authority",
       "lines": [
         396
       ],
@@ -341,7 +341,7 @@
       "lines": [
         9
       ],
-      "path": "src/app/assistant_memory_v2/legacy_shadow.py",
+      "path": "src/app/assistant_memory/v2/legacy_shadow.py",
       "rule": "AL001"
     },
     {
@@ -769,7 +769,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2",
+      "fingerprint": "<module>:app.assistant_memory.v2",
       "lines": [
         18
       ],
@@ -787,7 +787,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "_memory_v2_runtime:app.assistant_memory_v2.runtime",
+      "fingerprint": "_memory_v2_runtime:app.assistant_memory.v2.runtime",
       "lines": [
         41
       ],
@@ -940,7 +940,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "fingerprint": "<module>:app.assistant_memory.v2.contracts",
       "lines": [
         9
       ],
@@ -949,7 +949,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.policy",
+      "fingerprint": "<module>:app.assistant_memory.v2.policy",
       "lines": [
         10
       ],
@@ -958,7 +958,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "fingerprint": "<module>:app.assistant_memory.v2.contracts",
       "lines": [
         14
       ],
@@ -967,7 +967,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.policy",
+      "fingerprint": "<module>:app.assistant_memory.v2.policy",
       "lines": [
         15
       ],
@@ -976,7 +976,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "fingerprint": "<module>:app.assistant_memory.v2.contracts",
       "lines": [
         14
       ],
@@ -1057,7 +1057,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "fingerprint": "<module>:app.assistant_memory.v2.contracts",
       "lines": [
         16
       ],
@@ -1066,7 +1066,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.observation_store",
+      "fingerprint": "<module>:app.assistant_memory.v2.observation_store",
       "lines": [
         21
       ],
@@ -1075,7 +1075,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.runtime",
+      "fingerprint": "<module>:app.assistant_memory.v2.runtime",
       "lines": [
         22
       ],
@@ -2844,7 +2844,7 @@
       "lines": [
         1
       ],
-      "path": "src/app/assistant_memory_v2/",
+      "path": "src/app/assistant_memory/v2/",
       "rule": "AL002"
     },
     {
@@ -2853,7 +2853,7 @@
       "lines": [
         1
       ],
-      "path": "src/app/assistant_memory_v2/",
+      "path": "src/app/assistant_memory/v2/",
       "rule": "AL002"
     },
     {
@@ -2975,7 +2975,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "app.chat->app.assistant_memory_v2",
+      "fingerprint": "app.chat->app.assistant_memory.v2",
       "lines": [
         1
       ],
@@ -3047,7 +3047,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "app.companion_activity->app.assistant_memory_v2",
+      "fingerprint": "app.companion_activity->app.assistant_memory.v2",
       "lines": [
         1
       ],
@@ -3083,7 +3083,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "app.desktop_companion->app.assistant_memory_v2",
+      "fingerprint": "app.desktop_companion->app.assistant_memory.v2",
       "lines": [
         1
       ],

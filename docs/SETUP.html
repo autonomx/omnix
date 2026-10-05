@@ -260,8 +260,8 @@ python -m app.persistence verify</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m pip install --require-hashes -r requirements.txt</code></pre></div>
 <p>Use Python 3.11. <code>requirements.txt</code> installs the gateway runtime from its hash-locked dependency set. Install test tools from <code>requirements/dev.lock.txt</code>; the image, TTS, and STT runtimes have separate locks and isolated environments.</p>
 <p><code>setup.bat</code> / <code>setup.sh</code> also download Memory v2&#x27;s embedding model (<code>intfloat/multilingual-e5-small</code>, about 490 MB, pinned and SHA-256 checked) into <code>resources/models/multilingual-e5-small</code>. Rerunning setup skips files that already match their checksum. If the download fails, setup warns and continues, and memory retrieval matches words only until the model is present. On a host installed by hand, run it once after the dependency install:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">PYTHONPATH=src python -m app.assistant_memory_v2.embeddings download
-PYTHONPATH=src python -m app.assistant_memory_v2.embeddings status</code></pre></div>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">PYTHONPATH=src python -m app.assistant_memory.v2.embeddings download
+PYTHONPATH=src python -m app.assistant_memory.v2.embeddings status</code></pre></div>
 <h3 id="gpu-pytorch-note">GPU/PyTorch note</h3>
 <p><code>requirements.txt</code> intentionally does not install the repository&#x27;s CUDA PyTorch build. The image, TTS, and STT locks target CUDA 12.4 and keep each Torch runtime isolated. The Windows image environment can be installed with <code>scripts/requirements/bootstrap_omnix_flux_env.ps1</code>.</p>
 <p>For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:</p>

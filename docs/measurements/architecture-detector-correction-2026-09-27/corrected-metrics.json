@@ -1027,42 +1027,42 @@
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/__init__.py",
+        "path": "src/app/assistant_memory/v2/__init__.py",
         "symbol": "__all__"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/legacy_shadow.py",
+        "path": "src/app/assistant_memory/v2/legacy_shadow.py",
         "symbol": "_KIND_DOMAIN_MAP"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/legacy_shadow.py",
+        "path": "src/app/assistant_memory/v2/legacy_shadow.py",
         "symbol": "_TRUST_MAP"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/policy.py",
+        "path": "src/app/assistant_memory/v2/policy.py",
         "symbol": "_SCOPE_RANK"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/policy.py",
+        "path": "src/app/assistant_memory/v2/policy.py",
         "symbol": "_SENSITIVITY_RANK"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/policy.py",
+        "path": "src/app/assistant_memory/v2/policy.py",
         "symbol": "_TRUST_RANK"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/policy.py",
+        "path": "src/app/assistant_memory/v2/policy.py",
         "symbol": "__all__"
       },
       {
         "approved": false,
-        "path": "src/app/assistant_memory_v2/semantic_enrichment.py",
+        "path": "src/app/assistant_memory/v2/semantic_enrichment.py",
         "symbol": "_AUTHORITATIVE_SEMANTIC_EVENTS"
       },
       {

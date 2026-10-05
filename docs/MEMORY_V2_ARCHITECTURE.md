@@ -11,7 +11,7 @@ context, and audio-native affect. It is not a downstream fork contract and does 
 adopt upstream VoiceMem APIs as permanent Omnix APIs.
 
 The existing `app.assistant_memory` subsystem remains the runtime authority until a
-later, explicit cutover epoch. The `app.assistant_memory_v2` package introduced with
+later, explicit cutover epoch. The `app.assistant_memory.v2` package introduced with
 this document contains contracts only.
 
 ## 1. Authority model
@@ -376,7 +376,7 @@ The frozen first contract surface is:
 - `ConsolidationReceipt`
 - `MemoryAuthorityEpoch`
 
-These contracts live in `app.assistant_memory_v2` and must remain implementation-neutral.
+These contracts live in `app.assistant_memory.v2` and must remain implementation-neutral.
 VoiceMem capabilities are ported **into** these contracts later; upstream VoiceMem data
 models and public APIs do not define Omnix's permanent interfaces.
 

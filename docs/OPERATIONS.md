@@ -669,7 +669,7 @@ memory space belongs to a tenant workspace, so workspaces never share memory.
 
 Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
 embedding model is installed. `setup.bat` / `setup.sh` download it; on a host
-installed by hand, run `python -m app.assistant_memory_v2.embeddings download`
+installed by hand, run `python -m app.assistant_memory.v2.embeddings download`
 once on each host that runs the scheduler or serves retrieval (about
 490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
 `resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
@@ -689,10 +689,10 @@ The switch is a human decision. With the gateway running this code (migration
 ```powershell
 $env:PYTHONPATH = "src"
 python scripts/backup_omnix.py --output-dir <backup folder>        # 1. back up
-python -m app.assistant_memory_v2.shadow_runner                   # 2. import and compare
-python -m app.assistant_memory_v2.shadow_report --require-ready   # 3. verdict
-python -m app.assistant_memory_v2.cutover activate --by <name> --reason "<why>"   # 4. switch
-python -m app.assistant_memory_v2.cutover status                  # 5. confirm
+python -m app.assistant_memory.v2.shadow_runner                   # 2. import and compare
+python -m app.assistant_memory.v2.shadow_report --require-ready   # 3. verdict
+python -m app.assistant_memory.v2.cutover activate --by <name> --reason "<why>"   # 4. switch
+python -m app.assistant_memory.v2.cutover status                  # 5. confirm
 ```
 
 The shadow runner works only while v1 is authoritative, one run at a time,
@@ -730,7 +730,7 @@ with "v1 memory changed since the shadow run": run the shadow runner again.
 
 ### Rolling back
 
-`python -m app.assistant_memory_v2.cutover rollback --by <name> --reason
+`python -m app.assistant_memory.v2.cutover rollback --by <name> --reason
 "<why>"` returns curated memory to v1 only while nothing has been saved,
 edited or forgotten under v2 (v1 would lose or resurrect those memories);
 otherwise it refuses. Rollback is meant for the minutes right after a switch.

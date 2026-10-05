@@ -2465,7 +2465,7 @@ may_import = ["kernel", "shared_services"]
 
 [layers.features]
 packages = [
-  "app.chat", "app.live_voice", "app.characters", "app.assistant_memory", "app.assistant_memory_v2",
+  "app.chat", "app.live_voice", "app.characters", "app.assistant_memory", "app.assistant_memory.v2",
   "app.rpg", "app.trading", "app.agent_runtime", "app.assistant_tools", "app.audiobook", "app.image",
   "app.voice", "app.research", "app.story", "app.hermes", "app.companion_activity", "app.desktop_companion",
   "app.live_speech", "app.replay",

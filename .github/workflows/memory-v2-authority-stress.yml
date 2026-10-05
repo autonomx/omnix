@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "src/app/assistant_memory_v2/observation_store.py"
+      - "src/app/assistant_memory/v2/observation_store.py"
       - "src/app/persistence/migrations/0069_memory_v2_observation_store.sql"
       - "src/tests/persistence/test_memory_v2_observation_store_integration.py"
       - ".github/workflows/memory-v2-authority-stress.yml"

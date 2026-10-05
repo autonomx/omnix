@@ -216,10 +216,10 @@ if errorlevel 1 (
 echo.
 echo [9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)...
 set "PYTHONPATH=%CD%\src"
-"%RPG_FLUX_PYTHON%" -m app.assistant_memory_v2.embeddings download
+"%RPG_FLUX_PYTHON%" -m app.assistant_memory.v2.embeddings download
 if errorlevel 1 (
     echo WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only.
-    echo          Retry later with: "%RPG_FLUX_PYTHON%" -m app.assistant_memory_v2.embeddings download
+    echo          Retry later with: "%RPG_FLUX_PYTHON%" -m app.assistant_memory.v2.embeddings download
 )
 
 echo.

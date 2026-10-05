@@ -14,7 +14,7 @@ from app.assistant_memory.contracts import (
     select_memory_records,
 )
 from app.assistant_memory.contracts import estimate_memory_tokens, load_memory_runtime_settings
-from app.assistant_memory_v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
+from app.assistant_memory.v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import prompt_budget_from_env
@@ -34,7 +34,7 @@ def _memory_v2_runtime(
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return None
-    from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
+    from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 
     return PostgresMemoryV2Runtime()
 

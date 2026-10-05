@@ -205,8 +205,8 @@ and memory retrieval matches words only until the model is present. On a host
 installed by hand, run it once after the dependency install:
 
 ```bash
-PYTHONPATH=src python -m app.assistant_memory_v2.embeddings download
-PYTHONPATH=src python -m app.assistant_memory_v2.embeddings status
+PYTHONPATH=src python -m app.assistant_memory.v2.embeddings download
+PYTHONPATH=src python -m app.assistant_memory.v2.embeddings status
 ```
 
 ### GPU/PyTorch note

@@ -282,8 +282,8 @@ def create_production_app(config: RuntimeConfig | None = None):
         )
 
         def converge_memory_v2(_task_context) -> None:
-            from app.assistant_memory_v2.curated_records import MemoryV2CuratedConvergence
-            from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
+            from app.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
+            from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 
             # Before the cutover the shadow runner converges its own spaces.
             if PostgresMemoryV2Runtime(services.jobs.database).current().epoch.authority != "v2":

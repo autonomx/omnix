@@ -6,19 +6,19 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     GraphEntityRef,
     GraphValue,
     MemorySpaceKey,
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory_v2.assistant_output import (
+from app.assistant_memory.v2.assistant_output import (
     AssistantOutputLifecycleError,
     PostgresMemoryV2AssistantOutputLifecycle,
 )
-from app.assistant_memory_v2.observation_store import PostgresMemoryV2ObservationStore
-from app.assistant_memory_v2.semantic_enrichment import (
+from app.assistant_memory.v2.observation_store import PostgresMemoryV2ObservationStore
+from app.assistant_memory.v2.semantic_enrichment import (
     SemanticMemoryProposal,
     VoiceMemDerivedSemanticEnricher,
 )

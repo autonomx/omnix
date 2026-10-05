@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_memory_v2 import MemorySpaceKey, ObservationProvenance, VisibilityScope
-from app.assistant_memory_v2.contracts import Observation
-from app.assistant_memory_v2.cutover import CutoverRefused, ready_receipts
-from app.assistant_memory_v2.legacy_shadow import curated_projector
+from app.assistant_memory.v2 import MemorySpaceKey, ObservationProvenance, VisibilityScope
+from app.assistant_memory.v2.contracts import Observation
+from app.assistant_memory.v2.cutover import CutoverRefused, ready_receipts
+from app.assistant_memory.v2.legacy_shadow import curated_projector
 
 SPACE = MemorySpaceKey(principal_id="workspace:local", owner_type="character", owner_id="sofia")
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)

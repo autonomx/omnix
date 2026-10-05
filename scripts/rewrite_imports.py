@@ -20,7 +20,6 @@ import argparse
 import ast
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +78,14 @@ def rewrite_python(source: str, mapping: list[tuple[str, str]]) -> str:
             for alias in node.names:
                 start, end = span(alias)
                 replace_name(start, end, alias.name)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and "\n" not in node.value:
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and "\n" in node.value:
+            # Docstrings and other prose: dotted and src/ paths, as in a text file.
+            start, end = span(node)
+            segment = raw[start:end].decode("utf-8")
+            updated = rewrite_text(segment, mapping)
+            if updated != segment:
+                edits.append((start, end, updated.encode("utf-8")))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             new_value = _mapped(node.value, mapping)
             if new_value is not None:
                 start, end = span(node)

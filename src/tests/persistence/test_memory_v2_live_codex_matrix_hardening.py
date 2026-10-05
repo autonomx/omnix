@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.memory_contracts import MemoryRecord
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     AffectObservation,
     Episode,
     GraphAssertion,
@@ -24,29 +24,29 @@ from app.assistant_memory_v2 import (
     RetrievalScore,
     VisibilityScope,
 )
-from app.assistant_memory_v2.convergence import (
+from app.assistant_memory.v2.convergence import (
     DerivedPlanPayload,
     PostgresMemoryV2DerivedCoordinator,
     StaleDerivedPlanError,
 )
-from app.assistant_memory_v2.derived_state import PostgresMemoryV2DerivedStateStore
-from app.assistant_memory_v2.episode_store import PostgresMemoryV2EpisodeStore
-from app.assistant_memory_v2.federated_retrieval import FederatedMemoryV2Retriever
-from app.assistant_memory_v2.grant_store import PostgresMemoryV2GrantStore
-from app.assistant_memory_v2.graph_store import PostgresMemoryV2GraphStore
-from app.assistant_memory_v2.legacy_shadow import (
+from app.assistant_memory.v2.derived_state import PostgresMemoryV2DerivedStateStore
+from app.assistant_memory.v2.episode_store import PostgresMemoryV2EpisodeStore
+from app.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
+from app.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
+from app.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
+from app.assistant_memory.v2.legacy_shadow import (
     LegacyMemoryV2Importer,
     PostgresMemoryV2ShadowEvaluationStore,
     compare_shadow_retrieval,
 )
-from app.assistant_memory_v2.observation_store import (
+from app.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )
-from app.assistant_memory_v2.operations import PostgresMemoryV2ConvergenceWorker
-from app.assistant_memory_v2.relationship_store import PostgresMemoryV2RelationshipStore
-from app.assistant_memory_v2.retrieval import UnifiedMemoryV2Retriever
-from app.assistant_memory_v2.search_index import PostgresMemoryV2SearchIndex
+from app.assistant_memory.v2.operations import PostgresMemoryV2ConvergenceWorker
+from app.assistant_memory.v2.relationship_store import PostgresMemoryV2RelationshipStore
+from app.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
+from app.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresConstraintError, PostgresDatabase
 from app.persistence.migrations import apply_migrations

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     SYSTEM_MEMORY_OWNER_ID,
     AffectObservation,
     ConsolidationReceipt,

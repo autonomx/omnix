@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "d201205b90b62968eaee8771f420a107584a58ce0a853341a0a2fbfc7fe91168",
+  "policy_digest": "6fe1edd534a1617636cb80c9099ce62bf6869d0d9fc5af3c254578da3ee09994",
   "rules": [
     "AL001",
     "AL002",
@@ -88,7 +88,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2",
+      "fingerprint": "<module>:app.assistant_memory.v2",
       "lines": [
         17
       ],
@@ -97,7 +97,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "_memory_v2_runtime:app.assistant_memory_v2.runtime",
+      "fingerprint": "_memory_v2_runtime:app.assistant_memory.v2.runtime",
       "lines": [
         37
       ],
@@ -133,7 +133,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
+      "fingerprint": "<module>:app.assistant_memory.v2.contracts",
       "lines": [
         16
       ],
@@ -142,7 +142,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.observation_store",
+      "fingerprint": "<module>:app.assistant_memory.v2.observation_store",
       "lines": [
         21
       ],
@@ -151,7 +151,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.runtime",
+      "fingerprint": "<module>:app.assistant_memory.v2.runtime",
       "lines": [
         22
       ],

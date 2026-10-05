@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     MemorySpaceKey,
     RetrievalCandidate,
     RetrievalResult,
     RetrievalScore,
 )
-from app.assistant_memory_v2.legacy_shadow import ShadowProbe, compare_shadow_probes
-from app.assistant_memory_v2.shadow_runner import MemoryV2ShadowRunner, ShadowRunnerError
+from app.assistant_memory.v2.legacy_shadow import ShadowProbe, compare_shadow_probes
+from app.assistant_memory.v2.shadow_runner import MemoryV2ShadowRunner, ShadowRunnerError
 
 SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="sofia")
 

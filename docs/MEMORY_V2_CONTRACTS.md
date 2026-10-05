@@ -3,7 +3,7 @@
 Status: **Contract baseline for architecture-frozen Memory v2**  
 Architecture: `docs/MEMORY_V2_ARCHITECTURE.md`
 
-This document defines the semantic meaning of the initial `app.assistant_memory_v2`
+This document defines the semantic meaning of the initial `app.assistant_memory.v2`
 contracts. It is intentionally implementation-neutral. Persistence schemas, VoiceMem
 ports, vector stores, graph traversal engines, and live-runtime integration must conform
 to these contracts rather than redefine them.

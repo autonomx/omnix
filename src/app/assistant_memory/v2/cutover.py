@@ -1,8 +1,8 @@
 """Operator commands for the Memory v1 -> v2 authority switch (WP-8.5).
 
-    python -m app.assistant_memory_v2.cutover status
-    python -m app.assistant_memory_v2.cutover activate --by <operator> --reason "<why>"
-    python -m app.assistant_memory_v2.cutover rollback --by <operator> --reason "<why>"
+    python -m app.assistant_memory.v2.cutover status
+    python -m app.assistant_memory.v2.cutover activate --by <operator> --reason "<why>"
+    python -m app.assistant_memory.v2.cutover rollback --by <operator> --reason "<why>"
 
 ``activate`` runs only when the shadow report is ready (every v1 owner
 imported, every space ``ready``) or when v1 holds no memory at all. It passes

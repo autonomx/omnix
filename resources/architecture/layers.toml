@@ -30,7 +30,6 @@ contract_module = "contracts"
 # Transitional (PA-0.2): code that belongs to a module but lives outside its
 # package. Empty after PA-1.5 (replay), PA-3.2 (memory v2) and PA-5.2 (loose files).
 [modules.package_owners]
-"app.assistant_memory_v2" = "app.assistant_memory"
 "app.replay" = "app.rpg"
 "app.image_http_client" = "app.image"
 

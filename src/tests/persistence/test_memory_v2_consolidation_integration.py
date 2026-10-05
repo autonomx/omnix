@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory_v2 import (
+from app.assistant_memory.v2 import (
     GraphAssertion,
     GraphEntityRef,
     GraphValue,
@@ -15,15 +15,15 @@ from app.assistant_memory_v2 import (
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory_v2.consolidation import (
+from app.assistant_memory.v2.consolidation import (
     ConsolidationPlan,
     PostgresMemoryV2Consolidator,
 )
-from app.assistant_memory_v2.graph_store import (
+from app.assistant_memory.v2.graph_store import (
     GraphEvidenceError,
     PostgresMemoryV2GraphStore,
 )
-from app.assistant_memory_v2.observation_store import (
+from app.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )

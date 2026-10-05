@@ -213,9 +213,9 @@ fi
 
 echo ""
 echo "[9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)..."
-if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.assistant_memory_v2.embeddings download; then
+if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.assistant_memory.v2.embeddings download; then
     echo "WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only."
-    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.assistant_memory_v2.embeddings download"
+    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.assistant_memory.v2.embeddings download"
 fi
 
 echo ""

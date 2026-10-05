@@ -13,13 +13,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.assistant_memory.contracts import resolve_session_memory_scope
-from app.assistant_memory_v2.contracts import (
+from app.assistant_memory.v2.contracts import (
     MemorySpaceKey,
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory_v2.observation_store import ObservationAppendRequest
-from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
+from app.assistant_memory.v2.observation_store import ObservationAppendRequest
+from app.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 from app.chat.contracts import default_chat_store
 from app.runtime.tenant_context import current_tenant
 
