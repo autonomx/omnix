@@ -1,6 +1,8 @@
 """Typed ports and FeatureModule contributions (ADR-0016, PA-1.3)."""
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from typing import Protocol
 
 from fastapi import FastAPI
@@ -115,7 +117,8 @@ def test_composition_builds_contributions_from_the_feature_context(monkeypatch):
     monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
-    monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
+    monkeypatch.setattr("app.security.permissions.FEATURE_DEFAULTS",
+                        MappingProxyType({**FEATURE_DEFAULTS, "sample_feature": ("chat:read", "chat:write")}))
     gateway = FastAPI()
     gateway.state.runtime_config = RuntimeConfig()
     gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(RuntimeConfig())

@@ -24,6 +24,7 @@ from app.jobs.models import (
     JobStatus,
 )
 
+from app.jobs.handlers import executing_job
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
 from app.observability.logging import current_log_context
@@ -128,6 +129,17 @@ class PostgresJobStoreAdapter:
             "jitter": float(getattr(backoff, "jitter", 0.2)),
         }
         with unit_of_work(self.database) as work:
+            module = self.handler_registry.owner(request.type) if self.handler_registry is not None else None
+            if module is not None:
+                # The authoritative lifecycle check, in the job's own transaction (PA-4.3).
+                from .module_states import ModuleNotAcceptingWork, read_module_state
+
+                state = read_module_state(work.connection, module)
+                if not state.accepts_new_work:
+                    running = executing_job()
+                    if running is None or self.handler_registry.owner(running[1]) != module or not state.accepts_follow_up():
+                        raise ModuleNotAcceptingWork(state)
+                    metadata["parent_job_id"] = running[0]
             owner = self.chat_execution_owner
             if request.type == "chat.generate" and owner is not None:
                 owner.require_live(work.connection)

@@ -1,6 +1,7 @@
 """Typed job-handler registry owned by the jobs kernel."""
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 import builtins
 import logging
@@ -12,6 +13,16 @@ from typing import Any, Callable, Protocol
 from pydantic import BaseModel, ConfigDict
 
 from .models import CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
+
+
+# The job a handler is running in this context: (job id, job type). A job it
+# submits is a follow-up, which a draining module still accepts (PA-4.3).
+_EXECUTING_JOB: ContextVar[tuple[str, str] | None] = ContextVar("omnix_executing_job", default=None)
+
+
+def executing_job() -> tuple[str, str] | None:
+    """``(job id, job type)`` of the handler running in this context, if any."""
+    return _EXECUTING_JOB.get()
 
 
 class AnyJobInput(BaseModel):
@@ -84,6 +95,7 @@ class JobHandlerSpec:
 class JobHandlerRegistry:
     def __init__(self, specs: tuple[JobHandlerSpec, ...] = ()) -> None:
         self._handlers: dict[str, JobHandlerSpec] = {}
+        self._owners: dict[str, str] = {}
         self._observers: list[JobObserver] = []
         for spec in specs:
             self.register(spec)
@@ -110,10 +122,17 @@ class JobHandlerRegistry:
                     "Job observer failed for lifecycle event %s", event
                 )
 
-    def register(self, spec: JobHandlerSpec) -> None:
+    def register(self, spec: JobHandlerSpec, *, owner: str | None = None) -> None:
+        """Register a handler; ``owner`` is the module whose lifecycle state governs its jobs (PA-4.3)."""
         if spec.type in self._handlers:
             raise ValueError(f"duplicate job handler type: {spec.type}")
         self._handlers[spec.type] = spec
+        if owner:
+            self._owners[spec.type] = owner
+
+    def owner(self, job_type: str) -> str | None:
+        """The module that registered ``job_type``, or ``None`` for kernel and unknown types."""
+        return self._owners.get(job_type)
 
     def get(self, job_type: str) -> JobHandlerSpec | None:
         return self._handlers.get(job_type)
@@ -159,7 +178,11 @@ class JobHandlerRegistry:
         payload = spec.input_model.model_validate(job.input_payload or {})
         if payload.model_dump(mode="python") != (job.input_payload or {}):
             job = job.model_copy(update={"input_payload": payload.model_dump(mode="python")})
-        return spec.handler(context, job)
+        token = _EXECUTING_JOB.set((str(getattr(job, "id", "")), str(job.type)))
+        try:
+            return spec.handler(context, job)
+        finally:
+            _EXECUTING_JOB.reset(token)
 
 
 class RetryPolicyJobStore:
@@ -194,7 +217,7 @@ def registry_from_features(features: tuple[Any, ...]) -> JobHandlerRegistry:
     registry = JobHandlerRegistry()
     for feature in features:
         for spec in getattr(feature, "job_handlers", ()):
-            registry.register(spec)
+            registry.register(spec, owner=getattr(feature, "id", None))
         for observer_factory in getattr(feature, "job_observers", ()):
             observer = observer_factory()
             if observer is not None:

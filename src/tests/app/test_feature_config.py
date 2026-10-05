@@ -9,6 +9,11 @@ from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig
 from app.runtime.features import FeatureModule
 from app.runtime.scheduler import ScheduledTaskSpec
+import dataclasses
+from types import MappingProxyType
+
+from app.persistence.module_states import ModuleState
+from app.security import permissions
 from app.security.permissions import FEATURE_DEFAULTS
 
 
@@ -86,7 +91,8 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
-    monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
+    monkeypatch.setattr(permissions, "FEATURE_DEFAULTS",
+                        MappingProxyType({**FEATURE_DEFAULTS, "sample_feature": ("chat:read", "chat:write")}))
 
     gateway = FastAPI()
     gateway.state.runtime_config = RuntimeConfig()
@@ -139,7 +145,8 @@ def test_feature_composition_registers_scheduled_tasks(monkeypatch):
     monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
-    monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
+    monkeypatch.setattr(permissions, "FEATURE_DEFAULTS",
+                        MappingProxyType({**FEATURE_DEFAULTS, "sample_feature": ("chat:read", "chat:write")}))
 
     gateway = FastAPI()
     gateway.state.runtime_config = RuntimeConfig()
@@ -150,4 +157,10 @@ def test_feature_composition_registers_scheduled_tasks(monkeypatch):
 
     feature_registry._register_feature_modules(gateway)
 
-    assert registered_tasks == [task]
+    # The registered task is the declared one, paused while its module drains (PA-4.3).
+    (registered,) = registered_tasks
+    assert dataclasses.replace(registered, enabled=task.enabled) == task
+    assert registered.enabled() is True
+    monkeypatch.setattr("app.persistence.module_states.cached_module_state",
+                        lambda module_id: ModuleState(module_id, state="draining"))
+    assert registered.enabled() is False

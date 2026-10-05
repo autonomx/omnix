@@ -3,7 +3,7 @@
 import logging
 from typing import cast
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 from app.config.env import environment
 from app.config.load import load_feature_config
@@ -35,10 +35,26 @@ def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
     lifecycles.append(feature)
 
 
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 def feature_guard(feature_id: str):
-    """Return the composition-level feature policy hook for mounted routes."""
-    def guard() -> None:
-        return None
+    """Return the composition-level feature policy hook for mounted routes.
+
+    A draining module answers 503 to anything but reads; a retired one to
+    everything (PA-4.3). The database state wins over the runtime configuration.
+    """
+    from starlette.requests import HTTPConnection
+
+    def guard(connection: HTTPConnection) -> None:
+        from app.persistence.module_states import cached_module_state
+
+        state = cached_module_state(feature_id)
+        if state.state == "active":
+            return None
+        if state.state == "draining" and connection.scope.get("method") in _READ_METHODS:
+            return None
+        raise HTTPException(status_code=503, detail=f"module_{state.state}", headers={"Retry-After": "30"})
 
     guard.__name__ = "feature_guard_" + feature_id.replace("-", "_")
     return guard
@@ -75,6 +91,20 @@ def _router_operations(router) -> list[tuple[str, str]]:
     ]
 
 
+def _paused_while_draining(task: RuntimeScheduledTaskSpec, feature_id: str) -> RuntimeScheduledTaskSpec:
+    """A scheduled task starts no new run while its module is draining or retired (PA-4.3)."""
+    import dataclasses
+
+    from app.persistence import module_states
+
+    enabled = task.enabled
+
+    def enabled_while_active() -> bool:
+        return module_states.cached_module_state(feature_id).accepts_new_work and enabled()
+
+    return dataclasses.replace(task, enabled=enabled_while_active)
+
+
 def _register_feature_modules(gateway) -> None:
     config = gateway.state.runtime_config
     capabilities = gateway.state.runtime_capabilities
@@ -104,7 +134,7 @@ def _register_feature_modules(gateway) -> None:
         if feature.settings and settings_service is not None:
             settings_service.register_specs(tuple(feature.settings))
         for handler in feature.job_handlers:
-            job_handlers.register(handler)
+            job_handlers.register(handler, owner=feature.id)
         for observer_factory in feature.job_observers:
             observer = observer_factory()
             if observer is not None:
@@ -159,7 +189,7 @@ def _register_feature_modules(gateway) -> None:
                     raise RuntimeError(
                         f"Feature {feature.id} declares scheduled tasks without a scheduler registry"
                     )
-                scheduler_registry.register_task(cast(RuntimeScheduledTaskSpec, task))
+                scheduler_registry.register_task(_paused_while_draining(cast(RuntimeScheduledTaskSpec, task), feature.id))
         if feature.lifecycle is not None:
             register_feature_lifecycle(gateway, feature.lifecycle)
         registered.append(feature.id)

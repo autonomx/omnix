@@ -50,11 +50,16 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
             except ValueError as exc:
                 # Includes pydantic validation of the job input model.
                 raise HTTPException(status_code=422, detail=f"job_input_invalid:{type(exc).__name__}") from exc
+        from app.persistence.module_states import ModuleNotAcceptingWork
+
         job_store = get_job_store()
         idempotency_key = str((request.compat or {}).get("idempotency_key") or "").strip()
-        if idempotency_key and hasattr(job_store, "create_job_once"):
-            return job_store.create_job_once(request, idempotency_key=idempotency_key)
-        return job_store.create_job(request)
+        try:
+            if idempotency_key and hasattr(job_store, "create_job_once"):
+                return job_store.create_job_once(request, idempotency_key=idempotency_key)
+            return job_store.create_job(request)
+        except ModuleNotAcceptingWork as exc:
+            raise HTTPException(status_code=503, detail=f"module_{exc.state.state}", headers={"Retry-After": "30"}) from exc
 
     @router.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
     def list_jobs(

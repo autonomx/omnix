@@ -478,6 +478,7 @@
         "app.persistence.migrations",
         "app.persistence.model_residency",
         "app.persistence.module_repositories",
+        "app.persistence.module_states",
         "app.persistence.outbox_repository",
         "app.persistence.repositories",
         "app.persistence.repository_registry",
@@ -2124,7 +2125,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8296,
+      "collected_tests": 8304,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2940,14 +2941,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T07:06:48.910132+00:00",
+  "measured_at": "2026-10-05T07:37:38.412437+00:00",
   "metrics": {
-    "boot_imported_modules": 2076,
+    "boot_imported_modules": 2077,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "a4fe738b6ef9811963a25e82bb3001b53aa096dccc2d7e2ff0b2fdab4110e565"
+  "source_digest": "d78c71adc1120eecae5907ba54ff694da3b779e61e47174ae5a4fe7f8304aa04"
 }

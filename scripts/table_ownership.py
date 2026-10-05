@@ -67,13 +67,23 @@ def module_owner(path: str, feature_packages: dict[str, str]) -> str | None:
     return feature_packages.get(folder)
 
 
+def frozen_after(sources: dict[str, str]) -> str:
+    """The last kernel-folder migration the frozen historical map covers."""
+    text = sources.get(HISTORICAL)
+    return str(json.loads(text).get("frozen_after") or "") if text else ""
+
+
 def table_owners(sources: dict[str, str], historical: dict[str, dict], feature_packages: dict[str, str]) -> dict[str, str]:
     owners = {}
+    frozen = frozen_after(sources)
     for table, path in created_tables(sources).items():
         if path.startswith(KERNEL_MIGRATIONS):
             entry = historical.get(table)
             if entry is not None:
                 owners[table] = entry["owner"]
+            elif frozen and PurePosixPath(path).stem > frozen:
+                # A kernel table added after the map was frozen (PA-4.3): the kernel folder holds only kernel tables now.
+                owners[table] = "kernel"
         else:
             owner = module_owner(path, feature_packages)
             if owner is not None:
@@ -146,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.check:
         missing = sorted(set(created_tables(sources)) - set(load_historical(sources)))
-        kernel_missing = [table for table in missing if created_tables(sources)[table].startswith(KERNEL_MIGRATIONS)]
+        frozen = frozen_after(sources)
+        kernel_missing = [table for table in missing if created_tables(sources)[table].startswith(KERNEL_MIGRATIONS)
+                          and not (frozen and PurePosixPath(created_tables(sources)[table]).stem > frozen)]
         if kernel_missing:
             print("tables created by kernel-folder migrations without a historical owner: " + ", ".join(kernel_missing))
             return 1

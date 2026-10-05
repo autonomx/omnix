@@ -1469,6 +1469,15 @@
       "symbol": "_LOGGER_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/persistence/module_states.py",
+      "symbol": "cached_module_state.__cache__",
+      "category": "cache",
+      "reason": "Bounded, five-second view of each module's PostgreSQL lifecycle state for route guards and scheduled tasks; job creation re-reads the state in its own transaction, so this cache is never the authority.",
+      "max_entries": 64,
+      "ttl_seconds": 5.0,
+      "invalidation": "cached_module_state.cache_clear"
     }
   ]
 }
