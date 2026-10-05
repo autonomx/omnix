@@ -1,4 +1,7 @@
-"""Ports used to compose the live-voice conversation pipeline."""
+"""Ports used to compose the live-voice conversation pipeline.
+
+The TTS ports belong to the speech capability (``app.voice.contracts``, PA-3.3).
+"""
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
@@ -17,37 +20,6 @@ class PromptBuilder(Protocol):
 
 class LLMStream(Protocol):
     def stream(self, *args: Any, **kwargs: Any) -> Iterator[Any]: ...
-
-
-class TTSProvider(Protocol):
-    provider_name: str
-
-    def generate_audio_stream(
-        self,
-        *,
-        text: str,
-        speaker: str | None,
-        language: str,
-        **kwargs: Any,
-    ) -> Iterator[tuple[Any, int, Any]]: ...
-
-
-class TTSProviderResolver(Protocol):
-    def get(self, provider_name: str | None = None) -> TTSProvider | None: ...
-
-
-class TTSLane(Protocol):
-    def stream(
-        self,
-        provider: TTSProvider,
-        *,
-        text: str,
-        speaker: str | None,
-        language: str,
-        kwargs: dict[str, Any],
-        priority: Any,
-        **options: Any,
-    ) -> Iterator[tuple[Any, int, Any]]: ...
 
 
 class SpeculationCache(Protocol):

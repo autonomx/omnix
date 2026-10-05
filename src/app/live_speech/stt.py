@@ -1,28 +1,9 @@
-"""Streaming STT contracts and deterministic fallback implementation."""
+"""Deterministic fallback STT on the speech contract's session port (PA-3.3)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
-@dataclass
-class TranscriptUpdate:
-    text: str
-    final: bool = False
-    confidence: float | None = None
-    duration_ms: int | None = None
-
-
-class StreamingTranscriber:
-    """Interface for partial/final realtime transcript producers."""
-
-    def accept_audio(self, pcm: bytes) -> list[TranscriptUpdate]:
-        raise NotImplementedError
-
-    def finalize(self) -> TranscriptUpdate:
-        raise NotImplementedError
-
-    def reset(self) -> None:
-        raise NotImplementedError
+from app.voice.contracts import StreamingTranscriber, TranscriptUpdate
 
 
 @dataclass

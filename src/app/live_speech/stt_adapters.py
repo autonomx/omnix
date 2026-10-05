@@ -17,7 +17,9 @@ from typing import Any
 from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
 
-from .stt import BufferedStreamingTranscriber, StreamingTranscriber, TranscriptUpdate
+from app.voice.contracts import StreamingTranscriber, TranscriptUpdate
+
+from .stt import BufferedStreamingTranscriber
 
 
 @dataclass

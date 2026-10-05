@@ -16,5 +16,7 @@ FEATURE = FeatureModule(
     id="live-speech",
     title="Live Speech",
     tier="platform",
+    # The speech contract's STT and TTS session ports (PA-3.3).
+    uses=("voice",),
     routers=(_router,),
 )

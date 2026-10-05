@@ -248,7 +248,7 @@ def _update_conformance_baseline(module_id: str) -> None:
         gaps[f"retired:{module_id}"] = gaps.pop(module_id)
         changed = True
     if changed:
-        CONFORMANCE_BASELINE.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+        CONFORMANCE_BASELINE.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8",
                                         newline="\n")
 
 

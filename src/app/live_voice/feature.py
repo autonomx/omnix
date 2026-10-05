@@ -41,5 +41,7 @@ FEATURE = FeatureModule(
     title="Live voice",
     tier="platform",
     depends_on=("chat", "characters", "assistant-memory"),
+    # The speech contract's TTS ports (PA-3.3).
+    uses=("voice",),
     routers=(_live_voice_router,),
 )

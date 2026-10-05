@@ -422,7 +422,6 @@
         "app.live_voice",
         "app.live_voice.capacity",
         "app.live_voice.chat_integration",
-        "app.live_voice.contracts",
         "app.live_voice.diagnostics",
         "app.live_voice.feature",
         "app.live_voice.hardware_policy",
@@ -1510,6 +1509,7 @@
         "app.trading.yahoo_evidence",
         "app.voice",
         "app.voice.audio_cache",
+        "app.voice.contracts",
         "app.voice.declarations",
         "app.voice.feature",
         "app.voice.jobs",
@@ -2941,7 +2941,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-05T09:14:49.207061+00:00",
+  "measured_at": "2026-10-05T09:45:23.168814+00:00",
   "metrics": {
     "boot_imported_modules": 2077,
     "collection_errors": 0,
@@ -2950,5 +2950,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "bc164b69e0157855d9e0ac56931939e23ff363b16eb02d560f433097f7333a69"
+  "source_digest": "29019b316275a0772685b2614194c7139eb5b273e19f622b02f61c537d366b19"
 }

@@ -56,9 +56,7 @@
     "trading": [
       "contract"
     ],
-    "voice": [
-      "contract"
-    ]
+    "voice": []
   },
   "tenant_isolation": {
     "agent-runtime": [

@@ -13,7 +13,9 @@ import httpx
 from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
 
-from .tts import AudioDelta, DeterministicSpeechSynthesizer, StreamingSpeechSynthesizer
+from app.voice.contracts import AudioDelta, StreamingSpeechSynthesizer
+
+from .tts import DeterministicSpeechSynthesizer
 
 
 class SpeechServiceUnavailable(RuntimeError):

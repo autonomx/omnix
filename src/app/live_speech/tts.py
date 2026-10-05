@@ -1,23 +1,7 @@
-"""Realtime TTS scheduling contracts and deterministic test provider."""
+"""Deterministic TTS on the speech contract's session port, and TTS text splitting (PA-3.3)."""
 from __future__ import annotations
 
-import base64
-from dataclasses import dataclass
-
-
-@dataclass
-class AudioDelta:
-    pcm: bytes
-    sample_rate: int = 24000
-    sequence: int = 0
-
-    def b64(self) -> str:
-        return base64.b64encode(self.pcm).decode("ascii")
-
-
-class StreamingSpeechSynthesizer:
-    def synthesize(self, text: str, *, voice: str = "default", generation: int = 0) -> list[AudioDelta]:
-        raise NotImplementedError
+from app.voice.contracts import AudioDelta, StreamingSpeechSynthesizer
 
 
 class DeterministicSpeechSynthesizer(StreamingSpeechSynthesizer):
