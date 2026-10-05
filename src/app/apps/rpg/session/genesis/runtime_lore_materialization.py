@@ -185,13 +185,10 @@ def _slug(value: str) -> str:
 
 
 def _name_from_id(entity_id: str) -> str:
-    return (
-        entity_id.split(":", 1)[-1]
-        .replace("_", " ")
-        .replace("-", " ")
-        .title()
-        or "Unknown Entity"
-    )
+    words = entity_id.split(":", 1)[-1].replace("_", " ").replace("-", " ").split()
+    if len(words) > 1 and words[0].casefold() in {"loc", "location", "npc"}:
+        words = words[1:]  # loc_tavern reads as "Tavern", not "Loc Tavern"
+    return " ".join(words).title() or "Unknown Entity"
 
 
 def _kind(entity_id: str, value: Mapping[str, Any] | None = None) -> str:
@@ -626,7 +623,7 @@ def _fallback_location_bundle(
     }
 
 
-def _fallback_entity_bundle(target: SceneLoreTarget) -> dict[str, Any]:
+def _fallback_entity_bundle(target: SceneLoreTarget, location_name: str = "") -> dict[str, Any]:
     kind = target.kind if target.kind != "entity" else "creature"
     if kind == "npc":
         description = (
@@ -738,7 +735,7 @@ def _fallback_entity_bundle(target: SceneLoreTarget) -> dict[str, Any]:
                     "kind": "encountered_at",
                     "source_id": target.entity_id,
                     "target_id": target.location_id,
-                    "content": f"{target.name} was encountered at {_name_from_id(target.location_id)}.",
+                    "content": f"{target.name} was encountered at {location_name or _name_from_id(target.location_id)}.",
                     "entity_refs": [target.entity_id, target.location_id],
                 }
             ]
@@ -759,7 +756,10 @@ def _generate_bundle(
     fallback = (
         _fallback_location_bundle(campaign_id, target)
         if target.kind == "location"
-        else _fallback_entity_bundle(target)
+        else _fallback_entity_bundle(
+            target,
+            location_name=_text(_mapping(_mapping(bible.get("entities")).get(target.location_id)).get("name")),
+        )
     )
     if gateway is None or gateway is False:
         return fallback

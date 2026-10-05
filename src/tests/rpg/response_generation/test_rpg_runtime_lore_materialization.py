@@ -428,3 +428,17 @@ def test_documents_named_with_entity_id_and_body_still_document_the_target() -> 
     assert document["entity_refs"] == ["location:grayhaven"]
     assert document["full_text"] == "Grayhaven guards the ford."
     assert any(row["content"] == "Grayhaven has a ferry." for row in bible["facts"])
+
+
+def test_fallback_lore_names_the_place_not_its_id() -> None:
+    from app.apps.rpg.session.genesis.runtime_lore_materialization import (
+        SceneLoreTarget,
+        _fallback_entity_bundle,
+        _name_from_id,
+    )
+
+    target = SceneLoreTarget(entity_id="npc:bran", kind="npc", name="Bran", location_id="location:loc-tavern")
+    named = _fallback_entity_bundle(target, location_name="The Rusty Flagon Tavern")
+    assert named["relationships"][0]["content"] == "Bran was encountered at The Rusty Flagon Tavern."
+    assert _name_from_id("location:loc-tavern") == "Tavern"
+    assert _name_from_id("location:grayhaven") == "Grayhaven"

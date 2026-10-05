@@ -263,3 +263,30 @@ def test_claim_ledger_survives_serialization_and_semantic_hash_roundtrip() -> No
     restored = canonical_response_from_dict(response.as_dict())
     assert restored.content_hash == response.content_hash
     assert restored.blocks[0].claims == (claim,)
+
+
+class _FailingWriter:
+    def write(self, request, plan, evidence) -> WriterResult:
+        raise TimeoutError("provider timed out")
+
+
+def test_required_provider_prose_that_fails_validation_publishes_marked_fallback() -> None:
+    # A turn needing model prose no longer fails after its state is committed (owner, 2026-10-05).
+    unsupported = ClaimAssertion(
+        claim_id="claim:bridge",
+        text="The stone bridge has collapsed into the river.",
+        authority=AuthorityClass.OBJECTIVE_CANON,
+        evidence_refs=("evidence:road",),
+        scope="speaker",
+    )
+    for writer, reason in (
+        (_Writer(_block(unsupported.text, claim=unsupported)), "provider_validation_failed_after_repair"),
+        (_FailingWriter(), "writer_exception:TimeoutError"),
+    ):
+        result = write_validate_repair(_request(), _plan(), _evidence(), writer, allow_deterministic_fallback=False)
+
+        assert result.validation.passed is True
+        assert result.fallback_used is True
+        metadata = result.writer_result.raw_metadata
+        assert metadata["provider_fallback_reason"] == reason
+        assert metadata["provider_required_fallback"] is True

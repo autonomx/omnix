@@ -65,6 +65,12 @@ class _ScriptedModel:
                 break
         else:
             kind, answer = "unscripted", "{}"
+        if "decide which one present NPC" in text:
+            # The dialogue call names its addressee among the present NPCs: the bar's keeper.
+            present = json.loads(text.rsplit("CONTEXT: ", 1)[1]).get("present_npcs") or []
+            keeper = next(npc for npc in present if "innkeeper" in f"{npc.get('name')} {npc.get('role')}".lower())
+            kind = "turn_narration"
+            answer = json.dumps({"speaker_id": keeper["id"], "line": "The moment passes quietly in the room."})
         self.calls.append(kind)
         response = ChatResponse(content=answer, model="scripted")
         return iter([response]) if stream else response

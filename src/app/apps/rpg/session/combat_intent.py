@@ -671,36 +671,59 @@ def _normalize_prompt_location_name(value: str, grounded_fallback: str) -> str:
     return value
 
 
+def _location_key(value: str) -> str:
+    return _safe_str(value).strip().replace(":", "_").replace("-", "_").lower()
+
+
+def _is_location_id_text(name: str, location_id: str) -> bool:
+    """A "name" that is only the id (``loc_tavern``) is not a display name."""
+    return bool(name) and _location_key(name) in {_location_key(location_id), _location_key(location_id.split(":", 1)[-1])}
+
+
+def _humanized_location_id(location_id: str) -> str:
+    words = _location_key(location_id).split("_")
+    if words and words[0] in {"loc", "location"}:
+        words = words[1:]
+    return " ".join(words).title()
+
+
 def _resolve_location_name(
     simulation_state: dict[str, Any],
     location_id: str,
     fallback_name: str = "",
 ) -> str:
+    """The display name of a location: the simulation's entry, the location registry,
+    a stored name, then a readable form of the id -- never the raw id."""
     simulation_state = _safe_dict(simulation_state)
     location_id = _safe_str(location_id).strip()
+    fallback_name = _safe_str(fallback_name).strip()
     if not location_id:
-        return _safe_str(fallback_name).strip()
+        return fallback_name
+    normalized_id = _location_key(location_id)
 
-    # Normalize location id (handle both colon and underscore formats)
-    normalized_id = location_id.replace(":", "_").replace("-", "_").lower()
+    # Modern format: locations is an object keyed by location_id; legacy: a list.
+    entries = [
+        _safe_dict(entry)
+        for key, entry in _safe_dict(simulation_state.get("locations")).items()
+        if _location_key(key) == normalized_id
+    ] + [
+        _safe_dict(entry)
+        for entry in _safe_list(simulation_state.get("locations"))
+        if _location_key(_safe_dict(entry).get("location_id") or _safe_dict(entry).get("id")) == normalized_id
+    ]
+    for entry in entries:
+        name = _safe_str(entry.get("name") or entry.get("title")).strip()
+        if name:
+            return name
 
-    # Modern format: locations is object dict keyed by location_id
-    locations_map = _safe_dict(simulation_state.get("locations"))
-    for key in locations_map:
-        key_normalized = key.replace(":", "_").replace("-", "_").lower()
-        if key_normalized == normalized_id:
-            loc = _safe_dict(locations_map[key])
-            return _safe_str(loc.get("name") or loc.get("title") or fallback_name or location_id)
+    from app.apps.rpg.world.location_registry import get_location
 
-    # Legacy format: locations is list
-    for loc in _safe_list(simulation_state.get("locations")):
-        loc = _safe_dict(loc)
-        loc_id = _safe_str(loc.get("location_id") or loc.get("id")).replace(":", "_").replace("-", "_").lower()
-        if loc_id == normalized_id:
-            return _safe_str(loc.get("name") or loc.get("title") or fallback_name or location_id)
-
-    final_fallback = _safe_str(fallback_name).strip() or location_id
-    return final_fallback if final_fallback else "Current Location"
+    registered = _safe_str(get_location(location_id).get("name")).strip()
+    if registered:
+        return registered
+    if fallback_name and not _is_location_id_text(fallback_name, location_id):
+        return fallback_name
+    return _humanized_location_id(location_id) or "Current Location"
 
 
 def _resolve_actor_names(simulation_state: dict[str, Any], actor_ids: list[str]) -> list[str]:
@@ -778,7 +801,10 @@ def _apply_grounded_scene_overlay(scene: dict[str, Any], grounded: dict[str, Any
 
     scene["title"] = _safe_str(scene.get("title")).strip() or _safe_str(grounded.get("scene_title")) or "Current Scene"
     scene["location_id"] = _safe_str(scene.get("location_id")).strip() or _safe_str(grounded.get("location_id"))
-    scene["location_name"] = _safe_str(scene.get("location_name")).strip() or _safe_str(grounded.get("location_name")) or "Current Location"
+    stored_name = _safe_str(scene.get("location_name")).strip()
+    if _is_location_id_text(stored_name, _safe_str(scene.get("location_id"))):
+        stored_name = ""
+    scene["location_name"] = stored_name or _safe_str(grounded.get("location_name")) or "Current Location"
     scene["summary"] = _safe_str(scene.get("summary")).strip() or _safe_str(grounded.get("scene_summary")) or "Your adventure continues."
 
     actor_names = _safe_list(grounded.get("present_actor_names"))

@@ -75,7 +75,7 @@
             "kind": "dialogue",
             "purpose": "direct_answer",
             "sequence": 0,
-            "speaker_id": "npc:the",
+            "speaker_id": "npc:npc_innkeeper",
             "text": "The moment passes quietly in the room."
           }
         ],
@@ -114,18 +114,18 @@
         "messages": [
           {
             "kind": "npc_dialogue",
-            "speaker": "the",
-            "speaker_id": "npc:the",
+            "speaker": "Bran the Innkeeper",
+            "speaker_id": "npc:npc_innkeeper",
             "text": "The moment passes quietly in the room."
           }
         ],
         "narration": "",
         "npc": {
           "line": "The moment passes quietly in the room.",
-          "speaker": "the",
-          "speaker_id": "npc:the"
+          "speaker": "Bran the Innkeeper",
+          "speaker_id": "npc:npc_innkeeper"
         },
-        "plain_text": "the: \"The moment passes quietly in the room.\""
+        "plain_text": "Bran the Innkeeper: \"The moment passes quietly in the room.\""
       }
     },
     {

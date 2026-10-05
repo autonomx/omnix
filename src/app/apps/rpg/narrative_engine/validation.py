@@ -1,6 +1,7 @@
 """Fail-closed validation, bounded repair, and deterministic fallback."""
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, replace
 from typing import Sequence
@@ -16,6 +17,13 @@ from .contracts import (
 )
 from .planner import NarrativePlan
 from .writer import DeterministicNarrativeWriter, NarrativeWriter, WriterResult
+
+logger = logging.getLogger(__name__)
+# When a turn requires model-written prose and the model fails at runtime (an error,
+# or prose that fails validation after repair), the turn publishes validated
+# deterministic prose marked with this flag instead of failing after its state
+# is committed. A writer that is not a live provider at all is still refused.
+PROVIDER_REQUIRED_FALLBACK = "provider_required_fallback"
 
 _TRUNCATION_MARKERS = ("...[truncated]", "[truncated]", "<truncated>")
 _LABEL_PREFIX = re.compile(r"^(?:narrator|action|npc|result|reward)\s*:\s*", re.IGNORECASE)
@@ -196,9 +204,12 @@ def _fallback_diagnostics(
     *,
     reason: str,
     issues: Sequence[ValidationIssue] = (),
+    provider_required: bool = False,
 ) -> ValidatedWriterResult:
     metadata = dict(result.writer_result.raw_metadata or {})
     metadata["provider_fallback_reason"] = reason
+    if provider_required:
+        metadata[PROVIDER_REQUIRED_FALLBACK] = True
     if issues:
         metadata["provider_validation_issues"] = sorted(
             {str(issue.code) for issue in issues if str(issue.code).strip()}
@@ -298,9 +309,7 @@ def write_validate_repair(
         )
     except Exception as exc:
         if not allow_deterministic_fallback:
-            raise NarrativeProviderRequiredError(
-                "LLM-authored dialogue is required and the narrative provider failed"
-            ) from exc
+            logger.warning("rpg narrative provider failed; publishing validated fallback prose", exc_info=True)
         fallback = _validated_fallback(
             request,
             plan,
@@ -312,6 +321,7 @@ def write_validate_repair(
         return _fallback_diagnostics(
             fallback,
             reason=f"writer_exception:{type(exc).__name__}",
+            provider_required=not allow_deterministic_fallback,
         )
     if not allow_deterministic_fallback and result.source != "structured_provider":
         raise NarrativeProviderRequiredError(
@@ -350,8 +360,9 @@ def write_validate_repair(
                 False,
             )
     if not allow_deterministic_fallback:
-        raise NarrativeProviderRequiredError(
-            "LLM-authored dialogue failed canonical validation after provider repair"
+        logger.warning(
+            "rpg narrative prose failed validation after repair (%s); publishing validated fallback prose",
+            ",".join(sorted({issue.code for issue in repaired_report.issues})),
         )
     fallback = _validated_fallback(
         request,
@@ -365,4 +376,5 @@ def write_validate_repair(
         fallback,
         reason="provider_validation_failed_after_repair",
         issues=repaired_report.issues,
+        provider_required=not allow_deterministic_fallback,
     )

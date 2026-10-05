@@ -173,6 +173,13 @@ def _rich_profile(npc_id: str, npc: Dict[str, Any], sim: Dict[str, Any], rt: Dic
     }
 
 
+def nearby_npc_profiles(*, simulation_state: dict[str, Any], runtime_state: dict[str, Any], npc_ids: list[str]) -> list[dict[str, Any]]:
+    """Grounded profiles of the given NPCs, in order; ids the session does not know are skipped."""
+    sim, rt = _d(simulation_state), _d(runtime_state)
+    by_id = {_npc_id("", npc): npc for npc in _npcs(sim, rt)}
+    return [_rich_profile(npc_id, by_id[npc_id], sim, rt, None) for npc_id in npc_ids if npc_id in by_id]
+
+
 def _referenced_npcs(player_input: str, npcs: List[Dict[str, Any]]) -> List[str]:
     text = _norm(player_input)
     out = []

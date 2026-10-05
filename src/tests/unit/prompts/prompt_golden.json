@@ -251,6 +251,10 @@
     "sha256": "850b324bb5b1c3fb2ea68862784538f2c136ec4a6b2e12ac8918f185df0f8ab4",
     "version": "1"
   },
+  "rpg.ai_compact_dialogue.choose_speaker": {
+    "sha256": "ea0c3aa21f92ef2e201ebb6d73b14fecb5e86b9d04e2315a3e5f0b0a273ebe0a",
+    "version": "1"
+  },
   "rpg.ai_compact_dialogue.prompt": {
     "sha256": "75a9f9b0d5bd2a489941ff24cdc8e535a435228880baf043ced3711b00d00ebc",
     "version": "1"

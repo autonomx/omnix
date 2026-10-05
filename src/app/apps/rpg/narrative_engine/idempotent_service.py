@@ -17,7 +17,7 @@ from .persistence_policy import repository_save_deferred
 from .planner import NarrativePlan
 from .repository import NarrativeResponseConflict
 from .service import NarrativeEngineResult, NarrativeEngineService as _NarrativeEngineService
-from .validation import NarrativeProviderRequiredError, ValidatedWriterResult
+from .validation import PROVIDER_REQUIRED_FALLBACK, NarrativeProviderRequiredError, ValidatedWriterResult
 from .writer import WriterResult
 
 
@@ -105,9 +105,12 @@ def _replay_result(
             "turn already belongs to a different presentation request: "
             f"{request.campaign_id}/{request.turn_id}"
         )
+    writer_metadata = response.generation.metadata.get("writer_raw_metadata") or {}
     if (
         request.metadata.get("llm_prose_required") is True
         and response.generation.source != "structured_provider"
+        # A recorded runtime fallback (the provider failed this turn) replays as published.
+        and writer_metadata.get(PROVIDER_REQUIRED_FALLBACK) is not True
     ):
         raise NarrativeProviderRequiredError(
             "LLM-authored dialogue is required; stored deterministic prose is not publishable"
