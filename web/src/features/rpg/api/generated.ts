@@ -4115,6 +4115,127 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgTurnResponse */
+        RpgTurnResponse: {
+            /** Canonical Narrative Response */
+            canonical_narrative_response?: {
+                [key: string]: unknown;
+            } | null;
+            /** Command */
+            command: string;
+            /** Content */
+            content?: string | null;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "rpg_turn_response_v2";
+            /** Interaction Id */
+            interaction_id?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Response */
+            response?: string | null;
+            result: components["schemas"]["RpgTurnResult"];
+            /** Session Id */
+            session_id: string;
+            /** Session Summary */
+            session_summary?: {
+                [key: string]: unknown;
+            };
+            /** Simulation Tick */
+            simulation_tick?: number | null;
+            state: components["schemas"]["RpgTurnState"];
+            /** Submission Id */
+            submission_id?: string | null;
+            /** Timing */
+            timing?: {
+                [key: string]: number;
+            };
+            /** Trace Id */
+            trace_id?: string | null;
+            /** Turn Id */
+            turn_id?: string | null;
+            visible_response: components["schemas"]["RpgTurnVisibleResponse"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgTurnResult */
+        RpgTurnResult: {
+            /** Action Type */
+            action_type?: string | null;
+            /** Changed Domains */
+            changed_domains?: string[];
+            /** Interaction Id */
+            interaction_id?: string | null;
+            /** Llm Called */
+            llm_called?: boolean | null;
+            /** Llm Purpose */
+            llm_purpose?: string | null;
+            /** Narration Status */
+            narration_status?: string | null;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+            /** Outcome */
+            outcome?: string | null;
+            /** Semantic Action Type */
+            semantic_action_type?: string | null;
+            /** Semantic Family */
+            semantic_family?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Stateful */
+            stateful?: boolean | null;
+            /** Tick */
+            tick?: number | null;
+            /** Timing */
+            timing?: {
+                [key: string]: number;
+            };
+            /** Turn Id */
+            turn_id?: string | null;
+            visible_response?: components["schemas"]["RpgTurnVisibleResponse"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgTurnState */
+        RpgTurnState: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /** Changed Domains */
+            changed_domains?: string[];
+            /** Revision */
+            revision?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgTurnVisibleResponse */
+        RpgTurnVisibleResponse: {
+            /** Format Version */
+            format_version?: string | null;
+            /** Messages */
+            messages?: {
+                [key: string]: unknown;
+            }[];
+            /** Narration */
+            narration?: string | null;
+            /** Npc */
+            npc?: {
+                [key: string]: unknown;
+            } | null;
+            /** Plain Text */
+            plain_text?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** RpgUpdateWorldEntityDossierRequestBody */
         RpgUpdateWorldEntityDossierRequestBody: {
             /** Dossier */
@@ -7516,13 +7637,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The turn's rpg_turn_response_v2 contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RpgTurnResponse"];
                 };
             };
             /** @description Validation Error */

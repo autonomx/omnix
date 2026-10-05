@@ -129,6 +129,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
     from app.apps.rpg.narrative_engine import service as narrative_service
     from app.apps.rpg.narrative_engine.writer import StructuredNarrativeWriter
+    from app.apps.rpg.presentation.turn_response import RpgTurnResponse
     from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
     from tests.support.routers import include_router_registrar
 
@@ -154,6 +155,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
                 before = len(model.calls)
                 response = client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command})
                 assert response.status_code == 200, response.text[:500]
+                RpgTurnResponse.model_validate(response.json())  # the published contract (WP-8.6)
                 turns.append({"command": command, **_turn_record(response.json(), model.calls[before:])})
             text = json.dumps({"status": created.get("status"), "turns": turns}, sort_keys=True)
             text = text.replace(session_id, "SESSION")

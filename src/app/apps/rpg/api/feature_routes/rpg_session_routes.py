@@ -14,6 +14,7 @@ from .rpg_narrative_delivery_routes import (
     register_rpg_narrative_delivery_routes,
 )
 from app.apps.rpg.api.turn_pipeline import execute_foreground_rpg_turn
+from app.apps.rpg.presentation.turn_response import RpgTurnResponse
 from app.apps.rpg.session.ability_coverage import summarize_ability_coverage
 from app.apps.rpg.session.environment_narration import build_environment_narration_contract
 from app.apps.rpg.session.environment_regions import derive_active_region_snapshot
@@ -370,6 +371,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/turn",
         tags=["rpg-session"],
+        responses={200: {"model": RpgTurnResponse, "description": "The turn's rpg_turn_response_v2 contract."}},
     )
     async def rpg_apply_turn(
         session_id: str,

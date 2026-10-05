@@ -37400,6 +37400,424 @@
         "title": "RpgTacticalMoveRequestBody",
         "type": "object"
       },
+      "RpgTurnResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "canonical_narrative_response": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Narrative Response"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "contract_version": {
+            "const": "rpg_turn_response_v2",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          },
+          "result": {
+            "$ref": "#/components/schemas/RpgTurnResult"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_summary": {
+            "additionalProperties": true,
+            "title": "Session Summary",
+            "type": "object"
+          },
+          "simulation_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulation Tick"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RpgTurnState"
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          },
+          "timing": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timing",
+            "type": "object"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
+          },
+          "visible_response": {
+            "$ref": "#/components/schemas/RpgTurnVisibleResponse"
+          }
+        },
+        "required": [
+          "ok",
+          "contract_version",
+          "session_id",
+          "command",
+          "visible_response",
+          "result",
+          "state"
+        ],
+        "title": "RpgTurnResponse",
+        "type": "object"
+      },
+      "RpgTurnResult": {
+        "additionalProperties": true,
+        "properties": {
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type"
+          },
+          "changed_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Domains",
+            "type": "array"
+          },
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id"
+          },
+          "llm_called": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Called"
+          },
+          "llm_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Purpose"
+          },
+          "narration_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narration Status"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "semantic_action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Action Type"
+          },
+          "semantic_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Family"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "stateful": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stateful"
+          },
+          "tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick"
+          },
+          "timing": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timing",
+            "type": "object"
+          },
+          "turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
+          },
+          "visible_response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgTurnVisibleResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "RpgTurnResult",
+        "type": "object"
+      },
+      "RpgTurnState": {
+        "additionalProperties": true,
+        "properties": {
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "changed_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Domains",
+            "type": "array"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "RpgTurnState",
+        "type": "object"
+      },
+      "RpgTurnVisibleResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "format_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format Version"
+          },
+          "messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "narration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narration"
+          },
+          "npc": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Npc"
+          },
+          "plain_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plain Text"
+          }
+        },
+        "title": "RpgTurnVisibleResponse",
+        "type": "object"
+      },
       "RpgUpdateWorldEntityDossierRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -67548,11 +67966,12 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgTurnResponse",
                   "title": "Response Rpg Apply Turn Api Rpg Sessions  Session Id  Turn Post"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The turn's rpg_turn_response_v2 contract."
           },
           "422": {
             "content": {

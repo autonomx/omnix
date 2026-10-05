@@ -1,13 +1,80 @@
-"""Compact foreground RPG turn response contract."""
+"""Compact foreground RPG turn response contract.
+
+``build_turn_response_v2`` produces ``RpgTurnResponse`` (WP-8.6): the turn route
+publishes it as its OpenAPI response and the production-turn characterization
+validates every response against it. Fields the budget may drop are optional,
+and nested runtime projections stay open (``extra="allow"``), so the model
+documents the response without filtering it.
+"""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
 
 TURN_RESPONSE_CONTRACT_VERSION = "rpg_turn_response_v2"
 TURN_RESPONSE_MAX_BYTES = 50_000
+
+
+class _OpenContract(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class RpgTurnVisibleResponse(_OpenContract):
+    format_version: str | None = None
+    plain_text: str | None = None
+    narration: str | None = None
+    npc: dict[str, Any] | None = None
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RpgTurnState(_OpenContract):
+    revision: int | None = None
+    changed: bool = False
+    changed_domains: list[str] = Field(default_factory=list)
+
+
+class RpgTurnResult(_OpenContract):
+    ok: bool = True
+    turn_id: str | None = None
+    tick: int | None = None
+    interaction_id: str | None = None
+    stateful: bool | None = None
+    changed_domains: list[str] = Field(default_factory=list)
+    action_type: str | None = None
+    semantic_action_type: str | None = None
+    semantic_family: str | None = None
+    outcome: str | None = None
+    narration_status: str | None = None
+    llm_called: bool | None = None
+    llm_purpose: str | None = None
+    source: str | None = None
+    visible_response: RpgTurnVisibleResponse | None = None
+    timing: dict[str, float] = Field(default_factory=dict)
+
+
+class RpgTurnResponse(_OpenContract):
+    ok: bool
+    contract_version: Literal["rpg_turn_response_v2"]
+    session_id: str
+    submission_id: str | None = None
+    interaction_id: str | None = None
+    turn_id: str | None = None
+    simulation_tick: int | None = None
+    job_id: str | None = None
+    trace_id: str | None = None
+    command: str
+    visible_response: RpgTurnVisibleResponse
+    response: str | None = None
+    content: str | None = None
+    result: RpgTurnResult
+    state: RpgTurnState
+    timing: dict[str, float] = Field(default_factory=dict)
+    session_summary: dict[str, Any] = Field(default_factory=dict)
+    canonical_narrative_response: dict[str, Any] | None = None
 
 
 def build_turn_response_v2(
