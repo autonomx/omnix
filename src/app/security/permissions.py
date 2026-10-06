@@ -54,6 +54,7 @@ _KERNEL_CATALOG: dict[str, str] = {
     "tools:approve": "Approve assistant tool calls",
     "tools:execute": "Execute approved assistant tool calls",
     "tools:connections:admin": "OAuth connections and tool credentials",
+    "tools:policy:admin": "Assistant tool enablement and approval policy",
     "agent:read": "Agent runs (read)",
     "agent:run": "Start agent runs",
     "agent:steer": "Steer agent runs",
@@ -218,6 +219,9 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/hermes/rpg/approved-flow"): "tools:approve",
     # Credentials and connections.
     ("POST", "/api/assistant/tools/connect/{tool_id}/oauth-client"): "tools:connections:admin",
+    # Enabling tools and loosening their approval policy is the workspace
+    # admin's decision; a member may only propose calls.
+    ("POST", "/api/assistant/tools/config"): "tools:policy:admin",
     ("POST", "/api/assistant/research/credentials"): "tools:connections:admin",
     ("PUT", "/api/trading/execution/providers/alpaca-iex/credentials"): "trading:control",
     ("PUT", "/api/trading/market-data/providers/coinmarketcap/credentials"): "trading:control",

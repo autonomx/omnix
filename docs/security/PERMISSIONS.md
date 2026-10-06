@@ -67,6 +67,7 @@ role to permission list; `owner` cannot be changed).
 | `tools:approve` | Approve assistant tool calls | yes | yes |  | yes |  |  |  |  |
 | `tools:connections:admin` | OAuth connections and tool credentials | yes | yes |  |  |  |  |  |  |
 | `tools:execute` | Execute approved assistant tool calls | yes | yes |  |  | yes |  |  |  |
+| `tools:policy:admin` | Assistant tool enablement and approval policy | yes | yes |  |  |  |  |  |  |
 | `tools:propose` | Propose assistant tool calls | yes | yes |  |  | yes |  |  |  |
 | `tools:read` | Assistant tools (read) | yes | yes |  |  | yes |  |  | yes |
 | `trading:control` | Trading controls | yes | yes |  |  |  |  |  |  |
@@ -144,6 +145,7 @@ role to permission list; `owner` cannot be changed).
 | POST | `/api/assistant/memory/reset` | `memory:admin` |
 | POST | `/api/assistant/research/credentials` | `tools:connections:admin` |
 | GET | `/api/assistant/research/status` | `chat:read` |
+| POST | `/api/assistant/tools/config` | `tools:policy:admin` |
 | POST | `/api/assistant/tools/connect/{tool_id}/oauth-client` | `tools:connections:admin` |
 | POST | `/api/assistant/tools/proposals/{proposal_id}/approve` | `tools:approve` |
 | POST | `/api/chat/sessions/{session_id}/live/material/promote` | `agent:promote` |
