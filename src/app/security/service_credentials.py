@@ -125,6 +125,26 @@ def replace_protected_token(target: Path) -> str:
         temporary.unlink(missing_ok=True)
 
 
+def run_token_key_path() -> Path:
+    """Protected run-token signing key, separate from the service token (WP-4.6)."""
+    return service_credential_path().with_name("run-token-key.dpapi" if _windows() else "run-token-key")
+
+
+def initialize_run_token_key() -> str:
+    """The agent run-token signing key for this installation's gateway processes.
+
+    ``OMNIX_RUN_TOKEN_KEY`` when set (containers set it; model services never
+    get it), otherwise a protected key created once next to the service token.
+    The caller decides which child processes receive it.
+    """
+    configured = (_env_str("OMNIX_RUN_TOKEN_KEY") or "").strip()
+    if configured:
+        if len(configured) < 32:
+            raise ServiceCredentialError("OMNIX_RUN_TOKEN_KEY must have at least 32 characters")
+        return configured
+    return load_or_create_protected_token(run_token_key_path())
+
+
 def initialize_service_token() -> str:
     """Initialize once in a launcher; children inherit this exact credential."""
     configured = _env_str("OMNIX_SERVICE_TOKEN")

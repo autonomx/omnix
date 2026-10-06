@@ -23,6 +23,8 @@ x-omnix-env: &omnix-env
   OMNIX_ENV: ${OMNIX_ENV:-production}
   OMNIX_DATABASE_URL: postgresql://omnix_app:${OMNIX_APP_DB_PASSWORD:?set OMNIX_APP_DB_PASSWORD in .env}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}
   OMNIX_SERVICE_TOKEN: ${OMNIX_SERVICE_TOKEN:?set OMNIX_SERVICE_TOKEN in .env}
+  # Gateway processes only; the model services below never receive it.
+  OMNIX_RUN_TOKEN_KEY: ${OMNIX_RUN_TOKEN_KEY:?set OMNIX_RUN_TOKEN_KEY in .env}
   OMNIX_SECRET_STORE: env
   OMNIX_BIND_HOST: 0.0.0.0
   OMNIX_ALLOW_LAN: "true"

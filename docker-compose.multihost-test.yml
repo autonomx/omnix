@@ -17,6 +17,7 @@ x-omnix-env: &omnix-env
   OMNIX_S3_ACCESS_KEY_ID: omnixmultihost
   OMNIX_S3_SECRET_ACCESS_KEY: omnixmultihostsecret
   OMNIX_SERVICE_TOKEN: multihost-test-service-token-not-a-secret-0123456789
+  OMNIX_RUN_TOKEN_KEY: multihost-test-run-token-key-not-a-secret-0123456789
   OMNIX_BIND_HOST: 0.0.0.0
   OMNIX_ALLOW_LAN: "true"
   OMNIX_ALLOWED_HOSTS: nginx,nginx:8080,localhost,localhost:8080,127.0.0.1,gateway-worker,gateway-worker:8000,api-1,api-1:8000,api-2,api-2:8000

@@ -1033,10 +1033,14 @@ or a signed-in browser session, is refused on these routes. Pi's extensions
 remove the token from their environment before any tool runs, so shell
 commands never see it.
 
-Every Omnix process of an installation must share the signing key. The
-launcher's service token provides it; otherwise set `OMNIX_RUN_TOKEN_KEY` (at
-least 32 characters) on every gateway and worker. `scripts/gateway_cluster.py`
-generates one shared key for its replicas when neither is set.
+Every gateway process of an installation must share the signing key, and no
+model service may hold it. The gateway entrypoint (`scripts/run_omnix_gateway.py`)
+uses `OMNIX_RUN_TOKEN_KEY` when set and otherwise a protected key of its own
+next to the service token; its replicas and job worker inherit it. The key is
+never derived from the service token, which the model services share. Compose
+requires `OMNIX_RUN_TOKEN_KEY` for the gateway processes only.
+`scripts/gateway_cluster.py` generates one shared key for its replicas when
+none is set.
 
 ## Agent request ceilings
 

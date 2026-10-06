@@ -189,6 +189,8 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     # Runtime launch inherits an explicit ephemeral token; never access the
     # operator's protected credential store from this bootstrap unit test.
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
+    run_token_key = secrets.token_urlsafe(32)
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", run_token_key)
     monkeypatch.setattr(
         uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs))
     )
@@ -197,9 +199,25 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     launcher = runpy.run_path(
         str(Path(__file__).resolve().parents[4] / "scripts/run_omnix_gateway.py")
     )
-    assert launcher["main"]() == 0
+    import logging
+
+    from app.observability import logging as omnix_logging
+
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        assert launcher["main"]() == 0
+        # The container entrypoint installs the structured log handler.
+        assert any(getattr(h, omnix_logging._HANDLER_MARKER, False) for h in root.handlers)
+    finally:
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
     assert calls[0][0] == ("app.composition.production:app",)
     assert calls[0][1]["reload"] is True
+    import os
+
+    assert os.environ["OMNIX_RUN_TOKEN_KEY"] == run_token_key
 
 
 def test_production_application_composes_once_for_concurrent_requests(monkeypatch):

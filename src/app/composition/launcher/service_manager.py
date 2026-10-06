@@ -276,6 +276,9 @@ class LauncherServiceManager:
                 env.pop("OMNIX_SERVICE_TOKEN", None)
             else:
                 env["OMNIX_SERVICE_TOKEN"] = initialize_service_token()
+            # Only gateway processes sign or verify agent run tokens; the
+            # gateway entrypoint loads the key itself (WP-4.6).
+            env.pop("OMNIX_RUN_TOKEN_KEY", None)
             # Semantic v2 is the only typed-chat production router. Do not pass
             # the retired shadow/legacy-v1 switch to launcher-managed services,
             # even if it remains in a user's parent shell.

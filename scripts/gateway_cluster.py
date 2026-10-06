@@ -60,10 +60,10 @@ def start_local_job_worker(cwd: Path, env: Mapping[str, str] | None = None):
 def ensure_shared_run_token_key(env) -> None:
     """Replicas must agree on the agent run-token key (WP-4.6).
 
-    The launcher's service token already derives one. Without it, give all
-    children of this cluster one generated key.
+    The gateway entrypoint normally sets it. Without it, give all children of
+    this cluster one generated key; the service token never stands in for it.
     """
-    if not env.get("OMNIX_RUN_TOKEN_KEY") and not env.get("OMNIX_SERVICE_TOKEN"):
+    if not env.get("OMNIX_RUN_TOKEN_KEY"):
         env["OMNIX_RUN_TOKEN_KEY"] = secrets.token_urlsafe(32)
 
 

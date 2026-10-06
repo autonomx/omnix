@@ -136,6 +136,7 @@ def test_cluster_children_share_one_run_token_key() -> None:
     assert len(generated) >= 32
     ensure_shared_run_token_key(env)
     assert env["OMNIX_RUN_TOKEN_KEY"] == generated
+    # The service token never stands in for the key (model services hold it).
     launcher = {"OMNIX_SERVICE_TOKEN": "s" * 43}
     ensure_shared_run_token_key(launcher)
-    assert "OMNIX_RUN_TOKEN_KEY" not in launcher
+    assert launcher["OMNIX_RUN_TOKEN_KEY"] not in {"", "s" * 43}

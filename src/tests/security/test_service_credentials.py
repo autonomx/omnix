@@ -96,3 +96,24 @@ def test_posix_unsafe_permissions_are_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(credentials.os, "fstat", lambda _: SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_uid=1000))
     with pytest.raises(credentials.ServiceCredentialError, match="permissions_unsafe"):
         credentials.load_or_create_service_token(path)
+
+
+def test_run_token_key_is_its_own_protected_credential(protected_store, monkeypatch):
+    """Run tokens are never signed with the service token model services hold."""
+    monkeypatch.delenv("OMNIX_RUN_TOKEN_KEY", raising=False)
+    monkeypatch.setattr(credentials, "service_credential_path", lambda: protected_store)
+    service_token = credentials.load_or_create_service_token(protected_store)
+    key = credentials.initialize_run_token_key()
+    assert credentials.run_token_key_path() == protected_store.with_name("run-token-key.dpapi")
+    assert key != service_token and len(key) >= 32
+    assert key.encode() not in credentials.run_token_key_path().read_bytes()
+    assert credentials.initialize_run_token_key() == key
+
+
+def test_configured_run_token_key_wins_and_must_be_long(monkeypatch):
+    monkeypatch.setattr(credentials, "load_or_create_protected_token", lambda _: pytest.fail("configured key must not access storage"))
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", "k" * 40)
+    assert credentials.initialize_run_token_key() == "k" * 40
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", "short")
+    with pytest.raises(credentials.ServiceCredentialError):
+        credentials.initialize_run_token_key()
