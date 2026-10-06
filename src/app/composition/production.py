@@ -440,7 +440,7 @@ class ProductionApplication:
     """Import-safe ASGI entrypoint; initializes inside the serving process."""
 
     def __init__(self, factory=None):
-        self._application = None
+        self._application: Any = None
         self._lock = threading.Lock()
         self._factory = factory
 

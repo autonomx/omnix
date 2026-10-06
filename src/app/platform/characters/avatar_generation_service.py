@@ -1,6 +1,7 @@
 """Image-generation orchestration for Character Mode live avatars."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import hashlib
 import re
 from collections.abc import Callable
@@ -103,7 +104,7 @@ class CharacterAvatarGenerationService:
         character_service_factory: Callable[[], CharacterService] = default_character_service,
         avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
         job_store_factory: Callable[[], Any] = default_job_store,
-        asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
+        asset_store_factory: Callable[[], AssetStore] = default_asset_store,
     ) -> None:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime

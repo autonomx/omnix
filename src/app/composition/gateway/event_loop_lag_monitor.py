@@ -31,7 +31,7 @@ _DEFAULT_STACK_LIMIT = 10
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return (_env_str(name, default) or default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
@@ -111,7 +111,7 @@ def _thread_stacks(
     event_loop_thread_id: int | None,
     stack_limit: int,
 ) -> list[dict[str, Any]]:
-    frames = sys._current_frames()  # type: ignore[attr-defined]
+    frames = sys._current_frames()
     threads = {thread.ident: thread for thread in threading.enumerate() if thread.ident is not None}
     payload: list[dict[str, Any]] = []
 
@@ -121,7 +121,7 @@ def _thread_stacks(
         stack = [
             {
                 "file": _safe_code_path(item.filename),
-                "line": int(item.lineno),
+                "line": int(item.lineno or 0),
                 "function": item.name,
             }
             for item in extracted

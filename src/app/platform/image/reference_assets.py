@@ -1,6 +1,7 @@
 """Reference-image storage and loading for image-to-image generation."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import logging
 
 import io
@@ -42,7 +43,7 @@ def image_reference_root() -> Path:
 def list_image_reference_assets(
     *,
     limit: int = 100,
-    store: SharedAssetStore | None = None,
+    store: AssetStore | None = None,
 ) -> AssetListResponse:
     asset_store = store or default_asset_store()
     # Newest first from the store; stop once the page is full.
@@ -63,7 +64,7 @@ def save_image_reference_upload(
     *,
     filename: str,
     mime_type: str,
-    store: SharedAssetStore | None = None,
+    store: AssetStore | None = None,
     root: Path | None = None,
 ) -> AssetRecord:
     if not data:
@@ -124,7 +125,7 @@ def save_image_reference_upload(
 def load_image_reference_assets(
     asset_ids: Iterable[str],
     *,
-    store: SharedAssetStore | None = None,
+    store: AssetStore | None = None,
 ) -> list[Any]:
     normalized_ids = _normalize_reference_ids(asset_ids)
     if not normalized_ids:

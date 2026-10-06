@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.assets.content import asset_available
 from app.assets import AssetListResponse, AssetRecord, AssetType, PublicAssetListResponse, iter_assets
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus
+from app.jobs.models import JobStage
 from app.runtime.contracts import AssetService, JobService
 
 from app.jobs.projections import summarize_job
@@ -277,12 +278,7 @@ def _retry_request(source: JobRecord) -> CreateJobRequest:
         resource_class=source.resource_class,
         priority=source.priority,
         stages=[
-            {
-                "id": stage.id,
-                "label": stage.label,
-                "status": JobStatus.QUEUED,
-                "resource_class": stage.resource_class,
-            }
+            JobStage(id=stage.id, label=stage.label, status=JobStatus.QUEUED, resource_class=stage.resource_class)
             for stage in source.stages
         ],
         input_ref=source.input_ref,

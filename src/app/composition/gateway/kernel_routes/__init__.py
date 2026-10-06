@@ -201,7 +201,7 @@ def create_kernel_router(
         tags=["providers"],
     )
     def chatgpt_codex_auth_status() -> CodexAuthStatus:
-        return ChatGPTCodexProvider.auth_status(_configured_codex_path())
+        return CodexAuthStatus.model_validate(ChatGPTCodexProvider.auth_status(_configured_codex_path()))
 
     @router.post(
         "/api/providers/chatgpt-codex/login",
@@ -209,7 +209,7 @@ def create_kernel_router(
         tags=["providers"],
     )
     def chatgpt_codex_login() -> CodexAuthStatus:
-        return ChatGPTCodexProvider.start_login(_configured_codex_path())
+        return CodexAuthStatus.model_validate(ChatGPTCodexProvider.start_login(_configured_codex_path()))
 
     @router.post(
         "/api/providers/refresh", response_model=JobRecord, tags=["providers"]

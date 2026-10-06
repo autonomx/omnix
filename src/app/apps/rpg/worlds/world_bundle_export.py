@@ -1,6 +1,7 @@
 """Read-only export of one reusable RPG world into a portable archive."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from typing import Any
 
 from app.assets.content import AssetContentUnavailable, read_asset_bytes
@@ -221,7 +222,7 @@ def _world_payload(work: Any, context: Any, world_id: str) -> WorldBundlePayload
 
 def _selected_image_assets(
     payload: WorldBundlePayload,
-    store: SharedAssetStore,
+    store: AssetStore,
 ) -> list[AssetRecord]:
     values = payload.model_dump(mode="json")
     referenced_ids = discover_image_asset_ids(values)
@@ -282,7 +283,7 @@ def export_world_bundle(
     world_id: str,
     *,
     database: Any | None = None,
-    asset_store: SharedAssetStore | None = None,
+    asset_store: AssetStore | None = None,
 ) -> WorldBundleArchive:
     context = current_tenant()
     with unit_of_work(database) as work:

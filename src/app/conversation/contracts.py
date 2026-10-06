@@ -246,9 +246,12 @@ class DeliveryCheckpointRecorder(Protocol):
 
 
 class AcceptedChatActivityRecorder(Protocol):
-    """Observer for accepted user turns; Chat owns persistence, not enrichment."""
+    """Observer for accepted user turns; Chat owns persistence, not enrichment.
 
-    def __call__(self, session: ChatSession, user_message: ChatMessage) -> None: ...
+    Chat ignores whatever the observer returns.
+    """
+
+    def __call__(self, session: ChatSession, user_message: ChatMessage) -> object: ...
 
 
 class LiveVoiceChatPort(Protocol):

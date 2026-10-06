@@ -25,12 +25,16 @@ from app.platform.image.reference_assets import (
 from app.platform.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
 from app.platform.image.style import apply_image_style
 from app.platform.image.image_http_client import generate_image_via_service, is_image_service_enabled
-from app.persistence.device_permits import device_permit_slot
+from app.persistence.device_permits import PermitPriority, device_permit_slot
 
 _GIB = float(1024**3)
 
 
-def _generate_with_device_permit(provider: Any, payload: dict[str, Any], *, priority: str) -> Any:
+def _metadata(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _generate_with_device_permit(provider: Any, payload: dict[str, Any], *, priority: PermitPriority) -> Any:
     with device_permit_slot("image", priority=priority, timeout_seconds=30.0):
         return provider.generate(payload)
 
@@ -98,7 +102,7 @@ def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
         reference_asset_ids=_reference_asset_ids(payload.get("reference_asset_ids")),
         session_id=_safe_str(payload.get("session_id")).strip(),
         request_id=_safe_str(payload.get("request_id")).strip(),
-        metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+        metadata=_metadata(payload.get("metadata")),
     )
 
 
@@ -314,7 +318,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
                 provider_payload["image"] = reference_images[0] if len(reference_images) == 1 else reference_images
 
             if definition.get("supports_local_model"):
-                priority = (
+                priority: PermitPriority = (
                     "batch"
                     if payload.get("_device_permit_priority") == "batch"
                     else "interactive"
@@ -408,7 +412,7 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
             width=_safe_int(data.get("width"), 0),
             height=_safe_int(data.get("height"), 0),
             mime_type=_safe_str(data.get("mime_type")) or "image/png",
-            metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
+            metadata=_metadata(data.get("metadata")),
         )
 
     return generate_image_local(payload)

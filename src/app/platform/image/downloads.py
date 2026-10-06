@@ -287,7 +287,6 @@ def download_image_model(provider_name: str, hf_token: str = "") -> Dict[str, An
         snapshot_download(
             repo_id=repo_id,
             local_dir=local_dir,
-            local_dir_use_symlinks=False,
             token=token,
         )
     except Exception as exc:

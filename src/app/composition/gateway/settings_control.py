@@ -116,8 +116,8 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         changed = _changed_values(previous_settings, settings)
         revisions: dict[str, int] = {}
         for key in changed:
-            current = service.get(key)
-            revisions[key] = 0 if current is None else int(current["revision"])
+            stored = service.get(key)
+            revisions[key] = 0 if stored is None else int(stored["revision"])
 
         if secrets_changed:
             save_secrets(secrets)

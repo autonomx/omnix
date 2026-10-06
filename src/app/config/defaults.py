@@ -1,7 +1,9 @@
 """Canonical browser/provider defaults formerly held in app.shared."""
 from __future__ import annotations
 
-DEFAULT_SETTINGS = {
+from typing import Any
+
+DEFAULT_SETTINGS: dict[str, Any] = {
     "provider": "lmstudio",
     "audio_provider_tts": "faster-qwen3-tts",
     "audio_provider_stt": "parakeet",

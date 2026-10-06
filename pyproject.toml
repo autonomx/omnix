@@ -83,25 +83,19 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
   "app.platform.agent_runtime", "app.platform.agent_runtime.*",
-  "app.composition.production",
-  "app.composition.runtime_composition",
   "app.platform.assistant_memory", "app.platform.assistant_memory.*",
   "app.platform.assistant_memory.v2", "app.platform.assistant_memory.v2.*",
   "app.platform.assistant_tools", "app.platform.assistant_tools.*",
   "app.apps.audiobook", "app.apps.audiobook.*",
-  "app.assets", "app.assets.*",
   "app.platform.characters", "app.platform.characters.*",
   "app.platform.chat", "app.platform.chat.*",
   "app.apps.desktop_companion", "app.apps.desktop_companion.*",
-  "app.composition.gateway", "app.composition.gateway.*",
-  "app.platform.image", "app.platform.image.*",
   "app.platform.live_voice", "app.platform.live_voice.*",
   "app.providers", "app.providers.*",
   "app.apps.rpg.replay", "app.apps.rpg.replay.*",
   "app.platform.research", "app.platform.research.*",
   "app.apps.rpg", "app.apps.rpg.*",
   "app.settings", "app.settings.*",
-  "app.apps.story", "app.apps.story.*",
   "app.apps.trading", "app.apps.trading.*",
 ]
 ignore_errors = true

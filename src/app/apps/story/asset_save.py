@@ -1,6 +1,7 @@
 """Storyteller shared-asset save helpers for the browser gateway."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from collections.abc import Iterator
 from contextlib import contextmanager
 import re
@@ -47,7 +48,7 @@ def _safe_story_slug(value: str) -> str:
 
 
 @contextmanager
-def _story_staging_dir(asset_store: SharedAssetStore) -> Iterator[Path]:
+def _story_staging_dir(asset_store: AssetStore) -> Iterator[Path]:
     """Where the manuscript file is written before the asset is recorded.
 
     The legacy manifest store keeps files beside its manifest. The PostgreSQL
@@ -64,7 +65,7 @@ def _story_staging_dir(asset_store: SharedAssetStore) -> Iterator[Path]:
         yield Path(directory)
 
 
-def save_story_asset(asset_store: SharedAssetStore, request: SaveStoryAssetRequest) -> SavedStoryAssetResponse:
+def save_story_asset(asset_store: AssetStore, request: SaveStoryAssetRequest) -> SavedStoryAssetResponse:
     content = request.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="story_content_required")
@@ -81,7 +82,7 @@ def save_story_asset(asset_store: SharedAssetStore, request: SaveStoryAssetReque
         except OSError as exc:
             raise HTTPException(status_code=500, detail="story_asset_write_failed") from exc
         stored = asset_store.upsert_asset(_story_record(request, title, slug, unique, created_at, path))
-    return SavedStoryAssetResponse(asset=stored, content=content)
+    return SavedStoryAssetResponse(asset=PublicAssetRecord.model_validate(stored), content=content)
 
 
 def _story_record(

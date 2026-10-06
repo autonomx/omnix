@@ -1,6 +1,7 @@
 """Character avatar-pack management backed by shared assets."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from collections.abc import Callable
 
 from app.assets.content import asset_available
@@ -22,7 +23,7 @@ class CharacterAvatarService:
         repository: CharacterAvatarRepository | None = None,
         *,
         character_service_factory: Callable[[], CharacterService] = default_character_service,
-        asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
+        asset_store_factory: Callable[[], AssetStore] = default_asset_store,
     ) -> None:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime

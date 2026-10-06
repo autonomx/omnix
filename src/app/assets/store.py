@@ -1,6 +1,7 @@
 """Manifest-backed shared asset store with compatibility read-through."""
 from __future__ import annotations
 
+from .protocol import AssetStore
 import logging
 
 from app.config.env import env_str, environment
@@ -536,6 +537,6 @@ class SharedAssetStore:
             temporary_path.unlink(missing_ok=True)
 
 
-def default_asset_store() -> SharedAssetStore:
+def default_asset_store() -> AssetStore:
     from app.assets import default_asset_store as factory
     return factory()

@@ -64,6 +64,6 @@ def create_image_reference_router(asset_store: AssetService) -> APIRouter:
             )
         except ImageReferenceError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return ImageReferenceUploadResponse(ok=True, asset=asset)
+        return ImageReferenceUploadResponse(ok=True, asset=PublicAssetRecord.model_validate(asset))
 
     return router

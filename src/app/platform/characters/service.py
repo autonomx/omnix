@@ -1,6 +1,7 @@
 """Character profile management with shared voice-asset validation."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import logging
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -79,7 +80,7 @@ class CharacterService:
         self,
         repository: CharacterRepository | None = None,
         *,
-        asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
+        asset_store_factory: Callable[[], AssetStore] = default_asset_store,
     ) -> None:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime

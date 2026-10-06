@@ -1,6 +1,7 @@
 """Pixel-stabilize generated avatar frames against their canonical portrait."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import os
 import uuid
 from collections.abc import Mapping
@@ -34,7 +35,7 @@ def stabilize_generated_avatar_frame(
     *,
     reference_asset_id: str,
     variant: str,
-    store: SharedAssetStore,
+    store: AssetStore,
     mouth_anchor: Mapping[str, float] | None = None,
     articulation_percent: float | None = None,
 ) -> dict[str, Any]:

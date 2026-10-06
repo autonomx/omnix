@@ -227,6 +227,7 @@ def build_flux_pipeline(
     local_files_only: bool,
     device_map: str | None = None,
 ):
+    pipeline_cls: Any
     pipeline_cls, _class_name = resolve_flux_pipeline_class()
     kwargs: Dict[str, Any] = {
         "torch_dtype": torch_dtype,

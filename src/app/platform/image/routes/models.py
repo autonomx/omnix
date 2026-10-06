@@ -213,7 +213,7 @@ def _repository_total_bytes(provider: str) -> int:
         info = HfApi().repo_info(
             repo_id=repo_id,
             files_metadata=True,
-            token=transient_token or _env_str("HF_TOKEN", "").strip() or None,
+            token=transient_token or (_env_str("HF_TOKEN", "") or "").strip() or None,
         )
         total = sum(
             max(0, int(getattr(sibling, "size", 0) or 0))
@@ -318,7 +318,7 @@ def _require_ok(result: dict[str, Any], fallback: str) -> dict[str, Any]:
 )
 async def image_model_status(
     provider: str = Query(default="flux_klein"),
-) -> ImageModelStatusResponse:
+) -> dict[str, Any]:  # validated by response_model
     provider_name = _provider(provider)
     try:
         result = await _call_service(_read_service_status, provider_name)
@@ -353,7 +353,7 @@ async def image_model_status(
     response_model=ImageModelStatusResponse,
     response_model_exclude_unset=True,
 )
-async def start_image_service(request: ImageModelActionRequest) -> ImageModelStatusResponse:
+async def start_image_service(request: ImageModelActionRequest) -> dict[str, Any]:  # validated by response_model
     result = await _call_service(start_image_service_via_launcher, _provider(request.provider))
     return _require_ok(result, "image_service_start_failed")
 
@@ -363,7 +363,7 @@ async def start_image_service(request: ImageModelActionRequest) -> ImageModelSta
     response_model=ImageModelStatusResponse,
     response_model_exclude_unset=True,
 )
-async def ensure_image_model_loaded(request: ImageModelActionRequest) -> ImageModelStatusResponse:
+async def ensure_image_model_loaded(request: ImageModelActionRequest) -> dict[str, Any]:  # validated by response_model
     """Start the managed service and make the requested model resident."""
 
     provider_name = _provider(request.provider)
@@ -383,7 +383,7 @@ async def ensure_image_model_loaded(request: ImageModelActionRequest) -> ImageMo
     response_model=ImageModelStatusResponse,
     response_model_exclude_unset=True,
 )
-async def download_image_model(request: ImageModelDownloadRequest) -> ImageModelStatusResponse:
+async def download_image_model(request: ImageModelDownloadRequest) -> dict[str, Any]:  # validated by response_model
     provider_name = _provider(request.provider)
     token = request.hf_token.get_secret_value().strip() if request.hf_token else ""
     with _DOWNLOAD_TOTALS_LOCK:
@@ -409,7 +409,7 @@ async def download_image_model(request: ImageModelDownloadRequest) -> ImageModel
     response_model=ImageModelStatusResponse,
     response_model_exclude_unset=True,
 )
-async def load_image_model(request: ImageModelActionRequest) -> ImageModelStatusResponse:
+async def load_image_model(request: ImageModelActionRequest) -> dict[str, Any]:  # validated by response_model
     result = await _call_service(load_image_model_via_service, _provider(request.provider))
     return _require_ok(result, "image_model_load_failed")
 
@@ -419,7 +419,7 @@ async def load_image_model(request: ImageModelActionRequest) -> ImageModelStatus
     response_model=ImageModelStatusResponse,
     response_model_exclude_unset=True,
 )
-async def unload_image_model(request: ImageModelActionRequest) -> ImageModelStatusResponse:
+async def unload_image_model(request: ImageModelActionRequest) -> dict[str, Any]:  # validated by response_model
     result = await _call_service(unload_image_model_via_service, _provider(request.provider))
     return _require_ok(result, "image_model_unload_failed")
 

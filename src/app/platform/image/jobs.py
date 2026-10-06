@@ -1,6 +1,7 @@
 """Background execution and shared asset persistence for image jobs."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,7 +76,7 @@ def execute_image_job(
     job: JobRecord,
     *,
     generate_fn: Callable[[dict[str, Any]], Any] | None = None,
-    asset_store: SharedAssetStore | None = None,
+    asset_store: AssetStore | None = None,
 ) -> JobRecord:
     """Run one image job, index its file, and complete the shared job."""
 
@@ -236,7 +237,7 @@ def _store_image_asset(
     job: JobRecord,
     request: ImageGenerateInput,
     result: Any,
-    store: SharedAssetStore,
+    store: AssetStore,
 ) -> tuple[AssetRecord, ImageOutputRef]:
     storage_path = str(getattr(result, "local_path", "") or "").strip()
     if not storage_path or not Path(storage_path).is_file():
@@ -323,7 +324,7 @@ def _stabilize_character_avatar_frame(
     request: ImageGenerateInput,
     storage_path: str,
     request_metadata: dict[str, Any],
-    store: SharedAssetStore,
+    store: AssetStore,
 ) -> dict[str, Any]:
     finisher = optional(CHARACTER_AVATAR_FINISHER)
     if finisher is None:
