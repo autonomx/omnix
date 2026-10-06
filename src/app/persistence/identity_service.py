@@ -201,7 +201,7 @@ SYSTEM_ROLE = "system"
 
 
 def list_active_workspace_contexts(
-    database: PostgresDatabase, *, limit: int = 1000, include_inactive: bool = False,
+    database: PostgresDatabase, *, limit: int | None = None, include_inactive: bool = False,
 ) -> list[TenantContext]:
     """System contexts for per-workspace background work (WP-4.2).
 
@@ -209,6 +209,7 @@ def list_active_workspace_contexts(
     local workspace. The context acts as the workspace's creator with only
     the ``system`` role; it is never a request principal. Retiring a module
     (PA-4.3) asks for inactive workspaces too: their jobs are in flight as well.
+    Every workspace is returned unless the caller sets ``limit``.
     """
     from .tenant_scope import system_scope
     from .unit_of_work import unit_of_work
@@ -222,15 +223,54 @@ def list_active_workspace_contexts(
             (include_inactive, limit),
         ).fetchall()
         work.rollback()
-    return [
-        TenantContext(
-            user_id=str(row[1]),
-            workspace_id=str(row[0]),
-            membership_id=f"system:{row[0]}",
-            roles=frozenset({SYSTEM_ROLE}),
-        )
-        for row in rows
-    ]
+    return [_system_context(row) for row in rows]
+
+
+def list_workspace_contexts_with_ready_jobs(
+    database: PostgresDatabase, resource_classes: list[str] | tuple[str, ...], *, limit: int = 256,
+) -> list[TenantContext]:
+    """System contexts of the active workspaces that have a job ready to claim.
+
+    One query per poll, whatever the number of workspaces: a job worker claims
+    only where there is work instead of trying every workspace in turn. The
+    predicate is a superset of ``claim_next``'s, so a listed workspace may
+    still yield nothing. Workspaces come oldest-waiting job first, so the
+    ``limit`` never starves one: a workspace left out this poll has waited
+    less than every listed one and moves up as they are served.
+    """
+    from .tenant_scope import system_scope
+    from .unit_of_work import unit_of_work
+
+    if not resource_classes:
+        return []
+    with system_scope("identity.workspaces"), unit_of_work(
+        database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ
+    ) as work:
+        rows = work.connection.execute(
+            """SELECT w.id, w.created_by, MIN(j.available_at) AS waiting_since
+                 FROM omnix_workspaces w
+                 JOIN omnix_jobs j ON j.workspace_id = w.id
+                WHERE w.status = 'active'
+                  AND j.status IN ('queued', 'retrying', 'waiting')
+                  AND j.available_at <= CURRENT_TIMESTAMP
+                  AND j.resource_class = ANY(%s)
+                  AND j.attempt_count < j.max_attempts
+                GROUP BY w.id, w.created_by
+                ORDER BY waiting_since, w.id
+                LIMIT %s""",
+            (list(resource_classes), max(1, int(limit))),
+        ).fetchall()
+        work.rollback()
+    return [_system_context(row) for row in rows]
+
+
+def _system_context(row: Any) -> TenantContext:
+    return TenantContext(
+        user_id=str(row[1]),
+        workspace_id=str(row[0]),
+        membership_id=f"system:{row[0]}",
+        roles=frozenset({SYSTEM_ROLE}),
+    )
 
 
 def get_workspace(database: PostgresDatabase, context: TenantContext) -> dict[str, Any]:
