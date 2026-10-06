@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from app.assets import AssetRecord, AssetType, PublicAssetRecord, SharedAssetStore
+from app.assets import AssetRecord, AssetType, PublicAssetRecord
 
 
 class SaveStoryAssetRequest(BaseModel):

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.assets.content import AssetContentUnavailable, asset_available, open_asset
-from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
+from app.assets import AssetListResponse, AssetRecord, AssetType, default_asset_store, iter_assets
 from app.runtime.paths import resources_data_root
 
 logger = logging.getLogger(__name__)

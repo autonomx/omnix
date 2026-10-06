@@ -10,7 +10,6 @@ from app.assets.content import asset_available
 from app.assets import (
     AssetRecord,
     AssetType,
-    SharedAssetStore,
     default_asset_store,
     discover_canonical_voice_clone_assets,
     iter_assets,

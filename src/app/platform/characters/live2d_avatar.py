@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assets.content import asset_available, materialize_asset
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime.paths import resources_data_root
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest

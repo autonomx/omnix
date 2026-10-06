@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.assets.content import AssetContentUnavailable, asset_checksum, asset_location
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 
 VoiceConsentStatus = Literal["unverified", "granted", "revoked"]
 VoiceDeletionState = Literal["active", "pending_deletion", "deleted"]

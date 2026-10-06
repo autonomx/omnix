@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
+from app.assets import AssetRecord, AssetType, default_asset_store, iter_assets
 from app.platform.image.contracts import (
     ImageReferenceError,
     close_image_references,

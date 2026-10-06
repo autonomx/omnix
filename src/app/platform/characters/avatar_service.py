@@ -5,7 +5,7 @@ from app.assets.protocol import AssetStore
 from collections.abc import Callable
 
 from app.assets.content import asset_available
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_repository import CharacterAvatarRepository

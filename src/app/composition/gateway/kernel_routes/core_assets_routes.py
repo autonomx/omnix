@@ -18,7 +18,6 @@ from app.assets import (
     PublicAssetListResponse,
     PublicAssetMigrationPreview,
     PublicAssetRecord,
-    SharedAssetStore,
 )
 from app.runtime.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, InvalidCursor
 from app.assets.content import AssetContentUnavailable, materialize_asset

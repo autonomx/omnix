@@ -14,11 +14,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection
 
-from app.assets import SharedAssetStore, default_asset_store
+from app.assets import default_asset_store
 from app.platform.chat import ChatSessionStore, default_chat_store
 from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 from app.jobs import (
-    InMemoryModelResidencyStore,
     default_model_residency_store,
 )
 from app.providers.facade import ProviderFacade, default_provider_facade

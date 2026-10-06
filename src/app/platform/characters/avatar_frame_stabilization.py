@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.assets.content import AssetContentUnavailable, materialize_asset
-from app.assets import AssetType, SharedAssetStore
+from app.assets import AssetType
 
 _DEFAULT_MOUTH_ANCHOR = {
     "x": 0.5,

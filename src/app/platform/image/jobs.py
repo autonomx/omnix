@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 from app.jobs.models import JobStatus
 from app.runtime.ports import optional
 

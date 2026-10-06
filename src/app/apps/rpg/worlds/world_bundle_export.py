@@ -5,7 +5,7 @@ from app.assets.protocol import AssetStore
 from typing import Any
 
 from app.assets.content import AssetContentUnavailable, read_asset_bytes
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
+from app.assets import AssetRecord, AssetType, default_asset_store, iter_assets
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
