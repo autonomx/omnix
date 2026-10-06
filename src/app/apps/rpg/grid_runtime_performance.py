@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from time import perf_counter_ns
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import Field
 
@@ -137,7 +137,7 @@ def assess_grid_renderer(
         )
     renderer = "pixi" if renderer_reasons else "svg"
     return GridRendererDecision(
-        renderer=renderer,
+        renderer=cast(Any, renderer),
         recommendation="escalate_to_pixi" if renderer_reasons else "retain_svg",
         renderer_reasons=renderer_reasons,
         runtime_warnings=tuple(runtime_warnings),

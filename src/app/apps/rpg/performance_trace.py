@@ -316,7 +316,7 @@ def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 20
         )
     with rpg_pipeline_span("turn.response_json_encode") as span:
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        budget = payload.get("response_budget") if isinstance(payload.get("response_budget"), dict) else {}
+        budget = raw_response_budget if isinstance(raw_response_budget := payload.get("response_budget"), dict) else {}
         span["response_bytes"] = len(encoded)
         span["contract_version"] = payload.get("contract_version")
         span["response_compacted"] = budget.get("compacted") is True
@@ -371,13 +371,14 @@ def _attach_span_resources(fields: dict[str, Any], cpu_started: float, rss_start
 
 
 def _rss_bytes() -> int | None:
-    try:
-        import resource
+    if sys.platform != "win32":
+        try:
+            import resource
 
-        rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        return rss if sys.platform == "darwin" else rss * 1024
-    except Exception:
-        logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
+            rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+            return rss if sys.platform == "darwin" else rss * 1024
+        except Exception:
+            logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
     if os.name == "nt":
         try:
             import ctypes

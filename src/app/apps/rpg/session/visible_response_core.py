@@ -390,7 +390,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
         )
 
     try:
-        from app.providers.base import ChatMessage  # type: ignore
+        from app.providers.base import ChatMessage
 
         messages = [
             ChatMessage(role="system", content=system_text),

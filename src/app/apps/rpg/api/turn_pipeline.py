@@ -194,9 +194,7 @@ def _execute_foreground_rpg_turn(
                     },
                 ) from exc
             replay = (
-                result.get("canonical_narrative_replay")
-                if isinstance(result.get("canonical_narrative_replay"), dict)
-                else {}
+                raw_canonical_narrative_replay if isinstance(raw_canonical_narrative_replay := result.get("canonical_narrative_replay"), dict) else {}
             )
             span["idempotent_replay"] = result.get("idempotent_replay") is True
             span["hydrated"] = replay.get("hydrated") is True
@@ -226,9 +224,7 @@ def _execute_foreground_rpg_turn(
                     },
                 ) from exc
             canonical = (
-                result.get("canonical_narrative_response")
-                if isinstance(result.get("canonical_narrative_response"), dict)
-                else {}
+                raw_canonical_narrative_response if isinstance(raw_canonical_narrative_response := result.get("canonical_narrative_response"), dict) else {}
             )
             span["published"] = bool(canonical)
             span["response_id"] = canonical.get("response_id")
@@ -243,9 +239,7 @@ def _execute_foreground_rpg_turn(
 
             result = prepare_canonical_result_delivery(result, delivery_mode)
             delivery_state = (
-                result.get("narrative_delivery_state")
-                if isinstance(result.get("narrative_delivery_state"), dict)
-                else {}
+                raw_narrative_delivery_state if isinstance(raw_narrative_delivery_state := result.get("narrative_delivery_state"), dict) else {}
             )
             span["mode"] = delivery_mode.value
             span["status"] = delivery_state.get("status")
@@ -260,14 +254,10 @@ def _execute_foreground_rpg_turn(
 
             result = attach_canonical_consumer_bundle(result)
             bundle = (
-                result.get("narrative_projections")
-                if isinstance(result.get("narrative_projections"), dict)
-                else {}
+                raw_narrative_projections if isinstance(raw_narrative_projections := result.get("narrative_projections"), dict) else {}
             )
             publisher = (
-                result.get("narrative_publisher_telemetry")
-                if isinstance(result.get("narrative_publisher_telemetry"), dict)
-                else {}
+                raw_narrative_publisher_telemetry if isinstance(raw_narrative_publisher_telemetry := result.get("narrative_publisher_telemetry"), dict) else {}
             )
             span["attached"] = bool(bundle)
             span["response_id"] = bundle.get("response_id")
@@ -302,9 +292,7 @@ def _execute_foreground_rpg_turn(
                     },
                 ) from exc
             certification = (
-                result.get("narrative_production_certification")
-                if isinstance(result.get("narrative_production_certification"), dict)
-                else {}
+                raw_narrative_production_certification if isinstance(raw_narrative_production_certification := result.get("narrative_production_certification"), dict) else {}
             )
             span["passed"] = certification.get("passed") is True
             span["response_id"] = certification.get("response_id")
@@ -322,9 +310,7 @@ def _execute_foreground_rpg_turn(
                 player_input=command,
             )
             shadow = (
-                result.get("narrative_engine_shadow")
-                if isinstance(result.get("narrative_engine_shadow"), dict)
-                else {}
+                raw_narrative_engine_shadow if isinstance(raw_narrative_engine_shadow := result.get("narrative_engine_shadow"), dict) else {}
             )
             span["selected"] = shadow.get("selected") is True
             span["ok"] = shadow.get("ok") is True
@@ -336,9 +322,7 @@ def _execute_foreground_rpg_turn(
             span["interaction_persisted"] = result.get("interaction_persisted") is True
             span["state_revision"] = result.get("state_revision")
             persistence = (
-                result.get("interaction_persistence")
-                if isinstance(result.get("interaction_persistence"), dict)
-                else {}
+                raw_interaction_persistence if isinstance(raw_interaction_persistence := result.get("interaction_persistence"), dict) else {}
             )
             span["persistence_mode"] = persistence.get("mode")
             span["snapshot_written"] = persistence.get("snapshot_written") is True
@@ -397,9 +381,7 @@ def _execute_foreground_rpg_turn(
 
             payload = deferred_public_turn_payload(payload)
             payload_timing = (
-                payload.get("timing")
-                if isinstance(payload.get("timing"), dict)
-                else {}
+                raw_timing if isinstance(raw_timing := payload.get("timing"), dict) else {}
             )
             payload_timing["pipeline_before_encode_ms"] = trace.elapsed_ms
             payload["timing"] = payload_timing

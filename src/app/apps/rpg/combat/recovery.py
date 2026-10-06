@@ -97,7 +97,7 @@ def revive_participant_with_healing(
     hp_after = min(max_hp, max(0, hp_before) + max(0, amount))
     participant["hp"] = hp_after
 
-    removed = []
+    removed: list[Any] = []
     if hp_after > 0:
         participant, removed = remove_status_effects_from_participant(
             participant,

@@ -46,7 +46,7 @@ def environment_narration_prompt_block(snapshot: dict[str, Any] | None) -> str:
 
     contract = build_environment_narration_contract(snapshot)
     weather = _weather_label(contract["environment_snapshot"])
-    display = contract["environment_snapshot"].get("display") if isinstance(contract["environment_snapshot"].get("display"), dict) else {}
+    display = raw_display if isinstance(raw_display := contract["environment_snapshot"].get("display"), dict) else {}
     return "\n".join(
         [
             "Environment Snapshot (read-only):",
@@ -60,17 +60,17 @@ def environment_narration_prompt_block(snapshot: dict[str, Any] | None) -> str:
 
 
 def _weather_label(snapshot: dict[str, Any]) -> str:
-    display = snapshot.get("display") if isinstance(snapshot.get("display"), dict) else {}
+    display = raw_display if isinstance(raw_display := snapshot.get("display"), dict) else {}
     if display.get("weather"):
         return str(display["weather"])
-    weather = snapshot.get("weather") if isinstance(snapshot.get("weather"), dict) else {}
+    weather = raw_weather if isinstance(raw_weather := snapshot.get("weather"), dict) else {}
     condition = str(weather.get("condition") or "Not tracked yet")
     intensity = str(weather.get("intensity") or "").strip()
     return f"{intensity.title()} {condition.title()}".strip()
 
 
 def _context_label(snapshot: dict[str, Any]) -> str:
-    context = snapshot.get("context") if isinstance(snapshot.get("context"), dict) else {}
+    context = raw_context if isinstance(raw_context := snapshot.get("context"), dict) else {}
     exposure = str(context.get("exposure") or "Not tracked yet")
     shelter = str(context.get("shelter") or "Not tracked yet")
     return f"{exposure} / {shelter}"

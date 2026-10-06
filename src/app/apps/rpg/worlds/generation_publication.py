@@ -143,7 +143,7 @@ def _profile_place_kinds(graph: CampaignTopicGraph) -> set[str]:
 
 
 def _place_ids(canon: Mapping[str, Any], graph: CampaignTopicGraph) -> tuple[str, ...]:
-    entities = canon.get("entities") if isinstance(canon.get("entities"), Mapping) else {}
+    entities = raw_entities if isinstance(raw_entities := canon.get("entities"), Mapping) else {}
     kinds = _profile_place_kinds(graph)
     return tuple(
         str(entity_id)

@@ -97,6 +97,7 @@ class SceneManager:
         
         if self.active_scene is None:
             self._create_new_scene(primary)
+        assert self.active_scene is not None
         
         # Check if scene should transition (location change)
         new_location = primary.get("location")
@@ -217,6 +218,7 @@ class SceneManager:
         for event in events:
             event_type = event.get("type", "unknown")
             total += mood_scores.get(event_type, 0)
+        assert self.active_scene is not None
         
         if total >= 3:
             self.active_scene.mood = "dark"

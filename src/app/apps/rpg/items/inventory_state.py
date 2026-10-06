@@ -5,7 +5,7 @@ and stack merging.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.economy.currency import normalize_currency
 
@@ -101,7 +101,7 @@ def _merge_stack(items: List[Dict[str, Any]], incoming: Dict[str, Any], capacity
     if not incoming.get("item_id"):
         return items
 
-    item_def = get_item_definition(incoming.get("item_id"))
+    item_def = get_item_definition(cast(Any, incoming.get("item_id")))
     if item_def.get("stackable"):
         for idx, existing in enumerate(items):
             if _safe_str(existing.get("item_id")) == incoming["item_id"]:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.party.companion_presence import active_party_companions
 from app.apps.rpg.party.companion_values import evaluate_companion_value_alignment
@@ -236,10 +236,10 @@ def apply_companion_relationship_drift(
         "loyalty_state": loyalty_state_for_score(_safe_int(rel.get("loyalty"), 0)),
     }
 
-    rel["trust"] = max(-5, min(5, before["trust"] + int(trust_delta or 0)))
-    rel["respect"] = max(-5, min(5, before["respect"] + int(respect_delta or 0)))
-    rel["morale"] = max(-5, min(5, before["morale"] + int(morale_delta or 0)))
-    rel["loyalty"] = max(-5, min(5, before["loyalty"] + int(loyalty_delta or 0)))
+    rel["trust"] = max(-5, min(5, cast(int, before["trust"]) + int(trust_delta or 0)))
+    rel["respect"] = max(-5, min(5, cast(int, before["respect"]) + int(respect_delta or 0)))
+    rel["morale"] = max(-5, min(5, cast(int, before["morale"]) + int(morale_delta or 0)))
+    rel["loyalty"] = max(-5, min(5, cast(int, before["loyalty"]) + int(loyalty_delta or 0)))
     rel["loyalty_state"] = loyalty_state_for_score(_safe_int(rel.get("loyalty"), 0))
 
     event = {

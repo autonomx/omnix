@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from .models import CoherenceMutation, CoherenceState, ContradictionRecord
 
@@ -47,7 +47,7 @@ class ContradictionDetector:
                         message=f"Entity '{subject}' received update '{predicate}' after confirmed death.",
                         event_id=event.get("event_id") if event else None,
                         tick=event.get("tick") if event else None,
-                        entity_ids=[subject],
+                        entity_ids=[cast(Any, subject)],
                         related_fact_ids=[alive_fact.fact_id],
                     )
                 )
@@ -67,7 +67,7 @@ class ContradictionDetector:
             if data.get("predicate") != "location":
                 continue
             fact_id = data.get("fact_id")
-            existing = state.stable_world_facts.get(fact_id) or state.scene_facts.get(fact_id)
+            existing = state.stable_world_facts.get(cast(Any, fact_id)) or state.scene_facts.get(cast(Any, fact_id))
             if existing and existing.value != data.get("value"):
                 out.append(
                     ContradictionRecord(
@@ -81,7 +81,7 @@ class ContradictionDetector:
                         ),
                         event_id=event.get("event_id") if event else None,
                         tick=event.get("tick") if event else None,
-                        entity_ids=[data.get("subject")],
+                        entity_ids=[cast(Any, data.get("subject"))],
                         related_fact_ids=[existing.fact_id],
                     )
                 )
@@ -100,7 +100,7 @@ class ContradictionDetector:
             data = mutation.data
             if data.get("predicate") != "owner":
                 continue
-            existing = state.stable_world_facts.get(data.get("fact_id"))
+            existing = state.stable_world_facts.get(cast(Any, data.get("fact_id")))
             if existing and existing.value not in (None, data.get("value")):
                 out.append(
                     ContradictionRecord(
@@ -114,7 +114,7 @@ class ContradictionDetector:
                         ),
                         event_id=event.get("event_id") if event else None,
                         tick=event.get("tick") if event else None,
-                        entity_ids=[data.get("subject"), str(existing.value), str(data.get("value"))],
+                        entity_ids=[cast(Any, data.get("subject")), str(existing.value), str(data.get("value"))],
                         related_fact_ids=[existing.fact_id],
                     )
                 )

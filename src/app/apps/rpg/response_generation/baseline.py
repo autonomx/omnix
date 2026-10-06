@@ -213,53 +213,53 @@ def evaluate_baseline(
     latencies: list[float] = []
 
     for scenario in scenarios:
-        observation = observation_by_id.get(scenario.scenario_id)
+        scenario_observation = observation_by_id.get(scenario.scenario_id)
         issues: list[str] = []
-        if observation is None:
+        if scenario_observation is None:
             issues.append("missing_observation")
             evaluations.append(ScenarioEvaluation(scenario.scenario_id, False, tuple(issues)))
             continue
 
-        if observation.selected_affordance not in scenario.expected_affordances:
+        if scenario_observation.selected_affordance not in scenario.expected_affordances:
             issues.append("unexpected_affordance")
-        if observation.forward_outcome not in scenario.allowed_forward_outcomes:
+        if scenario_observation.forward_outcome not in scenario.allowed_forward_outcomes:
             issues.append("unexpected_forward_outcome")
-        if not set(observation.truth_classes).issubset(set(scenario.allowed_truth_classes)):
+        if not set(scenario_observation.truth_classes).issubset(set(scenario.allowed_truth_classes)):
             issues.append("disallowed_truth_class")
-        lowered = observation.final_visible_text.casefold()
+        lowered = scenario_observation.final_visible_text.casefold()
         if any(claim.casefold() in lowered for claim in scenario.forbidden_claims):
             issues.append("forbidden_claim")
-        if scenario.clarification_required and observation.forward_outcome != "clarification":
+        if scenario.clarification_required and scenario_observation.forward_outcome != "clarification":
             issues.append("clarification_required")
-        if observation.agency_violation:
+        if scenario_observation.agency_violation:
             issues.append("agency_violation")
-        if observation.hard_state_claims:
+        if scenario_observation.hard_state_claims:
             issues.append("unsupported_hard_state_claim")
-        if observation.hidden_fact_leaks:
+        if scenario_observation.hidden_fact_leaks:
             issues.append("hidden_information_leakage")
 
         normalized_text = " ".join(lowered.split())
         generic = (
-            observation.fallback_reason.casefold() == "generic"
+            scenario_observation.fallback_reason.casefold() == "generic"
             or normalized_text in _GENERIC_FALLBACK_TEXT
         )
-        has_answer = bool(observation.final_visible_text.strip()) and not generic
-        forward = observation.forward_outcome in scenario.allowed_forward_outcomes and not generic
+        has_answer = bool(scenario_observation.final_visible_text.strip()) and not generic
+        forward = scenario_observation.forward_outcome in scenario.allowed_forward_outcomes and not generic
 
         answer_flags.append(has_answer)
         forward_flags.append(forward)
         generic_flags.append(generic)
-        agency_flags.append(observation.agency_violation)
-        hard_claim_flags.append(bool(observation.hard_state_claims))
-        hidden_flags.append(bool(observation.hidden_fact_leaks))
-        repeated_flags.append(observation.repeated_content)
-        stale_flags.append(observation.stale_response_selected)
-        retrieval_flags.append(observation.local_retrieval_hit)
-        invoked = observation.hermes_status not in {"", "not_invoked"}
+        agency_flags.append(scenario_observation.agency_violation)
+        hard_claim_flags.append(bool(scenario_observation.hard_state_claims))
+        hidden_flags.append(bool(scenario_observation.hidden_fact_leaks))
+        repeated_flags.append(scenario_observation.repeated_content)
+        stale_flags.append(scenario_observation.stale_response_selected)
+        retrieval_flags.append(scenario_observation.local_retrieval_hit)
+        invoked = scenario_observation.hermes_status not in {"", "not_invoked"}
         hermes_invoked_flags.append(invoked)
-        hermes_success_flags.append(observation.hermes_status == "success")
-        hermes_timeout_flags.append(observation.hermes_status == "timeout")
-        latencies.append(max(0.0, observation.latency_ms))
+        hermes_success_flags.append(scenario_observation.hermes_status == "success")
+        hermes_timeout_flags.append(scenario_observation.hermes_status == "timeout")
+        latencies.append(max(0.0, scenario_observation.latency_ms))
         evaluations.append(ScenarioEvaluation(scenario.scenario_id, not issues, tuple(issues)))
 
     completed = len(answer_flags)

@@ -23,7 +23,7 @@ def validate_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     history = _safe_dict(draft.get("history"))
     personality = _safe_dict(draft.get("personality"))
 
-    clean = {
+    clean: dict[str, Any] = {
         "biography": {
             "short_summary": _safe_str(biography.get("short_summary"))[:500],
             "full_biography": _safe_str(biography.get("full_biography"))[:4000],
@@ -32,11 +32,11 @@ def validate_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         },
         "history": {
             "background": _safe_str(history.get("background"))[:3000],
-            "major_life_events": history.get("major_life_events") if isinstance(history.get("major_life_events"), list) else [],
-            "recent_events": history.get("recent_events") if isinstance(history.get("recent_events"), list) else [],
+            "major_life_events": raw_major_life_events if isinstance(raw_major_life_events := history.get("major_life_events"), list) else [],
+            "recent_events": raw_recent_events if isinstance(raw_recent_events := history.get("recent_events"), list) else [],
         },
         "personality": {
-            "traits": personality.get("traits") if isinstance(personality.get("traits"), list) else [],
+            "traits": raw_traits if isinstance(raw_traits := personality.get("traits"), list) else [],
             "temperament": _safe_str(personality.get("temperament"))[:500],
             "speech_style": _safe_str(personality.get("speech_style"))[:500],
             "risk_tolerance": _safe_str(personality.get("risk_tolerance"))[:100],

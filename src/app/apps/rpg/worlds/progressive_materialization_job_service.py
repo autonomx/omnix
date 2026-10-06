@@ -150,7 +150,7 @@ def materialization_job_telemetry(
     with unit_of_work(db) as work:
         rows = list(work.jobs.iter_jobs(context, job_types=(MATERIALIZATION_JOB_TYPE,)))
         work.rollback()
-    jobs = []
+    jobs: list[Any] = []
     for row in rows:
         if len(jobs) >= max(1, int(limit)):
             break

@@ -136,7 +136,7 @@ class PublicationValidatedWorldForgeGenerator:
         if not isinstance(generated, GeneratedTopic):
             try:
                 validate_generated_topic_for_publication(
-                    generated,  # type: ignore[arg-type]
+                    generated,
                     expected_topic_id=node.topic_id,
                 )
             except Exception as exc:

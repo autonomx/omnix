@@ -98,7 +98,7 @@ def apply_item_session_action(state: dict[str, Any], action: dict[str, Any]) -> 
             source=source,
         )
     elif kind in {"combat", "attack", "item_combat"}:
-        source_item = request.get("source_item") if isinstance(request.get("source_item"), dict) else None
+        source_item = raw_source_item if isinstance(raw_source_item := request.get("source_item"), dict) else None
         result = apply_session_item_combat(
             state,
             attacker_id=request.get("attacker_id"),

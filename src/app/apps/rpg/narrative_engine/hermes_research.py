@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, cast
 
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord, stable_hash
+from collections.abc import Sequence
 
 
 _ALLOWED_AUTHORITIES = {
@@ -227,15 +228,11 @@ def normalize_hermes_research(
 ) -> HermesResearchResult:
     bounded = (policy or HermesResearchPolicy()).bounded()
     query = _text(request.query, bounded.max_query_chars)
-    source_rows = (
-        raw.get("sources")
-        if isinstance(raw.get("sources"), list | tuple)
-        else ()
+    source_rows: Sequence[Any] = (
+        raw_sources if isinstance(raw_sources := raw.get("sources"), list | tuple) else ()
     )
-    finding_rows = (
-        raw.get("findings")
-        if isinstance(raw.get("findings"), list | tuple)
-        else ()
+    finding_rows: Sequence[Any] = (
+        raw_findings if isinstance(raw_findings := raw.get("findings"), list | tuple) else ()
     )
     sources: list[HermesResearchSource] = []
     source_ids: set[str] = set()
@@ -337,7 +334,7 @@ def normalize_hermes_research(
                 finding_id=finding_id,
                 content=content,
                 source_refs=source_refs,
-                authority=authority,
+                authority=cast(Any, authority),
                 entity_refs=_strings(
                     row.get("entity_refs") or row.get("entities")
                 ),
@@ -346,7 +343,7 @@ def normalize_hermes_research(
                     min(float(row.get("confidence") or 0.5), 1.0),
                 ),
                 disputed=disputed,
-                visibility=visibility,
+                visibility=cast(Any, visibility),
                 known_by=_strings(row.get("known_by")),
                 metadata=dict(row.get("metadata") or {}),
             )

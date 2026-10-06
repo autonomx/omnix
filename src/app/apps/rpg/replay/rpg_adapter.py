@@ -99,9 +99,9 @@ class RpgReplayPersistenceAdapter:
                 diagnostics.append({"kind": "invalid_session", "source": "rpg_session"})
                 continue
 
-            manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
-            state = session.get("state") if isinstance(session.get("state"), dict) else {}
-            metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+            manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
+            state = raw_state if isinstance(raw_state := session.get("state"), dict) else {}
+            metadata = raw_metadata if isinstance(raw_metadata := state.get("metadata"), dict) else {}
             session_id = manifest.get("session_id") or manifest.get("id") or state.get("session_id") or ""
             if not session_id:
                 diagnostics.append({"kind": "missing_manifest", "source": "rpg_session"})
@@ -121,7 +121,7 @@ class RpgReplayPersistenceAdapter:
                     "checkpoint": manifest.get("checkpoint") or manifest.get("checkpoint_id") or "Autosave session",
                     "metadata": {**metadata, "manifest": manifest},
                     "state": state,
-                    "payload": session.get("setup_payload") if isinstance(session.get("setup_payload"), dict) else {},
+                    "payload": raw_setup_payload if isinstance(raw_setup_payload := session.get("setup_payload"), dict) else {},
                 }
             )
         return PersistenceInventory(sessions=sessions, diagnostics=diagnostics)

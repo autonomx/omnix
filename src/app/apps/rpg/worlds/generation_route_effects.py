@@ -56,7 +56,7 @@ def _domains(graph: Mapping[str, Any] | None) -> set[str]:
 
 
 def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values = []
+    values: list[Any] = []
     for topic_index, raw in enumerate(topic_rows, 1):
         topic = _map(raw); candidate = _candidate(topic); topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
         values.extend((topic_id, index, entity) for index, entity in enumerate(_rows(candidate.get("entities"))))
@@ -116,7 +116,7 @@ def route_effect_issues(topic_rows: Sequence[Mapping[str, Any]], topic_graph: Ma
             if not material:
                 issues.append(RouteEffectIssue("route_sensitive_market_without_route_effect", place_id, "", base, "Route-sensitive markets require at least one route with a material supply effect.", {"connected_place_ids": list(connected)}))
     if len(valid_payloads) >= 4:
-        counts = {}
+        counts: dict[Any, Any] = {}
         for payload in valid_payloads: counts.setdefault(_fingerprint(payload), 0); counts[_fingerprint(payload)] += 1
         if max(counts.values(), default=0) > max(2, len(valid_payloads) // 2):
             issues.append(RouteEffectIssue("route_effect_portfolio_too_repetitive", "", "", "/route_effects/portfolio", "One exact route-effect template cannot dominate the route network.", {"route_effect_count": len(valid_payloads), "maximum_duplicate_count": max(counts.values())}))

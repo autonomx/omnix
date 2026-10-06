@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.item_detail import _session_genre, _setting_context
@@ -128,7 +128,7 @@ def generate_ability_detail(
                 ability,
                 ability_name,
                 state=state,
-                summary=fallback,
+                summary=cast(str, fallback),
                 source="unavailable",
             ),
             "mechanics_source": ABILITY_DETAIL_SOURCE,
@@ -150,7 +150,7 @@ def generate_ability_detail(
                 ability,
                 ability_name,
                 state=state,
-                summary=fallback,
+                summary=cast(str, fallback),
                 source="unavailable",
             ),
             "mechanics_source": ABILITY_DETAIL_SOURCE,

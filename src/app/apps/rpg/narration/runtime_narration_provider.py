@@ -468,7 +468,7 @@ def _call_provider_text_with_diagnostics(
     *,
     max_tokens: int = 320,
 ) -> Dict[str, Any]:
-    diagnostics = {
+    diagnostics: Dict[str, Any] = {
         "provider_shape": _provider_shape(provider),
         "attempted_methods": [],
         "method_errors": {},

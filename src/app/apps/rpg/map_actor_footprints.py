@@ -5,6 +5,7 @@ from collections.abc import Iterable
 
 from .map_effective_geometry import effective_is_walkable, effective_movement_cost
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
+from typing import Any
 
 
 def actor_footprint_cells(
@@ -53,7 +54,7 @@ def footprint_is_inside(
 
 def footprint_is_walkable(
     definition: GridMapDefinition,
-    snapshot: object,
+    snapshot: Any,
     actor: GridActorPlacement,
     *,
     anchor: GridPoint | None = None,
@@ -77,7 +78,7 @@ def footprint_overlaps(
 
 def footprint_movement_cost(
     definition: GridMapDefinition,
-    snapshot: object,
+    snapshot: Any,
     actor: GridActorPlacement,
     *,
     anchor: GridPoint,

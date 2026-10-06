@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, cast
 
 FieldValueType = Literal[
     "string",
@@ -338,7 +338,7 @@ def _range(value: Any, fallback: tuple[int, int]) -> tuple[int, int]:
     try:
         return tuple(int(item) for item in value)  # type: ignore[return-value]
     except (TypeError, ValueError):
-        return ()
+        return cast(Any, ())
 
 
 def domain_definition_from_dict(value: Mapping[str, Any]) -> DomainDefinition:

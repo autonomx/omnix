@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from app.apps.rpg.map_contracts import MapDefinition, MapPolygon
 
@@ -38,11 +38,11 @@ class MapDynamicOverlay:
     fog_polygons: tuple[MapFogPolygon, ...] = ()
     environment: Mapping[str, str] = field(default_factory=dict)
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def project_dynamic_map_overlay(session: Mapping[str, object], definition: MapDefinition) -> MapDynamicOverlay:
+def project_dynamic_map_overlay(session: Mapping[str, Any], definition: MapDefinition) -> MapDynamicOverlay:
     state = _mapping(session.get("state"))
     map_state = _mapping(state.get("map_state"))
     known_ids = {item.id for item in definition.objects}
@@ -67,8 +67,8 @@ def project_dynamic_map_overlay(session: Mapping[str, object], definition: MapDe
         )
 
     fog_polygons = []
-    for index, raw in enumerate(_sequence(map_state.get("fog_polygons"))):
-        item = _mapping(raw)
+    for index, polygon_raw in enumerate(_sequence(map_state.get("fog_polygons"))):
+        item = _mapping(polygon_raw)
         polygon_id = str(item.get("id") or f"fog:{index}").strip()
         points = _points(item.get("points"))
         if not polygon_id or len(points) < 3:
@@ -92,9 +92,9 @@ def project_dynamic_map_overlay(session: Mapping[str, object], definition: MapDe
 
 
 def merge_dynamic_overlay_payload(
-    base_overlay: Mapping[str, object],
+    base_overlay: Mapping[str, Any],
     dynamic: MapDynamicOverlay,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     payload = dict(base_overlay)
     payload.update(dynamic.as_dict())
     return payload
@@ -119,7 +119,7 @@ def _points(value: object) -> tuple[tuple[int, int], ...]:
     return tuple(points)
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 

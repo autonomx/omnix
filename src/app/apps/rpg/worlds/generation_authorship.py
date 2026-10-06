@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -12,9 +13,9 @@ from typing import Any, Iterable, Mapping, Sequence
 
 # ``enum.StrEnum`` was added in Python 3.11.  The RPG launcher still supports
 # Python 3.10 environments, so provide its small required surface locally.
-try:
+if sys.version_info >= (3, 11):
     from enum import StrEnum
-except ImportError:
+else:
     class StrEnum(str, Enum):
         def __str__(self) -> str:
             return str(self.value)
@@ -332,7 +333,7 @@ def _origin_entry(
     event_id: str = "",
     parent_origin: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    entry = {
+    entry: dict[str, Any] = {
         "path": str(row["path"]),
         "authorship_class": authorship_class,
         "generation_artifact_id": artifact_id,

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal, Mapping
+from typing import Any, Final, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-GRID_MAP_SCHEMA_VERSION = 1
+GRID_MAP_SCHEMA_VERSION: Final = 1
 GridPoint = tuple[int, int]
 
 

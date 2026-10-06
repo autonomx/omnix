@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 REPUTATION_MIN = -5
@@ -72,11 +72,11 @@ def update_npc_reputation(
 
     updated = {
         "npc_id": npc_id,
-        "familiarity": _clamp(current.get("familiarity") + int(familiarity_delta or 0)),
-        "trust": _clamp(current.get("trust") + int(trust_delta or 0)),
-        "annoyance": _clamp(current.get("annoyance") + int(annoyance_delta or 0)),
-        "fear": _clamp(current.get("fear") + int(fear_delta or 0)),
-        "respect": _clamp(current.get("respect") + int(respect_delta or 0)),
+        "familiarity": _clamp(cast(int, current.get("familiarity")) + int(familiarity_delta or 0)),
+        "trust": _clamp(cast(int, current.get("trust")) + int(trust_delta or 0)),
+        "annoyance": _clamp(cast(int, current.get("annoyance")) + int(annoyance_delta or 0)),
+        "fear": _clamp(cast(int, current.get("fear")) + int(fear_delta or 0)),
+        "respect": _clamp(cast(int, current.get("respect")) + int(respect_delta or 0)),
         "last_updated_tick": int(tick or 0),
         "last_reason": _safe_str(reason),
         "source": "deterministic_npc_reputation_runtime",

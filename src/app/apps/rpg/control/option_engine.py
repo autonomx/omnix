@@ -101,7 +101,7 @@ class OptionEngine:
     def _build_thread_options(self, coherence_core: Any) -> list[ChoiceOption]:
         options: list[ChoiceOption] = []
 
-        threads = []
+        threads: list[Any] = []
         if hasattr(coherence_core, "get_unresolved_threads"):
             threads = coherence_core.get_unresolved_threads() or []
 

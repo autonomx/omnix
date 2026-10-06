@@ -26,7 +26,7 @@ USAGE:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple, cast
 
 from .event_bus import Event, EventBus, EventContext
 
@@ -210,7 +210,7 @@ class TimelineQueryEngine:
             if tick is not None:
                 if tick not in groups:
                     groups[tick] = []
-                groups[tick].append(event.event_id)
+                groups[tick].append(cast(str, event.event_id))
         return groups
 
     # -------------------------------------------------------
@@ -250,12 +250,12 @@ class TimelineQueryEngine:
             score = self._evaluator.evaluate(events)
             depth = 0
             if events:
-                chain = self.event_bus.timeline.get_branch(events[-1].event_id)
+                chain = self.event_bus.timeline.get_branch(cast(str, events[-1].event_id))
                 depth = len(chain)
 
             # Find fork point (first event with multiple children in chain)
             fork_point = None
-            if len(chain := self.event_bus.timeline.get_branch(events[-1].event_id)) > 1:
+            if len(chain := self.event_bus.timeline.get_branch(cast(str, events[-1].event_id))) > 1:
                 for eid in chain:
                     node = self.event_bus.timeline.get_node(eid)
                     if node and len(node.children) > 1:
@@ -301,7 +301,7 @@ class TimelineQueryEngine:
         Returns:
             Dictionary with simulation results.
         """
-        result = {
+        result: dict[str, Any] = {
             "events_processed": 0,
             "final_tick": None,
             "branch_score": 0.0,
@@ -327,9 +327,9 @@ class TimelineQueryEngine:
                 )
 
             # Build causal chain for leaf events
-            if not self.event_bus.timeline.get_node(event.event_id):
+            if not self.event_bus.timeline.get_node(cast(str, event.event_id)):
                 self.event_bus.timeline.add_event(
-                    event.event_id, event.parent_id
+                    cast(str, event.event_id), event.parent_id
                 )
 
         if sorted_events:
@@ -339,7 +339,7 @@ class TimelineQueryEngine:
             # Get causal chain for the last event
             last_event = sorted_events[-1]
             try:
-                chain = self.event_bus.timeline.get_branch(last_event.event_id)
+                chain = self.event_bus.timeline.get_branch(cast(str, last_event.event_id))
                 result["causal_chains"] = chain
             except KeyError:
                 pass

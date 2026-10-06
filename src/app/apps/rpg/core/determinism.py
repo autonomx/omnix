@@ -83,7 +83,7 @@ def turn_rng_identity(session: Any, fallback_turn_index: int) -> tuple[int, int]
     state = session_data.get("simulation_state")
     state = state if isinstance(state, dict) else session_data
     if context is not None and context.session_seed is not None:
-        session_seed = context.session_seed
+        session_seed: Any = context.session_seed
     else:
         session_seed = state.get("rng_seed")
         if (
@@ -99,7 +99,7 @@ def turn_rng_identity(session: Any, fallback_turn_index: int) -> tuple[int, int]
             )
             session_seed = rng_seed_from_session_id(str(session_id)) if session_id else 0
     if context is not None and context.turn_index is not None:
-        turn_index = context.turn_index
+        turn_index: Any = context.turn_index
     else:
         turn_index = state.get("turn_index")
         if not isinstance(turn_index, int) or isinstance(turn_index, bool):

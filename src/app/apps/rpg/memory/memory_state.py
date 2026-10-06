@@ -28,7 +28,7 @@ def _normalize_memory_entry(value: Any) -> Dict[str, Any]:
         "id": _safe_str(data.get("id")).strip(),
         "summary": _safe_str(data.get("summary")).strip(),
         "kind": _safe_str(data.get("kind")).strip() or "fact",
-        "tick": int(data.get("tick")) if isinstance(data.get("tick"), int) else 0,
+        "tick": int(raw_tick) if isinstance(raw_tick := data.get("tick"), int) else 0,
     }
 
 

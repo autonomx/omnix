@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from .authority import (
     AuthorityClass,
@@ -28,7 +28,7 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if is_dataclass(value):
-        return _jsonable(asdict(value))
+        return _jsonable(asdict(cast(Any, value)))
     if isinstance(value, Mapping):
         return {str(key): _jsonable(item) for key, item in value.items()}
     if isinstance(value, tuple | list):

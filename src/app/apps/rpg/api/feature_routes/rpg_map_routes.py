@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -174,7 +174,7 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})
 
 
-def _project_overlay_payload(session: dict[str, Any], definition: Any, overlay: Any) -> dict[str, object]:
+def _project_overlay_payload(session: dict[str, Any], definition: Any, overlay: Any) -> dict[str, Any]:
     dynamic = project_dynamic_map_overlay(session, definition)
     payload = merge_dynamic_overlay_payload(_payload(overlay), dynamic)
     markers = project_living_map_markers(session, definition)
@@ -228,7 +228,7 @@ def _map_action_request(raw: object) -> MapActionRequest:
     target_object_id = str(payload.get("target_object_id") or "").strip()
     definition_revision = str(payload.get("definition_revision") or "").strip()
     try:
-        overlay_revision = int(payload.get("overlay_revision"))
+        overlay_revision = int(cast(Any, payload.get("overlay_revision")))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail={"ok": False, "error": "invalid_overlay_revision"}) from exc
     if action not in _ALLOWED_ACTIONS:

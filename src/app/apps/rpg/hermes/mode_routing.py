@@ -1,7 +1,7 @@
 """Omnix modes for Hermes: which mode routes where, its policy and the route decision."""
 from __future__ import annotations
 
-from typing import Literal, TypedDict, Any
+from typing import Any, Literal, TypedDict, cast
 
 
 OmnixMode = Literal["normal_chat", "live_chat", "agent_mode", "house_ai", "podcast", "rpg"]
@@ -78,17 +78,17 @@ MODE_ROUTES: dict[OmnixMode, OmnixModeRoute] = {
 
 
 def omnix_mode_route(mode: str) -> OmnixModeRoute:
-    route = MODE_ROUTES.get(mode)  # type: ignore[arg-type]
+    route = MODE_ROUTES.get(cast(OmnixMode, mode))
     if route is None:
         raise KeyError(f"Unknown Omnix mode: {mode}")
     return dict(route)  # type: ignore[return-value]
 
 
 def list_omnix_mode_routes() -> list[OmnixModeRoute]:
-    return [dict(MODE_ROUTES[mode]) for mode in ("normal_chat", "live_chat", "agent_mode", "house_ai", "podcast", "rpg")]
+    return [cast(OmnixModeRoute, dict(MODE_ROUTES[mode])) for mode in ("normal_chat", "live_chat", "agent_mode", "house_ai", "podcast", "rpg")]
 
 
-def omnix_mode_router_payload(mode: str | None = None) -> dict[str, object]:
+def omnix_mode_router_payload(mode: str | None = None) -> dict[str, Any]:
     if mode:
         try:
             return {"ok": True, "route": omnix_mode_route(mode)}
@@ -142,7 +142,7 @@ def list_omnix_mode_policies() -> list[OmnixModePolicy]:
     return [omnix_mode_policy(route["mode"]) for route in list_omnix_mode_routes()]
 
 
-def omnix_mode_policy_payload(mode: str | None = None) -> dict[str, object]:
+def omnix_mode_policy_payload(mode: str | None = None) -> dict[str, Any]:
     if mode:
         try:
             return {"ok": True, "policy": omnix_mode_policy(mode)}

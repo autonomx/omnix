@@ -131,12 +131,12 @@ def ensure_session_environment_seed_state(session: dict[str, Any]) -> dict[str, 
     Environment 2.0 slices replace their consumers.
     """
 
-    state = session.get("state") if isinstance(session.get("state"), dict) else None
+    state = raw_state if isinstance(raw_state := session.get("state"), dict) else None
     if state is None:
         return session
 
-    world = dict(state.get("world")) if isinstance(state.get("world"), dict) else {}
-    scene = dict(state.get("scene")) if isinstance(state.get("scene"), dict) else {}
+    world = dict(raw_world) if isinstance(raw_world := state.get("world"), dict) else {}
+    scene = dict(raw_scene) if isinstance(raw_scene := state.get("scene"), dict) else {}
     has_environment = isinstance(world.get("environment"), dict)
     has_scene_context = isinstance(scene.get("environment_context"), dict)
     if has_environment and has_scene_context:
@@ -168,8 +168,8 @@ def ensure_session_environment_seed_state(session: dict[str, Any]) -> dict[str, 
 
 
 def _session_seed(session: dict[str, Any], state: dict[str, Any]) -> int:
-    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
-    simulation_state = session.get("simulation_state") if isinstance(session.get("simulation_state"), dict) else {}
+    metadata = raw_metadata if isinstance(raw_metadata := state.get("metadata"), dict) else {}
+    simulation_state = raw_simulation_state if isinstance(raw_simulation_state := session.get("simulation_state"), dict) else {}
     for value in (metadata.get("seed"), simulation_state.get("seed"), state.get("seed")):
         coerced = _coerce_int(value)
         if coerced is not None:
@@ -179,8 +179,8 @@ def _session_seed(session: dict[str, Any], state: dict[str, Any]) -> int:
 
 
 def _session_contract(session: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    setup_payload = session.get("setup_payload") if isinstance(session.get("setup_payload"), dict) else {}
-    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+    setup_payload = raw_setup_payload if isinstance(raw_setup_payload := session.get("setup_payload"), dict) else {}
+    metadata = raw_metadata if isinstance(raw_metadata := state.get("metadata"), dict) else {}
     contract = dict(setup_payload)
     if isinstance(setup_payload.get("request"), dict):
         contract.update(setup_payload["request"])
@@ -191,7 +191,7 @@ def _session_contract(session: dict[str, Any], state: dict[str, Any]) -> dict[st
 
 
 def _session_location_id(state: dict[str, Any]) -> str:
-    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+    metadata = raw_metadata if isinstance(raw_metadata := state.get("metadata"), dict) else {}
     candidates = (
         state.get("starting_location"),
         metadata.get("starting_location"),
@@ -261,7 +261,7 @@ def _scene_environment_context(
     defaults: dict[str, Any],
     location: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    scene_defaults = defaults.get("scene") if isinstance(defaults.get("scene"), dict) else {}
+    scene_defaults = raw_scene if isinstance(raw_scene := defaults.get("scene"), dict) else {}
     location_name = str((location or {}).get("location") or location_id)
     return {
         "exposure": str(scene_defaults.get("exposure") or "outdoor"),

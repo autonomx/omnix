@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from .contract import CampaignGenesisContract
 from app.apps.rpg.safe_values import dict_copy as _safe_dict
@@ -44,7 +44,7 @@ def _motivation(opening_hook: str) -> dict[str, Any]:
         "random_from_seed": {"primary": "discovery", "target": None},
         "tavern_rumor": {"primary": "survival", "target": None},
     }
-    selected = dict(mapping.get(_normal_key(opening_hook), mapping["tavern_rumor"]))
+    selected = dict(cast(Any, mapping.get(_normal_key(opening_hook), mapping["tavern_rumor"])))
     selected.update({"intensity": 100, "fulfilled": False})
     return selected
 

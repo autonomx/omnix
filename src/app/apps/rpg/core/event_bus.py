@@ -33,7 +33,7 @@ import copy
 import inspect
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
 from .clock import DeterministicClock
@@ -271,7 +271,7 @@ class EventBus:
         self.assert_event_usage()
 
         # PHASE 5.1.5 — FIX #4: Assign sequence number for stable ordering
-        event._seq = self._seq
+        setattr(event, "_seq", self._seq)
         self._seq += 1
 
         # PHASE 4 — EVENT CONTEXT: Apply context parent_id and tick if provided
@@ -288,7 +288,7 @@ class EventBus:
                 tick=context.tick if context.tick is not None else event.tick,
             )
             # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
-            event._seq = seq_before
+            setattr(event, "_seq", seq_before)
 
         # Fix #2: Enforce source field when enforcement is enabled
         if self._enforce and not event.source:
@@ -378,13 +378,13 @@ class EventBus:
             tick=event_tick,
         )
         # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
-        cloned._seq = original_seq
+        setattr(cloned, "_seq", original_seq)
 
         # Propagate canonical fields back to original event so callers can inspect them
         event.event_id = event_id
         event.timestamp = event_timestamp
         event.tick = event_tick
-        event._seq = original_seq
+        setattr(event, "_seq", original_seq)
 
         # Use the cloned event for the bus
         event = cloned
@@ -412,7 +412,7 @@ class EventBus:
         self._events.append(event)
 
         # PHASE 3 — TIMELINE GRAPH: Track event in DAG for branching timelines
-        self.timeline.add_event(event.event_id, event.parent_id)
+        self.timeline.add_event(cast(str, event.event_id), event.parent_id)
 
     def collect(self) -> List[Event]:
         """Collect and clear all pending events.
@@ -531,7 +531,7 @@ class EventBus:
         self._current_tick = None
 
         for e in self._history:
-            self.timeline.add_event(e.event_id, e.parent_id)
+            self.timeline.add_event(cast(str, e.event_id), e.parent_id)
 
             if e.event_id is not None:
                 if len(self._seen_event_ids) == self._seen_event_ids.maxlen:
@@ -542,7 +542,7 @@ class EventBus:
 
             self._seq = max(self._seq, getattr(e, "_seq", 0) + 1)
             if getattr(e, "tick", None) is not None:
-                self._current_tick = max(self._current_tick or 0, e.tick)
+                self._current_tick = max(self._current_tick or 0, cast(int, e.tick))
 
     def reset(self) -> None:
         """Reset the bus state (clears queue, log, and history).

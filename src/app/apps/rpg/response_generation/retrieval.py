@@ -134,7 +134,7 @@ def _record(row: Mapping[str, Any], source: str, index: int) -> EvidenceRecord:
         source=str(row.get("source") or source),
         content=row.get("content"),
         visibility=str(row.get("visibility") or "player_visible"),
-        confidence=float(row.get("confidence") if row.get("confidence") is not None else 1.0),
+        confidence=float(raw_confidence if (raw_confidence := row.get("confidence")) is not None else 1.0),
         entity_ids=_strings(row.get("entity_ids")),
         speaker_ids=_strings(row.get("speaker_ids")),
         aliases=_strings(row.get("aliases")),

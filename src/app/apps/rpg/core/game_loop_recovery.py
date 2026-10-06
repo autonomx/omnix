@@ -2,13 +2,19 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..recovery.manager import RecoveryManager
 from .event_bus import Event
 
 
-class GameLoopRecoveryMixin:
+if TYPE_CHECKING:
+    from .game_loop_state import GameLoopState as _LoopBase
+else:
+    _LoopBase = object
+
+
+class GameLoopRecoveryMixin(_LoopBase):
     # -------------------------
     # PHASE 6.0 — COHERENCE CORE
     # -------------------------

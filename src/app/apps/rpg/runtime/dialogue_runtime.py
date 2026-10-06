@@ -11,7 +11,7 @@ Rules:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from app.apps.rpg.runtime.dialogue_runtime_state import (
     _EMOTION_ORDER,
@@ -73,7 +73,7 @@ def ensure_runtime_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
         runtime_state = simulation_state["runtime_state"] = {}
 
     dialogue_state = runtime_state.get("dialogue")
-    runtime_state["dialogue"] = _normalize_dialogue_state(dialogue_state)
+    runtime_state["dialogue"] = _normalize_dialogue_state(cast(Any, dialogue_state))
     simulation_state["runtime_state"] = runtime_state
     return simulation_state
 
@@ -105,7 +105,7 @@ def get_runtime_emotion(simulation_state: Dict[str, Any], actor_id: str) -> Dict
             "intensity": 0.0,
             "updated_tick": 0,
         }
-    return _normalize_emotion_entry(actor_id, emotions.get(actor_id))
+    return _normalize_emotion_entry(actor_id, cast(Any, emotions.get(actor_id)))
 
 
 def _set_runtime_dialogue_state(
@@ -115,7 +115,7 @@ def _set_runtime_dialogue_state(
     """Persist normalized dialogue runtime state back into simulation_state."""
     simulation_state = ensure_runtime_state(simulation_state)
     runtime_state = _safe_dict(simulation_state.get("runtime_state"))
-    runtime_state["dialogue"] = _normalize_dialogue_state(dialogue_state)
+    runtime_state["dialogue"] = _normalize_dialogue_state(cast(Any, dialogue_state))
     simulation_state["runtime_state"] = runtime_state
     return simulation_state
 
@@ -840,7 +840,7 @@ def decay_runtime_emotions(
 
     out: Dict[str, Dict[str, Any]] = {}
     for actor_id in sorted(emotions.keys()):
-        current = _normalize_emotion_entry(actor_id, emotions.get(actor_id))
+        current = _normalize_emotion_entry(actor_id, cast(Any, emotions.get(actor_id)))
         updated_tick = _safe_int(current.get("updated_tick"), 0)
         delta = max(0, tick - updated_tick)
         intensity = _safe_float(current.get("intensity"), 0.0)

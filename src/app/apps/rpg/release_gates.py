@@ -20,9 +20,9 @@ _FORBIDDEN_FOREGROUND_KEYS = {
 
 def evaluate_turn_response_release_gates(payload: dict[str, Any]) -> dict[str, Any]:
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    visible = payload.get("visible_response") if isinstance(payload.get("visible_response"), dict) else {}
-    messages = visible.get("messages") if isinstance(visible.get("messages"), list) else []
-    state = payload.get("state") if isinstance(payload.get("state"), dict) else {}
+    visible = raw_visible_response if isinstance(raw_visible_response := payload.get("visible_response"), dict) else {}
+    messages = raw_messages if isinstance(raw_messages := visible.get("messages"), list) else []
+    state = raw_state if isinstance(raw_state := payload.get("state"), dict) else {}
     failures: list[str] = []
 
     if payload.get("contract_version") != "rpg_turn_response_v2":

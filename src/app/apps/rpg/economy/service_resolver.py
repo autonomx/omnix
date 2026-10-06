@@ -665,7 +665,7 @@ def _n11619_not_service_precision_result(player_input: str, *, service_kind: str
     }
 
 
-def resolve_service_intent(
+def resolve_service_intent(  # type: ignore[no-redef]  # wraps the definition above
     player_input: str,
     action: Dict[str, Any] | None = None,
     simulation_state: Dict[str, Any] | None = None,
@@ -683,7 +683,7 @@ def resolve_service_intent(
     )
 
 
-def resolve_service_turn(
+def resolve_service_turn(  # type: ignore[no-redef]  # wraps the definition above
     *,
     player_input: str,
     action: Dict[str, Any] | None,

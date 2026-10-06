@@ -182,7 +182,7 @@ def deferred_public_turn_payload(payload: dict[str, Any]) -> dict[str, Any]:
     raw = payload.get("canonical_narrative_response")
     if not isinstance(raw, Mapping):
         return payload
-    delivery = raw.get("delivery") if isinstance(raw.get("delivery"), Mapping) else {}
+    delivery = raw_delivery if isinstance(raw_delivery := raw.get("delivery"), Mapping) else {}
     if str(delivery.get("mode") or "") != DeliveryMode.DEFERRED.value:
         return payload
     if str(delivery.get("status") or "") == "complete":
@@ -230,9 +230,7 @@ def deferred_public_turn_payload(payload: dict[str, Any]) -> dict[str, Any]:
     payload["canonical_narrative_response"] = envelope
     payload.pop("narrative_projections", None)
     delivery_metadata = (
-        delivery.get("metadata")
-        if isinstance(delivery.get("metadata"), Mapping)
-        else {}
+        raw_metadata if isinstance(raw_metadata := delivery.get("metadata"), Mapping) else {}
     )
     payload["deferred_narrative_delivery"] = {
         "response_id": response_id,

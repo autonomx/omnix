@@ -11,7 +11,7 @@ from app.runtime.clock import utc_now
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 from app.apps.rpg.session.item_turn_hooks import build_item_turn_hook_plan, run_item_turn_hooks
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
@@ -72,7 +72,7 @@ def _has_item_trace_for_turn(mechanics: dict[str, Any], *, turn: int) -> bool:
     for value in _safe_list(mechanics.get("item_traces")):
         trace = _safe_dict(value)
         try:
-            trace_turn = int(trace.get("turn"))
+            trace_turn = int(cast(Any, trace.get("turn")))
         except (TypeError, ValueError):
             continue
         if trace_turn == turn:

@@ -38,8 +38,6 @@ class NarrativeDirector:
         events = self.injector.inject(self.state, world)
         for event in events:
             self.state.add_event(event)
-        # 4. Adjust pacing
-        self.pacing.adjust(self.state, world)
         return events
 
     def reset(self):

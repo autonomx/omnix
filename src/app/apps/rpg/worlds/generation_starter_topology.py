@@ -56,7 +56,7 @@ def _plan_issues(plan: StarterBubblePlan) -> tuple[StarterTopologyIssue, ...]:
             "Starter route IDs must be present and unique.", {"route_ids": route_ids},
         ))
     known = set(slot_ids)
-    adjacency = {location_id: set() for location_id in known}
+    adjacency: dict[str, set[str]] = {location_id: set() for location_id in known}
     invalid_endpoints: set[str] = set()
     for row in route_rows:
         source = str(row.get("source_location_id") or "")

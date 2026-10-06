@@ -73,7 +73,7 @@ def _normalize_relationship(value: Any, fallback_target_id: str = "") -> Dict[st
         or fallback_target_id
     )
     stance = _clean_id(payload.get("stance")).casefold()
-    raw_axes = payload.get("axes") if isinstance(payload.get("axes"), dict) else payload
+    raw_axes = raw_axes if isinstance(raw_axes := payload.get("axes"), dict) else payload
     axes: Dict[str, int | float] = {}
     for raw_key, raw_value in sorted(_safe_dict(raw_axes).items()):
         key = _clean_id(raw_key).casefold()

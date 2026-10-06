@@ -243,7 +243,7 @@ def handle_pending_player_conversation_response(
         requested_topic_access = requested_topic_access_from_pivot(topic_pivot or {})
 
         # Z-AA-AB: Evaluate quest conversation access gate before biography response.
-        quest_access: Dict[str, Any] = {}
+        quest_access = {}
         effective_topic = active_topic
         if settings.get("quest_conversation_access_enabled", True):
             quest_access = evaluate_quest_conversation_access(
@@ -341,7 +341,7 @@ def handle_pending_player_conversation_response(
             )
 
         # Z-AA-AB: Apply richer player reputation consequences.
-        reputation_consequence: Dict[str, Any] = {}
+        reputation_consequence = {}
         if settings.get("player_reputation_consequences_enabled", True):
             reputation_consequence = apply_player_reputation_consequence(
                 simulation_state,

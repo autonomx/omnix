@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MAX_THREADS = 8
@@ -162,7 +162,7 @@ def add_thread_line(
             last = _safe_dict(lines[-1])
             if (
                 _safe_str(last.get("speaker_id")) == line["speaker_id"]
-                and _safe_str(last.get("text")).strip().lower() == line["text"].lower()
+                and _safe_str(last.get("text")).strip().lower() == cast(str, line["text"]).lower()
             ):
                 return runtime_state
         lines.append(line)

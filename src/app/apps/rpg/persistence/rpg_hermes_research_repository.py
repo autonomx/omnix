@@ -50,8 +50,8 @@ class PostgresRpgHermesResearchRepository:
         ).fetchone()
         if campaign is None:
             raise EntityNotFound(campaign_id)
-        sources = result.get("sources") if isinstance(result.get("sources"), list) else []
-        findings = result.get("findings") if isinstance(result.get("findings"), list) else []
+        sources = raw_sources if isinstance(raw_sources := result.get("sources"), list) else []
+        findings = raw_findings if isinstance(raw_findings := result.get("findings"), list) else []
         content_hash = str(result.get("content_hash") or "").strip()
         if not content_hash:
             raise ValueError("Hermes research result requires a content_hash")

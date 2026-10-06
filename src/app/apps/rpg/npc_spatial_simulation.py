@@ -8,7 +8,7 @@ reruns this scheduler, AI, or pathfinding.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Iterable, Literal
+from typing import Final, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -22,7 +22,7 @@ from .map_instance_runtime import (
     resolve_move_command,
 )
 
-NPC_SPATIAL_SIMULATION_VERSION = 1
+NPC_SPATIAL_SIMULATION_VERSION: Final = 1
 SpatialSimulationTier = Literal["active", "coarse", "dormant"]
 SpatialDecisionStatus = Literal[
     "moved",

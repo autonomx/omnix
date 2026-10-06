@@ -816,7 +816,7 @@ def _demo_state(session_id: str, now: str) -> dict[str, Any]:
 
 
 def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
-    state = session.get("state") if isinstance(session.get("state"), dict) else None
+    state = raw_state if isinstance(raw_state := session.get("state"), dict) else None
     if state is not None:
         write_ability_coverage_snapshot(state)
     saved = save_session(session, compact=True)

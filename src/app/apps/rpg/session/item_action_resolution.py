@@ -194,7 +194,7 @@ def apply_item_action_input(
             "mechanics_source": ITEM_ACTION_RESOLUTION_SOURCE,
         }
 
-    common_options = {
+    common_options: dict[str, Any] = {
         "current_turn": current_turn,
         "station": station,
         "genre": genre,

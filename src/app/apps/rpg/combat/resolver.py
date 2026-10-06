@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.combat.models import (
     AttackIntent,
@@ -107,14 +107,14 @@ def resolve_attack(
     attack_mod = strength + agility + brawling
     defense_mod = agility + endurance + evasion
 
-    attack_total = attack_roll["result"] + attack_mod
+    attack_total = cast(int, attack_roll["result"]) + attack_mod
     defense_total = 10 + defense_mod + _combat_defense_bonus(combat_state, intent.target_id)
 
     hit = attack_total >= defense_total
     crit = attack_roll["result"] == 20
 
     base_damage = strength + max(0, brawling // 2)
-    rolled_damage = damage_roll["result"]
+    rolled_damage = cast(int, damage_roll["result"])
     damage_total = 0
     if hit:
         damage_total = max(1, base_damage + rolled_damage - max(0, endurance // 2))

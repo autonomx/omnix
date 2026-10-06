@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from .belief_model import BeliefModel
 from .goal_engine import GoalEngine
@@ -44,7 +44,7 @@ class NPCMind:
         npc_id = _safe_str(data.get("npc_id"))
         return cls(
             npc_id=npc_id,
-            memory=NPCMemory.from_dict(data.get("memory")),
+            memory=NPCMemory.from_dict(cast(Any, data.get("memory"))),
             beliefs=BeliefModel.from_dict(data.get("beliefs")),
             goal_engine=GoalEngine.from_dict(data.get("goals")),
             last_decision=data.get("last_decision") or {},
@@ -95,7 +95,7 @@ class NPCMind:
             npc_context=npc_context,
             simulation_state=simulation_state,
             belief_summary=self.beliefs.summarize(limit=8),
-            memory_summary=self.memory.summary(limit=5),
+            memory_summary=[entry for entry in self.memory.entries[:5] if entry.get("summary")],
         )
         self.goal_engine.merge_goals(generated)
 

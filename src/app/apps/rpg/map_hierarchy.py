@@ -23,9 +23,9 @@ def switch_active_map(
     preferred_location_id: str | None,
     repository: MapDefinitionRepository,
 ) -> tuple[dict[str, Any], str]:
-    map_state = state.get("map_state") if isinstance(state.get("map_state"), dict) else {}
+    map_state = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
     current_map_id = str(map_state.get("current_map_id") or "")
-    overlays = map_state.get("map_overlays") if isinstance(map_state.get("map_overlays"), dict) else {}
+    overlays = raw_map_overlays if isinstance(raw_map_overlays := map_state.get("map_overlays"), dict) else {}
     if current_map_id:
         overlays[current_map_id] = {
             key: map_state.get(key)
@@ -34,7 +34,7 @@ def switch_active_map(
         }
 
     destination = repository.get(destination_map_id)
-    restored = overlays.get(destination_map_id) if isinstance(overlays.get(destination_map_id), dict) else {}
+    restored = raw_restored if isinstance(raw_restored := overlays.get(destination_map_id), dict) else {}
     destination_location_id = _location_for_map(destination, preferred_location_id)
     map_state["current_map_id"] = destination_map_id
     map_state["current_location_id"] = destination_location_id

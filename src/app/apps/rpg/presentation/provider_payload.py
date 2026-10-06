@@ -150,7 +150,7 @@ def _field_level_salvage(text: str) -> Dict[str, Any]:
     if npc_match:
         npc_block = npc_match.group(1)
 
-    payload = {
+    payload: dict[str, Any] = {
         "format_version": "rpg_narration_v2",
         "narration": grab_string("narration"),
         "action": grab_string("action"),

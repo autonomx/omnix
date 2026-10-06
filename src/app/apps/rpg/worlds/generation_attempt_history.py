@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 _ATTEMPT_HISTORY_SCHEMA = "rpg_world_generation_attempt_history_v1"
 _ATTEMPT_SCHEMA = "rpg_world_generation_validation_attempt_v1"
@@ -33,7 +33,7 @@ def _attempt_number(provider: Mapping[str, Any], history: list[dict[str, Any]]) 
     raw = provider.get("attempt_count")
     if not isinstance(raw, bool):
         try:
-            return max(1, int(raw))
+            return max(1, int(cast(Any, raw)))
         except (TypeError, ValueError):
             pass
     return len(history) + 1

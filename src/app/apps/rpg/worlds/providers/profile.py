@@ -317,7 +317,7 @@ class ProviderGenreProfileGenerator:
                 content=json.dumps(payload, ensure_ascii=False, sort_keys=True),
             ),
         ]
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         total_calls = max(1, self.config.max_retries + 2)
         provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
         call_limiter = (

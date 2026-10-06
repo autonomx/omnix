@@ -10,7 +10,7 @@ JSON serialization.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 # ---------------------------------------------------------------------------
@@ -327,7 +327,7 @@ def build_simulation_summary(setup_payload: dict[str, Any]) -> dict[str, Any]:
             pair = tuple(sorted([fid, other_fid]))
             if pair in seen_pairs:
                 continue
-            seen_pairs.add(pair)
+            seen_pairs.add(cast(tuple[str, str], pair))
 
             # Count shared NPCs at same locations
             shared_npcs = set(npcs_in_faction.get(fid, [])) & set(npcs_in_faction.get(other_fid, []))

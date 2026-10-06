@@ -25,7 +25,7 @@ def _context(database: PostgresDatabase):
 
 
 def _campaign_id(session: dict[str, Any]) -> str:
-    manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
+    manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
     value = str(manifest.get("session_id") or manifest.get("id") or "").strip()
     if not value:
         raise ValueError("RPG session manifest requires session_id")
@@ -33,8 +33,8 @@ def _campaign_id(session: dict[str, Any]) -> str:
 
 
 def _revision(session: dict[str, Any]) -> int:
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
-    manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
     return max(0, int(runtime.get("state_revision") or manifest.get("turn_count") or 0))
 
 
@@ -51,7 +51,7 @@ def save_session_to_postgres(
     campaign_id = _campaign_id(session)
     revision = _revision(session)
     digest = state_hash(session)
-    manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
+    manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
     engine_version = str(
         manifest.get("engine_version") or session.get("engine_version") or "rpg-engine"
     )

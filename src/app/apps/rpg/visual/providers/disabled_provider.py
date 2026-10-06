@@ -31,7 +31,7 @@ class DisabledImageProvider(BaseImageProvider):
     def unload(self) -> None:
         return None
 
-    def generate(
+    def generate(  # type: ignore[override]  # RPG's keyword image request
         self,
         *,
         prompt: str,

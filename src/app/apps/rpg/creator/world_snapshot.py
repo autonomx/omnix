@@ -52,14 +52,14 @@ def _normalize_value(value: Any) -> Any:
         }
         return normalized
     if isinstance(value, list):
-        normalized = [_normalize_value(v) for v in value]
-        normalized = [v for v in normalized if v not in (None, [], {})]
-        if all(not isinstance(v, (dict, list)) for v in normalized):
+        items = [_normalize_value(v) for v in value]
+        items = [v for v in items if v not in (None, [], {})]
+        if all(not isinstance(v, (dict, list)) for v in items):
             try:
-                return sorted(normalized)
+                return sorted(items)
             except Exception:
-                return normalized
-        return normalized
+                return items
+        return items
     return _normalize_scalar(value)
 
 

@@ -58,7 +58,7 @@ def _domains(graph: Mapping[str, Any] | None) -> set[str]:
 
 
 def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values = []
+    values: list[Any] = []
     for topic_index, raw in enumerate(topic_rows, 1):
         topic = _map(raw); candidate = _candidate(topic)
         topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
@@ -120,8 +120,8 @@ def countervailing_power_issues(topic_rows: Sequence[Mapping[str, Any]], topic_g
     if count >= 3:
         adjacency = {group_id: {value for value in targets if value in group_ids and value != group_id} for group_id, targets in constraints.items()}
         undirected = {group_id: set(values) for group_id, values in adjacency.items()}
-        for source, targets in adjacency.items():
-            for target in targets:
+        for source, linked in adjacency.items():
+            for target in linked:
                 undirected.setdefault(target, set()).add(source)
         seen = set(); pending = [next(iter(group_ids))] if group_ids else []
         while pending:
@@ -130,7 +130,7 @@ def countervailing_power_issues(topic_rows: Sequence[Mapping[str, Any]], topic_g
             seen.add(current); pending.extend(undirected.get(current, set()) - seen)
         if seen != group_ids:
             issues.append(CountervailingPowerIssue("countervailing_power_graph_disconnected", "", "/countervailing_powers/graph", "Major powers must form one connected constraint graph.", {"unreachable_group_ids": sorted(group_ids - seen)}))
-        by_signature = {}
+        by_signature: dict[Any, Any] = {}
         for group_id, payload in payloads.items(): by_signature.setdefault(_fingerprint(payload), []).append(group_id)
         for fingerprint, repeated in sorted(by_signature.items()):
             if len(repeated) > 1:

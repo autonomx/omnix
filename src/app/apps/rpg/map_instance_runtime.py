@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import heapq
-from typing import Any, Iterable, Literal
+from typing import Any, Final, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,7 +17,7 @@ from .map_actor_footprints import (
 from .map_effective_geometry import effective_terrain_rows, normalize_terrain_overrides
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 
-MAP_INSTANCE_SCHEMA_VERSION = 1
+MAP_INSTANCE_SCHEMA_VERSION: Final = 1
 PATHFINDER_VERSION = 2
 MAP_REDUCER_VERSION = 1
 
@@ -347,10 +347,10 @@ def _find_path(
     if destination not in came_from:
         return (), 0
     path: list[GridPoint] = []
-    current: GridPoint | None = destination
-    while current is not None:
-        path.append(current)
-        current = came_from[current]
+    step: GridPoint | None = destination
+    while step is not None:
+        path.append(step)
+        step = came_from[step]
     path.reverse()
     return tuple(path), cost_so_far[destination]
 

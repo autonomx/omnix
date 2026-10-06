@@ -264,7 +264,7 @@ class StoryArcManager:
         tags: Optional[List[str]] = None,
         dependency: Optional[str] = None,
         priority: float = 1.0,
-    ) -> StoryArc:
+    ) -> Optional[StoryArc]:
         """Create a new story arc.
         
         If the arc has an unmet dependency, it goes into pending.
@@ -382,12 +382,12 @@ class StoryArcManager:
         # Apply resolution effects
         for event in completion_events:
             if event["type"] == "arc_completion":
-                arc = next(
+                completed = next(
                     (a for a in self.completed_arcs if a.id == event["arc_id"]),
                     None
                 )
-                if arc and arc.resolution_effect:
-                    completion_events.append(arc.resolution_effect)
+                if completed and completed.resolution_effect:
+                    completion_events.append(completed.resolution_effect)
         
         # [FIX #3] Enforce arc limits after updates to prevent saturation
         self._limit_active_arcs()

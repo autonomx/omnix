@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 LocationStatus = Literal["stub", "expanded"]
 RouteStatus = Literal["open", "blocked", "locked"]
@@ -85,7 +85,7 @@ class RpgTravelResult:
     requires_narration: bool = False
     route_id: str | None = None
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "from_id": self.from_id,

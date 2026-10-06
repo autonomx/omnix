@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass, replace
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.apps.rpg.map_contracts import MapDefinition
 
@@ -42,7 +42,7 @@ def with_definition_revision(definition: MapDefinition) -> MapDefinition:
 
 def _canonical_value(value: object) -> Any:
     if is_dataclass(value):
-        return _canonical_value(asdict(value))
+        return _canonical_value(asdict(cast(Any, value)))
     if isinstance(value, Mapping):
         return {
             str(key): _canonical_value(item)

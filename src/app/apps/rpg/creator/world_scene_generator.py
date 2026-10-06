@@ -24,6 +24,7 @@ from app.apps.rpg.player import (
     update_journal_from_state,
 )
 from app.apps.rpg.safe_values import safe_list as _safe_list
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +271,7 @@ _INCIDENT_MAPPERS: dict[str, Any] = {
 }
 
 # Fallback mapping for partial matches
-_INCIDENT_TYPE_KEYWORDS: dict[str, str] = {
+_INCIDENT_TYPE_KEYWORDS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "crisis": _map_thread_crisis,
     "flashpoint": _map_location_flashpoint,
     "instability": _map_faction_instability,

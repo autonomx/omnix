@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.combat.abilities import resolve_combat_ability
 from app.apps.rpg.combat.apply import apply_defense_resolution
@@ -66,7 +66,7 @@ def _enemy_candidates(combat_state: Dict[str, Any]) -> List[Dict[str, Any]]:
             "hp": _hp(participant),
             "hp_ratio": _hp_ratio(participant),
         })
-    out.sort(key=lambda row: (float(row.get("hp_ratio", 1.0)), int(row.get("hp", 999999)), str(row.get("actor_id"))))
+    out.sort(key=lambda row: (float(cast(Any, row.get("hp_ratio", 1.0))), int(row.get("hp", 999999)), str(row.get("actor_id"))))
     return out
 
 
@@ -90,7 +90,7 @@ def _lowest_hp_party_member(combat_state: Dict[str, Any]) -> Dict[str, Any]:
             "hp_ratio": _hp_ratio(participant),
             "hp": _hp(participant),
         })
-    candidates.sort(key=lambda row: (float(row.get("hp_ratio", 1.0)), int(row.get("hp", 999999)), str(row.get("actor_id"))))
+    candidates.sort(key=lambda row: (float(cast(Any, row.get("hp_ratio", 1.0))), int(row.get("hp", 999999)), str(row.get("actor_id"))))
     return candidates[0] if candidates else {}
 
 

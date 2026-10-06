@@ -102,15 +102,15 @@ def validate_revision_origin_ledger(
         if path:
             ledger[path] = origin
     for path, value_hash in current.items():
-        origin = ledger.get(path)
-        if origin is None:
+        ledger_origin = ledger.get(path)
+        if ledger_origin is None:
             blockers.append({"path": path, "code": "revision_origin_missing"})
             continue
-        if str(origin.get("content_hash") or "") != value_hash:
+        if str(ledger_origin.get("content_hash") or "") != value_hash:
             blockers.append({"path": path, "code": "revision_origin_hash_mismatch"})
-        if str(origin.get("authorship_class") or "") != "human_authored":
+        if str(ledger_origin.get("authorship_class") or "") != "human_authored":
             blockers.append({"path": path, "code": "revision_origin_class_invalid"})
-        if str(origin.get("human_edit_event_id") or "") != event_id:
+        if str(ledger_origin.get("human_edit_event_id") or "") != event_id:
             blockers.append({"path": path, "code": "revision_origin_event_mismatch"})
     for path in sorted(set(ledger) - set(current)):
         blockers.append({"path": path, "code": "revision_origin_stale"})
@@ -144,9 +144,7 @@ def prepare_direct_world_revision(
     if str(provenance.get("source") or "") == "manual_world_authoring":
         validate_revision_origin_ledger(
             document.canon,
-            provenance.get("authorship")
-            if isinstance(provenance.get("authorship"), Mapping)
-            else None,
+            raw_authorship if isinstance(raw_authorship := provenance.get("authorship"), Mapping) else None,
         )
         return document
 
@@ -267,9 +265,7 @@ def require_revision_authorship(document: WorldRevisionDocument) -> dict[str, An
     if source == "manual_world_authoring":
         return validate_revision_origin_ledger(
             document.canon,
-            provenance.get("authorship")
-            if isinstance(provenance.get("authorship"), Mapping)
-            else None,
+            raw_authorship if isinstance(raw_authorship := provenance.get("authorship"), Mapping) else None,
         )
     raise ValueError(
         f"world_revision_authorship_untrusted:{document.world_id}:"

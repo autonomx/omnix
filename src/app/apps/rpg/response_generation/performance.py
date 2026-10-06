@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from typing import Callable, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from .contracts import ResponseMode
 from .profiles import ResponseGenerationProfile
@@ -111,7 +111,7 @@ class LatencyTrace:
     def total_ms(self) -> float:
         return round(sum(self.stages_ms.values()), 3)
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "stages_ms": dict(self.stages_ms),
             "total_ms": self.total_ms,

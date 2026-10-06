@@ -1,7 +1,7 @@
 """Safe progressive materialization of deferred maps into explicit future releases."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -333,10 +333,10 @@ def materialize_deferred_location(
                 definition_hash=definition.definition_hash,
                 semantic_interface_hash=definition.semantic_interface_hash,
                 simulation_readiness="navigable",
-                presentation_readiness=str(
+                presentation_readiness=cast(Any, str(
                     definition.metadata.get("presentation_readiness")
                     or "assets_pending"
-                ),
+                )),
             )
         bindings = [binding_by_map[key] for key in sorted(binding_by_map)]
         base_certification = dict(source_release.certification)

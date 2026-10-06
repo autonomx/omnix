@@ -57,9 +57,7 @@ def _request(data: Mapping[str, Any]) -> HermesResearchRequest:
 
 def _policy(data: Mapping[str, Any]) -> HermesResearchPolicy:
     raw = (
-        data.get("policy")
-        if isinstance(data.get("policy"), Mapping)
-        else {}
+        raw_policy if isinstance(raw_policy := data.get("policy"), Mapping) else {}
     )
     return HermesResearchPolicy(
         max_sources=int(raw.get("max_sources") or 5),

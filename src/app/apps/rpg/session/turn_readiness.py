@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_100_turn_readiness_gate"
@@ -126,15 +126,15 @@ def build_100_turn_readiness_result(
     warnings = []
     if actual_turns < expected_turns:
         blockers.append({"kind": "incomplete_turn_count", "actual": actual_turns, "expected": expected_turns, "source": SOURCE})
-    if budget_summary["projected_report_bytes"] > REPORT_BUDGET_BYTES:
+    if cast(int, budget_summary["projected_report_bytes"]) > REPORT_BUDGET_BYTES:
         blockers.append({"kind": "report_growth_budget_exceeded", "source": SOURCE})
-    if budget_summary["projected_transcript_debug_bytes"] > TRANSCRIPT_BUDGET_BYTES:
+    if cast(int, budget_summary["projected_transcript_debug_bytes"]) > TRANSCRIPT_BUDGET_BYTES:
         blockers.append({"kind": "transcript_debug_growth_budget_exceeded", "source": SOURCE})
-    if loop_summary["max_repeated_action_streak"] >= ACTION_LOOP_WARNING:
+    if cast(int, loop_summary["max_repeated_action_streak"]) >= ACTION_LOOP_WARNING:
         warnings.append({"kind": "repeated_action_loop_risk", "severity": "advisory", "source": SOURCE})
-    if loop_summary["max_repeated_location_streak"] >= LOCATION_LOOP_WARNING:
+    if cast(int, loop_summary["max_repeated_location_streak"]) >= LOCATION_LOOP_WARNING:
         warnings.append({"kind": "repeated_location_loop_risk", "severity": "advisory", "source": SOURCE})
-    if loop_summary["max_no_progress_streak"] >= NO_PROGRESS_WARNING:
+    if cast(int, loop_summary["max_no_progress_streak"]) >= NO_PROGRESS_WARNING:
         warnings.append({"kind": "no_progress_loop_risk", "severity": "advisory", "source": SOURCE})
     if not any(progress_counts.values()):
         warnings.append({"kind": "no_progress_signals_detected", "severity": "advisory", "source": SOURCE})

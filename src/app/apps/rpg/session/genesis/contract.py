@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, Field
 
-CAMPAIGN_GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"
+CAMPAIGN_GENESIS_CONTRACT_VERSION: Final = "rpg_genesis_v2"
 DEFAULT_GENESIS_CREATED_BY = "wizard_v2"
 
 
@@ -120,7 +120,7 @@ class CampaignGenesisContract(BaseModel):
     system_options: GenesisSystemOptions = Field(default_factory=GenesisSystemOptions)
 
 
-def canonical_genesis_payload(contract: CampaignGenesisContract) -> dict[str, object]:
+def canonical_genesis_payload(contract: CampaignGenesisContract) -> dict[str, Any]:
     """Return the normalized payload that should be hashed for provenance."""
 
     return contract.model_dump(mode="json", exclude_none=True)

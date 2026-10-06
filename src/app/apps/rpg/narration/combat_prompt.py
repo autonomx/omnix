@@ -14,7 +14,7 @@ _PROMPT_2 = prompt_template('rpg.narration_combat_prompt.party_defeat_instructio
 
 def build_combat_narration_prompt(contract: Dict[str, Any]) -> str:
     compact = json.dumps(contract, ensure_ascii=False, sort_keys=True)
-    facts = contract.get("facts") if isinstance(contract.get("facts"), dict) else {}
+    facts = raw_facts if isinstance(raw_facts := contract.get("facts"), dict) else {}
     party_defeat_instruction = ""
     if facts.get("party_defeated") is True:
         party_defeat_instruction = (

@@ -136,7 +136,7 @@ NO_BELIEF_DIALOGUE: List[str] = [
 ]
 
 # Self-directed dialogue (no target)
-SELF_DIALOGUE_TEMPLATES: Dict[str, List[str]] = {
+SELF_DIALOGUE_TEMPLATES = {  # noqa: F811
     "hostile": [
         "{speaker} mutters angrily. \"They'll pay for what they did.\"",
         "{speaker} clenches their fists. \"I won't forgive this.\"",

@@ -179,7 +179,7 @@ def enqueue_campaign_genesis(
 ) -> dict[str, Any]:
     """Persist a blocked shell and one durable World Forge job, then return immediately."""
 
-    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     campaign_id = str(result.get("session_id") or "")
     if session is None or not campaign_id:
         return {

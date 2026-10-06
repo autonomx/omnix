@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from .contracts import (
     RESPONSE_WORD_BUDGETS,
@@ -25,12 +25,12 @@ class ResponseRenderer:
         self,
         plan: SemanticResponsePlan,
         *,
-        authoritative_deltas: Mapping[str, object] | None = None,
+        authoritative_deltas: Mapping[str, Any] | None = None,
         truth_classes: Iterable[str] = (),
         lifetimes: Iterable[str] = (),
         repair_history: Iterable[str] = (),
-        quality_report: Mapping[str, object] | None = None,
-        metadata: Mapping[str, object] | None = None,
+        quality_report: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
     ) -> RenderedResponse:
         sections = self._deduplicate_sections(plan.sections)
         ordered = self._order_sections(plan.mode, sections)

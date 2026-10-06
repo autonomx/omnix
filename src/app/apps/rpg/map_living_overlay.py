@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from app.apps.rpg.map_contracts import MapDefinition
+from typing import Any, cast
 
 _ALLOWED_KINDS = {"npc", "danger", "resource", "quest", "event"}
 _MAX_MARKERS = 256
@@ -13,11 +14,11 @@ _MAX_MARKERS = 256
 
 @dataclass(frozen=True)
 class LivingMapProjection:
-    markers: tuple[dict[str, object], ...]
+    markers: tuple[dict[str, Any], ...]
 
 
 def project_living_map_markers(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     definition: MapDefinition,
 ) -> LivingMapProjection:
     state = _mapping(session.get("state"))
@@ -26,7 +27,7 @@ def project_living_map_markers(
     visible = _strings(map_state.get("visible_object_ids"))
     by_id = {item.id: item for item in definition.objects}
     by_location = {item.location_id: item for item in definition.objects if item.location_id}
-    rows: dict[str, dict[str, object]] = {}
+    rows: dict[str, dict[str, Any]] = {}
     for raw in _records(state.get("map_presence")):
         if _text(raw.get("map_id")) != definition.map_id:
             continue
@@ -60,18 +61,18 @@ def project_living_map_markers(
     return LivingMapProjection(tuple(rows[key] for key in sorted(rows)))
 
 
-def _point(raw: Mapping[str, object], item: object | None) -> tuple[int, int] | None:
+def _point(raw: Mapping[str, Any], item: object | None) -> tuple[int, int] | None:
     x, y = raw.get("x"), raw.get("y")
     if _integer(x) and _integer(y):
-        return int(x), int(y)
+        return int(cast(Any, x)), int(cast(Any, y))
     if item is not None:
         x, y = getattr(item, "x", None), getattr(item, "y", None)
         if _integer(x) and _integer(y):
-            return int(x), int(y)
+            return int(cast(Any, x)), int(cast(Any, y))
     return None
 
 
-def _records(value: object) -> tuple[Mapping[str, object], ...]:
+def _records(value: object) -> tuple[Mapping[str, Any], ...]:
     if isinstance(value, Mapping):
         return tuple(
             {"id": str(key), **dict(item)}
@@ -81,7 +82,7 @@ def _records(value: object) -> tuple[Mapping[str, object], ...]:
     return tuple(item for item in _sequence(value) if isinstance(item, Mapping))
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 

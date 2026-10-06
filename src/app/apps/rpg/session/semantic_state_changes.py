@@ -36,6 +36,7 @@ from typing import (
 
 import re as re
 from app.prompts import prompt_template
+from typing import Any
 
 _PROMPT_1 = prompt_template('rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract', "1", (
     "You are a deterministic state-change generator for an RPG simulation.\n\n"
@@ -309,7 +310,7 @@ def process_semantic_state_change_proposals(
 
     # Current policy: proposals are processed once per tick and never retried.
     # Invalid proposals are recorded in rejected_state_change_events.
-    remaining = []
+    remaining: list[Any] = []
     accepted_ids = _accepted_state_change_event_ids(runtime_state)
     applied_proposal_ids = _applied_semantic_proposal_ids(runtime_state)
 
@@ -659,7 +660,7 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
         return []
 
     # 🔥 HANDLE ALL VALID SHAPES
-    proposals = []
+    proposals: list[Any] = []
 
     # Case 1: wrapped
     if isinstance(data, dict) and "state_changes" in data:

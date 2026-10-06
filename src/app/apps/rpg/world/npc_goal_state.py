@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.world.location_registry import current_location_id
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
@@ -117,7 +117,7 @@ def seed_default_npc_goals(
             goal.setdefault("created_tick", int(tick or 0))
             goal.setdefault("expires_tick", int(tick or 0) + 200)
             existing.append(goal)
-            created.append(goal["goal_id"])
+            created.append(cast(str, goal["goal_id"]))
         goals_root[npc_id] = existing[-MAX_GOALS_PER_NPC:]
     state["goals"] = goals_root
     if created:

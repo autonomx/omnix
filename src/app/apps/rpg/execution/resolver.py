@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .consequences import ConsequenceBuilder
 from .intent_mapping import ActionIntentMapper
@@ -351,7 +351,7 @@ class ActionResolver:
         resolved = ResolvedAction(
             action_id=self._resolved_action_id(option),
             option_id=self._get_option_field(option, "option_id"),
-            intent_type=mapped_action.get("intent_type"),
+            intent_type=cast(Any, mapped_action.get("intent_type")),
             target_id=mapped_action.get("target_id"),
             summary="Invalid social interaction",
             outcome="blocked",
@@ -412,7 +412,7 @@ class ActionResolver:
             resolved_action = ResolvedAction(
                 action_id=self._resolved_action_id(option),
                 option_id=self._get_option_field(option, "option_id"),
-                intent_type=mapped_action.get("intent_type"),
+                intent_type=cast(Any, mapped_action.get("intent_type")),
                 target_id=mapped_action.get("target_id"),
                 summary="Fallback social interaction (no NPC agency engine)",
                 outcome="success",
@@ -471,7 +471,7 @@ class ActionResolver:
         )
 
         # Build ActionConsequence list from NPC events
-        consequences: list[ActionConsequence] = []
+        consequences = []
         for event in npc_events:
             event_type = event.get("type", "unknown")
             payload = event.get("payload", {})

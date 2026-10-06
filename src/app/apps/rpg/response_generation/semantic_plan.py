@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .claim_ledger import ClaimLedger
 from .contracts import SectionType, SemanticResponsePlan
+from typing import Any
 
 
 _FACTUAL_TYPES = {
@@ -21,7 +22,7 @@ class SemanticPlanValidation:
     referenced_claims: tuple[str, ...]
     referenced_soft_truth: tuple[str, ...]
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "issues": list(self.issues),

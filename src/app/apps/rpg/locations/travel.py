@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.locations.graph import OLD_MILL, OLD_ROAD, RUSTY_FLAGON, find_location_route, get_canonical_location
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
@@ -220,10 +220,10 @@ def apply_travel(
         "elapsed_minutes": _safe_int(travel_state.get("elapsed_minutes"), 0),
         "fatigue": _safe_int(travel_state.get("fatigue"), 0),
     }
-    after_fatigue = _clamp_fatigue(before["fatigue"] + _safe_int(totals.get("fatigue"), 0))
+    after_fatigue = _clamp_fatigue(cast(int, before["fatigue"]) + _safe_int(totals.get("fatigue"), 0))
     after = {
         "location_id": end,
-        "elapsed_minutes": before["elapsed_minutes"] + _safe_int(totals.get("minutes"), 0),
+        "elapsed_minutes": cast(int, before["elapsed_minutes"]) + _safe_int(totals.get("minutes"), 0),
         "fatigue": after_fatigue,
     }
     entry = {

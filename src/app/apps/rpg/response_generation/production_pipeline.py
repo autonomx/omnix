@@ -5,7 +5,7 @@ import logging
 import hashlib
 import json
 from dataclasses import replace
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from app.apps.rpg.narration.runtime_narration_legacy import (
     build_runtime_narration_payload as build_legacy_runtime_narration_payload,
@@ -105,7 +105,7 @@ class ProfileBoundProvider:
         effective.setdefault("temperature", self.profile.temperature)
         effective.setdefault("model", self.profile.model)
         self.calls.append({"method": method_name, **effective})
-        attempts = (
+        attempts: tuple[dict[str, Any], ...] = (
             effective,
             {key: value for key, value in effective.items() if key != "model"},
             {
@@ -502,8 +502,9 @@ class RpgProductionResponsePipeline:
         evidence_sources = _retrieval_sources(original, state)
         analysis = self.recovery.analyze(
             player_input,
-            known_entities=_known_entities(state),
-            known_locations=_known_locations(state),
+            # Name tuples: the classifier reads mappings, so these are not used yet.
+            known_entities=cast(Any, _known_entities(state)),
+            known_locations=cast(Any, _known_locations(state)),
             supported_mechanics=tuple(
                 str(value)
                 for value in original.get("supported_mechanics", ())

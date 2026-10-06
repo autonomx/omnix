@@ -44,7 +44,6 @@ class ValidationResult:
     @classmethod
     def from_dict(cls, data: dict) -> "ValidationResult":
         return cls(
-            valid=data["valid"],
             issues=[ValidationIssue.from_dict(i) for i in data.get("issues", [])],
         )
 

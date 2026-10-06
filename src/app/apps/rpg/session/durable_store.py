@@ -13,7 +13,7 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from app.apps.rpg.session.migrations import migrate_session_payload
 from app.apps.rpg.session.session_store import _normalize_session
@@ -86,7 +86,7 @@ def _session_path(session_id: str, *, session_dir: Path | None = None) -> Path:
 
 def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_delay_s: float = 0.02) -> None:
     """Best-effort Windows-safe atomic replace with short retry/backoff."""
-    last_exc = None
+    last_exc: OSError | None = None
     for attempt in range(attempts):
         try:
             os.replace(tmp_name, path)
@@ -109,7 +109,7 @@ def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_de
         return
     except Exception:
         logger.debug("suppressed error in %s", "_replace_with_retry", exc_info=True)
-    raise last_exc
+    raise cast(OSError, last_exc)
 
 
 def _write_text_atomic(path: Path, text: str) -> None:

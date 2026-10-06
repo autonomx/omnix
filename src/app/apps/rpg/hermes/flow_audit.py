@@ -4,8 +4,8 @@ from typing import Any
 
 
 def hermes_rpg_flow_audit(flow: dict[str, Any]) -> dict[str, Any]:
-    packet = flow.get("packet") if isinstance(flow.get("packet"), dict) else {}
-    result = flow.get("result") if isinstance(flow.get("result"), dict) else {}
+    packet = raw_packet if isinstance(raw_packet := flow.get("packet"), dict) else {}
+    result = raw_result if isinstance(raw_result := flow.get("result"), dict) else {}
     return {
         "ok": flow.get("ok") is True,
         "source": "hermes_rpg_flow_audit",

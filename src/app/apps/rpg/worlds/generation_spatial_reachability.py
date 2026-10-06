@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from app.apps.rpg.session.genesis.world_forge_spatial_routes import (
     minimum_route_count,
@@ -180,7 +180,7 @@ def _connected_components(
     place_ids: set[str],
     edges: set[tuple[str, str]],
 ) -> tuple[tuple[str, ...], ...]:
-    adjacency = {place_id: set() for place_id in place_ids}
+    adjacency: dict[str, set[str]] = {place_id: set() for place_id in place_ids}
     for source_id, target_id in edges:
         adjacency[source_id].add(target_id)
         adjacency[target_id].add(source_id)
@@ -257,7 +257,7 @@ def spatial_reachability_issues(
                 )
                 continue
             valid_targets.append(target_id)
-            edges.add(tuple(sorted((place_id, target_id))))
+            edges.add(cast(tuple[str, str], tuple(sorted((place_id, target_id)))))
         signature = place.get("travel_route_signature")
         if signature is None:
             issues.append(
@@ -404,7 +404,7 @@ def spatial_reachability_report(
         contract.get("minimum_route_count")
         or minimum_route_count(len(place_ids), depth)
     )
-    components = _connected_components(place_ids, edges) if place_ids else ()
+    components = _connected_components(place_ids, cast(Any, edges)) if place_ids else ()
     issues = spatial_reachability_issues(topic_rows, topic_graph)
     return {
         "schema_version": "rpg_world_spatial_reachability_v1",

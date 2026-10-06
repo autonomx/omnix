@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 from app.apps.rpg.safe_values import safe_str as _safe_str
 
 SOURCE = "deterministic_phase4_location_graph"
@@ -194,7 +194,7 @@ def validate_location_graph() -> Dict[str, Any]:
     if location_source_missing:
         blockers.append({"kind": "location_source_missing", "values": sorted(location_source_missing), "source": SOURCE})
     if edge_source_missing:
-        blockers.append({"kind": "edge_source_missing", "values": sorted(edge_source_missing), "source": SOURCE})
+        blockers.append({"kind": "edge_source_missing", "values": sorted(cast(list[str], edge_source_missing)), "source": SOURCE})
     return {
         "ok": not blockers,
         "reason": "location_graph_valid" if not blockers else "location_graph_invalid",
@@ -211,7 +211,7 @@ def find_location_route(start_location_id: str, end_location_id: str) -> Dict[st
     unknown = [location_id for location_id in (start, end) if not _location_exists(location_id)]
     if unknown:
         return {"ok": False, "reason": "unknown_location", "unknown_locations": unknown, "source": SOURCE}
-    queue = deque([(start, [start], [])])
+    queue: deque[tuple[str, list[str], list[Any]]] = deque([(start, [start], [])])
     visited = {start}
     while queue:
         current, path, edges = queue.popleft()
@@ -240,8 +240,8 @@ def build_location_map_payload(current_location_id: str = RUSTY_FLAGON) -> Dict[
 
 def build_location_narration_contract(map_payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = map_payload if isinstance(map_payload, dict) else {}
-    locations = payload.get("locations") if isinstance(payload.get("locations"), list) else []
-    edges = payload.get("edges") if isinstance(payload.get("edges"), list) else []
+    locations = raw_locations if isinstance(raw_locations := payload.get("locations"), list) else []
+    edges = raw_edges if isinstance(raw_edges := payload.get("edges"), list) else []
     allowed = [f"Known location: {location.get('location_id')} — {location.get('name')}" for location in locations]
     allowed.extend(f"Known route: {edge.get('from')} -> {edge.get('to')}" for edge in edges)
     return {

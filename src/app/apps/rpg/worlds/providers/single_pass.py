@@ -127,7 +127,7 @@ def _field_type(definition: Mapping[str, Any], references: tuple[str, ...]) -> A
     if kind == "entity_ref":
         return _literal(references)
     if kind == "entity_ref_list":
-        return list[_literal(references)]
+        return list[_literal(references)]  # type: ignore[misc]
     if kind == "structured_object":
         return dict[str, Any] | list[Any]
     return Any
@@ -190,7 +190,7 @@ def _profile_contract(
     response_model = create_model(
         f"WorldForgeProfileTopicResponse_{safe}",
         __base__=WorldForgeTopicResponse,
-        entities=(list[entity_model], ...),
+        entities=(list[entity_model], ...),  # type: ignore[valid-type]
     )
 
     def validate(value: Any) -> None:
@@ -330,7 +330,7 @@ class SinglePassProviderWorldForgeTopicGenerator(ProviderWorldForgeTopicGenerato
                 expected_entity_names=expected_entity_names,
             )
         )
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         with self._limiter():
             outcome = gateway.try_generate(
                 messages,
@@ -385,7 +385,7 @@ class SinglePassProviderWorldForgeTopicGenerator(ProviderWorldForgeTopicGenerato
                 ),
             ),
         ]
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         with self._limiter():
             outcome = gateway.try_generate(
                 messages,

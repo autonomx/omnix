@@ -7,7 +7,7 @@ first playable turn is allowed before each topic is complete.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal, Mapping
+from typing import Any, Iterable, Literal, Mapping, cast
 
 
 WorldGenerationDepth = Literal["quick", "standard", "epic"]
@@ -68,7 +68,7 @@ WORLD_FORGE_DEPTH_PROFILES: dict[WorldGenerationDepth, WorldForgeDepthProfile] =
 
 def world_forge_depth_profile(depth: str | None) -> WorldForgeDepthProfile:
     normalized = str(depth or "standard").strip().casefold()
-    return WORLD_FORGE_DEPTH_PROFILES.get(normalized, WORLD_FORGE_DEPTH_PROFILES["standard"])  # type: ignore[arg-type]
+    return WORLD_FORGE_DEPTH_PROFILES.get(cast(Any, normalized), WORLD_FORGE_DEPTH_PROFILES["standard"])
 
 
 @dataclass(frozen=True)
@@ -371,7 +371,7 @@ def build_campaign_topic_graph(
 _build_legacy_campaign_topic_graph = build_campaign_topic_graph
 
 
-def build_campaign_topic_graph(
+def build_campaign_topic_graph(  # type: ignore[no-redef]  # wraps the definition above
     *,
     campaign_template: str,
     genre: str | None,

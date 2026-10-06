@@ -85,7 +85,7 @@ def build_smoke_plan(
 
 def evaluate_live_smoke_payload(payload: dict[str, Any]) -> dict[str, Any]:
     gate = evaluate_turn_response_release_gates(payload)
-    visible = payload.get("visible_response") if isinstance(payload.get("visible_response"), dict) else {}
+    visible = raw_visible_response if isinstance(raw_visible_response := payload.get("visible_response"), dict) else {}
     failures = list(gate.get("failures") or [])
     if payload.get("contract_version") != "rpg_turn_response_v2":
         failures.append("unexpected_contract_version")

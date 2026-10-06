@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
@@ -284,7 +284,7 @@ def derive_state_delta(simulation_state: Dict[str, Any], interpreted_action: Dic
     intent = safe_str(interpreted_action.get("intent"))
     target_id = safe_str(interpreted_action.get("target_id"))
     target_name = safe_str(interpreted_action.get("target_name") or target_id)
-    delta = {"npc_updates": [], "scene_updates": {}, "flags": [], "memories": []}
+    delta: Dict[str, Any] = {"npc_updates": [], "scene_updates": {}, "flags": [], "memories": []}
     if intent == "attack" and target_id:
         delta["npc_updates"].append({"id": target_id, "mood": "angry", "activity": "recovering from the player's attack", "relationship_to_player_delta": -35, "trust_delta": -25, "fear_delta": 10, "health_delta": -4, "memory": f"The player attacked {target_name}."})
         delta["scene_updates"]["tension_delta"] = 25
@@ -455,14 +455,14 @@ def build_turn_contract(*, player_input: str, action: Dict[str, Any], resolved_a
         resolved_for_contract["service_result"] = service_result
     survival_result = apply_climate_survival_turn_effects(simulation_state_after, runtime_state)
     climate_survival = safe_dict(survival_result.get("climate_survival"))
-    resolved_for_contract["resource_changes"] = _merge_resource_changes(resolved_for_contract.get("resource_changes"), survival_result.get("resource_changes"))
-    resolved_for_contract["effect_result"] = _merge_effect_result(resolved_for_contract.get("effect_result"), survival_result.get("effect_result"))
+    resolved_for_contract["resource_changes"] = _merge_resource_changes(cast(Any, resolved_for_contract.get("resource_changes")), cast(Any, survival_result.get("resource_changes")))
+    resolved_for_contract["effect_result"] = _merge_effect_result(cast(Any, resolved_for_contract.get("effect_result")), cast(Any, survival_result.get("effect_result")))
     resolved_for_contract["climate_survival"] = climate_survival
     relief_result = resolve_survival_action(player_input=player_input, simulation_state=simulation_state_after, service_result=service_result)
     if relief_result.get("matched"):
         resolved_for_contract["survival_action"] = relief_result
-        resolved_for_contract["resource_changes"] = _merge_resource_changes(resolved_for_contract.get("resource_changes"), relief_result.get("resource_changes"))
-        resolved_for_contract["effect_result"] = _merge_effect_result(resolved_for_contract.get("effect_result"), relief_result.get("effect_result"))
+        resolved_for_contract["resource_changes"] = _merge_resource_changes(cast(Any, resolved_for_contract.get("resource_changes")), cast(Any, relief_result.get("resource_changes")))
+        resolved_for_contract["effect_result"] = _merge_effect_result(cast(Any, resolved_for_contract.get("effect_result")), cast(Any, relief_result.get("effect_result")))
         resolved_for_contract["climate_survival"] = safe_dict(simulation_state_after.get("climate_survival")) or climate_survival
         climate_survival = resolved_for_contract["climate_survival"]
     survival_suggestions = build_survival_suggested_actions(simulation_state_after, runtime_state)

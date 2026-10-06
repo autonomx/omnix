@@ -510,10 +510,10 @@ class AdventureSetup:
         result.difficulty_style = _norm_str(result.difficulty_style, lower=True, none_if_empty=True)
         result.starting_location_id = _norm_str(result.starting_location_id, none_if_empty=True)
 
-        result.hard_rules = [_norm_str(x) for x in result.hard_rules if _norm_str(x)]
-        result.soft_tone_rules = [_norm_str(x) for x in result.soft_tone_rules if _norm_str(x)]
-        result.forbidden_content = [_norm_str(x) for x in result.forbidden_content if _norm_str(x)]
-        result.canon_notes = [_norm_str(x) for x in result.canon_notes if _norm_str(x)]
+        result.hard_rules = [norm for x in result.hard_rules if (norm := _norm_str(x))]
+        result.soft_tone_rules = [norm for x in result.soft_tone_rules if (norm := _norm_str(x))]
+        result.forbidden_content = [norm for x in result.forbidden_content if (norm := _norm_str(x))]
+        result.canon_notes = [norm for x in result.canon_notes if (norm := _norm_str(x))]
 
         normalized_starting_npcs = []
         for npc_id in result.starting_npc_ids:

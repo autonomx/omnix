@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, replace
-from typing import Sequence
+from typing import Any, Sequence
 
 from .authority import BeatKind
 from .claims import infer_claims, validate_claims
@@ -304,7 +304,7 @@ _REVISION_GUIDANCE = {
 }
 
 
-def revision_feedback(report: ValidationReport) -> dict[str, object]:
+def revision_feedback(report: ValidationReport) -> dict[str, Any]:
     """What the writer is told after its prose failed validation (one revision per turn)."""
     issues = [
         {"code": issue.code, "problem": issue.message, "block_id": issue.block_id}

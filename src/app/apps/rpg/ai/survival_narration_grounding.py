@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, cast
 from app.prompts import prompt_template
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
@@ -387,11 +387,11 @@ def sanitize_survival_narration_text(text: str, context: Mapping[str, Any], *, f
 def sanitize_survival_narration_payload(payload: Mapping[str, Any], context: Mapping[str, Any]) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(payload))
     fallback = _safe_str(_safe_dict(context).get("authoritative_fallback"))
-    out["narration"] = sanitize_survival_narration_text(out.get("narration"), context, fallback=fallback)
-    out["action"] = sanitize_survival_narration_text(out.get("action"), context, fallback="")
+    out["narration"] = sanitize_survival_narration_text(cast(Any, out.get("narration")), context, fallback=fallback)
+    out["action"] = sanitize_survival_narration_text(cast(Any, out.get("action")), context, fallback="")
     npc = _safe_dict(out.get("npc"))
     if npc:
-        npc["line"] = sanitize_survival_narration_text(npc.get("line"), context, fallback="")
+        npc["line"] = sanitize_survival_narration_text(cast(Any, npc.get("line")), context, fallback="")
         out["npc"] = npc
     validation = validate_survival_narration_text(" ".join([
         _safe_str(out.get("narration")),

@@ -799,16 +799,16 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         for npc in (history_state.get("npc_index") or {}).values()
         if str(npc.get("faction_id") or "")
     })
-    for faction_id in faction_ids:
-        faction_view = reputation.get(faction_id, "player")
+    for any in faction_ids:
+        faction_view = reputation.get(any, "player")
         if faction_view.get("hostility", 0.0) >= 0.30:
             opposing = [
                 other for other in faction_ids
-                if other != faction_id and reputation.get(other, "player").get("hostility", 0.0) >= 0.30
+                if other != any and reputation.get(other, "player").get("hostility", 0.0) >= 0.30
             ]
             if opposing:
                 best = sorted(opposing, key=lambda x: (reputation.get(x, "player").get("hostility", 0), x))[0]
-                alliances.propose_or_strengthen([faction_id, best], "Shared hostility toward player", delta=0.10)
+                alliances.propose_or_strengthen([any, best], "Shared hostility toward player", delta=0.10)
 
     # 6.5.3 betrayal propagation
     social_events = []
@@ -825,7 +825,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
     # 6.5.5 group positions from NPC minds
     npc_index = history_state.get("npc_index") or {}
     npc_minds = history_state.get("npc_minds") or {}
-    members_by_faction = {}
+    members_by_faction: dict[Any, Any] = {}
     for npc_id, npc in sorted(npc_index.items()):
         faction_id = str(npc.get("faction_id") or "")
         if not faction_id:

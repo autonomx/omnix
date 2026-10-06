@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from app.apps.rpg.map_hierarchy import switch_active_map
 from app.apps.rpg.map_projection import increment_map_overlay_revision, project_session_map_overlay
@@ -32,11 +32,11 @@ class MapActionError(ValueError):
 
 
 def apply_map_action(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     map_id: str,
     request: MapActionRequest,
     repository: MapDefinitionRepository | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Validate and apply one map action without bypassing session truth."""
 
     repository = repository or default_map_repository()
@@ -93,10 +93,10 @@ def apply_map_action(
             raise MapActionError(reason, reason=reason, status_code=409)
 
     updated = deepcopy(dict(session))
-    state = updated.get("state") if isinstance(updated.get("state"), dict) else {}
-    map_state = state.get("map_state") if isinstance(state.get("map_state"), dict) else {}
+    state = raw_state if isinstance(raw_state := updated.get("state"), dict) else {}
+    map_state = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
     result_map_id = map_id
-    result: dict[str, object] = {
+    result: dict[str, Any] = {
         "action": request.action,
         "target_object_id": target.id,
         "target_location_id": target.location_id,
@@ -112,7 +112,7 @@ def apply_map_action(
         state["current_location_id"] = target.location_id
         state["current_location"] = target.label or target.location_id
         state["location"] = target.label or target.location_id
-        player = state.get("player") if isinstance(state.get("player"), dict) else {}
+        player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
         player["location_id"] = target.location_id
         state["player"] = player
         _sync_world_graph_location(state, target.location_id)
@@ -139,7 +139,7 @@ def apply_map_action(
         state["current_location_id"] = destination_location_id
         state["current_location"] = target.label or destination_location_id
         state["location"] = target.label or destination_location_id
-        player = state.get("player") if isinstance(state.get("player"), dict) else {}
+        player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
         player["location_id"] = destination_location_id
         state["player"] = player
         result_map_id = target.child_map_id
@@ -178,7 +178,7 @@ def apply_map_action(
     }
 
 
-def map_action_error_payload(error: MapActionError, map_id: str) -> dict[str, object]:
+def map_action_error_payload(error: MapActionError, map_id: str) -> dict[str, Any]:
     return {
         "ok": False,
         "error": error.code,
@@ -192,11 +192,11 @@ def map_action_error_payload(error: MapActionError, map_id: str) -> dict[str, ob
     }
 
 
-def _existing_action(session: Mapping[str, object], client_action_id: str | None) -> Mapping[str, object] | None:
+def _existing_action(session: Mapping[str, Any], client_action_id: str | None) -> Mapping[str, Any] | None:
     if not client_action_id:
         return None
-    state = session.get("state") if isinstance(session.get("state"), Mapping) else {}
-    map_state = state.get("map_state") if isinstance(state.get("map_state"), Mapping) else {}
+    state = raw_state if isinstance(raw_state := session.get("state"), Mapping) else {}
+    map_state = raw_map_state if isinstance(raw_map_state := state.get("map_state"), Mapping) else {}
     for item in reversed(_sequence(map_state.get("action_history"))):
         if isinstance(item, Mapping) and item.get("client_action_id") == client_action_id:
             result = item.get("result")
@@ -204,13 +204,13 @@ def _existing_action(session: Mapping[str, object], client_action_id: str | None
     return None
 
 
-def _authoritative_route_reason(session: Mapping[str, object], route_id: str | None) -> str:
+def _authoritative_route_reason(session: Mapping[str, Any], route_id: str | None) -> str:
     if not route_id:
         return ""
-    state = session.get("state") if isinstance(session.get("state"), Mapping) else {}
-    map_state = state.get("map_state") if isinstance(state.get("map_state"), Mapping) else {}
-    route_states = map_state.get("route_states") if isinstance(map_state.get("route_states"), Mapping) else {}
-    route_state = route_states.get(route_id) if isinstance(route_states.get(route_id), Mapping) else {}
+    state = raw_state if isinstance(raw_state := session.get("state"), Mapping) else {}
+    map_state = raw_map_state if isinstance(raw_map_state := state.get("map_state"), Mapping) else {}
+    route_states = raw_route_states if isinstance(raw_route_states := map_state.get("route_states"), Mapping) else {}
+    route_state = raw_route if isinstance(raw_route := route_states.get(route_id), Mapping) else {}
     return str(route_state.get("reason") or "").strip()
 
 
@@ -225,8 +225,8 @@ def _route_block_reason(route: object) -> str:
     return ""
 
 
-def _sync_world_graph_location(state: dict[str, object], location_id: str) -> None:
-    graph = state.get("world_graph") if isinstance(state.get("world_graph"), dict) else None
+def _sync_world_graph_location(state: dict[str, Any], location_id: str) -> None:
+    graph = raw_world_graph if isinstance(raw_world_graph := state.get("world_graph"), dict) else None
     if graph is None:
         return
     known_ids = {
@@ -244,7 +244,7 @@ def _sync_world_graph_location(state: dict[str, object], location_id: str) -> No
     state["world_graph"] = graph
 
 
-def _record_action(map_state: dict[str, object], request: MapActionRequest, result: Mapping[str, object]) -> None:
+def _record_action(map_state: dict[str, Any], request: MapActionRequest, result: Mapping[str, Any]) -> None:
     history = [item for item in _sequence(map_state.get("action_history")) if isinstance(item, Mapping)]
     history.append(
         {
@@ -257,9 +257,9 @@ def _record_action(map_state: dict[str, object], request: MapActionRequest, resu
     map_state["action_history"] = history[-32:]
 
 
-def _object_status(map_state: Mapping[str, object], object_id: str) -> str:
-    states = map_state.get("object_states") if isinstance(map_state.get("object_states"), Mapping) else {}
-    state = states.get(object_id) if isinstance(states.get(object_id), Mapping) else {}
+def _object_status(map_state: Mapping[str, Any], object_id: str) -> str:
+    states = raw_object_states if isinstance(raw_object_states := map_state.get("object_states"), Mapping) else {}
+    state = raw_state if isinstance(raw_state := states.get(object_id), Mapping) else {}
     return str(state.get("status") or "normal")
 
 

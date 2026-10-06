@@ -1,11 +1,19 @@
 """Scene execution and debug helpers for GameLoop."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..dialogue.core import DialogueCore
 from ..execution.resolver import ActionResolver
 
 
-class GameLoopExecutionMixin:
+if TYPE_CHECKING:
+    from .game_loop_state import GameLoopState as _LoopBase
+else:
+    _LoopBase = object
+
+
+class GameLoopExecutionMixin(_LoopBase):
     # ------------------------------------------------------------------
     # Phase 7.3 — Scene Execution Layer
     # ------------------------------------------------------------------

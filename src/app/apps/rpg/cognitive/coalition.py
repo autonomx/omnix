@@ -167,7 +167,7 @@ class Coalition:
         Returns:
             Average trust value, 0.0 if no trust data.
         """
-        all_trusts = []
+        all_trusts: list[Any] = []
         for member_trusts in self.trust_levels.values():
             all_trusts.extend(member_trusts.values())
         
@@ -496,7 +496,7 @@ class CoalitionSystem:
                         enemies[enemy_id] = enemies.get(enemy_id, 0) + 1
         
         # Pick most common enemy
-        target = max(enemies, key=enemies.get) if enemies else None
+        target = max(enemies, key=lambda enemy: enemies[enemy]) if enemies else None
         
         # Assign roles based on power
         participants = []

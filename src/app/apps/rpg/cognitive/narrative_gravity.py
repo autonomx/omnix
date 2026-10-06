@@ -316,7 +316,7 @@ class NarrativeGravity:
             Diversity bonus value (0.0-0.15).
         """
         # Track recent appearances across all storylines
-        recent_counts: Dict[str, int] = {}
+        recent_counts: Dict[str, float] = {}
         for storyline in self._storylines.values():
             for participant in storyline.participants:
                 recent_counts[participant] = recent_counts.get(participant, 0) + 1

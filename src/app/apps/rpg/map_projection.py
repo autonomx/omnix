@@ -35,7 +35,7 @@ _STARTING_MAP_BY_LOCATION = {
 def initial_map_session_state(
     starting_location_id: str,
     repository: MapDefinitionRepository | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Create explicit deterministic map state for a newly created campaign."""
 
     repository = repository or default_map_repository()
@@ -60,7 +60,7 @@ def initial_map_session_state(
 
 
 def project_session_map_overlay(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     map_id: str,
     repository: MapDefinitionRepository | None = None,
 ) -> MapOverlay:
@@ -161,7 +161,7 @@ def project_session_map_overlay(
 def increment_map_overlay_revision(state: dict[str, Any]) -> int:
     """Advance the persisted overlay revision after an authoritative mutation."""
 
-    map_state = state.get("map_state") if isinstance(state.get("map_state"), dict) else {}
+    map_state = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
     revision = _non_negative_int(map_state.get("overlay_revision")) + 1
     map_state["overlay_revision"] = revision
     state["map_state"] = map_state
@@ -187,7 +187,7 @@ def _unavailable_overlay(
     )
 
 
-def _route_overlays(route_geometry: Sequence[object], route_states: Mapping[str, object]) -> tuple[MapRouteOverlay, ...]:
+def _route_overlays(route_geometry: Sequence[Any], route_states: Mapping[str, Any]) -> tuple[MapRouteOverlay, ...]:
     overlays = []
     for route in route_geometry:
         route_id = str(getattr(route, "route_id"))
@@ -208,7 +208,7 @@ def _route_overlays(route_geometry: Sequence[object], route_states: Mapping[str,
 
 
 def _markers(
-    state: Mapping[str, object],
+    state: Mapping[str, Any],
     player_object_id: str,
     x: int,
     y: int,
@@ -241,8 +241,8 @@ def _markers(
 
 
 def _capabilities(
-    session: Mapping[str, object],
-    objects: Sequence[object],
+    session: Mapping[str, Any],
+    objects: Sequence[Any],
     visible: set[str],
     current_location_id: str,
     routes: tuple[MapRouteOverlay, ...],
@@ -304,7 +304,7 @@ def _route_disabled_reason(route: MapRouteOverlay | None) -> str:
     return "route_unavailable"
 
 
-def _environment(state: Mapping[str, object]) -> dict[str, str]:
+def _environment(state: Mapping[str, Any]) -> dict[str, str]:
     world = _mapping(state.get("world"))
     return {
         key: str(value)
@@ -317,7 +317,7 @@ def _known_ids(value: object, allowed: set[str]) -> set[str]:
     return {str(item) for item in _sequence(value) if str(item) in allowed}
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
@@ -331,7 +331,7 @@ def _text(value: object) -> str:
     return str(value).strip() if value is not None else ""
 
 
-def _non_negative_int(value: object, *, fallback: int = 0) -> int:
+def _non_negative_int(value: Any, *, fallback: int = 0) -> int:
     try:
         return max(0, int(value))
     except (TypeError, ValueError):

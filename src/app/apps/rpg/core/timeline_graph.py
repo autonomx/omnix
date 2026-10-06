@@ -107,7 +107,7 @@ class TimelineGraph:
         Returns:
             True if adding this link would create a cycle.
         """
-        current = parent_id
+        current: str | None = parent_id
         visited = set()
         while current is not None:
             if current == event_id:

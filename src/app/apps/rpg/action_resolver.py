@@ -7,7 +7,7 @@ No randomness without explicit seed.
 from __future__ import annotations
 
 import random
-from typing import Any, Dict
+from typing import Any, Dict, cast
 from app.apps.rpg.safe_values import dict_copy as _safe_dict
 
 # ---------------------------------------------------------------------------
@@ -372,13 +372,13 @@ def resolve_player_action(
         result["discovery"] = False
         result["important_find"] = False
     
-    if action_type == "steal" and _success_like(result.get("outcome")):
+    if action_type == "steal" and _success_like(cast(Any, result.get("outcome"))):
         gold_stolen = _safe_int(action.get("gold_stolen") or action.get("gold_amount"), 0)
         loot_value = _safe_int(action.get("loot_value"), 0)
         result["gold_stolen"] = gold_stolen
         result["loot_value"] = loot_value
 
-    if action_type == "investigate" and _success_like(result.get("outcome")):
+    if action_type == "investigate" and _success_like(cast(Any, result.get("outcome"))):
         result["found_clue"] = bool(action.get("found_clue"))
         result["discovery"] = str(action.get("discovery") or "")
         result["revealed"] = bool(action.get("revealed"))

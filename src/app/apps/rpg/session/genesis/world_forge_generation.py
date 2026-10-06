@@ -357,8 +357,8 @@ def generate_campaign_topics(
             pending.pop(topic_id, None)
         failed = {topic_id for topic_id in ready if topic_id not in topics}
         if failed:
-            for topic_id, dependencies in list(pending.items()):
-                if dependencies.intersection(failed):
+            for topic_id, waiting_on in list(pending.items()):
+                if waiting_on.intersection(failed):
                     node = node_map[topic_id]
                     jobs[topic_id] = WorldForgeJobRecord(
                         topic_id,

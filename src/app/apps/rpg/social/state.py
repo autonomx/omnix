@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 DEFAULT_MAX_LEVERAGE_PER_NPC = 20
@@ -80,7 +80,7 @@ def normalize_social_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 
     max_leverage = value.get("max_leverage_per_npc")
     try:
-        max_leverage = int(max_leverage)
+        max_leverage = int(cast(Any, max_leverage))
     except Exception:
         max_leverage = DEFAULT_MAX_LEVERAGE_PER_NPC
     if max_leverage <= 0:

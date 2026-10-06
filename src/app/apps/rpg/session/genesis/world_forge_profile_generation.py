@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from typing import Mapping, Protocol
+from typing import Any, Mapping, Protocol
 
 from .world_forge_profiles import (
     DomainDefinition,
@@ -37,7 +37,7 @@ class ProfileResolution:
     normalized_genre: str
     generated: bool = False
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "profile": self.profile.as_dict(),
             "source": self.source,
@@ -91,7 +91,7 @@ def _presentation(
     image_role: str,
     *,
     group: str = "world",
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "presentation": {
             "page_kind": page_kind,

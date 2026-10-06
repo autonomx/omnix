@@ -251,12 +251,12 @@ def local_narrative_issues(
                 {"pressure_ids": dominant, "opportunity_count": len(opportunities), "maximum_count": maximum},
             ))
         for component in _DIVERSITY:
-            values = sorted({payload.get(component, "") for payload in payloads if payload.get(component)})
-            if len(values) < 2:
+            component_values = sorted({payload.get(component, "") for payload in payloads if payload.get(component)})
+            if len(component_values) < 2:
                 issues.append(LocalNarrativeIssue(
                     "local_narrative_component_uniform", "", f"/local_narrative/{component}",
                     "Discovery channels, entry modes, and consequence scopes require portfolio diversity.",
-                    {"component": component, "values": values},
+                    {"component": component, "values": component_values},
                 ))
     unique = {(row.code, row.opportunity_id, row.path): row for row in issues}
     return tuple(unique[key] for key in sorted(unique))

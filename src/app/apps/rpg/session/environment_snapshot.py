@@ -84,7 +84,7 @@ def _active_weather_event(environment: dict[str, Any]) -> dict[str, Any]:
 
 
 def _derive_temperature_c(profile: dict[str, Any], calendar: dict[str, Any], condition: str, intensity: str, seed: int) -> int:
-    ranges = profile.get("temperature_ranges_c") if isinstance(profile.get("temperature_ranges_c"), dict) else {}
+    ranges = raw_temperature_ranges_c if isinstance(raw_temperature_ranges_c := profile.get("temperature_ranges_c"), dict) else {}
     low, high = _temperature_range(ranges.get(calendar["season_id"]))
     span = max(1, high - low)
     offset = _stable_int("temperature", seed, calendar["day"], calendar["minute_of_day"], condition) % (span + 1)

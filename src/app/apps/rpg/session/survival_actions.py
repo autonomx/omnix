@@ -49,14 +49,14 @@ def _contains_any(text_l: str, terms: Tuple[str, ...]) -> bool:
 
 def _player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(simulation_state)
-    player_state = state.get("player_state") if isinstance(state.get("player_state"), dict) else {}
+    player_state = raw_player_state if isinstance(raw_player_state := state.get("player_state"), dict) else {}
     state["player_state"] = player_state
     return player_state
 
 
 def _inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     player_state = _player_state(simulation_state)
-    inventory = player_state.get("inventory_state") if isinstance(player_state.get("inventory_state"), dict) else {}
+    inventory = raw_inventory_state if isinstance(raw_inventory_state := player_state.get("inventory_state"), dict) else {}
     player_state["inventory_state"] = inventory
     inventory.setdefault("items", [])
     inventory.setdefault("currency", normalize_currency(inventory.get("currency")))
@@ -65,16 +65,16 @@ def _inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 
 def _resources(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     player_state = _player_state(simulation_state)
-    resources = player_state.get("resources") if isinstance(player_state.get("resources"), dict) else {}
+    resources = raw_resources if isinstance(raw_resources := player_state.get("resources"), dict) else {}
     player_state["resources"] = resources
     return resources
 
 
 def _climate_survival(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(simulation_state)
-    climate = state.get("climate_survival") if isinstance(state.get("climate_survival"), dict) else {}
+    climate = raw_climate_survival if isinstance(raw_climate_survival := state.get("climate_survival"), dict) else {}
     state["climate_survival"] = climate
-    survival = climate.get("survival") if isinstance(climate.get("survival"), dict) else {}
+    survival = raw_survival if isinstance(raw_survival := climate.get("survival"), dict) else {}
     climate["survival"] = survival
     return climate
 
@@ -92,7 +92,7 @@ def _item_quantity(item: Dict[str, Any]) -> int:
 
 
 def _item_tags(item: Dict[str, Any]) -> List[str]:
-    tags = []
+    tags: list[Any] = []
     for key in ("tags", "item_tags", "categories"):
         tags.extend(_safe_str(value).lower() for value in _safe_list(item.get(key)))
     kind = _safe_str(item.get("kind") or item.get("type") or item.get("category")).lower()

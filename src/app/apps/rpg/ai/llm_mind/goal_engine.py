@@ -349,7 +349,7 @@ class GoalEngine:
 
     def merge_goals(self, generated: List[Dict[str, Any]]) -> None:
         generated = generated or []
-        merged = {}
+        merged: dict[Any, Any] = {}
         # Decay older goals so fresh context can take over.
         decayed_existing: List[Dict[str, Any]] = []
         for goal in self.goals:

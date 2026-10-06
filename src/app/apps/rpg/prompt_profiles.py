@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping, cast
 
 RpgPromptTask = Literal[
     "intent_classification",
@@ -40,9 +40,9 @@ class RpgPromptProfile:
         unknown = sorted(key for key in overrides if key not in allowed)
         if unknown:
             raise ValueError(f"unknown RPG prompt profile override(s): {', '.join(unknown)}")
-        return replace(self, **overrides)
+        return replace(self, **cast(dict[str, Any], overrides))
 
-    def debug_payload(self, *, latency_ms: float | None = None, status: str = "configured") -> dict[str, object]:
+    def debug_payload(self, *, latency_ms: float | None = None, status: str = "configured") -> dict[str, Any]:
         return {
             "task": self.task,
             "profile_id": self.profile_id,
@@ -80,7 +80,7 @@ def resolve_rpg_prompt_profile(
     task: RpgPromptTask,
     *,
     registry: Mapping[RpgPromptTask, RpgPromptProfile] | None = None,
-    overrides: Mapping[str, object] | None = None,
+    overrides: Mapping[str, Any] | None = None,
 ) -> RpgPromptProfile:
     active_registry = registry or default_rpg_prompt_profile_registry()
     try:

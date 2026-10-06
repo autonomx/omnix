@@ -50,7 +50,7 @@ from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe
 logger = logging.getLogger(__name__)
 
 # Compatibility export for the retired single-process narration guard.
-_ACTIVE_NARRATIONS = frozenset()
+_ACTIVE_NARRATIONS: frozenset[str] = frozenset()
 
 NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
 

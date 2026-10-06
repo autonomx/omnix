@@ -294,9 +294,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
                 topic_id=topic_id,
                 content=content,
                 directives=(
-                    payload.get("directives")
-                    if isinstance(payload.get("directives"), Mapping)
-                    else {}
+                    raw_directives if isinstance(raw_directives := payload.get("directives"), Mapping) else {}
                 ),
                 status=status,
             )
@@ -311,7 +309,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
     ) -> dict[str, Any]:
         payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         diagnostic_id = new_rpg_trace_id("world-generation")
-        scope = payload.get("scope") if isinstance(payload.get("scope"), Mapping) else {}
+        scope = raw_scope if isinstance(raw_scope := payload.get("scope"), Mapping) else {}
         log_world_generation_event(
             "world_generation.start_requested",
             diagnostic_id=diagnostic_id,
@@ -333,16 +331,10 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
                 starting_location=str(payload.get("starting_location") or ""),
                 background_expansion=bool(payload.get("background_expansion", True)),
                 topic_directives=(
-                    payload.get("topic_directives")
-                    if isinstance(payload.get("topic_directives"), Mapping)
-                    else payload.get("directives")
-                    if isinstance(payload.get("directives"), Mapping)
-                    else {}
+                    raw_topic_directives if isinstance(raw_topic_directives := payload.get("topic_directives"), Mapping) else raw_directives if isinstance(raw_directives := payload.get("directives"), Mapping) else {}
                 ),
                 entity_manifest=(
-                    payload.get("entity_manifest")
-                    if isinstance(payload.get("entity_manifest"), Mapping)
-                    else {}
+                    raw_entity_manifest if isinstance(raw_entity_manifest := payload.get("entity_manifest"), Mapping) else {}
                 ),
                 scope=scope,
                 strategy=str(payload.get("strategy") or "reuse_unchanged"),
@@ -548,19 +540,13 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
                 scenario_id=scenario_id,
                 scenario_revision=scenario_revision,
                 player=(
-                    payload.get("player")
-                    if isinstance(payload.get("player"), Mapping)
-                    else {}
+                    raw_player if isinstance(raw_player := payload.get("player"), Mapping) else {}
                 ),
                 gameplay=(
-                    payload.get("gameplay")
-                    if isinstance(payload.get("gameplay"), Mapping)
-                    else {}
+                    raw_gameplay if isinstance(raw_gameplay := payload.get("gameplay"), Mapping) else {}
                 ),
                 features=(
-                    payload.get("features")
-                    if isinstance(payload.get("features"), Mapping)
-                    else {}
+                    raw_features if isinstance(raw_features := payload.get("features"), Mapping) else {}
                 ),
             )
         except Exception as exc:

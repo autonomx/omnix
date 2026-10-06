@@ -654,16 +654,16 @@ def validate_signed_authorship(
             continue
         if authorship_class == AuthorshipClass.LLM_AUTHORED.value:
             artifact_id = str(origin.get("generation_artifact_id") or "")
-            artifact = artifacts.get(artifact_id)
-            claims = {
+            llm_artifact = artifacts.get(artifact_id)
+            artifact_claims = {
                 (str(row.get("path") or ""), str(row.get("content_hash") or ""))
-                for row in (artifact or {}).get("authored_strings") or ()
+                for row in (llm_artifact or {}).get("authored_strings") or ()
                 if isinstance(row, Mapping)
             }
             source_path = str(origin.get("source_json_pointer") or path)
-            if artifact is None:
+            if llm_artifact is None:
                 blockers.append({"path": path, "code": "server_generation_artifact_missing"})
-            elif (source_path, str(item["content_hash"])) not in claims:
+            elif (source_path, str(item["content_hash"])) not in artifact_claims:
                 blockers.append({"path": path, "code": "origin_artifact_content_mismatch"})
         elif not str(origin.get("human_edit_event_id") or ""):
             blockers.append({"path": path, "code": "human_authorship_event_missing"})

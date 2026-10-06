@@ -407,8 +407,8 @@ def _identity(row: Mapping[str, Any], card_type: str, index: int) -> str:
 
 
 def _title(row: Mapping[str, Any], entity_id: str, card_type: str) -> str:
-    document = row.get("document") if isinstance(row.get("document"), Mapping) else {}
-    dossier = row.get("dossier") if isinstance(row.get("dossier"), Mapping) else {}
+    document = raw_document if isinstance(raw_document := row.get("document"), Mapping) else {}
+    dossier = raw_dossier if isinstance(raw_dossier := row.get("dossier"), Mapping) else {}
     quick_facts = rows(dossier.get("quick_facts"))
     readable_label = next(
         (

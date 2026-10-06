@@ -48,7 +48,7 @@ def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
-    values = []
+    values: list[Any] = []
     for topic_index, raw in enumerate(topic_rows, 1):
         topic = _map(raw); candidate = _candidate(topic); topic_id = str(topic.get("topic_id") or candidate.get("topic_id") or f"topic:{topic_index}")
         values.extend((topic_id, index, entity) for index, entity in enumerate(_rows(candidate.get("entities"))))
@@ -132,7 +132,7 @@ def information_locality_issues(topic_rows: Sequence[Mapping[str, Any]], topic_g
             if route_rank is None and claimed == 0:
                 issues.append(InformationLocalityIssue("same_day_information_without_direct_route", group_id, endpoint, f"{base}/information_locality_signature/latency_band", "Same-day knowledge requires a direct canonical route from the information anchor.", {"anchor_place_id": anchor, "endpoint_place_id": endpoint}))
     if len(groups) >= 4:
-        by_signature = {}
+        by_signature: dict[Any, Any] = {}
         for group_id, payload in payloads.items(): by_signature.setdefault(_fingerprint(payload), []).append(group_id)
         for fingerprint, repeated in sorted(by_signature.items()):
             if len(repeated) > 1: issues.append(InformationLocalityIssue("duplicate_information_locality_signature", repeated[0], "", f"{paths[repeated[0]]}/information_locality_signature", "Multiple factions share the same complete information network.", {"fingerprint": fingerprint, "group_ids": sorted(repeated)}))

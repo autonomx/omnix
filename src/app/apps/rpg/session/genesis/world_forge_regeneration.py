@@ -65,23 +65,23 @@ def regeneration_request_from_error(
                 or f"Resolve {issue.field or 'reference'} without fallback substitution."
             )
     elif isinstance(error, StructuredFactValidationError):
-        for issue in error.issues:
-            codes.add(issue.code)
-            if issue.entity_id:
-                entity_ids.add(issue.entity_id)
-            if issue.field_id:
-                fields.add(issue.field_id)
-            instructions.add(issue.message)
+        for structured_fact_issue in error.issues:
+            codes.add(structured_fact_issue.code)
+            if structured_fact_issue.entity_id:
+                entity_ids.add(structured_fact_issue.entity_id)
+            if structured_fact_issue.field_id:
+                fields.add(structured_fact_issue.field_id)
+            instructions.add(structured_fact_issue.message)
             scopes.add("entity_fields")
     elif isinstance(error, WorldForgeSemanticQualityError):
-        for issue in error.report.issues:
-            if issue.severity != "error":
+        for semantic_quality_issue in error.report.issues:
+            if semantic_quality_issue.severity != "error":
                 continue
-            codes.add(issue.code)
-            entity_ids.update(issue.entity_ids)
-            fields.update(issue.fields)
-            instructions.add(issue.reason)
-            scopes.add(issue.regeneration_scope)
+            codes.add(semantic_quality_issue.code)
+            entity_ids.update(semantic_quality_issue.entity_ids)
+            fields.update(semantic_quality_issue.fields)
+            instructions.add(semantic_quality_issue.reason)
+            scopes.add(semantic_quality_issue.regeneration_scope)
     else:
         return None
 

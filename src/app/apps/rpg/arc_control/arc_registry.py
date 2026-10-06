@@ -7,7 +7,7 @@ explicit creator/GM steering to override status/priority.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from .models import NarrativeArc
 
@@ -56,7 +56,7 @@ class ArcRegistry:
             arcs.append(
                 NarrativeArc(
                     arc_id=f"arc:{thread_id}",
-                    title=title,
+                    title=cast(Any, title),
                     status="active",
                     priority="normal",
                     arc_type="general",

@@ -188,7 +188,7 @@ class ProviderNarrativeGenerator:
         remaining_seconds = float(deadline_seconds)
         if remaining_seconds <= 0:
             raise RuntimeError("structured RPG narrative operation deadline exhausted")
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         outcome = gateway.try_generate(
             [
                 ChatMessage(role="system", content=_system_prompt()),
@@ -267,7 +267,7 @@ class ProductionStructuredNarrativeWriter:
         remaining_calls = max(1, self.generator.config.max_retries + 1)
         maximum_attempts = max(1, min(remaining_calls, 3))
         total_attempts = 0
-        blocks = ()
+        blocks: tuple[NarrativeBlock, ...] = ()
         raw: Mapping[str, Any] = {}
         missing_fragments: list[str] = []
         quality_attempt = 0
@@ -377,9 +377,7 @@ class UnavailableNarrativeWriter:
 def build_production_narrative_writer(
     config: NarrativeProviderConfig | None = None,
     *,
-    provider_factory: Callable[
-        [str, Mapping[str, Any] | None], BaseProvider | None
-    ] = get_provider,
+    provider_factory: Callable[..., BaseProvider | None] = get_provider,
 ) -> NarrativeWriter:
     """Create the configured live typed writer or an explicit safe fallback."""
 

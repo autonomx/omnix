@@ -1,7 +1,7 @@
 """Genesis compiler/bootstrap and World Forge launch pipeline adapter."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from .bootstrap import bootstrap_session_from_compiled_genesis
 from .compiler import compile_campaign_genesis
@@ -48,7 +48,7 @@ def attach_compiled_genesis_to_session(
     session_id = str(result.get("session_id") or "")
     if not session_id:
         return result
-    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
         from app.apps.rpg.session.service import load_session
 
@@ -106,7 +106,7 @@ def _result_from_unsaved_session(session: dict[str, Any]) -> dict[str, Any]:
 
 
 def _save_prepared_result(result: dict[str, Any]) -> dict[str, Any]:
-    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
         return result
     from app.apps.rpg.session.new_game import _save_created_session
@@ -129,10 +129,10 @@ def _attach_world_forge_progress(
     )
 
     status = "completed" if not error and result.get("ok") is True else "failed"
-    job = build_creation_job(session_id=session_id, status=status, error=error)
+    job = build_creation_job(session_id=session_id, status=cast(Any, status), error=error)
     progress = build_creation_progress_snapshot(
         session_id=session_id,
-        status=status,
+        status=cast(Any, status),
         error=error,
     )
     if world_forge is not None:
@@ -208,7 +208,7 @@ def create_new_game_session_from_compiled_genesis(
         contract=contract,
         legacy=legacy,
     )
-    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None or not contract.world_forge.enabled:
         result["status"] = "ready"
         return _save_prepared_result(_attach_world_forge_progress(result, None))

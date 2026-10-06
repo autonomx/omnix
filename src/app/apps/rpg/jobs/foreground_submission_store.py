@@ -245,7 +245,7 @@ class InMemoryForegroundSubmissionStore:
 RpgForegroundSubmissionStore = InMemoryForegroundSubmissionStore
 
 
-def submission_store_for_job_store(job_store: Any) -> InMemoryForegroundSubmissionStore:
+def submission_store_for_job_store(job_store: Any) -> Any:
     if hasattr(job_store, 'database'):
         from app.apps.rpg.persistence.foreground_submissions import submission_store_for_job_store as factory
         return factory(job_store)

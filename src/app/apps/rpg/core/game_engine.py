@@ -26,8 +26,8 @@ Usage:
     scene = engine.handle_input("look around")
 """
 
-from threading import Event
-from typing import Any, Callable, Dict, List, Optional
+from .event_bus import Event
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from .event_bus import EventBus
 from .game_loop import (
@@ -102,12 +102,12 @@ class GameEngine:
         self._scene_renderer_factory = scene_renderer_factory
 
         self.loop = GameLoop(
-            intent_parser=intent_parser or (self._intent_parser_factory() if self._intent_parser_factory else None),
-            world=world or (self._world_factory() if self._world_factory else None),
-            npc_system=npc_system or (self._npc_system_factory() if self._npc_system_factory else None),
+            intent_parser=cast(Any, intent_parser or (self._intent_parser_factory() if self._intent_parser_factory else None)),
+            world=cast(Any, world or (self._world_factory() if self._world_factory else None)),
+            npc_system=cast(Any, npc_system or (self._npc_system_factory() if self._npc_system_factory else None)),
             event_bus=self.event_bus,
-            story_director=story_director or (self._story_director_factory() if self._story_director_factory else None),
-            scene_renderer=scene_renderer or (self._scene_renderer_factory() if self._scene_renderer_factory else None),
+            story_director=cast(Any, story_director or (self._story_director_factory() if self._story_director_factory else None)),
+            scene_renderer=cast(Any, scene_renderer or (self._scene_renderer_factory() if self._scene_renderer_factory else None)),
         )
 
     def handle_input(self, player_input: str) -> Dict[str, Any]:
@@ -252,11 +252,11 @@ class GameEngine:
             )
 
         return GameLoop(
-            intent_parser=self._intent_parser_factory(),
-            world=self._world_factory(),
-            npc_system=self._npc_system_factory(),
-            story_director=self._story_director_factory(),
-            scene_renderer=self._scene_renderer_factory(),
+            intent_parser=cast(Any, self._intent_parser_factory)(),
+            world=cast(Any, self._world_factory)(),
+            npc_system=cast(Any, self._npc_system_factory)(),
+            story_director=cast(Any, self._story_director_factory)(),
+            scene_renderer=cast(Any, self._scene_renderer_factory)(),
             event_bus=EventBus(),
         )
 

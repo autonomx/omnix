@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any
+from typing import Any, cast
 
 from .conversation_beats import (
     append_beat,
@@ -112,7 +112,7 @@ def _resolve_speaker_name(simulation_state: dict[str, Any], speaker_id: str) -> 
 def build_next_conversation_line(conversation: dict[str, Any], simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     speaker_id = select_next_speaker(conversation, simulation_state)
-    recent_lines = get_conversation_lines(simulation_state, conversation.get("conversation_id"))
+    recent_lines = get_conversation_lines(simulation_state, cast(Any, conversation.get("conversation_id")))
     speaker_display = _resolve_speaker_name(simulation_state, speaker_id)
 
     if settings.get("llm_expand_npc_conversations"):
@@ -180,7 +180,7 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
 
     line_payload = build_template_line(conversation, speaker_id, simulation_state, runtime_state)
     return build_conversation_line(
-        conversation_id=conversation.get("conversation_id"),
+        conversation_id=cast(Any, conversation.get("conversation_id")),
         turn=int(conversation.get("turn_count", 0) or 0) + 1,
         speaker=speaker_id,
         speaker_name=line_payload.get("speaker_name", speaker_display),
@@ -371,7 +371,7 @@ def _trim_ambient_overflow(simulation_state: dict[str, Any], settings: dict[str,
     ambient_sorted = sorted(ambient, key=lambda c: int(dict(c).get("updated_tick", 0) or 0))
     overflow = ambient_sorted[:-max_ambient]
     for conv in overflow:
-        close_conversation(simulation_state, conv.get("conversation_id"), reason="ambient_capacity_trim")
+        close_conversation(simulation_state, cast(Any, conv.get("conversation_id")), reason="ambient_capacity_trim")
     return simulation_state
 
 
@@ -460,7 +460,7 @@ def _update_thread_metadata(
         new_mode = classify_thread_mode(conv, simulation_state, runtime_state)
         if new_mode != _safe_str(conv.get("mode")):
             # Record pivot in history
-            pivot_history = conv.get("pivot_history") if isinstance(conv.get("pivot_history"), list) else []
+            pivot_history = raw_pivot_history if isinstance(raw_pivot_history := conv.get("pivot_history"), list) else []
             pivot_history.append({
                 "from_mode": _safe_str(conv.get("mode")),
                 "to_mode": new_mode,

@@ -146,7 +146,7 @@ def register_rpg_map_editor_routes(router: APIRouter, state) -> None:
         )
 
 
-def _payload(value: object) -> Mapping[str, object]:
+def _payload(value: object) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise HTTPException(status_code=422, detail={"ok": False, "error": "request_body_must_be_object"})
     return value

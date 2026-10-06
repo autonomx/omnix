@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 
 from app.apps.rpg.map_contracts import MapContractError
 from app.apps.rpg.map_serialization import canonical_map_json, map_content_revision
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class MapContentReport:
     canonical_json: str
     issues: tuple[MapContentIssue, ...]
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -105,7 +106,7 @@ def validate_map_content(
     return _report(raw, issues)
 
 
-def _report(raw: Mapping[str, object], issues: list[MapContentIssue]) -> MapContentReport:
+def _report(raw: Mapping[str, Any], issues: list[MapContentIssue]) -> MapContentReport:
     try:
         canonical = canonical_map_json(raw)
         revision = map_content_revision(raw)
@@ -120,7 +121,7 @@ def _report(raw: Mapping[str, object], issues: list[MapContentIssue]) -> MapCont
     )
 
 
-def _unique_ids(rows: tuple[Mapping[str, object], ...], path: str, issues: list[MapContentIssue], *, key: str = "id") -> set[str]:
+def _unique_ids(rows: tuple[Mapping[str, Any], ...], path: str, issues: list[MapContentIssue], *, key: str = "id") -> set[str]:
     seen: set[str] = set()
     for index, row in enumerate(rows):
         value = _required_text(row, key, f"{path}[{index}].{key}", issues)
@@ -156,30 +157,30 @@ def _asset_allowed(value: str, allowed: Sequence[str], path: str, issues: list[M
         issues.append(MapContentIssue("error", "asset_id_not_allowed", path, value))
 
 
-def _required_text(raw: Mapping[str, object], key: str, path: str, issues: list[MapContentIssue]) -> str:
+def _required_text(raw: Mapping[str, Any], key: str, path: str, issues: list[MapContentIssue]) -> str:
     value = _text(raw.get(key))
     if not value:
         issues.append(MapContentIssue("error", "required", path))
     return value
 
 
-def _positive_integer(raw: Mapping[str, object], key: str, path: str, issues: list[MapContentIssue]) -> None:
+def _positive_integer(raw: Mapping[str, Any], key: str, path: str, issues: list[MapContentIssue]) -> None:
     value = raw.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         issues.append(MapContentIssue("error", "positive_integer_required", path))
 
 
-def _integer(raw: Mapping[str, object], key: str, path: str, issues: list[MapContentIssue]) -> None:
+def _integer(raw: Mapping[str, Any], key: str, path: str, issues: list[MapContentIssue]) -> None:
     value = raw.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         issues.append(MapContentIssue("error", "integer_required", path))
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _rows(value: object) -> tuple[Mapping[str, object], ...]:
+def _rows(value: object) -> tuple[Mapping[str, Any], ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(item for item in value if isinstance(item, Mapping))

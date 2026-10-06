@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import html
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from .turn_readiness import build_100_turn_readiness_result
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
@@ -108,7 +108,7 @@ def build_100_turn_readiness_report_payload(readiness_result: Dict[str, Any]) ->
             "advisory": len(advisories),
         },
     }
-    payload["ok"] = payload["severity_counts"]["critical"] == 0
+    payload["ok"] = cast(dict[str, int], payload["severity_counts"])["critical"] == 0
     payload["reason"] = (
         "phase7_100_turn_readiness_report_ready"
         if payload["ok"]

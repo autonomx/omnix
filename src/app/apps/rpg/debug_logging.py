@@ -404,10 +404,10 @@ def _sanitize(value: Any, *, key: str = "", depth: int = 0) -> Any:
         return output
     if isinstance(value, (list, tuple, set, frozenset)):
         items = list(value)
-        output = [_sanitize(item, key=key, depth=depth + 1) for item in items[:_MAX_COLLECTION_ITEMS]]
+        listed = [_sanitize(item, key=key, depth=depth + 1) for item in items[:_MAX_COLLECTION_ITEMS]]
         if len(items) > _MAX_COLLECTION_ITEMS:
-            output.append(f"<truncated-items:{len(items) - _MAX_COLLECTION_ITEMS}>")
-        return output
+            listed.append(f"<truncated-items:{len(items) - _MAX_COLLECTION_ITEMS}>")
+        return listed
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         try:

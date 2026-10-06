@@ -12,8 +12,8 @@ def hermes_planner_context_from_session(session_id: str, session: dict[str, Any]
     if base.get("ok") is not True:
         return {**base, "planner_ready": False}
     context = dict(base["context"])
-    flags = context.get("state_flags") if isinstance(context.get("state_flags"), dict) else {}
-    recent_turns = context.get("recent_turns") if isinstance(context.get("recent_turns"), list) else []
+    flags = raw_state_flags if isinstance(raw_state_flags := context.get("state_flags"), dict) else {}
+    recent_turns = raw_recent_turns if isinstance(raw_recent_turns := context.get("recent_turns"), list) else []
     turn_id = recent_turns[-1].get("turn") if recent_turns and isinstance(recent_turns[-1], dict) else None
     context["available_commands"] = _available_commands(flags)
     context["turn_id"] = turn_id

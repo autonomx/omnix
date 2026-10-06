@@ -116,7 +116,7 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
     diagnostics = _mapping(result.get("first_call_grounding_diagnostics"))
     packet = _mapping(diagnostics.get("turn_grounding_packet"))
     npc_context = _mapping(packet.get("npc_context"))
-    addressed = npc_context.get("addressed_npcs") if isinstance(npc_context.get("addressed_npcs"), list) else []
+    addressed = raw_addressed_npcs if isinstance(raw_addressed_npcs := npc_context.get("addressed_npcs"), list) else []
     profiles = [item for item in addressed if isinstance(item, Mapping)]
     if not profiles:
         session = _mapping(result.get("session"))

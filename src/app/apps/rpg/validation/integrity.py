@@ -205,10 +205,10 @@ def validate_survival_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
             errors.append(_err("survival_need_out_of_bounds", f"{key}:{value}"))
 
     for key in ("last_food_turn", "last_water_turn", "last_rest_turn"):
-        value = survival.get(key)
-        if value is None or value == "":
+        turn_value = survival.get(key)
+        if turn_value is None or turn_value == "":
             continue
-        _, ok_value = _coerce_int(value)
+        _, ok_value = _coerce_int(turn_value)
         if not ok_value:
             warnings.append(_err("survival_last_turn_invalid_type", key))
 

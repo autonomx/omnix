@@ -249,8 +249,8 @@ def apply_story_arc_lifecycle(
         resolution_by_arc.setdefault(rule.arc_id, []).append(rule)
 
     failure_by_arc: Dict[str, List[ArcFailureRule]] = {}
-    for rule in failure_rules:
-        failure_by_arc.setdefault(rule.arc_id, []).append(rule)
+    for arc_failure_rule in failure_rules:
+        failure_by_arc.setdefault(arc_failure_rule.arc_id, []).append(arc_failure_rule)
 
     for arc_id, arc in arcs.items():
         if arc.status in TERMINAL_ARC_STATUSES:
@@ -302,18 +302,18 @@ def apply_story_arc_lifecycle(
             break
 
         if not resolved:
-            for rule in failure_by_arc.get(arc_id, []):
-                if not _failure_rule_met(rule, arc=arc, state=state, turn_index=turn_index):
+            for arc_failure_rule in failure_by_arc.get(arc_id, []):
+                if not _failure_rule_met(arc_failure_rule, arc=arc, state=state, turn_index=turn_index):
                     continue
 
-                arc = replace(arc, status=ARC_STATUS_FAILED, failed_turn=int(turn_index), failure_outcome=rule.outcome)
+                arc = replace(arc, status=ARC_STATUS_FAILED, failed_turn=int(turn_index), failure_outcome=arc_failure_rule.outcome)
                 arc.history.append(
                     {
                         "turn": turn_index,
                         "type": "arc_failed",
-                        "rule_id": rule.id,
-                        "outcome": rule.outcome,
-                        "summary": rule.summary,
+                        "rule_id": arc_failure_rule.id,
+                        "outcome": arc_failure_rule.outcome,
+                        "summary": arc_failure_rule.summary,
                     }
                 )
                 arcs[arc_id] = arc
@@ -324,8 +324,8 @@ def apply_story_arc_lifecycle(
                         "subtype": "arc_failed",
                         "arc_id": arc_id,
                         "title": arc.title,
-                        "outcome": rule.outcome,
-                        "summary": rule.summary or f"{arc.title} failed.",
+                        "outcome": arc_failure_rule.outcome,
+                        "summary": arc_failure_rule.summary or f"{arc.title} failed.",
                         "meaningful_progress": True,
                         "progress_category": "story_arc_resolution",
                     }

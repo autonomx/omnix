@@ -386,7 +386,7 @@ def _normalize_entity(
 
 
 def _dossier_text(entity: Mapping[str, Any]) -> str:
-    dossier = entity.get("dossier") if isinstance(entity.get("dossier"), Mapping) else {}
+    dossier = raw_dossier if isinstance(raw_dossier := entity.get("dossier"), Mapping) else {}
     sections = dossier.get("sections") if isinstance(dossier, Mapping) else []
     paragraphs: list[str] = []
     if isinstance(sections, Sequence) and not isinstance(sections, (str, bytes)):

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_contradictions import (
@@ -313,7 +313,7 @@ def _provider_presentation(
     raw_dossier = original.get("dossier")
     if not short_summary or validate_entity_dossier(raw_dossier):
         return None
-    return short_summary, dict(raw_dossier)
+    return short_summary, dict(cast(Any, raw_dossier))
 
 
 def _provider_presentation_issues(

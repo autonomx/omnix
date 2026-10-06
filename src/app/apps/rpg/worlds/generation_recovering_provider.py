@@ -76,7 +76,7 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
         temperature: float,
     ):
         capture = CapturingStructuredProvider(self.provider)
-        gateway = StructuredOutputGateway(capture)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(capture)
         with self._limiter():
             outcome = gateway.try_generate(
                 messages,

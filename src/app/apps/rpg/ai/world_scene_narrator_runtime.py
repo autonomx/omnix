@@ -752,262 +752,244 @@ def narrate_scene(
                 _safe_dict(narration_context.get("resolved_result"))
             ),
         })
-    turn_id = narration_context.get("turn_id")
-    if turn_id and turn_id in _ACTIVE_NARRATIONS:
+    try_ambient = _safe_str(narration_context.get("mode")) == "ambient_conversation"
+    if try_ambient:
         if require_live_llm:
-            raise RuntimeError("live_llm_required_but_narrator_fallback_selected")
+            raise RuntimeError("live_llm_required_but_ambient_fallback_selected")
+        text = _build_ambient_conversation_line(narration_context)
         return {
-            "narration": "",
+            "narration": text,
+            "structured_narration": {"markdown": text, "speaker_turns": []},
+            "speaker_turns": [],
             "used_llm": False,
             "raw_llm_narrative": "",
-            "narration_json": {},
-            "speaker_presentation": {},
-            "format_warning": False,
+            "llm_error": False,
         }
-    if turn_id:
-        _ACTIVE_NARRATIONS.add(turn_id)
-    try:
-        try_ambient = _safe_str(narration_context.get("mode")) == "ambient_conversation"
-        if try_ambient:
-            if require_live_llm:
-                raise RuntimeError("live_llm_required_but_ambient_fallback_selected")
-            text = _build_ambient_conversation_line(narration_context)
-            return {
-                "narration": text,
-                "structured_narration": {"markdown": text, "speaker_turns": []},
-                "speaker_turns": [],
-                "used_llm": False,
-                "raw_llm_narrative": "",
-                "llm_error": False,
-            }
 
-        turn_contract = _safe_dict(narration_context.get("turn_contract"))
-        state_snapshot = _safe_dict(narration_context.get("simulation_state"))
-        runtime_settings = _safe_dict(
-            narration_context.get("runtime_settings")
-            or narration_context.get("settings")
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    state_snapshot = _safe_dict(narration_context.get("simulation_state"))
+    runtime_settings = _safe_dict(
+        narration_context.get("runtime_settings")
+        or narration_context.get("settings")
+    )
+    grounding_settings = normalize_grounding_settings(
+        _safe_dict(runtime_settings.get("grounding"))
+    )
+
+    if llm_gateway:
+        logger.debug('[RPG][narrator] provider resolved %s', {
+                "provider_type": type(llm_gateway).__name__ if llm_gateway else "",
+                "provider_truthy": bool(llm_gateway),
+            })
+
+        if require_live_llm and not llm_gateway:
+            raise RuntimeError("live_llm_required_but_no_provider_available")
+
+        llm_narrative = _generate_live_narrative(
+            scene,
+            narration_context,
+            llm_gateway=llm_gateway,
+            tone=tone,
+            retry_on_invalid=retry_on_invalid,
+            debug_logging=debug_logging,
+            on_chunk=on_chunk,
+            require_live_llm=require_live_llm,
         )
-        grounding_settings = normalize_grounding_settings(
-            _safe_dict(runtime_settings.get("grounding"))
-        )
 
-        if llm_gateway:
-            logger.debug('[RPG][narrator] provider resolved %s', {
-                    "provider_type": type(llm_gateway).__name__ if llm_gateway else "",
-                    "provider_truthy": bool(llm_gateway),
-                })
-
-            if require_live_llm and not llm_gateway:
-                raise RuntimeError("live_llm_required_but_no_provider_available")
-
-            llm_narrative = _generate_live_narrative(
-                scene,
-                narration_context,
-                llm_gateway=llm_gateway,
-                tone=tone,
-                retry_on_invalid=retry_on_invalid,
-                debug_logging=debug_logging,
-                on_chunk=on_chunk,
-                require_live_llm=require_live_llm,
-            )
-
-            # Parse JSON response with tolerant fallback
-            parsed_json = _parse_llm_narration_payload(llm_narrative)
-            logger.debug('[RPG][LLM PARSED] %s', parsed_json)
-            if (
-                _safe_str(_safe_dict(parsed_json).get("format_version"))
-                == "rpg_narration_candidates_v1"
-            ):
-                narration_json = select_grounded_narration_candidate(
-                    parsed_json,
-                    turn_contract,
-                    state_snapshot=state_snapshot,
-                    grounding_settings=grounding_settings,
-                    strict_named_fact_check=False,
-                )
-            elif (
-                parsed_json
-                and _safe_str(parsed_json.get("format_version")) == "rpg_narration_v2"
-            ):
-                narration_json = select_grounded_narration_candidate(
-                    _strict_narration_payload(parsed_json),
-                    turn_contract,
-                    state_snapshot=state_snapshot,
-                    grounding_settings=grounding_settings,
-                    strict_named_fact_check=False,
-                )
-            else:
-                narration_json = select_grounded_narration_candidate(
-                    _strict_narration_payload(
-                        _normalize_narration_json(parsed_json or {})
-                    ),
-                    turn_contract,
-                    state_snapshot=state_snapshot,
-                    grounding_settings=grounding_settings,
-                    strict_named_fact_check=False,
-                )
-
-            logger.debug('[RPG][LLM RAW ACTION] %s', _safe_dict(parsed_json).get("action"))
-            logger.debug('[RPG][STRICT ACTION] %s', narration_json.get("action"))
-
-            if (
-                not narration_json.get("narration")
-                and not narration_json.get("action")
-                and not _safe_str(
-                    _safe_dict(narration_json.get("npc")).get("line")
-                ).strip()
-            ):
-                logger.warning(
-                    "Narration JSON parse failed or empty; recovering from raw text"
-                )
-                recovered_json = _strict_narration_payload(
-                    _recover_narration_from_raw_text(llm_narrative)
-                )
-                narration_json = select_grounded_narration_candidate(
-                    recovered_json,
-                    turn_contract,
-                    state_snapshot=state_snapshot,
-                    grounding_settings=grounding_settings,
-                    strict_named_fact_check=False,
-                )
-
-            logger.debug('[RPG][PRE-SANITIZE ACTION] %s', narration_json.get("action"))
-            authoritative_action = _build_authoritative_action_line(narration_context)
-            grounded_json = _sanitize_narration_payload(
-                narration_json,
-                scene,
-                narration_context,
-                authoritative_action=authoritative_action,
-            )
-            if isinstance(narration_json, dict) and narration_json.get(
-                "grounding_validation"
-            ):
-                grounded_json["grounding_validation"] = narration_json.get(
-                    "grounding_validation"
-                )
-            if isinstance(narration_json, dict) and narration_json.get(
-                "grounding_fallback"
-            ):
-                grounded_json["grounding_fallback"] = True
-                grounded_json["grounding_fallback_reason"] = narration_json.get(
-                    "grounding_fallback_reason"
-                )
-
-            logger.debug('[RPG][SANITIZED ACTION] %s', grounded_json.get("action"))
-
-            parts = []
-
-            if grounded_json["narration"]:
-                parts.append(grounded_json["narration"])
-
-            if authoritative_action:
-                parts.append(authoritative_action)
-
-            llm_action = _safe_str(grounded_json.get("action")).strip()
-            if llm_action and llm_action != authoritative_action:
-                parts.append(f"Result: {llm_action}")
-
-            npc = _safe_dict(grounded_json.get("npc"))
-            if npc.get("speaker") and npc.get("line"):
-                parts.append(f'{npc["speaker"]}: "{npc["line"]}"')
-
-            rendered_narration = _naturalize_service_debug_language(
-                "\n\n".join(parts).strip()
-            )
-
-            return {
-                "narration": rendered_narration,
-                "used_llm": True,
-                "raw_llm_narrative": llm_narrative,
-                "narration_json": grounded_json,
-                "grounding_validation": _safe_dict(
-                    grounded_json.get("grounding_validation")
-                ),
-                "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
-                "speaker_presentation": {},
-                "format_warning": False,
-            }
-        else:
-            if require_live_llm:
-                raise RuntimeError("live_llm_required_but_simulation_fallback_selected")
-            llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
-            simulated_json = _normalize_narration_json(
-                {
-                    "narration": llm_narrative,
-                    "action": _authoritative_action_text(narration_context),
-                    "npc": {"speaker": "", "line": ""},
-                    "reward": _authoritative_reward_text(narration_context),
-                    "followup_hooks": [],
-                }
-            )
+        # Parse JSON response with tolerant fallback
+        parsed_json = _parse_llm_narration_payload(llm_narrative)
+        logger.debug('[RPG][LLM PARSED] %s', parsed_json)
+        if (
+            _safe_str(_safe_dict(parsed_json).get("format_version"))
+            == "rpg_narration_candidates_v1"
+        ):
             narration_json = select_grounded_narration_candidate(
-                _strict_narration_payload(simulated_json),
+                parsed_json,
                 turn_contract,
                 state_snapshot=state_snapshot,
                 grounding_settings=grounding_settings,
                 strict_named_fact_check=False,
             )
-            logger.debug('[RPG][LLM RAW ACTION] %s', _safe_dict(simulated_json).get("action"))
-            logger.debug('[RPG][STRICT ACTION] %s', narration_json.get("action"))
-            logger.debug('[RPG][PRE-SANITIZE ACTION] %s', narration_json.get("action"))
-            authoritative_action = _build_authoritative_action_line(narration_context)
-            grounded_json = _sanitize_narration_payload(
-                narration_json,
-                scene,
-                narration_context,
-                authoritative_action=authoritative_action,
+        elif (
+            parsed_json
+            and _safe_str(parsed_json.get("format_version")) == "rpg_narration_v2"
+        ):
+            narration_json = select_grounded_narration_candidate(
+                _strict_narration_payload(parsed_json),
+                turn_contract,
+                state_snapshot=state_snapshot,
+                grounding_settings=grounding_settings,
+                strict_named_fact_check=False,
             )
-            if isinstance(narration_json, dict) and narration_json.get(
-                "grounding_validation"
-            ):
-                grounded_json["grounding_validation"] = narration_json.get(
-                    "grounding_validation"
-                )
-            if isinstance(narration_json, dict) and narration_json.get(
-                "grounding_fallback"
-            ):
-                grounded_json["grounding_fallback"] = True
-                grounded_json["grounding_fallback_reason"] = narration_json.get(
-                    "grounding_fallback_reason"
-                )
-
-            logger.debug('[RPG][SANITIZED ACTION] %s', grounded_json.get("action"))
-
-            parts = []
-
-            if grounded_json["narration"]:
-                parts.append(grounded_json["narration"])
-
-            if authoritative_action:
-                parts.append(authoritative_action)
-
-            llm_action = _safe_str(grounded_json.get("action")).strip()
-            if llm_action and llm_action != authoritative_action:
-                parts.append(f"Result: {llm_action}")
-
-            npc = _safe_dict(grounded_json.get("npc"))
-            if npc.get("speaker") and npc.get("line"):
-                parts.append(f'{npc["speaker"]}: "{npc["line"]}"')
-
-            rendered_narration = _naturalize_service_debug_language(
-                "\n\n".join(parts).strip()
-            )
-
-            return {
-                "narration": rendered_narration,
-                "used_llm": False,
-                "raw_llm_narrative": llm_narrative,
-                "narration_json": grounded_json,
-                "grounding_validation": _safe_dict(
-                    grounded_json.get("grounding_validation")
+        else:
+            narration_json = select_grounded_narration_candidate(
+                _strict_narration_payload(
+                    _normalize_narration_json(parsed_json or {})
                 ),
-                "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
-                "speaker_presentation": {},
-                "format_warning": False,
+                turn_contract,
+                state_snapshot=state_snapshot,
+                grounding_settings=grounding_settings,
+                strict_named_fact_check=False,
+            )
+
+        logger.debug('[RPG][LLM RAW ACTION] %s', _safe_dict(parsed_json).get("action"))
+        logger.debug('[RPG][STRICT ACTION] %s', narration_json.get("action"))
+
+        if (
+            not narration_json.get("narration")
+            and not narration_json.get("action")
+            and not _safe_str(
+                _safe_dict(narration_json.get("npc")).get("line")
+            ).strip()
+        ):
+            logger.warning(
+                "Narration JSON parse failed or empty; recovering from raw text"
+            )
+            recovered_json = _strict_narration_payload(
+                _recover_narration_from_raw_text(llm_narrative)
+            )
+            narration_json = select_grounded_narration_candidate(
+                recovered_json,
+                turn_contract,
+                state_snapshot=state_snapshot,
+                grounding_settings=grounding_settings,
+                strict_named_fact_check=False,
+            )
+
+        logger.debug('[RPG][PRE-SANITIZE ACTION] %s', narration_json.get("action"))
+        authoritative_action = _build_authoritative_action_line(narration_context)
+        grounded_json = _sanitize_narration_payload(
+            narration_json,
+            scene,
+            narration_context,
+            authoritative_action=authoritative_action,
+        )
+        if isinstance(narration_json, dict) and narration_json.get(
+            "grounding_validation"
+        ):
+            grounded_json["grounding_validation"] = narration_json.get(
+                "grounding_validation"
+            )
+        if isinstance(narration_json, dict) and narration_json.get(
+            "grounding_fallback"
+        ):
+            grounded_json["grounding_fallback"] = True
+            grounded_json["grounding_fallback_reason"] = narration_json.get(
+                "grounding_fallback_reason"
+            )
+
+        logger.debug('[RPG][SANITIZED ACTION] %s', grounded_json.get("action"))
+
+        parts = []
+
+        if grounded_json["narration"]:
+            parts.append(grounded_json["narration"])
+
+        if authoritative_action:
+            parts.append(authoritative_action)
+
+        llm_action = _safe_str(grounded_json.get("action")).strip()
+        if llm_action and llm_action != authoritative_action:
+            parts.append(f"Result: {llm_action}")
+
+        npc = _safe_dict(grounded_json.get("npc"))
+        if npc.get("speaker") and npc.get("line"):
+            parts.append(f'{npc["speaker"]}: "{npc["line"]}"')
+
+        rendered_narration = _naturalize_service_debug_language(
+            "\n\n".join(parts).strip()
+        )
+
+        return {
+            "narration": rendered_narration,
+            "used_llm": True,
+            "raw_llm_narrative": llm_narrative,
+            "narration_json": grounded_json,
+            "grounding_validation": _safe_dict(
+                grounded_json.get("grounding_validation")
+            ),
+            "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
+            "speaker_presentation": {},
+            "format_warning": False,
+        }
+    else:
+        if require_live_llm:
+            raise RuntimeError("live_llm_required_but_simulation_fallback_selected")
+        llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
+        simulated_json = _normalize_narration_json(
+            {
+                "narration": llm_narrative,
+                "action": _authoritative_action_text(narration_context),
+                "npc": {"speaker": "", "line": ""},
+                "reward": _authoritative_reward_text(narration_context),
+                "followup_hooks": [],
             }
-    finally:
-        if turn_id:
-            _ACTIVE_NARRATIONS.discard(turn_id)
+        )
+        narration_json = select_grounded_narration_candidate(
+            _strict_narration_payload(simulated_json),
+            turn_contract,
+            state_snapshot=state_snapshot,
+            grounding_settings=grounding_settings,
+            strict_named_fact_check=False,
+        )
+        logger.debug('[RPG][LLM RAW ACTION] %s', _safe_dict(simulated_json).get("action"))
+        logger.debug('[RPG][STRICT ACTION] %s', narration_json.get("action"))
+        logger.debug('[RPG][PRE-SANITIZE ACTION] %s', narration_json.get("action"))
+        authoritative_action = _build_authoritative_action_line(narration_context)
+        grounded_json = _sanitize_narration_payload(
+            narration_json,
+            scene,
+            narration_context,
+            authoritative_action=authoritative_action,
+        )
+        if isinstance(narration_json, dict) and narration_json.get(
+            "grounding_validation"
+        ):
+            grounded_json["grounding_validation"] = narration_json.get(
+                "grounding_validation"
+            )
+        if isinstance(narration_json, dict) and narration_json.get(
+            "grounding_fallback"
+        ):
+            grounded_json["grounding_fallback"] = True
+            grounded_json["grounding_fallback_reason"] = narration_json.get(
+                "grounding_fallback_reason"
+            )
+
+        logger.debug('[RPG][SANITIZED ACTION] %s', grounded_json.get("action"))
+
+        parts = []
+
+        if grounded_json["narration"]:
+            parts.append(grounded_json["narration"])
+
+        if authoritative_action:
+            parts.append(authoritative_action)
+
+        llm_action = _safe_str(grounded_json.get("action")).strip()
+        if llm_action and llm_action != authoritative_action:
+            parts.append(f"Result: {llm_action}")
+
+        npc = _safe_dict(grounded_json.get("npc"))
+        if npc.get("speaker") and npc.get("line"):
+            parts.append(f'{npc["speaker"]}: "{npc["line"]}"')
+
+        rendered_narration = _naturalize_service_debug_language(
+            "\n\n".join(parts).strip()
+        )
+
+        return {
+            "narration": rendered_narration,
+            "used_llm": False,
+            "raw_llm_narrative": llm_narrative,
+            "narration_json": grounded_json,
+            "grounding_validation": _safe_dict(
+                grounded_json.get("grounding_validation")
+            ),
+            "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
+            "speaker_presentation": {},
+            "format_warning": False,
+        }
 
 
 def play_scene(

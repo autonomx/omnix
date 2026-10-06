@@ -59,19 +59,19 @@ def normalize_survival_for_persistence(simulation_state: Mapping[str, Any]) -> D
     climate/needs fields are left untouched for backward compatibility, but they
     no longer act as authoritative state after canonical survival is present.
     """
-    simulation_state = deepcopy(_safe_dict(simulation_state))
-    state = normalize_survival_state(_canonical_survival_seed(simulation_state))
-    simulation_state[SURVIVAL_STATE_KEY] = state
-    return simulation_state
+    normalized = deepcopy(_safe_dict(simulation_state))
+    state = normalize_survival_state(_canonical_survival_seed(normalized))
+    normalized[SURVIVAL_STATE_KEY] = state
+    return normalized
 
 
 def normalize_session_survival_for_persistence(session: Mapping[str, Any]) -> Dict[str, Any]:
     """Normalize a whole session at save/load/export/import boundaries."""
-    session = deepcopy(_safe_dict(session))
+    normalized_session = deepcopy(_safe_dict(session))
     simulation_state = normalize_survival_for_persistence(
-        _safe_dict(session.get("simulation_state"))
+        _safe_dict(normalized_session.get("simulation_state"))
     )
-    session["simulation_state"] = simulation_state
-    return session
+    normalized_session["simulation_state"] = simulation_state
+    return normalized_session
 
 

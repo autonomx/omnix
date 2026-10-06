@@ -1,7 +1,7 @@
 """Preview, template, and validation helpers for adventure setup."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ..creator.defaults import (
     apply_adventure_defaults,
@@ -309,7 +309,7 @@ def build_adventure_preview(setup: dict[str, Any]) -> dict[str, Any]:
         if npc_id in present_ids or not present_ids:
             launch_cast.append({
                 "npc_id": npc_id,
-                "name": npc.get("name", npc_id),
+                "name": cast(str, npc.get("name", npc_id)),
                 "role": npc.get("role", "unknown"),
                 "reason_present": npc.get("reason_present", "Part of the opening scene"),
             })

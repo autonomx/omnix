@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
@@ -200,7 +200,7 @@ def _normalize_emotions_map(emotions_in: Dict[str, Any]) -> Dict[str, Dict[str, 
     pairs: List[Tuple[str, Dict[str, Any]]] = []
 
     for actor_id in sorted(emotions_in.keys()):
-        normalized = _normalize_emotion_entry(actor_id, emotions_in.get(actor_id))
+        normalized = _normalize_emotion_entry(actor_id, cast(Any, emotions_in.get(actor_id)))
         pairs.append((_safe_str(actor_id), normalized))
 
     pairs = pairs[:_MAX_EMOTION_ACTORS]
@@ -258,7 +258,7 @@ def _normalize_sequence_actor(item: Dict[str, Any], default_role: str = "npc") -
 def _sort_key_sequence_actor(item: Dict[str, Any]) -> Tuple[int, int, str]:
     item = _normalize_sequence_actor(item)
     return (
-        _role_precedence(item.get("role")),
+        _role_precedence(cast(Any, item.get("role"))),
         _safe_int(item.get("priority"), 0),
         _safe_str(item.get("actor_id")),
     )
@@ -285,7 +285,7 @@ def _sort_key_interruption_candidate(item: Dict[str, Any]) -> Tuple[int, int, in
     return (
         _safe_int(item.get("priority"), 0) * -1,
         _safe_int(item.get("target_sequence_index"), 0),
-        _role_precedence(item.get("role")),
+        _role_precedence(cast(Any, item.get("role"))),
         _safe_str(item.get("actor_id")),
         _safe_str(item.get("target_id")),
     )
@@ -396,8 +396,8 @@ def _normalize_dialogue_state(dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
         key=_sort_key_interrupt_log,
     )[-_MAX_INTERRUPTION_LOG:]
 
-    emotions = _normalize_emotions_map(dialogue_state.get("emotions"))
-    stream_state = _normalize_stream_state(dialogue_state.get("stream"))
+    emotions = _normalize_emotions_map(cast(Any, dialogue_state.get("emotions")))
+    stream_state = _normalize_stream_state(cast(Any, dialogue_state.get("stream")))
 
     sequence_participants_in = dialogue_state.get("sequence_participants", [])
     sequence_participants = [
@@ -409,7 +409,7 @@ def _normalize_dialogue_state(dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
         sequence_participants,
         key=lambda item: (
             _safe_int(item.get("sequence_index"), 0),
-            _role_precedence(item.get("role")),
+            _role_precedence(cast(Any, item.get("role"))),
             _safe_str(item.get("actor_id")),
         ),
     )[:_MAX_SEQUENCE_ACTORS]

@@ -7,7 +7,7 @@ actual deterministic mutation helpers so the same payload reflects persisted
 turn-by-turn state instead of report-only projection.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
@@ -126,12 +126,12 @@ def apply_climate_survival_turn_effects(
 
     state = simulation_state if isinstance(simulation_state, dict) else {}
     runtime_state = _safe_dict(runtime_state)
-    player_state = state.get("player_state") if isinstance(state.get("player_state"), dict) else {}
+    player_state = raw_player_state if isinstance(raw_player_state := state.get("player_state"), dict) else {}
     state["player_state"] = player_state
-    resources = player_state.get("resources") if isinstance(player_state.get("resources"), dict) else {}
+    resources = raw_resources if isinstance(raw_resources := player_state.get("resources"), dict) else {}
     player_state["resources"] = resources
 
-    existing = state.get("climate_survival") if isinstance(state.get("climate_survival"), dict) else {}
+    existing = raw_climate_survival if isinstance(raw_climate_survival := state.get("climate_survival"), dict) else {}
     existing_survival = _safe_dict(existing.get("survival"))
 
     base_tick = max(
@@ -409,14 +409,14 @@ def build_runtime_promotion_summary(
             },
         },
     ]
-    promoted_count = sum(1 for item in systems if item.get("status") in {"runtime_promoted", "runtime_enforced"})
+    promoted_count = sum(1 for item in cast(list[dict[str, Any]], systems) if item.get("status") in {"runtime_promoted", "runtime_enforced"})
     return {
         "format_version": "n1222_runtime_promotion_summary_v1",
         "ok": promoted_count == len(systems),
         "advisory_only": True,
         "system_count": len(systems),
         "runtime_promoted_count": promoted_count,
-        "runtime_enforced_count": sum(1 for item in systems if item.get("status") == "runtime_enforced"),
+        "runtime_enforced_count": sum(1 for item in cast(list[dict[str, Any]], systems) if item.get("status") == "runtime_enforced"),
         "partial_or_missing_count": len(systems) - promoted_count,
         "systems": systems,
         "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",

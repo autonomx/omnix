@@ -200,12 +200,12 @@ def _semantic_value(value: Any) -> Any:
                 result[field_id] = normalised
         return result or None
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        result = [
+        items = [
             normalised
             for item in value
             if (normalised := _semantic_value(item)) not in (None, "", [], {})
         ]
-        return result or None
+        return items or None
     return None
 
 

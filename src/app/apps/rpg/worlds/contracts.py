@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal, Mapping
+from typing import Any, Final, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-WORLD_CONTRACT_VERSION = "rpg_world_contract_v1"
-WORLD_RELEASE_VERSION = "rpg_world_release_v1"
-SCENARIO_CONTRACT_VERSION = "rpg_scenario_contract_v1"
-CAMPAIGN_LAUNCH_VERSION = "rpg_campaign_launch_v1"
+WORLD_CONTRACT_VERSION: Final = "rpg_world_contract_v1"
+WORLD_RELEASE_VERSION: Final = "rpg_world_release_v1"
+SCENARIO_CONTRACT_VERSION: Final = "rpg_scenario_contract_v1"
+CAMPAIGN_LAUNCH_VERSION: Final = "rpg_campaign_launch_v1"
 WorldArtifactStage = Literal[
     "canon_validated",
     "runtime_seeded",

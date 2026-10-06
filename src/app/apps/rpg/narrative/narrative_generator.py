@@ -22,7 +22,7 @@ Design Compliance:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from app.apps.rpg.core.determinism import rng_for_current_turn
 from .narrative_event import NarrativeEvent
@@ -156,7 +156,7 @@ class NarrativeGenerator:
         prompt = _PROMPT_2.format(v0=(location), v1=(participants), v2=(mood), v3=(event_descriptions), v4=(style_instruction), v5=(self.max_words))
         
         try:
-            result = self.llm(prompt)
+            result = cast(Any, self.llm)(prompt)
             return self._trim_to_max(result.strip())
         except Exception:
             return self._generate_with_templates(events)

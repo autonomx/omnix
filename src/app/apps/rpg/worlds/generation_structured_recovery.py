@@ -7,7 +7,7 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import (
     BaseModel,
@@ -120,11 +120,11 @@ def missing_field_patch_contract(paths: Sequence[str]) -> StructuredContract[Any
     response_model = create_model(
         "WorldForgeMissingFieldPatchResponse",
         __config__=ConfigDict(extra="forbid"),
-        patches=(list[patch_model], Field(min_length=len(normalized), max_length=len(normalized))),
+        patches=(list[patch_model], Field(min_length=len(normalized), max_length=len(normalized))),  # type: ignore[valid-type]
     )
 
     def validate(value: BaseModel) -> None:
-        actual = tuple(str(patch.path) for patch in value.patches)
+        actual = tuple(str(patch.path) for patch in cast(Any, value).patches)
         if set(actual) != set(normalized) or len(actual) != len(set(actual)):
             raise ValueError("missing_field_patch_path_set_mismatch")
 

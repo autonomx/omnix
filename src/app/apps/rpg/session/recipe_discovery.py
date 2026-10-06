@@ -107,7 +107,7 @@ def known_recipe_ids(state: dict[str, Any] | None = None, player: dict[str, Any]
 
 
 def _item_tags(item: dict[str, Any]) -> set[str]:
-    tags = set()
+    tags: set[Any] = set()
     for key in ("tags", "flavor_tags", "theme_tags", "properties"):
         tags.update(_norm(tag) for tag in _safe_list(item.get(key)) if _text(tag))
     for key in ("item_id", "id", "name", "label", "display_name", "item_type", "type"):

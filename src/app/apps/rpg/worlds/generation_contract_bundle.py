@@ -248,7 +248,7 @@ def _field_type(
     if kind == "entity_ref":
         return _literal(references)
     if kind == "entity_ref_list":
-        return list[_literal(references)]
+        return list[_literal(references)]  # type: ignore[misc]
     if kind == "structured_object":
         return dict[str, Any] | list[Any]
     return Any
@@ -352,7 +352,7 @@ def _draft_model(
             Field(default_factory=list, max_length=policy.max_documents),
         ),
         entities=(
-            list[entity_model],
+            list[entity_model],  # type: ignore[valid-type]
             Field(min_length=expected_count, max_length=expected_count),
         ),
         relationships=(

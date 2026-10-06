@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from .npc_conversations import (
     get_conversation_lines,
@@ -30,7 +30,7 @@ def build_conversation_payload(simulation_state: Dict[str, Any], runtime_state: 
     for conv in active:
         cid = conv.get("conversation_id")
         lines = []
-        for line in get_conversation_lines(simulation_state, cid):
+        for line in get_conversation_lines(simulation_state, cast(str, cid)):
             row = dict(line)
             row["speaker_name"] = _resolve_speaker_name(simulation_state, row)
             lines.append(row)
@@ -50,7 +50,7 @@ def build_conversation_payload(simulation_state: Dict[str, Any], runtime_state: 
     for conv in recent[-10:]:
         cid = conv.get("conversation_id")
         lines = []
-        for line in get_conversation_lines(simulation_state, cid):
+        for line in get_conversation_lines(simulation_state, cast(str, cid)):
             row = dict(line)
             row["speaker_name"] = _resolve_speaker_name(simulation_state, row)
             lines.append(row)

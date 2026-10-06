@@ -15,7 +15,7 @@ _DEMO_STARTING_LOCATION_ID = "glimmerdeep_pass"
 def ensure_session_map_state(session: dict[str, Any]) -> dict[str, Any]:
     """Normalize explicit canonical map state without inferring IDs from labels."""
 
-    state = session.get("state") if isinstance(session.get("state"), dict) else None
+    state = raw_state if isinstance(raw_state := session.get("state"), dict) else None
     if state is None:
         return session
 
@@ -36,14 +36,14 @@ def ensure_session_map_state(session: dict[str, Any]) -> dict[str, Any]:
 
     state["map_state"] = map_state
     state["current_location_id"] = starting_location_id
-    player = state.get("player") if isinstance(state.get("player"), dict) else {}
+    player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
     player["location_id"] = starting_location_id
     state["player"] = player
     session["state"] = state
     return session
 
 
-def _explicit_starting_location_id(session: Mapping[str, object]) -> str:
+def _explicit_starting_location_id(session: Mapping[str, Any]) -> str:
     setup = _mapping(session.get("setup_payload"))
     direct = _text(setup.get("starting_location"))
     if direct:
@@ -63,7 +63,7 @@ def _explicit_starting_location_id(session: Mapping[str, object]) -> str:
     return ""
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 

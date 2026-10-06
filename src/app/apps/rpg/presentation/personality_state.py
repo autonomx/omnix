@@ -5,7 +5,7 @@ within simulation state.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from app.apps.rpg.presentation.visual_state import ensure_visual_state
 from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
@@ -55,7 +55,7 @@ def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
 
     profiles_out: Dict[str, Dict[str, Any]] = {}
     for actor_id in sorted(profiles_in.keys()):
-        normalized = _normalize_profile(profiles_in.get(actor_id))
+        normalized = _normalize_profile(cast(Any, profiles_in.get(actor_id)))
         normalized["actor_id"] = _safe_str(actor_id or normalized.get("actor_id"))
         profiles_out[str(actor_id)] = normalized
 

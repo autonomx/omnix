@@ -4,6 +4,7 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from collections.abc import Iterable
 
 
 def _norm(value: Any) -> str:
@@ -142,7 +143,7 @@ def collect_interaction_entities(simulation_state: Dict[str, Any]) -> List[Dict[
     for container_key in ("scene_objects", "location_objects", "world_objects"):
         objects = sim.get(container_key)
         if isinstance(objects, dict):
-            iterable = objects.values()
+            iterable: Iterable[Any] = objects.values()
         else:
             iterable = _safe_list(objects)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import ceil, sqrt
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.map_contracts import (
     MapBackground,
@@ -45,7 +45,7 @@ class CanonicalWorldMapModel:
     map_bindings: Mapping[str, str]
 
 
-def canonical_world_map_model(session: Mapping[str, object]) -> CanonicalWorldMapModel | None:
+def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapModel | None:
     state = _mapping(session.get("state"))
     raw = _mapping(state.get("world_graph"))
     if not raw:
@@ -85,7 +85,7 @@ def canonical_world_map_model(session: Mapping[str, object]) -> CanonicalWorldMa
     )
 
 
-def map_repository_for_session(session: Mapping[str, object]) -> MapDefinitionRepository:
+def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepository:
     model = canonical_world_map_model(session)
     if model is None:
         return default_map_repository()
@@ -113,7 +113,7 @@ def map_repository_for_session(session: Mapping[str, object]) -> MapDefinitionRe
 
 
 def resolve_map_id_for_location(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     location_id: str,
     repository: MapDefinitionRepository | None = None,
 ) -> str | None:
@@ -133,7 +133,7 @@ def resolve_map_id_for_location(
 
 
 def canonical_route_id_for_locations(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     from_location_id: str,
     to_location_id: str,
 ) -> str | None:
@@ -153,8 +153,8 @@ def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, An
     if not map_id:
         return session
 
-    state = session.get("state") if isinstance(session.get("state"), dict) else {}
-    current = state.get("map_state") if isinstance(state.get("map_state"), dict) else {}
+    state = raw_state if isinstance(raw_state := session.get("state"), dict) else {}
+    current = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
     definition = repository.get(map_id)
     discovered_locations = set(model.discovered_location_ids)
     visible_object_ids = {
@@ -182,13 +182,13 @@ def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, An
         "discovered_object_ids": sorted(visible_object_ids),
         "visible_object_ids": sorted(visible_object_ids),
         "route_states": route_states,
-        "object_states": current.get("object_states") if isinstance(current.get("object_states"), dict) else {},
+        "object_states": raw_object_states if isinstance(raw_object_states := current.get("object_states"), dict) else {},
         "map_history": _append_unique(_string_sequence(current.get("map_history")), map_id),
         "source": "canonical_world_graph",
     }
     state["map_state"] = map_state
     state["current_location_id"] = model.current_location_id
-    player = state.get("player") if isinstance(state.get("player"), dict) else {}
+    player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
     player["location_id"] = model.current_location_id
     state["player"] = player
     session["state"] = state
@@ -332,7 +332,7 @@ def _locations(value: object) -> tuple[RpgLocationNode, ...]:
     if isinstance(value, Mapping):
         source = ({"id": key, **_mapping(item)} for key, item in value.items())
     else:
-        source = (_mapping(item) for item in _sequence(value))
+        source = cast(Any, (_mapping(item) for item in _sequence(value)))
     for raw in source:
         location_id = _first_text(raw.get("id"), raw.get("location_id"))
         if not location_id:
@@ -396,7 +396,7 @@ def _append_unique(values: Sequence[str], value: str) -> list[str]:
     return [*dict.fromkeys((*values, value))][-16:]
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
@@ -414,7 +414,7 @@ def _first_text(*values: object) -> str:
     return next((str(value).strip() for value in values if value is not None and str(value).strip()), "")
 
 
-def _int(value: object, *, fallback: int) -> int:
+def _int(value: Any, *, fallback: int) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):

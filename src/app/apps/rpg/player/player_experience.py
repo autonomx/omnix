@@ -134,7 +134,7 @@ class PlayerProfile:
     play_style: str = "balanced"
     values: List[str] = field(default_factory=lambda: ["freedom", "loyalty"])
     emotional_preferences: Dict[str, float] = field(default_factory=dict)
-    attention_patterns: Dict[str, int] = field(default_factory=dict)
+    attention_patterns: Dict[str, float] = field(default_factory=dict)
     relationship_history: Dict[str, float] = field(default_factory=dict)
     narrative_preferences: Dict[str, float] = field(default_factory=lambda: {
         "action": 0.5,

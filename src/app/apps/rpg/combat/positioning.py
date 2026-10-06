@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 VALID_ZONES = {"frontline", "backline"}
@@ -19,9 +19,9 @@ def normalize_position(value: Any) -> Dict[str, Any]:
     range_band = _safe_str(value.get("range_band") or DEFAULT_POSITION["range_band"]).strip().lower()
 
     if zone not in VALID_ZONES:
-        zone = DEFAULT_POSITION["zone"]
+        zone = cast(str, DEFAULT_POSITION["zone"])
     if range_band not in VALID_RANGE_BANDS:
-        range_band = DEFAULT_POSITION["range_band"]
+        range_band = cast(str, DEFAULT_POSITION["range_band"])
 
     engaged_with = []
     for actor_id in _safe_list(value.get("engaged_with")):

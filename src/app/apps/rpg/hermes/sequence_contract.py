@@ -31,7 +31,7 @@ def hermes_sequence_item(raw: Any, index: int = 0) -> dict[str, Any]:
 
 def hermes_sequence_contract(raw: Any) -> dict[str, Any]:
     data = dict_value(raw)
-    raw_items = data.get("items") if isinstance(data.get("items"), list) else []
+    raw_items = raw_items if isinstance(raw_items := data.get("items"), list) else []
     return {
         "sequence_id": text_value(data.get("sequence_id")) or "hermes-sequence-draft",
         "objective": text_value(data.get("objective")),

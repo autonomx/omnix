@@ -27,7 +27,7 @@ def hermes_sequence_loop_guard(sequence: dict[str, Any], state: dict[str, Any] |
         seen_commands.add(command)
 
     state = dict(state) if isinstance(state, dict) else {}
-    last_result = state.get("last_result") if isinstance(state.get("last_result"), dict) else {}
+    last_result = raw_last_result if isinstance(raw_last_result := state.get("last_result"), dict) else {}
     if last_result and last_result.get("state_changed") is False:
         return {"ok": False, "source": SOURCE, "stop_reason": "no_progress", "detail": "last_result_state_unchanged"}
     if _text(sequence.get("state_owner")) and sequence.get("state_owner") != "rpg_sim":

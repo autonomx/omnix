@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from app.apps.rpg.interactions.item_model import normalize_item_instance
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
@@ -87,14 +87,14 @@ def _loyalty_score(companion: Dict[str, Any]) -> int:
     for key in ("loyalty", "loyalty_score", "trust", "relationship_score"):
         raw = companion.get(key)
         try:
-            return int(raw)
+            return int(cast(Any, raw))
         except Exception:
             logger.debug("suppressed error in %s", "_loyalty_score", exc_info=True)
 
     relationship = _safe_dict(companion.get("relationship"))
     for key in ("loyalty", "trust", "score"):
         try:
-            return int(relationship.get(key))
+            return int(cast(Any, relationship.get(key)))
         except Exception:
             logger.debug("suppressed error in %s", "_loyalty_score", exc_info=True)
 

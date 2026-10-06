@@ -1,7 +1,7 @@
 """Phase 15.2 — Session/package bridge with validation and normalization."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from app.apps.rpg.session.survival_persistence import normalize_survival_for_persistence
 from app.apps.rpg.validation.integrity import validate_package_integrity
@@ -92,7 +92,7 @@ def _normalize_memory_state_for_export(memory_state: Dict[str, Any]) -> Dict[str
                     "updated_at": _safe_str(item.get("updated_at")).strip(),
                 }
             )
-        entries.sort(key=lambda item: (-item["strength"], item["updated_at"], item["text"]))
+        entries.sort(key=lambda item: (-cast(Any, item["strength"]), item["updated_at"], item["text"]))
         actor_memory_out[actor_id] = {"entries": entries[:50]}
 
     world_memory_in = _safe_dict(memory_state.get("world_memory"))
@@ -107,7 +107,7 @@ def _normalize_memory_state_for_export(memory_state: Dict[str, Any]) -> Dict[str
                 "updated_at": _safe_str(item.get("updated_at")).strip(),
             }
         )
-    rumors.sort(key=lambda item: (-item["strength"], -item["reach"], item["updated_at"], item["text"]))
+    rumors.sort(key=lambda item: (-cast(Any, item["strength"]), -cast(Any, item["reach"]), item["updated_at"], item["text"]))
 
     return {
         "actor_memory": actor_memory_out,

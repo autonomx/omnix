@@ -7,9 +7,10 @@ from typing import Any, Mapping, Sequence, TypeVar
 from .authority import AuthorityClass, EvidenceLifetime, VisibilityClass
 from .contracts import EvidenceRecord
 from .evidence import EvidenceQuery
+from enum import Enum
 
 
-_EnumT = TypeVar("_EnumT")
+_EnumT = TypeVar("_EnumT", bound=Enum)
 _VISIBLE_DISCOVERY_STATUSES = {
     "public_at_campaign_start",
     "learned",

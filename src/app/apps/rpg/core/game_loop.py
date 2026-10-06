@@ -40,7 +40,7 @@ Tick Pipeline:
 import contextvars
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol, cast
 
 from ..arc_control.controller import ArcControlController
 from ..arc_control.presenters import ArcControlPresenter
@@ -169,7 +169,7 @@ class TickContext:
 
 
 # Context-local storage for active game loop - future-proof for async/multiplayer
-_active_loop_ctx = contextvars.ContextVar("active_game_loop", default=None)
+_active_loop_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("active_game_loop", default=None)
 
 
 class GameLoop(
@@ -218,7 +218,7 @@ class GameLoop(
         """Set active loop in context (backwards compat)."""
         _active_loop_ctx.set(value)
 
-    _active_loop = property(_get_active_loop.__func__, _set_active_loop.__func__)
+    _active_loop = property(cast(Any, _get_active_loop).__func__, cast(Any, _set_active_loop).__func__)
 
     def __init__(
         self,
@@ -274,7 +274,7 @@ class GameLoop(
         # PHASE 4.5 — NPC PLANNER: Simulation-based NPC decision making
         self.npc_planner: Optional[Any] = None
         self.npc_system_protocol: Optional[Any] = None  # get_npcs() method
-        self.npc_method = None  # PHASE 5.2: Override for planner path
+        self.npc_method: Callable[..., Any] | None = None  # PHASE 5.2: Override for planner path
 
         # PHASE 5.3 — LLM RECORD/REPLAY: Deterministic LLM response caching
         self.llm_recorder: Optional[Any] = None
@@ -557,8 +557,9 @@ class GameLoop(
             self.world.tick(self.event_bus)
 
             # 3. Update NPCs
-            if getattr(self, "npc_method", None) is not None:
-                self.npc_method(intent)
+            npc_method = getattr(self, "npc_method", None)
+            if npc_method is not None:
+                npc_method(intent)
             else:
                 self.npc_system.update(intent, self.event_bus)
 

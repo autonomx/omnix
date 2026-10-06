@@ -1,10 +1,18 @@
 """Creator and GM helper methods for GameLoop."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .event_bus import Event
 
 
-class GameLoopCreatorMixin:
+if TYPE_CHECKING:
+    from .game_loop_state import GameLoopState as _LoopBase
+else:
+    _LoopBase = object
+
+
+class GameLoopCreatorMixin(_LoopBase):
     # -------------------------
     # PHASE 7.0 — CREATOR / GM
     # -------------------------

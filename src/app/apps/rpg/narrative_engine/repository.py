@@ -39,11 +39,11 @@ class InMemoryNarrativeResponseRepository:
                         f"turn already has different canonical response: {response.campaign_id}/{response.turn_id}"
                     )
                 return existing
-            existing = self._responses.get(response.response_id)
-            if existing:
-                if existing.content_hash != response.content_hash:
+            stored = self._responses.get(response.response_id)
+            if stored:
+                if stored.content_hash != response.content_hash:
                     raise NarrativeResponseConflict(f"response id reused with different content: {response.response_id}")
-                return existing
+                return stored
             self._responses[response.response_id] = response
             self._turn_index[key] = response.response_id
             return response

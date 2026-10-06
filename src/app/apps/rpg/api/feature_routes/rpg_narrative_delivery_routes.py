@@ -147,16 +147,16 @@ def _stream(
                 str(exc),
             )
             return
-        if event is None:
+        if published is None:
             yield _status_payload(
                 response.response_id,
                 response.semantic_hash,
                 projected.delivery.status,
             )
             return
-        if event.index > last_index:
-            last_index = event.index
-            yield _event_payload(event)
+        if published.index > last_index:
+            last_index = published.index
+            yield _event_payload(published)
 
 
 def register_rpg_narrative_delivery_routes(router: APIRouter, state) -> None:

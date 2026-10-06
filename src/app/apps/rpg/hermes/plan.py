@@ -33,7 +33,7 @@ def hermes_rpg_plan_payload(request: dict[str, Any], *, client: HermesRpgPlanCli
 
 
 def _planner_context(request: dict[str, Any]) -> dict[str, Any]:
-    context = request.get("context") if isinstance(request.get("context"), dict) else {}
+    context = raw_context if isinstance(raw_context := request.get("context"), dict) else {}
     if context:
         return {
             "ok": True,

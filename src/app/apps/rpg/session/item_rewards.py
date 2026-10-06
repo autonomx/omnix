@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from hashlib import sha256
 from random import Random
-from typing import Any
+from typing import Any, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_reward_table_v1"
@@ -74,7 +74,8 @@ def reward_table(source_id: str | None) -> dict[str, Any]:
 
 
 def _rng(source_id: str, seed: str | int | None, context: dict[str, Any] | None) -> Random:
-    context_bits = ":".join(f"{key}={context[key]}" for key in sorted(_safe_dict(context)))
+    safe_context = _safe_dict(context)
+    context_bits = ":".join(f"{key}={safe_context[key]}" for key in sorted(safe_context))
     digest = sha256(f"{source_id}:{seed or 'default'}:{context_bits}".encode("utf-8")).hexdigest()
     return Random(int(digest[:16], 16))
 
@@ -87,8 +88,8 @@ def _choose_weighted(entries: list[dict[str, Any]], rng: Random) -> dict[str, An
     for entry, weight in weighted:
         running += weight
         if pick <= running:
-            return deepcopy(_safe_dict(entry).get("item"))
-    return deepcopy(_safe_dict(weighted[-1][0]).get("item")) if weighted else {}
+            return deepcopy(cast(Any, _safe_dict(entry).get("item")))
+    return deepcopy(cast(Any, _safe_dict(weighted[-1][0]).get("item"))) if weighted else {}
 
 
 def _stack_key(item: dict[str, Any]) -> tuple[str, str, str] | None:

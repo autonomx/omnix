@@ -15,7 +15,7 @@ def get_active_region_environment(world_state: dict[str, Any]) -> dict[str, Any]
     region_environment = _region_environment(world, active_region_id)
     if region_environment is not None:
         return region_environment
-    environment = world.get("environment") if isinstance(world.get("environment"), dict) else {}
+    environment = raw_environment if isinstance(raw_environment := world.get("environment"), dict) else {}
     return deepcopy(environment)
 
 
@@ -29,15 +29,15 @@ def derive_active_region_snapshot(
 
 def get_active_region_id(world_state: dict[str, Any]) -> str:
     world = world_state if isinstance(world_state, dict) else {}
-    environment = world.get("environment") if isinstance(world.get("environment"), dict) else {}
+    environment = raw_environment if isinstance(raw_environment := world.get("environment"), dict) else {}
     active_region_id = environment.get("active_region_id") or environment.get("region_id")
     return str(active_region_id or DEFAULT_ACTIVE_REGION_ID)
 
 
 def _region_environment(world_state: dict[str, Any], region_id: str) -> dict[str, Any] | None:
-    regions = world_state.get("regions") if isinstance(world_state.get("regions"), dict) else {}
+    regions = raw_regions if isinstance(raw_regions := world_state.get("regions"), dict) else {}
     region = regions.get(region_id) if isinstance(regions.get(region_id), dict) else None
     if not region:
         return None
-    environment = region.get("environment") if isinstance(region.get("environment"), dict) else None
+    environment = raw_environment if isinstance(raw_environment := region.get("environment"), dict) else None
     return deepcopy(environment) if environment is not None else None

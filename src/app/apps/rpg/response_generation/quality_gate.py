@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from typing import Iterable
+from typing import Any, Iterable
 
 from .contracts import SemanticResponsePlan, SemanticSection
 
@@ -43,7 +43,7 @@ class QualityReport:
     def rewrite_recommended(self) -> bool:
         return bool(self.issues)
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "issues": list(self.issues),

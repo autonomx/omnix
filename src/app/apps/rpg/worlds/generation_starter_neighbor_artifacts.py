@@ -227,13 +227,13 @@ def _audit(
     deferred_by_id = {slot.location_id: slot for slot in deferred}
     for row in queue:
         location_id = str(row.get("location_id") or "")
-        slot = deferred_by_id.get(location_id)
-        if slot is not None and row.get("map_id") != slot.map_id:
+        deferred_slot = deferred_by_id.get(location_id)
+        if deferred_slot is not None and row.get("map_id") != deferred_slot.map_id:
             add(
                 "starter_frontier_artifact_queue_binding_invalid",
                 f"/starter_neighbor_artifacts/predictive_queue/{location_id}",
                 "Predictive jobs must preserve deferred blueprint map IDs.",
-                {"expected_map_id": slot.map_id, "actual_map_id": row.get("map_id")},
+                {"expected_map_id": deferred_slot.map_id, "actual_map_id": row.get("map_id")},
             )
         if (
             row.get("resource_class") != "cpu"

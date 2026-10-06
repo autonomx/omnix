@@ -250,7 +250,7 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
             ),
         ]
         contract = _authored_contract(bundle)
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         with self._limiter():
             outcome = gateway.try_generate(
                 messages,
@@ -369,7 +369,7 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
                 content=json.dumps(request, ensure_ascii=False, sort_keys=True),
             ),
         ]
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         with self._limiter():
             outcome = gateway.try_generate(
                 messages,

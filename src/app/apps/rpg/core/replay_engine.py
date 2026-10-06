@@ -30,7 +30,7 @@ DESIGN RULES:
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar, cast
 
 from .event_bus import Event
 
@@ -141,7 +141,7 @@ class ReplayEngine:
         up_to_tick: Optional[int] = None,
         branch_leaf_id: Optional[str] = None,
         mode: str = "normal",
-    ) -> T:
+    ) -> Any:
         """Replay events into a fresh game loop.
 
         PHASE 2 FIX #4: No longer calls load_history(). History builds naturally
@@ -199,7 +199,7 @@ class ReplayEngine:
                 )
 
             # Reconstruct branch by walking parent chain
-            branch_ids = self._get_branch_from_events(branch_leaf_id, event_map)
+            branch_ids = self._get_branch_from_events(branch_leaf_id, cast(Any, event_map))
             events = [event_map[eid] for eid in branch_ids if eid in event_map]
 
         loop = self._factory()
@@ -267,7 +267,7 @@ class ReplayEngine:
                 # Without this, loop._tick_count stays at 0 and future
                 # ticks collide with replayed tick values
                 if self._config.advance_ticks and tick is not None:
-                    loop._tick_count = max(loop._tick_count, tick)
+                    cast(Any, loop)._tick_count = max(cast(Any, loop)._tick_count, tick)
 
                 # Feed event back into systems
                 self._apply_event(loop, event)

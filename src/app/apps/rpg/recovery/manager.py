@@ -17,6 +17,7 @@ from .models import (
     RecoveryResult,
     RecoveryState,
 )
+from typing import Any, cast
 
 _MAX_RECENT_RECOVERIES = 50
 
@@ -403,7 +404,7 @@ class RecoveryManager:
         warnings: list[str] = []
         recovery_dicts: list[dict] = []
         for rec in recent:
-            rd = rec.to_dict() if hasattr(rec, "to_dict") else dict(rec)
+            rd = rec.to_dict() if hasattr(rec, "to_dict") else dict(cast(Any, rec))
             recovery_dicts.append(rd)
             if rd.get("reason") == "contradiction":
                 warnings.append(

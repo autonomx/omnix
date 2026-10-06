@@ -6,9 +6,9 @@ from typing import Any
 
 
 def hermes_rpg_ticket_payload(plan_payload: dict[str, Any]) -> dict[str, Any]:
-    plan = plan_payload.get("plan") if isinstance(plan_payload.get("plan"), dict) else plan_payload
-    proposal = plan.get("proposal") if isinstance(plan.get("proposal"), dict) else {}
-    validation = plan_payload.get("validation") if isinstance(plan_payload.get("validation"), dict) else {}
+    plan = raw_plan if isinstance(raw_plan := plan_payload.get("plan"), dict) else plan_payload
+    proposal = raw_proposal if isinstance(raw_proposal := plan.get("proposal"), dict) else {}
+    validation = raw_validation if isinstance(raw_validation := plan_payload.get("validation"), dict) else {}
     command = str(proposal.get("command") or "").strip()
     return {
         "ok": bool(command),

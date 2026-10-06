@@ -21,6 +21,7 @@ from .contracts import (
     canonical_content_hash,
 )
 from .release_artifact_refresh import refresh_release_runtime_artifacts
+from typing import Any, cast
 
 _PROTAGONIST_IDS = {"protagonist", "actor:protagonist", "player:protagonist"}
 
@@ -300,7 +301,7 @@ def initialize_starting_map_snapshot(
                 GridActorPlacement(
                     actor_id=actor_id,
                     cell=_operation_cell(definition, operation),
-                    facing=str(operation.payload.get("facing") or "south"),
+                    facing=cast(Any, str(operation.payload.get("facing") or "south")),
                     hidden=bool(operation.payload.get("hidden", False)),
                 )
             )

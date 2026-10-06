@@ -68,7 +68,7 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
         for row in value.get("blocks") or ()
         if isinstance(row, Mapping)
     )
-    validation_raw = value.get("validation") if isinstance(value.get("validation"), Mapping) else {}
+    validation_raw = raw_validation if isinstance(raw_validation := value.get("validation"), Mapping) else {}
     issues = tuple(
         ValidationIssue(
             code=str(row.get("code") or "unknown"),
@@ -79,8 +79,8 @@ def canonical_response_from_dict(value: Mapping[str, Any]) -> CanonicalNarrative
         for row in validation_raw.get("issues") or ()
         if isinstance(row, Mapping)
     )
-    generation_raw = value.get("generation") if isinstance(value.get("generation"), Mapping) else {}
-    delivery_raw = value.get("delivery") if isinstance(value.get("delivery"), Mapping) else {}
+    generation_raw = raw_generation if isinstance(raw_generation := value.get("generation"), Mapping) else {}
+    delivery_raw = raw_delivery if isinstance(raw_delivery := value.get("delivery"), Mapping) else {}
     return CanonicalNarrativeResponse(
         response_id=str(value.get("response_id") or ""),
         request_id=str(value.get("request_id") or ""),

@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi.responses import Response
 
 from app.apps.rpg.performance_trace import RpgPipelineTrace
+from typing import Any
 
 _MINIMUM_ATTRIBUTION_PERCENT = 95.0
 _INTERNAL_TARGET_PERCENT = 98.0
@@ -49,7 +50,7 @@ def _classify_pipeline_overhead(trace: RpgPipelineTrace) -> None:
     )
 
 
-def _server_timing_header(spans: list[dict[str, object]]) -> str:
+def _server_timing_header(spans: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for index, span in enumerate(spans):
         if int(span.get("depth") or 0) != 0:

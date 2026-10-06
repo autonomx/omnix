@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from app.apps.rpg.map_content_validation import MapContentReport, validate_map_content
+from typing import Any
 
 _ALLOWED_OPERATIONS = {
     "move_object",
@@ -32,10 +33,10 @@ class MapContentEditError(ValueError):
 
 @dataclass(frozen=True)
 class MapContentEditResult:
-    definition: Mapping[str, object]
+    definition: Mapping[str, Any]
     report: MapContentReport
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "definition": deepcopy(dict(self.definition)),
             "report": asdict(self.report),
@@ -69,7 +70,7 @@ def apply_map_content_operations(
     return MapContentEditResult(definition=draft, report=report)
 
 
-def _apply(draft: dict[str, object], operation: Mapping[str, object], path: str) -> None:
+def _apply(draft: dict[str, Any], operation: Mapping[str, Any], path: str) -> None:
     kind = _required_text(operation.get("type"), f"{path}.type")
     if kind not in _ALLOWED_OPERATIONS:
         raise MapContentEditError("unsupported_operation", f"{path}.type", kind)
@@ -77,7 +78,7 @@ def _apply(draft: dict[str, object], operation: Mapping[str, object], path: str)
         item = _object(draft, operation, path)
         item["x"] = _integer(operation.get("x"), f"{path}.x")
         item["y"] = _integer(operation.get("y"), f"{path}.y")
-        render = item.get("render_order") if isinstance(item.get("render_order"), dict) else {}
+        render = raw_render_order if isinstance(raw_render_order := item.get("render_order"), dict) else {}
         render["sort_y"] = item["y"]
         render.setdefault("offset", 0)
         item["render_order"] = render
@@ -125,7 +126,7 @@ def _apply(draft: dict[str, object], operation: Mapping[str, object], path: str)
         draft["route_geometry"] = [item for item in routes if _text(item.get("route_id")) != route_id]
         return
     if kind == "set_background_asset":
-        bounds = draft.get("bounds") if isinstance(draft.get("bounds"), Mapping) else {}
+        bounds = raw_bounds if isinstance(raw_bounds := draft.get("bounds"), Mapping) else {}
         draft["background"] = {
             "asset_id": _required_text(operation.get("asset_id"), f"{path}.asset_id"),
             "destination_bounds": deepcopy(dict(bounds)),
@@ -133,7 +134,7 @@ def _apply(draft: dict[str, object], operation: Mapping[str, object], path: str)
         }
 
 
-def _object(draft: dict[str, object], operation: Mapping[str, object], path: str) -> dict[str, object]:
+def _object(draft: dict[str, Any], operation: Mapping[str, Any], path: str) -> dict[str, Any]:
     object_id = _required_text(operation.get("object_id"), f"{path}.object_id")
     objects = _mutable_rows(draft, "objects")
     for item in objects:
@@ -142,10 +143,10 @@ def _object(draft: dict[str, object], operation: Mapping[str, object], path: str
     raise MapContentEditError("object_not_found", f"{path}.object_id", object_id)
 
 
-def _mutable_rows(draft: dict[str, object], key: str) -> list[dict[str, object]]:
+def _mutable_rows(draft: dict[str, Any], key: str) -> list[dict[str, Any]]:
     value = draft.get(key)
     if value is None:
-        rows: list[dict[str, object]] = []
+        rows: list[dict[str, Any]] = []
         draft[key] = rows
         return rows
     if not isinstance(value, list):

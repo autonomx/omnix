@@ -34,7 +34,7 @@ def preview_adventure_payload(data: dict[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.services.adventure_preview_service import build_adventure_preview, preview_setup
 
     payload = _safe_dict(data)
-    setup = payload.get("setup") if isinstance(payload.get("setup"), dict) else payload
+    setup = raw_setup if isinstance(raw_setup := payload.get("setup"), dict) else payload
     result = preview_setup(_safe_dict(setup))
     if "adventure_preview" not in result:
         result["adventure_preview"] = _safe_dict(build_adventure_preview(_safe_dict(setup)))

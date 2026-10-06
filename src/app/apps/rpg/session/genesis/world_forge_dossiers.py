@@ -281,9 +281,9 @@ def _paragraphs(value: Any) -> list[str]:
                     if part.strip()
                 )
             else:
-                rendered = _display(item)
-                if rendered:
-                    paragraphs.append(rendered.rstrip(".") + ".")
+                paragraph = _display(item)
+                if paragraph:
+                    paragraphs.append(paragraph.rstrip(".") + ".")
         return paragraphs
     raw = text(value)
     return [part.strip() for part in re.split(r"\n\s*\n", raw) if part.strip()]

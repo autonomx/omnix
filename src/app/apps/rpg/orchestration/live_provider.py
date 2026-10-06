@@ -5,7 +5,7 @@ It does not mutate simulation truth directly.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 _MAX_PROVIDER_EXECUTIONS = 12
@@ -121,7 +121,7 @@ def ensure_live_provider_state(simulation_state: Dict[str, Any]) -> Dict[str, An
         orchestration_state = simulation_state["orchestration_state"] = {}
 
     live_state = orchestration_state.get("live_provider")
-    orchestration_state["live_provider"] = _normalize_live_provider_state(live_state)
+    orchestration_state["live_provider"] = _normalize_live_provider_state(cast(Any, live_state))
     simulation_state["orchestration_state"] = orchestration_state
     return simulation_state
 
@@ -140,7 +140,7 @@ def _set_live_provider_state(
     """Persist normalized live provider state back into simulation_state."""
     simulation_state = ensure_live_provider_state(simulation_state)
     orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-    orchestration_state["live_provider"] = _normalize_live_provider_state(live_state)
+    orchestration_state["live_provider"] = _normalize_live_provider_state(cast(Any, live_state))
     simulation_state["orchestration_state"] = orchestration_state
     return simulation_state
 

@@ -196,8 +196,8 @@ def _prepare_narration_response(ctx) -> bool:
     ctx.final_tick = int(
         ctx.runtime_state.get("tick", ctx.current_tick) or ctx.current_tick
     )
-    ctx.continuity_rows: list[dict[str, Any]] = []
-    ctx.continuity_facts: list[str] = []
+    ctx.continuity_rows = []
+    ctx.continuity_facts = []
     if _runtime_continuity_grounding_enabled(ctx.runtime_state):
         ctx.continuity_rows = _build_recent_narration_continuity(
             ctx.runtime_state,

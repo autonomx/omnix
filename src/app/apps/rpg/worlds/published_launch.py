@@ -306,7 +306,7 @@ def launch_published_scenario(
     )
     created = create_new_game_session(request)
     session_id = str(created.get("session_id") or "")
-    session = created.get("session") if isinstance(created.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := created.get("session"), dict) else None
     if not session_id or session is None:
         raise RuntimeError("published_scenario_session_creation_failed")
 

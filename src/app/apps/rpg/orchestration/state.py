@@ -1,7 +1,7 @@
 """Phase 10.6 — LLM orchestration state models and normalization."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 _MAX_ACTIVE_REQUESTS = 4
@@ -156,7 +156,7 @@ def ensure_llm_orchestration_state(simulation_state: Dict[str, Any]) -> Dict[str
         orchestration_state = simulation_state["orchestration_state"] = {}
 
     llm_state = orchestration_state.get("llm")
-    orchestration_state["llm"] = _normalize_llm_state(llm_state)
+    orchestration_state["llm"] = _normalize_llm_state(cast(Any, llm_state))
     simulation_state["orchestration_state"] = orchestration_state
     return simulation_state
 
@@ -175,7 +175,7 @@ def _set_llm_orchestration_state(
     """Persist normalized LLM orchestration state back into simulation_state."""
     simulation_state = ensure_llm_orchestration_state(simulation_state)
     orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-    orchestration_state["llm"] = _normalize_llm_state(llm_state)
+    orchestration_state["llm"] = _normalize_llm_state(cast(Any, llm_state))
     simulation_state["orchestration_state"] = orchestration_state
     return simulation_state
 

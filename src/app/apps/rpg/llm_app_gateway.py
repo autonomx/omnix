@@ -163,7 +163,7 @@ class AppLLMGateway:
     ) -> T:
         """Return one validated Pydantic value through the shared boundary."""
 
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         config = getattr(self.provider, "config", None)
         outcome = gateway.try_generate(
             self._build_messages(prompt, context=context),

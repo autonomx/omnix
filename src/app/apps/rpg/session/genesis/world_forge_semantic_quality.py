@@ -432,7 +432,7 @@ def audit_topic_semantic_quality(
                             regeneration_scope="topic",
                         )
                     )
-        for reference_tuple, entity_ids in reference_tuples.items():
+        for reference_tuple, referencing_ids in reference_tuples.items():
             non_exempt_tuple = tuple(
                 (field_id, referenced_ids)
                 for field_id, referenced_ids in reference_tuple
@@ -441,7 +441,7 @@ def audit_topic_semantic_quality(
             )
             if not non_exempt_tuple:
                 continue
-            if len(entity_ids) >= threshold and not _reference_tuple_declared(
+            if len(referencing_ids) >= threshold and not _reference_tuple_declared(
                 node.topic_id,
                 non_exempt_tuple,
                 declarations,
@@ -450,7 +450,7 @@ def audit_topic_semantic_quality(
                     SemanticQualityIssue(
                         "repeated_reference_tuple",
                         node.topic_id,
-                        tuple(sorted(entity_ids)),
+                        tuple(sorted(referencing_ids)),
                         tuple(field for field, _ in non_exempt_tuple),
                         "Most entities share the same cross-domain reference tuple.",
                         regeneration_scope="topic",

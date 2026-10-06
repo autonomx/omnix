@@ -11,7 +11,7 @@ Key guarantees:
     - equipment is a pointer (item_id only), inventory owns quantity
     - VALID_SLOTS enforced for equipment
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 # Valid equipment slots — centralised for UI/balance parity
@@ -290,7 +290,7 @@ def set_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: str
         comp = _normalize_companion(comp)
         # Fix #6: Cannot equip while downed
         if comp.get("npc_id") == npc_id and not _is_companion_downed(comp):
-            equipment = dict(comp.get("equipment"))
+            equipment = dict(cast(Any, comp.get("equipment")))
             # Fix #1: Store item_id only, no qty
             equipment[slot] = _safe_str(item_id)
             comp["equipment"] = equipment
@@ -319,7 +319,7 @@ def clear_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: s
         comp = _normalize_companion(comp)
         # Fix #6: Cannot unequip while downed (equipment persists in downed state)
         if comp.get("npc_id") == npc_id and not _is_companion_downed(comp):
-            equipment = dict(comp.get("equipment"))
+            equipment = dict(cast(Any, comp.get("equipment")))
             equipment.pop(slot, None)
             comp["equipment"] = equipment
         out.append(comp)

@@ -264,7 +264,7 @@ class PacingController:
         }
         
         # Return highest scoring type
-        best = max(scores, key=scores.get)
+        best = max(scores, key=lambda kind: scores[kind])
         return best if scores[best] > 0 else BEAT_DESCRIPTION
     
     def _split_sentences(self, text: str) -> List[str]:

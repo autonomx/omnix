@@ -76,8 +76,8 @@ def replay_interaction_events(
 ) -> dict[str, Any]:
     if not isinstance(session, dict) or not events:
         return session
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
-    timeline = runtime.get("interaction_timeline") if isinstance(runtime.get("interaction_timeline"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
     existing = [item for item in timeline.get("events", []) if isinstance(item, dict)]
     by_id = {
         str(item.get("interaction_id") or f"sequence:{item.get('sequence')}"): dict(item)
@@ -110,8 +110,8 @@ def replay_interaction_events(
 
 
 def load_and_replay_interaction_events(session_id: str, session: dict[str, Any]) -> dict[str, Any]:
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
-    timeline = runtime.get("interaction_timeline") if isinstance(runtime.get("interaction_timeline"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
     snapshot_sequence = int(timeline.get("last_sequence") or runtime.get("interaction_seq") or 0)
     events = load_interaction_events(session_id, after_sequence=snapshot_sequence)
     return replay_interaction_events(session, events)

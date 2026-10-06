@@ -54,9 +54,9 @@ def hermes_rpg_approved_flow_route_payload(
             "state_changed": False,
         }
 
-    user_step = data.get("user_step") if isinstance(data.get("user_step"), dict) else {}
-    replay_entry = data.get("replay_entry") if isinstance(data.get("replay_entry"), dict) else {}
-    context = data.get("context") if isinstance(data.get("context"), dict) else {}
+    user_step = raw_user_step if isinstance(raw_user_step := data.get("user_step"), dict) else {}
+    replay_entry = raw_replay_entry if isinstance(raw_replay_entry := data.get("replay_entry"), dict) else {}
+    context = raw_context if isinstance(raw_context := data.get("context"), dict) else {}
     flow = hermes_rpg_approved_flow(
         user_step,
         replay_entry,
@@ -119,49 +119,49 @@ def hermes_rpg_approved_flow_route(payload: dict[str, Any] | None = Body(default
 
 
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/config")
-def hermes_rpg_approved_flow_config_route() -> dict[str, object]:
+def hermes_rpg_approved_flow_config_route() -> dict[str, Any]:
     return hermes_rpg_approved_flow_config_payload()
 
 
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger")
-def hermes_rpg_approved_flow_ledger_route(limit: int = 20, session_id: str = "", sequence_id: str = "") -> dict[str, object]:
+def hermes_rpg_approved_flow_ledger_route(limit: int = 20, session_id: str = "", sequence_id: str = "") -> dict[str, Any]:
     return hermes_rpg_execution_ledger_recent(limit, session_id=session_id or None, sequence_id=sequence_id or None)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/review")
-def hermes_rpg_sequence_review_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+def hermes_rpg_sequence_review_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     return hermes_rpg_sequence_review_payload(payload)
 
 
 @hermes_rpg_approved_bp.get("/api/hermes/rpg/sequence/state")
-def hermes_rpg_sequence_state_route(session_id: str = "") -> dict[str, object]:
+def hermes_rpg_sequence_state_route(session_id: str = "") -> dict[str, Any]:
     return latest_hermes_sequence_state(session_id=session_id)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/execute-step")
-def hermes_rpg_sequence_execute_step_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+def hermes_rpg_sequence_execute_step_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     return hermes_rpg_sequence_execute_step_payload(payload)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/context-pack")
-def hermes_rpg_context_pack_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+def hermes_rpg_context_pack_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
-    session = data.get("session") if isinstance(data.get("session"), dict) else data
+    session = raw_session if isinstance(raw_session := data.get("session"), dict) else data
     item_limit = int(data.get("item_limit") or 8)
     char_budget = int(data.get("char_budget") or 4000)
     return build_hermes_rpg_context_pack(session, item_limit=item_limit, char_budget=char_budget)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/plan")
-def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
-    sequence = data.get("sequence") if isinstance(data.get("sequence"), dict) else data
-    context_pack = data.get("context_pack") if isinstance(data.get("context_pack"), dict) else {}
+    sequence = raw_sequence if isinstance(raw_sequence := data.get("sequence"), dict) else data
+    context_pack = raw_context_pack if isinstance(raw_context_pack := data.get("context_pack"), dict) else {}
     return hermes_sequence_planner_loop(sequence, context_pack)
 
 
 @hermes_rpg_approved_bp.post("/api/hermes/rpg/narrative-research")
 def hermes_rpg_narrative_research_route(
     payload: dict[str, Any] | None = Body(default=None),
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return hermes_rpg_narrative_research_payload(payload)

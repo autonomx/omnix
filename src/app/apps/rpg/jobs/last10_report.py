@@ -190,7 +190,7 @@ def _collect_session_events(session_id: str | None, *, limit: int) -> list[dict[
     if not session_id:
         return []
     try:
-        from app.apps.rpg.session.service import load_session  # type: ignore[import-untyped]
+        from app.apps.rpg.session.service import load_session
 
         session = load_session(session_id)
     except Exception:

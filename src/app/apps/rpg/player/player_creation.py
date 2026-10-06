@@ -1,7 +1,7 @@
 """Phase 18.3A — Player character creation contract."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .player_progression_state import (
     allocate_starting_stats,
@@ -11,7 +11,7 @@ from .player_progression_state import (
 _DEFAULT_TOTAL_POINTS = 12
 _STAT_NAMES = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]
 
-def build_default_stat_allocation(template: Dict[str, Any] = None) -> Dict[str, int]:
+def build_default_stat_allocation(template: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
     """Return a default even-spread stat allocation."""
     template = dict(template or {})
     allocation = {}

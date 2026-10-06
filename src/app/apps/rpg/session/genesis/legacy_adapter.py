@@ -262,7 +262,7 @@ def attach_genesis_to_created_session(
         return result
     from app.apps.rpg.session.service import load_session, save_session
 
-    session = result.get("session") if isinstance(result.get("session"), dict) else None
+    session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
         session = load_session(session_id)
     if not session:

@@ -442,7 +442,7 @@ def prepare_opening_scenarios_for_launch(
     for topic in detail.get("topics") or ():
         if str(topic.get("topic_id") or "") != "opening_scenarios":
             continue
-        content = topic.get("content") if isinstance(topic.get("content"), Mapping) else {}
+        content = raw_content if isinstance(raw_content := topic.get("content"), Mapping) else {}
         openings.extend(
             entity for entity in content.get("entities") or () if isinstance(entity, Mapping)
         )

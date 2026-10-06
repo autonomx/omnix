@@ -1,10 +1,18 @@
 """Panel and adventure-pack delegates for GameLoop."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..packs.models import AdventurePack
 
 
-class GameLoopPanelsPacksMixin:
+if TYPE_CHECKING:
+    from .game_loop_state import GameLoopState as _LoopBase
+else:
+    _LoopBase = object
+
+
+class GameLoopPanelsPacksMixin(_LoopBase):
     # ------------------------------------------------------------------
     # Phase 7.6 — Social State Dashboard / Query
     # ------------------------------------------------------------------

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.apps.rpg.narration.runtime_narration_legacy import (
     build_runtime_narration_payload as build_legacy_runtime_narration_payload,
@@ -37,7 +37,7 @@ class AuthoritativeProfileBoundProvider(ProfileBoundProvider):
         effective.setdefault("timeout", self.profile.timeout_seconds)
         effective.setdefault("timeout_seconds", self.profile.timeout_seconds)
         self.calls.append({"method": method_name, **effective})
-        variants = (
+        variants: tuple[dict[str, Any], ...] = (
             effective,
             {key: value for key, value in effective.items() if key != "timeout_seconds"},
             {key: value for key, value in effective.items() if key not in {"timeout", "timeout_seconds"}},
@@ -103,8 +103,9 @@ class StrictRpgProductionResponsePipeline(RpgProductionResponsePipeline):
         )
         analysis = self.recovery.analyze(
             player_input,
-            known_entities=_known_entities(state),
-            known_locations=_known_locations(state),
+            # Name tuples: the classifier reads mappings, so these are not used yet.
+            known_entities=cast(Any, _known_entities(state)),
+            known_locations=cast(Any, _known_locations(state)),
             supported_mechanics=tuple(
                 str(value)
                 for value in contract.get("supported_mechanics", ())

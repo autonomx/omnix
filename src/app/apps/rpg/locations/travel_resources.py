@@ -266,7 +266,7 @@ def assert_phase4_travel_resource_consumption_ready() -> Dict[str, Any]:
         turn_index=4,
     )
     contract = build_travel_resource_narration_contract(applied)
-    blockers = []
+    blockers: list[dict[str, Any]] = []
     items = {row.get("item_id"): row.get("qty") for row in _safe_list(_player_inventory_state(state).get("items"))}
     if applied.get("reason") != "runtime_travel_resources_consumed":
         blockers.append({"kind": "expected_runtime_travel_resources_consumed", "source": SOURCE})

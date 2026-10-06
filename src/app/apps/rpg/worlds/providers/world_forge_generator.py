@@ -232,7 +232,7 @@ class ProviderWorldForgeTopicGenerator:
             ),
         ]
         total_calls = max(1, self.config.max_retries + 2)
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
         call_limiter = (
             device_permit_slot("llm-local", priority="batch")
@@ -486,7 +486,7 @@ class ProviderWorldForgeTopicGenerator:
             ),
         ]
         total_calls = max(1, self.config.max_retries + 2)
-        gateway = StructuredOutputGateway(self.provider)
+        gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(self.provider)
         provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
         call_limiter = (
             device_permit_slot("llm-local", priority="batch")

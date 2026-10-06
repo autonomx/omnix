@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from app.apps.rpg.map_contracts import MapDefinition
+from typing import Any
 
 _OBJECT_STATUSES = {"normal", "open", "closed", "damaged", "burned", "occupied"}
 _ROUTE_STATUSES = {"open", "blocked", "locked", "unknown"}
@@ -13,13 +14,13 @@ _ROUTE_STATUSES = {"open", "blocked", "locked", "unknown"}
 
 @dataclass(frozen=True)
 class LivingMapStateProjection:
-    object_states: tuple[dict[str, object], ...]
-    routes: tuple[dict[str, object], ...]
+    object_states: tuple[dict[str, Any], ...]
+    routes: tuple[dict[str, Any], ...]
     environment: Mapping[str, str]
 
 
 def project_living_map_state(
-    session: Mapping[str, object],
+    session: Mapping[str, Any],
     definition: MapDefinition,
 ) -> LivingMapStateProjection:
     state = _mapping(session.get("state"))
@@ -32,10 +33,10 @@ def project_living_map_state(
 
 
 def merge_living_overlay_payload(
-    base: Mapping[str, object],
-    markers: Sequence[Mapping[str, object]],
+    base: Mapping[str, Any],
+    markers: Sequence[Mapping[str, Any]],
     living: LivingMapStateProjection,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     payload = dict(base)
     payload["markers"] = _merge(base.get("markers"), markers, "id")
     payload["object_states"] = _merge(base.get("object_states"), living.object_states, "object_id")
@@ -48,14 +49,14 @@ def merge_living_overlay_payload(
 
 
 def _object_states(
-    state: Mapping[str, object],
+    state: Mapping[str, Any],
     definition: MapDefinition,
-    map_state: Mapping[str, object],
-) -> tuple[dict[str, object], ...]:
+    map_state: Mapping[str, Any],
+) -> tuple[dict[str, Any], ...]:
     allowed = {item.id for item in definition.objects}
     discovered = _strings(map_state.get("discovered_object_ids"))
     visible = _strings(map_state.get("visible_object_ids"))
-    rows: dict[str, dict[str, object]] = {}
+    rows: dict[str, dict[str, Any]] = {}
     for raw in _records(state.get("map_object_states")):
         object_id = _text(raw.get("object_id"))
         if _text(raw.get("map_id")) != definition.map_id:
@@ -76,12 +77,12 @@ def _object_states(
 
 
 def _route_states(
-    state: Mapping[str, object],
+    state: Mapping[str, Any],
     definition: MapDefinition,
-) -> tuple[dict[str, object], ...]:
+) -> tuple[dict[str, Any], ...]:
     allowed = {item.route_id for item in definition.route_geometry}
     graph = _mapping(state.get("world_graph"))
-    rows: dict[str, dict[str, object]] = {}
+    rows: dict[str, dict[str, Any]] = {}
     for raw in _records(graph.get("routes")):
         route_id = _first(raw.get("id"), raw.get("route_id"))
         if route_id not in allowed:
@@ -100,7 +101,7 @@ def _route_states(
     return tuple(rows[key] for key in sorted(rows))
 
 
-def _environment(state: Mapping[str, object]) -> dict[str, str]:
+def _environment(state: Mapping[str, Any]) -> dict[str, str]:
     world = _mapping(state.get("world"))
     climate = _mapping(state.get("climate"))
     values = {
@@ -118,8 +119,8 @@ def _environment(state: Mapping[str, object]) -> dict[str, str]:
     }
 
 
-def _merge(base: object, additions: Sequence[Mapping[str, object]], key_name: str) -> list[dict[str, object]]:
-    rows: dict[str, dict[str, object]] = {}
+def _merge(base: object, additions: Sequence[Mapping[str, Any]], key_name: str) -> list[dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
     for raw in (*_records(base), *tuple(additions)):
         key = _text(raw.get(key_name))
         if key:
@@ -127,7 +128,7 @@ def _merge(base: object, additions: Sequence[Mapping[str, object]], key_name: st
     return [rows[key] for key in sorted(rows)]
 
 
-def _records(value: object) -> tuple[Mapping[str, object], ...]:
+def _records(value: object) -> tuple[Mapping[str, Any], ...]:
     if isinstance(value, Mapping):
         return tuple(
             {"id": str(key), **dict(item)}
@@ -137,7 +138,7 @@ def _records(value: object) -> tuple[Mapping[str, object], ...]:
     return tuple(item for item in _sequence(value) if isinstance(item, Mapping))
 
 
-def _mapping(value: object) -> Mapping[str, object]:
+def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 

@@ -152,9 +152,7 @@ def _attach_environment_snapshot_to_session(
     session: dict[str, Any],
 ) -> dict[str, Any]:
     state = (
-        session.get("state")
-        if isinstance(session.get("state"), dict)
-        else None
+        raw_state if isinstance(raw_state := session.get("state"), dict) else None
     )
     if state is None:
         return session
@@ -171,9 +169,7 @@ def _with_environment_snapshot(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     session = (
-        payload.get("session")
-        if isinstance(payload.get("session"), dict)
-        else None
+        raw_session if isinstance(raw_session := payload.get("session"), dict) else None
     )
     state = (
         session.get("state")
@@ -200,25 +196,19 @@ def _with_world_scale_abilities(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     session = (
-        payload.get("session")
-        if isinstance(payload.get("session"), dict)
-        else None
+        raw_session if isinstance(raw_session := payload.get("session"), dict) else None
     )
     if not session:
         return payload
     state = (
-        session.get("state")
-        if isinstance(session.get("state"), dict)
-        else None
+        raw_state if isinstance(raw_state := session.get("state"), dict) else None
     )
     if not state:
         return payload
     ensure_world_scale_abilities(state)
     coverage = _ability_coverage_payload(state)
     mechanics = (
-        state.get("mechanics")
-        if isinstance(state.get("mechanics"), dict)
-        else {}
+        raw_mechanics if isinstance(raw_mechanics := state.get("mechanics"), dict) else {}
     )
     mechanics["ability_coverage_latest"] = coverage
     state["mechanics"] = mechanics
@@ -333,9 +323,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
                 },
             )
         state = (
-            session.get("state")
-            if isinstance(session.get("state"), dict)
-            else {}
+            raw_state if isinstance(raw_state := session.get("state"), dict) else {}
         )
         ensure_world_scale_abilities(state)
         return {

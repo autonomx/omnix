@@ -191,7 +191,7 @@ class ResolutionEngine:
         # Track recent resolutions to prevent predictability over long runs
         self._recent_resolutions: list[str] = []
         
-        self._stats = {
+        self._stats: dict[str, Any] = {
             "resolutions_generated": 0,
             "llm_resolutions": 0,
             "template_resolutions": 0,

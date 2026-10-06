@@ -192,14 +192,14 @@ def _restore_history(work: Any, context: Any, campaign_id: str, item: dict[str, 
             if not work.jobs.job_exists(str(job_id)):
                 job_id = None
         response = submission.get("response")
-        interaction_id = None
+        response_interaction_id = None
         if isinstance(response, dict):
-            interaction_id = response.get("interaction_id")
+            response_interaction_id = response.get("interaction_id")
         work.connection.execute(
             """
             INSERT INTO omnix_rpg_foreground_submissions (
                 workspace_id, session_id, submission_id, status, claim_token,
-                job_id, interaction_id, response, error, lease_expires_at,
+                job_id, response_interaction_id, response, error, lease_expires_at,
                 execution_started_at, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s,
@@ -216,7 +216,7 @@ def _restore_history(work: Any, context: Any, campaign_id: str, item: dict[str, 
                 submission.get("status", "completed"),
                 submission.get("claim_token") or "legacy-import",
                 job_id,
-                interaction_id,
+                response_interaction_id,
                 canonical_json(response) if response is not None else None,
                 submission.get("error"),
                 submission.get("lease_expires_at"),

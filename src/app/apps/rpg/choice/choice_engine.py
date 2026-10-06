@@ -11,7 +11,7 @@ The core philosophy is that choices should be:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from .choice_models import PlayerChoice
 
@@ -177,7 +177,7 @@ class ChoiceEngine:
         )
 
         return PlayerChoice(
-            quest_id=qid,
+            quest_id=cast(Any, qid),
             stage=stage_name,
             description=description,
             options=choices,
@@ -291,7 +291,7 @@ class ChoiceEngine:
         Returns:
             Modified choice list with contextual elements.
         """
-        contextualized = []
+        contextualized: list[Any] = []
 
         # Check for betrayal history - adds betrayal-specific options
         has_betrayal = False

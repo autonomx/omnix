@@ -9,7 +9,7 @@ from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe
 try:
     from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 except Exception:
-    get_npc_biography = None
+    get_npc_biography = None  # type: ignore[assignment]  # optional registry
 
 logger = logging.getLogger(__name__)
 

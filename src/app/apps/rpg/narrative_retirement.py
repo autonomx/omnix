@@ -185,21 +185,15 @@ def record_narrative_retirement(
     """Fail closed unless one certified response proves legacy ownership is retired."""
 
     canonical = (
-        result.get("canonical_narrative_response")
-        if isinstance(result.get("canonical_narrative_response"), Mapping)
-        else {}
+        raw_canonical_narrative_response if isinstance(raw_canonical_narrative_response := result.get("canonical_narrative_response"), Mapping) else {}
     )
     response_id = str(canonical.get("response_id") or "")
     content_hash = str(canonical.get("content_hash") or "")
     certification = (
-        result.get("narrative_production_certification")
-        if isinstance(result.get("narrative_production_certification"), Mapping)
-        else {}
+        raw_narrative_production_certification if isinstance(raw_narrative_production_certification := result.get("narrative_production_certification"), Mapping) else {}
     )
     telemetry = (
-        result.get("narrative_publisher_telemetry")
-        if isinstance(result.get("narrative_publisher_telemetry"), Mapping)
-        else {}
+        raw_narrative_publisher_telemetry if isinstance(raw_narrative_publisher_telemetry := result.get("narrative_publisher_telemetry"), Mapping) else {}
     )
     if certification.get("passed") is not True:
         raise RuntimeError("retirement telemetry requires production certification")
@@ -216,9 +210,7 @@ def record_narrative_retirement(
             "legacy publisher deletion audit failed: " + ", ".join(audit.violations)
         )
     delivery = (
-        canonical.get("delivery")
-        if isinstance(canonical.get("delivery"), Mapping)
-        else {}
+        raw_delivery if isinstance(raw_delivery := canonical.get("delivery"), Mapping) else {}
     )
     payload = {
         "response_id": response_id,

@@ -277,8 +277,8 @@ def _campaign_record_id(kind: str, session_id: str, state_revision: int) -> str:
 def _canonical_effects(result: dict[str, Any]) -> dict[str, Any]:
     for source in (
         result,
-        result.get("result") if isinstance(result.get("result"), dict) else {},
-        result.get("authoritative") if isinstance(result.get("authoritative"), dict) else {},
+        raw_result if isinstance(raw_result := result.get("result"), dict) else {},
+        raw_authoritative if isinstance(raw_authoritative := result.get("authoritative"), dict) else {},
     ):
         value = source.get("canonical_effects")
         if isinstance(value, dict):

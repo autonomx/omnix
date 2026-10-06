@@ -39,9 +39,9 @@ def _render_value(value: Any, *, depth: int = 0) -> str:
                 lines.append(f"{_label(str(key))}: {rendered}")
         return "\n".join(lines)
     if isinstance(value, (list, tuple)):
-        rendered = [_render_value(item, depth=depth + 1) for item in value]
-        rendered = [item for item in rendered if item]
-        return "\n".join(f"• {item}" for item in rendered)
+        parts = [_render_value(item, depth=depth + 1) for item in value]
+        parts = [item for item in parts if item]
+        return "\n".join(f"• {item}" for item in parts)
     if isinstance(value, bool):
         return "Yes" if value else "No"
     return _text(value)

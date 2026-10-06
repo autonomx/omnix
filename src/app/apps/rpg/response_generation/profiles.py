@@ -36,7 +36,7 @@ class ResponseGenerationProfile:
     allow_hermes: bool
     blocking_budget_ms: int
 
-    def debug_payload(self) -> dict[str, object]:
+    def debug_payload(self) -> dict[str, Any]:
         return {
             "profile_id": self.profile_id,
             "mode": self.mode.value,

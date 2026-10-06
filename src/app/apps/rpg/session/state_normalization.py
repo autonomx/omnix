@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
 from app.apps.rpg.economy.currency import currency_to_copper_value, normalize_currency
@@ -160,7 +160,7 @@ def _normalize_runtime_settings(value: dict[str, Any]) -> dict[str, Any]:
         result["response_length"] = "short"
     ics = value.get("idle_conversation_seconds")
     try:
-        ics = int(ics)
+        ics = int(cast(Any, ics))
     except (TypeError, ValueError):
         ics = 15
     result["idle_conversation_seconds"] = ics if ics in _ALLOWED_IDLE_SECONDS else 15

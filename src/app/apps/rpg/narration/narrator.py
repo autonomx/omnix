@@ -23,7 +23,7 @@ Design Compliance:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.narration_narrator.prompt', "1", "Narrate this as a story:\n\n{v0}\n\n{v1}\n\nRules:\n- Do not add events that didn't happen\n- Do not contradict the facts\n- Keep it concise (under 200 words)\n- Use present tense\n- Second person if player is involved\n\nNarrative:")
@@ -135,7 +135,7 @@ class NarratorAgent:
         prompt = _PROMPT_1.format(v0=(combined), v1=(style_instruction))
 
         try:
-            result = self.llm(prompt)
+            result = cast(Any, self.llm)(prompt)
             return result.strip()
         except Exception:
             return self._generate_template(events)

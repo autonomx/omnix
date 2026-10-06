@@ -200,7 +200,7 @@ def add_item_to_items_list(items: List[Any], item: Dict[str, Any]) -> Dict[str, 
                 "quantity_after": existing["quantity"],
             })
 
-    added_items = []
+    added_items: list[Any] = []
     while remaining_qty > 0:
         new_item = deepcopy(incoming)
         new_qty = min(remaining_qty, _safe_int(new_item.get("max_stack"), 1))

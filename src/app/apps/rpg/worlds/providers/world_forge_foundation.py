@@ -11,6 +11,7 @@ from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.apps.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.prompts import prompt_template
+from collections.abc import Sequence
 
 _PROMPT_1 = prompt_template('rpg.worlds_providers_world_forge_foundation.prompt', "1", 'You are the Omnix Campaign World Forge. Return strict JSON only for the single requested topic. Build rich, internally consistent campaign canon, not player-facing turn narration. The campaign_context.world_brief is authoritative: its title and description override generic genre, tone, or template labels. Ground every name, institution, conflict, technology, culture, creature, and location in that brief and its dependencies. Do not fall back to generic fantasy conventions (such as magic, elves, kingdoms, or medieval classes) unless the world brief explicitly supports them. Produce exactly the requested target_count of distinct, substantive entities. Never pad output with numbered topic names or generic placeholder canon. Respect dependency entities and IDs. Return topic_id plus arrays named documents, entities, facts, relationships, knowledge_rules, and story_threads, and a provenance object. Set provenance to exactly {{}}; Omnix adds trusted provider, authorship, usage, and validation provenance after accepting the response. Never copy dependency provenance or authorship ledgers into the response. Every generated entity must include short_summary plus a dossier object matching the supplied rpg_world_entity_dossier_v1 contract. Dossier sections use stable IDs, titled sections, and one to three substantial paragraphs per substantive section. Use short_summary only for cards; do not replace the long dossier with a one- or two-line description. Keep mechanics and canonical references in their structured fields rather than hiding them in prose. NPC dossiers must include appearance, personality, backstory, goals, motives, speech_style, faction_ids, location_id, secrets, and known_facts. Location dossiers must include a sensory_profile and region_id. Every factual row must use stable IDs, generated_proposal authority, approved objective_canon authority, visibility, and entity_refs. Facts use content for a concise one-sentence canon summary and expanded_description for one or two self-contained lore paragraphs that explain origins, impact, or consequences. Never invent an unresolved dependency ID. The requested domain is {v0}; follow its domain-specific section template exactly.')
 _PROMPT_2 = prompt_template('rpg.worlds_providers_world_forge_foundation.system_prompt', "1", "{v0} This is entity batch {v1} of {v2}. Return only this batch's requested entities, with no overlap with earlier batches. Earlier entities are: {v3}. Use these preallocated entity IDs exactly, one per returned entity: {v4}. Expand the allocated registry slots exactly; preserve each assigned name, role, and distinction: {v5}.")
@@ -118,7 +119,7 @@ class WorldForgeTopicResponse(BaseModel):
 class WorldForgeAuthoredTopicResponse(WorldForgeTopicResponse):
     """Live-generation response whose entities always carry reviewable lore."""
 
-    entities: list[WorldForgeAuthoredEntity]
+    entities: list[WorldForgeAuthoredEntity]  # type: ignore[assignment]  # narrows the base field
 
 
 class WorldForgeEntityRegistryItem(BaseModel):
@@ -546,5 +547,5 @@ def _token_estimate(text: str) -> int:
     return max(1, (len(text) + 3) // 4)
 
 
-def _model_rows(rows: list[_WorldForgeRow]) -> tuple[Mapping[str, Any], ...]:
+def _model_rows(rows: Sequence[_WorldForgeRow]) -> tuple[Mapping[str, Any], ...]:
     return tuple(row.model_dump(mode="python") for row in rows)

@@ -44,7 +44,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 # Field name mappings: raw_field -> canonical_field
-_FIELD_MAPPINGS: Dict[str, Dict[str, str]] = {
+_FIELD_MAPPINGS: Dict[str, str] = {
     # Actor fields
     "actor_id": "actor",
     "agent": "actor",

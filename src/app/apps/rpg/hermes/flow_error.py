@@ -7,8 +7,8 @@ def hermes_rpg_flow_error(flow: dict[str, Any]) -> dict[str, Any]:
     if flow.get("ok") is True:
         error = "none"
     else:
-        result = flow.get("result") if isinstance(flow.get("result"), dict) else {}
-        packet = flow.get("packet") if isinstance(flow.get("packet"), dict) else {}
+        result = raw_result if isinstance(raw_result := flow.get("result"), dict) else {}
+        packet = raw_packet if isinstance(raw_packet := flow.get("packet"), dict) else {}
         if packet.get("ready_for_rpg_pipeline") is not True:
             error = "packet_not_ready"
         else:
