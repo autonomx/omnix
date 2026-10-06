@@ -960,11 +960,9 @@
         "app.apps.trading.strategy_solana_ai",
         "app.apps.trading.strategy_solana_ai_monitor",
         "app.apps.trading.strategy_solana_ai_repository",
-        "app.apps.trading.strategy_stoch_execution_cost",
         "app.apps.trading.strategy_stoch_rsi_5m",
         "app.apps.trading.strategy_stoch_rsi_5m_early_single",
         "app.apps.trading.strategy_stoch_rsi_5m_monitor",
-        "app.apps.trading.strategy_stoch_trend_capture",
         "app.apps.trading.strategy_timeframes",
         "app.apps.trading.strategy_universe_archive_monitor",
         "app.apps.trading.strategy_universe_archiver",
@@ -987,6 +985,7 @@
         "app.assets.legacy_documents",
         "app.assets.models",
         "app.assets.paging",
+        "app.assets.protocol",
         "app.assets.rpg_map_pack",
         "app.assets.store",
         "app.assets.voice_clone_assets",
@@ -1513,6 +1512,7 @@
         "app.security.request_tenant",
         "app.security.run_tokens",
         "app.security.secrets",
+        "app.security.service_credentials",
         "app.security.service_token",
         "app.security.tenant_context",
         "app.security.url_policy",
@@ -2138,7 +2138,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 8379,
+      "collected_tests": 8405,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2963,7 +2963,7 @@
       ]
     }
   },
-  "measured_at": "2026-10-06T01:10:50.085869+00:00",
+  "measured_at": "2026-10-06T03:31:52.271688+00:00",
   "metrics": {
     "boot_imported_modules": 2083,
     "collection_errors": 0,
@@ -2972,5 +2972,5 @@
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "de1ff614b6a5464ce59e165000a770087b7baec936a799ff3c16421463409f18"
+  "source_digest": "3fb35ea68d1a89a32c55002511d1aa30f723140518282fd1b7f31e883a3e4194"
 }
