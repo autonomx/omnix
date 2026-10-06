@@ -10,6 +10,22 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from app.apps.trading import strategy_monitor as strategy_monitor_module
+from app.apps.trading import (
+    strategy_monitor_candidates,
+    strategy_monitor_config_run,
+    strategy_monitor_diagnostics,
+    strategy_monitor_intraday_llm,
+    strategy_monitor_protections,
+)
+
+strategy_monitor_modules = (
+    strategy_monitor_module,
+    strategy_monitor_candidates,
+    strategy_monitor_config_run,
+    strategy_monitor_diagnostics,
+    strategy_monitor_intraday_llm,
+    strategy_monitor_protections,
+)
 from app.apps.trading import order_gateway as hardening_module
 from app.apps.trading.execution import ExecutionObservation
 from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
@@ -567,7 +583,9 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
     market_service = ReplayMarketService(bars, fixture, now=REPLAY_RUNTIME_NOW)
 
     frozen_clock = _frozen_datetime(REPLAY_RUNTIME_NOW)
-    monkeypatch.setattr(strategy_monitor_module, "datetime", frozen_clock)
+    # The monitor spans several modules; each reads the clock.
+    for module in strategy_monitor_modules:
+        monkeypatch.setattr(module, "datetime", frozen_clock)
     monkeypatch.setattr(hardening_module, "datetime", frozen_clock)
 
     monitor = TradingStrategyMonitor(

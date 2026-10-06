@@ -200,7 +200,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     ):
         assert forbidden not in research
 
-    strategy_monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text(encoding="utf-8")
+    strategy_monitor = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")))
     assert '"live_broker_enabled": False' in strategy_monitor
     assert '"ai_order_placement_enabled": False' in strategy_monitor
     assert "bounce_model" not in strategy_monitor.lower()

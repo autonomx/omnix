@@ -99,7 +99,7 @@ def test_trade_attempt_identity_is_stable_per_signal_and_distinct_by_signal_time
 
 
 def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> None:
-    source = Path("src/app/apps/trading/strategy_monitor.py").read_text()
+    source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")))
     entry_block = source.split(
         'order_key = _key(config.strategy_id, trade_attempt_id, "entry")', 1
     )[1]

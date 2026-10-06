@@ -479,7 +479,7 @@ def test_two_r_label_is_pessimistic_when_stop_and_target_hit_same_bar() -> None:
 
 
 def test_strategy_surface_remains_paper_only_and_ai_shadow_only() -> None:
-    monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text()
+    monitor = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")))
     catalyst = Path("src/app/apps/trading/catalyst_evidence.py").read_text().lower()
     gateway = Path("src/app/apps/trading/route_registration.py").read_text()
     strategy_api = Path("src/app/apps/trading/strategy_api.py").read_text()

@@ -17,6 +17,22 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.apps.trading import strategy_monitor as strategy_monitor_module
+from app.apps.trading import (
+    strategy_monitor_candidates,
+    strategy_monitor_config_run,
+    strategy_monitor_diagnostics,
+    strategy_monitor_intraday_llm,
+    strategy_monitor_protections,
+)
+
+strategy_monitor_modules = (
+    strategy_monitor_module,
+    strategy_monitor_candidates,
+    strategy_monitor_config_run,
+    strategy_monitor_diagnostics,
+    strategy_monitor_intraday_llm,
+    strategy_monitor_protections,
+)
 from app.apps.trading import order_gateway as hardening_module
 from app.apps.trading.execution import ExecutionObservation
 from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
@@ -423,7 +439,9 @@ async def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and
             assumptions=assumptions,
         )
         frozen = _frozen_datetime(REPLAY_RUNTIME_NOW)
-        monkeypatch.setattr(strategy_monitor_module, "datetime", frozen)
+        # The monitor spans several modules; each reads the clock.
+        for module in strategy_monitor_modules:
+            monkeypatch.setattr(module, "datetime", frozen)
         monkeypatch.setattr(hardening_module, "datetime", frozen)
         monitor = TradingStrategyMonitor(
             strategy_repository_factory=lambda: strategy_repository,

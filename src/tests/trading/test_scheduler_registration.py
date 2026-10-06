@@ -200,8 +200,8 @@ def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():
 def test_proposals_never_wait_on_the_intraday_llm():
     import inspect as source_inspect
 
-    from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+    from app.apps.trading.strategy_monitor_candidates import evaluate_candidates
 
-    evaluation = source_inspect.getsource(TradingStrategyMonitor._evaluate_candidates)
-    assert "await self._run_intraday_llm" not in evaluation
+    evaluation = source_inspect.getsource(evaluate_candidates)
+    assert "await monitor._run_intraday_llm" not in evaluation
     assert "intraday_llm_annotations.start" in evaluation

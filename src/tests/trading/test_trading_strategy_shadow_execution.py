@@ -192,7 +192,7 @@ def test_shadow_execution_module_has_no_order_or_paper_repository_dependency() -
 
 
 def test_strategy_monitor_shadow_observation_precedes_auto_paper_order_boundary() -> None:
-    source = Path("src/app/apps/trading/strategy_monitor.py").read_text(encoding="utf-8")
+    source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")))
     shadow_start = source.index('if config.mode == "shadow" and proposals:')
     auto_paper_start = source.index(
         "snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)",

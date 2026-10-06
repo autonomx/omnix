@@ -150,7 +150,7 @@ def test_locked_model_reports_dated_oos_calibration_and_evidence_volume() -> Non
 def test_model_artifacts_have_relational_authority_and_no_execution_gate() -> None:
     migration = Path("src/app/apps/trading/migrations/0040_trading_model_artifacts.sql").read_text()
     model_api = Path("src/app/apps/trading/model_api.py").read_text().lower()
-    strategy_monitor = Path("src/app/apps/trading/strategy_monitor.py").read_text().lower()
+    strategy_monitor = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py"))).lower()
 
     assert "create table if not exists omnix_trading_model_artifacts" in migration.lower()
     assert "check (shadow_only = true)" in migration.lower()
