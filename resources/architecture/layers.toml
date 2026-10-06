@@ -40,5 +40,19 @@ tenant_bootstrap = ["app/persistence/identity_service.py", "app/persistence/star
 [rpg_core]
 packages = ["app.apps.rpg.core", "app.apps.rpg.session", "app.apps.rpg.combat", "app.apps.rpg.economy", "app.apps.rpg.items", "app.apps.rpg.world", "app.apps.rpg.social", "app.apps.rpg.action_resolver"]
 
+# Track R (R-1, R-2): RPG's bounded contexts, lowest first; docs/architecture/RPG_CONTEXTS.md.
+# A context imports only the contexts listed before it (AL017). Every top-level
+# entry of app/apps/rpg belongs to exactly one context.
+[rpg_contexts]
+order = ["foundation", "rules", "world", "narration", "genesis", "session", "edge"]
+foundation = ["core", "compat", "safe_values", "events", "debug", "debug_logging", "performance_trace", "analytics", "response_trace_headers", "llm_priority", "llm_app_gateway", "provider_access", "narrative_provider", "persistence", "foreground_turn_record", "systems", "sandbox", "ux"]
+rules = ["action_resolver", "items", "economy", "combat", "interactions", "encounter", "party", "player", "character", "validation", "survival", "survival_action_context", "survival_tick_runtime", "quest", "choice"]
+world = ["world", "world_graph", "world_sim", "simulation", "locations", "spatial", "tactical_spatial", "tactical_spatial_service", "map_actions", "map_actor_footprints", "map_content_editor", "map_content_validation", "map_contracts", "map_effective_geometry", "map_fixtures", "map_geometry_patch", "map_geometry_patch_service", "map_grid_contracts", "map_hierarchy", "map_hierarchy_fixtures", "map_instance_runtime", "map_living_overlay", "map_living_state", "map_observer_runtime", "map_observer_service", "map_overlay_projection", "map_persistence", "map_projection", "map_repository", "map_serialization", "map_settlement_assembler", "map_world_integration", "grid_runtime_performance", "grid_runtime_performance_service", "npc", "npc_agency", "npc_evolution", "npc_spatial_campaign_authoring", "npc_spatial_campaign_contracts", "npc_spatial_campaign_runtime", "npc_spatial_simulation", "npc_spatial_transition", "social", "social_state", "group_dynamics", "memory", "scene"]
+narration = ["ai", "cognitive", "narration", "narrative", "narrative_engine", "narrative_delivery", "narrative_reference", "narrative_repository", "narrative_retirement", "response_generation", "dialogue", "dialogue_state", "npc_dialogue", "presentation", "coherence", "prompt_profiles", "visual", "arc_control", "story", "journal", "campaign_journal_runtime"]
+# World Forge: worlds/ and session/genesis/ (to move out of session in R-3).
+genesis = ["creator", "profiles", "packs", "migration", "modding", "worlds", "session.genesis"]
+session = ["session", "orchestration", "runtime", "execution", "control", "jobs", "recovery", "interactive_cli_state_checkpoint"]
+edge = ["api", "hermes", "replay", "narrative_replay", "feature", "declarations", "services", "release_finalization", "release_gates", "local_live_smoke", "dialogue_quality_benchmark", "local_dialogue_quality_fixtures", "agent", "__init__"]
+
 [production]
 entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/services/stt/nemotron_eou_stt_server.py", "src/services/stt/parakeet_stt_runtime.py", "src/services/stt/parakeet_stt_server.py", "src/services/tts/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]

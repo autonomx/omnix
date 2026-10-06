@@ -55,6 +55,7 @@ CASES = [
     ("AL013", {APP + "apps/rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
     ("AL015", {APP + "platform/chat/a.py": "def work():\n    import app.apps.rpg.b", APP + "apps/rpg/b.py": "def work():\n    import app.platform.chat.a"}),
+    ("AL017", {APP + "apps/rpg/core/a.py": "def work():\n    import app.apps.rpg.session.b", APP + "apps/rpg/session/b.py": ""}),
     ("AL016", {APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]
 
@@ -553,3 +554,24 @@ def test_a_sql_file_outside_the_three_migration_places_is_a_violation():
     assert {(entry["path"], entry["fingerprint"]) for entry in report(sources)["violations"] if entry["rule"] == "AL014"} == {
         (APP + "apps/rpg/persistence/migrations/v8.sql", "stray_schema_migration"),
     }
+
+
+def _al017(sources):
+    return sorted(entry["fingerprint"] for entry in report(sources)["violations"] if entry["rule"] == "AL017")
+
+
+def test_rpg_contexts_import_only_the_contexts_below_them():
+    """Track R-2: foundation < rules < world < narration < genesis < session < edge."""
+    # Upward, at any scope: a violation naming both contexts and the entry.
+    assert _al017({APP + "apps/rpg/combat/a.py": "def work():\n    from app.apps.rpg.narration import b",
+                   APP + "apps/rpg/narration/b.py": ""}) == ["rules->narration:narration"]
+    # Downward and within a context: free.
+    assert _al017({APP + "apps/rpg/session/a.py": "import app.apps.rpg.core.b\nimport app.apps.rpg.session.c",
+                   APP + "apps/rpg/core/b.py": "", APP + "apps/rpg/session/c.py": ""}) == []
+    # A subpackage entry decides its own context, and importing it does not
+    # count as importing its parent package: worlds -> session.genesis is genesis -> genesis.
+    assert _al017({APP + "apps/rpg/worlds/a.py": "from app.apps.rpg.session.genesis import forge",
+                   APP + "apps/rpg/session/genesis/forge.py": "", APP + "apps/rpg/session/__init__.py": ""}) == []
+    # Every top-level entry belongs to a context.
+    assert _al017({APP + "apps/rpg/brand_new/a.py": "x = 1"}) == ["rpg_entry_without_context:brand_new"]
+
