@@ -54,7 +54,8 @@ class PostgresUnitOfWork:
             if job_priority_aging_seconds is None
             else max(1, int(job_priority_aging_seconds))
         )
-        self.connection: Any | None = None
+        # The open psycopg connection while the unit is active (None outside it).
+        self.connection: Any = None
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
         self.idempotency: PostgresIdempotencyRepository

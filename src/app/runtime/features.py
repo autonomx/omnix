@@ -1,6 +1,7 @@
 """Feature-module contracts used by the composition root."""
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 import logging
 from typing import Any, Callable, Literal, Protocol, get_args
@@ -27,7 +28,7 @@ class JobHandlerSpec(Protocol):
     @property
     def handler(self) -> Callable[..., object]: ...
     @property
-    def input_model(self) -> type[BaseModel]: ...
+    def input_model(self) -> builtins.type[BaseModel]: ...  # ``type`` is the property above
     @property
     def resource_class(self) -> object: ...
     @property

@@ -8,6 +8,7 @@ from app.config.env import env_str, environment
 import errno
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -119,7 +120,7 @@ def _legacy_audio_module(root: Path) -> str:
 
 def _acquire_os_file_lock(handle: BinaryIO, lock_path: Path) -> None:
     deadline = time.monotonic() + _MANIFEST_LOCK_TIMEOUT_SECONDS
-    if os.name == "nt":
+    if sys.platform == "win32":  # the form type checkers narrow on
         import msvcrt
 
         handle.seek(0, os.SEEK_END)
@@ -151,7 +152,7 @@ def _acquire_os_file_lock(handle: BinaryIO, lock_path: Path) -> None:
 
 
 def _release_os_file_lock(handle: BinaryIO) -> None:
-    if os.name == "nt":
+    if sys.platform == "win32":  # the form type checkers narrow on
         import msvcrt
 
         handle.seek(0)

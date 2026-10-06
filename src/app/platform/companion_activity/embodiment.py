@@ -93,7 +93,7 @@ class CompanionEmbodimentMapper:
 
 
 def _semantic_state(kind: DeliveryIntentKind) -> SemanticEmbodimentState:
-    return {
+    states: dict[str, SemanticEmbodimentState] = {
         "IGNORE": "neutral",
         "REACT": "engaged",
         "ASK": "curious",
@@ -101,7 +101,8 @@ def _semantic_state(kind: DeliveryIntentKind) -> SemanticEmbodimentState:
         "CELEBRATE": "celebrating",
         "WARN": "alert",
         "RESUME": "engaged",
-    }[kind]
+    }
+    return states[kind]
 
 
 def _first_supported(preferred: tuple[str, ...], supported: tuple[str, ...]) -> str | None:

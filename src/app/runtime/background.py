@@ -66,11 +66,11 @@ class GatewayBackgroundRuntime:
         self.lock_key = int.from_bytes(digest[:8], "big", signed=True)
         self.healthy = False
         self.epoch: int | None = None
-        self.connection = None
-        self._connection_context = None
+        self.connection: Any = None
+        self._connection_context: Any = None
         self._connection_lock = threading.Lock()
-        self._workers = []
-        self._started = []
+        self._workers: list[Any] = []
+        self._started: list[Any] = []
 
     def acquire(self):
         if not self.config.owns_background_runtime:

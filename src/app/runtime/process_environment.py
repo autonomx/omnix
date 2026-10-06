@@ -1,7 +1,7 @@
 """Safe process-environment construction for local agent tooling."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 import ntpath
 import os
 import re
@@ -46,15 +46,15 @@ def _set_canonical(environment: dict[str, str], key: str, value: str) -> None:
         environment[key] = value
 
 
+def _literal(replacement: str) -> Callable[[re.Match[str]], str]:
+    """A replacement function, so backslashes in Windows paths are not escapes."""
+    return lambda _match: replacement
+
+
 def _expand_known_windows_references(value: str, known: Mapping[str, str]) -> str:
     expanded = str(value or "").strip()
     for key, replacement in known.items():
-        expanded = re.sub(
-            rf"%{re.escape(key)}%",
-            lambda _match, replacement=replacement: replacement,
-            expanded,
-            flags=re.IGNORECASE,
-        )
+        expanded = re.sub(rf"%{re.escape(key)}%", _literal(str(replacement)), expanded, flags=re.IGNORECASE)
     return expanded
 
 

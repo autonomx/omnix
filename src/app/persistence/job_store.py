@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 from collections.abc import Iterator
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast, overload
+
+from pydantic import BaseModel
 
 from app.jobs.models import (
     CancelJobRequest,
@@ -33,7 +35,7 @@ from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import run_unit_of_work, unit_of_work
 
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 def _model(model: type[T], values: dict[str, Any]) -> T:
@@ -66,6 +68,12 @@ class PostgresJobStoreAdapter:
 
     def configure_handler_registry(self, registry: Any) -> None:
         self.handler_registry = registry
+
+    @overload
+    def _hydrate_job_logs(self, work: Any, record: dict[str, Any]) -> dict[str, Any]: ...
+
+    @overload
+    def _hydrate_job_logs(self, work: Any, record: None) -> None: ...
 
     def _hydrate_job_logs(self, work: Any, record: dict[str, Any] | None) -> dict[str, Any] | None:
         if record is None:
@@ -344,7 +352,8 @@ class PostgresJobStoreAdapter:
                 self.context,
                 job_id=job_id,
                 worker_id=worker_id,
-                lease_token=lease_token,
+                # Both credentials are present: checked together above.
+                lease_token=cast(str, lease_token),
             )
             record = self._hydrate_job_logs(work, record)
             work.commit()

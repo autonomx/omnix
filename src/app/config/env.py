@@ -40,7 +40,7 @@ class _EnvironmentAccess(MutableMapping[str, str]):
 _ENVIRONMENT = _EnvironmentAccess()
 
 
-def environment() -> MutableMapping[str, str]:
+def environment() -> _EnvironmentAccess:
     """Return a mapping view that records every variable value accessed."""
     return _ENVIRONMENT
 

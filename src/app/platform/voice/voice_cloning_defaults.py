@@ -17,7 +17,8 @@ def apply_voice_cloning_defaults(value: Any) -> Any:
     request = deepcopy(value)
     payload = request.get("input_payload")
     payload = deepcopy(payload) if isinstance(payload, dict) else {}
-    profile = load_effective_profile()
+    # The profile model is assembled at runtime from declared sections (PA-2.1).
+    profile: Any = load_effective_profile()
 
     if _missing(payload.get("provider_id")):
         payload["provider_id"] = profile.global_settings.providers.voice_cloning or profile.global_settings.providers.tts

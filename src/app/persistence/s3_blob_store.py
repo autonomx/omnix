@@ -15,7 +15,7 @@ import hmac
 import os
 from pathlib import Path
 import tempfile
-from typing import Any, BinaryIO
+from typing import IO, Any, BinaryIO
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -276,7 +276,7 @@ class S3BlobStore:
             spool.close()
             raise
 
-    def _download_into(self, storage_key: str, writer: BinaryIO, *, expected_checksum: str | None) -> str:
+    def _download_into(self, storage_key: str, writer: IO[bytes], *, expected_checksum: str | None) -> str:
         response = self._request("GET", storage_key, stream=True)
         try:
             if response.status_code == 404:

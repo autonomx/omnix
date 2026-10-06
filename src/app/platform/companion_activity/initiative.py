@@ -6,7 +6,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from pydantic import Field
 
@@ -538,9 +538,10 @@ def _postgres_state_from_row(row) -> _SessionInitiativeState:
             generation=generation,
             owner=str(row[3]),
             intent_id=str(row[4]),
-            channel=str(row[5]),
-            urgency=str(row[6]),
-            interruptibility=str(row[7]),
+            # Stored values; the model validates them on construction.
+            channel=cast(InitiativeChannel, str(row[5])),
+            urgency=cast(InitiativeUrgency, str(row[6])),
+            interruptibility=cast(InitiativeInterruptibility, str(row[7])),
             acquired_at=row[8],
             expires_at=row[9],
         )

@@ -79,6 +79,7 @@ warn_redundant_casts = true
 check_untyped_defs = true
 ignore_missing_imports = true
 
+# Packages not yet type-checked; remove a package once mypy passes on it.
 [[tool.mypy.overrides]]
 module = [
   "app.platform.agent_runtime", "app.platform.agent_runtime.*",
@@ -90,37 +91,18 @@ module = [
   "app.apps.audiobook", "app.apps.audiobook.*",
   "app.assets", "app.assets.*",
   "app.platform.characters", "app.platform.characters.*",
-  "app.apps.character_interactions", "app.apps.character_interactions.*",
   "app.platform.chat", "app.platform.chat.*",
-  "app.platform.companion_activity", "app.platform.companion_activity.*",
-  "app.data", "app.data.*",
   "app.apps.desktop_companion", "app.apps.desktop_companion.*",
   "app.composition.gateway", "app.composition.gateway.*",
   "app.platform.image", "app.platform.image.*",
-  "app.composition.launcher", "app.composition.launcher.*",
-  "app.platform.live_speech", "app.platform.live_speech.*",
   "app.platform.live_voice", "app.platform.live_voice.*",
-  "app.persistence", "app.persistence.*",
-    "app.prompts", "app.prompts.*",
   "app.providers", "app.providers.*",
   "app.apps.rpg.replay", "app.apps.rpg.replay.*",
   "app.platform.research", "app.platform.research.*",
   "app.apps.rpg", "app.apps.rpg.*",
   "app.settings", "app.settings.*",
   "app.apps.story", "app.apps.story.*",
-  "app.testing", "app.testing.*",
   "app.apps.trading", "app.apps.trading.*",
-  "app.platform.voice", "app.platform.voice.*",
-  "app.composition.worker_runtime", "app.composition.worker_runtime.*",
-  "app.runtime.background",
-  "app.runtime.feature_catalog",
-  "app.runtime.features",
-  "app.runtime.hooks",
-  "app.runtime.live_voice_config",
-  "app.runtime.logging",
-  "app.runtime.process_environment",
-  "app.runtime.tenant_context",
-  "app.runtime.worker_health",
 ]
 ignore_errors = true
 
