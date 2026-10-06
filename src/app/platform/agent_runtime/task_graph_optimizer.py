@@ -169,9 +169,8 @@ def task_node_cache_key(graph: TaskGraph, node: TaskNode) -> str | None:
         # validation. Phase 19's graph-local cache deliberately excludes it.
         return None
     incoming = sorted(
-        edge.model_dump(mode="json")
-        for edge in graph.edges
-        if edge.target == node.id
+        (edge.model_dump(mode="json") for edge in graph.edges if edge.target == node.id),
+        key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")),
     )
     payload = {
         "node": task_node_fingerprint(node),

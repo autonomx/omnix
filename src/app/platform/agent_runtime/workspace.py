@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Any
+from typing import Any, cast
 
 from .contracts import AgentEvent
 from app.runtime.process_environment import bounded_process_environment
@@ -156,12 +156,12 @@ class WorkspaceAuthority:
             raise WorkspacePolicyError("workspace list target is not a directory")
         return sorted(item.relative_to(self.root).as_posix() for item in path.iterdir())
 
-    def search_text(self, query: str, relative: str | Path = ".") -> list[dict[str, object]]:
+    def search_text(self, query: str, relative: str | Path = ".") -> list[dict[str, Any]]:
         if not query:
             return []
         base = self.resolve_path(relative)
         files = [base] if base.is_file() else list(base.rglob("*"))
-        matches: list[dict[str, object]] = []
+        matches: list[dict[str, Any]] = []
         for path in files:
             if not path.is_file() or path.stat().st_size > 2_000_000:
                 continue
@@ -248,7 +248,7 @@ class WorkspaceAuthority:
         except OSError as exc:
             raise WorkspacePolicyError(f"unable to hash workspace path: {relative}") from exc
 
-    def provenance_snapshot(self) -> dict[str, object]:
+    def provenance_snapshot(self) -> dict[str, Any]:
         dirty_paths = self.git_status_paths()
         return {
             "head": self.git_head(),
@@ -442,6 +442,6 @@ class WorkspaceAuthority:
             raise WorkspacePolicyError("remote/destructive git command is broker-controlled")
         return normalized
 
-    def _event(self, event_type: str, payload: dict[str, object]) -> None:
+    def _event(self, event_type: str, payload: dict[str, Any]) -> None:
         if self.emit is not None:
-            self.emit(AgentEvent(run_id=self.run_id, event_type=event_type, payload=payload))
+            self.emit(AgentEvent(run_id=self.run_id, event_type=cast(Any, event_type), payload=payload))

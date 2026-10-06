@@ -18,7 +18,7 @@ from app.capabilities.executor import execute_capability as execute_capability
 from dataclasses import dataclass
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from .active_objective import (
     ActiveObjective,
@@ -587,10 +587,29 @@ class _ChatTurn:
     def content(self) -> str:
         return self.submitted_content
 
+    # Routing fills decision, mode and routing before any later phase reads them.
+    @property
+    def routed(self) -> OmnixRouteDecision:
+        if self.decision is None:
+            raise RuntimeError("chat turn read before routing settled its decision")
+        return self.decision
+
+    @property
+    def routed_mode(self) -> RequestModeSelection:
+        if self.mode is None:
+            raise RuntimeError("chat turn read before routing settled its request mode")
+        return self.mode
+
+    @property
+    def routed_routing(self) -> dict[str, Any]:
+        if self.routing is None:
+            raise RuntimeError("chat turn read before routing recorded its routing decision")
+        return self.routing
+
     def mark_route(self) -> None:
         _mark_chat_route(
             self.user_message,
-            self.decision,
+            self.routed,
             semantic_intent=self.semantic_intent,
             semantic_task=self.semantic_task,
             semantic_compilation=self.semantic_compilation,
@@ -600,11 +619,11 @@ class _ChatTurn:
 
     def clarification(self, *, task_known: bool = True, parser_unavailable: bool = False) -> GeneralizedChatResult:
         return _semantic_clarification_result(
-            self.decision,
+            self.routed,
             task=self.semantic_task if task_known else None,
             compilation=self.semantic_compilation if task_known else None,
-            request_mode=self.mode,
-            routing_shadow=self.routing,
+            request_mode=self.routed_mode,
+            routing_shadow=self.routed_routing,
             canonical_request=self.submitted_content,
             **({"parser_unavailable": True} if parser_unavailable else {}),
         )
@@ -655,12 +674,12 @@ def route_typed_chat_turn(
         outcome = phase(turn)
         if outcome is not _PROCEED:
             return outcome
-    if turn.decision.lane == "chat":
+    if turn.routed.lane == "chat":
         return _chat_lane_turn(turn, context_items)
-    if turn.decision.lane == "direct":
-        return _direct_result(session, user_message, turn.decision)
-    if turn.decision.lane == "workflow":
-        return _workflow_result(session, user_message, turn.decision)
+    if turn.routed.lane == "direct":
+        return _direct_result(session, user_message, turn.routed)
+    if turn.routed.lane == "workflow":
+        return _workflow_result(session, user_message, turn.routed)
     return _execute_turn(
         turn,
         provider_id=provider_id,
@@ -1060,7 +1079,7 @@ def _cancel_superseded_task_graph(turn: _ChatTurn) -> Any:
     active_run_id = str(turn_plan.active_run_id or "").strip()
     if not active_run_id:
         return _agent_request_rejection(
-            turn.decision,
+            turn.routed,
             profile="task-graph",
             task=turn.submitted_content,
             reason="active_task_graph_unavailable",
@@ -1083,7 +1102,7 @@ def _cancel_superseded_task_graph(turn: _ChatTurn) -> Any:
             )
     except Exception as exc:
         return _agent_start_failure(
-            turn.decision,
+            turn.routed,
             run_id=active_run_id,
             profile="task-graph",
             task=turn.submitted_content,
@@ -1118,11 +1137,11 @@ def _chat_lane_turn(
     return _enforce_chat_evidence(
         turn.session,
         turn.user_message,
-        turn.decision,
-        request_mode=turn.mode,
+        turn.routed,
+        request_mode=turn.routed_mode,
         semantic_task=turn.semantic_task,
         semantic_compilation=turn.semantic_compilation,
-        routing_shadow=turn.routing,
+        routing_shadow=turn.routed_routing,
         context_items=context_items,
     )
 
@@ -1147,8 +1166,8 @@ def _execute_turn(
     if (
         turn.semantic_task is None or turn.semantic_compilation is None
     ) and not (
-        turn.mode.mode == "agent"
-        and turn.mode.source in {"explicit_command", "persistent_setting"}
+        turn.routed_mode.mode == "agent"
+        and turn.routed_mode.source in {"explicit_command", "persistent_setting"}
     ):
         return turn.clarification(parser_unavailable=True)
 
@@ -1185,6 +1204,7 @@ def _execute_turn(
         latest_user_message=turn.submitted_content,
         attached_workspace=bool(turn.metadata.get("workspace_root")),
     )
+    result: GeneralizedChatResult | None
     if (
         turn_plan is not None
         and turn_plan.run_action in _TASK_GRAPH_RUN_ACTIONS
@@ -1193,10 +1213,10 @@ def _execute_turn(
         result = _task_graph_result(
             turn.session,
             turn.user_message,
-            turn.decision,
+            turn.routed,
             provider_id=provider_id,
             model_id=model_id,
-            request_mode=turn.mode,
+            request_mode=turn.routed_mode,
             semantic_task=task_graph_semantic_task or turn.semantic_task,
             semantic_compilation=turn.semantic_compilation,
             routing_shadow=turn.routing,
@@ -1208,10 +1228,10 @@ def _execute_turn(
         result = _agent_result(
             turn.session,
             turn.user_message,
-            turn.decision,
+            turn.routed,
             provider_id=provider_id,
             model_id=model_id,
-            request_mode=turn.mode,
+            request_mode=turn.routed_mode,
             semantic_intent=turn.semantic_intent,
             semantic_task=turn.semantic_task,
             semantic_compilation=turn.semantic_compilation,
@@ -1256,7 +1276,7 @@ def _complete_graph_objective(turn: _ChatTurn, routing_deadline_at: float | None
         and turn.semantic_task is not None
         and turn.active_objective is not None
     )
-    if not rebuild:
+    if not rebuild or turn_plan is None or turn.active_objective is None:
         return turn.semantic_task
     effective_graph_request = derive_effective_objective(
         turn.active_objective.effective_objective_text(),
@@ -1281,6 +1301,8 @@ def _complete_graph_objective(turn: _ChatTurn, routing_deadline_at: float | None
 
 def _advanced_objective(turn: _ChatTurn, *, profile: str, run_id: str, status: str) -> dict[str, Any]:
     turn_plan = turn.turn_plan
+    if turn_plan is None:
+        raise RuntimeError("an objective advances only on a planned turn")
     return advance_active_objective(
         turn.active_objective,
         request=turn_plan.latest_request,
@@ -1289,7 +1311,7 @@ def _advanced_objective(turn: _ChatTurn, *, profile: str, run_id: str, status: s
         disposition=turn_plan.disposition,
         turn_id=str(getattr(turn.user_message, "id", "") or "") or None,
         run_id=run_id,
-        status=status,
+        status=cast(Any, status),
         workspace_name=(
             turn.routing_environment.active_workspace
             if turn.routing_environment is not None
@@ -1311,7 +1333,7 @@ def _record_turn_outcome(turn: _ChatTurn, result: GeneralizedChatResult) -> None
             "semantic_compilation",
             turn.semantic_compilation.model_dump(mode="json"),
         )
-    result.metadata.setdefault("request_mode", turn.mode.model_dump(mode="json"))
+    result.metadata.setdefault("request_mode", turn.routed_mode.model_dump(mode="json"))
     turn_plan = turn.turn_plan
     if turn_plan is None:
         return

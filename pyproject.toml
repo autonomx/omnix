@@ -82,7 +82,6 @@ ignore_missing_imports = true
 # Packages not yet type-checked; remove a package once mypy passes on it.
 [[tool.mypy.overrides]]
 module = [
-  "app.platform.agent_runtime", "app.platform.agent_runtime.*",
   "app.platform.assistant_tools", "app.platform.assistant_tools.*",
   "app.apps.audiobook", "app.apps.audiobook.*",
   "app.platform.characters", "app.platform.characters.*",

@@ -9,7 +9,7 @@ from app.security.permissions import ensure_permission
 import asyncio
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -162,7 +162,7 @@ def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> Age
     root = workspace_root or repository
     if profile.requires_workspace and not root:
         raise HTTPException(status_code=422, detail="repository or workspace_root is required for this profile")
-    limit_kwargs = {"limits": request.limits} if request.limits is not None else {}
+    limit_kwargs: dict[str, Any] = {"limits": request.limits} if request.limits is not None else {}
     spec = AgentRunSpec(
         task=request.task,
         objective=request.objective,
@@ -267,7 +267,7 @@ def command_agent_run(
                 run_id=run_id,
                 command_type=request.command_type,
                 payload=payload,
-                **({"idempotency_key": request.idempotency_key} if request.idempotency_key else {}),
+                **(cast(dict[str, Any], {"idempotency_key": request.idempotency_key}) if request.idempotency_key else {}),
             )
         )
     except KeyError as exc:

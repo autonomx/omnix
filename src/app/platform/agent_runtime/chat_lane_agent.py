@@ -11,12 +11,13 @@ from dataclasses import dataclass
 import hashlib
 import os
 import re
-from typing import Any
+from typing import Any, cast
 from .active_objective import (
     make_active_objective,
     objective_continuity_candidate,
 )
 from .contracts import (
+    AgentApprovalPolicy,
     AgentRunCommand,
     AgentRunSpec,
     ModelRef,
@@ -619,6 +620,7 @@ def _agent_turn_inputs(
     if not reference_images and reference_images_override:
         reference_images = list(reference_images_override)
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
+    profile_id: str
     if semantic_compilation is not None:
         profile_id = semantic_compilation.profile_id or "research"
     else:
@@ -992,10 +994,10 @@ def _agent_semantic_reference_context(
     return f"{target}\n\n{prior}" if prior else target
 
 
-def _coding_approval_policy(value: Any) -> str:
+def _coding_approval_policy(value: Any) -> AgentApprovalPolicy:
     normalized = str(value or "ask_sensitive").strip().casefold()
     if normalized in {"always_ask", "ask_sensitive", "allow_automatic"}:
-        return normalized
+        return cast(AgentApprovalPolicy, normalized)
     return "ask_sensitive"
 
 
@@ -1193,7 +1195,7 @@ def _continue_agent_run(
     command_digest = hashlib.sha256(digest_material.encode("utf-8")).hexdigest()[:24]
     command = AgentRunCommand(
         run_id=snapshot.run_id,
-        command_type=command_type,
+        command_type=cast(Any, command_type),
         payload=payload,
         idempotency_key=f"chat:{snapshot.run_id}:{command_type}:{command_digest}",
     )

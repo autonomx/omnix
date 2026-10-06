@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -208,7 +208,7 @@ def _normalize_workspace_path(value: object) -> str:
     return normalized.rstrip("/")
 
 
-def _baseline_dirty_paths(baseline_provenance: dict[str, object] | None) -> set[str]:
+def _baseline_dirty_paths(baseline_provenance: dict[str, Any] | None) -> set[str]:
     if not baseline_provenance:
         return set()
     return {
@@ -232,7 +232,7 @@ def _planned_path_covers(pattern: str, path: str) -> bool:
 
 def _preexisting_dirty_plan_failures(
     submission: ImplementationPlanSubmission,
-    baseline_provenance: dict[str, object] | None,
+    baseline_provenance: dict[str, Any] | None,
 ) -> list[str]:
     """Reject plans that propose mutating workspace content owned by the user baseline."""
 
@@ -255,7 +255,7 @@ def _preexisting_dirty_operation_failures(
     effect: str,
     target_path: str | None,
     command: str,
-    baseline_provenance: dict[str, object] | None,
+    baseline_provenance: dict[str, Any] | None,
 ) -> list[str]:
     """Block a mutation before it can overwrite a path dirty when the run began."""
 
@@ -303,50 +303,50 @@ def _merge_plan_delta(
 
     impacts = {item.candidate_id: item for item in previous.impacts}
     impact_order = [item.candidate_id for item in previous.impacts]
-    for item in delta.impacts:
-        if item.candidate_id not in impacts:
-            impact_order.append(item.candidate_id)
-        impacts[item.candidate_id] = item
+    for plan_impact_disposition in delta.impacts:
+        if plan_impact_disposition.candidate_id not in impacts:
+            impact_order.append(plan_impact_disposition.candidate_id)
+        impacts[plan_impact_disposition.candidate_id] = plan_impact_disposition
 
     changes = {item.id: item for item in previous.changes}
     change_order = [item.id for item in previous.changes]
-    for item in delta.changes:
-        prior = changes.get(item.id)
-        if prior is None:
-            change_order.append(item.id)
-            changes[item.id] = item
+    for plan_item in delta.changes:
+        prior_change = changes.get(plan_item.id)
+        if prior_change is None:
+            change_order.append(plan_item.id)
+            changes[plan_item.id] = plan_item
         else:
-            changes[item.id] = prior.model_copy(update={
-                "intent": item.intent,
-                "paths": _ordered_union(prior.paths, item.paths),
-                "requirement_ids": _ordered_union(prior.requirement_ids, item.requirement_ids),
-                "candidate_ids": _ordered_union(prior.candidate_ids, item.candidate_ids),
-                "validation_ids": _ordered_union(prior.validation_ids, item.validation_ids),
-                "allowed_effects": _ordered_union(prior.allowed_effects, item.allowed_effects),
-                "command_hints": _ordered_union(prior.command_hints, item.command_hints),
+            changes[plan_item.id] = prior_change.model_copy(update={
+                "intent": plan_item.intent,
+                "paths": _ordered_union(prior_change.paths, plan_item.paths),
+                "requirement_ids": _ordered_union(prior_change.requirement_ids, plan_item.requirement_ids),
+                "candidate_ids": _ordered_union(prior_change.candidate_ids, plan_item.candidate_ids),
+                "validation_ids": _ordered_union(prior_change.validation_ids, plan_item.validation_ids),
+                "allowed_effects": _ordered_union(prior_change.allowed_effects, plan_item.allowed_effects),
+                "command_hints": _ordered_union(prior_change.command_hints, plan_item.command_hints),
             })
 
     validations = {item.id: item for item in previous.validations}
     validation_order = [item.id for item in previous.validations]
-    for item in delta.validations:
-        prior = validations.get(item.id)
-        if prior is None:
-            validation_order.append(item.id)
-            validations[item.id] = item
+    for plan_validation_intent in delta.validations:
+        prior_validation = validations.get(plan_validation_intent.id)
+        if prior_validation is None:
+            validation_order.append(plan_validation_intent.id)
+            validations[plan_validation_intent.id] = plan_validation_intent
         else:
-            validations[item.id] = prior.model_copy(update={
-                "kind": item.kind,
-                "requirement_ids": _ordered_union(prior.requirement_ids, item.requirement_ids),
-                "invariant": item.invariant if item.invariant is not None else prior.invariant,
-                "command_hint": item.command_hint if item.command_hint is not None else prior.command_hint,
+            validations[plan_validation_intent.id] = prior_validation.model_copy(update={
+                "kind": plan_validation_intent.kind,
+                "requirement_ids": _ordered_union(prior_validation.requirement_ids, plan_validation_intent.requirement_ids),
+                "invariant": plan_validation_intent.invariant if plan_validation_intent.invariant is not None else prior_validation.invariant,
+                "command_hint": plan_validation_intent.command_hint if plan_validation_intent.command_hint is not None else prior_validation.command_hint,
             })
 
     hypotheses = {item.hypothesis: item for item in previous.causal_hypotheses}
     hypothesis_order = [item.hypothesis for item in previous.causal_hypotheses]
-    for item in delta.causal_hypotheses:
-        if item.hypothesis not in hypotheses:
-            hypothesis_order.append(item.hypothesis)
-        hypotheses[item.hypothesis] = item
+    for causal_hypothesis in delta.causal_hypotheses:
+        if causal_hypothesis.hypothesis not in hypotheses:
+            hypothesis_order.append(causal_hypothesis.hypothesis)
+        hypotheses[causal_hypothesis.hypothesis] = causal_hypothesis
 
     return ImplementationPlanSubmission(
         previous_plan_revision_id=previous.plan_revision_id,
@@ -444,8 +444,8 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
         )
         for item in fresh_evidence:
             planning.add_inspection_evidence(item)
-        for item in fresh_candidates:
-            planning.add_impact_candidate(item)
+        for impact_candidate in fresh_candidates:
+            planning.add_impact_candidate(impact_candidate)
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         state = planning.get_state(run_id)
@@ -724,8 +724,8 @@ def _record_plan_revision(failures, quality, run_id, amend, revision, planning, 
         task_revision_id=revision.revision_id,
         sequence=planning.next_plan_sequence(run_id, revision.revision_id),
         previous_plan_revision_id=previous_id if amend else None,
-        source=source,
-        status=status,
+        source=cast(Any, source),
+        status=cast(Any, status),
         mode=mode,
         authority=authority,
         baseline_provenance=baseline,
@@ -940,6 +940,7 @@ def authorize_agent_planned_operation(
         planning.add_decision(decision)
         work.commit()
 
+    reason: str | None
     if protected_reasons and not allowed:
         reason = (
             "Omnix protected pre-existing workspace changes from being overwritten: "

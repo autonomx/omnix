@@ -5,7 +5,7 @@ delegator per function, so callers and tests are unchanged.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from app.capabilities.registry import capability_definition_hash
 from .contracts import (
@@ -101,7 +101,7 @@ def get_approval(repo: PostgresAgentRunRepository, run_id: str, approval_id: str
         return None
     return AgentApproval(
         approval_id=approval_id, run_id=run_id, capability_id=str(row[0]),
-        state=str(row[1]), request_payload=dict(row[2] or {}),
+        state=cast(Any, str(row[1])), request_payload=dict(row[2] or {}),
         resolution_payload=dict(row[3] or {}), created_at=row[4], resolved_at=row[5],
     ).with_definition_hash(row[6])
 
@@ -139,7 +139,7 @@ def list_approvals(
             approval_id=str(row[0]),
             run_id=run_id,
             capability_id=str(row[1]),
-            state=str(row[2]),
+            state=cast(Any, str(row[2])),
             request_payload=dict(row[3] or {}),
             resolution_payload=dict(row[4] or {}),
             created_at=row[5],
@@ -170,7 +170,7 @@ def resolve_approval(
             raise KeyError(approval_id)
         return existing
     approval = AgentApproval(
-        approval_id=approval_id, run_id=run_id, capability_id=str(row[0]), state=state,
+        approval_id=approval_id, run_id=run_id, capability_id=str(row[0]), state=cast(Any, state),
         request_payload=dict(row[1] or {}), resolution_payload=dict(row[2] or {}),
         created_at=row[3], resolved_at=row[4],
     ).with_definition_hash(row[5])
@@ -220,7 +220,7 @@ def list_artifacts(repo: PostgresAgentRunRepository, run_id: str) -> list[AgentA
         AgentArtifact(
             artifact_id=str(row[0]),
             run_id=run_id,
-            kind=str(row[1]),
+            kind=cast(Any, str(row[1])),
             name=str(row[2]),
             storage_ref=str(row[3]) if row[3] else None,
             checksum=str(row[4]) if row[4] else None,

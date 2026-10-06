@@ -208,7 +208,8 @@ def _request_implementation_continuation(
                 },
             )
         )
-        return service._quality_fail(repository, current, "quality_failed:implementation_candidate_not_ready")
+        service._quality_fail(repository, current, "quality_failed:implementation_candidate_not_ready")
+        return None
 
     continuation = retries + 1
     repository.append_event(
@@ -293,11 +294,12 @@ def _request_self_review_protocol_retry(
                 },
             )
         )
-        return service._quality_fail(
+        service._quality_fail(
             repository,
             current,
             "quality_failed:quality_self_review_protocol_exhausted",
         )
+        return None
 
     protocol_retry = retries + 1
     validations = quality.list_validation_results(
@@ -384,7 +386,8 @@ def _request_validation_execution(
     )
     retry_limit = _validation_retry_limit()
     if prior > retry_limit:
-        return service._quality_fail(repository, current, "quality_failed:validation_not_executed")
+        service._quality_fail(repository, current, "quality_failed:validation_not_executed")
+        return None
     repository.append_event(AgentEvent(
         run_id=current.run_id,
         event_type="quality.validation_requested",
@@ -478,7 +481,8 @@ def _request_validation_retry(
                 "retry_limit": limit,
             },
         ))
-        return service._quality_fail(repository, current, "quality_failed:validation_retry_exhausted")
+        service._quality_fail(repository, current, "quality_failed:validation_retry_exhausted")
+        return None
     retry = max(retry_counts.values(), default=0) + 1
     retry_identity = hashlib.sha256(
         "|".join(validation_ids).encode("utf-8")
@@ -534,7 +538,8 @@ def _request_validation_repair(
         fingerprint=fingerprint,
     )
     if prior:
-        return service._quality_fail(repository, current, "quality_failed:no_progress_after_validation_failure")
+        service._quality_fail(repository, current, "quality_failed:no_progress_after_validation_failure")
+        return None
     repository.append_event(AgentEvent(
         run_id=current.run_id,
         event_type="quality.validation_repair_requested",
@@ -611,7 +616,8 @@ def _advance_quality_on_settle(
         service._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
-            return service._quality_fail(repository, current, "quality_workspace_state_unavailable")
+            service._quality_fail(repository, current, "quality_workspace_state_unavailable")
+            return None
         quality.add_workspace_state(state)
 
         outcome = _accept_without_quality_phases(service, repository, current, attempt, revision, state)
@@ -639,7 +645,8 @@ def _advance_quality_on_settle(
     service._quarantine_isolated_workspace_contamination(repository, current.spec)
     state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
     if state is None:
-        return service._quality_fail(repository, current, "quality_workspace_state_unavailable")
+        service._quality_fail(repository, current, "quality_workspace_state_unavailable")
+        return None
     quality.add_workspace_state(state)
 
     outcome = _settle_self_review(stage, repository, current, attempt, revision, state, service, quality)
@@ -892,7 +899,8 @@ def _start_quality_reviews(current, repository, revision, service, state, valida
     )
     change_set = run_change_set_from_artifact(diff_artifact)
     if change_set is None:
-        return service._quality_fail(repository, current, "quality_run_change_set_unavailable")
+        service._quality_fail(repository, current, "quality_run_change_set_unavailable")
+        return None
     review_root = _env_str(
         "OMNIX_AGENT_REVIEW_ROOT",
         _default_review_root(current.spec),

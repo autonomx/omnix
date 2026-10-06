@@ -262,7 +262,7 @@ class AgentRunService:
         self.quality_repository_factory = (
             quality_repository_factory or PostgresCodingQualityRepository
         )
-        self.workspace_authority_factory = workspace_authority_factory or WorkspaceAuthority
+        self.workspace_authority_factory: Any = workspace_authority_factory or WorkspaceAuthority
         self.semantic_task_parser = semantic_task_parser or default_semantic_task_parser
         self.terminal_reviewer_consumer = (
             terminal_reviewer_consumer or consume_terminal_reviewer_in_repository
@@ -481,7 +481,7 @@ class AgentRunService:
         *,
         reference_context: str = "",
         turn_plan: TurnPlan | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         from . import run_steering
 
         return run_steering._compile_steering(self, current, command, reference_context=reference_context, turn_plan=turn_plan)
@@ -741,7 +741,7 @@ class AgentRunService:
         *,
         task_revision_id: str | None,
         workspace_state_id: str | None,
-    ) -> dict[str, object] | None:
+    ) -> dict[str, Any] | None:
         from . import run_workspace
 
         return run_workspace._promote_accepted_workspace(self, repository, current, task_revision_id=task_revision_id, workspace_state_id=workspace_state_id)

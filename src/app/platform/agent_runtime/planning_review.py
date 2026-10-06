@@ -17,7 +17,7 @@ import json
 import os
 import re
 import uuid
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -238,7 +238,7 @@ def _usage_token(usage: Any, *names: str) -> int | None:
         if isinstance(value, bool):
             continue
         try:
-            parsed = int(value)
+            parsed = int(cast(Any, value))
         except (TypeError, ValueError):
             continue
         if parsed >= 0:
@@ -603,7 +603,7 @@ class ProviderPlanSemanticReviewer:
             run_id=spec.run_id,
             provider_id=self.provider_id,
         )
-        output = StructuredOutputGateway(budgeted_provider).generate(
+        output = StructuredOutputGateway[_PlanReviewOutput](budgeted_provider).generate(
             [
                 ChatMessage(role="system", content=plan_review_system_prompt(final_round=final_round)),
                 ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False, sort_keys=True)),

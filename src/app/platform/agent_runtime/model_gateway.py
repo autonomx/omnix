@@ -10,7 +10,7 @@ import asyncio
 import json
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -256,7 +256,7 @@ def _output_tokens(response: ChatResponse) -> int | None:
         if isinstance(value, bool):
             continue
         try:
-            parsed = int(value)
+            parsed = int(cast(Any, value))
         except (TypeError, ValueError):
             continue
         if parsed >= 0:
@@ -271,7 +271,7 @@ def _input_tokens(response: ChatResponse) -> int | None:
         if isinstance(value, bool):
             continue
         try:
-            parsed = int(value)
+            parsed = int(cast(Any, value))
         except (TypeError, ValueError):
             continue
         if parsed >= 0:
@@ -432,7 +432,7 @@ async def agent_chat_completion(
         return outcome
 
     iterator = await asyncio.to_thread(
-        provider.chat_completion,
+        cast(Any, provider.chat_completion),
         messages,
         model=model_id,
         stream=True,

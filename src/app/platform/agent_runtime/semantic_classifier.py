@@ -13,7 +13,7 @@ from app.config.env import env_str
 import json
 import re
 from collections.abc import Mapping
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -710,7 +710,7 @@ class ProviderSemanticIntentClassifier:
         self.provider = provider
         self.model = model or getattr(getattr(provider, "config", None), "model", None)
         self.timeout_seconds = max(0.25, min(float(timeout_seconds), 60.0))
-        self.gateway = StructuredOutputGateway(provider)
+        self.gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(provider)
 
     def classify(self, content: str) -> SemanticIntentDecision:
         return self.classify_contextual(content)
@@ -842,7 +842,7 @@ def classify_semantic_intent_safely(
                 previous_objective=previous_objective,
             )
             method = getattr(classifier, "classify", None)
-            value = method(legacy_input) if callable(method) else classifier(legacy_input)
+            value = method(legacy_input) if callable(method) else cast(Any, classifier)(legacy_input)
         validated = SemanticIntentDecision.model_validate(value)
         return _normalize_semantic_decision(content, validated)
     except Exception as exc:

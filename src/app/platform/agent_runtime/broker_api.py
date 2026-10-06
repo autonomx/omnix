@@ -12,7 +12,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -464,7 +464,7 @@ def _evidence_result_usage(result_payload: dict[str, Any], *, failed: bool) -> t
     items = output.get("items")
     source_count = diagnostics.get("source_count", output.get("source_count"))
     try:
-        sources = int(source_count)
+        sources = int(cast(Any, source_count))
     except (TypeError, ValueError):
         sources = len(items) if isinstance(items, list) else 1
     try:

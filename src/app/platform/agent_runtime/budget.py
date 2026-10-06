@@ -15,6 +15,7 @@ from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
 from .run_repository_queries import PostgresAgentRunQueries
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def apply_default_run_limits(spec):
     except Exception:
         logger.warning("agent_budget_settings_unavailable", exc_info=True)
         return spec
-    updates: dict[str, object] = {}
+    updates: dict[str, Any] = {}
     if spec.limits.max_tokens is None and settings.default_max_output_tokens is not None:
         updates["max_tokens"] = settings.default_max_output_tokens
     if spec.limits.max_cost is None and settings.default_max_cost_usd is not None:
@@ -75,7 +76,7 @@ class AgentBudgetManager:
         self.database = database or default_database()
         self.context = context
 
-    def usage(self, run_id: str) -> dict[str, object]:
+    def usage(self, run_id: str) -> dict[str, Any]:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             row = repository.get_usage(run_id)
@@ -109,7 +110,7 @@ class AgentBudgetManager:
         run_id: str,
         *,
         provider_id: str,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             self._lock_run(repository, run_id)
@@ -143,7 +144,7 @@ class AgentBudgetManager:
                 run_id,
                 steps=1,
                 model_calls=1,
-                max_steps=int(effective["max_steps"]),
+                max_steps=int(cast(int, effective["max_steps"])),
             )
             if usage is None:
                 reason = "budget_max_steps_exceeded"
@@ -158,7 +159,7 @@ class AgentBudgetManager:
         run_id: str,
         *,
         tool_name: str,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         del tool_name
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -173,7 +174,7 @@ class AgentBudgetManager:
             usage = repository.consume_usage(
                 run_id,
                 tool_calls=1,
-                max_tool_calls=int(effective["max_tool_calls"]),
+                max_tool_calls=int(cast(int, effective["max_tool_calls"])),
             )
             if usage is None:
                 reason = "budget_max_tool_calls_exceeded"
@@ -190,7 +191,7 @@ class AgentBudgetManager:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         provider_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         if input_tokens is not None and input_tokens < 0:
             raise ValueError("token usage must be non-negative")
         if output_tokens is not None and output_tokens < 0:
@@ -230,7 +231,7 @@ class AgentBudgetManager:
             work.commit()
             return usage
 
-    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, object]:
+    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, Any]:
         return self.record_token_usage(run_id, output_tokens=tokens)
 
     def enforce_wall_time(self, run_id: str) -> None:

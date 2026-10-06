@@ -134,7 +134,7 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
             and operation.target not in {"conversation", "email"}
         ):
             normalized = operation.model_copy(update={"target": "conversation"})
-        key = (
+        key: tuple[str, str, str] = (
             normalized.kind,
             normalized.target,
             str(normalized.subject_reference or "").strip().casefold(),

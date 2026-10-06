@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Literal, Sequence
 
 from .contracts import AgentRunSpec, TaskRevision
 from .planning_contracts import (
@@ -104,7 +104,7 @@ def extract_change_literals(revision: TaskRevision) -> list[str]:
     return []
 
 
-def capture_planning_baseline(spec: AgentRunSpec) -> tuple[str, dict[str, object]]:
+def capture_planning_baseline(spec: AgentRunSpec) -> tuple[str, dict[str, Any]]:
     workspace = spec.workspace
     if workspace is None:
         raise WorkspacePolicyError("planning requires an issued workspace")
@@ -493,7 +493,7 @@ def plan_requires_hard_planning(plan: ImplementationPlanRevision | None) -> bool
         if any(consequential_path(path) for path in item.paths):
             return True
         for hint in item.command_hints:
-            effect = "unknown" if "unknown" in item.allowed_effects else "mutate"
+            effect: Literal["unknown", "mutate"] = "unknown" if "unknown" in item.allowed_effects else "mutate"
             if planning_requirement_for_operation(effect, command=hint) == "hard":
                 return True
     return False
@@ -553,7 +553,7 @@ def operation_plan_failures(
     target_path: str | None = None,
     command: str = "",
     current_evidence_digest: str | None = None,
-    quality_stage: dict[str, object] | None = None,
+    quality_stage: dict[str, Any] | None = None,
 ) -> list[str]:
     del quality_stage
     requirement = planning_requirement_for_operation(
@@ -610,7 +610,7 @@ def plan_conformance_failures(
         forbidden_paths=list(workspace.forbidden_paths),
     )
     provenance = authority.provenance_snapshot()
-    baseline = dict(plan.baseline_provenance)
+    baseline: dict[str, Any] = dict(plan.baseline_provenance)
     if str(provenance.get("head") or "") != str(baseline.get("head") or ""):
         return ["planning_base_commit_changed"]
 

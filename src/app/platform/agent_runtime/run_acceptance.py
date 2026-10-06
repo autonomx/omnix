@@ -21,7 +21,7 @@ from .contracts import (
 from app.observability.agent_logging import log_agent_activity
 from .repository import PostgresAgentRunRepository
 from .workspace_promotion import WorkspacePromotionError
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from .service_core import (
     _acceptance_failures_retryable,
     _acceptance_retry_count,
@@ -121,7 +121,7 @@ def _finalize_acceptance(
     if child_failed:
         failures.append("child_run_failed")
     passed = result.passed and not failures
-    promotion: dict[str, object] | None = None
+    promotion: dict[str, Any] | None = None
     if passed:
         try:
             promotion = service._promote_accepted_workspace(

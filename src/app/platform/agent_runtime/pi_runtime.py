@@ -29,6 +29,7 @@ from .pi_runtime_core import (
 )
 from .repository_guidance import compile_repository_guidance
 from app.prompts import prompt_template
+from typing import Any
 
 
 MANDATORY_BROWSER_VALIDATION_PROMPT_TEMPLATE = prompt_template(
@@ -151,7 +152,7 @@ def clear_provider_failures(run_id: str | None = None) -> None:
 
 def _provider_failure_event(
     run_id: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
     *,
     task_revision_id: str | None = None,
 ) -> AgentEvent | None:
@@ -237,7 +238,7 @@ def _provider_failure_event(
 
 def normalize_pi_event(
     run_id: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
     *,
     task_revision_id: str | None = None,
 ) -> AgentEvent | None:

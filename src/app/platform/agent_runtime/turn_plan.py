@@ -7,7 +7,7 @@ requirements consumed by both Chat and durable steering.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -213,7 +213,7 @@ def compile_turn_plan(
     return TurnPlan(
         latest_request=latest,
         effective_request=effective_request,
-        relation=relation,
+        relation=cast(Any, relation),
         disposition=disposition,
         lane=final_compilation.lane,
         profile_id=final_compilation.profile_id,

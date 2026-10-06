@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from collections.abc import Iterable, Iterator
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.tenant import TenantContext
@@ -144,8 +144,8 @@ class PostgresAgentRunRepository:
         return AgentRunSnapshot(
             run_id=str(row[0]),
             spec=AgentRunSpec.model_validate(row[1]),
-            status=str(row[2]),
-            desired_state=str(row[3]),
+            status=cast(Any, str(row[2])),
+            desired_state=cast(Any, str(row[3])),
             revision=int(row[4]),
             worker_id=str(row[5]) if row[5] else None,
             superseded_by_run_id=str(row[6]) if row[6] else None,

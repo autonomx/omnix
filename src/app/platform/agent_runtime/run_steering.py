@@ -22,6 +22,7 @@ from .profiles import get_agent_profile, resolve_profile_capabilities
 from .budget import apply_default_run_limits
 from .contracts import (
     AgentEvent,
+    ArtifactKind,
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -303,7 +304,7 @@ def _compile_steering(
     *,
     reference_context: str = "",
     turn_plan: TurnPlan | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     message = str(command.payload.get("message") or "").strip()
     reference_context = str(reference_context or "").strip()
     if not message:
@@ -366,7 +367,7 @@ def _compile_steering(
         and required_local.issubset(issued_local)
         and required_external.issubset(issued_external)
     )
-    expected_artifacts = (
+    expected_artifacts: list[ArtifactKind] = (
         ["diff"]
         if profile_produces_diff(target_profile_id)
         and task_requires_workspace_mutation(

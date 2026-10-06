@@ -9,7 +9,7 @@ import json
 import os
 import threading
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.capabilities.executor import (
     CapabilityExecutor,
@@ -137,7 +137,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             work.rollback()
         return str(row[0]) if row else None
 
-    def start(self, workflow_id: str, input_payload: dict[str, object]) -> str:
+    def start(self, workflow_id: str, input_payload: dict[str, Any]) -> str:
         self._ensure_supervisor()
         definition = self._definition(workflow_id)
         if definition is None:
@@ -147,7 +147,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def _start_definition(
         self,
         definition: WorkflowDefinition,
-        input_payload: dict[str, object],
+        input_payload: dict[str, Any],
     ) -> str:
         run_id = uuid.uuid4().hex
         idempotency_key = str(input_payload.get("idempotency_key") or "").strip() or None
@@ -215,7 +215,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         *,
         workflow_id: str | None = None,
         limit: int = 100,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         bounded = max(1, min(int(limit), 1000))
         with unit_of_work(self.database) as work:
             if workflow_id is None:
@@ -223,7 +223,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             else:
                 rows = self.repository(work.connection).recent_run_ids_for_workflow(workflow_id, bounded).fetchall()
             work.rollback()
-        result: list[dict[str, object]] = []
+        result: list[dict[str, Any]] = []
         for row in rows:
             state = self.get_status(str(row[0]))
             if state is not None:
@@ -233,7 +233,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def schedule(
         self,
         workflow_id: str,
-        input_payload: dict[str, object],
+        input_payload: dict[str, Any],
         *,
         run_at: datetime,
         interval_seconds: int | None = None,
@@ -296,7 +296,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
 
         return workflow_execution._resolve_approval(self, run_id, step_id, approved_by=approved_by)
 
-    def get_status(self, run_id: str) -> dict[str, object] | None:
+    def get_status(self, run_id: str) -> dict[str, Any] | None:
         self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             row = self.repository(work.connection).run_status_row(run_id).fetchone()
@@ -307,7 +307,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             run_id=run_id,
             workflow_id=str(row[0]),
             workflow_version=int(row[1]),
-            status=str(row[2]),
+            status=cast(Any, str(row[2])),
             current_step_id=str(row[3]) if row[3] else None,
             input_payload=dict(row[4] or {}),
             revision=int(row[5]),
