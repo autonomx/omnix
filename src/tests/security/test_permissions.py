@@ -208,7 +208,7 @@ def test_gateway_without_installed_tenant_serves_the_local_owner(monkeypatch) ->
             return None
 
     monkeypatch.setattr(tenant_context, "_PROCESS_DEFAULT", None)
-    monkeypatch.delenv("OMNIX_AUTH_MODE", raising=False)
+    monkeypatch.setenv("OMNIX_AUTH_MODE", "disabled")
     app = create_gateway_app(job_store_factory=lambda: EmptyStore())
     client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/api/jobs/missing").status_code == 404

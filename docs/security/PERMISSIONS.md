@@ -16,68 +16,68 @@ role to permission list; `owner` cannot be changed).
 
 ## Catalog
 
-| Permission | Meaning | owner | admin | agent_run | approver | member | service | system | viewer |
-|---|---|---|---|---|---|---|---|---|---|
-| `admin:diagnostics` | Diagnostics | yes | yes |  |  |  |  |  |  |
-| `admin:docs` | API documentation | yes | yes |  |  |  |  |  |  |
-| `admin:features` | Feature toggles | yes | yes |  |  |  |  |  |  |
-| `admin:metrics` | Metrics | yes | yes |  |  |  |  |  |  |
-| `admin:users` | User administration | yes | yes |  |  |  |  |  |  |
-| `agent:approve` | Approve agent capabilities | yes | yes |  | yes |  |  |  |  |
-| `agent:promote` | Promote agent results | yes | yes |  |  |  |  |  |  |
-| `agent:read` | Agent runs (read) | yes | yes | yes |  | yes |  |  | yes |
-| `agent:run` | Start agent runs | yes | yes | yes |  | yes |  |  |  |
-| `agent:steer` | Steer agent runs | yes | yes |  |  | yes |  |  |  |
-| `agent:workflows:admin` | Register and manage workflows | yes | yes |  |  |  |  |  |  |
-| `assets:delete` | Assets (delete) | yes | yes |  |  | yes |  |  |  |
-| `assets:read` | Assets (read) | yes | yes |  |  | yes |  |  | yes |
-| `assets:write` | Assets (write) | yes | yes |  |  | yes |  |  |  |
-| `assistant:read` | Assistant (read) | yes | yes |  |  | yes |  |  | yes |
-| `assistant:write` | Assistant (write) | yes | yes |  |  | yes |  |  |  |
-| `audiobook:read` | Audiobooks (read) | yes | yes |  |  | yes |  |  | yes |
-| `audiobook:write` | Audiobooks (write) | yes | yes |  |  | yes |  |  |  |
-| `characters:read` | Character profiles (read) | yes | yes |  |  | yes |  |  | yes |
-| `characters:write` | Character profiles (write) | yes | yes |  |  | yes |  |  |  |
-| `chat:read` | Chat sessions and messages (read) | yes | yes |  |  | yes |  |  | yes |
-| `chat:write` | Chat sessions and messages (write) | yes | yes |  |  | yes |  |  |  |
-| `client:report` | Report browser errors | yes | yes |  |  | yes |  |  | yes |
-| `companion:read` | Desktop companion (read) | yes | yes |  |  | yes |  |  | yes |
-| `companion:write` | Desktop companion (write) | yes | yes |  |  | yes |  |  |  |
-| `image:generate` | Generate images | yes | yes |  |  | yes |  |  |  |
-| `image:models:admin` | Image model management | yes | yes |  |  |  |  |  |  |
-| `image:read` | Image workspace (read) | yes | yes |  |  | yes |  |  | yes |
-| `internal:service` | Internal service-to-service routes | yes |  |  |  |  | yes |  |  |
-| `jobs:cancel` | Cancel jobs | yes | yes |  |  | yes |  |  |  |
-| `jobs:read` | Job views and event streams | yes | yes |  |  | yes |  |  | yes |
-| `jobs:submit` | Submit jobs | yes | yes |  |  | yes |  |  |  |
-| `memory:admin` | Memory management | yes | yes |  |  |  |  |  |  |
-| `memory:read` | Memory items and settings (read) | yes | yes |  |  | yes |  |  | yes |
-| `memory:write` | Memory items (write) | yes | yes |  |  | yes |  |  |  |
-| `research:read` | Research (read) | yes | yes |  |  | yes |  |  | yes |
-| `research:run` | Run research | yes | yes |  |  | yes |  |  |  |
-| `rpg:admin` | RPG administration | yes | yes |  |  |  |  |  |  |
-| `rpg:author` | Author RPG worlds | yes | yes |  |  | yes |  |  |  |
-| `rpg:play` | Play RPG sessions | yes | yes |  |  | yes |  |  |  |
-| `rpg:read` | RPG (read) | yes | yes |  |  | yes |  |  | yes |
-| `secrets:export` | Export credentials | yes |  |  |  |  |  |  |  |
-| `settings:read` | Settings (read) | yes | yes |  |  | yes |  |  |  |
-| `settings:write` | Settings (write) | yes | yes |  |  |  |  |  |  |
-| `story:read` | Storyteller (read) | yes | yes |  |  | yes |  |  | yes |
-| `story:write` | Storyteller (write) | yes | yes |  |  | yes |  |  |  |
-| `tools:approve` | Approve assistant tool calls | yes | yes |  | yes |  |  |  |  |
-| `tools:connections:admin` | OAuth connections and tool credentials | yes | yes |  |  |  |  |  |  |
-| `tools:execute` | Execute approved assistant tool calls | yes | yes |  |  | yes |  |  |  |
-| `tools:policy:admin` | Assistant tool enablement and approval policy | yes | yes |  |  |  |  |  |  |
-| `tools:propose` | Propose assistant tool calls | yes | yes |  |  | yes |  |  |  |
-| `tools:read` | Assistant tools (read) | yes | yes |  |  | yes |  |  | yes |
-| `trading:control` | Trading controls | yes | yes |  |  |  |  |  |  |
-| `trading:paper:order` | Place paper orders | yes | yes |  |  | yes |  |  |  |
-| `trading:read` | Trading data (read) | yes | yes |  |  | yes |  |  | yes |
-| `trading:strategies:admin` | Trading strategy administration | yes | yes |  |  |  |  |  |  |
-| `voice:clone` | Voice cloning (consent governed) | yes | yes |  |  | yes |  |  |  |
-| `voice:read` | Voice studio (read) | yes | yes |  |  | yes |  |  | yes |
-| `voice:write` | Voice studio (write) | yes | yes |  |  | yes |  |  |  |
-| `workspace:transfer` | Transfer workspace ownership | yes |  |  |  |  |  |  |  |
+| Permission | Meaning | owner | admin | agent_run | approver | guest | member | service | system | viewer |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `admin:diagnostics` | Diagnostics | yes | yes |  |  |  |  |  |  |  |
+| `admin:docs` | API documentation | yes | yes |  |  |  |  |  |  |  |
+| `admin:features` | Feature toggles | yes | yes |  |  |  |  |  |  |  |
+| `admin:metrics` | Metrics | yes | yes |  |  |  |  |  |  |  |
+| `admin:users` | User administration | yes | yes |  |  |  |  |  |  |  |
+| `agent:approve` | Approve agent capabilities | yes | yes |  | yes |  |  |  |  |  |
+| `agent:promote` | Promote agent results | yes | yes |  |  |  |  |  |  |  |
+| `agent:read` | Agent runs (read) | yes | yes | yes |  | yes | yes |  |  | yes |
+| `agent:run` | Start agent runs | yes | yes | yes |  |  | yes |  |  |  |
+| `agent:steer` | Steer agent runs | yes | yes |  |  |  | yes |  |  |  |
+| `agent:workflows:admin` | Register and manage workflows | yes | yes |  |  |  |  |  |  |  |
+| `assets:delete` | Assets (delete) | yes | yes |  |  | yes | yes |  |  |  |
+| `assets:read` | Assets (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `assets:write` | Assets (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `assistant:read` | Assistant (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `assistant:write` | Assistant (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `audiobook:read` | Audiobooks (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `audiobook:write` | Audiobooks (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `characters:read` | Character profiles (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `characters:write` | Character profiles (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `chat:read` | Chat sessions and messages (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `chat:write` | Chat sessions and messages (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `client:report` | Report browser errors | yes | yes |  |  | yes | yes |  |  | yes |
+| `companion:read` | Desktop companion (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `companion:write` | Desktop companion (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `image:generate` | Generate images | yes | yes |  |  | yes | yes |  |  |  |
+| `image:models:admin` | Image model management | yes | yes |  |  |  |  |  |  |  |
+| `image:read` | Image workspace (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `internal:service` | Internal service-to-service routes | yes |  |  |  |  |  | yes |  |  |
+| `jobs:cancel` | Cancel jobs | yes | yes |  |  | yes | yes |  |  |  |
+| `jobs:read` | Job views and event streams | yes | yes |  |  | yes | yes |  |  | yes |
+| `jobs:submit` | Submit jobs | yes | yes |  |  | yes | yes |  |  |  |
+| `memory:admin` | Memory management | yes | yes |  |  |  |  |  |  |  |
+| `memory:read` | Memory items and settings (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `memory:write` | Memory items (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `research:read` | Research (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `research:run` | Run research | yes | yes |  |  |  | yes |  |  |  |
+| `rpg:admin` | RPG administration | yes | yes |  |  |  |  |  |  |  |
+| `rpg:author` | Author RPG worlds | yes | yes |  |  | yes | yes |  |  |  |
+| `rpg:play` | Play RPG sessions | yes | yes |  |  | yes | yes |  |  |  |
+| `rpg:read` | RPG (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `secrets:export` | Export credentials | yes |  |  |  |  |  |  |  |  |
+| `settings:read` | Settings (read) | yes | yes |  |  | yes | yes |  |  |  |
+| `settings:write` | Settings (write) | yes | yes |  |  |  |  |  |  |  |
+| `story:read` | Storyteller (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `story:write` | Storyteller (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `tools:approve` | Approve assistant tool calls | yes | yes |  | yes |  |  |  |  |  |
+| `tools:connections:admin` | OAuth connections and tool credentials | yes | yes |  |  |  |  |  |  |  |
+| `tools:execute` | Execute approved assistant tool calls | yes | yes |  |  |  | yes |  |  |  |
+| `tools:policy:admin` | Assistant tool enablement and approval policy | yes | yes |  |  |  |  |  |  |  |
+| `tools:propose` | Propose assistant tool calls | yes | yes |  |  |  | yes |  |  |  |
+| `tools:read` | Assistant tools (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `trading:control` | Trading controls | yes | yes |  |  |  |  |  |  |  |
+| `trading:paper:order` | Place paper orders | yes | yes |  |  |  | yes |  |  |  |
+| `trading:read` | Trading data (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `trading:strategies:admin` | Trading strategy administration | yes | yes |  |  |  |  |  |  |  |
+| `voice:clone` | Voice cloning (consent governed) | yes | yes |  |  |  | yes |  |  |  |
+| `voice:read` | Voice studio (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `voice:write` | Voice studio (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `workspace:transfer` | Transfer workspace ownership | yes |  |  |  |  |  |  |  |  |
 
 ## Feature defaults
 

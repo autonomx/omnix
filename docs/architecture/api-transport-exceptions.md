@@ -44,6 +44,10 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/login` | 302 redirect to the identity provider |
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/callback` | 303 sign-in result redirect that sets the session cookies |
 | `src/app/security/auth/routes.py` | POST | `/api/auth/logout` | 204 empty response that clears the session cookies |
+| `src/app/security/auth/routes.py` | POST | `/api/auth/email` | 204 empty response after the account's email changes |
+| `src/app/security/auth/routes.py` | POST | `/api/auth/invites/{invite_id}/revoke` | 204 empty response after an invite link is revoked |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/google/login` | 302 redirect to Google |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/google/callback` | 303 Google sign-in result redirect that sets the session cookies |
 | `src/app/platform/agent_runtime/preview_api.py` | GET | `/api/agent-runs/{run_id}/workspace-preview/{asset_path}` | Allowlisted preview file bytes or HTML source text |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/runtime/{filename}` | Runtime script or binary bytes |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/assets/{asset_id}/{asset_path}` | Live2D model asset bytes |

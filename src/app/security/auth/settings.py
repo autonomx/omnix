@@ -6,15 +6,19 @@ from dataclasses import dataclass
 from enum import Enum
 import ipaddress
 import logging
+from typing import Literal, cast
 
 from app.config.env import env_bool, env_int, env_list, env_str
 
 logger = logging.getLogger(__name__)
 
-# Human gate (roadmap WP-4.1): existing installs keep today's unauthenticated
-# behaviour until the operator approves enforcing local auth by default. An
-# explicit OMNIX_AUTH_MODE always takes effect.
-AUTH_ENFORCED_WHEN_UNSET = False
+# Sign-in is on unless OMNIX_AUTH_MODE=disabled (WP-4.1; the owner approved the
+# default flip on 2026-10-06). Opening Omnix from the launcher still signs the
+# owner in automatically with a single-use link.
+AUTH_ENFORCED_WHEN_UNSET = True
+
+RegistrationPolicy = Literal["open", "invite", "closed"]
+GOOGLE_ISSUER = "https://accounts.google.com"
 
 
 class AuthMode(str, Enum):
@@ -43,6 +47,21 @@ class OidcSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountPolicy:
+    """Who may get an account in local mode, and how long sign-ins last."""
+
+    # open: anyone may register; invite: only with an invite link; closed: nobody.
+    registration: RegistrationPolicy = "invite"
+    guests: bool = False
+    # "Stay signed in": idle and absolute lifetime of such a session.
+    remember_ttl_seconds: int = 30 * 86400
+    # A guest account lives this long; then its session ends for good.
+    guest_ttl_seconds: int = 7 * 86400
+    # Sign in with Google, when configured (OMNIX_GOOGLE_*).
+    google: OidcSettings | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AuthSettings:
     mode: AuthMode
     enforced: bool
@@ -52,6 +71,7 @@ class AuthSettings:
     absolute_ttl_seconds: int
     login_code_ttl_seconds: int
     oidc: OidcSettings | None = None
+    accounts: AccountPolicy = AccountPolicy()
 
 
 def _oidc_settings(env: Mapping[str, str] | None) -> OidcSettings:
@@ -85,6 +105,58 @@ def _oidc_settings(env: Mapping[str, str] | None) -> OidcSettings:
         groups_claim=(env_str("OMNIX_OIDC_GROUPS_CLAIM", "groups", env=env) or "groups"),
         workspace_id=(env_str("OMNIX_OIDC_WORKSPACE_ID", "workspace:local", env=env) or "workspace:local"),
         default_role=role,
+    )
+
+
+def _google_settings(env: Mapping[str, str] | None) -> OidcSettings | None:
+    """Sign in with Google: an OIDC client for accounts.google.com, or None."""
+    client_id = (env_str("OMNIX_GOOGLE_CLIENT_ID", "", env=env) or "").strip()
+    if not client_id:
+        return None
+    secret = (env_str("OMNIX_GOOGLE_CLIENT_SECRET", "", env=env) or "").strip()
+    redirect_uri = (env_str("OMNIX_GOOGLE_REDIRECT_URI", "", env=env) or "").strip()
+    if not secret or not redirect_uri:
+        raise AuthConfigurationError(
+            "OMNIX_GOOGLE_CLIENT_ID requires OMNIX_GOOGLE_CLIENT_SECRET and OMNIX_GOOGLE_REDIRECT_URI "
+            "(…/api/auth/google/callback, registered with Google)"
+        )
+    return OidcSettings(
+        issuer=GOOGLE_ISSUER,
+        client_id=client_id,
+        client_secret=secret,
+        redirect_uri=redirect_uri,
+        scopes=("openid", "email", "profile"),
+        api_audience=None,
+        allowed_domains=tuple(
+            domain.strip().lower().lstrip("@")
+            for domain in env_list("OMNIX_GOOGLE_ALLOWED_DOMAINS", (), env=env)
+            if domain.strip()
+        ),
+        required_group=None,
+        groups_claim="groups",
+        workspace_id="",
+        default_role="member",
+    )
+
+
+def _account_policy(env: Mapping[str, str] | None) -> AccountPolicy:
+    deployment = (env_str("OMNIX_ENV", "development", env=env) or "development").strip().lower()
+    # A developer's own machine may let anyone it serves register; a deployed
+    # instance asks for an invite unless the operator opens it.
+    default_registration = "open" if deployment in {"development", "test"} else "invite"
+    registration = (env_str("OMNIX_AUTH_REGISTRATION", default_registration, env=env) or default_registration)
+    registration = registration.strip().lower()
+    if registration not in {"open", "invite", "closed"}:
+        raise AuthConfigurationError("OMNIX_AUTH_REGISTRATION must be open, invite or closed")
+    guests = env_bool("OMNIX_AUTH_GUESTS", registration == "open", env=env)
+    remember_days = env_int("OMNIX_AUTH_REMEMBER_DAYS", 30, minimum=1, maximum=365, env=env)
+    guest_days = env_int("OMNIX_AUTH_GUEST_DAYS", 7, minimum=1, maximum=90, env=env)
+    return AccountPolicy(
+        registration=cast(RegistrationPolicy, registration),
+        guests=guests,
+        remember_ttl_seconds=remember_days * 86400,
+        guest_ttl_seconds=guest_days * 86400,
+        google=_google_settings(env),
     )
 
 
@@ -122,6 +194,9 @@ def resolve_auth_settings(env: Mapping[str, str] | None = None) -> AuthSettings:
         absolute_ttl_seconds=absolute,
         login_code_ttl_seconds=60,
         oidc=_oidc_settings(env) if enforced and mode is AuthMode.OIDC else None,
+        # Accounts, guests and Google belong to local mode; in OIDC mode the
+        # organization's identity provider decides who signs in.
+        accounts=_account_policy(env) if enforced and mode is AuthMode.LOCAL else AccountPolicy(),
     )
 
 
@@ -153,7 +228,4 @@ def assert_auth_startup_allowed(
             "OMNIX_ENV=development bound to a loopback address"
         )
     if not settings.enforced:
-        logger.warning(
-            "authentication_not_enforced: OMNIX_AUTH_MODE is unset; set "
-            "OMNIX_AUTH_MODE=local to require sign-in (pending the WP-4.1 default flip)"
-        )
+        logger.warning("authentication_not_enforced")

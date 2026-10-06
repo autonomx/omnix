@@ -645,10 +645,38 @@
   },
   {
     "default": null,
+    "description": "Controls auth guests for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_GUESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "7",
+    "description": "Controls auth guest days for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_GUEST_DAYS",
+    "type": "integer"
+  },
+  {
+    "default": null,
     "description": "Controls auth mode for production.py, security.",
     "feature": "production.py, security",
     "name": "OMNIX_AUTH_MODE",
     "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls auth registration for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_REGISTRATION",
+    "type": "string"
+  },
+  {
+    "default": "30",
+    "description": "Controls auth remember days for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_REMEMBER_DAYS",
+    "type": "integer"
   },
   {
     "default": "12",
@@ -921,6 +949,34 @@
     "description": "Controls gateway startup timeout seconds for launcher.",
     "feature": "launcher",
     "name": "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls google allowed domains for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_ALLOWED_DOMAINS",
+    "type": "list"
+  },
+  {
+    "default": "",
+    "description": "Controls google client id for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls google client secret for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_CLIENT_SECRET",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls google redirect uri for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_REDIRECT_URI",
     "type": "string"
   },
   {

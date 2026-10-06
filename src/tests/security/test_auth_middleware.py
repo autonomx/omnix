@@ -247,7 +247,7 @@ def test_authentication_backend_failure_fails_closed(gateway) -> None:
 def test_unenforced_mode_passes_requests_through() -> None:
     from app.composition.gateway.main import create_gateway_app
 
-    app = create_gateway_app(auth_service=FakeAuthenticator(resolve_auth_settings({})))
+    app = create_gateway_app(auth_service=FakeAuthenticator(resolve_auth_settings({"OMNIX_AUTH_MODE": "disabled"})))
     client = _client(app)
     assert client.get(PROBE).status_code == 404
     assert client.get("/api/auth/session").json()["enforced"] is False

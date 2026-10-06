@@ -111,6 +111,104 @@ class PostgresIdentityRepository:
         )
         return self.load_context(user_id=user_id, workspace_id=workspace_id)
 
+    # Accounts (local sign-in, WP-4.1) -------------------------------------
+
+    def user_account(self, user_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT id, display_name, email, account_kind, status FROM omnix_users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"user_id": str(row[0]), "display_name": str(row[1]), "email": str(row[2]) if row[2] else None,
+                "account_kind": str(row[3]), "status": str(row[4])}
+
+    def user_by_email(self, email: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT id FROM omnix_users WHERE lower(email) = lower(%s) AND status = 'active'",
+            (email,),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def email_taken(self, email: str, *, except_user: str | None = None) -> bool:
+        row = self.connection.execute(
+            "SELECT 1 FROM omnix_users WHERE lower(email) = lower(%s) AND id IS DISTINCT FROM %s",
+            (email, except_user),
+        ).fetchone()
+        return row is not None
+
+    def update_account(self, user_id: str, *, display_name: str, email: str | None, account_kind: str) -> None:
+        self.connection.execute(
+            """UPDATE omnix_users
+                  SET display_name = %s, email = %s, account_kind = %s,
+                      revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s""",
+            (display_name, email, account_kind, user_id),
+        )
+
+    def primary_workspace(self, user_id: str) -> str | None:
+        """The workspace a sign-in opens: the user's oldest active membership."""
+        row = self.connection.execute(
+            """SELECT m.workspace_id
+                 FROM omnix_workspace_memberships m
+                 JOIN omnix_workspaces w ON w.id = m.workspace_id AND w.status = 'active'
+                WHERE m.user_id = %s AND m.status = 'active'
+                ORDER BY m.created_at, m.workspace_id
+                LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def create_account_with_workspace(
+        self,
+        *,
+        user_id: str,
+        display_name: str,
+        email: str | None,
+        account_kind: str,
+        roles: tuple[str, ...],
+        seed_settings_from: str | None = LOCAL_WORKSPACE_ID,
+    ) -> TenantContext:
+        """A new user with a workspace of their own.
+
+        The workspace starts with a copy of the installation workspace's
+        settings (providers, models, appearance), so the account works on its
+        first sign-in. Secrets are not settings: they stay in the secret store.
+        """
+        workspace_id = f"workspace:{uuid.uuid4().hex}"
+        self.connection.execute(
+            """INSERT INTO omnix_users (id, display_name, email, account_kind, metadata)
+                VALUES (%s, %s, %s, %s, %s::jsonb)""",
+            (user_id, display_name, email, account_kind, json.dumps({"provisioned_by": "sign_up"})),
+        )
+        name = "Guest workspace" if account_kind == "guest" else f"{display_name}'s workspace"
+        self.connection.execute(
+            """INSERT INTO omnix_workspaces (id, name, created_by, metadata)
+                VALUES (%s, %s, %s, %s::jsonb)""",
+            (workspace_id, name[:200], user_id, json.dumps({"personal": True, "account_kind": account_kind})),
+        )
+        self.connection.execute(
+            """INSERT INTO omnix_workspace_memberships (id, workspace_id, user_id, roles)
+                VALUES (%s, %s, %s, %s)""",
+            (f"membership:{uuid.uuid4().hex}", workspace_id, user_id, list(roles)),
+        )
+        if seed_settings_from:
+            self.connection.execute(
+                """INSERT INTO omnix_settings (workspace_id, setting_scope, setting_key, value, updated_by)
+                    SELECT %s, setting_scope, setting_key, value, %s
+                      FROM omnix_settings WHERE workspace_id = %s
+                    ON CONFLICT DO NOTHING""",
+                (workspace_id, user_id, seed_settings_from),
+            )
+        return self.load_context(user_id=user_id, workspace_id=workspace_id)
+
+    def set_membership_roles(self, *, user_id: str, workspace_id: str, roles: tuple[str, ...]) -> None:
+        self.connection.execute(
+            """UPDATE omnix_workspace_memberships SET roles = %s
+                WHERE user_id = %s AND workspace_id = %s""",
+            (list(roles), user_id, workspace_id),
+        )
+
     def get_workspace(self, context: TenantContext, workspace_id: str) -> dict[str, Any] | None:
         context.require_workspace(workspace_id)
         row = self.connection.execute(

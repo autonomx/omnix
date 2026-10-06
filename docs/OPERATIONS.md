@@ -870,13 +870,15 @@ public hostnames to `OMNIX_ALLOWED_HOSTS` and browser origins to
 
 | Value | Behaviour |
 |---|---|
-| unset | No sign-in, as before. The gateway logs `authentication_not_enforced` at startup. |
-| `local` | Sign-in required. One local owner account (`user:local`) signs in with the install credential or a launcher link. |
+| unset or `local` | Sign-in required (the default since 2026-10-06). Accounts with email and password, guests, invite links and Google sign-in, as the account settings below allow. The owner (`user:local`) is signed in automatically from the launcher and can always use the install credential. |
 | `oidc` | Sign-in through your identity provider (Authorization Code + PKCE). API clients may send `Authorization: Bearer <access token>`. |
 | `disabled` | No sign-in. Startup fails unless `OMNIX_ENV=test`, or `OMNIX_ENV=development` with a loopback `OMNIX_BIND_HOST`. |
 
-Leaving the variable unset keeps existing installations working unchanged.
-Making `local` the default is a separate, approved change (roadmap WP-4.1).
+With sign-in on, outbound provider URLs (LM Studio, OpenAI-compatible servers)
+may use loopback, but a private-network address such as `192.168.1.20` needs
+`OMNIX_ALLOWED_PRIVATE_NETWORKS` (for example `192.168.1.0/24`). Every account
+can configure providers in its own workspace, so the LAN stays closed unless
+you open it.
 
 When sign-in is required, every route needs a session except `/health`,
 `/ready`, `/api/health` and `/api/auth/*`. Unauthenticated requests get 401;
@@ -899,7 +901,8 @@ get 403 `csrf_failed`.
 Settings → Overview lists the signed-in user's sessions
 (`GET /api/auth/sessions`). Signing out one other session or all others
 (`POST /api/auth/sessions/revoke`) needs proof of identity again: the install
-credential in local mode, a sign-in within the last 10 minutes in OIDC mode.
+account's password (or, for the owner, the install credential) in local mode;
+a sign-in within the last 10 minutes in OIDC mode or for a Google-only account.
 It shares the sign-in rate limit and is audited (`auth.sessions.revoked`).
 Sign-out answers `Clear-Site-Data: "cache", "storage"`, so the browser drops
 what the app stored locally.
@@ -913,9 +916,48 @@ revoke Omnix's access in the provider's account settings.
 
 ### Local mode
 
-On first start the gateway creates a random install credential. The plaintext
-is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX);
-the database keeps only a scrypt hash.
+**Accounts.** The sign-in page offers what the account settings allow:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `OMNIX_AUTH_REGISTRATION` | `open` in development, `invite` otherwise | `open`: anyone who reaches Omnix may create an account. `invite`: only with an invite link. `closed`: nobody. |
+| `OMNIX_AUTH_GUESTS` | on when registration is `open` | One-click guest accounts. |
+| `OMNIX_AUTH_REMEMBER_DAYS` | 30 | Lifetime of a "stay signed in" session. |
+| `OMNIX_AUTH_GUEST_DAYS` | 7 | Lifetime of a guest account's session. |
+
+- **Email and password:** passwords have at least 12 characters and are stored
+  as scrypt hashes. A wrong password and an unknown email get the same answer.
+  Changing a password signs out the account's other sessions.
+- **Own workspace:** every new account gets a workspace of its own, which
+  starts with a copy of the installation workspace's settings (providers,
+  models, appearance). API keys stay in the secret store and are shared.
+- **Guests:** a guest account has its own workspace and the `guest` role: what
+  a member does, minus tools, agents, research runs, trading orders and voice
+  cloning. **Save your account** (top bar, or Settings → Your account) turns it
+  into a full account and keeps everything. A guest who signs out cannot come
+  back. Their workspace stays until an operator removes it.
+- **Invites:** an admin creates a single-use link that is valid for 7 days
+  (Settings → Your account, or `POST /api/auth/invites`). The link lets one
+  person create an account while registration is `invite`.
+- **Stay signed in:** checked by default on the sign-in page. Launcher sign-ins
+  always stay signed in on the owner's machine.
+- **The owner** (`user:local`) can add an email and a password in Settings →
+  Your account, to sign in from other devices. Setting the first password needs
+  the install credential.
+
+**Google.** Set `OMNIX_GOOGLE_CLIENT_ID`, `OMNIX_GOOGLE_CLIENT_SECRET` and
+`OMNIX_GOOGLE_REDIRECT_URI` (`<public origin>/api/auth/google/callback`,
+registered as an authorized redirect URI of a Google OAuth web client).
+`OMNIX_GOOGLE_ALLOWED_DOMAINS` limits sign-in to verified emails in the listed
+domains. A new Google account follows the registration setting, including
+invites. Accounts are never merged by email, because registration does not
+verify email. If a Google account's email already belongs to an Omnix account,
+its owner signs in with their password and chooses **Connect Google** in
+Settings.
+
+**Install credential.** On first start the gateway creates a random install
+credential. The plaintext is kept in the protected secret store (DPAPI on
+Windows, a 0600 file on POSIX); the database keeps only a scrypt hash.
 
 - **Launcher:** **Open app** signs the browser in through a single-use link
   that expires after 60 seconds.

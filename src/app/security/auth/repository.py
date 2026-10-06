@@ -53,6 +53,41 @@ class OidcLoginState:
     nonce: str
     code_verifier: str
     redirect_after: str
+    purpose: str = "oidc"
+    link_user_id: str | None = None
+    invite_token_hash: str | None = None
+    remember: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PasswordRecord:
+    user_id: str
+    salt: bytes
+    credential_hash: bytes
+    n: int
+    r: int
+    p: int
+
+
+@dataclass(frozen=True, slots=True)
+class AccountRecord:
+    """A user as sign-in sees it."""
+
+    user_id: str
+    display_name: str
+    email: str | None
+    account_kind: str
+    status: str
+    has_password: bool
+    linked_issuers: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class InviteSummary:
+    handle: str
+    note: str | None
+    created_at: datetime
+    expires_at: datetime
 
 
 _SESSION_COLUMNS = (
@@ -92,15 +127,17 @@ class PostgresAuthRepository:
         user_agent_hash: str | None,
         sliding_seconds: int,
         absolute_seconds: int,
+        own_sliding_seconds: int | None = None,
     ) -> SessionRecord:
+        """``own_sliding_seconds`` gives this session its own idle lifetime ("stay signed in")."""
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_auth_sessions
                 (id, user_id, workspace_id, auth_method, csrf_secret, user_agent_hash,
-                 expires_at, absolute_expires_at)
+                 expires_at, absolute_expires_at, sliding_seconds)
             VALUES (%s, %s, %s, %s, %s, %s,
                     CURRENT_TIMESTAMP + make_interval(secs => %s),
-                    CURRENT_TIMESTAMP + make_interval(secs => %s))
+                    CURRENT_TIMESTAMP + make_interval(secs => %s), %s)
             RETURNING {_SESSION_COLUMNS}
             """,
             (
@@ -110,8 +147,9 @@ class PostgresAuthRepository:
                 auth_method,
                 csrf_secret,
                 user_agent_hash,
-                min(sliding_seconds, absolute_seconds),
+                min(own_sliding_seconds or sliding_seconds, absolute_seconds),
                 absolute_seconds,
+                own_sliding_seconds,
             ),
         ).fetchone()
         return _session(row)
@@ -139,7 +177,7 @@ class PostgresAuthRepository:
                SET last_seen_at = CURRENT_TIMESTAMP,
                    expires_at = LEAST(
                        absolute_expires_at,
-                       CURRENT_TIMESTAMP + make_interval(secs => %s)
+                       CURRENT_TIMESTAMP + make_interval(secs => COALESCE(sliding_seconds, %s))
                    )
              WHERE id = %s AND revoked_at IS NULL
             RETURNING {_SESSION_COLUMNS}
@@ -314,6 +352,10 @@ class PostgresAuthRepository:
         code_verifier: str,
         redirect_after: str,
         ttl_seconds: int,
+        purpose: str = "oidc",
+        link_user_id: str | None = None,
+        invite_token_hash: str | None = None,
+        remember: bool = False,
     ) -> None:
         self.connection.execute(
             "DELETE FROM omnix_oidc_login_states WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 hour'"
@@ -321,10 +363,12 @@ class PostgresAuthRepository:
         self.connection.execute(
             """
             INSERT INTO omnix_oidc_login_states
-                (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, expires_at)
-            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s))
+                (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, expires_at,
+                 purpose, link_user_id, invite_token_hash, remember)
+            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s), %s, %s, %s, %s)
             """,
-            (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, ttl_seconds),
+            (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, ttl_seconds,
+             purpose, link_user_id, invite_token_hash, remember),
         )
 
     def consume_oidc_state(self, *, state_hash: str, browser_binding_hash: str) -> OidcLoginState | None:
@@ -336,13 +380,18 @@ class PostgresAuthRepository:
                AND browser_binding_hash = %s
                AND consumed_at IS NULL
                AND expires_at > CURRENT_TIMESTAMP
-            RETURNING nonce, code_verifier, redirect_after
+            RETURNING nonce, code_verifier, redirect_after, purpose, link_user_id, invite_token_hash, remember
             """,
             (state_hash, browser_binding_hash),
         ).fetchone()
         if row is None:
             return None
-        return OidcLoginState(nonce=str(row[0]), code_verifier=str(row[1]), redirect_after=str(row[2]))
+        return OidcLoginState(
+            nonce=str(row[0]), code_verifier=str(row[1]), redirect_after=str(row[2]), purpose=str(row[3]),
+            link_user_id=str(row[4]) if row[4] is not None else None,
+            invite_token_hash=str(row[5]) if row[5] is not None else None,
+            remember=bool(row[6]),
+        )
 
     def external_identity_user(self, *, issuer: str, subject: str) -> str | None:
         row = self.connection.execute(
@@ -363,3 +412,102 @@ class PostgresAuthRepository:
             """,
             (issuer, subject, user_id, email),
         )
+
+    # Accounts -------------------------------------------------------------
+
+    def has_password(self, user_id: str) -> bool:
+        row = self.connection.execute("SELECT 1 FROM omnix_user_passwords WHERE user_id = %s", (user_id,)).fetchone()
+        return row is not None
+
+    def linked_issuers(self, user_id: str) -> tuple[str, ...]:
+        rows = self.connection.execute(
+            "SELECT DISTINCT issuer FROM omnix_external_identities WHERE user_id = %s ORDER BY issuer",
+            (user_id,),
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
+    def password(self, user_id: str) -> PasswordRecord | None:
+        row = self.connection.execute(
+            """
+            SELECT user_id, salt, credential_hash, scrypt_n, scrypt_r, scrypt_p
+              FROM omnix_user_passwords WHERE user_id = %s
+            """,
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return PasswordRecord(user_id=str(row[0]), salt=bytes(row[1]), credential_hash=bytes(row[2]),
+                              n=int(row[3]), r=int(row[4]), p=int(row[5]))
+
+    def store_password(self, *, user_id: str, salt: bytes, credential_hash: bytes, n: int, r: int, p: int) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_user_passwords (user_id, salt, credential_hash, scrypt_n, scrypt_r, scrypt_p)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+               SET salt = EXCLUDED.salt, credential_hash = EXCLUDED.credential_hash,
+                   scrypt_n = EXCLUDED.scrypt_n, scrypt_r = EXCLUDED.scrypt_r, scrypt_p = EXCLUDED.scrypt_p,
+                   updated_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, salt, credential_hash, n, r, p),
+        )
+
+    # Invites --------------------------------------------------------------
+
+    def insert_invite(self, *, token_hash: str, created_by: str, note: str | None, ttl_seconds: int) -> datetime:
+        row = self.connection.execute(
+            """
+            INSERT INTO omnix_auth_invites (token_hash, created_by, note, expires_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s))
+            RETURNING expires_at
+            """,
+            (token_hash, created_by, note, ttl_seconds),
+        ).fetchone()
+        return row[0]
+
+    def invite_usable(self, token_hash: str) -> bool:
+        row = self.connection.execute(
+            """
+            SELECT 1 FROM omnix_auth_invites
+             WHERE token_hash = %s AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            """,
+            (token_hash,),
+        ).fetchone()
+        return row is not None
+
+    def consume_invite(self, token_hash: str, *, consumed_by: str) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_invites
+               SET consumed_at = CURRENT_TIMESTAMP, consumed_by = %s
+             WHERE token_hash = %s AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            RETURNING token_hash
+            """,
+            (consumed_by, token_hash),
+        ).fetchone()
+        return row is not None
+
+    def open_invites(self, created_by: str) -> list[InviteSummary]:
+        rows = self.connection.execute(
+            """
+            SELECT token_hash, note, created_at, expires_at FROM omnix_auth_invites
+             WHERE created_by = %s AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+             ORDER BY created_at DESC
+             LIMIT 100
+            """,
+            (created_by,),
+        ).fetchall()
+        return [InviteSummary(handle=str(row[0])[:SESSION_HANDLE_LENGTH], note=row[1], created_at=row[2],
+                              expires_at=row[3]) for row in rows]
+
+    def revoke_invite(self, *, created_by: str, handle: str) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_invites SET expires_at = CURRENT_TIMESTAMP
+             WHERE created_by = %s AND consumed_at IS NULL AND left(token_hash, %s) = %s
+               AND expires_at > CURRENT_TIMESTAMP
+            RETURNING token_hash
+            """,
+            (created_by, SESSION_HANDLE_LENGTH, handle),
+        ).fetchone()
+        return row is not None

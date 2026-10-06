@@ -14,6 +14,10 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
+
+# These tests read worker health, not sign-in (on by default since WP-4.1).
+_SIGN_IN_OFF = {"OMNIX_AUTH_MODE": "disabled"}
+
 def _client() -> TestClient:
     from app.composition.gateway.main import create_gateway_app
 
@@ -50,7 +54,7 @@ def test_gateway_openapi_is_available() -> None:
 
 
 def test_gateway_runtime_status_does_not_require_workers() -> None:
-    with patch.dict("os.environ", {}, clear=True):
+    with patch.dict("os.environ", _SIGN_IN_OFF, clear=True):
         client = _client()
 
         response = client.get("/api/runtime/status")
@@ -71,7 +75,7 @@ def test_gateway_runtime_status_does_not_require_workers() -> None:
 
 
 def test_gateway_worker_health_placeholder_is_explicit() -> None:
-    with patch.dict("os.environ", {}, clear=True):
+    with patch.dict("os.environ", _SIGN_IN_OFF, clear=True):
         client = _client()
 
         response = client.get("/api/workers/health")
@@ -90,7 +94,7 @@ def test_gateway_worker_health_uses_mock_mode_for_ci() -> None:
         "OMNIX_GATEWAY_MOCK_WORKERS": "1",
         "OMNIX_GATEWAY_MOCK_WORKERS_LIST": "tts,image",
     }
-    with patch.dict("os.environ", env, clear=True):
+    with patch.dict("os.environ", {**_SIGN_IN_OFF, **env}, clear=True):
         client = _client()
         response = client.get("/api/workers/health")
 
@@ -115,7 +119,7 @@ def test_gateway_runtime_status_uses_mock_workers_for_ci_smoke() -> None:
         "OMNIX_GATEWAY_MOCK_WORKERS": "1",
         "OMNIX_GATEWAY_MOCK_WORKERS_LIST": "tts,stt,image",
     }
-    with patch.dict("os.environ", env, clear=True):
+    with patch.dict("os.environ", {**_SIGN_IN_OFF, **env}, clear=True):
         client = _client()
         response = client.get("/api/runtime/status")
 
@@ -139,7 +143,7 @@ def test_gateway_worker_health_reports_unreachable_worker() -> None:
         "OMNIX_GATEWAY_WORKERS": "tts",
         "OMNIX_WORKER_TTS_URL": "http://127.0.0.1:5101",
     }
-    with patch.dict("os.environ", env, clear=True), patch('app.runtime.worker_health.urlopen', side_effect=URLError('offline')):
+    with patch.dict("os.environ", {**_SIGN_IN_OFF, **env}, clear=True), patch('app.runtime.worker_health.urlopen', side_effect=URLError('offline')):
         client = _client()
         response = client.get("/api/workers/health")
 

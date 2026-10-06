@@ -96,7 +96,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
 | `OMNIX_AUDIOBOOK_LOG_DIR` | string | — | audiobook | Controls audiobook log dir for audiobook. |
 | `OMNIX_AUTH_COOKIE_SECURE` | boolean | `false` | security | Controls auth cookie secure for security. |
+| `OMNIX_AUTH_GUESTS` | boolean | — | security | Controls auth guests for security. |
+| `OMNIX_AUTH_GUEST_DAYS` | integer | `7` | security | Controls auth guest days for security. |
 | `OMNIX_AUTH_MODE` | string | — | production.py, security | Controls auth mode for production.py, security. |
+| `OMNIX_AUTH_REGISTRATION` | string | — | security | Controls auth registration for security. |
+| `OMNIX_AUTH_REMEMBER_DAYS` | integer | `30` | security | Controls auth remember days for security. |
 | `OMNIX_AUTH_SESSION_IDLE_HOURS` | integer | `12` | security | Controls auth session idle hours for security. |
 | `OMNIX_AUTH_SESSION_MAX_DAYS` | integer | `7` | security | Controls auth session max days for security. |
 | `OMNIX_AVATAR_GENERATION_LOG_PATH` | string | — | characters | Controls avatar generation log path for characters. |
@@ -136,6 +140,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
+| `OMNIX_GOOGLE_ALLOWED_DOMAINS` | list | — | security | Controls google allowed domains for security. |
+| `OMNIX_GOOGLE_CLIENT_ID` | string | — | security | Controls google client id for security. |
+| `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
+| `OMNIX_GOOGLE_REDIRECT_URI` | string | — | security | Controls google redirect uri for security. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
 | `OMNIX_IBKR_ENABLED` | string | — | trading | Controls ibkr enabled for trading. |
 | `OMNIX_IBKR_HOST` | string | — | trading | Controls ibkr host for trading. |

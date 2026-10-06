@@ -1,4 +1,4 @@
-"""Login, logout and session endpoints under ``/api/auth`` (WP-4.1).
+"""Sign-in, account, logout and session endpoints under ``/api/auth`` (WP-4.1).
 
 These routes are public in the authentication middleware; each one
 authenticates its own input. They live under ``/api`` so the existing
@@ -22,8 +22,10 @@ from .oidc import safe_redirect_path
 from .service import (
     CSRF_COOKIE,
     CSRF_HEADER,
+    MAX_PASSWORD_LENGTH,
     SECURE_SESSION_COOKIE,
     SESSION_COOKIE,
+    AccountError,
     AuthenticatedPrincipal,
     AuthService,
     IssuedSession,
@@ -33,6 +35,27 @@ from .settings import AuthMode
 
 OIDC_TX_COOKIE = "omnix_oidc_tx"
 _OIDC_TX_PATH = "/api/auth/oidc"
+GOOGLE_TX_COOKIE = "omnix_google_tx"
+_GOOGLE_TX_PATH = "/api/auth/google"
+
+
+class AuthOptionsResponse(BaseModel):
+    """How someone may sign in here; the sign-in page shows only these."""
+
+    registration: Literal["open", "invite", "closed"] = "closed"
+    guests: bool = False
+    google: bool = False
+    install_credential: bool = False
+    min_password_length: int = 12
+
+
+class AccountResponse(BaseModel):
+    display_name: str
+    email: str | None = None
+    kind: Literal["standard", "guest"]
+    has_password: bool
+    google_linked: bool
+    is_owner: bool
 
 
 class AuthSessionResponse(BaseModel):
@@ -43,10 +66,78 @@ class AuthSessionResponse(BaseModel):
     workspace_id: str | None = None
     roles: list[str] = Field(default_factory=list)
     auth_method: str | None = None
+    options: AuthOptionsResponse = Field(default_factory=AuthOptionsResponse)
+    account: AccountResponse | None = None
 
 
 class LocalLoginRequest(BaseModel):
     credential: str = Field(min_length=1, max_length=512)
+    remember: bool = False
+
+
+class PasswordLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+    remember: bool = True
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+    display_name: str | None = Field(default=None, max_length=200)
+    invite: str | None = Field(default=None, max_length=256)
+    remember: bool = True
+
+
+class GuestUpgradeRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+    display_name: str | None = Field(default=None, max_length=200)
+    remember: bool = True
+
+
+class PasswordChangeRequest(BaseModel):
+    # The current password; for a first password, the install credential or nothing after a recent sign-in.
+    current: str | None = Field(default=None, max_length=MAX_PASSWORD_LENGTH)
+    new_password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+
+
+class PasswordChangeResponse(BaseModel):
+    signed_out_sessions: int
+
+
+class EmailChangeRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    display_name: str | None = Field(default=None, max_length=200)
+
+
+class InviteRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=200)
+
+
+class InviteResponse(BaseModel):
+    invite: str
+    path: str
+    expires_at: datetime
+
+
+class InviteSummaryResponse(BaseModel):
+    id: str
+    note: str | None = None
+    created_at: datetime
+    expires_at: datetime
+
+
+class InviteListResponse(BaseModel):
+    invites: list[InviteSummaryResponse]
+
+
+class InviteCheckResponse(BaseModel):
+    usable: bool
+
+
+class RedirectUrlResponse(BaseModel):
+    url: str
 
 
 class AuthSessionSummary(BaseModel):
@@ -140,6 +231,45 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         if previous:
             service.logout(previous)
 
+    def options_for(service: AuthService) -> AuthOptionsResponse:
+        if service.settings.mode is not AuthMode.LOCAL:
+            return AuthOptionsResponse()
+        policy = service.settings.accounts
+        return AuthOptionsResponse(
+            registration=policy.registration,
+            guests=policy.guests,
+            google=policy.google is not None,
+            install_credential=True,
+        )
+
+    def session_payload(service: AuthService, principal: AuthenticatedPrincipal) -> AuthSessionResponse:
+        account = service.account_view(principal) if service.settings.mode is AuthMode.LOCAL else None
+        return AuthSessionResponse(
+            enforced=True,
+            mode=service.settings.mode.value,
+            authenticated=True,
+            user_id=principal.user_id,
+            workspace_id=principal.context.workspace_id,
+            roles=sorted(principal.context.roles),
+            auth_method=principal.auth_method,
+            options=options_for(service),
+            account=AccountResponse(
+                display_name=account.display_name, email=account.email,
+                kind="guest" if account.kind == "guest" else "standard",
+                has_password=account.has_password, google_linked=account.google_linked, is_owner=account.is_owner,
+            ) if account is not None else None,
+        )
+
+    def signed_in_response(service: AuthService, issued: IssuedSession, request: Request,
+                           response: Response) -> AuthSessionResponse:
+        revoke_presented(service, request)
+        _set_session_cookies(response, issued, secure=_secure(service, request))
+        return session_payload(service, issued.principal)
+
+    def account_failure(exc: AccountError) -> HTTPException:
+        record_auth_rejection(exc.code)
+        return HTTPException(status_code=exc.status, detail=exc.code)
+
     @router.get("/session", response_model=AuthSessionResponse)
     def current_session(request: Request) -> AuthSessionResponse:
         service = get_service()
@@ -149,37 +279,58 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         token = presented_session(request)
         principal = service.authenticate_session(token) if token else None
         if principal is None:
-            # 200, not 401: the sign-in page reads the mode from this response.
-            return AuthSessionResponse(enforced=True, mode=service.settings.mode.value, authenticated=False)
-        return AuthSessionResponse(
-            enforced=True,
-            mode=service.settings.mode.value,
-            authenticated=True,
-            user_id=principal.user_id,
-            workspace_id=principal.context.workspace_id,
-            roles=sorted(principal.context.roles),
-            auth_method=principal.auth_method,
-        )
+            # 200, not 401: the sign-in page reads the mode and options from this response.
+            return AuthSessionResponse(enforced=True, mode=service.settings.mode.value, authenticated=False,
+                                       options=options_for(service))
+        return session_payload(service, principal)
 
     @router.post("/local/login", response_model=AuthSessionResponse, dependencies=[Depends(login_rate_limit)])
     def local_login(body: LocalLoginRequest, request: Request, response: Response) -> AuthSessionResponse:
         service = service_for(AuthMode.LOCAL)
-        issued = service.login_with_install_credential(body.credential, user_agent=_user_agent(request))
+        issued = service.login_with_install_credential(
+            body.credential, user_agent=_user_agent(request), remember=body.remember
+        )
         if issued is None:
             record_auth_rejection("invalid_credential")
             raise HTTPException(status_code=401, detail="invalid_credential")
-        revoke_presented(service, request)
-        _set_session_cookies(response, issued, secure=_secure(service, request))
-        context = issued.principal.context
-        return AuthSessionResponse(
-            enforced=True,
-            mode="local",
-            authenticated=True,
-            user_id=context.user_id,
-            workspace_id=context.workspace_id,
-            roles=sorted(context.roles),
-            auth_method=issued.principal.auth_method,
-        )
+        return signed_in_response(service, issued, request, response)
+
+    @router.post("/password/login", response_model=AuthSessionResponse, dependencies=[Depends(login_rate_limit)])
+    def password_login(body: PasswordLoginRequest, request: Request, response: Response) -> AuthSessionResponse:
+        service = service_for(AuthMode.LOCAL)
+        issued = service.login_with_password(email=body.email, password=body.password, remember=body.remember,
+                                             user_agent=_user_agent(request))
+        if issued is None:
+            record_auth_rejection("invalid_credentials")
+            # One answer for an unknown email and a wrong password.
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        return signed_in_response(service, issued, request, response)
+
+    @router.post("/register", response_model=AuthSessionResponse, status_code=201,
+                 dependencies=[Depends(login_rate_limit)])
+    def register(body: RegisterRequest, request: Request, response: Response) -> AuthSessionResponse:
+        service = service_for(AuthMode.LOCAL)
+        try:
+            issued = service.register(email=body.email, password=body.password, display_name=body.display_name,
+                                      invite=body.invite, remember=body.remember, user_agent=_user_agent(request))
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        return signed_in_response(service, issued, request, response)
+
+    @router.post("/guest", response_model=AuthSessionResponse, status_code=201,
+                 dependencies=[Depends(login_rate_limit)])
+    def guest(request: Request, response: Response) -> AuthSessionResponse:
+        service = service_for(AuthMode.LOCAL)
+        try:
+            issued = service.login_as_guest(user_agent=_user_agent(request))
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        return signed_in_response(service, issued, request, response)
+
+    @router.get("/invites/check", response_model=InviteCheckResponse)
+    def check_invite(invite: str = "") -> InviteCheckResponse:
+        service = service_for(AuthMode.LOCAL)
+        return InviteCheckResponse(usable=service.invite_status(invite))
 
     @router.get("/local/callback", response_class=RedirectResponse, status_code=303, dependencies=[Depends(login_rate_limit)])
     def local_callback(request: Request, code: str = "", next: str = "/") -> RedirectResponse:
@@ -202,6 +353,120 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             if len(supplied) != 1 or not principal.csrf_token or not hmac.compare_digest(supplied[0], principal.csrf_token):
                 raise HTTPException(status_code=403, detail="csrf_failed")
         return principal
+
+    @router.post("/guest/upgrade", response_model=AuthSessionResponse, dependencies=[Depends(login_rate_limit)])
+    def upgrade_guest(body: GuestUpgradeRequest, request: Request, response: Response) -> AuthSessionResponse:
+        service = service_for(AuthMode.LOCAL)
+        principal = signed_in(service, request, check_csrf=True)
+        try:
+            issued = service.upgrade_guest(principal, email=body.email, password=body.password,
+                                           display_name=body.display_name, remember=body.remember,
+                                           user_agent=_user_agent(request))
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        _set_session_cookies(response, issued, secure=_secure(service, request))
+        return session_payload(service, issued.principal)
+
+    @router.post("/password", response_model=PasswordChangeResponse, dependencies=[Depends(login_rate_limit)])
+    def change_password(body: PasswordChangeRequest, request: Request) -> PasswordChangeResponse:
+        """Set or change the caller's password; their other sessions are signed out."""
+        service = service_for(AuthMode.LOCAL)
+        principal = signed_in(service, request, check_csrf=True)
+        try:
+            revoked = service.change_password(principal, current=body.current, new_password=body.new_password)
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        except ReauthenticationRequired as exc:
+            record_auth_rejection("reauthentication_required")
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        return PasswordChangeResponse(signed_out_sessions=revoked)
+
+    @router.post("/email", status_code=204, dependencies=[Depends(login_rate_limit)])
+    def change_email(body: EmailChangeRequest, request: Request) -> Response:
+        service = service_for(AuthMode.LOCAL)
+        principal = signed_in(service, request, check_csrf=True)
+        try:
+            service.set_email(principal, email=body.email, display_name=body.display_name)
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        return Response(status_code=204)
+
+    def admin(service: AuthService, request: Request, *, check_csrf: bool) -> AuthenticatedPrincipal:
+        from app.security.permissions import has_permission
+
+        principal = signed_in(service, request, check_csrf=check_csrf)
+        if not has_permission(principal.context.roles, "admin:users"):
+            raise HTTPException(status_code=403, detail="permission_denied:admin:users")
+        return principal
+
+    @router.post("/invites", response_model=InviteResponse, status_code=201)
+    def create_invite(body: InviteRequest, request: Request) -> InviteResponse:
+        """A single-use link that lets one person register, for seven days."""
+        service = service_for(AuthMode.LOCAL)
+        principal = admin(service, request, check_csrf=True)
+        issued = service.create_invite(principal, note=body.note)
+        return InviteResponse(invite=issued.token, path=f"/login?invite={issued.token}", expires_at=issued.expires_at)
+
+    @router.get("/invites", response_model=InviteListResponse)
+    def list_invites(request: Request) -> InviteListResponse:
+        service = service_for(AuthMode.LOCAL)
+        principal = admin(service, request, check_csrf=False)
+        return InviteListResponse(invites=[
+            InviteSummaryResponse(id=item.handle, note=item.note, created_at=item.created_at, expires_at=item.expires_at)
+            for item in service.list_invites(principal)
+        ])
+
+    @router.post("/invites/{invite_id}/revoke", status_code=204)
+    def revoke_invite(invite_id: str, request: Request) -> Response:
+        service = service_for(AuthMode.LOCAL)
+        principal = admin(service, request, check_csrf=True)
+        if not service.revoke_invite(principal, invite_id[:16]):
+            raise HTTPException(status_code=404, detail="invite_not_found")
+        return Response(status_code=204)
+
+    def google_redirect(service: AuthService, request: Request, url: str, binding: str) -> RedirectResponse:
+        redirect = RedirectResponse(url, status_code=302)
+        # Lax: Google returns the browser with a cross-site top-level navigation.
+        redirect.set_cookie(GOOGLE_TX_COOKIE, binding, max_age=600, httponly=True, samesite="lax",
+                            secure=_secure(service, request), path=_GOOGLE_TX_PATH)
+        return redirect
+
+    @router.get("/google/login", response_class=RedirectResponse, status_code=302)
+    def google_login(request: Request, next: str = "/", invite: str = "", remember: bool = True) -> RedirectResponse:
+        service = service_for(AuthMode.LOCAL)
+        try:
+            url, binding = service.start_google_login(redirect_after=next, invite=invite or None, remember=remember)
+        except AccountError:
+            return RedirectResponse("/login?error=google_not_configured", status_code=303)
+        return google_redirect(service, request, url, binding)
+
+    @router.post("/google/link", response_model=RedirectUrlResponse)
+    def google_link(request: Request, response: Response, next: str = "/") -> RedirectUrlResponse:
+        """Start connecting Google to the signed-in account; the browser then opens ``url``."""
+        service = service_for(AuthMode.LOCAL)
+        principal = signed_in(service, request, check_csrf=True)
+        try:
+            url, binding = service.start_google_login(redirect_after=next, link_user=principal.user_id)
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        response.set_cookie(GOOGLE_TX_COOKIE, binding, max_age=600, httponly=True, samesite="lax",
+                            secure=_secure(service, request), path=_GOOGLE_TX_PATH)
+        return RedirectUrlResponse(url=url)
+
+    @router.get("/google/callback", response_class=RedirectResponse, status_code=303,
+                dependencies=[Depends(login_rate_limit)])
+    def google_callback(request: Request, code: str = "", state: str = "") -> RedirectResponse:
+        service = service_for(AuthMode.LOCAL)
+        binding = request.cookies.get(GOOGLE_TX_COOKIE) or ""
+        issued, target = service.complete_google_login(code=code, state=state, browser_binding=binding,
+                                                       user_agent=_user_agent(request))
+        redirect = RedirectResponse(safe_redirect_path(target) if not target.startswith("/login?error=")
+                                    else target, status_code=303)
+        redirect.delete_cookie(GOOGLE_TX_COOKIE, path=_GOOGLE_TX_PATH)
+        if issued is not None:
+            revoke_presented(service, request)
+            _set_session_cookies(redirect, issued, secure=_secure(service, request))
+        return redirect
 
     @router.get("/sessions", response_model=AuthSessionListResponse)
     def list_sessions(request: Request) -> AuthSessionListResponse:

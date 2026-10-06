@@ -62,6 +62,7 @@ def test_invalid_environment_configuration_fails_closed(monkeypatch, value):
 def test_launcher_initialization_exports_stored_token(monkeypatch):
     token = secrets.token_urlsafe(32)
     monkeypatch.delenv("OMNIX_SERVICE_TOKEN", raising=False)
+    monkeypatch.setenv("OMNIX_AUTH_MODE", "local")
     monkeypatch.setattr(credentials, "load_or_create_service_token", lambda: token)
     assert credentials.initialize_service_token() == token
     assert os.environ["OMNIX_SERVICE_TOKEN"] == token

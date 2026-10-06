@@ -133,6 +133,10 @@ _MEMBER = frozenset({
     "voice:read", "voice:write", "voice:clone", "image:read", "image:generate",
     "settings:read", "client:report",
 })
+_GUEST_EXCLUDED = frozenset({
+    "tools:propose", "tools:execute", "agent:run", "agent:steer", "research:run",
+    "trading:paper:order", "voice:clone",
+})
 DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(CATALOG) - _ADMIN_EXCLUDED,
     "member": _MEMBER | _MODULE_MEMBER,
@@ -144,6 +148,10 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     # An agent process proven by its run token (WP-4.6): it may act on its
     # own run through the broker and model gateway, never approve.
     "agent_run": frozenset({"agent:read", "agent:run"}),
+    # A guest account (WP-4.1): what a member does in their own workspace,
+    # minus tools and agents that act outside the conversation, trading
+    # orders, voice cloning and paid research. Signing up lifts the limits.
+    "guest": (_MEMBER | _MODULE_MEMBER) - _GUEST_EXCLUDED,
 }
 
 # Feature id -> (read permission, write permission).

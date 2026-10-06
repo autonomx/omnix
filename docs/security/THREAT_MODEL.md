@@ -6,8 +6,8 @@ Update this file when a component, trust boundary or mitigation changes.
 
 ## Scope and assets
 
-Omnix runs as a local single-user install (sign-in off, the default today)
-or as a multi-user deployment (sign-in on, several workspaces, separate
+Omnix runs as a local install (sign-in on by default since 2026-10-06; the
+owner is signed in from the launcher) or as a multi-user deployment (several workspaces, separate
 database roles, possibly several hosts).
 
 Assets, most sensitive first:
@@ -55,7 +55,9 @@ Assets, most sensitive first:
 
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
-| S | Unauthenticated access when sign-in is on | Deny-by-default authentication middleware; auto-enumerated test over every route (WP-4.1) | Sign-in stays off by default by owner decision |
+| S | Unauthenticated access | Sign-in on by default; deny-by-default authentication middleware; auto-enumerated test over every route (WP-4.1) | `OMNIX_AUTH_MODE=disabled` is refused outside test or loopback development |
+| S | Account takeover through sign-up or Google | Accounts never merged by email (sign-up does not verify email); Google identities link only from the signed-in account; passwords scrypt-hashed, at least 12 characters; unknown email and wrong password answer alike after a full scrypt run; sign-in, sign-up and guest creation rate-limited; invites single-use and expiring (WP-4.1) | An address can be registered by someone who does not own it; its owner then uses Google from a different account or asks an admin |
+| E | A guest or new account reaches more than its own workspace | Each new account gets its own workspace; guests hold the restricted `guest` role (no tools, agents, research runs, orders or voice cloning); private-network provider URLs need `OMNIX_ALLOWED_PRIVATE_NETWORKS` once sign-in is on | Guest workspaces are kept after the guest's session ends |
 | S | Session theft or replay | Random 256-bit tokens hashed at rest, sliding and absolute expiry, revocation on logout; over HTTPS a `Secure` `__Host-` cookie; users list their sessions and sign out the others after re-authenticating; sign-out clears browser storage (WP-4.1, WP-4.11) | — |
 | T | Cross-workspace writes | Request tenant bound per request (WP-4.2); repositories filter by workspace; RLS (WP-4.4) | — |
 | R | Denying a sensitive action | Append-only audit trail for approvals, executions, settings, trading control, administration, sign-in (WP-4.8) | Retention path WP-5.2 |

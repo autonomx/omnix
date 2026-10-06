@@ -48,6 +48,10 @@ def service_token(monkeypatch):
 
 
 def pytest_configure(config) -> None:
+    # Sign-in is on by default (WP-4.1). Tests that are not about sign-in run
+    # without it, including module-scoped gateways built before any per-test
+    # fixture; sign-in tests set OMNIX_AUTH_MODE (or pass settings) themselves.
+    os.environ.setdefault("OMNIX_AUTH_MODE", "disabled")
     # Before anything reads a database URL: each xdist worker gets its own database.
     from tests.conftest_databases import configure_worker_database
 
