@@ -36,6 +36,59 @@ function when(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+type Act = (action: () => Promise<unknown>, done: string, fallback: string) => Promise<void>;
+
+/** A guest keeps everything by turning the account into a full one. */
+function GuestUpgradeForm({ minLength, busy, act }: { minLength: number; busy: boolean; act: Act }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void act(
+      () => upgradeGuest({ email: email.trim(), password, display_name: name.trim() || null, remember: true }),
+      'Your account is saved. Everything you made as a guest is still here.',
+      'The account could not be created.',
+    );
+  };
+  return (
+    <form className="settings-account-form" onSubmit={submit} aria-label="Create your account">
+      <p>A guest account ends when its session does. Create an account to keep your work; nothing is lost.</p>
+      <label><span>Name</span><input value={name} autoComplete="name" onChange={(event) => setName(event.currentTarget.value)} /></label>
+      <label><span>Email</span><input type="email" required value={email} autoComplete="email" onChange={(event) => setEmail(event.currentTarget.value)} /></label>
+      <label><span>Password (at least {minLength} characters)</span><input type="password" required value={password} autoComplete="new-password" onChange={(event) => setPassword(event.currentTarget.value)} /></label>
+      <button type="submit" disabled={busy || !email.trim() || !password}>Create account</button>
+    </form>
+  );
+}
+
+/** Single-use invite links for people who should be able to register (admins). */
+function InviteLinks({ invites, busy, act }: { invites: InviteSummary[]; busy: boolean; act: Act }) {
+  const [issued, setIssued] = useState<string | null>(null);
+  const create = () => {
+    void act(async () => {
+      const invite = await createInvite(null);
+      setIssued(`${window.location.origin}${invite.path}`);
+    }, 'Invite link created. It works once, for seven days.', 'The invite link could not be created.');
+  };
+  return (
+    <div className="settings-account-invites">
+      <button type="button" disabled={busy} onClick={create}>Create invite link</button>
+      {issued ? <p><code>{issued}</code></p> : null}
+      {invites.length ? (
+        <ul aria-label="Open invites">
+          {invites.map((item) => (
+            <li key={item.id}>
+              <span>Invite {item.id.slice(0, 6)}{item.note ? ` (${item.note})` : ''}, expires {when(item.expires_at)}</span>
+              <button type="button" disabled={busy} onClick={() => void act(() => revokeInvite(item.id), 'Invite revoked.', 'The invite could not be revoked.')}>Revoke</button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 /** The signed-in account: guest upgrade, email, password, Google and invites. Hidden while sign-in is off. */
 export function AccountSection() {
   const [auth, setAuth] = useState<AuthSession | null>(null);
@@ -44,12 +97,10 @@ export function AccountSection() {
     return code ? MESSAGES[code] ?? 'Connecting Google did not complete.' : null;
   });
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [current, setCurrent] = useState('');
   const [password, setPassword] = useState('');
   const [invites, setInvites] = useState<InviteSummary[]>([]);
-  const [newInvite, setNewInvite] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     void fetchAuthSession()
@@ -69,14 +120,13 @@ export function AccountSection() {
   const account = auth?.account;
   if (!auth || !account) return null;
   const minLength = auth.options?.min_password_length ?? 12;
-  const guest = account.kind === 'guest';
 
-  async function act(action: () => Promise<unknown>, done: string, fallback: string): Promise<void> {
+  const act: Act = async (action, done, fallback) => {
     setBusy(true);
     setStatus(null);
     try {
       await action();
-      setStatus(done);
+      setStatus((previous) => previous ?? done);
       setCurrent('');
       setPassword('');
       reload();
@@ -85,33 +135,19 @@ export function AccountSection() {
     } finally {
       setBusy(false);
     }
-  }
-
-  const upgrade = (event: FormEvent) => {
-    event.preventDefault();
-    void act(
-      () => upgradeGuest({ email: email.trim(), password, display_name: name.trim() || null, remember: true }),
-      'Your account is saved. Everything you made as a guest is still here.',
-      'The account could not be created.',
-    );
   };
 
   const savePassword = (event: FormEvent) => {
     event.preventDefault();
-    void act(
-      async () => {
-        const signedOut = await changePassword({ current: current || null, new_password: password });
-        if (signedOut) setStatus(`Password saved. Signed out ${signedOut} other session${signedOut === 1 ? '' : 's'}.`);
-      },
-      'Password saved.',
-      'The password could not be saved.',
-    );
+    void act(async () => {
+      const signedOut = await changePassword({ current: current || null, new_password: password });
+      if (signedOut) setStatus(`Password saved. Signed out ${signedOut} other session${signedOut === 1 ? '' : 's'}.`);
+    }, 'Password saved.', 'The password could not be saved.');
   };
 
   const saveEmail = (event: FormEvent) => {
     event.preventDefault();
-    void act(() => changeEmail({ email: email.trim(), display_name: name.trim() || null }), 'Email saved.',
-      'The email could not be saved.');
+    void act(() => changeEmail({ email: email.trim(), display_name: null }), 'Email saved.', 'The email could not be saved.');
   };
 
   const connectGoogle = () => {
@@ -124,25 +160,11 @@ export function AccountSection() {
       });
   };
 
-  const invite = () => {
-    void act(async () => {
-      const issued = await createInvite(null);
-      setNewInvite(`${window.location.origin}${issued.path}`);
-    }, 'Invite link created. It works once, for seven days.', 'The invite link could not be created.');
-  };
-
+  const guest = account.kind === 'guest';
   return (
     <SettingsSection title="Your account" scope="session"
       description={guest ? 'You are using a guest account.' : `${account.display_name}${account.email ? ` · ${account.email}` : ''}`}>
-      {guest ? (
-        <form className="settings-account-form" onSubmit={upgrade} aria-label="Create your account">
-          <p>A guest account ends when its session does. Create an account to keep your work; nothing is lost.</p>
-          <label><span>Name</span><input value={name} autoComplete="name" onChange={(event) => setName(event.currentTarget.value)} /></label>
-          <label><span>Email</span><input type="email" required value={email} autoComplete="email" onChange={(event) => setEmail(event.currentTarget.value)} /></label>
-          <label><span>Password (at least {minLength} characters)</span><input type="password" required value={password} autoComplete="new-password" onChange={(event) => setPassword(event.currentTarget.value)} /></label>
-          <button type="submit" disabled={busy || !email.trim() || !password}>Create account</button>
-        </form>
-      ) : (
+      {guest ? <GuestUpgradeForm minLength={minLength} busy={busy} act={act} /> : (
         <>
           {!account.email ? (
             <form className="settings-account-form" onSubmit={saveEmail} aria-label="Add an email">
@@ -165,22 +187,7 @@ export function AccountSection() {
               <button type="button" disabled={busy} onClick={connectGoogle}>Connect Google</button>
             )
           ) : null}
-          {auth.roles.includes('admin') ? (
-            <div className="settings-account-invites">
-              <button type="button" disabled={busy} onClick={invite}>Create invite link</button>
-              {newInvite ? <p><code>{newInvite}</code></p> : null}
-              {invites.length ? (
-                <ul aria-label="Open invites">
-                  {invites.map((item) => (
-                    <li key={item.id}>
-                      <span>Invite {item.id.slice(0, 6)}{item.note ? ` (${item.note})` : ''}, expires {when(item.expires_at)}</span>
-                      <button type="button" disabled={busy} onClick={() => void act(() => revokeInvite(item.id), 'Invite revoked.', 'The invite could not be revoked.')}>Revoke</button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
+          {auth.roles.includes('admin') ? <InviteLinks invites={invites} busy={busy} act={act} /> : null}
         </>
       )}
       {status ? <p role="status">{status}</p> : null}

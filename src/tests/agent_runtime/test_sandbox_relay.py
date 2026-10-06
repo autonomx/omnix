@@ -10,7 +10,6 @@ import shutil
 import socket
 import subprocess
 import threading
-import time
 
 import httpx
 import pytest
@@ -19,6 +18,14 @@ from app.platform.agent_runtime import isolation
 
 RELAY = Path(isolation.__file__).resolve().parent / "sandbox_relay.mjs"
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+def _wait_until_listening(process: subprocess.Popen) -> None:
+    """The relay prints one line per route once it listens; an early exit fails the test."""
+    assert process.stdout is not None
+    announced = process.stdout.readline()
+    if not announced.startswith("relay "):
+        pytest.fail(f"relay did not start: {process.stderr.read() if process.stderr else ''}")
 
 
 def _free_port() -> int:
@@ -53,15 +60,7 @@ def relay():
     listen = _free_port()
     arguments = isolation.relay_arguments([(listen, f"127.0.0.1:{upstream.server_address[1]}")])
     process = subprocess.Popen(["node", str(RELAY), *arguments], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    deadline = time.monotonic() + 15
-    while time.monotonic() < deadline:
-        try:
-            socket.create_connection(("127.0.0.1", listen), timeout=0.2).close()
-            break
-        except OSError:
-            if process.poll() is not None:
-                pytest.fail(f"relay exited: {process.stderr.read() if process.stderr else ''}")
-            time.sleep(0.05)
+    _wait_until_listening(process)
     try:
         yield f"http://127.0.0.1:{listen}", seen
     finally:
@@ -121,15 +120,8 @@ def test_the_preview_ingress_mode_forwards_raw_bytes() -> None:
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     try:
-        deadline = time.monotonic() + 15
-        while True:
-            try:
-                client = socket.create_connection(("127.0.0.1", listen), timeout=0.2)
-                break
-            except OSError:
-                assert process.poll() is None and time.monotonic() < deadline
-                time.sleep(0.05)
-        with client:
+        _wait_until_listening(process)
+        with socket.create_connection(("127.0.0.1", listen), timeout=5) as client:
             accepted, _ = upstream.accept()
             with accepted:
                 client.sendall(b"GET /@vite/client HTTP/1.1\r\nUpgrade: websocket\r\n\r\n")

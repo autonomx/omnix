@@ -68,6 +68,20 @@ function messageFor(caught: unknown, fallback: string, minLength: number): strin
   return (caught.detail && ERROR_MESSAGES[caught.detail]) || fallback;
 }
 
+/** Existing account or new account. */
+function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
+  return (
+    <Group grow gap="xs" role="group" aria-label="Sign in or create an account">
+      {(['sign-in', 'create'] as const).map((value) => (
+        <Button key={value} type="button" variant={mode === value ? 'filled' : 'default'} aria-pressed={mode === value}
+          onClick={() => onChange(value)}>
+          {value === 'create' ? 'New account' : 'Existing account'}
+        </Button>
+      ))}
+    </Group>
+  );
+}
+
 /** Google, guest access, or why there is no sign-up here. */
 function OtherWaysIn({ options, invite, canCreate, googleHref, submitting, onGuest }: {
   options: AuthOptions;
@@ -231,22 +245,13 @@ export function LoginPage() {
           {session?.mode === 'local' ? (
             <>
               {canCreate ? (
-                <Group grow gap="xs" role="group" aria-label="Sign in or create an account">
-                  {(['sign-in', 'create'] as const).map((value) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      variant={mode === value ? 'filled' : 'default'}
-                      aria-pressed={mode === value}
-                      onClick={() => {
-                        setMode(value);
-                        setError(null);
-                      }}
-                    >
-                      {value === 'create' ? 'New account' : 'Existing account'}
-                    </Button>
-                  ))}
-                </Group>
+                <ModeToggle
+                  mode={mode}
+                  onChange={(value) => {
+                    setMode(value);
+                    setError(null);
+                  }}
+                />
               ) : null}
               <form onSubmit={submitAccount}>
                 <Stack gap="sm">
