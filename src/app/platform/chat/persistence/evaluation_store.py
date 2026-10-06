@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.platform.chat.evaluation_store import LiveChatEvaluationStore
-from app.persistence.document_store import PostgresDocumentStore
+from app.persistence.document_store import DocumentLock, PostgresDocumentStore
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +15,8 @@ from app.persistence.document_schemas import register_document_schema
 
 class PostgresLiveChatEvaluationStore(LiveChatEvaluationStore):
     """Keep evaluation/policy validation logic while replacing JSON authority."""
+
+    _lock: DocumentLock  # a cross-process document lock instead of the base's RLock
 
     def __init__(self, path: Path | None = None) -> None:
         if path is not None:

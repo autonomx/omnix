@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import ClassVar, Literal, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
@@ -92,7 +92,28 @@ def strategy_config_document_model(
     return model
 
 
-TradingStrategyConfigDocument = strategy_config_document_model(STRATEGY_REGISTRY)
+if TYPE_CHECKING:
+    class TradingStrategyConfigDocument(_StrategyConfigDocumentBase):
+        """What type checkers see; the runtime model is built from the registry below."""
+
+        strategy_id: str
+        parent_strategy_id: str | None
+        account_id: str
+        strategy_kind: str
+        strategy_version: str
+        mode: StrategyMode
+        active_universe_id: str | None
+        # The kind's own configuration model (gap pullback, Stoch RSI, ...).
+        config: Any
+        risk: StrategyRiskProfile
+        enabled: bool
+        archived_at: datetime | None
+        archived_reason: str | None
+        revision: int
+        created_at: datetime | None
+        updated_at: datetime | None
+else:
+    TradingStrategyConfigDocument = strategy_config_document_model(STRATEGY_REGISTRY)
 
 
 class StrategyEvent(BaseModel):

@@ -118,13 +118,13 @@ class AssistantContextChatRequest(BaseModel):
 
         from app.platform.chat.models import SendChatMessageRequest
 
-        validated = SendChatMessageRequest(
-            content=self.content,
-            user_turn_id=self.user_turn_id,
-            image_data_url=self.image_data_url,
-            image_data_urls=self.image_data_urls,
-            text_attachment=self.text_attachment,
-        )
+        validated = SendChatMessageRequest.model_validate({
+            "content": self.content,
+            "user_turn_id": self.user_turn_id,
+            "image_data_url": self.image_data_url,
+            "image_data_urls": self.image_data_urls,
+            "text_attachment": self.text_attachment,
+        })
         self.image_data_url = validated.image_data_url
         self.image_data_urls = list(validated.image_data_urls)
         self.user_turn_id = validated.user_turn_id

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING
 
 from app.runtime.ports import Port, required
 
-from app.conversation.contracts import InteractionSelection, SetSessionInteractionRequest
+from app.conversation.contracts import InteractionMode, InteractionSelection, SetSessionInteractionRequest, SharedMemoryAccess, TranscriptPolicy
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession, ChatSessionSummary, CreateChatSessionRequest, SendChatMessageRequest
@@ -37,7 +37,14 @@ def conversation_segments() -> Any:
     return segments()
 
 
-class _CharacterSessionMixin:
+if TYPE_CHECKING:
+    # Mixed into the prompt-assembling chat stores (JSON, in-memory, PostgreSQL).
+    from .prompt_store import ChatSessionStore as _ChatStoreBase
+else:
+    _ChatStoreBase = object
+
+
+class _CharacterSessionMixin(_ChatStoreBase):
     def segments(self, session_id: str) -> list[Any]:
         """The session's conversation segments, oldest first."""
         return conversation_segments().segments(session_id)
@@ -370,13 +377,13 @@ def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
 
 
 def _resolve_request(
-    interaction_mode: str,
+    interaction_mode: InteractionMode,
     character_id: str | None,
     voice_asset_id: str | None,
-    transcript_policy: str,
+    transcript_policy: TranscriptPolicy,
     read_memory: bool,
     write_memory: bool,
-    shared_memory_access: str,
+    shared_memory_access: SharedMemoryAccess,
 ):
     selection = InteractionSelection(
         interaction_mode=interaction_mode,

@@ -199,7 +199,7 @@ class PostgresChatRepositoryAdapter:
                     work,
                     session.id,
                     after_position=(
-                        session._window_first_position - 1 if session.transcript_is_window else -1
+                        (session._window_first_position or 0) - 1 if session.transcript_is_window else -1
                     ),
                 )
                 work.connection.execute(

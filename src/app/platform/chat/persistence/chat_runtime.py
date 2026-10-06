@@ -10,7 +10,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from app.caching.bounded_cache import bounded_lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.platform.chat.assistant_turns import default_assistant_turn_coordinator
 from app.platform.chat.character_store import (
@@ -655,7 +655,7 @@ class PostgresHistorySearchService:
                 PromptHistoryItem(
                     session_id=str(row[1]),
                     message_id=str(row[0]),
-                    role=str(row[2]),
+                    role=cast(Any, str(row[2])),
                     content=str(row[3]),
                     created_at=row[4].isoformat(),
                 )
@@ -917,7 +917,7 @@ def default_chat_store(
     accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
 ) -> PostgresCharacterChatSessionStore:
     """Reuse the authoritative chat store instead of re-running startup checks per request."""
-    store_kwargs = {
+    store_kwargs: dict[str, Any] = {
         "history_search_factory": default_history_search_service,
         "memory_service_factory": memory_service_factory,
         "memory_settings_factory": memory_settings_factory,

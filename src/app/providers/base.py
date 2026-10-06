@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Literal, Optional, Union, overload
 
 from app.runtime.http_client import HttpPolicy, PooledHttpClient
 
@@ -235,6 +235,22 @@ class BaseProvider(ABC):
         """Validate the provider configuration. Override in subclasses if needed."""
         pass
     
+    # The result's shape follows ``stream``: one response, or a stream of chunks.
+    @overload
+    def chat_completion(
+        self, messages: List[ChatMessage], model: Optional[str] = None, stream: Literal[False] = False, **kwargs: Any
+    ) -> ChatResponse: ...
+
+    @overload
+    def chat_completion(
+        self, messages: List[ChatMessage], model: Optional[str] = None, *, stream: Literal[True], **kwargs: Any
+    ) -> Iterator[ChatResponse]: ...
+
+    @overload
+    def chat_completion(
+        self, messages: List[ChatMessage], model: Optional[str] = None, stream: bool = False, **kwargs: Any
+    ) -> Union[ChatResponse, Iterator[ChatResponse]]: ...
+
     @abstractmethod
     def chat_completion(
         self,

@@ -23,7 +23,6 @@ from .compaction import (
     enqueue_compaction_job,
 )
 from .history_search import (
-    InMemoryHistorySearchService,
     build_history_recall_query,
     default_history_search_service,
     history_recall_enabled,
@@ -48,6 +47,8 @@ from .store import (
     _provider_message,
     _provider_key,
 )
+from app.platform.chat.history_search import HistorySearchService
+from app.platform.chat.compaction import ConversationSummaryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -246,8 +247,8 @@ class ChatSessionStore(JsonChatSessionStore):
         path: str | Path | None = None,
         *,
         memory_service_factory: Callable[[], Any] = default_memory_service,
-        history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
-        summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
+        history_search_factory: Callable[[], HistorySearchService] = default_history_search_service,
+        summary_repository_factory: Callable[[], ConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         job_service: Any | None = None,
         live_voice_chat_port: LiveVoiceChatPort | None = None,
         live_agent_planner: Any | None = None,
@@ -454,7 +455,7 @@ class ChatSessionStore(JsonChatSessionStore):
         source_messages[user_message.id] = user_message
         return [
             _provider_message(
-                source_messages.get(message.message_id, message),
+                source_messages.get(message.message_id or "", message),
                 content=message.content,
             )
             for message in rendered.messages
@@ -717,13 +718,12 @@ class ChatSessionStore(JsonChatSessionStore):
                 )
             finally:
                 self.discard_prompt_context(session, user_message)
-            metadata = reply.get("metadata")
-            if not isinstance(metadata, dict):
-                metadata = {}
+            provided = reply.get("metadata")
+            provided_metadata = provided if isinstance(provided, dict) else {}
             return {
                 **reply,
                 "metadata": {
-                    **metadata,
+                    **provided_metadata,
                     **self._active_memory_metadata(assembly, rendered),
                     **self._active_history_metadata(assembly),
                 },
@@ -743,7 +743,7 @@ class ChatSessionStore(JsonChatSessionStore):
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
-        completion_kwargs = (
+        completion_kwargs: dict[str, Any] = (
             {"conversation_id": session.id}
             if provider_supports(provider_id, CONVERSATION_SESSIONS)
             else {}
@@ -771,7 +771,7 @@ class ChatSessionStore(JsonChatSessionStore):
         content = (getattr(response, "content", "") or "").strip()
         if not content:
             raise RuntimeError("Chat response was empty")
-        metadata: dict[str, Any] = {
+        reply_metadata: dict[str, Any] = {
             "generation_status": "completed",
             "provider_id": provider_id,
             "model_id": model_id,
@@ -781,11 +781,11 @@ class ChatSessionStore(JsonChatSessionStore):
         }
         usage = getattr(response, "usage", None)
         if usage:
-            metadata["usage"] = usage
+            reply_metadata["usage"] = usage
         thinking = getattr(response, "thinking", None) or getattr(response, "reasoning", None)
         if thinking:
-            metadata["thinking"] = thinking
-        return {"content": content, "metadata": metadata}
+            reply_metadata["thinking"] = thinking
+        return {"content": content, "metadata": reply_metadata}
 
     def stream_provider_reply_chunks(
         self,

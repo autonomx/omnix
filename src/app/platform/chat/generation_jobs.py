@@ -12,7 +12,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, overload
 from weakref import WeakValueDictionary
 
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
@@ -47,8 +47,8 @@ _ACTIVE_JOB_STATUSES = {
     JobStatus.RETRYING,
 }
 _registry_guard = threading.Lock()
-_submission_locks = WeakValueDictionary()
-_job_commit_locks = WeakValueDictionary()
+_submission_locks: WeakValueDictionary[str, Any] = WeakValueDictionary()
+_job_commit_locks: WeakValueDictionary[str, Any] = WeakValueDictionary()
 _job_cancel_events: dict[str, CancellationToken] = {}
 _active_chat_providers: dict[str, Any] = {}
 _execution_registry_lock = threading.Lock()
@@ -88,14 +88,15 @@ class _ChatGenerationDispatcher:
         self._provider_pool: ThreadPoolExecutor | None = None
         self._provider_calls = 0
         self._outstanding = 0
-        self._ready_sessions: queue.Queue[str] = queue.Queue()
+        # None wakes a worker to stop.
+        self._ready_sessions: queue.Queue[str | None] = queue.Queue()
         self._pending: dict[str, deque[_ChatGenerationWork]] = defaultdict(deque)
         self._scheduled: set[str] = set()
         self._lock = threading.Lock()
         self._started = False
         self._closing = False
-        self._threads = []
-        self._active = {}
+        self._threads: list[threading.Thread] = []
+        self._active: dict[str, Any] = {}
         self._admission_rejections = 0
 
     def diagnostics(self):
@@ -266,6 +267,14 @@ _dispatcher = _ChatGenerationDispatcher()
 def _registry_lock(registry: MutableMapping[Any, threading.RLock], key: Any) -> threading.RLock:
     with _registry_guard:
         return registry.setdefault(key, threading.RLock())
+
+
+@overload
+def _job_cancel_event(job_id: str, *, create: Literal[True]) -> CancellationToken: ...
+
+
+@overload
+def _job_cancel_event(job_id: str, *, create: bool = False) -> CancellationToken | None: ...
 
 
 def _job_cancel_event(job_id: str, *, create: bool = False) -> CancellationToken | None:

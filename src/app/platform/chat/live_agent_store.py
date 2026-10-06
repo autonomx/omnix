@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 
 from app.platform.chat.assist.live_agent import (
@@ -291,6 +291,9 @@ def stream_live_agent_turn(
                         "review_required": False,
                     }
                 )
+                def persist_fallback_route(fallback_error: str = fallback_error) -> None:
+                    _persist_route(self, session.id, user_message, fallback, error=fallback_error)
+
                 yield from _provider_with_route(
                     _original(
                         self,
@@ -302,13 +305,7 @@ def stream_live_agent_turn(
                     ),
                     fallback,
                     error=fallback_error,
-                    persist_route=lambda fallback_error=fallback_error: _persist_route(
-                        self,
-                        session.id,
-                        user_message,
-                        fallback,
-                        error=fallback_error,
-                    ),
+                    persist_route=persist_fallback_route,
                 )
                 return
         else:
@@ -360,7 +357,7 @@ def _canonical_routing_context(
 
 def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
     requested = user_message.metadata.get("live_agent_route")
-    requested_mode = requested if requested in {"off", "auto", "agent"} else "off"
+    requested_mode: Literal["off", "auto", "agent"] = requested if requested in {"off", "auto", "agent"} else "off"
     return resolve_live_agent_route(
         content=user_message.content,
         requested_mode=requested_mode,
@@ -467,11 +464,8 @@ def _provider_with_route(
             if persist_route is not None:
                 persist_route()
                 persist_route = None
-            metadata = (
-                event.get("metadata")
-                if isinstance(event.get("metadata"), dict)
-                else {}
-            )
+            event_metadata = event.get("metadata")
+            metadata: dict[str, Any] = event_metadata if isinstance(event_metadata, dict) else {}
             event = {
                 **event,
                 "metadata": {

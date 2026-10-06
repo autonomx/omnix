@@ -199,7 +199,7 @@ def unit_of_work(
 class _JoinedUnitOfWork:
     """Nested repository operation: commit releases a savepoint, never the root."""
 
-    def __init__(self, parent: PostgresUnitOfWork) -> None:
+    def __init__(self, parent: PostgresUnitOfWork | _JoinedUnitOfWork) -> None:
         self.parent = parent
         self.name = f'omnix_join_{uuid.uuid4().hex}'
         self.completed = False

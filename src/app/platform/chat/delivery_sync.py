@@ -67,7 +67,7 @@ def persist_live_voice_delivery(details: Mapping[str, Any]) -> None:
         sync_delivery_metadata(record)
 
 
-def _count(value: object) -> int:
+def _count(value: Any) -> int:
     if isinstance(value, bool):
         return 0
     try:

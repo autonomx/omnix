@@ -125,7 +125,7 @@ def _configured_live_route() -> tuple[str | None, str | None, str]:
     provider_name = _provider_key(provider_id)
     model_id = None
     if not provider_supports(provider_name, LOADED_MODEL):
-        provider_settings = settings.get(provider_name)
+        provider_settings = settings.get(provider_name) if provider_name else None
         if isinstance(provider_settings, dict):
             model_id = _model_key(provider_settings.get("model"))
     return resolve_live_voice_chat_route(provider_id, model_id)

@@ -73,9 +73,12 @@ class ScheduledTaskFactory(Protocol):
 class RepositorySpec(Protocol):
     """Structural repository factory contract without importing persistence."""
 
-    type: object
-    factory: Callable[..., object]
-    alias: str | None
+    @property
+    def type(self) -> object: ...
+    @property
+    def factory(self) -> Callable[..., object]: ...
+    @property
+    def alias(self) -> str | None: ...
 
 
 class OutboxConsumerSpec(Protocol):

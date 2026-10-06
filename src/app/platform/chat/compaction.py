@@ -11,7 +11,7 @@ import hashlib
 import threading
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -68,6 +68,12 @@ def compaction_threshold() -> int:
 
 _SUMMARIES: dict[str, dict[str, ConversationSummary]] = {}
 _SUMMARY_LOCK = threading.RLock()
+
+
+class ConversationSummaryRepository(Protocol):
+    """Where a chat store reads a session's latest summary (in memory or PostgreSQL)."""
+
+    def latest(self, session_id: str) -> ConversationSummary | None: ...
 
 
 class InMemoryConversationSummaryRepository:

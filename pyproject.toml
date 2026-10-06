@@ -88,7 +88,6 @@ module = [
   "app.platform.assistant_tools", "app.platform.assistant_tools.*",
   "app.apps.audiobook", "app.apps.audiobook.*",
   "app.platform.characters", "app.platform.characters.*",
-  "app.platform.chat", "app.platform.chat.*",
   "app.apps.desktop_companion", "app.apps.desktop_companion.*",
   "app.platform.live_voice", "app.platform.live_voice.*",
   "app.providers", "app.providers.*",
