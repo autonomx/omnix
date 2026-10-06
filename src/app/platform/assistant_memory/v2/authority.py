@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -72,7 +72,7 @@ def _json(value: Any) -> str:
 def _readiness_receipt_from_row(row: Any) -> SpaceCutoverReadinessReceipt:
     space = MemorySpaceKey(
         principal_id=str(row[1]),
-        owner_type=str(row[2]),
+        owner_type=cast(Any, str(row[2])),
         owner_id=str(row[3]),
     )
     readiness = CutoverReadiness(
@@ -369,7 +369,7 @@ class PostgresMemoryV2AuthorityStore:
         readiness_data = dict(row[4]) if row[4] is not None else None
         epoch = MemoryAuthorityEpoch(
             epoch=int(row[0]),
-            authority=str(row[1]),
+            authority=cast(Any, str(row[1])),
             activated_at=row[2],
             previous_epoch=int(row[3]) if row[3] is not None else None,
             readiness=(
@@ -572,7 +572,7 @@ class PostgresMemoryV2AuthorityStore:
             """
         ).fetchall()
         return {
-            MemorySpaceKey(principal_id=str(row[0]), owner_type=str(row[1]), owner_id=str(row[2]))
+            MemorySpaceKey(principal_id=str(row[0]), owner_type=cast(Any, str(row[1])), owner_id=str(row[2]))
             for row in rows
         }
 

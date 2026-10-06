@@ -35,8 +35,10 @@ class MemorySnapshotView(BaseModel):
 def resolve_snapshot_view(
     service: MemoryService,
     context: MemoryScopeContext,
-    snapshot_id: str,
+    snapshot_id: str | None,
 ) -> MemorySnapshotView | None:
+    if not snapshot_id:
+        return None
     snapshot = service.repository.get_snapshot(snapshot_id)
     if snapshot is None or snapshot.session_id != context.session_id:
         return None
@@ -46,6 +48,7 @@ def resolve_snapshot_view(
     items: list[MemorySnapshotViewItem] = []
     for item in snapshot.items:
         record = service.repository.get_record(item.memory_record_id)
+        reason: str | None
         if item.revoked_at:
             reason = "snapshot_item_revoked"
         elif record is None:

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.conversation.memory_contracts import (
     MemoryConflictError,
@@ -72,7 +72,7 @@ def tenant_principal() -> str:
 
 
 def memory_space(principal_id: str, owner_type: str, owner_id: str) -> MemorySpaceKey:
-    return MemorySpaceKey(principal_id=principal_id, owner_type=owner_type, owner_id=owner_id)
+    return MemorySpaceKey(principal_id=principal_id, owner_type=cast(Any, owner_type), owner_id=owner_id)
 
 
 def _parse_time(value: str) -> datetime:
@@ -109,9 +109,9 @@ def curated_request(
         event_type=CURATED_EVENT,
         occurred_at=_parse_time(record.updated_at),
         provenance=ObservationProvenance(
-            source_type=_SOURCE_TYPE.get(record.source, "system"),
+            source_type=cast(Any, _SOURCE_TYPE.get(record.source, "system")),
             source_id=f"memory:{record.id}"[:240],
-            trust_level=TRUST_MAP[record.trust_level],
+            trust_level=cast(Any, TRUST_MAP[record.trust_level]),
             message_id=record.provenance_id[:200] if record.provenance_id else None,
         ),
         idempotency_key=idempotency_key

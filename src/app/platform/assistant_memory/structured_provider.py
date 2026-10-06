@@ -114,7 +114,7 @@ class ProviderStructuredProposalProvider:
         self.provider = provider
         self.model = model or getattr(provider.config, "model", None)
         self.timeout_seconds = max(0.1, min(float(timeout_seconds), 30.0))
-        self.gateway = StructuredOutputGateway(provider)
+        self.gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(provider)
 
     def _call(self, content: str) -> list[dict[str, Any]]:
         try:

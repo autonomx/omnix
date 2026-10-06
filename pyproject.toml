@@ -83,8 +83,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
   "app.platform.agent_runtime", "app.platform.agent_runtime.*",
-  "app.platform.assistant_memory", "app.platform.assistant_memory.*",
-  "app.platform.assistant_memory.v2", "app.platform.assistant_memory.v2.*",
   "app.platform.assistant_tools", "app.platform.assistant_tools.*",
   "app.apps.audiobook", "app.apps.audiobook.*",
   "app.platform.characters", "app.platform.characters.*",

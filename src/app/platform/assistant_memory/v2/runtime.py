@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -556,7 +556,7 @@ class PostgresMemoryV2Runtime:
                     )
                 space = MemorySpaceKey(
                     principal_id=str(receipt_row[0]),
-                    owner_type=str(receipt_row[1]),
+                    owner_type=cast(Any, str(receipt_row[1])),
                     owner_id=str(receipt_row[2]),
                 )
                 stream = connection.execute(

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.conversation.memory_contracts import (
     MemoryCandidate,
     MemoryRecord,
-    MAX_MEMORY_SNAPSHOT_ITEMS,
     MemorySnapshot,
-    MemorySnapshotItem,
 )
 from app.platform.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 
@@ -21,6 +19,7 @@ from app.runtime.pagination import bounded_count
 from app.platform.assistant_memory.persistence.repository_specs import (
     ASSISTANT_MEMORY_REPOSITORY_SPECS,
 )
+from app.platform.assistant_memory.persistence.owner_memory_rows import OwnerMemoryRowSupport
 
 
 class PostgresMemoryRepositoryAdapter:
@@ -195,6 +194,10 @@ class PostgresMemoryRepositoryAdapter:
             )
         return True
 
+    def accept_candidate(self, candidate_id: str, record: MemoryRecord, *, resolved_at: str) -> MemoryRecord:
+        """The memory service's name for approving: the stored record."""
+        return self.approve_candidate(candidate_id, record, resolved_at=resolved_at)[1]
+
     def approve_candidate(
         self,
         candidate_id: str,
@@ -268,61 +271,67 @@ class PostgresMemoryRepositoryAdapter:
             )
         return self._candidate_from_row(resolved), record
 
+    # Snapshot rows follow today's schema (migration 0010: session, token
+    # estimate, frozen item text), read and built the same way as the
+    # owner-aware store's (OwnerMemoryRowSupport).
     def create_snapshot(self, snapshot: MemorySnapshot) -> MemorySnapshot:
         with self.database.transaction() as connection:
             connection.execute(
                 """
-                INSERT INTO omnix_memory_snapshots
-                    (id, workspace_id, owner_type, owner_id, revision, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s::timestamptz)
+                INSERT INTO omnix_memory_snapshots (
+                    id, workspace_id, owner_type, owner_id, revision, status,
+                    created_at, session_id, token_estimate, refreshed_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, 'active', %s::timestamptz, %s, %s, %s::timestamptz
+                )
                 """,
                 (
                     snapshot.id,
                     self.context.workspace_id,
-                    snapshot.scope,
-                    snapshot.scope_id,
+                    snapshot.owner_type,
+                    snapshot.owner_id,
                     snapshot.revision,
-                    snapshot.status,
                     snapshot.created_at,
+                    snapshot.session_id,
+                    snapshot.token_estimate,
+                    snapshot.refreshed_at,
                 ),
             )
             for position, item in enumerate(snapshot.items):
                 connection.execute(
                     """
-                    INSERT INTO omnix_memory_snapshot_items
-                        (snapshot_id, memory_record_id, position, record_revision)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO omnix_memory_snapshot_items (
+                        snapshot_id, memory_record_id, position, record_revision, frozen_content, revoked_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s::timestamptz)
                     """,
-                    (
-                        snapshot.id,
-                        item.memory_record_id,
-                        getattr(item, "position", position),
-                        item.record_revision,
-                    ),
+                    (snapshot.id, item.memory_record_id, position, item.record_revision,
+                     item.frozen_content, item.revoked_at),
                 )
         return snapshot
 
     def get_snapshot(self, snapshot_id: str) -> MemorySnapshot | None:
         with self.database.connection() as connection:
             row = connection.execute(
-                """
-                SELECT id, owner_type, owner_id, revision, status, created_at
-                  FROM omnix_memory_snapshots
-                 WHERE id = %s AND workspace_id = %s
-                """,
+                OwnerMemoryRowSupport.snapshot_select() + " WHERE id = %s AND workspace_id = %s",
                 (snapshot_id, self.context.workspace_id),
             ).fetchone()
             if row is None:
                 return None
-            items = connection.execute(
-                """
-                SELECT memory_record_id, record_revision, position
-                  FROM omnix_memory_snapshot_items
-                 WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
-                """,
-                (snapshot_id, MAX_MEMORY_SNAPSHOT_ITEMS),
-            ).fetchall()
-        return self._snapshot(row, items)
+            items = OwnerMemoryRowSupport.snapshot_items(connection, str(row[0]))
+        return OwnerMemoryRowSupport.snapshot_from_row(row, items)
+
+    def latest_snapshot(self, session_id: str) -> MemorySnapshot | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                OwnerMemoryRowSupport.snapshot_select()
+                + " WHERE workspace_id = %s AND session_id = %s AND status = 'active'"
+                + " ORDER BY revision DESC, created_at DESC, id DESC LIMIT 1",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if row is None:
+                return None
+            items = OwnerMemoryRowSupport.snapshot_items(connection, str(row[0]))
+        return OwnerMemoryRowSupport.snapshot_from_row(row, items)
 
     def list_snapshots(
         self,
@@ -332,62 +341,41 @@ class PostgresMemoryRepositoryAdapter:
         status: str | None = None,
         limit: int = 100,
     ) -> list[MemorySnapshot]:
+        """``scope``/``scope_id`` select the owner (type and id), as they always have here."""
         clauses = ["workspace_id = %s"]
         parameters: list[Any] = [self.context.workspace_id]
-        if scope is not None:
-            clauses.append("owner_type = %s")
-            parameters.append(scope)
-        if scope_id is not None:
-            clauses.append("owner_id = %s")
-            parameters.append(scope_id)
-        if status is not None:
-            clauses.append("status = %s")
-            parameters.append(status)
+        for column, value in (("owner_type", scope), ("owner_id", scope_id), ("status", status)):
+            if value is not None:
+                clauses.append(f"{column} = %s")
+                parameters.append(value)
         parameters.append(bounded_count(limit))
         with self.database.connection() as connection:
             rows = connection.execute(
-                """
-                SELECT id, owner_type, owner_id, revision, status, created_at
-                  FROM omnix_memory_snapshots WHERE
-                """
-                + " AND ".join(clauses)
+                OwnerMemoryRowSupport.snapshot_select()
+                + " WHERE " + " AND ".join(clauses)
                 + " ORDER BY created_at DESC, id DESC LIMIT %s",
                 tuple(parameters),
             ).fetchall()
-            snapshots: list[MemorySnapshot] = []
-            for row in rows:
-                items = connection.execute(
-                    """
-                    SELECT memory_record_id, record_revision, position
-                      FROM omnix_memory_snapshot_items
-                     WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
-                    """,
-                    (row[0], MAX_MEMORY_SNAPSHOT_ITEMS),
-                ).fetchall()
-                snapshots.append(self._snapshot(row, items))
-        return snapshots
+            return [
+                OwnerMemoryRowSupport.snapshot_from_row(row, OwnerMemoryRowSupport.snapshot_items(connection, str(row[0])))
+                for row in rows
+            ]
 
     def set_snapshot_status(self, snapshot_id: str, status: str) -> MemorySnapshot:
         with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                UPDATE omnix_memory_snapshots SET status = %s
-                 WHERE id = %s AND workspace_id = %s
-                RETURNING id, owner_type, owner_id, revision, status, created_at
-                """,
+            updated = connection.execute(
+                "UPDATE omnix_memory_snapshots SET status = %s WHERE id = %s AND workspace_id = %s RETURNING id",
                 (status, snapshot_id, self.context.workspace_id),
             ).fetchone()
-            if row is None:
+            if updated is None:
                 raise MemoryNotFoundError(snapshot_id)
-            items = connection.execute(
-                """
-                SELECT memory_record_id, record_revision, position
-                  FROM omnix_memory_snapshot_items
-                 WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
-                """,
-                (snapshot_id, MAX_MEMORY_SNAPSHOT_ITEMS),
-            ).fetchall()
-        return self._snapshot(row, items)
+            row = connection.execute(
+                OwnerMemoryRowSupport.snapshot_select() + " WHERE id = %s AND workspace_id = %s",
+                (snapshot_id, self.context.workspace_id),
+            ).fetchone()
+            items = OwnerMemoryRowSupport.snapshot_items(connection, snapshot_id)
+        return OwnerMemoryRowSupport.snapshot_from_row(row, items)
+
 
     def _resolve_candidate(self, candidate_id: str, status: str, resolved_at: str) -> MemoryCandidate:
         with self.database.transaction() as connection:
@@ -455,7 +443,7 @@ class PostgresMemoryRepositoryAdapter:
             pinned=value["pinned"],
             trust_level=value["trust_level"],
             sensitivity=value["sensitivity"],
-            provenance_type=value.get("provenance_type"),
+            provenance_type=cast(Any, value.get("provenance_type")),
             provenance_id=value.get("provenance_id"),
             status=value["status"],
             revision=value["revision"],
@@ -494,7 +482,7 @@ class PostgresMemoryRepositoryAdapter:
     def _candidate(value: dict[str, Any]) -> MemoryCandidate:
         return MemoryCandidate(
             id=value["id"],
-            source_session_id=value.get("source_session_id"),
+            source_session_id=cast(str, value.get("source_session_id")),
             source_message_id=value["source_message_id"],
             candidate_fingerprint=value["candidate_fingerprint"],
             proposed_scope=value["proposed_owner_type"],
@@ -534,25 +522,6 @@ class PostgresMemoryRepositoryAdapter:
             }
         )
 
-    @staticmethod
-    def _snapshot(row: Any, item_rows: list[Any]) -> MemorySnapshot:
-        items = [
-            MemorySnapshotItem(
-                memory_record_id=str(item[0]),
-                record_revision=int(item[1]),
-                position=int(item[2]),
-            )
-            for item in item_rows
-        ]
-        return MemorySnapshot(
-            id=str(row[0]),
-            scope=str(row[1]),
-            scope_id=str(row[2]),
-            revision=int(row[3]),
-            status=str(row[4]),
-            created_at=row[5].isoformat(),
-            items=items,
-        )
 
 
 def production_memory_repository() -> PostgresMemoryRepositoryAdapter:

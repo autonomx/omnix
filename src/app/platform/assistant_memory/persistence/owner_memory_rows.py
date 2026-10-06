@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.conversation.memory_contracts import (
     MAX_MEMORY_SNAPSHOT_ITEMS,
@@ -76,12 +76,12 @@ class OwnerMemoryRowSupport:
             offset = 0
         return MemoryRecord(
             id=str(row[0]),
-            owner_type=str(row[2]),
+            owner_type=cast(Any, str(row[2])),
             owner_id=str(row[3]),
-            scope=str(row[4]),
+            scope=cast(Any, str(row[4])),
             scope_id=str(row[5]),
-            category=str(row[6]),
-            kind=kind,
+            category=cast(Any, str(row[6])),
+            kind=cast(Any, kind),
             structured_payload=payload,
             supersedes_memory_id=supersedes,
             contradiction_group=contradiction,
@@ -89,16 +89,16 @@ class OwnerMemoryRowSupport:
             normalized_content=str(row[8 + offset]),
             confidence=float(row[9 + offset]),
             pinned=bool(row[10 + offset]),
-            trust_level=str(row[11 + offset]),
-            sensitivity=str(row[12 + offset]),
-            provenance_type=(
+            trust_level=cast(Any, str(row[11 + offset])),
+            sensitivity=cast(Any, str(row[12 + offset])),
+            provenance_type=cast(Any, (
                 str(row[13 + offset]) if row[13 + offset] is not None else None
-            ),
+            )),
             provenance_id=(
                 str(row[14 + offset]) if row[14 + offset] is not None else None
             ),
-            source=str(row[15 + offset]),
-            status=str(row[16 + offset]),
+            source=cast(Any, str(row[15 + offset])),
+            status=cast(Any, str(row[16 + offset])),
             revision=int(row[17 + offset]),
             created_at=row[18 + offset].isoformat(),
             updated_at=row[19 + offset].isoformat(),
@@ -124,24 +124,24 @@ class OwnerMemoryRowSupport:
             offset = 0
         return MemoryCandidate(
             id=str(row[0]),
-            owner_type=str(row[4]),
+            owner_type=cast(Any, str(row[4])),
             owner_id=str(row[5]),
             source_session_id=str(row[1]) if row[1] is not None else "",
             source_message_id=str(row[2]),
             candidate_fingerprint=str(row[3]),
-            proposed_scope=str(row[6]),
+            proposed_scope=cast(Any, str(row[6])),
             proposed_scope_id=str(row[7]),
-            proposed_category=str(row[8]),
-            proposed_kind=kind,
+            proposed_category=cast(Any, str(row[8])),
+            proposed_kind=cast(Any, kind),
             proposed_payload=payload,
             proposed_supersedes_memory_id=supersedes,
             proposed_content=str(row[9 + offset]),
             confidence=float(row[10 + offset]),
-            source=str(row[11 + offset]),
-            trust_level=str(row[12 + offset]),
-            sensitivity=str(row[13 + offset]),
+            source=cast(Any, str(row[11 + offset])),
+            trust_level=cast(Any, str(row[12 + offset])),
+            sensitivity=cast(Any, str(row[13 + offset])),
             extraction_metadata=dict(row[14 + offset] or {}),
-            status=str(row[15 + offset]),
+            status=cast(Any, str(row[15 + offset])),
             created_at=row[16 + offset].isoformat(),
             resolved_at=(
                 row[17 + offset].isoformat()
@@ -154,7 +154,7 @@ class OwnerMemoryRowSupport:
     def snapshot_from_row(row: Any, item_rows: list[Any]) -> MemorySnapshot:
         return MemorySnapshot(
             id=str(row[0]),
-            owner_type=str(row[1]),
+            owner_type=cast(Any, str(row[1])),
             owner_id=str(row[2]),
             revision=int(row[3]),
             created_at=row[4].isoformat(),

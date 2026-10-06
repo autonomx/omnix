@@ -183,7 +183,7 @@ def _process_claimed_memory_job(
     settings = load_memory_runtime_settings()
     rollout = companion_rollout_policy(settings)
     service = None
-    proposals = []
+    proposals: list[Any] = []
     if not rollout.review_candidates_enabled and not rollout.automatic_direct_assertions_enabled:
         result.skipped_reasons.append("rollout_stage_disabled")
     elif session is None:
@@ -215,7 +215,7 @@ def _process_claimed_memory_job(
             )
             result.skipped_reasons.extend(skipped)
     with execution.write_result(service):
-        if service is not None:
+        if service is not None and session is not None and message is not None:
             for proposal in proposals:
                 action, entity = consolidate_structured_proposal(
                     service,

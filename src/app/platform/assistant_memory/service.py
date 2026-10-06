@@ -25,9 +25,10 @@ from .policy import (
     move_scope_decision,
     source_requires_approval,
 )
-from .repository import InMemoryMemoryRepository, MemoryNotFoundError
+from .repository import InMemoryMemoryRepository, MemoryNotFoundError, MemoryRepository
 from .scope import scope_id_for
 from .selection import MemorySelection, select_memory_records
+from typing import Any, cast
 
 
 class MemoryPolicyError(ValueError):
@@ -63,7 +64,7 @@ def _candidate_fingerprint(
 class MemoryService:
     def __init__(
         self,
-        repository: InMemoryMemoryRepository | None = None,
+        repository: MemoryRepository | None = None,
         *,
         write_guard: Callable[[], None] | None = None,
     ) -> None:
@@ -74,7 +75,7 @@ class MemoryService:
                 repository = production_memory_repository()
             else:
                 repository = InMemoryMemoryRepository()
-        self.repository = repository
+        self.repository: MemoryRepository = repository
         self._write_guard = write_guard
 
     def _assert_write_allowed(self) -> None:
@@ -185,7 +186,7 @@ class MemoryService:
             proposed_content=content.strip(),
             confidence=confidence,
             source=source,
-            trust_level=trust_level,
+            trust_level=cast(Any, trust_level),
             sensitivity=sensitivity,
             extraction_metadata=dict(extraction_metadata or {}),
             created_at=now,

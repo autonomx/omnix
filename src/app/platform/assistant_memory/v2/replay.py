@@ -147,18 +147,18 @@ class PostgresMemoryV2DerivedReplayValidator:
                     assertions[item.assertion_id] = item
                     if item.policy is not None:
                         policies[("assertion", item.assertion_id)] = item.policy
-                for item in payload.episodes:
-                    episodes[item.episode_id] = item
-                    if item.policy is not None:
-                        policies[("episode", item.episode_id)] = item.policy
-                for item in payload.relationships:
-                    relationships[item.relationship_id] = item
-                    if item.policy is not None:
-                        policies[("relationship", item.relationship_id)] = item.policy
-                for item in payload.affect:
-                    affect[item.affect_id] = item
-                    if item.policy is not None:
-                        policies[("affect", item.affect_id)] = item.policy
+                for episode in payload.episodes:
+                    episodes[episode.episode_id] = episode
+                    if episode.policy is not None:
+                        policies[("episode", episode.episode_id)] = episode.policy
+                for relationship in payload.relationships:
+                    relationships[relationship.relationship_id] = relationship
+                    if relationship.policy is not None:
+                        policies[("relationship", relationship.relationship_id)] = relationship.policy
+                for affect_item in payload.affect:
+                    affect[affect_item.affect_id] = affect_item
+                    if affect_item.policy is not None:
+                        policies[("affect", affect_item.affect_id)] = affect_item.policy
         except RedactedDecisionSetError as exc:
             return DerivedReplayReport(
                 matches=False,

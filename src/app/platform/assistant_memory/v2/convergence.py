@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -187,7 +187,9 @@ class PostgresMemoryV2DerivedCoordinator:
 
     @staticmethod
     def _validate_payload_space(space: MemorySpaceKey, payload: DerivedPlanPayload) -> None:
-        items = (*payload.assertions, *payload.episodes, *payload.relationships, *payload.affect)
+        items: tuple[GraphAssertion | Episode | RelationshipState | AffectObservation, ...] = (
+            *payload.assertions, *payload.episodes, *payload.relationships, *payload.affect
+        )
         if any(item.space != space for item in items):
             raise DerivedConvergenceError("derived plan crosses MemorySpaceKey authority")
 
@@ -574,20 +576,20 @@ class PostgresMemoryV2DerivedCoordinator:
                     declared_visibility=episode.visibility_scopes,
                     governance_revision=prepared.expected_governance_revision,
                 )
-                normalized = episode.model_copy(
+                normalized_episode = episode.model_copy(
                     update={"visibility_scopes": policy.effective_visibility, "policy": policy}
                 )
-                self._write_episode(connection, normalized)
+                self._write_episode(connection, normalized_episode)
                 PostgresMemoryV2DerivedStateStore.write_policy(
                     connection,
                     space=space,
                     item_type="episode",
-                    ref_id=normalized.episode_id,
+                    ref_id=normalized_episode.episode_id,
                     policy=policy,
                     derived_revision=next_revision,
                 )
                 policies.append(policy)
-                normalized_episodes.append(normalized)
+                normalized_episodes.append(normalized_episode)
 
             normalized_relationships: list[RelationshipState] = []
             for relationship in prepared.payload.relationships:
@@ -611,18 +613,18 @@ class PostgresMemoryV2DerivedCoordinator:
                     declared_visibility=(),
                     governance_revision=prepared.expected_governance_revision,
                 )
-                normalized = relationship.model_copy(update={"policy": policy})
-                self._write_relationship(connection, normalized)
+                normalized_relationship = relationship.model_copy(update={"policy": policy})
+                self._write_relationship(connection, normalized_relationship)
                 PostgresMemoryV2DerivedStateStore.write_policy(
                     connection,
                     space=space,
                     item_type="relationship",
-                    ref_id=normalized.relationship_id,
+                    ref_id=normalized_relationship.relationship_id,
                     policy=policy,
                     derived_revision=next_revision,
                 )
                 policies.append(policy)
-                normalized_relationships.append(normalized)
+                normalized_relationships.append(normalized_relationship)
 
             normalized_affect: list[AffectObservation] = []
             for affect in prepared.payload.affect:
@@ -634,18 +636,18 @@ class PostgresMemoryV2DerivedCoordinator:
                     declared_visibility=(),
                     governance_revision=prepared.expected_governance_revision,
                 )
-                normalized = affect.model_copy(update={"policy": policy})
-                self._write_affect(connection, normalized)
+                normalized_affect_item = affect.model_copy(update={"policy": policy})
+                self._write_affect(connection, normalized_affect_item)
                 PostgresMemoryV2DerivedStateStore.write_policy(
                     connection,
                     space=space,
                     item_type="affect",
-                    ref_id=normalized.affect_id,
+                    ref_id=normalized_affect_item.affect_id,
                     policy=policy,
                     derived_revision=next_revision,
                 )
                 policies.append(policy)
-                normalized_affect.append(normalized)
+                normalized_affect.append(normalized_affect_item)
 
             computed_plan = {
                 "assertions": [item.model_dump(mode="json") for item in normalized_assertions],
@@ -906,7 +908,7 @@ class PostgresMemoryV2DerivedCoordinator:
         return ConsolidationDecisionSet(
             decision_set_id=decision_set_id,
             space=MemorySpaceKey(
-                principal_id=str(row[0]), owner_type=str(row[1]), owner_id=str(row[2])
+                principal_id=str(row[0]), owner_type=cast(Any, str(row[1])), owner_id=str(row[2])
             ),
             input_observation_from=int(row[3]),
             input_observation_through=int(row[4]),

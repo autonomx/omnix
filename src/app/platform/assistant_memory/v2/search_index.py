@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -107,11 +107,11 @@ def _policy_from_columns(row: Any, start: int) -> DerivedPolicyEnvelope | None:
     if row[start] is None:
         return None
     return DerivedPolicyEnvelope(
-        sensitivity=str(row[start]),
+        sensitivity=cast(Any, str(row[start])),
         effective_visibility=tuple(
             VisibilityScope.model_validate(item) for item in row[start + 1]
         ),
-        trust_class=str(row[start + 2]),
+        trust_class=cast(Any, str(row[start + 2])),
         source_observation_ids=tuple(str(item) for item in row[start + 3]),
         source_assertion_ids=tuple(str(item) for item in row[start + 4]),
         source_governance_revision=int(row[start + 5]),
@@ -414,6 +414,7 @@ class PostgresMemoryV2SearchIndex:
         """Entries matching ``text``, or exactly ``ref_ids`` (semantic matches), under the same visibility."""
         if not visible_scopes:
             return []
+        match_value: str | list[str]
         if ref_ids is not None:
             if not ref_ids:
                 return []

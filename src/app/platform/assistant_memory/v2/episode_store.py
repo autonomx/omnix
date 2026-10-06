@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -28,7 +28,7 @@ def _episode_from_row(row: Any, observation_ids: tuple[str, ...], assertion_ids:
     scopes = tuple(VisibilityScope.model_validate(item) for item in row[4])
     return Episode(
         episode_id=str(row[0]),
-        space=MemorySpaceKey(principal_id=str(row[1]), owner_type=str(row[2]), owner_id=str(row[3])),
+        space=MemorySpaceKey(principal_id=str(row[1]), owner_type=cast(Any, str(row[2])), owner_id=str(row[3])),
         visibility_scopes=scopes,
         title=str(row[5]),
         summary=str(row[6]),

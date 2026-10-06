@@ -1,10 +1,9 @@
 """Backend-owned Chat and Character memory scope resolution."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 from app.conversation.contracts import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
 
-import os
 import re
 from typing import Any
 
@@ -62,7 +61,7 @@ def resolve_session_memory_scope(session: Any) -> MemoryScopeContext:
     interaction_mode = getattr(session, "interaction_mode", "system")
     character_id = getattr(session, "character_id", None)
     owner_type: MemoryOwnerType = "character" if interaction_mode == "character" else "system"
-    owner_id = character_id if owner_type == "character" else SYSTEM_MEMORY_OWNER_ID
+    owner_id = str(character_id or "") if owner_type == "character" else SYSTEM_MEMORY_OWNER_ID
     if owner_type == "character" and not owner_id:
         raise ValueError("character session is missing character_id")
     return resolve_chat_scope(

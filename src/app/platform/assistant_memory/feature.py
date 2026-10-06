@@ -67,7 +67,7 @@ def _chat_memory(_context: FeatureContext) -> Any:
 def _router(context: FeatureContext) -> APIRouter:
     router = APIRouter()
     services = context.services
-    kwargs = {"chat_store_factory": lambda: services.chat}
+    kwargs: dict[str, Any] = {"chat_store_factory": lambda: services.chat}
     settings_service = getattr(services, "settings", None)
     if settings_service is not None:
         from app.platform.assistant_memory.persistence.settings_store import (

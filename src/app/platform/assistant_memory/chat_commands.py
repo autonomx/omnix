@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import re
-from typing import Literal, Protocol
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from app.platform.chat.contracts import explicit_memory_mutation_allowed
-from app.conversation.contracts import ChatSession
+from app.conversation.contracts import ChatSession, ChatSessionMutationPort
 
 from .contracts import (
     MemoryService,
@@ -39,11 +39,6 @@ class MemoryCommandResult(BaseModel):
     memory_ids: list[str] = []
 
 
-class SessionStoreLike(Protocol):
-    def get_session(self, session_id: str) -> ChatSession | None: ...
-    def _save_session(self, session: ChatSession) -> None: ...
-
-
 _SAVE_PATTERN = re.compile(
     r"^save\s+as\s+(global|workspace|project|session)\s+"
     r"(preference|fact|project|relationship|instruction)\s*:\s*(.+)$",
@@ -65,8 +60,8 @@ def parse_memory_command(content: str) -> MemoryCommand | None:
     if match:
         return MemoryCommand(
             kind="save",
-            scope=match.group(1).casefold(),
-            category=match.group(2).casefold(),
+            scope=cast(Any, match.group(1).casefold()),
+            category=cast(Any, match.group(2).casefold()),
             content=match.group(3).strip(),
         )
     match = _UPDATE_PATTERN.match(text)
@@ -120,7 +115,7 @@ def _read_rejected(session: ChatSession, command: MemoryCommand) -> MemoryComman
 
 
 def execute_memory_command(
-    store: SessionStoreLike,
+    store: ChatSessionMutationPort,
     service: MemoryService,
     session_id: str,
     user_message_id: str,
@@ -207,13 +202,13 @@ def execute_memory_command(
         store._save_session(current)
         return MemoryCommandResult(content="Memory is disabled for this Chat. Saved records were not deleted.", command="disable", mutated=True)
 
-    record = service.repository.get_record(command.memory_id or "")
-    if record is None or record not in service.list_active(context):
+    current_record = service.repository.get_record(command.memory_id or "")
+    if current_record is None or current_record not in service.list_active(context):
         return MemoryCommandResult(content="That memory ID is not available in this Chat's scope.", command="update", mutated=False)
     updated = service.edit_memory(
         context,
-        record.id,
+        current_record.id,
         content=command.content,
-        expected_revision=record.revision,
+        expected_revision=current_record.revision,
     )
     return MemoryCommandResult(content="Updated the memory. Refresh active Chat memory to use the revised text.", command="update", mutated=True, memory_ids=[updated.id])

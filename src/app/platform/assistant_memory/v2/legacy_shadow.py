@@ -4,7 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from app.conversation.memory_contracts import MemoryRecord
@@ -144,7 +144,7 @@ class LegacyMemoryV2Importer:
                 provenance=ObservationProvenance(
                     source_type="migration",
                     source_id=f"v1-memory:{record.id}"[:240],
-                    trust_level=trust,
+                    trust_level=cast(Any, trust),
                 ),
                 idempotency_key=f"legacy-memory:{digest}",
                 observation_id=legacy_observation_id(space, record.id, record.revision),

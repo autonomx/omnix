@@ -7,7 +7,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import date, datetime, time as clock_time, timedelta
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -67,7 +67,7 @@ class TemporalRetrievalResult(BaseModel):
                     scope=record.scope,
                     category=record.category,
                     revision=record.revision,
-                    source=source,
+                    source=cast(Any, source),
                 )
             )
         return result

@@ -44,7 +44,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -143,12 +143,12 @@ class ShadowRunReport:
 def _record_from_row(row: Sequence[Any]) -> MemoryRecord:
     return MemoryRecord(
         id=str(row[0]),
-        owner_type=str(row[2]),
+        owner_type=cast(Any, str(row[2])),
         owner_id=str(row[3]),
-        scope=str(row[4]),
+        scope=cast(Any, str(row[4])),
         scope_id=str(row[5]),
-        category=str(row[6]),
-        kind=str(row[7]),
+        category=cast(Any, str(row[6])),
+        kind=cast(Any, str(row[7])),
         structured_payload=dict(row[8] or {}),
         supersedes_memory_id=str(row[9]) if row[9] is not None else None,
         contradiction_group=str(row[10]) if row[10] is not None else None,
@@ -156,12 +156,12 @@ def _record_from_row(row: Sequence[Any]) -> MemoryRecord:
         normalized_content=str(row[12]),
         confidence=float(row[13]),
         pinned=bool(row[14]),
-        trust_level=str(row[15]),
-        sensitivity=str(row[16]),
-        provenance_type=str(row[17]) if row[17] is not None else None,
+        trust_level=cast(Any, str(row[15])),
+        sensitivity=cast(Any, str(row[16])),
+        provenance_type=cast(Any, str(row[17]) if row[17] is not None else None),
         provenance_id=str(row[18]) if row[18] is not None else None,
-        source=str(row[19]),
-        status=str(row[20]),
+        source=cast(Any, str(row[19])),
+        status=cast(Any, str(row[20])),
         revision=int(row[21]),
         created_at=row[22].isoformat(),
         updated_at=row[23].isoformat(),
@@ -225,7 +225,7 @@ def load_imported(database: PostgresDatabase) -> dict[MemorySpaceKey, list[Impor
                 (after, _PAGE_SIZE),
             ).fetchall()
         for row in page:
-            space = MemorySpaceKey(principal_id=str(row[1]), owner_type=str(row[2]), owner_id=str(row[3]))
+            space = MemorySpaceKey(principal_id=str(row[1]), owner_type=cast(Any, str(row[2])), owner_id=str(row[3]))
             imported[space].append(
                 ImportedObservation(
                     observation_id=str(row[0]),
@@ -324,8 +324,8 @@ class MemoryV2ShadowRunner:
             invalid_rows = [row for row in invalid_rows if (row.owner_type, row.owner_id) in self.owners]
 
         invalid: dict[tuple[str, str], int] = defaultdict(int)
-        for row in invalid_rows:
-            invalid[(row.owner_type, row.owner_id)] += 1
+        for invalid_row in invalid_rows:
+            invalid[(invalid_row.owner_type, invalid_row.owner_id)] += 1
         skipped = set(invalid)
         for owner_type, owner_id in sorted(skipped):
             report.skipped_owners.append({

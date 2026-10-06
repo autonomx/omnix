@@ -140,7 +140,7 @@ def register_memory_management_routes(
         def assistant_memory_archived_endpoint(session_id: str) -> MemoryListResponse:
             _, _, context = read_context(session_id)
             service = memory_service_factory()
-            records = []
+            records: list[MemoryRecord] = []
             for scope in ("global", "workspace", "project", "session"):
                 scope_id = {
                     "global": context.profile_id,

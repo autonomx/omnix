@@ -68,7 +68,7 @@ class PostgresMemoryV2EmbeddingIndex:
                 ).fetchall()
             }
         missing = [digest for digest in texts if digest not in stored]
-        vectors = []
+        vectors: list[tuple[str, Any]] = []
         for start in range(0, len(missing), _BATCH):
             batch = missing[start:start + _BATCH]
             vectors.extend(zip(batch, embedder.embed([texts[digest] for digest in batch], kind="passage")))

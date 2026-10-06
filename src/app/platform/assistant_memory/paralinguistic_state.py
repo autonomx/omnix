@@ -121,7 +121,7 @@ def _utcnow(value: datetime | None = None) -> datetime:
 def _finite_metric(metadata: dict[str, Any], *names: str) -> float:
     for name in names:
         value = metadata.get(name)
-        if isinstance(value, bool):
+        if value is None or isinstance(value, bool):
             continue
         try:
             parsed = float(value)

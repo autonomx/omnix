@@ -97,11 +97,16 @@ class OutboxConsumerSpec(Protocol):
 class SettingSpec(Protocol):
     """Structural settings contract without importing the settings kernel."""
 
-    key: str
-    value_type: type
-    default: object
-    feature: str
-    writable: bool
+    @property
+    def key(self) -> str: ...
+    @property
+    def value_type(self) -> type: ...
+    @property
+    def default(self) -> object: ...
+    @property
+    def feature(self) -> str: ...
+    @property
+    def writable(self) -> bool: ...
 
 
 class PermissionSpec(Protocol):

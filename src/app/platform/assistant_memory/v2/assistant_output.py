@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -44,11 +44,11 @@ def _state_from_row(row: Any) -> AssistantOutputState:
     return AssistantOutputState(
         space=MemorySpaceKey(
             principal_id=str(row[0]),
-            owner_type=str(row[1]),
+            owner_type=cast(Any, str(row[1])),
             owner_id=str(row[2]),
         ),
         correlation_id=str(row[3]),
-        visibility_scope=VisibilityScope(kind=str(row[4]), scope_id=str(row[5])),
+        visibility_scope=VisibilityScope(kind=cast(Any, str(row[4])), scope_id=str(row[5])),
         generated_text=str(row[6]),
         delivered_text=str(row[7]) if row[7] is not None else None,
         experienced_prefix=str(row[8]),
@@ -292,6 +292,7 @@ class PostgresMemoryV2AssistantOutputLifecycle:
             state = _state_from_row(row)
             if state.delivered_text is None:
                 raise AssistantOutputLifecycleError("delivery must be recorded before finalization")
+            observation: Observation | None
             if state.finalized:
                 observation = (
                     self.observation_store.get(space, state.experienced_observation_id)
@@ -300,7 +301,7 @@ class PostgresMemoryV2AssistantOutputLifecycle:
                 )
                 return state, observation
 
-            observation: Observation | None = None
+            observation = None
             if state.experienced_prefix:
                 observation = self.observation_store.append(
                     ObservationAppendRequest(

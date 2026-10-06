@@ -112,7 +112,7 @@ def derive_policy_envelope(
             }
         )
     )
-    material = {
+    material: dict[str, Any] = {
         "sensitivity": sensitivity,
         "effective_visibility": [item.model_dump(mode="json") for item in visibility],
         "trust_class": _effective_trust(evidence, inherited_policies),

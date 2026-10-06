@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -36,11 +36,11 @@ def _json(value: Any) -> str:
 
 def _policy_from_row(row: Any, *, offset: int = 1) -> DerivedPolicyEnvelope:
     return DerivedPolicyEnvelope(
-        sensitivity=str(row[offset]),
+        sensitivity=cast(Any, str(row[offset])),
         effective_visibility=tuple(
             VisibilityScope.model_validate(item) for item in row[offset + 1]
         ),
-        trust_class=str(row[offset + 2]),
+        trust_class=cast(Any, str(row[offset + 2])),
         source_observation_ids=tuple(str(item) for item in row[offset + 3]),
         source_assertion_ids=tuple(str(item) for item in row[offset + 4]),
         source_governance_revision=int(row[offset + 5]),

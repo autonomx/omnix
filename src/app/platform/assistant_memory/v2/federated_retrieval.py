@@ -184,13 +184,13 @@ class FederatedMemoryV2Retriever:
 
         revisions_by_key: dict[tuple[str, str, str, int], RetrievalSourceRevision] = {}
         for revision in source_revisions:
-            key = (
+            revision_key = (
                 revision.source_space.principal_id,
                 revision.source_space.owner_type,
                 revision.source_space.owner_id,
                 revision.grant_revision,
             )
-            revisions_by_key[key] = revision
+            revisions_by_key[revision_key] = revision
         revisions = tuple(
             sorted(
                 revisions_by_key.values(),

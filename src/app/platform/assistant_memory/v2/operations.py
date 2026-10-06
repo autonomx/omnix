@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -92,7 +92,7 @@ class PostgresMemoryV2ConvergenceWorker:
     def _space(row: Any, offset: int = 0) -> MemorySpaceKey:
         return MemorySpaceKey(
             principal_id=str(row[offset]),
-            owner_type=str(row[offset + 1]),
+            owner_type=cast(Any, str(row[offset + 1])),
             owner_id=str(row[offset + 2]),
         )
 

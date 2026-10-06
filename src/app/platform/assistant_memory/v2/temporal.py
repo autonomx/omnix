@@ -47,6 +47,12 @@ def _same_value(left: GraphValue, right: GraphValue | None) -> bool:
     return right is not None and left.model_dump(mode="json") == right.model_dump(mode="json")
 
 
+def _claim_value(claim: TemporalClaim) -> GraphValue:
+    if claim.value is None:
+        raise ValueError(f"temporal claim {claim.predicate!r} has no value to assert")
+    return claim.value
+
+
 def _assertion_id(space: MemorySpaceKey, observation: Observation, claim: TemporalClaim) -> str:
     material = {
         "space": space.model_dump(mode="json"),
@@ -139,7 +145,7 @@ def apply_temporal_claim(
             visibility_scopes=(observation.visibility_scope,),
             subject=claim.subject,
             predicate=claim.predicate,
-            object=claim.value,
+            object=_claim_value(claim),
             domain=claim.domain,
             confidence=claim.confidence,
             valid_from=claim.effective_at,
@@ -157,7 +163,7 @@ def apply_temporal_claim(
             visibility_scopes=(observation.visibility_scope,),
             subject=claim.subject,
             predicate=claim.predicate,
-            object=claim.value,
+            object=_claim_value(claim),
             domain=claim.domain,
             confidence=claim.confidence,
             valid_from=claim.effective_at,
@@ -190,7 +196,7 @@ def apply_temporal_claim(
         visibility_scopes=(observation.visibility_scope,),
         subject=claim.subject,
         predicate=claim.predicate,
-        object=claim.value,
+        object=_claim_value(claim),
         domain=claim.domain,
         confidence=claim.confidence,
         valid_from=claim.effective_at,
