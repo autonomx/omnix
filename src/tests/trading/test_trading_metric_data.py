@@ -232,3 +232,13 @@ def test_metric_service_routes_each_external_data_family() -> None:
     assert service.metric("crypto:BINANCE:spot:BTC-USDT", "binance.open_interest", "1h") == "binance"
     assert service.metric("equity:NASDAQ:NVDA", "yahoo.analyst_price_forecast", "1d") == "yahoo"
     assert service.metric("crypto:BINANCE:spot:BTC-USDT", "blockchain.hash_rate", "1d") == "blockchain"
+
+
+def test_the_default_metric_service_constructs_without_an_injected_cache() -> None:
+    """The metric API and monitor build the service with no arguments."""
+    from app.apps.trading.cache import TradingMarketDataCache
+    from app.apps.trading.metric_data import TradingMetricDataService
+
+    service = TradingMetricDataService()
+    assert isinstance(service.cache, TradingMarketDataCache)
+    assert service.binance.cache is service.cache

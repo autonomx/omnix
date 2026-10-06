@@ -12,7 +12,6 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -1012,10 +1011,7 @@ class TradingMetricDataService:
         yahoo: YahooFundamentalMetricAdapter | None = None,
         blockchain: BlockchainMetricAdapter | None = None,
     ) -> None:
-        self.cache = cache or TradingMarketDataCache(
-            max_entries=256,
-            cache_dir=Path("resources/cache/trading/metrics"),
-        )
+        self.cache = cache or TradingMarketDataCache(max_entries=256)
         self.binance = binance or BinanceDerivativesMetricAdapter(cache=self.cache)
         self.yahoo = yahoo or YahooFundamentalMetricAdapter(cache=self.cache)
         self.blockchain = blockchain or BlockchainMetricAdapter(cache=self.cache)
