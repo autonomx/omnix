@@ -182,6 +182,29 @@ def test_agent_runtime_routes_require_a_run_token_for_that_run(gateway) -> None:
     assert _client(app, **authorization).get(PROBE).status_code == 401
 
 
+def test_relayed_sandbox_requests_reach_only_agent_runtime_routes() -> None:
+    """With sign-in off, a sandboxed agent must not act as the owner (WP-4.7)."""
+    from dataclasses import replace
+
+    from app.composition.gateway.main import create_gateway_app
+    from app.security.run_tokens import SANDBOX_RELAY_HEADER, issue_run_token
+    from tests.support.auth import enforced_local_settings
+
+    unenforced = FakeAuthenticator(replace(enforced_local_settings(), enforced=False))
+    app = create_gateway_app(auth_service=unenforced)
+    relayed = {SANDBOX_RELAY_HEADER: "1"}
+    approve = {"command_type": "approve", "payload": {"approval_id": "a-1"}}
+    # Relayed: refused before any handler, whatever the method or route.
+    response = _client(app, **relayed).post("/api/agent-runs/run-1/commands", json=approve)
+    assert (response.status_code, response.json()["detail"]) == (403, "sandbox_route_refused")
+    assert _client(app, **relayed).get("/api/assistant/tools/config").status_code == 403
+    # The agent's own routes still work through the relay with its run token.
+    token = issue_run_token(run_id="run-1", workspace_id="workspace:local", owner="worker", caps_digest="d")
+    agent = {**relayed, "Authorization": f"OmnixRun {token}", "X-Omnix-Agent-Run-Id": "run-1"}
+    probe = _client(app, **agent).get("/api/agent-model/v1/__probe__")
+    assert probe.status_code == 404
+
+
 def test_cors_preflight_is_answered_before_authentication(gateway) -> None:
     app, _ = gateway
     origin = "http://127.0.0.1:5173"

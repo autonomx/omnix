@@ -4,8 +4,10 @@ A Git worktree is change isolation only. A run that can change its workspace
 (edit, write, command or test capability) or that asks for strong isolation
 runs in the Docker sandbox: a read-only container without capabilities, with
 memory, CPU and pid limits, a private home under /tmp, and a network whose only
-reachable endpoint is the Omnix broker relay. When the sandbox is unavailable
-such a run fails closed, unless the operator sets
+reachable endpoint is the Omnix broker relay, which forwards only the
+agent-runtime routes (broker and model gateway) and refuses the rest of the
+gateway. When the sandbox is unavailable such a run fails closed, unless the
+operator sets
 ``OMNIX_AGENT_ALLOW_UNSANDBOXED=true``: then it runs supervised, every command
 needs approval, and the override is audited and shown on the run.
 """
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 from app.config.env import env_bool, env_str, environment
 from app.runtime.net import CONTAINER_ALL_INTERFACES
+from app.security.run_tokens import AGENT_RUNTIME_PATTERNS
 from app.security.run_tokens import TOKEN_ENVIRONMENT_KEY as RUN_TOKEN_ENVIRONMENT_KEY
 
 from dataclasses import dataclass
@@ -36,6 +39,9 @@ MUTATING_CAPABILITIES = frozenset({"workspace.edit", "workspace.write", "workspa
 DEFAULT_SANDBOX_IMAGE = "omnix-agent-sandbox:pi-0.85.1"
 SANDBOX_NETWORK = "omnix-agent-sandbox"
 RELAY_CONTAINER = "omnix-agent-broker-relay"
+# Bumped when the relay's behaviour changes, so a running relay of an older
+# version (the raw TCP forwarder before v2) is replaced on the next run.
+RELAY_VERSION = "v2"
 SANDBOX_HOME = "/tmp/home"
 _DOCKER_TIMEOUT_SECONDS = 30
 
@@ -97,6 +103,16 @@ def _relay_routes(urls: list[str]) -> list[tuple[int, str]]:
     return sorted(ports.items())
 
 
+def relay_arguments(routes: list[tuple[int, str]]) -> list[str]:
+    """The relay's arguments: its gateway routes and the only paths it forwards."""
+    allowed = "^(?:" + "|".join(AGENT_RUNTIME_PATTERNS) + ")$"
+    return [*(f"{port}={target}" for port, target in routes), f"--allow={allowed}"]
+
+
+def relay_signature(routes: list[tuple[int, str]]) -> str:
+    return RELAY_VERSION + ";" + ",".join(f"{port}={target}" for port, target in routes)
+
+
 def _through_relay(url: str) -> str:
     parts = urlsplit(url)
     port = parts.port or (443 if parts.scheme == "https" else 80)
@@ -147,7 +163,8 @@ class DockerStrongIsolation:
 
         The network is ``--internal``: containers on it reach nothing outside
         it. The relay is the one container on it with a route out, and it
-        forwards only the gateway ports the run uses to the gateway host.
+        forwards only the gateway ports the run uses to the gateway host, and
+        on them only the agent-runtime routes (broker and model gateway).
         """
         if self.operator_network:
             return
@@ -157,7 +174,7 @@ class DockerStrongIsolation:
             if created.returncode != 0 and "already exists" not in created.stderr:
                 raise AgentIsolationError(f"could not create the agent sandbox network: {created.stderr.strip()}")
         routes = _relay_routes(urls)
-        signature = ",".join(f"{port}={target}" for port, target in routes)
+        signature = relay_signature(routes)
         current = _docker(self.docker, "inspect", "--format",
                           '{{index .Config.Labels "omnix.relay.routes"}}|{{.State.Running}}', RELAY_CONTAINER)
         if current.returncode == 0 and current.stdout.strip() == f"{signature}|true":
@@ -173,7 +190,7 @@ class DockerStrongIsolation:
             "--add-host", "host.docker.internal:host-gateway",
             "--mount", f"type=bind,source={extension_dir},target=/omnix-agent-runtime,readonly",
             self.image, "node", "/omnix-agent-runtime/sandbox_relay.mjs",
-            *(f"{port}={target}" for port, target in routes),
+            *relay_arguments(routes),
         )
         if started.returncode != 0:
             raise AgentIsolationError(f"could not start the agent sandbox relay: {started.stderr.strip()}")
@@ -385,7 +402,9 @@ def start_sandboxed_preview(
         "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "--memory", "128m", "--pids-limit", "64",
         "--mount", f"type=bind,source={extension_dir},target=/omnix-agent-runtime,readonly",
-        sandbox.image, "node", "/omnix-agent-runtime/sandbox_relay.mjs", f"{port}={preview}:{port}",
+        # Ingress into the preview (dev server and its websocket reload), not
+        # a way out of the sandbox: forward raw bytes.
+        sandbox.image, "node", "/omnix-agent-runtime/sandbox_relay.mjs", "--tcp", f"{port}={preview}:{port}",
     )
     connected = (
         _docker(sandbox.docker, "network", "connect", sandbox.network, relay) if started.returncode == 0 else started

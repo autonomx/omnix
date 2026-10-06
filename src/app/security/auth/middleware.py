@@ -24,7 +24,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.observability.metrics import record_auth_rejection
 from app.runtime.tenant_context import LOCAL_USER_ID, LOCAL_WORKSPACE_ID, TenantContext
-from app.security.run_tokens import RunTokenClaims
+from app.security.run_tokens import AGENT_RUNTIME_PATTERNS, SANDBOX_RELAY_HEADER, RunTokenClaims
 from app.security.service_token import valid_service_token
 
 from .service import (
@@ -46,16 +46,6 @@ INTERNAL_PREFIXES = ("/internal/",)
 # Routes called by the Pi broker, guard and model-provider extensions. They
 # accept only a run token for the run they name (WP-4.6), never a session or
 # a bare run id header; the list is pinned by a test so it cannot grow.
-AGENT_RUNTIME_PATTERNS = (
-    r"/api/agent-model/v1/.+",
-    r"/api/agent-runs/[^/]+/planning/[a-z_-]+",
-    r"/api/agent-runs/[^/]+/run-change-set",
-    r"/api/agent-runs/[^/]+/capabilities/[^/]+",
-    r"/api/agent-runs/[^/]+/command-authorization",
-    r"/api/agent-runs/[^/]+/workspace-authorization",
-    r"/api/agent-runs/[^/]+/budget/tool",
-    r"/api/agent-runs/[^/]+/run-token",
-)
 _AGENT_RUNTIME_PATH = re.compile("^(?:" + "|".join(AGENT_RUNTIME_PATTERNS) + ")$")
 _AGENT_RUN_PATH = re.compile(r"^/api/agent-runs/([^/]+)/")
 AGENT_RUN_ROLE = "agent_run"
@@ -181,6 +171,12 @@ class AuthenticationMiddleware:
                 return
             scope.setdefault("state", {})[PRINCIPAL_STATE_KEY] = run_principal
             await self.app(scope, receive, send)
+            return
+        if _header_values(scope, SANDBOX_RELAY_HEADER.encode("ascii")):
+            # A sandboxed agent reaches only its broker and model gateway,
+            # whether or not sign-in is enforced (WP-4.7). The relay refuses
+            # other paths first; this holds if it ever does not.
+            await self._reject(scope, receive, send, 403, "sandbox_route_refused")
             return
         authenticator = self._authenticator_or_none()
         if authenticator is None or not authenticator.settings.enforced:

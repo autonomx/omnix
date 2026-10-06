@@ -143,6 +143,7 @@ asks). At most `OMNIX_AGENT_MAX_CONCURRENT_RUNS` agents run at once.
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
 | I | An agent exfiltrates workspace data over the network | Internal Docker network; the relay forwards only the gateway's broker and model-gateway ports; the run token is accepted only for that run's routes (WP-4.6/4.7) | Data can still leave through governed capabilities the run was issued (e.g. a web search query) |
+| E | Sandboxed agent code calls the rest of the gateway (approves its own run, loosens tool policy), which without sign-in would act as the local owner | The relay forwards HTTP only on the agent-runtime routes and refuses every other path and upgrade; the gateway refuses relayed requests outside those routes (`x-omnix-sandbox-relay`) | — |
 | E | Agent-edited code runs on the host (dev server, test runner) | Commands and the workspace preview run inside the sandbox | On Windows hosts, host-installed native dependencies (node_modules, virtualenvs) do not run in the Linux sandbox; projects need a sandbox image with their toolchain or the unsandboxed override |
 | T | An agent reads the person's home (SSH keys, tokens) | Home is a per-run directory (`/tmp/home` in the container) | — |
 
