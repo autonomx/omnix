@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     CampaignBibleSnapshot,
     WorldForgeProposal,
     apply_world_forge_proposal,

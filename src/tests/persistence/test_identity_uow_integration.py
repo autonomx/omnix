@@ -8,7 +8,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import IdempotencyConflict, RevisionConflict
 from app.persistence.identity_service import (
-    bootstrap_local_tenant,
+    ensure_local_identity,
     get_workspace,
     rename_workspace,
 )
@@ -49,8 +49,8 @@ def test_local_bootstrap_is_idempotent_and_tenant_scoped() -> None:
     database = _database()
     try:
         _reset(database)
-        first = bootstrap_local_tenant(database)
-        second = bootstrap_local_tenant(database)
+        first = ensure_local_identity(database)
+        second = ensure_local_identity(database)
         assert first == second
         workspace = get_workspace(database, first)
         assert workspace["id"] == first.workspace_id
@@ -70,7 +70,7 @@ def test_workspace_rename_is_revisioned_and_idempotent() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         first = rename_workspace(
             database,
             context,
@@ -118,7 +118,7 @@ def test_cross_workspace_access_is_denied() -> None:
     database = _database()
     try:
         _reset(database)
-        local = bootstrap_local_tenant(database)
+        local = ensure_local_identity(database)
         with database.transaction() as connection:
             connection.execute(
                 "INSERT INTO omnix_users (id, display_name) VALUES (%s, %s)",
@@ -150,7 +150,7 @@ def test_uncommitted_unit_of_work_rolls_back() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.audit.append(
                 context,

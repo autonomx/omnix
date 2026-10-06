@@ -5,19 +5,19 @@ from datetime import datetime, timezone
 import inspect
 import time
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidencePolicy,
     EvidenceReceipt,
     EvidenceRequirement,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
     evaluate_evidence_set,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_task_parser import (
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.semantic_task_parser import (
     ProviderSemanticTaskParser,
     _SEMANTIC_TASK_CONTRACT,
 )

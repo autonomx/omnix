@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.metric_data import (
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.metric_data import (
     BinanceDerivativesMetricAdapter,
     BinanceLiquidationBuffer,
     BlockchainMetricAdapter,
@@ -12,7 +12,7 @@ from app.trading.metric_data import (
     TradingMetricDataService,
     YahooFundamentalMetricAdapter,
 )
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class FakeResponse:

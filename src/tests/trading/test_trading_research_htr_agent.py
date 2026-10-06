@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.trading.research.contracts import (
+from app.apps.trading.research.contracts import (
     ResearchActionProposal,
     ResearchActionRecord,
     ResearchCoverage,
@@ -15,10 +15,10 @@ from app.trading.research.contracts import (
     ValidationFeatureResult,
     fingerprint,
 )
-from app.trading.research.coordinator import _research_status
-from app.trading.research.hermes_contract import TradingHermesNextActionDecision
-from app.trading.research.policy import evaluate_research_policy
-from app.trading.strategy_research_policy import apply_research_policy_to_quality
+from app.apps.trading.research.coordinator import _research_status
+from app.apps.trading.research.hermes_contract import TradingHermesNextActionDecision
+from app.apps.trading.research.policy import evaluate_research_policy
+from app.apps.trading.strategy_research_policy import apply_research_policy_to_quality
 
 
 def _request(**updates):
@@ -174,10 +174,10 @@ def test_score_only_changes_deterministic_quality_boundary():
         validation=_validation("primary_catalyst_confirmed", "score_only"),
     )
     positive_quality = apply_research_policy_to_quality(
-        positive, base_quality_score=7, minimum_quality_score=7,
+        positive, base_quality_score=7, minimum_quality_score=7, score_adjustment_enabled=True,
     )
     negative_quality = apply_research_policy_to_quality(
-        negative, base_quality_score=7, minimum_quality_score=7,
+        negative, base_quality_score=7, minimum_quality_score=7, score_adjustment_enabled=True,
     )
     assert positive.score_adjustment == 1
     assert positive_quality.allowed is True and positive_quality.adjusted_quality_score == 8
@@ -195,10 +195,10 @@ def test_soft_gate_is_stronger_than_score_only_but_not_a_direct_hard_gate():
     assert decision.allowed is True
     assert decision.score_adjustment == -2
     marginal = apply_research_policy_to_quality(
-        decision, base_quality_score=8, minimum_quality_score=7,
+        decision, base_quality_score=8, minimum_quality_score=7, score_adjustment_enabled=True,
     )
     exceptional = apply_research_policy_to_quality(
-        decision, base_quality_score=10, minimum_quality_score=7,
+        decision, base_quality_score=10, minimum_quality_score=7, score_adjustment_enabled=True,
     )
     assert marginal.allowed is False and marginal.adjusted_quality_score == 6
     assert exceptional.allowed is True and exceptional.adjusted_quality_score == 8
@@ -212,3 +212,45 @@ def test_hard_gate_fails_closed_when_required_evidence_is_missing():
     )
     assert decision.allowed is False
     assert decision.reason_code == "RESEARCH_HARD_GATE_IMMEDIATE_SUPPLY_RISK"
+
+
+def test_research_never_changes_the_score_unless_the_configuration_opts_in():
+    """WP-8.3: research may block an entry, but changes its score only by opt-in."""
+    positive = evaluate_research_policy(
+        strategy_version="1.2.0",
+        features=_features(primary_catalyst_confirmed=True),
+        validation=_validation("primary_catalyst_confirmed", "score_only"),
+    )
+    quality = apply_research_policy_to_quality(positive, base_quality_score=6, minimum_quality_score=7)
+    assert quality.adjusted_quality_score == 6
+    assert quality.score_adjustment == 0
+    assert quality.proposed_score_adjustment == 1
+    assert quality.score_adjustment_enabled is False
+    # The +1 that would have lifted a marginal setup over the threshold does not apply.
+    assert quality.allowed is False
+
+    opted_in = apply_research_policy_to_quality(
+        positive, base_quality_score=6, minimum_quality_score=7, score_adjustment_enabled=True,
+    )
+    assert opted_in.adjusted_quality_score == 7 and opted_in.allowed is True
+
+
+def test_the_research_score_opt_in_is_off_by_default_and_part_of_the_strategy_configuration():
+    from app.apps.trading.strategies.models import GapPullbackConfig
+
+    assert GapPullbackConfig().research_score_adjustment_enabled is False
+    assert GapPullbackConfig(research_score_adjustment_enabled=True).research_score_adjustment_enabled is True
+
+
+def test_the_opt_in_leaves_qualified_profile_fingerprints_unchanged_while_off():
+    """Qualification evidence is bound to the profile fingerprint; the new field must not move it."""
+    from app.apps.trading.strategy_v2_qualification import (
+        FROZEN_V2_PROFILE_FINGERPRINT,
+        frozen_v2_config,
+        v2_profile_fingerprint,
+    )
+
+    config = frozen_v2_config()
+    assert v2_profile_fingerprint(config) == FROZEN_V2_PROFILE_FINGERPRINT
+    opted_in = config.model_copy(update={"research_score_adjustment_enabled": True})
+    assert v2_profile_fingerprint(opted_in) != FROZEN_V2_PROFILE_FINGERPRINT

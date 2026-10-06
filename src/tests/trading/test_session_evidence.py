@@ -1,14 +1,14 @@
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from app.trading.session_evidence import (
+from app.apps.trading.session_evidence import (
     begin_reconciliation,
     build_session_evidence_manifest,
     defer_reconciliation,
     file_evidence_input,
     finalize_reconciliation,
 )
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 AT = datetime(2026, 9, 17, 13, 30, tzinfo=timezone.utc)

@@ -10,7 +10,7 @@ set "SCRIPT_DIR=%~dp0"
 set "OMNIX_REPO_ROOT=%SCRIPT_DIR%..\.."
 for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
 
-set "CONDA_ROOT=%USERPROFILE%\miniconda3"
+if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
 set "RPG_TTS_ENV=rpg-tts"
 set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\%RPG_TTS_ENV%\python.exe"
 
@@ -41,7 +41,7 @@ if not exist "%OMNIX_MODELS_ROOT%" mkdir "%OMNIX_MODELS_ROOT%"
 if not exist "%OMNIX_TTS_MODELS_DIR%" mkdir "%OMNIX_TTS_MODELS_DIR%"
 
 echo [1/4] Checking huggingface_hub in rpg-tts...
-"%RPG_TTS_PYTHON%" -c "import huggingface_hub; print('huggingface_hub', huggingface_hub.__version__)"
+"%RPG_TTS_PYTHON%" -c "import sys, huggingface_hub; assert sys.version_info[:2] == (3, 11), sys.version; print('huggingface_hub', huggingface_hub.__version__)"
 if errorlevel 1 (
     echo ERROR: huggingface_hub is not available in %RPG_TTS_ENV%
     pause

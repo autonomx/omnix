@@ -19,7 +19,7 @@ This directory documents the application that is currently implemented on `main`
 
 ## Application map
 
-The supported browser UI lives under `src/apps/web`. `/` redirects to `/chatbot`.
+The supported browser UI lives under `web`. `/` redirects to `/chatbot`.
 
 | Route | Workspace | What it provides |
 | --- | --- | --- |
@@ -117,14 +117,14 @@ Images should be committed under `docs/images` and referenced from a guide with 
 The full setup, including PostgreSQL and optional workers, is in [SETUP.md](SETUP.md). The shortest development path is:
 
 ```bash
-# Python dependencies
-pip install -r requirements.txt
+# Python dependencies (Python 3.11)
+python -m pip install --require-hashes -r requirements.txt
 
 # Frontend dependencies
 npm install
 
 # Start the FastAPI web gateway
-PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
 # In another terminal, start the browser app
 npm run web:dev
@@ -164,16 +164,16 @@ npm --workspace @omnix/web run api:check
 
 ## Source-of-truth locations
 
-- `src/apps/web/src/app/modules.ts` — routed application module catalog.
-- `src/apps/web/src/features/` — browser feature workspaces and shared assistant UI.
-- `src/app/gateway/` — browser-facing FastAPI gateway and compatibility handoff.
-- `src/app/agent_runtime/` — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.
-- `src/app/assistant_tools/` — governed assistant-tool adapters and policy projection.
+- `web/src/app/modules.ts` — routed application module catalog.
+- `web/src/features/` — browser feature workspaces and shared assistant UI.
+- `src/app/composition/gateway/` — browser-facing FastAPI gateway and compatibility handoff.
+- `src/app/platform/agent_runtime/` — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.
+- `src/app/platform/assistant_tools/` — governed assistant-tool adapters and policy projection.
 - `src/app/providers/` — provider/model integration layer.
 - `src/app/jobs/` — shared job/run contracts and stores.
 - `src/app/assets/` — shared asset/artifact system.
-- `src/app/rpg/` — deterministic RPG domain and APIs.
-- `src/app/trading/` — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.
+- `src/app/apps/rpg/` — deterministic RPG domain and APIs.
+- `src/app/apps/trading/` — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.
 - `src/app/persistence/` — PostgreSQL persistence contracts and transaction policy.
 - `scripts/requirements/` — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in `requirements.txt`.
 - `resources/` — models, data, logs, and generated/runtime resources.
@@ -181,4 +181,4 @@ npm --workspace @omnix/web run api:check
 
 ## Compatibility boundary
 
-The classic `src/templates` and `src/static` browser UI is retired. The old compatibility application server is also retired. Both `src/main.py` and `src/launch.py` start the shared gateway. Browser behavior belongs in `src/apps/web` and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.
+The classic `src/templates` and `src/static` browser UI is retired. The old compatibility application server is also retired. Both `src/main.py` and `src/launch.py` start the shared gateway. Browser behavior belongs in `web` and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.

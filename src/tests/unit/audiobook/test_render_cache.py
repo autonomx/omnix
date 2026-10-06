@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.audiobook.render_cache import valid_render_blob
+from app.apps.audiobook.render_cache import valid_render_blob
 from app.persistence.blob_store import LocalBlobStore
 from app.providers.audio_base import AudioProviderCapability, BaseTTSProvider
 

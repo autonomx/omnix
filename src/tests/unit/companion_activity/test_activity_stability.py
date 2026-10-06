@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.contracts import EvidenceProposition
-from app.companion_activity.runtime import CompanionActivityRuntime
-from app.companion_activity.state import empty_activity_state
+from app.platform.companion_activity.contracts import EvidenceProposition
+from app.platform.companion_activity.runtime import CompanionActivityRuntime
+from app.platform.companion_activity.state import empty_activity_state
 
 NOW = datetime(2026, 9, 14, 23, 30, tzinfo=timezone.utc)
 

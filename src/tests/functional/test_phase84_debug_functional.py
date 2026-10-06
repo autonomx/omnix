@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import copy
 
-from app.rpg.debug.core import DebugCore
-from app.rpg.debug.trace_builder import DebugTraceBuilder
-from app.rpg.ux.models import ActionResultPayload, SceneUXPayload
-from app.rpg.ux.payload_builder import UXPayloadBuilder
-from app.rpg.ux.presenters import UXPresenter
+from app.apps.rpg.debug.core import DebugCore
+from app.apps.rpg.debug.trace_builder import DebugTraceBuilder
+from app.apps.rpg.ux.models import ActionResultPayload, SceneUXPayload
+from app.apps.rpg.ux.payload_builder import UXPayloadBuilder
+from app.apps.rpg.ux.presenters import UXPresenter
 
 # ======================================================================
 # Helpers — lightweight mock loop

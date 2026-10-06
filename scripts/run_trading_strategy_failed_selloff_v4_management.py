@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from datetime import time, timedelta
 from decimal import Decimal
 
-import app.trading.strategy_backtest as _bt
-from app.trading.paper import PaperOrder, paper_fill_decision, paper_protection_trigger
-from app.trading.strategy_timeframes import resample_final_bars
+import app.apps.trading.strategy_backtest as _bt
+from app.apps.trading.paper import PaperOrder, paper_fill_decision, paper_protection_trigger
+from app.apps.trading.strategy_timeframes import resample_final_bars
 import scripts.run_trading_strategy_failed_selloff_v2_sweep as _v2
 
 

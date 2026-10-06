@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from app.gateway.rpg_foreground_turn_record import (
+from app.apps.rpg.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_MAX_BYTES,
     build_foreground_turn_record,
 )
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -20,11 +20,11 @@ from app.rpg.narrative_engine import (
     NarrativeBlock,
     ValidationReport,
 )
-from app.rpg.narrative_replay import (
+from app.apps.rpg.narrative_replay import (
     CanonicalNarrativeReplayError,
     hydrate_canonical_narrative_replay,
 )
-from app.rpg.presentation.turn_response_budget import encoded_size_bytes
+from app.apps.rpg.presentation.turn_response_budget import encoded_size_bytes
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -157,14 +157,3 @@ def test_repository_response_identity_mismatch_fails_closed() -> None:
             campaign_id=response.campaign_id,
             repository=_Repository(),
         )
-
-
-def test_gateway_hydrates_replay_before_single_canonical_presenter() -> None:
-    source = (ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(
-        encoding="utf-8"
-    )
-    hydration = source.index("hydrate_canonical_narrative_replay(")
-    presenter = source.index("present_authoritative_turn(")
-    assert hydration < presenter
-    assert source.count("present_authoritative_turn(") == 1
-    assert 'rpg_pipeline_span("turn.narrative_replay_hydration")' in source

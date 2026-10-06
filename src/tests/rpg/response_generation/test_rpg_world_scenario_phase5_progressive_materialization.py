@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds.progressive_materialization import (
+from app.apps.rpg.worlds.progressive_materialization import (
     _affected_slots,
     _updated_plan,
 )
-from app.rpg.worlds.starter_bubble import (
+from app.apps.rpg.worlds.starter_bubble import (
     build_starter_bubble,
     build_starter_map_definitions,
     predictive_materialization_queue,

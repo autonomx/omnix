@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_data_quality import cross_check_analysis_prices
-from app.trading.prospective_prediction_evidence import SIPTradeEvent, select_analysis_session_prices
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_data_quality import cross_check_analysis_prices
+from app.apps.trading.prospective_prediction_evidence import SIPTradeEvent, select_analysis_session_prices
 
 UTC = timezone.utc
 SESSION = date(2026, 9, 16)

@@ -8,6 +8,8 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import expect
 
+pytestmark = pytest.mark.playwright
+
 
 def test_welcome_speaker_button_e2e(page):
     """Complete end-to-end test for welcome speaker button."""

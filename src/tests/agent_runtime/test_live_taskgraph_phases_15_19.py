@@ -42,29 +42,29 @@ from typing import Literal
 
 import pytest
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.active_objective import (
     ActiveObjective,
     advance_active_objective,
 )
-from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
-from app.agent_runtime.evidence import evidence_coverage_key
-from app.agent_runtime.semantic_task import SemanticTask
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.chat_bridge import route_typed_chat_turn
+from app.platform.agent_runtime.contracts import ModelRef, WorkspaceSpec
+from app.platform.agent_runtime.evidence import evidence_coverage_key
+from app.platform.agent_runtime.semantic_task import SemanticTask
+from app.platform.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.platform.agent_runtime.task_graph import (
     TaskGraph,
     TaskGraphRunSnapshot,
     TaskNodeRunState,
     compile_task_graph,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_optimizer import optimize_task_graph
-from app.agent_runtime.task_graph_revision import (
+from app.platform.agent_runtime.task_graph_optimizer import optimize_task_graph
+from app.platform.agent_runtime.task_graph_revision import (
     merge_task_graph_additive_revision,
     task_graph_preserves_execution_contract,
 )
-from app.agent_runtime.turn_plan import (
+from app.platform.agent_runtime.turn_plan import (
     TurnPlan,
     compile_turn_plan,
     derive_effective_objective,

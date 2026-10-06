@@ -1,5 +1,5 @@
-from app.rpg.worlds.contracts import canonical_content_hash
-from app.rpg.worlds.runtime_seed import (
+from app.apps.rpg.worlds.contracts import canonical_content_hash
+from app.apps.rpg.worlds.runtime_seed import (
     compile_runtime_seed,
     compile_vertical_slice,
     run_player_absent_playtest,

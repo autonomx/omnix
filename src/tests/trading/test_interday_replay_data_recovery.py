@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.market_data_recovery import StrategyDataRequirement
+from app.apps.trading.market_data_recovery import StrategyDataRequirement
 from scripts.trade.run_interday_winner_shadow_replay import (
     MarketDataCache,
     RawBar,

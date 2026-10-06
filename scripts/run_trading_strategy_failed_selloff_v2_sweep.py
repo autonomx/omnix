@@ -29,17 +29,17 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import app.trading.strategy_backtest as _backtest_module
-from app.trading.historical_gapper_reconstruction import reconstructed_strategy_config
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.strategies.gap_pullback import session_vwap
-from app.trading.strategies.models import (
+import app.apps.trading.strategy_backtest as _backtest_module
+from app.apps.trading.historical_gapper_reconstruction import reconstructed_strategy_config
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.strategies.gap_pullback import session_vwap
+from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
     GapPullbackResult,
     StrategySignal,
 )
-from app.trading.strategy_backtest import BacktestSessionDataset, run_gap_pullback_backtest
+from app.apps.trading.strategy_backtest import BacktestSessionDataset, run_gap_pullback_backtest
 from scripts.run_trading_strategy_backtest import strict_v11_strategy
 from scripts.run_trading_strategy_liquidity_sweep import (
     _cache_namespace,

@@ -6,7 +6,7 @@ on:
     paths:
       - "docs/MEMORY_V2_ARCHITECTURE.md"
       - "docs/MEMORY_V2_CONTRACTS.md"
-      - "src/app/assistant_memory_v2/**"
+      - "src/app/platform/assistant_memory/v2/**"
       - "src/tests/unit/assistant_memory_v2/**"
       - ".github/workflows/memory-v2-contracts.yml"
   workflow_dispatch:
@@ -28,17 +28,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
 
       - name: Install contract test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart playwright
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Lint Memory v2 contracts
         run: |
-          ruff check src/app/assistant_memory_v2 src/tests/unit/assistant_memory_v2
+          ruff check src/app/platform/assistant_memory/v2 src/tests/unit/assistant_memory_v2
 
       - name: Run Memory v2 contract invariants
         run: |

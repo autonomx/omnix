@@ -7,7 +7,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -49,7 +49,7 @@ def test_character_versions_are_immutable_and_tenant_scoped() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             created = work.characters.create(
                 context,
@@ -109,7 +109,7 @@ def test_memory_revision_candidate_and_snapshot_lifecycle() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             first = work.memories.create(
                 context,
@@ -201,7 +201,7 @@ def test_chat_messages_append_incrementally_with_cursor_pagination() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             session = work.chats.create_session(
                 context,
@@ -270,7 +270,7 @@ def test_conversation_domain_changes_rollback_together() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(RuntimeError, match="abort domain transaction"):
             with unit_of_work(database) as work:
                 work.characters.create(

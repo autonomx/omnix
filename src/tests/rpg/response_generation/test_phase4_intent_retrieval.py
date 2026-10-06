@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.response_generation.intent_affordance import NarrativeAffordanceClassifier
-from app.rpg.response_generation.recovery import LocalRecoveryCoordinator
-from app.rpg.response_generation.retrieval import (
+from app.apps.rpg.response_generation.intent_affordance import NarrativeAffordanceClassifier
+from app.apps.rpg.response_generation.recovery import LocalRecoveryCoordinator
+from app.apps.rpg.response_generation.retrieval import (
     EvidenceRecord,
     LocalKnowledgeRetriever,
     build_retrieval_sources,

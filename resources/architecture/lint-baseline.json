@@ -1,0 +1,55 @@
+{
+  "errors": [],
+  "policy_digest": "de77d4b6053397b3a212c7b8f0c23a9d76b8524c2b489aef3726a9e5014f44f1",
+  "rules": [
+    "AL001",
+    "AL002",
+    "AL003",
+    "AL004",
+    "AL005",
+    "AL006",
+    "AL007",
+    "AL008",
+    "AL009",
+    "AL010",
+    "AL011",
+    "AL012",
+    "AL013",
+    "AL014",
+    "AL015",
+    "AL016"
+  ],
+  "schema_version": 1,
+  "scope": "tracked_nonvendor_production_python_and_migrations",
+  "violations": [
+    {
+      "count": 3,
+      "fingerprint": "_recovery_command:app.persistence.blob_store.LocalBlobStore",
+      "lines": [
+        260,
+        261,
+        275
+      ],
+      "path": "src/app/persistence/cli.py",
+      "rule": "AL011"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.assets<->app.persistence",
+      "lines": [
+        1
+      ],
+      "path": "src/app/assets/",
+      "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "app.persistence<->app.security",
+      "lines": [
+        1
+      ],
+      "path": "src/app/persistence/",
+      "rule": "AL015"
+    }
+  ]
+}

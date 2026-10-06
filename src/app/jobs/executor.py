@@ -6,7 +6,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from .models import ClaimJobRequest, CompleteJobRequest, FailJobRequest, JobRecord, ResourceClass
-from .store import InMemoryJobStore
 
 HandlerResult = Mapping[str, Any] | None
 JobHandler = Callable[[JobRecord], HandlerResult | Awaitable[HandlerResult]]
@@ -17,7 +16,7 @@ class LocalJobExecutor:
 
     def __init__(
         self,
-        store: InMemoryJobStore,
+        store: Any,
         handlers: Mapping[str, JobHandler],
         *,
         worker_id: str = "local:executor",
@@ -39,12 +38,18 @@ class LocalJobExecutor:
         if not claim.ok or claim.job is None:
             return None
 
-        job = self.store.mark_running(claim.job.id) or claim.job
+        # Retain the credentials from this claim, never from a later row read.
+        credentials: dict[str, Any] = {
+            "worker_id": self.worker_id,
+            "lease_token": claim.job.lease.token if claim.job.lease is not None else None,
+        }
+        job = self.store.mark_running(claim.job.id, **credentials) or claim.job
         handler = self.handlers.get(job.type)
         if handler is None:
             return self.store.fail_job(
                 job.id,
                 FailJobRequest(
+                    **credentials,
                     code="job_handler_missing",
                     message=f"No local job handler is registered for {job.type}.",
                     retryable=False,
@@ -58,9 +63,9 @@ class LocalJobExecutor:
         except Exception as exc:
             return self.store.fail_job(
                 job.id,
-                FailJobRequest(code="job_handler_failed", message=str(exc), retryable=False),
+                FailJobRequest(**credentials, code="job_handler_failed", message=str(exc), retryable=False),
             )
 
         output_refs = list((result or {}).get("output_refs", []))
         logs = list((result or {}).get("logs", []))
-        return self.store.complete_job(job.id, CompleteJobRequest(output_refs=output_refs, logs=logs))
+        return self.store.complete_job(job.id, CompleteJobRequest(**credentials, output_refs=output_refs, logs=logs))

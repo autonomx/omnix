@@ -5,12 +5,12 @@ from pathlib import Path
 
 
 CSS_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "apps"
+    Path(__file__).resolve().parents[3]
     / "web"
     / "src"
     / "features"
-    / "chatbot"
+    / "assistant"
+    / "chat"
     / "ChatbotWorkspaceAssistantNav.css"
 )
 

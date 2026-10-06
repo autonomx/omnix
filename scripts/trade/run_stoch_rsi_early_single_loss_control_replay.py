@@ -18,7 +18,7 @@ from pathlib import Path
 
 import run_interday_winner_shadow_replay_core as core
 
-from app.trading.strategy_stoch_rsi_5m_early_single_loss_controls import (
+from app.apps.trading.strategy_stoch_rsi_5m_early_single_loss_controls import (
     StochRsiEarlySingleLossControlArm,
     evaluate_stoch_rsi_5m_early_single_loss_control,
 )

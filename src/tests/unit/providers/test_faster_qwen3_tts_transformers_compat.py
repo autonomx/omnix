@@ -1,3 +1,10 @@
+
+import pytest
+
+# Needs the GPU model stack; skipped where torch is not installed.
+pytest.importorskip("torch")
+pytestmark = pytest.mark.gpu
+
 import importlib
 import sys
 import types

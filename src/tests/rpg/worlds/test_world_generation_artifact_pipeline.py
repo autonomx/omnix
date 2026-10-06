@@ -1,14 +1,14 @@
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_deterministic import (
     DeterministicWorldForgeGenerator,
 )
-from app.rpg.session.genesis.world_forge_generation import generate_campaign_topics
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import generate_campaign_topics
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     resolve_or_generate_genre_profile,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.rpg.worlds.generation_jobs import canonical_hash
-from app.rpg.worlds.generation_publication import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.worlds.generation_jobs import canonical_hash
+from app.apps.rpg.worlds.generation_publication import (
     compile_world_generation_publication,
 )
 

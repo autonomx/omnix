@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.trading.research.outcome_dataset import attribution_summary
-from app.trading.research.validation import build_validation_report
+from app.apps.trading.research.outcome_dataset import attribution_summary
+from app.apps.trading.research.validation import build_validation_report
 
 
 def _outcomes(count: int = 120):

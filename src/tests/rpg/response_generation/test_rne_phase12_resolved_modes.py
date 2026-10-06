@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 
-from app.rpg.session.narrative_engine_bridge import canonicalize_resolved_turn_result
+from app.apps.rpg.session.narrative_engine_bridge import canonicalize_resolved_turn_result
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -121,11 +121,3 @@ def test_major_quest_result_uses_cinematic_profile() -> None:
     assert canonical["metadata"]["profile"] == "cinematic"
     assert canonical["metadata"]["mode"] == "major_beat"
     assert canonical["validation"]["passed"] is True
-
-
-def test_gateway_routes_all_modes_through_single_presenter_before_shadow() -> None:
-    source = (REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(encoding="utf-8")
-    assert "present_authoritative_turn" in source
-    assert source.index("present_authoritative_turn") < source.index("attach_shadow_report")
-    assert 'rpg_pipeline_span("turn.narrative_present")' in source
-    assert "canonicalize_resolved_turn_result" not in source

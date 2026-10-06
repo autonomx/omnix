@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.security_audit import tenant_security_audit
 
@@ -34,7 +34,7 @@ def test_tenant_security_audit_passes() -> None:
     database = _database()
     try:
         apply_migrations(database)
-        bootstrap_local_tenant(database)
+        ensure_local_identity(database)
         with database.connection() as connection:
             report = tenant_security_audit(connection)
         assert report["ok"] is True
@@ -48,7 +48,7 @@ def test_cross_workspace_chat_message_reference_is_rejected() -> None:
     database = _database()
     try:
         apply_migrations(database)
-        local = bootstrap_local_tenant(database)
+        local = ensure_local_identity(database)
         with database.transaction() as connection:
             connection.execute(
                 "INSERT INTO omnix_workspaces (id, name, created_by) "

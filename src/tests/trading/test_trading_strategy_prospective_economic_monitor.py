@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.models import MarketBar
-from app.trading.strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
-from app.trading.strategy_prospective_economic_monitor import TradingStrategyProspectiveEconomicMonitor
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_v2_qualification import frozen_v2_config, v2_profile_fingerprint
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
+from app.apps.trading.strategy_prospective_economic_monitor import TradingStrategyProspectiveEconomicMonitor
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_v2_qualification import frozen_v2_config, v2_profile_fingerprint
 
 
 INSTRUMENT = "equity:NASDAQ:ECON"
@@ -143,7 +143,7 @@ class FakeMarketService:
 
 
 def test_prospective_economic_monitor_is_structurally_orderless() -> None:
-    import app.trading.strategy_prospective_economic_monitor as module
+    import app.apps.trading.strategy_prospective_economic_monitor as module
 
     source = inspect.getsource(module)
     assert "TradingPaperRepository" not in source

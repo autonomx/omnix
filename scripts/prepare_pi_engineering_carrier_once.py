@@ -17,13 +17,13 @@ def prepare() -> None:
     path = ROOT / "scripts/apply_pi_engineering_tools_once.py"
     text = path.read_text(encoding="utf-8")
     old = '''replace(
-    "src/app/agent_runtime/evidence.py",
+    "src/app/platform/agent_runtime/evidence.py",
     '                "workspace.git_diff",\\n            }',
     '                "workspace.git_diff",\\n                "workspace.lsp",\\n                "workspace.ast_search",\\n                "agent.context",\\n                "agent.clarify",\\n            }',
     count=1,
 )'''
     new = '''replace(
-    "src/app/agent_runtime/evidence.py",
+    "src/app/platform/agent_runtime/evidence.py",
     '    if profile.id == "coding":\\n        read_caps = [\\n            capability\\n            for capability in profile.capabilities\\n            if capability in {\\n                "workspace.read",\\n                "workspace.list",\\n                "workspace.search",\\n                "workspace.git_status",\\n                "workspace.git_diff",\\n            }\\n        ]',
     '    if profile.id == "coding":\\n        read_caps = [\\n            capability\\n            for capability in profile.capabilities\\n            if capability in {\\n                "workspace.read",\\n                "workspace.list",\\n                "workspace.search",\\n                "workspace.git_status",\\n                "workspace.git_diff",\\n                "workspace.lsp",\\n                "workspace.ast_search",\\n                "agent.context",\\n                "agent.clarify",\\n            }\\n        ]',
 )'''
@@ -43,7 +43,7 @@ def prepare() -> None:
 
 
 def _harden_engineering_extension() -> None:
-    extension = ROOT / "src/app/agent_runtime/pi_engineering_extension.ts"
+    extension = ROOT / "src/app/platform/agent_runtime/pi_engineering_extension.ts"
     text = extension.read_text(encoding="utf-8")
 
     old_servers = '''  typescript: {
@@ -142,7 +142,7 @@ def _harden_engineering_extension() -> None:
 
 
 def post() -> None:
-    runtime = ROOT / "src/app/agent_runtime/pi_runtime_core.py"
+    runtime = ROOT / "src/app/platform/agent_runtime/pi_runtime_core.py"
     old = '''    tools = sorted({tool for capability, tool in mapping.items() if capability in spec.capabilities})
     if tools:
         argv.extend(["--tools", ",".join(tools)])
@@ -203,7 +203,7 @@ def test_pi_explicitly_allowlists_governed_extension_tools(tmp_path: Path) -> No
         source += '''
 
 def test_engineering_extension_runtime_hardening_contract() -> None:
-    source = Path("src/app/agent_runtime/pi_engineering_extension.ts").read_text(encoding="utf-8")
+    source = Path("src/app/platform/agent_runtime/pi_engineering_extension.ts").read_text(encoding="utf-8")
     assert 'OMNIX_AGENT_AST_GREP_COMMAND || "ast-grep"' in source
     assert 'result.code === 0 || result.code === 1' in source
     assert 'textDocument/didChange' in source

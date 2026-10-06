@@ -4,13 +4,13 @@ from __future__ import annotations
 
 def create_fastapi_app():
     """Create a provider-free gateway for explicit tests and dependency injection."""
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
     return create_gateway_app()
 
 
 def create_app():
     """Create the production PostgreSQL-authoritative gateway."""
-    from app.production import create_production_app
+    from app.composition.production import create_production_app
 
     return create_production_app()

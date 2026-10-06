@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
-from app.agent_runtime.pi_runtime import pi_rpc_argv
-from app.agent_runtime.planning import (
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision, WorkspaceSpec
+from app.platform.agent_runtime.pi_runtime import pi_rpc_argv
+from app.platform.agent_runtime.planning import (
     build_inspection_bundle,
     operation_plan_failures,
     planning_requirement_for_operation,
 )
-from app.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
+from app.platform.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
 
 
 def _revision() -> TaskRevision:
@@ -34,11 +34,11 @@ def test_consequential_mutations_remain_hard_gated() -> None:
     for path in (
         "src/app/persistence/migrations/0066_change.sql",
         "package-lock.json",
-        "src/apps/web/src/api/generated/types.ts",
+        "web/src/api/generated/types.ts",
     ):
         assert planning_requirement_for_operation("mutate", target_path=path) == "hard"
         assert operation_plan_failures(None, revision, effect="mutate", target_path=path) == ["approved_plan_missing"]
-    assert planning_requirement_for_operation("mutate", command="npm --prefix src/apps/web install react") == "hard"
+    assert planning_requirement_for_operation("mutate", command="npm --prefix web install react") == "hard"
     assert planning_requirement_for_operation("unknown", command="custom-generator --output src/generated.py") == "hard"
 
 
@@ -99,7 +99,7 @@ def test_omnix_no_longer_infers_semantic_inspection_from_user_language(tmp_path:
 
 
 def test_invalid_planning_mode_fails_closed_to_enforce() -> None:
-    from app.agent_runtime.planning import planning_mode
+    from app.platform.agent_runtime.planning import planning_mode
 
     assert planning_mode({"OMNIX_AGENT_PLANNING_MODE": "typo"}) == "enforce"
 

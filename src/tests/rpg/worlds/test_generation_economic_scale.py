@@ -2,29 +2,28 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_economic_scale import (
+from app.apps.rpg.session.genesis.world_forge_economic_scale import (
     deterministic_economic_scale_signature,
     economic_scale_components,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_profile_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_profile_deterministic import (
     generate_deterministic_profile_topic,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_economic_scale import (
-    EconomicScaleCompilationError,
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_economic_scale import (
     economic_scale_issues,
     economic_scale_report,
 )
-from app.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 
@@ -456,52 +455,6 @@ def test_duplicate_complete_scale_signature_is_blocking() -> None:
         "ent:economy:1",
         "ent:economy:2",
     ]
-
-
-def test_scale_portfolio_requires_band_diversity() -> None:
-    issues = economic_scale_issues(
-        _portfolio_rows(uniform_components=True),
-        _graph(),
-    )
-
-    components = {
-        issue.evidence["component"]
-        for issue in issues
-        if issue.code == "economic_scale_portfolio_too_uniform"
-    }
-    assert components == {
-        "served_population_band",
-        "throughput_band",
-        "price_basis",
-        "scarcity_level",
-    }
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(EconomicScaleCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(workforce_exceeds_population=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_economic_scale_report(

@@ -3,14 +3,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.prospective_gap_monitor import ProspectiveGapMonitor
-from app.trading.providers.alpaca_iex_status import AlpacaIexStatusMonitor
-from app.trading.strategy_deep_recovery_monitor import TradingStrategyDeepRecoveryShadowMonitor
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_operations_api import create_trading_strategy_operations_router
-from app.trading.strategy_universe_archive_monitor import TradingStrategyUniverseArchiveMonitor
-from app.trading.strategy_v2_qualification_monitor import TradingStrategyV2QualificationMonitor
-from app.trading.yahoo_acquisition_monitor import TradingYahooAcquisitionMonitor
+from app.apps.trading.prospective_gap_monitor import ProspectiveGapMonitor
+from app.apps.trading.providers.alpaca_iex_status import AlpacaIexStatusMonitor
+from app.apps.trading.strategy_deep_recovery_monitor import TradingStrategyDeepRecoveryShadowMonitor
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
+from app.apps.trading.strategy_universe_archive_monitor import TradingStrategyUniverseArchiveMonitor
+from app.apps.trading.strategy_v2_qualification_monitor import TradingStrategyV2QualificationMonitor
+from app.apps.trading.yahoo_acquisition_monitor import TradingYahooAcquisitionMonitor
 
 
 def _core_status(value: dict[str, object]) -> dict[str, object]:

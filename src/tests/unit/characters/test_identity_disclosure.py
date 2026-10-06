@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.characters import CharacterProfileSnapshot, InteractionSelection, resolve_interaction_context
+from app.platform.characters import CharacterProfileSnapshot, InteractionSelection, resolve_interaction_context
 
 
 def _character(policy: dict[str, object]) -> CharacterProfileSnapshot:

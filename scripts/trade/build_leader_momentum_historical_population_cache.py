@@ -43,8 +43,8 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
-from app.trading.strategy_evolving_top_gainers_research import (
+from app.apps.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
+from app.apps.trading.strategy_evolving_top_gainers_research import (
     HistoricalPopulationManifest,
 )
 

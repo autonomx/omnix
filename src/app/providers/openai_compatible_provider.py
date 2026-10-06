@@ -1,10 +1,15 @@
 """OpenAI-compatible provider plugin."""
 from __future__ import annotations
 
+import logging
+
 import json
+from contextlib import ExitStack, contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-import requests
+import httpx
+
+from app.security.url_policy import UrlPolicyError, check_outbound_url
 
 from .base import (
     AuthenticationError,
@@ -13,14 +18,15 @@ from .base import (
     ChatResponse,
     ConnectionError,
     ModelInfo,
-    ModelNotFoundError,
     ProviderCapability,
 )
+from .http_calls import raise_for_provider_status, transport_errors
 from .provider_trace import provider_call_enter, provider_call_exit
 from .structured.transport import (
     pop_structured_transport_options,
-    raise_if_structured_mode_rejected,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -44,8 +50,12 @@ class OpenAICompatibleProvider(BaseProvider):
             raise ValueError("OpenAI-compatible provider requires a model ID")
         self.config.base_url = self.config.base_url.rstrip("/")
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+    def _request_target(self, endpoint: str, kwargs: dict[str, Any]) -> tuple[str, dict[str, str]]:
         url = f"{self.config.base_url}{endpoint}"
+        try:
+            check_outbound_url(url, resolve=True)
+        except UrlPolicyError as exc:
+            raise ConnectionError(f"Blocked by the outbound URL policy: {exc}") from exc
         headers = kwargs.pop("headers", {})
         if "Authorization" not in headers:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
@@ -53,45 +63,24 @@ class OpenAICompatibleProvider(BaseProvider):
         custom_headers = self.config.extra_params.get("custom_headers", {})
         if isinstance(custom_headers, dict):
             headers.update(custom_headers)
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.config.timeout
-        try:
-            response = requests.request(method, url, headers=headers, **kwargs)
-            response.raise_for_status()
-            return response
-        except requests.exceptions.ConnectionError as exc:
-            raise ConnectionError(f"Failed to connect to {url}: {exc}") from exc
-        except requests.exceptions.Timeout as exc:
-            raise ConnectionError(f"Connection to {url} timed out: {exc}") from exc
-        except requests.exceptions.HTTPError as exc:
-            response = exc.response
-            status = response.status_code if response is not None else None
-            body = ""
-            if response is not None:
-                try:
-                    body = response.text[:2000]
-                except Exception:
-                    body = ""
-            raise_if_structured_mode_rejected(
-                status_code=status,
-                response_body=body,
-                error=exc,
-            )
-            if status in {401, 403}:
-                raise AuthenticationError(f"Authentication failed: {exc}") from exc
-            if status == 404:
-                raise ModelNotFoundError(f"Resource not found: {exc}") from exc
-            if status == 429:
-                from .exceptions import RateLimitError
+        kwargs.setdefault("timeout", self.config.timeout)
+        return url, headers
 
-                raise RateLimitError(f"Rate limit exceeded: {exc}") from exc
-            raise ConnectionError(
-                f"HTTP error {status}: {exc}; response_body={body}"
-            ) from exc
-        except Exception as exc:
-            if isinstance(exc, (AuthenticationError, ModelNotFoundError, ConnectionError)):
-                raise
-            raise ConnectionError(f"Unexpected error: {exc}") from exc
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> httpx.Response:
+        url, headers = self._request_target(endpoint, kwargs)
+        with transport_errors(url):
+            response = self.http.request(method, url, headers=headers, **kwargs)
+        raise_for_provider_status(response)
+        return response
+
+    @contextmanager
+    def _stream_request(self, endpoint: str, **kwargs) -> Iterator[httpx.Response]:
+        url, headers = self._request_target(endpoint, kwargs)
+        with ExitStack() as stack:
+            with transport_errors(url):
+                response = stack.enter_context(self.http.stream("POST", url, headers=headers, **kwargs))
+            raise_for_provider_status(response)
+            yield response
 
     def chat_completion(
         self,
@@ -195,13 +184,17 @@ class OpenAICompatibleProvider(BaseProvider):
         *,
         timeout: float | None = None,
     ) -> Iterator[ChatResponse]:
-        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        request_kwargs: Dict[str, Any] = {"json": payload}
         if timeout is not None:
             request_kwargs["timeout"] = timeout
-        try:
-            response = self._make_request("post", "/chat/completions", **request_kwargs)
-        except Exception as exc:
-            raise ConnectionError(f"Failed to start stream: {exc}") from exc
+        with ExitStack() as stack:
+            try:
+                response = stack.enter_context(self._stream_request("/chat/completions", **request_kwargs))
+            except Exception as exc:
+                raise ConnectionError(f"Failed to start stream: {exc}") from exc
+            yield from self._stream_events(response, payload)
+
+    def _stream_events(self, response: httpx.Response, payload: dict[str, Any]) -> Iterator[ChatResponse]:
         try:
             for line in response.iter_lines():
                 if not line:
@@ -256,7 +249,7 @@ class OpenAICompatibleProvider(BaseProvider):
                     )
                 )
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "OpenAICompatibleProvider.get_models", exc_info=True)
         if self.config.model and not any(model.id == self.config.model for model in models):
             models.append(
                 ModelInfo(

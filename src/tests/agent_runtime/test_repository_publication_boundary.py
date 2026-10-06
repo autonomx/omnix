@@ -5,14 +5,14 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import (
+from app.platform.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _bind_authoritative_capability_input,
 )
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, WorkspaceSpec
-from app.agent_runtime.service import AgentRunService
-from app.assistant_tools.models import AssistantToolRequest
-from app.assistant_tools.repo_adapter import (
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, WorkspaceSpec
+from app.platform.agent_runtime.service import AgentRunService
+from app.platform.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.repo_adapter import (
     FakeRepositoryRuntimeAdapter,
     _github_repository_from_remote,
     run_repository_tool_request,

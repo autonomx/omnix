@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.response_generation.contracts import ResponseMode
-from app.rpg.response_generation.fallback_library import (
+from app.apps.rpg.response_generation.contracts import ResponseMode
+from app.apps.rpg.response_generation.fallback_library import (
     DeterministicFallbackLibrary,
     FallbackInput,
 )
-from app.rpg.response_generation.forward_motion import (
+from app.apps.rpg.response_generation.forward_motion import (
     ForwardMotionPolicy,
     RecoveryHistoryEntry,
     validate_agency,
 )
-from app.rpg.response_generation.recovery import LocalRecoveryCoordinator
-from app.rpg.response_generation.retrieval import EvidenceRecord, build_retrieval_sources
+from app.apps.rpg.response_generation.recovery import LocalRecoveryCoordinator
+from app.apps.rpg.response_generation.retrieval import EvidenceRecord, build_retrieval_sources
 
 
 @pytest.mark.parametrize(

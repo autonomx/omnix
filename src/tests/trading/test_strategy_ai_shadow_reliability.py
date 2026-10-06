@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.providers import ConnectionError, ProviderConfig
-from app.trading import ai_shadow_reliability as reliability
-from app.trading.strategy_ai_shadow import AIShadowPolicyAnalyzer
+from app.apps.trading import strategy_ai_shadow_provider as reliability
+from app.apps.trading.strategy_ai_shadow import AIShadowPolicyAnalyzer
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -175,7 +175,7 @@ def test_dedicated_provider_lane_clones_foreground_provider(monkeypatch):
             return replacement
 
     registry = Registry()
-    monkeypatch.setattr(reliability.shared, "get_provider", lambda: foreground)
+    monkeypatch.setattr(reliability, "get_provider", lambda: foreground)
     monkeypatch.setattr(reliability, "get_registry", lambda: registry)
 
     first = reliability.get_trading_research_provider()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from app.agent_runtime.semantic_task import SemanticTask
+from app.platform.agent_runtime.semantic_task import SemanticTask
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
 

@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.assistant_tools import browser_adapter
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools import browser_adapter
+from app.platform.assistant_tools.models import AssistantToolRequest
 
 
 def _completed(argv: list[str], *, stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
@@ -286,9 +286,9 @@ def test_run_id_is_bound_from_broker_execution_identity() -> None:
 
 def test_pi_guard_rejects_shell_preview_and_prompt_uses_managed_preview() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    guard = (repo_root / "src/app/agent_runtime/pi_guard_extension.ts").read_text(encoding="utf-8")
-    runtime = (repo_root / "src/app/agent_runtime/pi_runtime.py").read_text(encoding="utf-8")
-    broker_extension = (repo_root / "src/app/agent_runtime/pi_broker_extension.ts").read_text(encoding="utf-8")
+    guard = (repo_root / "src/app/platform/agent_runtime/pi_guard_extension.ts").read_text(encoding="utf-8")
+    runtime = (repo_root / "src/app/platform/agent_runtime/pi_runtime.py").read_text(encoding="utf-8")
+    broker_extension = (repo_root / "src/app/platform/agent_runtime/pi_broker_extension.ts").read_text(encoding="utf-8")
 
     assert "managedPreviewShellCommand" in guard
     assert "Do not launch npm/vite dev or preview servers through shell commands" in guard

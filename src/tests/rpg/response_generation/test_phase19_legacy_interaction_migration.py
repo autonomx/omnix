@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
-from app.rpg.session.legacy_interaction_migration import (
+from app.apps.rpg.session.legacy_interaction_migration import (
     LEGACY_INTERACTION_MIGRATION_VERSION,
 )
-from app.rpg.session.migrations import migrate_session_payload
+from app.apps.rpg.session.migrations import migrate_session_payload
 
 
 def _legacy_wrapped_payload() -> dict:

@@ -7,7 +7,7 @@ def test_broker_rejects_non_runnable_agent_runs_before_capabilities() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "broker_api.py"
     ).read_text(encoding="utf-8")
     assert 'snapshot.status not in {"starting", "running", "waiting_for_approval"}' in source

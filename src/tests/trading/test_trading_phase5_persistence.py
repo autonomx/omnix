@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.persistence.errors import RevisionConflict
-from app.trading.api import create_trading_router
+from app.apps.trading.api import create_trading_router
 
 
 class RevisionedRepository:
@@ -19,6 +19,11 @@ class RevisionedRepository:
                 "updated_at": "2026-08-05T00:00:00+00:00",
             }
         }
+
+    def iter(self, record_type: str):
+
+        return iter(self.list(record_type, limit=10_000))
+
 
     def list(self, record_type: str, *, limit: int = 100):
         return [record for (kind, _), record in self.records.items() if kind == record_type and record["status"] == "active"][:limit]

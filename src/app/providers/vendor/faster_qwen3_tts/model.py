@@ -4,6 +4,7 @@ FasterQwen3TTS: Real-time TTS using CUDA graph capture.
 Wrapper class that provides a Qwen3-TTS API while using
 CUDA graphs for 6-10x speedup.
 """
+from app.config.env import env_str as _env_str
 import logging
 import time
 from pathlib import Path
@@ -42,8 +43,8 @@ def _ensure_transformers_qwen3_compat() -> None:
             def _fallback_is_offline_mode() -> bool:
                 import os
                 return (
-                    os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
-                    or os.environ.get("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    _env_str("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    or _env_str("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
                 )
             huggingface_hub.is_offline_mode = _fallback_is_offline_mode
     except Exception:
@@ -55,8 +56,8 @@ def _ensure_transformers_qwen3_compat() -> None:
             def _fallback_is_offline_mode_utils() -> bool:
                 import os
                 return (
-                    os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
-                    or os.environ.get("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    _env_str("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    or _env_str("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
                 )
             hf_utils.is_offline_mode = _fallback_is_offline_mode_utils
     except Exception:

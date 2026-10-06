@@ -57,7 +57,7 @@ def run_live_worker_endurance(
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
-    from app.gateway.workers import get_worker_health_payload
+    from app.runtime.worker_health import get_worker_health_payload
 
     started_at = _utcnow()
     samples: list[dict[str, Any]] = []

@@ -2,31 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.rpg.ai import world_scene_narrator
-from app.rpg.response_generation import legacy_bridge
+from app.apps.rpg.ai import world_scene_narrator
+from app.apps.rpg.response_generation import legacy_bridge
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-AI_ROOT = REPO_ROOT / "src" / "app" / "rpg" / "ai"
-SESSION_RUNTIME = REPO_ROOT / "src" / "app" / "rpg" / "session" / "narration_runtime.py"
-
-
-def test_phase8_facade_uses_explicit_exports_without_fixup_side_effects():
-    source = (AI_ROOT / "world_scene_narrator.py").read_text(encoding="utf-8")
-
-    assert " import *" not in source
-    assert "turn_fixups" not in source
-    assert "current_turn_fixups" not in source
-    assert "patch" not in source.casefold()
-    assert "narrate_scene = narrate_scene_canonical" in source
-    assert not (AI_ROOT / "world_scene_narrator_turn_fixups.py").exists()
-    assert not (AI_ROOT / "world_scene_narrator_current_turn_fixups.py").exists()
+AI_ROOT = REPO_ROOT / "src" / "app" / "apps" / "rpg" / "ai"
+SESSION_RUNTIME = REPO_ROOT / "src" / "app" / "apps" / "rpg" / "session" / "narration_runtime.py"
 
 
 def test_phase8_session_publication_resolves_through_canonical_facade():
     source = SESSION_RUNTIME.read_text(encoding="utf-8")
 
-    assert "from app.rpg.ai.world_scene_narrator import narrate_scene" in source
+    assert "from app.apps.rpg.ai.world_scene_narrator import narrate_scene" in source
     assert "world_scene_narrator_runtime import narrate_scene" not in source
     assert world_scene_narrator.narrate_scene is legacy_bridge.narrate_scene_canonical
 

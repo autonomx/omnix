@@ -96,6 +96,6 @@ work may wait for the current offline span to finish.
   `OMNIX_TEST_FFMPEG` to an FFmpeg executable, then run
   `python -m pytest src/tests/persistence/test_audiobook_ingest_integration.py
   -q --tb=short`.
-- Web workspace: `npm --prefix src/apps/web run test --
+- Web workspace: `npm --prefix web run test --
   src/features/audiobook/AudiobookWorkspace.test.tsx` and
-  `npm --prefix src/apps/web run build`.
+  `npm --prefix web run build`.

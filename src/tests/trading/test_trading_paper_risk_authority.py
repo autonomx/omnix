@@ -6,17 +6,17 @@ from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.execution import ExecutionObservation
-from app.trading.paper import (
+from app.apps.trading.execution import ExecutionObservation
+from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountSnapshot,
     PaperBalance,
     PaperOrder,
     PaperPosition,
 )
-from app.trading.paper_api import create_trading_paper_router
-from app.trading.paper_protection import PaperPositionProtection
-from app.trading.paper_risk import PaperRiskPreviewRequest, preview_paper_risk
+from app.apps.trading.paper_api import create_trading_paper_router
+from app.apps.trading.paper_protection import PaperPositionProtection
+from app.apps.trading.paper_risk import PaperRiskPreviewRequest, preview_paper_risk
 
 
 NOW = datetime.now(timezone.utc)
@@ -156,7 +156,7 @@ class Repo:
     def snapshot(self, account_id):
         return self.current
 
-    def place_order(self, account_id, request):
+    def place_order(self, account_id, request, *, authority):
         self.events.append("order")
         if self.fail_place:
             raise ValueError("insufficient_paper_cash")

@@ -1,22 +1,23 @@
+from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 
-from app.gateway.rpg_world_routes import register_rpg_world_routes
-from app.rpg.worlds.map_blueprint_authoring import (
+from app.apps.rpg.api.feature_routes.rpg_world_routes import register_rpg_world_routes
+from app.apps.rpg.worlds.map_blueprint_authoring import (
     MapBlueprintDocument,
     generated_location_blueprint_documents,
     reconcile_blueprint_scenarios,
 )
-from app.rpg.worlds.service import (
+from app.apps.rpg.worlds.service import (
     compile_scenario_revision,
     compile_world_revision,
 )
-from app.rpg.worlds.contracts import MapInitializationOperation
+from app.apps.rpg.worlds.contracts import MapInitializationOperation
 
 
 def test_world_routes_register_map_blueprint_authoring_endpoints() -> None:
     app = FastAPI()
-    register_rpg_world_routes(app)
-    paths = {route.path for route in app.routes}
+    include_router_registrar(app, register_rpg_world_routes)
+    paths = set(app.openapi()["paths"])
 
     assert "/api/rpg/worlds/{world_id}/map-blueprints" in paths
     assert "/api/rpg/worlds/{world_id}/map-blueprints/materialize" in paths

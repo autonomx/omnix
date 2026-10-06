@@ -22,6 +22,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 DEFAULT_TTS_SERVER_URL = "http://127.0.0.1:5101"
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 DEFAULT_PROMPTS = {
     "mhm": "Mhm.",
     "hmm": "Hmm.",
@@ -175,6 +180,10 @@ def synthesize_via_server(
     variant: int,
     timeout: float,
 ) -> tuple[bytes, int, int]:
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    from app.security.service_token import service_headers
+
     payload = json.dumps(
         {
             "text": text,
@@ -192,11 +201,11 @@ def synthesize_via_server(
     request = urllib.request.Request(
         f"{server_url.rstrip('/')}/api/tts/generate_stream_audio",
         data=payload,
-        headers={"Accept": "audio/wav", "Content-Type": "application/json"},
+        headers={"Accept": "audio/wav", "Content-Type": "application/json", **service_headers()},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout) as response:
             content_type = str(response.headers.get("Content-Type") or "").lower()
             wav_bytes = response.read()
     except urllib.error.HTTPError as exc:
@@ -232,7 +241,7 @@ def inspect_wav(wav_bytes: bytes) -> tuple[int, int]:
 def load_in_process_provider() -> Any:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from app.shared import get_tts_provider
+    from app.providers.service import get_tts_provider
 
     provider = get_tts_provider()
     if provider is None or not hasattr(provider, "generate_audio_stream"):
@@ -250,7 +259,7 @@ def synthesize_in_process(
 ) -> tuple[bytes, int]:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from app.gateway.tts_stream_contract import audio_chunk_to_pcm16_bytes
+    from app.conversation.tts_stream_contract import audio_chunk_to_pcm16_bytes
 
     chunks: list[bytes] = []
     sample_rate = 0

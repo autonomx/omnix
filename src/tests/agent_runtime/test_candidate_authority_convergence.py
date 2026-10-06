@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.agent_runtime.api import StartAgentRunRequest
-from app.agent_runtime.coding_quality import (
+from app.platform.agent_runtime.api import StartAgentRunRequest
+from app.platform.agent_runtime.coding_quality import (
     candidate_validation_gate,
     diff_review_command_is_complete,
     parse_review_result,
     review_is_acceptable,
     validation_result_from_tool_event,
 )
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSpec,
     ModelRef,
@@ -20,7 +20,7 @@ from app.agent_runtime.contracts import (
     ValidationResult,
     ValidationSpec,
 )
-from app.agent_runtime.service import _quality_sized_run_spec
+from app.platform.agent_runtime.service import _quality_sized_run_spec
 
 
 def _revision() -> TaskRevision:
@@ -144,7 +144,7 @@ def test_api_limits_omitted_and_null_are_not_explicit_but_empty_object_is() -> N
 
 def test_run_card_keeps_unreported_tokens_distinct_from_zero() -> None:
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[2] / "apps/web/src/features/chatbot/OmnixRunCardCore.tsx").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[3] / "web/src/features/assistant/chat/OmnixRunCardCore.tsx").read_text(encoding="utf-8")
     assert "if (reported !== true) return '—';" in source
     assert "input_tokens_reported" in source
     assert "output_tokens_reported" in source

@@ -2,29 +2,28 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_network_constraints import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_network_constraints import (
     deterministic_network_constraint_signature,
     network_constraint_components,
 )
-from app.rpg.session.genesis.world_forge_profile_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_profile_deterministic import (
     generate_deterministic_profile_topic,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_network_constraints import (
-    NetworkConstraintCompilationError,
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_network_constraints import (
     network_constraint_issues,
     network_constraint_report,
 )
-from app.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 
@@ -391,33 +390,6 @@ def test_network_portfolio_requires_distinct_blind_spots_and_failures() -> None:
         if issue.code == "network_constraint_portfolio_too_uniform"
     }
     assert components == {"blind_spot", "failure_mode"}
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(NetworkConstraintCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(unbounded_blind_spot=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_network_report(

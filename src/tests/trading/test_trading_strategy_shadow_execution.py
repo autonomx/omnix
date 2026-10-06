@@ -5,8 +5,8 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.trading.models import MarketBar
-from app.trading.strategy_shadow_execution import observe_shadow_execution
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_shadow_execution import observe_shadow_execution
 
 
 INSTRUMENT = "equity:NASDAQ:SHADOW"
@@ -185,14 +185,14 @@ def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
 
 
 def test_shadow_execution_module_has_no_order_or_paper_repository_dependency() -> None:
-    source = Path("src/app/trading/strategy_shadow_execution.py").read_text(encoding="utf-8")
+    source = Path("src/app/apps/trading/strategy_shadow_execution.py").read_text(encoding="utf-8")
     assert "paper_repository" not in source
     assert "place_order" not in source
     assert "PaperOrder" not in source
 
 
 def test_strategy_monitor_shadow_observation_precedes_auto_paper_order_boundary() -> None:
-    source = Path("src/app/trading/strategy_monitor.py").read_text(encoding="utf-8")
+    source = Path("src/app/apps/trading/strategy_monitor.py").read_text(encoding="utf-8")
     shadow_start = source.index('if config.mode == "shadow" and proposals:')
     auto_paper_start = source.index(
         "snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)",

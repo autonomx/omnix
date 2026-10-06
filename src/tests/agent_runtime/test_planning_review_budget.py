@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import planning_review
-from app.agent_runtime.budget import AgentBudgetError
+from app.platform.agent_runtime import planning_review
+from app.platform.agent_runtime.budget import AgentBudgetError
 from app.providers.structured.errors import StructuredOutputExhausted
 
 
@@ -30,6 +30,7 @@ class _Budget:
         *,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        provider_id: str | None = None,
     ):
         self.tokens.append((run_id, input_tokens, output_tokens))
         return {"output_tokens": output_tokens or 0}

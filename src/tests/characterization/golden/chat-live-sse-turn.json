@@ -1,0 +1,362 @@
+{
+  "content_type": "text/event-stream; charset=utf-8",
+  "persisted_messages": [
+    {
+      "content": "Summarize the current request.",
+      "created_at": "<timestamp>",
+      "id": "msg:<uuid:1>",
+      "metadata": {
+        "agent_mode": false,
+        "assistant_turn": {
+          "assistant_turn_id": "assistant-turn:<uuid:2>",
+          "audio_delivered_phrase_count": 0,
+          "audio_interrupted_phrase_index": null,
+          "audio_played_samples": 0,
+          "cancellation_reason": null,
+          "context_delivered_text_end": 0,
+          "created_at": "<timestamp>",
+          "delivery": "full",
+          "delivery_policy": "reveal_as_spoken",
+          "generated_phrase_count": 0,
+          "lifecycle": "completed",
+          "provider_execution": "completed",
+          "session_id": "chat:<uuid:3>",
+          "speech_segment_id": null,
+          "terminal_version": 1,
+          "tool_execution": "none",
+          "updated_at": "<timestamp>",
+          "user_message_id": "msg:<uuid:1>",
+          "user_turn_id": "user-turn:<uuid:4>",
+          "visual_delivered_text_end": 0
+        },
+        "assistant_turn_id": "assistant-turn:<uuid:2>",
+        "coding_approval_policy": "ask_sensitive",
+        "generation_status": "completed",
+        "omnix_route": {
+          "capability_id": null,
+          "confidence": 0.0,
+          "explicit": false,
+          "hermes_recommended": false,
+          "lane": "chat",
+          "reason": "semantic_parser_unavailable_safe_chat",
+          "workflow_id": null
+        },
+        "segment_id": "segment:<uuid:5>",
+        "speech_segment_id": null,
+        "user_turn_id": "user-turn:<uuid:4>"
+      },
+      "role": "user"
+    },
+    {
+      "content": "The request is ready. The provider is deterministic.",
+      "created_at": "<timestamp>",
+      "id": "msg:<uuid:6>",
+      "metadata": {
+        "assistant_turn_id": "assistant-turn:<uuid:2>",
+        "generation_status": "completed",
+        "model_id": "fixture-model",
+        "provider_id": "fixture",
+        "reply_to_message_id": "msg:<uuid:1>",
+        "resolved_model": "fixture-model",
+        "segment_id": "segment:<uuid:5>",
+        "usage": {
+          "completion_tokens": 7
+        }
+      },
+      "role": "assistant"
+    }
+  ],
+  "provider_calls": [
+    {
+      "kwargs": {},
+      "messages": [
+        {
+          "content": "System prompt",
+          "role": "system"
+        },
+        {
+          "content": "Summarize the current request.",
+          "role": "user"
+        }
+      ],
+      "model": "fixture-model",
+      "prompt_hash": "ae5f6ac21a32914de191b1a8add4587931cfb0b86849683136cfaec97fa96023",
+      "stream": true
+    }
+  ],
+  "sse_events": [
+    {
+      "message": {
+        "content": "Summarize the current request.",
+        "created_at": "<timestamp>",
+        "id": "msg:<uuid:1>",
+        "metadata": {
+          "agent_mode": false,
+          "assistant_turn": {
+            "assistant_turn_id": "assistant-turn:<uuid:2>",
+            "audio_delivered_phrase_count": 0,
+            "audio_interrupted_phrase_index": null,
+            "audio_played_samples": 0,
+            "cancellation_reason": null,
+            "context_delivered_text_end": 0,
+            "created_at": "<timestamp>",
+            "delivery": "none",
+            "delivery_policy": "reveal_as_spoken",
+            "generated_phrase_count": 0,
+            "lifecycle": "streaming",
+            "provider_execution": "running",
+            "session_id": "chat:<uuid:3>",
+            "speech_segment_id": null,
+            "terminal_version": 0,
+            "tool_execution": "none",
+            "updated_at": "<timestamp>",
+            "user_message_id": "msg:<uuid:1>",
+            "user_turn_id": "user-turn:<uuid:4>",
+            "visual_delivered_text_end": 0
+          },
+          "assistant_turn_id": "assistant-turn:<uuid:2>",
+          "coding_approval_policy": "ask_sensitive",
+          "generation_status": "running",
+          "segment_id": "segment:<uuid:5>",
+          "speech_segment_id": null,
+          "user_turn_id": "user-turn:<uuid:4>"
+        },
+        "role": "user"
+      },
+      "type": "user_message"
+    },
+    {
+      "job": {
+        "cancel": {
+          "acknowledged_at": "<timestamp>",
+          "reason": null,
+          "requested": false,
+          "requested_at": "<timestamp>"
+        },
+        "compat": {
+          "contract": "chat_session_v1",
+          "inline_execution": true
+        },
+        "completed_at": "<timestamp>",
+        "correlation_id": "<uuid:7>",
+        "created_at": "<timestamp>",
+        "error": null,
+        "id": "job:<uuid:8>",
+        "input_payload": {
+          "message_id": "msg:<uuid:1>",
+          "model_id": "fixture-model",
+          "provider_id": "fixture",
+          "request": {
+            "agent_mode": false,
+            "coding_approval_policy": "ask_sensitive",
+            "content": "Summarize the current request.",
+            "dry_run": false,
+            "image_data_url": null,
+            "image_data_urls": [],
+            "model_id": "fixture-model",
+            "provider_id": "fixture",
+            "research_mode": null,
+            "speech_segment_id": null,
+            "text_attachment": null,
+            "user_turn_id": null,
+            "workspace_root": null
+          },
+          "session_id": "chat:<uuid:3>",
+          "submission_id": null
+        },
+        "input_ref": {
+          "message_id": "msg:<uuid:1>",
+          "session_id": "chat:<uuid:3>"
+        },
+        "lease": null,
+        "logs": [],
+        "module": "chatbot",
+        "output_refs": [],
+        "owner_id": null,
+        "priority": 0,
+        "progress": {
+          "current": 0,
+          "message": null,
+          "total": 1
+        },
+        "resource_class": "gpu:llm",
+        "stages": [
+          {
+            "checkpoint_ref": null,
+            "completed_at": "<timestamp>",
+            "error": null,
+            "id": "run",
+            "label": "chat.generate",
+            "output_refs": [],
+            "progress": {
+              "current": 0,
+              "message": null,
+              "total": 1
+            },
+            "resource_class": "gpu:llm",
+            "retry": {
+              "attempts": 0,
+              "max_attempts": 0,
+              "policy": "none"
+            },
+            "started_at": "<timestamp>",
+            "status": "queued"
+          }
+        ],
+        "started_at": "<timestamp>",
+        "status": "queued",
+        "type": "chat.generate",
+        "updated_at": "<timestamp>"
+      },
+      "type": "job"
+    },
+    {
+      "text": "The request is ready. ",
+      "type": "text_chunk"
+    },
+    {
+      "text": "The provider is deterministic.",
+      "type": "text_chunk"
+    },
+    {
+      "content": "The request is ready. The provider is deterministic.",
+      "diagnostics": {
+        "provider_completion_log_ms": "<duration>",
+        "terminal_metadata_ms": "<duration>"
+      },
+      "metadata": {
+        "assistant_turn_id": "assistant-turn:<uuid:2>",
+        "generation_status": "completed",
+        "model_id": "fixture-model",
+        "provider_id": "fixture",
+        "resolved_model": "fixture-model",
+        "usage": {
+          "completion_tokens": 7
+        }
+      },
+      "type": "complete"
+    },
+    {
+      "session": {
+        "active_segment_id": "segment:<uuid:5>",
+        "character_id": null,
+        "character_profile_version": null,
+        "created_at": "<timestamp>",
+        "effective_identity_hash": "094c309ad1e2fa9ab42f657b41b19861b0a1520dbcad6dd952fe4c73bb199e62",
+        "id": "chat:<uuid:3>",
+        "interaction_mode": "system",
+        "memory_enabled": false,
+        "memory_last_refreshed_at": "<timestamp>",
+        "memory_record_count": 0,
+        "memory_snapshot_id": null,
+        "memory_snapshot_revision": null,
+        "message_count": 2,
+        "messages": [
+          {
+            "content": "Summarize the current request.",
+            "created_at": "<timestamp>",
+            "id": "msg:<uuid:1>",
+            "metadata": {
+              "agent_mode": false,
+              "assistant_turn": {
+                "assistant_turn_id": "assistant-turn:<uuid:2>",
+                "audio_delivered_phrase_count": 0,
+                "audio_interrupted_phrase_index": null,
+                "audio_played_samples": 0,
+                "cancellation_reason": null,
+                "context_delivered_text_end": 0,
+                "created_at": "<timestamp>",
+                "delivery": "full",
+                "delivery_policy": "reveal_as_spoken",
+                "generated_phrase_count": 0,
+                "lifecycle": "completed",
+                "provider_execution": "completed",
+                "session_id": "chat:<uuid:3>",
+                "speech_segment_id": null,
+                "terminal_version": 1,
+                "tool_execution": "none",
+                "updated_at": "<timestamp>",
+                "user_message_id": "msg:<uuid:1>",
+                "user_turn_id": "user-turn:<uuid:4>",
+                "visual_delivered_text_end": 0
+              },
+              "assistant_turn_id": "assistant-turn:<uuid:2>",
+              "coding_approval_policy": "ask_sensitive",
+              "generation_status": "completed",
+              "omnix_route": {
+                "capability_id": null,
+                "confidence": 0.0,
+                "explicit": false,
+                "hermes_recommended": false,
+                "lane": "chat",
+                "reason": "semantic_parser_unavailable_safe_chat",
+                "workflow_id": null
+              },
+              "segment_id": "segment:<uuid:5>",
+              "speech_segment_id": null,
+              "user_turn_id": "user-turn:<uuid:4>"
+            },
+            "role": "user"
+          },
+          {
+            "content": "The request is ready. The provider is deterministic.",
+            "created_at": "<timestamp>",
+            "id": "msg:<uuid:6>",
+            "metadata": {
+              "assistant_turn_id": "assistant-turn:<uuid:2>",
+              "generation_status": "completed",
+              "model_id": "fixture-model",
+              "provider_id": "fixture",
+              "reply_to_message_id": "msg:<uuid:1>",
+              "resolved_model": "fixture-model",
+              "segment_id": "segment:<uuid:5>",
+              "usage": {
+                "completion_tokens": 7
+              }
+            },
+            "role": "assistant"
+          }
+        ],
+        "model_id": "fixture-model",
+        "profile_id": "profile:local",
+        "project_id": null,
+        "provider_id": "fixture",
+        "read_memory": false,
+        "research_mode_override": null,
+        "shared_memory_access": "none",
+        "title": "Characterization",
+        "transcript_policy": "persistent",
+        "updated_at": "<timestamp>",
+        "voice_asset_id": null,
+        "workspace_id": "workspace:default",
+        "write_memory": false
+      },
+      "type": "session"
+    },
+    {
+      "type": "done"
+    }
+  ],
+  "store_calls": [
+    {
+      "content": "Summarize the current request.",
+      "method": "begin_user_message",
+      "session_id": "chat:<uuid:3>"
+    },
+    {
+      "content": "Summarize the current request.",
+      "method": "stream_provider_reply_chunks",
+      "model_id": "fixture-model",
+      "provider_id": "fixture",
+      "session_id": "chat:<uuid:3>"
+    },
+    {
+      "content": "The request is ready. The provider is deterministic.",
+      "generation_status": "completed",
+      "method": "complete_streamed_reply",
+      "session_id": "chat:<uuid:3>",
+      "user_message_id": "msg:<uuid:1>"
+    }
+  ],
+  "warnings": []
+}

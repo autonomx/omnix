@@ -1,0 +1,473 @@
+{
+  "date": "2026-10-03",
+  "work_package": "WP-9.8",
+  "what": "Pixel differences between the approved visual baselines and the same screens after the colour palette (6,685 literals -> 259 tokens).",
+  "method": "Playwright visual-baselines.spec.ts captured with --update-snapshots=all; per-screen luminance difference. visible_pct counts pixels differing by more than 6 of 255; rerun_without_change is the same capture before the change (run-to-run noise).",
+  "palette": {
+    "tokens": 259,
+    "oklab_limit": 0.05,
+    "strict_scale_dark_near_white_low_chroma": 0.35,
+    "mid_dark_scale": 0.6,
+    "alpha": "limit divided by the highest alpha a colour is used at",
+    "translucency": "color-mix(in srgb, var(--c-x) N%, transparent), exact"
+  },
+  "test_result": "38 of 38 visual checks pass at their configured tolerance (maxDiffPixelRatio 0.002)",
+  "screens": {
+    "assets-dark": {
+      "tokens": {
+        "changed_pct": 99.06,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "assets-light": {
+      "tokens": {
+        "changed_pct": 94.58,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "audiobook-dark": {
+      "tokens": {
+        "changed_pct": 83.58,
+        "visible_pct": 2.1,
+        "max_level": 13
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "audiobook-light": {
+      "tokens": {
+        "changed_pct": 60.72,
+        "visible_pct": 1.9,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "chatbot-dark": {
+      "tokens": {
+        "changed_pct": 97.28,
+        "visible_pct": 0.77,
+        "max_level": 8
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "chatbot-evergreen-dark": {
+      "tokens": {
+        "changed_pct": 95.07,
+        "visible_pct": 0.45,
+        "max_level": 19
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "chatbot-evergreen-light": {
+      "tokens": {
+        "changed_pct": 79.24,
+        "visible_pct": 0.25,
+        "max_level": 42
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.04,
+        "visible_pct": 0.04,
+        "max_level": 42
+      }
+    },
+    "chatbot-graphite-dark": {
+      "tokens": {
+        "changed_pct": 95.02,
+        "visible_pct": 0.0,
+        "max_level": 8
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "chatbot-graphite-light": {
+      "tokens": {
+        "changed_pct": 44.51,
+        "visible_pct": 0.06,
+        "max_level": 32
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.04,
+        "visible_pct": 0.03,
+        "max_level": 32
+      }
+    },
+    "chatbot-light": {
+      "tokens": {
+        "changed_pct": 74.54,
+        "visible_pct": 0.08,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "chatbot-liquid-glass-dark": {
+      "tokens": {
+        "changed_pct": 93.4,
+        "visible_pct": 0.47,
+        "max_level": 28
+      },
+      "rerun_without_change": {
+        "changed_pct": 2.95,
+        "visible_pct": 0.14,
+        "max_level": 27
+      }
+    },
+    "chatbot-liquid-glass-light": {
+      "tokens": {
+        "changed_pct": 93.94,
+        "visible_pct": 0.03,
+        "max_level": 10
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "diagnostics-dark": {
+      "tokens": {
+        "changed_pct": 99.05,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "diagnostics-light": {
+      "tokens": {
+        "changed_pct": 94.53,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "image-generation-dark": {
+      "tokens": {
+        "changed_pct": 92.57,
+        "visible_pct": 0.48,
+        "max_level": 29
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "image-generation-light": {
+      "tokens": {
+        "changed_pct": 74.02,
+        "visible_pct": 0.22,
+        "max_level": 76
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.21,
+        "visible_pct": 0.19,
+        "max_level": 76
+      }
+    },
+    "jobs-dark": {
+      "tokens": {
+        "changed_pct": 99.08,
+        "visible_pct": 0.03,
+        "max_level": 235
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.02,
+        "visible_pct": 0.02,
+        "max_level": 232
+      }
+    },
+    "jobs-light": {
+      "tokens": {
+        "changed_pct": 88.86,
+        "visible_pct": 0.05,
+        "max_level": 218
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.04,
+        "visible_pct": 0.04,
+        "max_level": 218
+      }
+    },
+    "models-dark": {
+      "tokens": {
+        "changed_pct": 98.84,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "models-light": {
+      "tokens": {
+        "changed_pct": 90.78,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "podcast-dark": {
+      "tokens": {
+        "changed_pct": 89.2,
+        "visible_pct": 0.06,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "podcast-light": {
+      "tokens": {
+        "changed_pct": 63.93,
+        "visible_pct": 0.04,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "providers-dark": {
+      "tokens": {
+        "changed_pct": 98.84,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "providers-light": {
+      "tokens": {
+        "changed_pct": 90.76,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "reports-dark": {
+      "tokens": {
+        "changed_pct": 99.05,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "reports-light": {
+      "tokens": {
+        "changed_pct": 94.56,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "settings-dark": {
+      "tokens": {
+        "changed_pct": 98.6,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "settings-light": {
+      "tokens": {
+        "changed_pct": 72.7,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "storyteller-dark": {
+      "tokens": {
+        "changed_pct": 98.89,
+        "visible_pct": 0.02,
+        "max_level": 8
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.61,
+        "visible_pct": 0.0,
+        "max_level": 1
+      }
+    },
+    "storyteller-light": {
+      "tokens": {
+        "changed_pct": 85.51,
+        "visible_pct": 0.04,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 1.01,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "stt-dark": {
+      "tokens": {
+        "changed_pct": 90.5,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "stt-light": {
+      "tokens": {
+        "changed_pct": 70.46,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "trading-dark": {
+      "tokens": {
+        "changed_pct": 94.41,
+        "visible_pct": 0.1,
+        "max_level": 25
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "trading-light": {
+      "tokens": {
+        "changed_pct": 18.35,
+        "visible_pct": 0.08,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "voice-cloning-dark": {
+      "tokens": {
+        "changed_pct": 91.97,
+        "visible_pct": 0.0,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.0,
+        "visible_pct": 0.0,
+        "max_level": 0
+      }
+    },
+    "voice-cloning-light": {
+      "tokens": {
+        "changed_pct": 66.19,
+        "visible_pct": 0.03,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 0.03,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    },
+    "voice-dark": {
+      "tokens": {
+        "changed_pct": 92.65,
+        "visible_pct": 0.02,
+        "max_level": 7
+      },
+      "rerun_without_change": {
+        "changed_pct": 5.05,
+        "visible_pct": 0.0,
+        "max_level": 2
+      }
+    },
+    "voice-light": {
+      "tokens": {
+        "changed_pct": 57.2,
+        "visible_pct": 0.04,
+        "max_level": 31
+      },
+      "rerun_without_change": {
+        "changed_pct": 1.21,
+        "visible_pct": 0.02,
+        "max_level": 31
+      }
+    }
+  }
+}

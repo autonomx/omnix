@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-BROKER = Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_broker_extension.ts"
+BROKER = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime" / "pi_broker_extension.ts"
 
 
 def _source() -> str:

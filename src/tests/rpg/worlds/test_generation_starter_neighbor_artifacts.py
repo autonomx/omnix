@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.worlds import generation_starter_neighbor_artifacts
-from app.rpg.worlds.generation_starter_neighbor_artifacts import (
+from app.apps.rpg.worlds import generation_starter_neighbor_artifacts
+from app.apps.rpg.worlds.generation_starter_neighbor_artifacts import (
     StarterNeighborArtifactCompilationError,
     require_valid_starter_neighbor_artifacts,
     starter_neighbor_artifact_report,

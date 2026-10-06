@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import MarketBar
-from app.trading import strategy_stoch_rsi_5m as strategy
-from app.trading.strategies.models import StochRsi5mConfig
+from app.apps.trading.models import MarketBar
+from app.apps.trading import strategy_stoch_rsi_5m as strategy
+from app.apps.trading.strategies.models import StochRsi5mConfig
 
 
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)  # 09:30 ET

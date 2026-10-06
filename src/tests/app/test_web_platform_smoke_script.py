@@ -4,6 +4,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+import pytest
+
+# The backend smoke composes the full gateway, which needs PostgreSQL.
+pytestmark = pytest.mark.postgres
 
 
 def test_web_platform_smoke_script_backend_mode() -> None:

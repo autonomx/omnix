@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.chat_bridge import route_typed_chat_turn
+from app.platform.agent_runtime.semantic_task import (
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
 )
-from app.agent_runtime.semantic_task_parser import classify_semantic_task_safely
+from app.platform.agent_runtime.semantic_task_parser import classify_semantic_task_safely
 
 
 class _WorkspaceContextSensitiveParser:

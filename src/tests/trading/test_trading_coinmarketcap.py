@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import requests
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading import market_data_api
-from app.trading.catalog import bindings_for_instrument, instrument_by_id
-from app.trading.providers.coinmarketcap import CoinMarketCapProvider
+from app.apps.trading import market_data_api
+from app.apps.trading.catalog import bindings_for_instrument, instrument_by_id
+from app.apps.trading.providers.coinmarketcap import CoinMarketCapProvider
 
 
 class JsonResponse:
@@ -129,7 +129,7 @@ def test_coinmarketcap_provider_retries_basic_plan_daily_limit(monkeypatch) -> N
                     }
                 }
             )
-            raise requests.HTTPError("400 Client Error", response=response)
+            raise httpx.HTTPStatusError("400 Client Error", request=httpx.Request("GET", url), response=response)
         return original_get(url, **kwargs)
 
     runtime.get = get  # type: ignore[method-assign]
@@ -159,7 +159,7 @@ def test_coinmarketcap_provider_uses_extended_history_before_basic_fallback(monk
                     }
                 }
             )
-            raise requests.HTTPError("400 Client Error", response=response)
+            raise httpx.HTTPStatusError("400 Client Error", request=httpx.Request("GET", url), response=response)
         return original_get(url, **kwargs)
 
     runtime.get = get  # type: ignore[method-assign]

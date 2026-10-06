@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import types
+import pytest
+
+# Needs torch/diffusers model dependencies from the GPU lock sets.
+pytestmark = pytest.mark.gpu
 
 
 def test_from_pretrained_cpu_does_not_build_cuda_graphs(monkeypatch):

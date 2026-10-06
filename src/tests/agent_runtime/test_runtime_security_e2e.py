@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import (
+from app.platform.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _approved_execution_key,
     _bind_authoritative_capability_input,
 )
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentApproval,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -21,14 +21,14 @@ from app.agent_runtime.contracts import (
     ModelRef,
     SubjectRef,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
     evaluate_evidence_set,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.subagents import ChildRunRequest, derive_child_spec
 
 
 def test_tool_output_prompt_injection_cannot_create_workspace_mutation() -> None:

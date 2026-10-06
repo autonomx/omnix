@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from app.trading import strategy_stoch_rsi_5m_late_stage as late_stage
-from app.trading.models import MarketBar
-from app.trading.strategies.models import StochRsi5mConfig
+from app.apps.trading import strategy_stoch_rsi_5m_late_stage as late_stage
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import StochRsi5mConfig
 
 
 def _bar(start: datetime, *, open_: str, close: str) -> MarketBar:

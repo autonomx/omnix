@@ -1,15 +1,19 @@
 """Llama.cpp provider plugin with local server lifecycle management."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
-import platform
+import socket
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-import requests
+import httpx
+from app.runtime.net import bind_host
 
 from .base import (
     BaseProvider,
@@ -20,10 +24,26 @@ from .base import (
     ModelNotFoundError,
     ProviderCapability,
 )
+from .http_calls import transport_errors
 from .structured.transport import (
     pop_structured_transport_options,
     raise_if_structured_mode_rejected,
 )
+
+
+def _probe_host(host: str) -> str:
+    """Where to check for an existing listener: a wildcard bind means loopback."""
+    try:
+        return "127.0.0.1" if ipaddress.ip_address(host).is_unspecified else host
+    except ValueError:
+        return host
+
+
+def _drain(stream: Any, tail: deque) -> None:
+    """Read the server's output so it never blocks on a full pipe; keep the tail."""
+    with stream:
+        for line in stream:
+            tail.append(line.rstrip())
 
 
 class LlamaCppProvider(BaseProvider):
@@ -38,10 +58,12 @@ class LlamaCppProvider(BaseProvider):
         ProviderCapability.MODELS,
     ]
     SERVER_BINARY_NAMES = ["llama-server.exe", "llama-server", "llama.exe", "llama"]
+    STARTUP_TIMEOUT_SECONDS = 120.0
+    LOG_TAIL_LINES = 200
 
     def _validate_config(self):
         if not self.config.base_url:
-            self.config.base_url = "http://localhost:8080"
+            self.config.base_url = "http://localhost:8180"
         self.config.base_url = self.config.base_url.rstrip("/")
         if not self.config.extra_params.get("model_dir"):
             base_dir = Path(__file__).parent.parent.parent
@@ -61,42 +83,31 @@ class LlamaCppProvider(BaseProvider):
 
     def _is_server_running(self) -> bool:
         try:
-            response = requests.get(f"{self.config.base_url}/v1/models", timeout=2)
+            response = self.http.request("GET", f"{self.config.base_url}/v1/models", timeout=2, retry=False)
             return response.status_code == 200
         except Exception:
             return False
 
+    def _port(self) -> int:
+        try:
+            return int(self.config.base_url.split(":")[-1])
+        except (TypeError, ValueError):
+            return 8180
+
     def _start_server(self, model_path: str) -> Optional[int]:
+        host = bind_host()
         binary = self._find_server_binary()
         if not binary:
             raise ConnectionError("Llama.cpp server binary not found")
-        try:
-            port = int(self.config.base_url.split(":")[-1])
-        except (TypeError, ValueError):
-            port = 8080
-        try:
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    f"netstat -ano | findstr :{port}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
+        port = self._port()
+        # Never stop a process Omnix did not start (WP-4.10): a busy port is
+        # an error for the operator to resolve.
+        with socket.socket() as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex((_probe_host(host), port)) == 0:
+                raise ConnectionError(
+                    f"Port {port} is in use by another process; stop it or configure another llama.cpp port"
                 )
-                for line in result.stdout.strip().splitlines():
-                    parts = line.split()
-                    if len(parts) >= 5 and "LISTENING" in line:
-                        subprocess.run(
-                            f"taskkill /F /PID {parts[-1]} 2>nul",
-                            shell=True,
-                        )
-            else:
-                subprocess.run(
-                    f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                    shell=True,
-                )
-            time.sleep(1)
-        except Exception:
-            pass
         try:
             proc = subprocess.Popen(
                 [
@@ -108,52 +119,99 @@ class LlamaCppProvider(BaseProvider):
                     "-ngl",
                     "99",
                     "--host",
-                    "0.0.0.0",
+                    host,
                     "--port",
                     str(port),
                 ],
                 cwd=binary.parent,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
             )
-            return proc.pid
         except Exception as exc:
             raise ConnectionError(f"Failed to start server: {exc}") from exc
+        self._server_process = proc
+        self._server_log: deque[str] = deque(maxlen=self.LOG_TAIL_LINES)
+        self._server_log_reader = threading.Thread(
+            target=_drain, args=(proc.stdout, self._server_log),
+            name=f"llamacpp-log-{proc.pid}", daemon=True,
+        )
+        self._server_log_reader.start()
+        return proc.pid
+
+    def server_log_tail(self) -> list[str]:
+        """The last lines the started server printed, for diagnostics."""
+        return list(getattr(self, "_server_log", ()))
+
+    def _ensure_server(self, model_path: Path) -> None:
+        """Use a running server; start one only when ``auto_start`` is enabled."""
+        if self._is_server_running():
+            return
+        if not self.config.extra_params.get("auto_start"):
+            raise ConnectionError(
+                f"llama.cpp server is not running at {self.config.base_url}; "
+                "start it or enable auto_start"
+            )
+        if not self._start_server(str(model_path)):
+            raise ConnectionError("Failed to start llama.cpp server")
+        self._wait_until_ready()
+
+    def _wait_until_ready(self) -> None:
+        """Poll until the started server answers; fail early if it exits."""
+        proc = getattr(self, "_server_process", None)
+        deadline = time.monotonic() + self.STARTUP_TIMEOUT_SECONDS
+        pause = threading.Event()
+        while time.monotonic() < deadline:
+            if self._is_server_running():
+                return
+            if proc is not None and proc.poll() is not None:
+                # Let the reader collect the server's last words before reporting.
+                self._server_log_reader.join(timeout=2.0)
+                last = self.server_log_tail()[-1:] or ["no output"]
+                self._server_process = None
+                raise ConnectionError(
+                    f"llama.cpp server exited during startup (code {proc.returncode}): {last[0]}"
+                )
+            pause.wait(0.5)
+        self._stop_server()
+        raise ConnectionError(
+            f"llama.cpp server did not answer within {self.STARTUP_TIMEOUT_SECONDS:.0f} s"
+        )
 
     def _stop_server(self) -> bool:
+        """Stop the server this provider started, and nothing else."""
+        proc = getattr(self, "_server_process", None)
+        if proc is None:
+            return False
         try:
-            port = int(self.config.base_url.split(":")[-1])
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    f"netstat -ano | findstr :{port}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-                for line in result.stdout.strip().splitlines():
-                    parts = line.split()
-                    if len(parts) >= 5 and "LISTENING" in line:
-                        subprocess.run(
-                            f"taskkill /F /PID {parts[-1]} 2>nul",
-                            shell=True,
-                        )
-            else:
-                subprocess.run(
-                    f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                    shell=True,
-                )
-            return True
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
         except Exception:
             return False
+        finally:
+            self._server_process = None
+        return True
 
     def _resolve_model_path(self, model_name: str) -> Path:
         model_dir = Path(self.config.extra_params.get("model_dir", ""))
         possible_paths: list[Path] = []
         if os.path.isabs(model_name):
-            possible_paths.append(Path(model_name))
+            # Model files come from the models directory only (WP-4.10).
+            candidate = Path(model_name).resolve()
+            if not candidate.is_relative_to(model_dir.resolve()):
+                raise ModelNotFoundError(f"Model must be inside the models directory: {model_name}")
+            possible_paths.append(candidate)
         else:
-            direct_path = model_dir / model_name
+            direct_path = (model_dir / model_name).resolve()
+            if not direct_path.is_relative_to(model_dir.resolve()):
+                raise ModelNotFoundError(f"Model must be inside the models directory: {model_name}")
             if direct_path.exists():
                 possible_paths.append(direct_path)
             for file_path in model_dir.rglob("*.gguf"):
@@ -178,13 +236,7 @@ class LlamaCppProvider(BaseProvider):
         if not model_name:
             raise ModelNotFoundError("No model specified")
         model_path = self._resolve_model_path(model_name)
-        if not self._is_server_running():
-            pid = self._start_server(str(model_path))
-            if not pid:
-                raise ConnectionError("Failed to start llama.cpp server")
-            time.sleep(2)
-            if not self._is_server_running():
-                raise ConnectionError("Server started but not responding")
+        self._ensure_server(model_path)
         transport = pop_structured_transport_options(kwargs)
         payload: Dict[str, Any] = {
             "model": model_name,
@@ -216,37 +268,30 @@ class LlamaCppProvider(BaseProvider):
         *,
         timeout: float | None,
         stream: bool,
-    ) -> requests.Response:
-        try:
-            response = requests.post(
-                f"{self.config.base_url}/v1/chat/completions",
-                json=payload,
-                timeout=timeout if timeout is not None else self.config.timeout,
-                stream=stream,
-            )
-            response.raise_for_status()
+    ) -> Any:
+        """POST a chat completion; with ``stream`` the caller closes the response."""
+        url = f"{self.config.base_url}/v1/chat/completions"
+        timeout = timeout if timeout is not None else self.config.timeout
+        with transport_errors("llama.cpp server", timeout_target="llama.cpp"):
+            if stream:
+                response = self.http.open_stream("POST", url, json=payload, timeout=timeout)
+            else:
+                response = self.http.request("POST", url, json=payload, timeout=timeout)
+        if response.is_success:
             return response
-        except requests.exceptions.ConnectionError as exc:
-            raise ConnectionError(f"Failed to connect to llama.cpp server: {exc}") from exc
-        except requests.exceptions.Timeout as exc:
-            raise ConnectionError(f"Request to llama.cpp timed out: {exc}") from exc
-        except requests.exceptions.HTTPError as exc:
-            response = exc.response
-            status = response.status_code if response is not None else None
+        try:
+            body = response.read().decode("utf-8", "replace")[:2000]
+        except Exception:
             body = ""
-            if response is not None:
-                try:
-                    body = response.text[:2000]
-                except Exception:
-                    body = ""
-            raise_if_structured_mode_rejected(
-                status_code=status,
-                response_body=body,
-                error=exc,
-            )
-            raise ConnectionError(
-                f"HTTP error {status}: {exc}; response_body={body}"
-            ) from exc
+        finally:
+            response.close()
+        error = httpx.HTTPStatusError(
+            f"{response.status_code} {response.reason_phrase}",
+            request=response.request,
+            response=getattr(response, "response", response),
+        )
+        raise_if_structured_mode_rejected(status_code=response.status_code, response_body=body, error=error)
+        raise ConnectionError(f"HTTP error {response.status_code}: {error}; response_body={body}") from error
 
     def _non_stream_completion(
         self,
@@ -321,6 +366,8 @@ class LlamaCppProvider(BaseProvider):
                     continue
         except Exception as exc:
             raise ConnectionError(f"Stream error: {exc}") from exc
+        finally:
+            response.close()
 
     def get_models(self) -> List[ModelInfo]:
         try:
@@ -364,7 +411,7 @@ class LlamaCppProvider(BaseProvider):
                     "name": "base_url",
                     "type": "string",
                     "label": "Server URL",
-                    "default": "http://localhost:8080",
+                    "default": "http://localhost:8180",
                     "required": True,
                     "description": "URL of the llama.cpp server",
                 },

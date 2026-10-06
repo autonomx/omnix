@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.jobs.models import ResourceClass
-from app.rpg.session.genesis.async_coordinator import (
+from app.apps.rpg.session.genesis.async_coordinator import (
     CAMPAIGN_GENESIS_ASYNC_CONTRACT,
     CAMPAIGN_GENESIS_JOB_TYPE,
     CAMPAIGN_GENESIS_RESOURCE_CLASS,
@@ -15,7 +15,7 @@ from app.rpg.session.genesis.async_coordinator import (
     enqueue_campaign_genesis,
     _preserve_live_progress_during_expansion,
 )
-from app.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -139,7 +139,7 @@ def test_async_mode_is_production_default_but_deterministic_ci_is_explicit() -> 
 
 
 def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeypatch) -> None:
-    pipeline = importlib.import_module("app.rpg.session.genesis.pipeline_adapter")
+    pipeline = importlib.import_module("app.apps.rpg.session.genesis.pipeline_adapter")
     contract = _contract()
     prepared_calls: list[dict] = []
 
@@ -154,15 +154,15 @@ def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeyp
 
     monkeypatch.setattr(pipeline, "prepare_new_game_session_from_compiled_genesis", prepare)
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.campaign_genesis_async_enabled",
+        "app.apps.rpg.session.genesis.async_coordinator.campaign_genesis_async_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.campaign_genesis_sync_fallback_allowed",
+        "app.apps.rpg.session.genesis.async_coordinator.campaign_genesis_sync_fallback_allowed",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator.enqueue_campaign_genesis",
+        "app.apps.rpg.session.genesis.async_coordinator.enqueue_campaign_genesis",
         lambda *args, **kwargs: {
             "ok": False,
             "error": "campaign_genesis_enqueue_failed",
@@ -206,9 +206,9 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
         saved.append(session)
         return session
 
-    monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
+    monkeypatch.setattr("app.apps.rpg.session.service.save_session", save_session)
     monkeypatch.setattr(
-        "app.persistence.identity_service.bootstrap_local_tenant",
+        "app.persistence.identity_service.ensure_local_identity",
         lambda database: SimpleNamespace(workspace_id="workspace", user_id="user"),
     )
     unit_of_work_module = importlib.import_module("app.persistence.unit_of_work")
@@ -265,13 +265,13 @@ def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
         saved[campaign_id] = session
         return session
 
-    monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
+    monkeypatch.setattr("app.apps.rpg.session.service.save_session", save_session)
     monkeypatch.setattr(
-        "app.rpg.session.service.load_session",
+        "app.apps.rpg.session.service.load_session",
         lambda campaign_id: saved.get(campaign_id),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.async_coordinator._database",
+        "app.apps.rpg.session.genesis.async_coordinator._database",
         lambda value: (_ for _ in ()).throw(RuntimeError("PostgreSQL driver unavailable")),
     )
 
@@ -290,59 +290,6 @@ def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
     assert result["creation_progress"]["status"] == "failed"
     assert result["creation_progress"]["progress"] == 0
     assert result["session"]["runtime_state"]["campaign_generation"]["stage"] == "enqueue_failed"
-
-
-def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -> None:
-    coordinator = (
-        ROOT
-        / "src"
-        / "app"
-        / "rpg"
-        / "session"
-        / "genesis"
-        / "async_coordinator.py"
-    ).read_text(encoding="utf-8")
-    pipeline = (
-        ROOT
-        / "src"
-        / "app"
-        / "rpg"
-        / "session"
-        / "genesis"
-        / "pipeline_adapter.py"
-    ).read_text(encoding="utf-8")
-    materialization = (
-        ROOT
-        / "src"
-        / "app"
-        / "rpg"
-        / "session"
-        / "genesis"
-        / "materialization.py"
-    ).read_text(encoding="utf-8")
-    routes = (
-        ROOT / "src" / "app" / "gateway" / "rpg_campaign_lore_routes.py"
-    ).read_text(encoding="utf-8")
-
-    assert "work.jobs.claim_next(" in coordinator
-    assert "work.jobs.mark_running(" in coordinator
-    assert "lease_seconds=_DEFAULT_LEASE_SECONDS" in coordinator
-    assert "work.jobs.fail(" in coordinator
-    assert "retry_delay_seconds=1" in coordinator
-    assert 'result.get("status") == "retrying"' in coordinator
-    assert "_worker_stop.wait(1.05)" in coordinator
-    assert 'status="generating" if retrying else "failed"' in coordinator
-    assert "genesis_run_started=True" in coordinator
-    assert "required=True" in coordinator
-    assert "campaign_genesis_async_enabled()" in pipeline
-    assert "enqueue_campaign_genesis(" in pipeline
-    assert 'status="generating_world"' not in pipeline
-    assert "campaign_bible_hash(bible)" in materialization
-    assert "retry produced different canon" in materialization
-    assert 'status="ready"' in materialization
-    assert 'register_background_worker(' in routes
-    assert 'RuntimeCapability.RUN_RECOVERY' in routes
-    assert "kick_campaign_genesis_worker()" in routes
 
 
 def test_background_expansion_preserves_live_discovery_and_thread_progress() -> None:

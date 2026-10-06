@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.trading.feature_qualification import (
+from app.apps.trading.feature_qualification import (
     FeatureRequirement,
     qualify_bar_feature,
 )
-from app.trading.models import MarketBar
+from app.apps.trading.models import MarketBar
 
 
 ET = ZoneInfo("America/New_York")

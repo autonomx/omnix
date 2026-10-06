@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.coding_quality import repair_prompt
-from app.agent_runtime.contracts import ReviewFinding, ReviewResult, TaskRevision
+from app.platform.agent_runtime.coding_quality import repair_prompt
+from app.platform.agent_runtime.contracts import ReviewFinding, ReviewResult, TaskRevision
 
 
 def test_quality_repair_returns_reasoning_to_pi_and_hard_gates_only_when_required() -> None:

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import os
+import threading
 
 import pytest
 
+from app.jobs.handlers import Backoff, JobHandlerRegistry, JobHandlerSpec
+from app.jobs.models import CreateJobRequest, ResourceClass
 from app.persistence.config import DatabaseSettings
-from app.persistence.database import PostgresDatabase
+from app.persistence.database import PostgresConstraintError, PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.migrations import apply_migrations
+from app.persistence.identity_service import ensure_local_identity
+from app.persistence.job_store import PostgresJobStoreAdapter
+from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -62,11 +66,24 @@ def _create_job(work, context, job_id: str, *, priority: int = 0, max_attempts: 
     )
 
 
+def _make_expired_retry_available(database, context, job_id: str) -> None:
+    """Fast-forward the persisted retry delay in a deterministic test."""
+    with unit_of_work(database) as work:
+        released = work.jobs.release_expired_leases(context, job_id=job_id)
+        assert [row["id"] for row in released] == [job_id]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+            "WHERE id = %s",
+            (job_id,),
+        )
+        work.commit()
+
+
 def test_skip_locked_claims_distinct_jobs_and_completes() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:low", priority=1)
             _create_job(work, context, "job:high", priority=10)
@@ -139,7 +156,7 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:durable-feature")
             claimed = work.jobs.claim_next(
@@ -164,6 +181,7 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
                 "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
                 "WHERE id = 'job:durable-feature'"
             )
+        _make_expired_retry_available(database, context, "job:durable-feature")
 
         with unit_of_work(database) as work:
             reclaimed = work.jobs.claim_next(
@@ -188,7 +206,7 @@ def test_expired_worker_cannot_fail_before_reclaim() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:expired-failure", max_attempts=3)
             claimed = work.jobs.claim_next(
@@ -226,7 +244,7 @@ def test_stale_worker_cannot_fail_successor_attempt() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:stale-failure", max_attempts=3)
             first = work.jobs.claim_next(
@@ -244,6 +262,7 @@ def test_stale_worker_cannot_fail_successor_attempt() -> None:
                 "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
                 "WHERE id = 'job:stale-failure'"
             )
+        _make_expired_retry_available(database, context, "job:stale-failure")
 
         with unit_of_work(database) as work:
             second = work.jobs.claim_next(
@@ -279,12 +298,364 @@ def test_stale_worker_cannot_fail_successor_attempt() -> None:
         database.close()
 
 
+def test_stale_worker_cannot_update_progress_or_append_logs_after_takeover() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:fenced-progress")
+            first = work.jobs.claim_next(
+                context, worker_id="worker:first", resource_classes=["gpu:image"]
+            )
+            assert first is not None
+            work.jobs.mark_running(
+                context,
+                job_id=first["id"],
+                worker_id="worker:first",
+                lease_token=first["lease_token"],
+            )
+            work.commit()
+
+        with database.transaction() as connection:
+            connection.execute(
+                """UPDATE omnix_jobs
+                      SET lease_expires_at = clock_timestamp() - INTERVAL '1 second',
+                          metadata = jsonb_set(metadata, '{retry_backoff}',
+                              '{"base_seconds":1,"factor":2,"max_seconds":30,"jitter":0}'::jsonb, TRUE)
+                    WHERE id = 'job:fenced-progress'"""
+            )
+        with unit_of_work(database) as work:
+            released = work.jobs.release_expired_leases(context)
+            assert len(released) == 1 and released[0]["status"] == "retrying"
+            work.commit()
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET available_at = clock_timestamp() WHERE id = 'job:fenced-progress'"
+            )
+
+        with unit_of_work(database) as work:
+            second = work.jobs.claim_next(
+                context, worker_id="worker:second", resource_classes=["gpu:image"]
+            )
+            assert second is not None
+            work.jobs.mark_running(
+                context,
+                job_id=second["id"],
+                worker_id="worker:second",
+                lease_token=second["lease_token"],
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            assert not work.jobs.update_progress_compat(
+                context,
+                job_id=first["id"],
+                progress={"current": 99, "total": 100, "message": "stale"},
+                worker_id="worker:first",
+                lease_token=first["lease_token"],
+            )
+            assert not work.jobs.append_compat_logs(
+                context,
+                job_id=first["id"],
+                logs=[{"level": "error", "message": "stale write"}],
+                worker_id="worker:first",
+                lease_token=first["lease_token"],
+            )
+            work.rollback()
+
+        with unit_of_work(database) as work:
+            current = work.jobs.get_job(context, first["id"])
+            logs = work.jobs.list_job_logs(context, job_id=first["id"])
+            work.rollback()
+        assert current is not None
+        assert current["lease_token"] == second["lease_token"]
+        assert current["progress"] != {"current": 99, "total": 100, "message": "stale"}
+        assert logs == []
+    finally:
+        database.close()
+
+
+def test_concurrent_cancel_and_fenced_log_append_both_persist() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:cancel-and-log")
+            claimed = work.jobs.claim_next(
+                context, worker_id="worker:cancel-log", resource_classes=["gpu:image"]
+            )
+            assert claimed is not None
+            work.jobs.mark_running(
+                context,
+                job_id=claimed["id"],
+                worker_id="worker:cancel-log",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+
+        log_locked = threading.Event()
+        cancel_started = threading.Event()
+        failures: list[BaseException] = []
+
+        def append_log() -> None:
+            try:
+                with unit_of_work(database) as work:
+                    assert work.jobs.append_compat_logs(
+                        context,
+                        job_id=claimed["id"],
+                        logs=[{"level": "info", "message": "finished before cancel"}],
+                        worker_id="worker:cancel-log",
+                        lease_token=claimed["lease_token"],
+                    )
+                    log_locked.set()
+                    if not cancel_started.wait(10):
+                        raise TimeoutError("cancel did not begin while log row lock was held")
+                    work.commit()
+            except BaseException as exc:
+                failures.append(exc)
+
+        def cancel() -> None:
+            try:
+                if not log_locked.wait(10):
+                    raise TimeoutError("log append did not acquire the job row")
+                cancel_started.set()
+                with unit_of_work(database) as work:
+                    work.jobs.request_cancel(context, claimed["id"])
+                    work.commit()
+            except BaseException as exc:
+                failures.append(exc)
+
+        logger = threading.Thread(target=append_log)
+        canceller = threading.Thread(target=cancel)
+        logger.start()
+        canceller.start()
+        logger.join(timeout=15)
+        canceller.join(timeout=15)
+        assert not logger.is_alive() and not canceller.is_alive()
+        assert failures == []
+
+        with unit_of_work(database) as work:
+            current = work.jobs.get_job(context, claimed["id"])
+            logs = work.jobs.list_job_logs(context, job_id=claimed["id"])
+            work.rollback()
+        assert current is not None and current["status"] == "cancel_requested"
+        assert logs == [{"level": "info", "message": "finished before cancel"}]
+    finally:
+        database.close()
+
+
+def test_data_only_compat_log_keeps_its_original_shape() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:data-only-log")
+            claimed = work.jobs.claim_next(
+                context, worker_id="worker:data-only-log", resource_classes=["gpu:image"]
+            )
+            assert claimed is not None
+            work.jobs.mark_running(
+                context,
+                job_id=claimed["id"],
+                worker_id="worker:data-only-log",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            assert work.jobs.append_compat_logs(
+                context,
+                job_id=claimed["id"],
+                logs=[{"event": "completed"}],
+                worker_id="worker:data-only-log",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            logs = work.jobs.list_job_logs(context, job_id=claimed["id"])
+            work.rollback()
+        assert logs == [{"event": "completed"}]
+    finally:
+        database.close()
+
+
+def test_legacy_data_only_logs_backfill_without_adding_compat_fields() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            work.jobs.create_job(
+                context,
+                {
+                    "id": "job:legacy-data-only-log",
+                    "module": "image",
+                    "job_type": "image.generate",
+                    "resource_class": "gpu:image",
+                    "metadata": {"compat_contract": {"logs": [{"event": "imported"}]}},
+                },
+            )
+            work.commit()
+
+        migration = next(
+            item for item in discover_migrations()
+            if item.version == "0102_durable_job_hygiene"
+        )
+        with unit_of_work(database) as work:
+            work.connection.execute(migration.sql)
+            migrated = work.jobs.get_job(context, "job:legacy-data-only-log")
+            logs = work.jobs.list_job_logs(context, job_id="job:legacy-data-only-log")
+            work.commit()
+
+        assert migrated is not None
+        assert "logs" not in migrated["metadata"]["compat_contract"]
+        assert logs == [{"event": "imported"}]
+    finally:
+        database.close()
+
+
+def test_expired_lease_backoff_counts_attempts_and_dead_letters_exhaustion() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:backoff", max_attempts=3)
+            _create_job(work, context, "job:dead-letter", max_attempts=1)
+            work.commit()
+        with database.transaction() as connection:
+            connection.execute(
+                """UPDATE omnix_jobs
+                      SET metadata = jsonb_set(metadata, '{retry_backoff}',
+                          '{"base_seconds":3,"factor":2,"max_seconds":30,"jitter":0}'::jsonb, TRUE)
+                    WHERE id = 'job:backoff'"""
+            )
+
+        with unit_of_work(database) as work:
+            first = work.jobs.claim_next(
+                context, worker_id="worker:backoff-a", resource_classes=["gpu:image"],
+                job_id="job:backoff",
+            )
+            exhausted = work.jobs.claim_next(
+                context, worker_id="worker:dead", resource_classes=["gpu:image"],
+                job_id="job:dead-letter",
+            )
+            assert first is not None and exhausted is not None
+            work.commit()
+        with database.transaction() as connection:
+            connection.execute(
+                """UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+                    WHERE id IN ('job:backoff', 'job:dead-letter')"""
+            )
+        with unit_of_work(database) as work:
+            released = work.jobs.release_expired_leases(context)
+            assert {row["id"]: row["status"] for row in released} == {
+                "job:backoff": "retrying", "job:dead-letter": "failed"
+            }
+            work.commit()
+        with database.transaction() as connection:
+            delay = connection.execute(
+                "SELECT EXTRACT(EPOCH FROM (available_at - updated_at)) "
+                "FROM omnix_jobs WHERE id = 'job:backoff'"
+            ).fetchone()[0]
+            dead_letters = connection.execute(
+                "SELECT count(*) FROM omnix_dead_letters WHERE job_id = 'job:dead-letter'"
+            ).fetchone()[0]
+        assert 2.9 <= float(delay) <= 3.1
+        assert dead_letters == 1
+    finally:
+        database.close()
+
+
+def test_submission_snapshots_registered_handler_retry_backoff() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        registry = JobHandlerRegistry((
+            JobHandlerSpec(
+                type="test.retry-snapshot",
+                handler=lambda execution, job: job,
+                max_attempts=4,
+                retry_backoff=Backoff(
+                    base_seconds=7, factor=3, max_seconds=70, jitter=0.1
+                ),
+            ),
+        ))
+        store = PostgresJobStoreAdapter(database, context=context)
+        store.configure_handler_registry(registry)
+        created = store.create_job(CreateJobRequest(
+            module="test",
+            type="test.retry-snapshot",
+            resource_class=ResourceClass.CPU,
+        ))
+        with unit_of_work(database) as work:
+            persisted = work.jobs.get_job(context, created.id)
+            work.rollback()
+        assert persisted is not None
+        assert persisted["max_attempts"] == 4
+        assert persisted["metadata"]["retry_backoff"] == {
+            "base_seconds": 7.0,
+            "factor": 3.0,
+            "max_seconds": 70.0,
+            "jitter": 0.1,
+        }
+    finally:
+        database.close()
+
+
+def test_priority_aging_promotes_older_job_using_configured_interval() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database, job_priority_aging_seconds=30) as work:
+            _create_job(work, context, "job:aged-low", priority=0)
+            _create_job(work, context, "job:new-high", priority=1)
+            work.commit()
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET created_at = clock_timestamp() - INTERVAL '2 minutes' "
+                "WHERE id = 'job:aged-low'"
+            )
+
+        with unit_of_work(database, job_priority_aging_seconds=30) as work:
+            claimed = work.jobs.claim_next(
+                context, worker_id="worker:aged", resource_classes=["gpu:image"]
+            )
+            work.commit()
+        assert claimed is not None and claimed["id"] == "job:aged-low"
+    finally:
+        database.close()
+
+
+def test_job_status_constraint_rejects_unknown_state() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:status-check")
+            work.commit()
+        with pytest.raises(PostgresConstraintError) as error:
+            with database.transaction() as connection:
+                connection.execute(
+                    "UPDATE omnix_jobs SET status = 'not-a-job-state' WHERE id = 'job:status-check'"
+                )
+        assert error.value.constraint == "ck_omnix_jobs_status"
+    finally:
+        database.close()
+
 
 def test_record_only_job_transitions_without_worker_lease() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.jobs.create_job(
                 context,
@@ -293,23 +664,37 @@ def test_record_only_job_transitions_without_worker_lease() -> None:
                     "module": "rpg",
                     "job_type": "rpg.turn.foreground_record",
                     "resource_class": "cpu",
-                    "input_payload": {"command": "ask Bran about business"},
+                    "input_payload": {"command": "ask Bran about business", "submission_id": "submit:record"},
                     "metadata": {
                         "compat_contract": {
+                            "input_ref": {"session_id": "rpg:test"},
                             "compat": {"record_only": True},
                             "logs": [],
                         }
                     },
                 },
             )
+            claim = work.foreground_submissions.claim(
+                context, session_id="rpg:test", submission_id="submit:record",
+            )
+            assert work.foreground_submissions.attach_job(
+                context, session_id="rpg:test", submission_id="submit:record",
+                claim_token=claim["claim_token"], job_id="job:foreground-record",
+            )
+            assert work.foreground_submissions.start_execution(
+                context, session_id="rpg:test", submission_id="submit:record",
+                claim_token=claim["claim_token"],
+            )
             running = work.jobs.mark_record_only_running(
                 context,
                 job_id="job:foreground-record",
+                submission_claim_token=claim["claim_token"],
             )
             completed = work.jobs.complete_record_only(
                 context,
                 job_id="job:foreground-record",
                 output_refs=[{"session_id": "rpg:test"}],
+                submission_claim_token=claim["claim_token"],
             )
             work.commit()
 
@@ -325,7 +710,7 @@ def test_job_retry_then_dead_letter() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:retry", max_attempts=2)
             work.commit()
@@ -346,6 +731,11 @@ def test_job_retry_then_dead_letter() -> None:
             )
             work.commit()
         assert retried["status"] == "retrying"
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = 'job:retry'"
+            )
 
         with unit_of_work(database) as work:
             second = work.jobs.claim_next(
@@ -384,7 +774,7 @@ def test_claim_reconciles_a_stale_attempt_record() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:stale-attempt", max_attempts=2)
             work.connection.execute(
@@ -416,7 +806,7 @@ def test_cancel_queued_and_active_jobs() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:queued")
             _create_job(work, context, "job:active", priority=5)
@@ -439,7 +829,7 @@ def test_expired_cancel_requested_job_becomes_terminal_canceled() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:cancel-expired")
             claimed = work.jobs.claim_next(
@@ -501,11 +891,12 @@ def test_expired_cancel_requested_job_becomes_terminal_canceled() -> None:
 
 
 
+@pytest.mark.xdist_group("outbox")  # the outbox relay tests claim every pending event
 def test_outbox_is_transactional_claimable_and_retryable() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(RuntimeError):
             with unit_of_work(database) as work:
                 work.outbox.append(
@@ -568,7 +959,7 @@ def test_foreground_submission_reuses_committed_result() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             job = _create_job(work, context, "job:foreground")
             claim = work.foreground_submissions.claim(
@@ -621,7 +1012,7 @@ def test_expired_pre_execution_submission_can_be_reclaimed() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             first = work.foreground_submissions.claim(
                 context,

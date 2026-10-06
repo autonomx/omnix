@@ -1,7 +1,7 @@
 """Phase 10.5 — Regression tests for runtime layer stability."""
 
-from app.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
-from app.rpg.runtime.dialogue_runtime import (
+from app.apps.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
+from app.apps.rpg.runtime.dialogue_runtime import (
     apply_runtime_interruptions,
     begin_runtime_turn,
     build_runtime_style_tags,

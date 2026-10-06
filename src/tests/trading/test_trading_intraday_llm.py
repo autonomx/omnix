@@ -8,15 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.strategies.models import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
     GapPullbackResult,
     StrategySignal,
 )
-from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
-from app.trading.strategy_intraday_llm import (
+from app.apps.trading.strategy_intraday_learning import IntradayLearningSnapshot
+from app.apps.trading.strategy_intraday_llm import (
     EVENT_BATCH_COOLDOWN_MINUTES,
     FULL_REFRESH_MINUTES,
     IntradayLLMAssessment,
@@ -27,8 +27,8 @@ from app.trading.strategy_intraday_llm import (
     select_intraday_llm_candidates,
     should_run_intraday_llm_batch,
 )
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 OBSERVED = datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import BINANCE_POLICY, INSTRUMENTS
-from app.trading.providers.binance import INTERVAL_SECONDS, BinanceMarketDataProvider
-from app.trading.streaming.gap_recovery import INTERVAL_DELTAS, recovery_window
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import BINANCE_POLICY, INSTRUMENTS
+from app.apps.trading.providers.binance import INTERVAL_SECONDS, BinanceMarketDataProvider
+from app.apps.trading.streaming.gap_recovery import INTERVAL_DELTAS, recovery_window
 
 
 class FakeResponse:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.desktop_companion.evaluation import DesktopCompanionEvaluationRecord, hash_vision_model_id
-from app.desktop_companion.release_gate import (
+from app.apps.desktop_companion.evaluation import DesktopCompanionEvaluationRecord, hash_vision_model_id
+from app.apps.desktop_companion.release_gate import (
     DesktopCompanionEvidencePartition,
     build_partitioned_desktop_companion_release_gate,
     build_partitioned_desktop_companion_speech_gate,

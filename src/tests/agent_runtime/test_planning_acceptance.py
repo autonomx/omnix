@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
+from app.platform.agent_runtime.planning_acceptance import PlanningAcceptanceAssessment
 
 
 def test_shadow_planning_failures_are_observable_but_do_not_block_acceptance() -> None:

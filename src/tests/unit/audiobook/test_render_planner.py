@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.audiobook.hashing import text_hash
-from app.audiobook.render_planner import load_chapter_units
+from app.apps.audiobook.hashing import text_hash
+from app.apps.audiobook.render_planner import load_chapter_units
 from app.persistence.tenant import local_tenant_context
 
 

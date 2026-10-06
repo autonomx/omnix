@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from app.trading import historical_gapper_reconstruction as reconstruction
-from app.trading.strategies.models import GapPullbackConfig
+from app.apps.trading import historical_gapper_reconstruction as reconstruction
+from app.apps.trading.strategies.models import GapPullbackConfig
 
 
 class FakeResponse:

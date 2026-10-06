@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.platform.settings_profile_experience import AssistantSettingsProfile
-from app.platform.settings_profile_repository import (
+from app.settings.profile_experience import AssistantSettingsProfile
+from app.settings.profile_repository import (
     load_settings_profile,
     profile_payload,
     save_settings_profile,

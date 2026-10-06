@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.audiobook.document_structure import (
+from app.apps.audiobook.document_structure import (
     ANALYSIS_POLICY_VERSION,
     DOCUMENT_STRUCTURE_VERSION,
     RENDER_POLICY_VERSION,
@@ -22,7 +22,7 @@ from app.audiobook.document_structure import (
     mask_span_for_render,
     render_policy,
 )
-from app.audiobook.extraction import extract_source
+from app.apps.audiobook.extraction import extract_source
 
 
 _FIXTURE = (

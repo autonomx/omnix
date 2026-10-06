@@ -3,15 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.strategy_backtest import GapPullbackBacktestTrade
-from app.trading.strategy_partial_runner_research import (
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.strategy_backtest import GapPullbackBacktestTrade
+from app.apps.trading.strategy_partial_runner_research import (
     partial_target_quantity,
     replay_partial_profit_runner,
 )
-from app.trading.strategy_v2_qualification import frozen_v2_config
+from app.apps.trading.strategy_v2_qualification import frozen_v2_config
 
 
 def _bars(*, stop_and_target_same_bar: bool = False) -> list[MarketBar]:

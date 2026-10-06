@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.presentation.visible_response import build_visible_response, visible_response_text
+from app.apps.rpg.presentation.visible_response import build_visible_response, visible_response_text
 
 
 def test_canonical_visible_response_preserves_narration_and_npc_line() -> None:

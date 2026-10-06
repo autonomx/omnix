@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.characters.stage1_preflight import (
+from tests.rehearsal.characters.stage1_preflight import (
     Stage1Checkpoint,
     Stage1PrepareConfig,
     prepare_stage1,

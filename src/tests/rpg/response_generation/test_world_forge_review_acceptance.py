@@ -4,24 +4,24 @@ import json
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
-from app.rpg.worlds import generation_acceptance
-from app.rpg.worlds.generation_authorship_policy_signing import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
+from app.apps.rpg.worlds import generation_acceptance
+from app.apps.rpg.worlds.generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
 )
-from app.rpg.worlds.generation_authorship_runtime import build_generation_artifact
-from app.rpg.worlds.generation_authorship_signing import (
+from app.apps.rpg.worlds.generation_authorship_runtime import build_generation_artifact
+from app.apps.rpg.worlds.generation_authorship_signing import (
     attach_signed_llm_authorship,
     harden_and_sign_generation_artifact,
     sign_record,
 )
-from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings, canonical_hash
-from app.rpg.worlds.generation_contract_receipt import (
+from app.apps.rpg.worlds.generation_jobs import WorldTopicGenerationSettings, canonical_hash
+from app.apps.rpg.worlds.generation_contract_receipt import (
     RECEIPT_SCHEMA_VERSION,
     canonical_candidate_content_hash,
 )
@@ -251,7 +251,7 @@ class _Work:
 
 def _install(monkeypatch: pytest.MonkeyPatch, work: _Work) -> None:
     context = type("Context", (), {"workspace_id": "workspace:1"})()
-    monkeypatch.setattr(generation_acceptance, "bootstrap_local_tenant", lambda database: context)
+    monkeypatch.setattr(generation_acceptance, "current_tenant", lambda: context)
     monkeypatch.setattr(generation_acceptance, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_acceptance,

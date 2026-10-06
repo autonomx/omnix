@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.desktop_companion.models import (
+from app.apps.desktop_companion.models import (
     CompanionAttentionDecision,
     DesktopActivitySignal,
     DesktopBehaviorState,

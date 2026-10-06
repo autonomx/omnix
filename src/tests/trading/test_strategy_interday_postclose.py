@@ -4,14 +4,14 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.models import MarketBar
-from app.trading.strategy_dynamic_discovery import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_dynamic_discovery import (
     CandidateLifecycleState,
     DynamicCandidate,
     EvaluationTier,
 )
-from app.trading.strategy_dynamic_discovery_learning import DiscoveryDailyReport
-from app.trading.strategy_interday_postclose import (
+from app.apps.trading.strategy_dynamic_discovery_learning import DiscoveryDailyReport
+from app.apps.trading.strategy_interday_postclose import (
     label_candidate_outcome,
     qualification_from_persisted_evidence,
 )

@@ -1,19 +1,19 @@
 import pytest
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_fact_pipeline import (
+from app.apps.rpg.session.genesis.world_forge_fact_pipeline import (
     StructuredFactValidationError,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
     WorldForgeJobRecord,
 )
-from app.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
-from app.rpg.worlds.canon_repair import repair_generation_contracts
+from app.apps.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
+from app.apps.rpg.worlds.canon_repair import repair_generation_contracts
 
 
 def _generation(*topics: GeneratedTopic) -> WorldForgeGenerationResult:

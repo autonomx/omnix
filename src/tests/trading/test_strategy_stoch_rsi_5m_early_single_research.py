@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import MarketBar
-from app.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
-from app.trading import strategy_stoch_rsi_5m_early_single_research as research
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
+from app.apps.trading import strategy_stoch_rsi_5m_early_single_research as research
 
 
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)  # 09:30 ET

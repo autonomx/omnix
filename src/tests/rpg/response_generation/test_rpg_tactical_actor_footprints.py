@@ -2,22 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.map_actor_footprints import actor_footprint_cells
-from app.rpg.map_geometry_patch import ApplyGeometryPatchCommand, GeometryCellPatch, resolve_geometry_patch_command
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_actor_footprints import actor_footprint_cells
+from app.apps.rpg.map_geometry_patch import ApplyGeometryPatchCommand, GeometryCellPatch, resolve_geometry_patch_command
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import (
+from app.apps.rpg.map_instance_runtime import (
     MapMovementError,
     MoveActorCommand,
     create_map_instance_snapshot,
     replay_map_events,
     resolve_move_command,
 )
-from app.rpg.map_observer_runtime import ObserverPerceptionPolicy, observe_map
+from app.apps.rpg.map_observer_runtime import ObserverPerceptionPolicy, observe_map
 
 
 def _definition(rows: tuple[str, ...], *, map_id: str = "map:footprints") -> GridMapDefinition:

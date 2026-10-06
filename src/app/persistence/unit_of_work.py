@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 import logging
 from types import TracebackType
-from typing import Any, Literal
+from typing import Any, Callable, Hashable, Literal
 
+from .background_authority import require_background_owner
 from .authority import (
     AuthorityOperation,
-    initialize_fresh_install_authority,
     require_authority_operation,
 )
 from .asset_repository import (
@@ -17,48 +16,19 @@ from .asset_repository import (
     PostgresSecretReferenceRepository,
     PostgresSettingsRepository,
 )
-from .conversation_repositories import (
-    PostgresCharacterRepository,
-    PostgresChatRepository,
-    PostgresMemoryRepository,
-)
+from .audit import PostgresAuditRepository
 from .database import PostgresDatabase, default_database
-from .execution_repositories import PostgresForegroundSubmissionRepository
 from .job_repository import PostgresJobRepository
-from .module_repositories import (
-    PostgresModuleRecordRepository,
-    PostgresProjectionRepository,
-    PostgresPromptRepository,
-    PostgresProviderRepository,
-    PostgresResearchReportRepository,
-)
 from .outbox_repository import (
     PostgresOutboxConsumerRepository,
     PostgresOutboxRepository,
     PostgresSideEffectRepository,
 )
-from .repositories import (
-    PostgresAuditRepository,
-    PostgresIdempotencyRepository,
-    PostgresIdentityRepository,
-)
-from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
-from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
-from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
-from .rpg_map_instance_repository import PostgresRpgMapInstanceRepository
-from .rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
-from .rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
-from .rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
-from .rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
-from .rpg_observer_repository import PostgresRpgObserverRepository
-from .rpg_repository import PostgresRpgRepository
-from .rpg_trusted_world_scenario_repository import (
-    PostgresTrustedRpgWorldScenarioRepository,
-)
-from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
-from .rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
-from .rpg_world_library_repository import PostgresRpgWorldLibraryRepository
-from .transaction_policy import transaction_scope
+from .identity_service import PostgresIdentityRepository
+from .repositories import PostgresIdempotencyRepository
+from .repository_registry import repository_spec, repository_spec_by_alias
+from app.runtime.statement_class import apply_statement_class
+from .transaction_policy import TransactionPolicy, default_sleep, is_retryable_transaction_error, transaction_scope
 
 
 class UnitOfWorkClosedError(RuntimeError):
@@ -73,9 +43,17 @@ class PostgresUnitOfWork:
         database: PostgresDatabase | None = None,
         *,
         authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+        job_priority_aging_seconds: int | None = None,
     ) -> None:
+        from app.config.runtime import configured_job_priority_aging_seconds
+
         self.database = database or default_database()
         self.authority_operation = authority_operation
+        self.job_priority_aging_seconds = (
+            configured_job_priority_aging_seconds()
+            if job_priority_aging_seconds is None
+            else max(1, int(job_priority_aging_seconds))
+        )
         self.connection: Any | None = None
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
@@ -83,38 +61,16 @@ class PostgresUnitOfWork:
         self.assets: PostgresAssetRepository
         self.settings: PostgresSettingsRepository
         self.secret_references: PostgresSecretReferenceRepository
-        self.characters: PostgresCharacterRepository
-        self.memories: PostgresMemoryRepository
-        self.chats: PostgresChatRepository
         self.jobs: PostgresJobRepository
         self.outbox: PostgresOutboxRepository
         self.outbox_consumers: PostgresOutboxConsumerRepository
         self.side_effects: PostgresSideEffectRepository
-        self.foreground_submissions: PostgresForegroundSubmissionRepository
-        self.rpg: PostgresRpgRepository
-        self.campaign_bibles: PostgresRpgCampaignBibleRepository
-        self.campaign_genesis: PostgresRpgCampaignGenesisRepository
-        self.world_forge: PostgresRpgWorldForgeRepository
-        self.world_scenarios: PostgresTrustedRpgWorldScenarioRepository
-        self.world_generation: PostgresRpgWorldGenerationRepository
-        self.world_library: PostgresRpgWorldLibraryRepository
-        self.map_instances: PostgresRpgMapInstanceRepository
-        self.npc_spatial: PostgresRpgNpcSpatialRepository
-        self.observers: PostgresRpgObserverRepository
-        self.hermes_research: PostgresRpgHermesResearchRepository
-        self.narrative_responses: PostgresRpgNarrativeResponseRepository
-        self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
-        self.narrative_retirement: PostgresRpgNarrativeRetirementRepository
-        self.module_records: PostgresModuleRecordRepository
-        self.projections: PostgresProjectionRepository
-        self.providers: PostgresProviderRepository
-        self.prompts: PostgresPromptRepository
-        self.research_reports: PostgresResearchReportRepository
         self._connection_context: Any | None = None
         self._transaction_scope_context: Any | None = None
         self._completed = False
-        self._after_commit = []
+        self._after_commit: list[Callable[[], Any]] = []
         self._committed = False
+        self._feature_repositories: dict[Hashable, Any] = {}
 
     def __enter__(self) -> "PostgresUnitOfWork":
         if self.connection is not None:
@@ -122,21 +78,12 @@ class PostgresUnitOfWork:
         self._connection_context = self.database.connection()
         self.connection = self._connection_context.__enter__()
         try:
-            if self.authority_operation == AuthorityOperation.RUNTIME_MUTATION:
-                schema_row = self.connection.execute(
-                    "SELECT version FROM omnix_schema_migrations ORDER BY version DESC LIMIT 1"
-                ).fetchone()
-                initialize_fresh_install_authority(
-                    self.connection,
-                    software_revision=(
-                        os.environ.get("OMNIX_SOFTWARE_REVISION")
-                        or "fresh-install-unversioned"
-                    ).strip(),
-                    schema_version=(
-                        str(schema_row[0]) if schema_row is not None else "unknown-schema"
-                    ),
-                )
             require_authority_operation(self.connection, self.authority_operation)
+            # The work's transaction holds its background owner's fencing epoch (WP-8.3).
+            require_background_owner(self.connection, hold=True)
+            settings = getattr(self.database, "settings", None)
+            if settings is not None:
+                apply_statement_class(self.connection, settings.statement_timeout_ms)
         except BaseException:
             context, self._connection_context = self._connection_context, None
             self.connection = None
@@ -151,38 +98,33 @@ class PostgresUnitOfWork:
         self.assets = PostgresAssetRepository(self.connection)
         self.settings = PostgresSettingsRepository(self.connection)
         self.secret_references = PostgresSecretReferenceRepository(self.connection)
-        self.characters = PostgresCharacterRepository(self.connection)
-        self.memories = PostgresMemoryRepository(self.connection)
-        self.chats = PostgresChatRepository(self.connection)
-        self.jobs = PostgresJobRepository(self.connection)
+        self.jobs = PostgresJobRepository(
+            self.connection,
+            priority_aging_seconds=self.job_priority_aging_seconds,
+        )
         self.outbox = PostgresOutboxRepository(self.connection)
         self.outbox_consumers = PostgresOutboxConsumerRepository(self.connection)
         self.side_effects = PostgresSideEffectRepository(self.connection)
-        self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
-        self.rpg = PostgresRpgRepository(self.connection)
-        self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
-        self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
-        self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
-        self.world_scenarios = PostgresTrustedRpgWorldScenarioRepository(self.connection)
-        self.world_generation = PostgresRpgWorldGenerationRepository(self.connection)
-        self.world_library = PostgresRpgWorldLibraryRepository(self.connection)
-        self.map_instances = PostgresRpgMapInstanceRepository(self.connection)
-        self.npc_spatial = PostgresRpgNpcSpatialRepository(self.connection)
-        self.observers = PostgresRpgObserverRepository(self.connection)
-        self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
-        self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
-        self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
-            self.connection
-        )
-        self.narrative_retirement = PostgresRpgNarrativeRetirementRepository(
-            self.connection
-        )
-        self.module_records = PostgresModuleRecordRepository(self.connection)
-        self.projections = PostgresProjectionRepository(self.connection)
-        self.providers = PostgresProviderRepository(self.connection)
-        self.prompts = PostgresPromptRepository(self.connection)
-        self.research_reports = PostgresResearchReportRepository(self.connection)
         return self
+
+    def repository(self, repo_type: Hashable) -> Any:
+        connection = self._require_connection()
+        if repo_type in self._feature_repositories:
+            return self._feature_repositories[repo_type]
+        spec = repository_spec(repo_type)
+        if spec is None:
+            raise KeyError(f"repository is not registered: {repo_type!r}")
+        value = spec.factory(connection)
+        self._feature_repositories[repo_type] = value
+        return value
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        spec = repository_spec_by_alias(name)
+        if spec is None:
+            raise AttributeError(name)
+        return self.repository(spec.type)
 
     def commit(self) -> None:
         connection = self._require_connection()
@@ -236,7 +178,8 @@ def unit_of_work(
     database: PostgresDatabase | None = None,
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
-):
+    job_priority_aging_seconds: int | None = None,
+) -> PostgresUnitOfWork | _JoinedUnitOfWork:
     from .transaction_binding import shared_work
 
     resolved = database or default_database()
@@ -245,37 +188,79 @@ def unit_of_work(
         if parent.authority_operation != authority_operation:
             raise RuntimeError('A shared transaction cannot change its authority operation')
         return _JoinedUnitOfWork(parent)
-    return PostgresUnitOfWork(resolved, authority_operation=authority_operation)
+    return PostgresUnitOfWork(
+        resolved,
+        authority_operation=authority_operation,
+        job_priority_aging_seconds=job_priority_aging_seconds,
+    )
 
 
 class _JoinedUnitOfWork:
     """Nested repository operation: commit releases a savepoint, never the root."""
 
-    def __init__(self, parent):
+    def __init__(self, parent: PostgresUnitOfWork) -> None:
         self.parent = parent
         self.name = f'omnix_join_{uuid.uuid4().hex}'
         self.completed = False
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self.parent, name)
 
-    def __enter__(self):
+    def __enter__(self) -> _JoinedUnitOfWork:
         self.parent._require_connection().execute(f'SAVEPOINT {self.name}')
         self.callback_count = len(self.parent._after_commit)
         return self
 
-    def commit(self):
+    def commit(self) -> None:
         self.completed = True
 
-    def rollback(self):
+    def rollback(self) -> None:
         self.parent._require_connection().execute(f'ROLLBACK TO SAVEPOINT {self.name}')
         del self.parent._after_commit[self.callback_count:]
         self.completed = True
 
-    def __exit__(self, exc_type, exc, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
         connection = self.parent._require_connection()
         if exc_type is not None or not self.completed:
             connection.execute(f'ROLLBACK TO SAVEPOINT {self.name}')
             del self.parent._after_commit[self.callback_count:]
         connection.execute(f'RELEASE SAVEPOINT {self.name}')
         return False
+
+
+def run_unit_of_work(
+    database: PostgresDatabase | None,
+    operation: Callable[[Any], Any],
+    *,
+    policy: TransactionPolicy | None = None,
+    sleep: Callable[[float], None] = default_sleep,
+) -> Any:
+    """Run ``operation`` in a unit of work, retrying deadlocks and serialization failures (WP-5.10).
+
+    ``operation`` may run more than once; it must only touch the database
+    through ``work``. The unit of work is committed when it returns. Inside
+    a shared transaction it runs once: a deadlock aborts the outer
+    transaction, which only its owner can retry.
+    """
+    from .transaction_binding import shared_work
+
+    resolved = policy or TransactionPolicy()
+    attempts = 1 if shared_work(database or default_database()) is not None else resolved.max_attempts
+    for attempt in range(1, attempts + 1):
+        try:
+            with unit_of_work(database) as work:
+                result = operation(work)
+                work.commit()
+                return result
+        except Exception as exc:
+            if attempt >= attempts or not is_retryable_transaction_error(exc):
+                raise
+            delay = resolved.delay_for_attempt(attempt)
+            if delay:
+                sleep(delay)
+    raise AssertionError("unit of work retry loop exhausted without returning or raising")

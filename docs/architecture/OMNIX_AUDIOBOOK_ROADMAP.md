@@ -843,10 +843,10 @@ This is **not** a request to clone Alexandria's UI. Alexandria is a workflow/ref
 
 The closest existing visual/layout reference is Storyteller:
 
-- `src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
-- `src/apps/web/src/features/storyteller/StorytellerWorkspace.css`
-- `src/apps/web/src/features/storyteller/StorytellerSidebar.css`
-- `src/apps/web/src/features/storyteller/StoryMode.css`
+- `web/src/features/storyteller/StorytellerWorkspace.tsx`
+- `web/src/features/storyteller/StorytellerWorkspace.css`
+- `web/src/features/storyteller/StorytellerSidebar.css`
+- `web/src/features/storyteller/StoryMode.css`
 
 Audiobook should reuse the same overall three-column desktop grammar instead of inventing a second shell:
 
@@ -860,17 +860,17 @@ Audiobook may widen the center/right production area when useful, but should pre
 
 Codex must also integrate the module through the existing module registry and workspace router rather than hard-coding a standalone page:
 
-- `src/apps/web/src/app/modules.ts`
+- `web/src/app/modules.ts`
   - add `audiobook` to `OmnixModuleId`
   - add `/audiobook` to `OmnixModuleRoute`
   - add the Audiobook module definition
-- `src/apps/web/src/features/ModuleWorkspace.tsx`
+- `web/src/features/ModuleWorkspace.tsx`
   - import and route to `AudiobookWorkspace`
   - register capability labels
-- `src/apps/web/src/main.tsx`
+- `web/src/main.tsx`
   - import Audiobook workspace styles only as needed by the current app pattern
 - implementation target:
-  - `src/apps/web/src/features/audiobook/AudiobookWorkspace.tsx`
+  - `web/src/features/audiobook/AudiobookWorkspace.tsx`
   - colocated components/hooks/types/tests/styles under `features/audiobook/`
 
 Do not fork the entire Storyteller component. Reuse shared primitives and extract common presentational primitives only when that improves both modules without coupling their domain state.
@@ -1389,7 +1389,7 @@ Worker-side execution should call the same domain services and repositories used
 
 The web application should live under a dedicated feature folder, conceptually:
 
-    src/apps/web/src/features/audiobook/
+    web/src/features/audiobook/
 
 Reuse existing Jobs/Assets/Provider UI components where possible.
 

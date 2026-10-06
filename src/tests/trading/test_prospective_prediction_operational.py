@@ -6,20 +6,20 @@ from types import SimpleNamespace
 
 import pytest
 
-import app.trading.prospective_prediction_operational as operational
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_operational import (
+import app.apps.trading.prospective_prediction_operational as operational
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_operational import (
     build_cash_preserving_shadow_portfolio,
     build_operational_formal_outcome,
     evaluate_operational_confirmation,
     load_operational_premarket_state,
 )
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.prospective_prediction_v4 import (
     FinvizFrozenCohort,
     TradeAuthorizationReceipt,
 )
-from app.trading.strategies.models import (
+from app.apps.trading.strategies.models import (
     GapPullbackFeatures,
     GapPullbackResult,
     StrategySignal,

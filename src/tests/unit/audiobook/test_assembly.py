@@ -6,8 +6,8 @@ from array import array
 
 import pytest
 
-from app.audiobook.assembly import AudioSpan, PausePolicy, assemble_chapter
-from app.audiobook.assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
+from app.apps.audiobook.assembly import AudioSpan, PausePolicy, assemble_chapter
+from app.apps.audiobook.assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from app.persistence.blob_store import LocalBlobStore
 
 

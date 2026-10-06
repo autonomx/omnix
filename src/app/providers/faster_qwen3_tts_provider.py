@@ -4,10 +4,10 @@ Faster Qwen3 TTS Provider Plugin
 Implements the BaseTTSProvider interface for the faster-qwen3-tts library
 with CUDA graph acceleration for real-time voice cloning.
 """
+from app.config.env import env_str as _env_str
 
 import base64
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 import numpy as np
 from app.assets.voice_clone_identity import reference_transcript
 
-from ..shared import VOICE_CLONES_DIR
+from app.runtime.paths import VOICE_CLONES_DIR
 from .audio_base import (
     AudioProviderCapability,
     BaseTTSProvider,
@@ -50,11 +50,12 @@ def _clone_reference(speaker: Optional[str]) -> tuple[Optional[str], str]:
     """Resolve a saved clone and its exact reference transcript together."""
     if speaker:
         from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+        from app.assets.content import asset_available, materialize_asset
 
         clone_id = speaker.removeprefix("voice-cloning:").casefold()
         for asset in discover_canonical_voice_clone_assets():
-            if asset.storage_path and asset.id.removeprefix("voice-cloning:").casefold() == clone_id:
-                path = Path(asset.storage_path)
+            if asset.id.removeprefix("voice-cloning:").casefold() == clone_id and asset_available(asset):
+                path = materialize_asset(asset)
                 return str(path), reference_transcript(path)
         if speaker.startswith("voice-cloning:"):
             return None, ""
@@ -106,11 +107,11 @@ def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
     """
     config = config or {}
 
-    env_model_dir = (os.environ.get("OMNIX_TTS_MODEL_DIR", "") or "").strip()
+    env_model_dir = (_env_str("OMNIX_TTS_MODEL_DIR", "") or "").strip()
     if env_model_dir:
         return env_model_dir
 
-    env_qwen3_model_dir = (os.environ.get("OMNIX_QWEN3_TTS_MODEL_DIR", "") or "").strip()
+    env_qwen3_model_dir = (_env_str("OMNIX_QWEN3_TTS_MODEL_DIR", "") or "").strip()
     if env_qwen3_model_dir:
         return env_qwen3_model_dir
 
@@ -358,7 +359,23 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
     generation_strategy_revision = "faster-qwen3-tts-generation-v4"
-    
+
+    @staticmethod
+    def local_model_artifacts():
+        """The installed model directory that audiobook renders are pinned to."""
+        from app.settings.access import load_settings
+
+        from .tts_artifacts import LocalArtifactsUnavailable, LocalModelArtifacts
+
+        settings = load_settings().get("faster-qwen3-tts", {})
+        source = _resolve_model_source(_resolve_qwen3_model_name(settings))
+        directory = Path(source).expanduser().resolve()
+        if not directory.is_dir():
+            raise LocalArtifactsUnavailable("a local, pinned FasterQwen model directory is required")
+        if not list(directory.glob("*.safetensors")):
+            raise LocalArtifactsUnavailable("the configured FasterQwen model has no weight files")
+        return LocalModelArtifacts(model_id="Qwen3-TTS", directory=directory)
+
     default_capabilities = [
         AudioProviderCapability.STREAMING,
         AudioProviderCapability.VOICE_CLONING,
@@ -880,6 +897,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self, text: str, speaker: Optional[str] = None,
         language: Optional[str] = None, **kwargs,
     ) -> Iterator[tuple[np.ndarray, int, dict]]:
+        permit_already_held = bool(kwargs.pop("_device_permit_held", False))
+        if permit_already_held:
+            yield from self._generate_audio_stream_impl(
+                text, speaker=speaker, language=language, **kwargs,
+            )
+            return
         with generation_slot():
             yield from self._generate_audio_stream_impl(
                 text, speaker=speaker, language=language, **kwargs,

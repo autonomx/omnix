@@ -4,10 +4,9 @@ import pytest
 
 from app.jobs import (
     GpuResidencyRequest,
+    InMemoryModelResidencyStore,
     LocalJobExecutor,
     ResourceClass,
-    SQLiteJobStore,
-    SQLiteModelResidencyStore,
     create_model_evict_job_request,
     create_model_load_job_request,
     create_model_residency_handlers,
@@ -16,6 +15,7 @@ from app.jobs import (
 )
 from app.jobs.models import JobStatus
 from app.jobs.residency import ModelResidencyRecord, ModelResidencyStatus
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _request() -> GpuResidencyRequest:
@@ -46,7 +46,7 @@ def _record(worker_endpoint: str = "http://127.0.0.1:5301") -> ModelResidencyRec
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_worker_model_control_hooks_complete_load_and_evict_through_executor(tmp_path) -> None:
     calls: list[tuple[str, dict, float]] = []
 
@@ -55,8 +55,8 @@ async def test_worker_model_control_hooks_complete_load_and_evict_through_execut
         return {"ok": True, "provider": payload["provider"], "url": url}
 
     load_hook, evict_hook = create_worker_model_control_hooks(post_json=post_json, timeout_seconds=12.0)
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    residency_store = SQLiteModelResidencyStore(tmp_path / "residency.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
+    residency_store = InMemoryModelResidencyStore(tmp_path / "residency")
     load_job = job_store.create_job(create_model_load_job_request(_request()))
     executor = LocalJobExecutor(
         job_store,
@@ -104,14 +104,14 @@ async def test_worker_model_control_hooks_complete_load_and_evict_through_execut
 
 def test_worker_model_control_hook_rejects_missing_endpoint(tmp_path) -> None:
     request = _request().model_copy(update={"worker_endpoint": None})
-    job = SQLiteJobStore(tmp_path / "jobs.sqlite").create_job(create_model_load_job_request(request))
+    job = InMemoryJobStore(tmp_path / "jobs").create_job(create_model_load_job_request(request))
 
     with pytest.raises(RuntimeError, match="worker_model_control_endpoint_missing"):
         load_worker_model(_record(worker_endpoint=""), job, post_json=lambda *_args: {"ok": True})
 
 
 def test_worker_model_control_hook_raises_on_worker_error(tmp_path) -> None:
-    job = SQLiteJobStore(tmp_path / "jobs.sqlite").create_job(create_model_load_job_request(_request()))
+    job = InMemoryJobStore(tmp_path / "jobs").create_job(create_model_load_job_request(_request()))
 
     with pytest.raises(RuntimeError, match="worker_model_control_loaded_failed:image_generation_disabled"):
         load_worker_model(

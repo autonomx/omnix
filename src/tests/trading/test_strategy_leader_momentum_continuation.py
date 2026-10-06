@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import MarketBar
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.strategy_timeframes import resample_final_bars
+from app.apps.trading.models import MarketBar
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.strategy_timeframes import resample_final_bars
 
 
 def _bar(

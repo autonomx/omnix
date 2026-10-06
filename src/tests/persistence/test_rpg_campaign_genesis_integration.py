@@ -6,17 +6,18 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.compiler import compile_campaign_genesis
-from app.rpg.session.genesis.contract import CampaignGenesisContract
-from app.rpg.session.genesis.materialization import persist_campaign_genesis
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_deterministic import (
+from app.runtime.tenant_context import install_process_tenant
+from app.apps.rpg.session.genesis.compiler import compile_campaign_genesis
+from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
+from app.apps.rpg.session.genesis.materialization import persist_campaign_genesis
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_deterministic import (
     DeterministicWorldForgeGenerator,
 )
-from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.apps.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -55,6 +56,8 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
     database = _database()
     try:
         _reset(database)
+        context = ensure_local_identity(database)
+        install_process_tenant(context)
         contract = CampaignGenesisContract.model_validate(
             {
                 "campaign_template": "summoned_heroes",
@@ -100,7 +103,6 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
         assert persisted["genesis"]["status"] == "ready"
         assert persisted["genesis"]["progress"]["launch_ready"] is True
 
-        context = bootstrap_local_tenant(database)
         with unit_of_work(database) as work:
             bible = work.campaign_bibles.get(context, "campaign:genesis")
             genesis = work.campaign_genesis.get(context, "campaign:genesis")

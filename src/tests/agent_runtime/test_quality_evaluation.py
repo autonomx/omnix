@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.agent_runtime.quality_evaluation import (
+from app.platform.agent_runtime.quality_evaluation import (
     CodingQualitySample,
     SeededQualityProbe,
     aggregate_quality_samples,

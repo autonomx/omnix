@@ -3,18 +3,17 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.characters import (
+from app.platform.characters import (
     SYSTEM_ASSISTANT_IDENTITY,
     CharacterModeDisabledError,
     CharacterProfileSnapshot,
     CharacterResolutionError,
     InteractionSelection,
-    neutralize_legacy_system_prompt,
     resolve_interaction_context,
 )
-from app.characters.interaction import LEGACY_MAYA_SYSTEM_PROMPT
-from app.chat.models import ChatMessage, ChatSession, CreateChatSessionRequest
-from app.chat.prompt_assembly import build_prompt_assembly
+from app.platform.chat.session_identity import LEGACY_MAYA_SYSTEM_PROMPT, neutralize_legacy_system_prompt
+from app.platform.chat.models import ChatMessage, ChatSession, CreateChatSessionRequest
+from app.platform.chat.prompt_assembly import build_prompt_assembly
 
 
 def _session(**overrides: object) -> ChatSession:

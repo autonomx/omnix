@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.trading.indicators.engine import (
+from app.apps.trading.indicators.engine import (
     CORE_INDICATOR_FORMULA_VERSION,
     exponential_moving_average,
     relative_strength_index,
@@ -11,7 +11,7 @@ from app.trading.indicators.engine import (
 )
 
 
-FIXTURE = Path(__file__).resolve().parents[3] / "src/apps/web/src/features/trading/indicators/fixtures/coreIndicators.json"
+FIXTURE = Path(__file__).resolve().parents[3] / "web/src/features/trading/indicators/fixtures/coreIndicators.json"
 
 
 def load_fixture():

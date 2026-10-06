@@ -23,6 +23,9 @@ class _Result:
     def fetchall(self):
         return self._rows
 
+    def fetchmany(self, size):
+        return self._rows[:size]
+
 
 class _RecoveryConnection:
     def __init__(self, *, live_root, content: bytes = b"recovery-content") -> None:

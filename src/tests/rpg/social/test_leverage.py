@@ -1,4 +1,4 @@
-from app.rpg.social.leverage import add_social_leverage, validate_leverage
+from app.apps.rpg.social.leverage import add_social_leverage, validate_leverage
 
 
 def test_valid_leverage_returns_bonus():

@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.characters.stage2_contracts import Stage2Checkpoint, Stage2PrepareConfig
-from app.characters.stage2_runner import prepare_stage2, verify_stage2_restart
+from tests.rehearsal.characters.stage2_contracts import Stage2Checkpoint, Stage2PrepareConfig
+from tests.rehearsal.characters.stage2_runner import prepare_stage2, verify_stage2_restart
 
 
 class FakeStage2Gateway:

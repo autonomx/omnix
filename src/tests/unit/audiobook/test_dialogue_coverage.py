@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.audiobook.dialogue_coverage import audit_dialogue_coverage
-from app.audiobook.hashing import text_hash
-from app.audiobook.models import SourceSpan
+from app.apps.audiobook.dialogue_coverage import audit_dialogue_coverage
+from app.apps.audiobook.hashing import text_hash
+from app.apps.audiobook.models import SourceSpan
 
 
 def _narration(text: str) -> SourceSpan:

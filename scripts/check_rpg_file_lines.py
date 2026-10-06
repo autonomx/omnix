@@ -1,8 +1,8 @@
-"""Check RPG source and test files for excessive line counts.
+"""Check RPG source and test files against the 1,200-line file budget.
 
 Default target areas:
-  - src/app/rpg
-  - src/tests/rpg
+  - src/app/apps/rpg
+  - src/tests/unit/rpg
 
 The script prints files whose line count is greater than the configured limit and
 exits with status 1 when any oversized files are found. This makes it suitable
@@ -12,15 +12,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-DEFAULT_LIMIT = 1000
+# The repository-wide architecture metrics also track all files over 1,200 lines
+# and all functions over 150 lines. This focused gate keeps the RPG line budget
+# aligned with that global policy while existing oversize files shrink.
+DEFAULT_LIMIT = 1200
 DEFAULT_PATHS = (
-    Path("src/app/rpg"),
-    Path("src/tests/rpg"),
+    Path("src/app/apps/rpg"),
+    Path("src/tests/unit/rpg"),
 )
 DEFAULT_EXTENSIONS = (
     ".py",
@@ -41,22 +43,9 @@ IGNORED_DIR_NAMES = {
     "node_modules",
 }
 
-# Existing RPG file-size debt. These files remain over DEFAULT_LIMIT, but the
-# audit must fail if they grow further. This keeps the gate useful while follow-up
-# refactors split the files below the normal limit.
-LINE_DEBT_LIMITS = {
-    "src/app/rpg/tests/test_narration_queue_service_dialogue.py": 1543,
-    "src/app/rpg/api/rpg_session_routes.py": 1257,
-    "src/app/rpg/ai/grounding_validator.py": 1017,
-    "src/app/rpg/presentation/dialogue_quality.py": 1251,
-    "src/app/rpg/response_generation/production_pipeline.py": 1182,
-    "src/app/rpg/session/genesis/campaign_lore_store.py": 1093,
-    "src/app/rpg/session/genesis/runtime_lore_materialization.py": 1049,
-    "src/app/rpg/worlds/world_images.py": 1126,
-    # Single-pass generation landed as one safety-coherent cutover. Keep this
-    # ceiling tight so follow-up extraction can only reduce the coordinator.
-    "src/app/rpg/worlds/generation_coordinator.py": 1259,
-}
+# Files above the shared budget that may only shrink. Empty since WP-8.6: every
+# RPG file is within 1,200 lines, and a new exception needs a DECISIONS entry.
+LINE_DEBT_LIMITS: dict[str, int] = {}
 
 
 @dataclass(frozen=True)
@@ -182,15 +171,15 @@ def find_line_debt(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check RPG source and test files for files over a line-count limit.")
+    parser = argparse.ArgumentParser(description="Check the RPG 1,200-line file budget.")
     parser.add_argument(
         "paths",
         nargs="*",
         type=Path,
         default=list(DEFAULT_PATHS),
-        help="Paths to scan. Defaults to src/app/rpg and src/tests/rpg.",
+        help="Paths to scan. Defaults to src/app/apps/rpg and src/tests/unit/rpg.",
     )
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Maximum allowed line count. Defaults to 1000.")
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Maximum allowed line count. Defaults to 1200.")
     parser.add_argument(
         "--extension",
         action="append",
@@ -221,7 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for item in oversized:
             print(f"{item.lines:5d} lines  +{item.over_by:4d}  {item.path}  limit={item.limit}")
     else:
-        print(f"RPG file line audit passed: no files exceed configured limits.")
+        print("RPG file line audit passed: no files exceed configured limits.")
         if debt:
             print(f"Tracked RPG line debt remains: {len(debt)} file(s) above {args.limit} lines.")
             for item in debt:

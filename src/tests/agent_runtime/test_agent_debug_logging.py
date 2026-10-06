@@ -8,15 +8,15 @@ import threading
 
 import pytest
 
-from app.agent_runtime.contracts import AgentEvent, AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.debug_logging import (
+from app.platform.agent_runtime.contracts import AgentEvent, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.observability.agent_logging import (
     _reset_agent_debug_logging_for_tests,
     configure_agent_debug_logging,
     log_agent_activity,
 )
-from app.agent_runtime.pi_runtime import PiRpcSession
-from app.agent_runtime.pi_runtime_core import _rpc_payload_for_log
-from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.platform.agent_runtime.pi_runtime import PiRpcSession
+from app.platform.agent_runtime.pi_runtime_core import _rpc_payload_for_log
+from app.platform.agent_runtime.repository import PostgresAgentRunRepository
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_agent_activity_is_written_to_daily_and_per_run_logs(agent_log_dir: Path
 
 
 def test_agent_logger_captures_python_runtime_records_without_secrets(agent_log_dir: Path) -> None:
-    logger = logging.getLogger("app.agent_runtime.test")
+    logger = logging.getLogger("app.platform.agent_runtime.test")
     logger.error(
         "runtime observer failed",
         extra={"run_id": "run-python", "token": "secret-token"},
@@ -122,12 +122,23 @@ def test_durable_event_append_failure_has_traceback(agent_log_dir: Path) -> None
 
 
 def test_pi_process_and_rpc_activity_is_traceable(agent_log_dir: Path, tmp_path: Path) -> None:
+    class PromptInput(StringIO):
+        def __init__(self, prompt_sent: threading.Event) -> None:
+            super().__init__()
+            self.prompt_sent = prompt_sent
+
+        def write(self, value: str) -> int:
+            written = super().write(value)
+            self.prompt_sent.set()
+            return written
+
     class OutputStream:
         def __init__(self, process: FakeProcess, lines: list[str]) -> None:
             self.process = process
             self.lines = lines
 
         def __iter__(self):
+            self.process.prompt_sent.wait(timeout=2)
             yield from self.lines
             self.process.output_done.set()
 
@@ -136,7 +147,8 @@ def test_pi_process_and_rpc_activity_is_traceable(agent_log_dir: Path, tmp_path:
             self.pid = 731
             self.returncode: int | None = None
             self.output_done = threading.Event()
-            self.stdin = StringIO()
+            self.prompt_sent = threading.Event()
+            self.stdin = PromptInput(self.prompt_sent)
             self.stdout = OutputStream(
                 self,
                 [

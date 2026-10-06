@@ -22,7 +22,7 @@ def test_relative_codex_path_resolves_before_subprocess_cwd_changes(monkeypatch,
 
 def test_registry_preserves_explicit_codex_provider_config(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "providerConfigs": {
@@ -87,7 +87,7 @@ def test_provider_facade_surfaces_live_codex_catalog(monkeypatch) -> None:
             ),
         ]
     )
-    monkeypatch.setattr("app.shared.get_provider", lambda name: live_provider if name == "chatgpt_codex" else None)
+    monkeypatch.setattr("app.providers.service.get_provider", lambda name: live_provider if name == "chatgpt_codex" else None)
     facade = ProviderFacade(
         llm_lister=lambda: [
             {
@@ -117,7 +117,7 @@ def test_provider_facade_surfaces_live_codex_catalog(monkeypatch) -> None:
 
 
 def test_provider_facade_keeps_configured_codex_model_when_catalog_unavailable(monkeypatch) -> None:
-    monkeypatch.setattr("app.shared.get_provider", lambda _name: SimpleNamespace(get_models=lambda: []))
+    monkeypatch.setattr("app.providers.service.get_provider", lambda _name: SimpleNamespace(get_models=lambda: []))
     facade = ProviderFacade(
         llm_lister=lambda: [{"name": "chatgpt_codex", "capabilities": ["chat", "models"]}],
         tts_lister=lambda: [],

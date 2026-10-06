@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.contracts import EvidenceProposition
-from app.companion_activity.delivery_quality import (
+from app.platform.companion_activity.contracts import EvidenceProposition
+from app.platform.companion_activity.delivery_quality import (
     CompanionDeliveryQualityMetrics,
     DeliveryQualityOutcome,
 )
-from app.companion_activity.evaluation import (
+from app.platform.companion_activity.evaluation import (
     CompanionReleaseEvidence,
     CompanionReleaseGate,
     CompanionReleaseGatePolicy,
@@ -16,7 +16,7 @@ from app.companion_activity.evaluation import (
     ReplayScenario,
     ReplayStep,
 )
-from app.companion_activity.state import empty_activity_state
+from app.platform.companion_activity.state import empty_activity_state
 
 NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
 

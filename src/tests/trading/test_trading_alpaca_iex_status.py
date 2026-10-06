@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ssl
 
-from app.trading.providers.alpaca_iex_status import (
+from app.apps.trading.providers.alpaca_iex_status import (
     _status_stream_connect_kwargs,
     _status_stream_ssl_context,
 )

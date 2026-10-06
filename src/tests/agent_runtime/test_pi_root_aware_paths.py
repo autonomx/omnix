@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-ROOT = Path(__file__).parents[2] / "app" / "agent_runtime"
+ROOT = Path(__file__).parents[2] / "app" / "platform" / "agent_runtime"
 
 
 def test_pi_guard_normalizes_scoped_grep_results_to_issued_root_identity() -> None:

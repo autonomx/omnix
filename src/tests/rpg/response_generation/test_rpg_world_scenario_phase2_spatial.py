@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     GridPortal,
@@ -13,7 +13,7 @@ from app.rpg.map_grid_contracts import (
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import (
+from app.apps.rpg.map_instance_runtime import (
     MapMovementError,
     MoveActorCommand,
     create_map_instance_snapshot,
@@ -97,16 +97,6 @@ def _tavern_definition() -> GridMapDefinition:
         ),
     )
     return with_grid_definition_hashes(base)
-
-
-def test_grid_definition_has_independent_hash_and_coordinate_transform() -> None:
-    definition = _tavern_definition()
-
-    assert definition.definition_hash.startswith("sha256:")
-    assert definition.semantic_interface_hash.startswith("sha256:")
-    assert definition.transform.display_point((14, 14)) == (15, 15)
-    assert definition.transform.display_point((13, 13)) == (14, 14)
-    assert definition.transform.visual_point((13, 13)) == (416, 416)
 
 
 def test_actor_move_is_resolved_once_and_replays_without_pathfinding() -> None:

@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 
 from app.providers.base import ChatResponse, ProviderConfig
-from app.rpg.ai.action_intelligence import get_action_advisory
-from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
-from app.rpg.llm_app_gateway import AppLLMGateway
+from app.apps.rpg.ai.action_intelligence import get_action_advisory
+from app.apps.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
+from app.apps.rpg.llm_app_gateway import AppLLMGateway
 
 
 def _action_payload(*, stateful=True, action_type="observe") -> dict:

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from decimal import Decimal
 
-from app.trading.finviz_gapper_discovery import (
+from app.apps.trading.finviz_gapper_discovery import (
     FINVIZ_ATOMIC_SOURCE_LOCATOR,
     _finviz_symbols,
     discover_finviz_gappers,
@@ -105,7 +105,7 @@ def _chart_payload_without_premarket():
 def test_finviz_discovery_uses_finviz_for_rank_and_yahoo_for_point_in_time_enrichment(monkeypatch):
     now = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
     monkeypatch.setattr(
-        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        "app.apps.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
         10**9,
     )
     finviz = Runtime([
@@ -181,7 +181,7 @@ def test_finviz_source_capture_is_one_request_and_never_paginates():
 def test_finviz_candidate_marks_missing_premarket_evidence_instead_of_fake_low_volume(monkeypatch):
     now = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
     monkeypatch.setattr(
-        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        "app.apps.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
         10**9,
     )
     finviz = Runtime([Response(text='<a href="quote.ashx?t=TEST">TEST</a>')])
@@ -228,7 +228,7 @@ class ExecutionProvider:
 def test_finviz_discovery_can_use_alpaca_spread_as_research_evidence(monkeypatch):
     now = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
     monkeypatch.setattr(
-        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        "app.apps.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
         10**9,
     )
     finviz = Runtime([Response(text='<a href="quote.ashx?t=TEST">TEST</a>')])
@@ -265,7 +265,7 @@ def test_finviz_discovery_can_use_alpaca_spread_as_research_evidence(monkeypatch
 def test_membership_only_materializes_finviz_symbol_when_yahoo_enrichment_is_down(monkeypatch):
     now = datetime(2026, 9, 8, 13, 15, tzinfo=timezone.utc)
     monkeypatch.setattr(
-        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        "app.apps.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
         10**9,
     )
     finviz = Runtime([Response(text='<a href="quote.ashx?t=RECOVER">RECOVER</a>')])

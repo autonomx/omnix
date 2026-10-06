@@ -105,18 +105,26 @@ owner identity and cannot safely participate in owner-aware recovery. Migration
 execution already uses PostgreSQL advisory transaction locking.
 
 Run exactly one process with `OMNIX_GATEWAY_BACKGROUND_ROLE=worker` per workspace;
-this is the default and is explicit on the normal Compose `omnix` service.
-Additional production gateway processes must set the role to `api`. The optional
-Compose `omnix-api` service in profile `replicas` shares PostgreSQL and the local
-resources volume, disables startup TTS warmup, and exposes port 8000 only on the
-container network. A reverse proxy/load balancer is required to serve those
-replicas; this change does not deploy one. Use one Uvicorn worker per service.
+this is the default and is explicit on the normal Compose `omnix` service. It
+owns background workers that still require grouped startup and may also claim
+scheduled tasks. Additional request-serving processes set the role to `api`.
+Scheduler-role processes can be replicated independently; each claims its own
+set of `(task, workspace)` locks and must stay on trusted service networking.
+The optional Compose `omnix-api` service in profile `replicas` shares PostgreSQL
+and the local resources volume, disables startup TTS warmup, and exposes port
+8000 only on the container network. A reverse proxy/load balancer is required
+to serve request replicas; this change does not deploy one. Use one Uvicorn
+worker per service.
 
-A second worker-role process fails startup instead of duplicating monitors.
-API-role processes continue serving Chat/jobs and other request routes but do
-not start the trading monitor cohort. Restart a failed worker service to acquire
-released ownership; API replicas do not automatically promote themselves.
-Each gateway has its own leased Chat execution identity and readiness checks.
+A second worker-role process fails startup instead of duplicating grouped
+background workers. API-role processes continue serving Chat/jobs and other
+request routes but do not start scheduled tasks. Scheduler-role processes run
+the trading monitor cohort under per-task locks; the singleton worker owns
+platform recovery tasks. Surviving scheduler processes retry unowned tasks
+after an owner exits.
+Restart a failed worker service to acquire released grouped ownership; API
+replicas do not automatically promote themselves. Each gateway has its own
+leased Chat execution identity and readiness checks.
 
 ## Practical limits
 

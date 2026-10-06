@@ -312,7 +312,11 @@ def test_semantic_failure_is_regenerated_when_contract_allows_it() -> None:
     )
 
     assert result.count == 5
-    assert "StructuredSemanticError" in provider.calls[1]["messages"][-1].content
+    retry_messages = provider.calls[1]["messages"]
+    # The correction is control-plane system text placed before the final user turn.
+    corrections = [m for m in retry_messages if "StructuredSemanticError" in str(m.content)]
+    assert [m.role for m in corrections] == ["system"]
+    assert retry_messages[-1].role == "user"
 
 
 def test_correction_attempt_remaining_invalid_returns_typed_failure() -> None:
@@ -499,3 +503,28 @@ def test_provider_call_budget_caps_validation_attempts() -> None:
     assert isinstance(outcome.error, StructuredDecodeError)
     assert outcome.diagnostics.provider_calls == 2
     assert len(provider.calls) == 2
+
+
+def test_the_provider_call_runs_in_the_callers_context() -> None:
+    from app.providers.base import current_turn_owner, provider_turn_owner
+
+    owners: list[str | None] = []
+
+    class OwnerRecordingProvider(FakeProvider):
+        def chat_completion(self, messages, **kwargs):
+            owners.append(current_turn_owner())
+            return super().chat_completion(messages, **kwargs)
+
+    provider = OwnerRecordingProvider([
+        ChatResponse(
+            content=json.dumps({"name": "a", "count": 1, "enabled": True}),
+            model="test-model",
+            finish_reason="stop",
+        ),
+    ])
+    with provider_turn_owner("job-42"):
+        StructuredOutputGateway(provider).generate(
+            [ChatMessage(role="user", content="go")], contract=EXAMPLE_CONTRACT,
+        )
+
+    assert owners == ["job-42"]

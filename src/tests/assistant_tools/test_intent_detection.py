@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.assistant_tools.intent import detect_assistant_tool_intent
-from app.gateway.main import create_gateway_app
+from app.platform.assistant_tools.intent import detect_assistant_tool_intent
+from app.composition.gateway.main import create_gateway_app
 
 
 def test_detect_assistant_tool_intent_for_email_draft():
@@ -21,7 +21,7 @@ def test_detect_assistant_tool_intent_for_availability():
 
 
 def test_assistant_tool_intent_route_returns_preview():
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post("/api/assistant/tools/intent", json={"message": "Find Ada in contacts"})
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 import io
 import json
@@ -7,21 +8,21 @@ import zipfile
 import pytest
 from fastapi import FastAPI
 
-from app.gateway.rpg_world_bundle_routes import register_rpg_world_bundle_routes
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.api.feature_routes.rpg_world_bundle_routes import register_rpg_world_bundle_routes
+from app.apps.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.worlds.contracts import MapDefinitionBinding
-from app.rpg.worlds.map_blueprint_authoring import MapBlueprintDocument
-from app.rpg.worlds.service import (
+from app.apps.rpg.worlds.contracts import MapDefinitionBinding
+from app.apps.rpg.worlds.map_blueprint_authoring import MapBlueprintDocument
+from app.apps.rpg.worlds.service import (
     compile_scenario_revision,
     compile_world_release,
     compile_world_revision,
 )
-from app.rpg.worlds.world_bundle import (
+from app.apps.rpg.worlds.world_bundle import (
     WORLD_BUNDLE_DATA_PATH,
     WORLD_BUNDLE_MANIFEST_PATH,
     WorldBundleAsset,
@@ -30,7 +31,7 @@ from app.rpg.worlds.world_bundle import (
     parse_world_bundle_archive,
     sha256_hex,
 )
-from app.rpg.worlds.world_bundle_transform import transform_world_bundle
+from app.apps.rpg.worlds.world_bundle_transform import transform_world_bundle
 
 
 def _definition() -> GridMapDefinition:
@@ -267,13 +268,14 @@ def test_world_bundle_rejects_unsafe_asset_path_and_bad_checksum() -> None:
         parse_world_bundle_archive(output.getvalue())
 
 
-def test_world_bundle_routes_are_hidden_and_registered_once() -> None:
+def test_world_bundle_routes_are_in_openapi_and_registered_once() -> None:
     app = FastAPI()
-    register_rpg_world_bundle_routes(app)
-    register_rpg_world_bundle_routes(app)
+    registered_router = include_router_registrar(app, register_rpg_world_bundle_routes)
+    duplicate_router = include_router_registrar(app, register_rpg_world_bundle_routes)
 
-    paths = [getattr(route, "path", "") for route in app.routes]
-    assert paths.count("/api/rpg/worlds/{world_id}/export") == 1
-    assert paths.count("/api/rpg/worlds/import") == 1
-    assert "/api/rpg/worlds/{world_id}/export" not in app.openapi()["paths"]
-    assert "/api/rpg/worlds/import" not in app.openapi()["paths"]
+    registered_paths = [route.path for route in registered_router.routes]
+    assert registered_paths.count("/api/rpg/worlds/{world_id}/export") == 1
+    assert registered_paths.count("/api/rpg/worlds/import") == 1
+    assert duplicate_router.routes == []
+    assert "/api/rpg/worlds/{world_id}/export" in app.openapi()["paths"]
+    assert "/api/rpg/worlds/import" in app.openapi()["paths"]

@@ -1,0 +1,92 @@
+{
+  "checks": {
+    "asset_across_hosts": {
+      "asset_id": "story:multihost-story:347cbf542580",
+      "ok": true,
+      "size_bytes": 55
+    },
+    "chat_cross_replica": {
+      "job_id": "job:897b1b6dd74d448b9e6fc56615632f58",
+      "ok": true,
+      "session_id": "chat:cf692232fe144fceb35519f5fb5e67c2"
+    },
+    "events": {
+      "job_id": "job:idempotent:3441cfb9e637cdd9a16f382d7fdc9c7691bcbc5f42c208e995977347120fbf0b",
+      "ok": true
+    },
+    "live_call_audio": {
+      "first_audio_ms": 26.75,
+      "frames": 2,
+      "ok": true,
+      "pcm_bytes": 9600
+    }
+  },
+  "evidence": {
+    "job": "multihost-topology",
+    "pr_head": "d95cd0fa8",
+    "workflow_run": "https://github.com/autonomx/omnix/actions/runs/36863947119"
+  },
+  "jobs": {
+    "backlog_drain_seconds": 87.1,
+    "completed": 2184,
+    "distinct_workers": 2,
+    "duplicate_completions": [],
+    "not_completed": [],
+    "submitted": 2184
+  },
+  "load": {
+    "duration_seconds": 60.2,
+    "operations": {
+      "chat.round_trip": {
+        "count": 215,
+        "error_examples": [],
+        "errors": 0,
+        "mean_ms": 416.53,
+        "p50_ms": 365.96,
+        "p95_ms": 652.83,
+        "p99_ms": 846.67,
+        "throughput_per_second": 3.569
+      },
+      "jobs.list": {
+        "count": 2184,
+        "error_examples": [],
+        "errors": 0,
+        "mean_ms": 14.66,
+        "p50_ms": 11.49,
+        "p95_ms": 32.81,
+        "p99_ms": 51.64,
+        "throughput_per_second": 36.25
+      },
+      "jobs.submit": {
+        "count": 2184,
+        "error_examples": [],
+        "errors": 0,
+        "mean_ms": 15.39,
+        "p50_ms": 13.92,
+        "p95_ms": 26.07,
+        "p99_ms": 39.32,
+        "throughput_per_second": 36.25
+      },
+      "ready": {
+        "count": 2184,
+        "error_examples": [],
+        "errors": 0,
+        "mean_ms": 93.91,
+        "p50_ms": 93.21,
+        "p95_ms": 148.36,
+        "p99_ms": 168.41,
+        "throughput_per_second": 36.25
+      }
+    },
+    "threads": 6
+  },
+  "measurement": "multihost-topology",
+  "problems": [],
+  "ready": {
+    "http://api-1:8000": "multihost-api",
+    "http://api-2:8000": "multihost-api",
+    "http://gateway-worker:8000": "multihost-worker",
+    "http://nginx:8080": "multihost-worker"
+  },
+  "result": "passed"
+}

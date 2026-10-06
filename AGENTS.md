@@ -27,19 +27,19 @@ Do not install new developer tools merely to satisfy a generic checklist unless 
 
 ## React / TypeScript web app
 
-The main web package is under `src/apps/web`.
+The main web package is under `web`.
 
 From repository root, prefer package-scoped commands such as:
 
-- `npm --prefix src/apps/web run test -- <focused-test>`
-- `npm --prefix src/apps/web run build`
+- `npm --prefix web run test -- <focused-test>`
+- `npm --prefix web run build`
 - the package's existing typecheck command when applicable
 
 Keep UI behavior, CSS ownership, component tests, and generated API contracts in sync.
 
 ## Agent runtime / authority-sensitive code
 
-For `src/app/agent_runtime`, capability authority, approvals, evidence, acceptance, TaskGraph, persistence, and recovery are security/correctness boundaries.
+For `src/app/platform/agent_runtime`, capability authority, approvals, evidence, acceptance, TaskGraph, persistence, and recovery are security/correctness boundaries.
 
 - Profiles are ceilings, not grants.
 - Approval policy must never expand issued capabilities.
@@ -59,3 +59,27 @@ AI trading/shadow analysis is research unless a deterministic strategy/runtime e
 ## Shell/runtime constraints
 
 Agent shell commands are intentionally narrow. Avoid shell composition (`;`, pipes, redirection, command substitution) and issue commands separately. Stay inside the issued workspace and use repository-root commands rather than changing shell directories when package-prefix options exist.
+
+## Trading research process (scheduled premarket and post-close research)
+
+The scheduled research process publishes two files on `main`; Omnix imports
+them into PostgreSQL automatically (`trading.prospective_gap_handoff_import`,
+04:00-09:30 ET) and never reads them from a checkout. Publish only these data
+paths; do not change code from a research run.
+
+- **Premarket handoff:** commit the frozen research handoff as
+  `resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`, a
+  `SchedulerPremarketHandoff` (`"handoff_version": "prospective-gap-scheduler-handoff-v1"`),
+  by 09:20 ET. A handoff is immutable once Omnix imports it: publish it once,
+  and never rewrite a session that has been published.
+- **Climatology:** when the confirmed baseline advances after the close,
+  update `resources/trading/prospective_gap_state/climatology.json`
+  (`prospective-gap-climatology-state-v1`). Never publish a state older than
+  the previous one. Omnix imports it before the next premarket freeze.
+- **Journal:** `resources/trading/activity_log/` is no longer tracked; do not
+  commit journal files. Put the day's review (predictions, scoring, integrity
+  notes) in the body of the handoff or climatology commit and in the run's
+  final report.
+
+Manual equivalents: `python -m app.apps.trading.prospective_gap_inputs import-handoff --github YYYY-MM-DD`
+and `import-climatology --file PATH`.

@@ -7,7 +7,10 @@ Playwright's ``page.evaluate()``, replacing the standalone HTML test runner.
 
 from __future__ import annotations
 
+import pytest
 from playwright.sync_api import Page
+
+pytestmark = pytest.mark.playwright
 
 
 class TestTokenCounter:

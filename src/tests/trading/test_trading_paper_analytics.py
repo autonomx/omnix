@@ -1,14 +1,14 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.paper_analytics import (
+from app.apps.trading.paper_analytics import (
     PaperAnalyticsTrade,
     lifecycle_funnel,
     performance_summary,
     r_distribution,
     rolling_expectancy,
 )
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 def _trade(index: int, result: str, *, mae: str = "-0.4", mfe: str = "1.2") -> PaperAnalyticsTrade:

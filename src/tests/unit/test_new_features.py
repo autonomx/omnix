@@ -15,43 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 
 # ---------------------------------------------------------------------------
-# #7  TTS Provider Abstraction
-# ---------------------------------------------------------------------------
-
-class TestTTSProviderAbstraction:
-    def test_register_and_get(self):
-        from app.providers.tts_abstraction import (
-            OpenAITTSProvider,
-            get_provider,
-            list_providers,
-            register_provider,
-            unregister_provider,
-        )
-
-        p = OpenAITTSProvider(base_url="http://localhost:9999")
-        register_provider("test_openai", p)
-        assert "test_openai" in list_providers()
-        assert get_provider("test_openai") is p
-        unregister_provider("test_openai")
-        assert "test_openai" not in list_providers()
-
-    def test_openai_provider_name(self):
-        from app.providers.tts_abstraction import OpenAITTSProvider
-        p = OpenAITTSProvider(api_key="fake")
-        assert p.name == "openai"
-
-    def test_get_nonexistent(self):
-        from app.providers.tts_abstraction import get_provider
-        assert get_provider("nonexistent_xyz") is None
-
-    def test_openai_generate_connection_error(self):
-        from app.providers.tts_abstraction import OpenAITTSProvider
-        p = OpenAITTSProvider(base_url="http://localhost:1")
-        result = p.generate("test")
-        assert result == b""
-
-
-# ---------------------------------------------------------------------------
 # Tests for pipeline hardening fixes (Issues 1-5)
 # ---------------------------------------------------------------------------
 

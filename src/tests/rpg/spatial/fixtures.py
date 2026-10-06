@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 
-def tavern_spatial_fixture() -> Dict[str, Any]:
+def _entity_location(entity_id: str, area_id: str, *, hidden: bool, silent: bool) -> dict[str, Any]:
+    return {"entity_id": entity_id, "area_id": area_id, "hidden": hidden, "silent": silent}
+
+
+def tavern_spatial_fixture() -> dict[str, Any]:
     return {
         "graph_id": "tavern_fixture",
         "current_area_id": "tavern_common_room",
@@ -107,60 +111,23 @@ def tavern_spatial_fixture() -> Dict[str, Any]:
             },
         },
         "entity_locations": {
-            "player": {
-                "entity_id": "player",
-                "area_id": "tavern_common_room",
-                "hidden": False,
-                "silent": False,
-            },
-            "bran": {
-                "entity_id": "bran",
-                "area_id": "tavern_common_room",
-                "hidden": False,
-                "silent": False,
-            },
-            "mira": {
-                "entity_id": "mira",
-                "area_id": "kitchen",
-                "hidden": False,
-                "silent": False,
-            },
-            "spy": {
-                "entity_id": "spy",
-                "area_id": "private_room",
-                "hidden": True,
-                "silent": False,
-            },
-            "guest_private": {
-                "entity_id": "guest_private",
-                "area_id": "private_room",
-                "hidden": False,
-                "silent": False,
-            },
-            "sealed_guard": {
-                "entity_id": "sealed_guard",
-                "area_id": "sealed_room",
-                "hidden": False,
-                "silent": False,
-            },
-            "bandit": {
-                "entity_id": "bandit",
-                "area_id": "street",
-                "hidden": False,
-                "silent": False,
-            },
-            "silent_rat": {
-                "entity_id": "silent_rat",
-                "area_id": "tavern_common_room",
-                "hidden": False,
-                "silent": True,
-            },
+            entity_id: _entity_location(entity_id, area_id, hidden=hidden, silent=silent)
+            for entity_id, area_id, hidden, silent in (
+                ("player", "tavern_common_room", False, False),
+                ("bran", "tavern_common_room", False, False),
+                ("mira", "kitchen", False, False),
+                ("spy", "private_room", True, False),
+                ("guest_private", "private_room", False, False),
+                ("sealed_guard", "sealed_room", False, False),
+                ("bandit", "street", False, False),
+                ("silent_rat", "tavern_common_room", False, True),
+            )
         },
         "metadata": {},
     }
 
 
-def tavern_spatial_fixture_with_private_door_open() -> Dict[str, Any]:
+def tavern_spatial_fixture_with_private_door_open() -> dict[str, Any]:
     graph = tavern_spatial_fixture()
     graph["connections"]["common_private_door"]["is_open"] = True
     graph["connections"]["common_private_door"]["visibility"] = "open"

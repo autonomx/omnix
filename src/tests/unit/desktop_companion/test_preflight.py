@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 import struct
 
-from app.assistant_context.models import AssistantContextItem
-from app.desktop_companion.preflight import (
+from app.conversation.contracts import AssistantContextItem
+from app.apps.desktop_companion.preflight import (
     DesktopCompanionPreflightRequest,
     DesktopCompanionPreflightService,
     is_remote_vision_endpoint,

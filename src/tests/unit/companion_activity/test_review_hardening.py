@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.companion_activity.cognition import CompanionCognition
-from app.companion_activity.contracts import EvidenceProposition
-from app.companion_activity.persistence import CompanionCheckpointPolicy
-from app.companion_activity.runtime import CompanionActivityRuntime
-from app.companion_activity.state import empty_activity_state
+from app.platform.companion_activity.cognition import CompanionCognition
+from app.platform.companion_activity.contracts import EvidenceProposition
+from app.platform.companion_activity.persistence import CompanionCheckpointPolicy
+from app.platform.companion_activity.runtime import CompanionActivityRuntime
+from app.platform.companion_activity.state import empty_activity_state
 
 NOW = datetime(2026, 9, 15, 15, 0, tzinfo=timezone.utc)
 

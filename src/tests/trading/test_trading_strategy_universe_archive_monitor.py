@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from app.trading import strategy_universe_archive_monitor as archive_monitor
+from app.apps.trading import strategy_universe_archive_monitor as archive_monitor
 
 
 class _Repository:

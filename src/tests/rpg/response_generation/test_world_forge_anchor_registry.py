@@ -1,16 +1,16 @@
-from app.rpg.session.genesis.world_forge_anchor_registry import (
+from app.apps.rpg.session.genesis.world_forge_anchor_registry import (
     allocate_global_anchor_registry,
     anchor_slice_for_domain,
     validate_global_anchor_registry,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     generate_campaign_topics,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
 
 
 def _graph():
@@ -91,3 +91,19 @@ def test_scheduler_injects_only_permitted_anchor_slice() -> None:
     assert {row["domain_id"] for row in place_registry["anchors"]} == {"places"}
     assert {row["domain_id"] for row in actor_registry["anchors"]} == {"actors"}
     assert "anchor_registry" not in observed["pressures"]
+
+
+def test_every_targeted_entity_gets_an_anchor_at_every_depth() -> None:
+    # Topic generation requires one authoritative anchor per entity; a cap
+    # below the graph's target count failed standard and epic worlds.
+    profile = default_profile_registry().resolve("fantasy")
+    assert profile is not None
+    for depth in ("quick", "standard", "epic"):
+        graph = build_profile_topic_graph(profile, campaign_template="anchor-registry", depth=depth)
+        registry = allocate_global_anchor_registry(graph, seed=17, world_key="campaign:depth")
+        counts: dict[str, int] = {}
+        for row in registry["anchors"]:
+            counts[row["domain_id"]] = counts.get(row["domain_id"], 0) + 1
+        nodes = graph.node_map()
+        assert counts == {domain: nodes[domain].target_count for domain in counts}, depth
+        assert counts["places"] == nodes["places"].target_count

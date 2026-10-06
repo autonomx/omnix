@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 
-from app.trading.prospective_prediction_evidence import sip_trade_eligible
-from app.trading.providers import alpaca_sip
+from app.apps.trading.prospective_prediction_evidence import sip_trade_eligible
+from app.apps.trading.providers import alpaca_sip
 
 
 class _Response:

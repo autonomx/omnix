@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from app.assistant_memory import MemoryPolicyError, resolve_chat_scope, resolve_snapshot_view
-from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
-from app.assistant_memory.owner_service import OwnerAwareMemoryService
+from app.platform.assistant_memory import MemoryPolicyError, resolve_chat_scope, resolve_snapshot_view
+from app.platform.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
+from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
 
 
 def _service(tmp_path: Path) -> OwnerAwareMemoryService:

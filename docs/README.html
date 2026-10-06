@@ -71,7 +71,7 @@
 </tr>
 </tbody></table></div>
 <h2 id="application-map">Application map</h2>
-<p>The supported browser UI lives under <code>src/apps/web</code>. <code>/</code> redirects to <code>/chatbot</code>.</p>
+<p>The supported browser UI lives under <code>web</code>. <code>/</code> redirects to <code>/chatbot</code>.</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Route</th>
 <th>Workspace</th>
@@ -225,14 +225,14 @@ FastAPI Web Gateway
 <p>Images should be committed under <code>docs/images</code> and referenced from a guide with a relative path such as <code>![Trading workspace](images/trading.png)</code>. The renderer turns standalone Markdown images into responsive, captioned HTML figures. Use the <code>omnix-diagram</code> fenced markers for native HTML/CSS diagrams that should appear in the generated guide pages.</p>
 <h2 id="quick-local-development">Quick local development</h2>
 <p>The full setup, including PostgreSQL and optional workers, is in <a href="SETUP.html">SETUP.html</a>. The shortest development path is:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash"># Python dependencies
-pip install -r requirements.txt
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash"># Python dependencies (Python 3.11)
+python -m pip install --require-hashes -r requirements.txt
 
 # Frontend dependencies
 npm install
 
 # Start the FastAPI web gateway
-PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn app.composition.gateway.main:app --host 127.0.0.1 --port 8000
 
 # In another terminal, start the browser app
 npm run web:dev</code></pre></div>
@@ -251,23 +251,23 @@ pytest</code></pre></div>
 npm --workspace @omnix/web run api:check</code></pre></div>
 <h2 id="source-of-truth-locations">Source-of-truth locations</h2>
 <ul>
-<li><code>src/apps/web/src/app/modules.ts</code> — routed application module catalog.</li>
-<li><code>src/apps/web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
-<li><code>src/app/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
-<li><code>src/app/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
-<li><code>src/app/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
+<li><code>web/src/app/modules.ts</code> — routed application module catalog.</li>
+<li><code>web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
+<li><code>src/app/composition/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
+<li><code>src/app/platform/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
+<li><code>src/app/platform/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
 <li><code>src/app/providers/</code> — provider/model integration layer.</li>
 <li><code>src/app/jobs/</code> — shared job/run contracts and stores.</li>
 <li><code>src/app/assets/</code> — shared asset/artifact system.</li>
-<li><code>src/app/rpg/</code> — deterministic RPG domain and APIs.</li>
-<li><code>src/app/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
+<li><code>src/app/apps/rpg/</code> — deterministic RPG domain and APIs.</li>
+<li><code>src/app/apps/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
 <li><code>src/app/persistence/</code> — PostgreSQL persistence contracts and transaction policy.</li>
 <li><code>scripts/requirements/</code> — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in <code>requirements.txt</code>.</li>
 <li><code>resources/</code> — models, data, logs, and generated/runtime resources.</li>
 <li><code>../SPEC.md</code> — platform architecture rules.</li>
 </ul>
 <h2 id="compatibility-boundary">Compatibility boundary</h2>
-<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. <code>src/run_app.py</code> and older feature routes can still exist as backend compatibility surfaces while contracts migrate, but new browser behavior belongs in <code>src/apps/web</code> and should use the shared gateway, jobs, assets, providers, events, and design system.</p>
+<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. The old compatibility application server is also retired. Both <code>src/main.py</code> and <code>src/launch.py</code> start the shared gateway. Browser behavior belongs in <code>web</code> and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.</p>
       </article>
     </main>
     <footer class="guide-footer">

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.map_grid_contracts import (
+from app.apps.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridPortal,
     GridPortalEndpoint,
@@ -10,16 +10,16 @@ from app.rpg.map_grid_contracts import (
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.rpg.map_instance_runtime import project_observer_map
-from app.rpg.worlds.contracts import MapDefinitionBinding, MapInitializationOperation
-from app.rpg.worlds.semantic_validation import (
+from app.apps.rpg.map_instance_runtime import project_observer_map
+from app.apps.rpg.worlds.contracts import MapDefinitionBinding, MapInitializationOperation
+from app.apps.rpg.worlds.semantic_validation import (
     WorldSemanticError,
     certify_world_release,
     initialize_starting_map_snapshot,
     validate_release_bindings,
     validate_scenario_against_release,
 )
-from app.rpg.worlds.service import (
+from app.apps.rpg.worlds.service import (
     compile_scenario_revision,
     compile_world_release,
     compile_world_revision,

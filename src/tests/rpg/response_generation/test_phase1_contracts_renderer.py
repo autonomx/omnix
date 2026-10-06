@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.response_generation.contracts import (
+from app.apps.rpg.response_generation.contracts import (
     AgencyEffect,
     CandidateSource,
     RESPONSE_WORD_BUDGETS,
@@ -13,13 +13,13 @@ from app.rpg.response_generation.contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.rpg.response_generation.orchestration import (
+from app.apps.rpg.response_generation.orchestration import (
     RpgResponseGenerator,
     build_runtime_shadow_report,
     build_world_scene_shadow_report,
     semantic_plan_from_legacy_payload,
 )
-from app.rpg.response_generation.renderer import ResponseRenderer
+from app.apps.rpg.response_generation.renderer import ResponseRenderer
 
 
 def _plan(mode: ResponseMode) -> SemanticResponsePlan:

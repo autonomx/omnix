@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.session import turn_presenter
-from app.rpg.session.turn_presenter import (
+from app.apps.rpg.session import turn_presenter
+from app.apps.rpg.session.turn_presenter import (
     TurnPresentationInvariantError,
     present_authoritative_turn,
 )
@@ -72,16 +72,3 @@ def test_entry_point_rejects_missing_or_changed_response_identity(monkeypatch) -
             session_id="campaign:phase30",
             player_input="Look around.",
         )
-
-
-def test_gateway_has_one_narrative_generation_entry_point() -> None:
-    gateway = (
-        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
-    ).read_text(encoding="utf-8")
-    assert gateway.count("present_authoritative_turn(") == 1
-    assert "canonicalize_scene_turn_result" not in gateway
-    assert "canonicalize_resolved_turn_result" not in gateway
-    assert 'rpg_pipeline_span("turn.narrative_present")' in gateway
-    assert 'rpg_pipeline_span("turn.narrative_scene_cutover")' not in gateway
-    assert 'rpg_pipeline_span("turn.narrative_resolved_cutover")' not in gateway
-    assert 'payload["turn_presentation_request_count"]' in gateway

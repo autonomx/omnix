@@ -1,8 +1,8 @@
 from __future__ import annotations
 import pytest
 
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, ResourceScope, RunLimits
-from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec, reserve_child_budget
+from app.platform.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, ResourceScope, RunLimits
+from app.platform.agent_runtime.subagents import ChildRunRequest, derive_child_spec, reserve_child_budget
 
 
 def _parent() -> AgentRunSnapshot:

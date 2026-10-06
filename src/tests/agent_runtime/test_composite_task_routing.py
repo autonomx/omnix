@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.profiles import (
+from app.platform.agent_runtime.profiles import (
     get_agent_profile,
     profile_external_ceiling,
     resolve_profile_capabilities,
 )
-from app.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.router import route_omnix_request
 
 
 @pytest.mark.parametrize(

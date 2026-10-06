@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from urllib.parse import urlparse
+
+from app.config.env import env_int, env_str
 
 
 class DatabaseConfigurationError(ValueError):
@@ -11,16 +12,10 @@ class DatabaseConfigurationError(ValueError):
 
 
 def _integer(name: str, default: int, *, minimum: int, maximum: int) -> int:
-    raw = (os.environ.get(name) or "").strip()
-    if not raw:
-        return default
     try:
-        value = int(raw)
+        return env_int(name, default, minimum=minimum, maximum=maximum)
     except ValueError as exc:
-        raise DatabaseConfigurationError(f"{name} must be an integer") from exc
-    if not minimum <= value <= maximum:
-        raise DatabaseConfigurationError(f"{name} must be between {minimum} and {maximum}")
-    return value
+        raise DatabaseConfigurationError(str(exc)) from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,16 +70,31 @@ class DatabaseSettings:
         return f"postgresql://{user}{host}{port}/{database}"
 
 
-@lru_cache(maxsize=1)
+# Default pool size per process role (WP-5.10); OMNIX_DATABASE_POOL_MAX overrides.
+ROLE_POOL_MAX = {"api": 10, "worker": 10, "job-worker": 5, "scheduler": 3}
+# Connections a process opens outside its pool: the background or scheduler
+# lock holder and the LISTEN connections for live events and run streams.
+DEDICATED_CONNECTIONS_PER_PROCESS = 3
+
+
+def process_role() -> str:
+    return (env_str("OMNIX_GATEWAY_BACKGROUND_ROLE", "worker") or "worker").strip().lower()
+
+
+def role_pool_max(role: str) -> int:
+    return ROLE_POOL_MAX.get(role, 10)
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def database_settings() -> DatabaseSettings:
-    database_url = (os.environ.get("OMNIX_DATABASE_URL") or "").strip()
+    database_url = (env_str("OMNIX_DATABASE_URL", "") or "").strip()
     if not database_url:
         raise DatabaseConfigurationError(
             "OMNIX_DATABASE_URL must be configured; start Omnix through the "
             "credential-aware launcher or provide an explicit PostgreSQL URL"
         )
     pool_min = _integer("OMNIX_DATABASE_POOL_MIN", 1, minimum=0, maximum=100)
-    pool_max = _integer("OMNIX_DATABASE_POOL_MAX", 10, minimum=1, maximum=200)
+    pool_max = _integer("OMNIX_DATABASE_POOL_MAX", role_pool_max(process_role()), minimum=1, maximum=200)
     statement_timeout_ms = _integer(
         "OMNIX_DATABASE_STATEMENT_TIMEOUT", 30_000, minimum=100, maximum=3_600_000
     )
@@ -105,10 +115,34 @@ def database_settings() -> DatabaseSettings:
         transaction_retry_base_ms=_integer(
             "OMNIX_DATABASE_TRANSACTION_RETRY_BASE_MS", 25, minimum=0, maximum=10_000
         ),
-        application_name=(os.environ.get("OMNIX_DATABASE_APPLICATION_NAME") or "omnix").strip()
+        application_name=(env_str("OMNIX_DATABASE_APPLICATION_NAME", "omnix") or "omnix").strip()
         or "omnix",
     )
 
 
 def reset_database_settings_cache() -> None:
     database_settings.cache_clear()
+
+
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
+def migration_database_settings() -> DatabaseSettings:
+    """Return DDL-owner settings, falling back to the runtime URL for local installs."""
+    migration_url = (env_str("OMNIX_MIGRATION_DATABASE_URL", "") or "").strip()
+    if not migration_url:
+        return database_settings()
+    runtime = database_settings()
+    return DatabaseSettings(
+        url=migration_url,
+        pool_min=0,
+        pool_max=max(1, min(runtime.pool_max, 2)),
+        connect_timeout_seconds=runtime.connect_timeout_seconds,
+        statement_timeout_ms=max(runtime.statement_timeout_ms, 300_000),
+        lock_timeout_ms=runtime.lock_timeout_ms,
+        transaction_max_attempts=runtime.transaction_max_attempts,
+        transaction_retry_base_ms=runtime.transaction_retry_base_ms,
+        application_name="omnix-migrator",
+    )
+
+
+def reset_migration_database_settings_cache() -> None:
+    migration_database_settings.cache_clear()

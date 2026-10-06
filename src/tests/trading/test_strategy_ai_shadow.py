@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.strategy_ai_shadow import (
+from app.apps.trading.strategy_ai_shadow import (
     AIShadowDecision,
     AIShadowPolicyAnalyzer,
     AIShadowPositionState,

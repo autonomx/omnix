@@ -4,13 +4,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.assistant_context.models import AssistantContextItem
-from app.desktop_companion.models import (
+from app.conversation.contracts import AssistantContextItem
+from app.apps.desktop_companion.models import (
     DesktopActivitySignal,
     DesktopBehaviorState,
     DesktopCompanionPolicy,
 )
-from app.desktop_companion.runtime import (
+from app.apps.desktop_companion.runtime import (
     DesktopCompanionObserveRequest,
     DesktopCompanionOrchestrator,
 )

@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.catalog import INSTRUMENTS, default_binding, instrument_by_id
-from app.trading.models import BarsResponse, DatasetProvenance, MarketBar
-from app.trading.providers.aggregation import (
+from app.apps.trading.catalog import INSTRUMENTS, default_binding, instrument_by_id
+from app.apps.trading.models import BarsResponse, DatasetProvenance, MarketBar
+from app.apps.trading.providers.aggregation import (
     aggregate_market_bars,
     aggregation_plan,
 )
-from app.trading.providers.registry import ProviderRegistry
+from app.apps.trading.providers.registry import ProviderRegistry
 
 
 def make_bar(index: int, *, session: str = "24x7") -> MarketBar:

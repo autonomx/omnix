@@ -2,13 +2,13 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.trading.market_data_recovery import (
+from app.apps.trading.market_data_recovery import (
     StrategyDataRequirement,
     assess_data_requirement,
     reconcile_recovery,
 )
-from app.trading.models import MarketBar
-from app.trading.service import _coalesced_gap_ranges
+from app.apps.trading.models import MarketBar
+from app.apps.trading.service import _coalesced_gap_ranges
 
 
 ET = ZoneInfo("America/New_York")

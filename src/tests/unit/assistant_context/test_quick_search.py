@@ -1,7 +1,7 @@
-from app.assistant_context.models import AssistantContextItem
-from app.research.contracts import ResearchSourceSnapshot
-from app.research.extraction import ExtractedPage
-from app.research.quick_search import QuickSearchService, is_transient_search_error, provider_coverage
+from app.conversation.contracts import AssistantContextItem
+from app.platform.research.contracts import ResearchSourceSnapshot
+from app.platform.research.extraction import ExtractedPage
+from app.platform.research.quick_search import QuickSearchService, is_transient_search_error, provider_coverage
 
 
 class FakeSearchClient:

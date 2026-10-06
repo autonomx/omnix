@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentArtifact,
     AgentEvent,
     EvidenceReceipt,
     TaskRevision,
 )
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
     evaluate_evidence_set,
     revise_objective,
     steering_semantic_context,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.service import AgentRunService
 
 
 def test_complete_steering_is_not_contextual_continuity() -> None:
-    from app.agent_runtime.active_objective import objective_continuity_candidate
+    from app.platform.agent_runtime.active_objective import objective_continuity_candidate
 
     assert objective_continuity_candidate("also update the focused test")
     assert not objective_continuity_candidate(

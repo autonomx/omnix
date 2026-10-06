@@ -1,0 +1,25 @@
+# Prometheus for the Compose `observability` profile (WP-11.2). Each gateway
+# process serves its own /metrics (WP-10.3); API replicas are found through
+# Docker DNS. With sign-in enabled, /metrics needs admin:metrics: add an
+# `authorization` block with a credentials_file for the gateway jobs.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: omnix-gateway-worker
+    static_configs:
+      - targets: ["gateway-worker:8000"]
+  - job_name: omnix-api
+    dns_sd_configs:
+      - names: ["api"]
+        type: A
+        port: 8000
+  - job_name: omnix-job-worker
+    dns_sd_configs:
+      - names: ["job-worker"]
+        type: A
+        port: 8090

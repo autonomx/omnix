@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from app.rpg.session.ability_system import (
+from app.apps.rpg.session.ability_system import (
     assign_ability_to_hotbar,
     apply_ability_to_state,
     build_ability_tree,

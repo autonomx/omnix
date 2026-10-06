@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
     ModelRef,
@@ -9,7 +9,7 @@ from app.agent_runtime.contracts import (
     TaskRequirement,
     TaskRevision,
 )
-from app.agent_runtime.review_runtime import (
+from app.platform.agent_runtime.review_runtime import (
     REVIEW_PROTOCOL_VERSION,
     classify_runtime_failure,
     finish_protocol_failed_attempt,

@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from app.gateway import tts_stream_contract
-from app.gateway.tts_stream_contract import (
+from app.conversation import tts_stream_contract
+from app.conversation.tts_stream_contract import (
     TtsStreamRequest,
     audio_chunk_to_pcm16_bytes,
     initial_speech_start_byte,
 )
-from app.live_speech.performance_contract import (
+from app.conversation.performance_contract import (
     FASTER_QWEN3_TTS_CAPABILITIES,
     SpeechPerformancePlan,
     apply_performance_plan_to_provider,

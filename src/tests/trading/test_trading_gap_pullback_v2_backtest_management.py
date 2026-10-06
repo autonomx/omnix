@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-import app.trading.strategy_backtest as backtest
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.models import MarketBar
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.strategies.models import (
+import app.apps.trading.strategy_backtest as backtest
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
     GapPullbackResult,

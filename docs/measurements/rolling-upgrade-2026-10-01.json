@@ -1,0 +1,57 @@
+{
+  "duration_seconds": 149.3,
+  "evidence": {
+    "job": "rolling-upgrade",
+    "pr_head": "bba7bcbad",
+    "workflow_run": "https://github.com/autonomx/omnix/actions/runs/36844007092"
+  },
+  "failed_request_count": 0,
+  "failed_requests": [],
+  "gateways": [
+    {
+      "drain_ready_observed": {
+        "build_revision": "rolling-N",
+        "ready": false,
+        "reason": "draining"
+      },
+      "exit_code": 0,
+      "replaced": "gateway-api",
+      "replacement_revision": "rolling-N+1"
+    },
+    {
+      "drain_ready_observed": {
+        "build_revision": "rolling-N",
+        "ready": false,
+        "reason": "draining"
+      },
+      "exit_code": 0,
+      "replaced": "gateway-worker",
+      "replacement_revision": "rolling-N+1"
+    }
+  ],
+  "jobs": {
+    "duplicate_completions": [],
+    "missing": [],
+    "not_completed": [],
+    "retried_after_release": 0
+  },
+  "jobs_submitted": 880,
+  "measurement": "rolling-upgrade",
+  "n1_migrations_applied": [
+    "9990_rolling_upgrade_probe"
+  ],
+  "problems": [],
+  "requests": 1760,
+  "result": "passed",
+  "retried_refusals": 465,
+  "workers": [
+    {
+      "exit_code": 0,
+      "replaced": "job-worker-a"
+    },
+    {
+      "exit_code": 0,
+      "replaced": "job-worker-b"
+    }
+  ]
+}

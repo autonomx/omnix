@@ -1,0 +1,100 @@
+{
+  "authorization_decisions": [
+    {
+      "assessment": {
+        "authorized": true,
+        "bar_coverage_ready": true,
+        "evidence_policy_matches": true,
+        "execution_eligible": true,
+        "execution_observation_present": true,
+        "instrument_id": "equity:TLYS",
+        "market_evidence_policy_version": "market-evidence-v3-finviz-membership",
+        "morning_evidence_eligible": true,
+        "policy_version": "trade-authorization-v1",
+        "profile_matches": true,
+        "provider_circuit_clear": true,
+        "provider_ready": true,
+        "qualification_authorized": true,
+        "reason_codes": [],
+        "risk_sizing_valid": true,
+        "session_evaluability_complete": true,
+        "session_open": true,
+        "source_member_valid": true,
+        "strategy_entry_ready": true,
+        "strategy_id": "sep3-tlys-auto-paper-e2e",
+        "strategy_kill_switch_clear": true,
+        "strategy_profile_fingerprint": "1a6900199beb324cbd8ad616fcde57dbde31d078c7c33611a4ac60f189fd94a9",
+        "trade_attempt_id": "attempt-b0b2a93ff861397ca7aac77f",
+        "universe_id": "auto-archive-2026-10-01-0915-finviz-76482c8df8"
+      },
+      "reason_code": "TRADE_AUTHORIZATION_APPROVED",
+      "state": "authorized"
+    }
+  ],
+  "events": [
+    {
+      "event_type": "trade_authorization",
+      "instrument_id": "equity:TLYS",
+      "reason_code": "TRADE_AUTHORIZATION_APPROVED",
+      "state": "authorized"
+    },
+    {
+      "event_type": "entry_order_submitted",
+      "instrument_id": "equity:TLYS",
+      "reason_code": "AUTO_PAPER_ENTRY_SUBMITTED",
+      "state": "entry_ready"
+    }
+  ],
+  "paper_fills": [
+    {
+      "instrument_id": "equity:TLYS",
+      "order_id": "strat-<uuid:1>",
+      "price": "4.95495",
+      "quantity": "80.273452",
+      "side": "buy"
+    }
+  ],
+  "paper_orders": [
+    {
+      "average_fill_price": "4.95495",
+      "filled_quantity": "80.273452",
+      "instrument_id": "equity:TLYS",
+      "limit_price": null,
+      "order_id": "strat-<uuid:1>",
+      "quantity": "80.273452",
+      "side": "buy",
+      "status": "filled"
+    }
+  ],
+  "proposal_runs": [
+    [
+      {
+        "instrument_id": "equity:TLYS",
+        "observed_at": "<timestamp>",
+        "reason_code": "FAILED_SELLOFF_V2_TIMING_BREAK",
+        "signal": {
+          "entry_price": "4.9024",
+          "instrument_id": "equity:TLYS",
+          "quality_score": 6,
+          "reason_code": "FAILED_SELLOFF_V2_TIMING_BREAK",
+          "risk_per_share": "0.43600965",
+          "state": "entry_ready",
+          "stop_price": "4.46639035",
+          "target_price": "5.556414475"
+        },
+        "state": "entry_ready"
+      }
+    ]
+  ],
+  "protections": [
+    {
+      "instrument_id": "equity:TLYS",
+      "quantity": "80.273452",
+      "status": "active"
+    }
+  ],
+  "run_results": [
+    1,
+    0
+  ]
+}

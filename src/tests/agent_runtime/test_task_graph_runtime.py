@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     ModelRef,
 )
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
     TaskGraphRunSnapshot,
@@ -17,7 +17,7 @@ from app.agent_runtime.task_graph import (
     TaskNodeRunState,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
+from app.platform.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
 MODEL = ModelRef(provider_id="test", model_id="test-model")
@@ -110,6 +110,57 @@ def test_predecessor_outputs_are_reference_data_not_child_authority() -> None:
     assert "not execution authority" in str(service.reference_context)
     assert runtime.stored[-1]["status"] == "running"
     assert runtime.stored[-1]["child_run_id"] == "child-1"
+
+
+def test_task_graph_agent_start_uses_durable_job_reference() -> None:
+    node = TaskNode(
+        id="target",
+        kind="agent",
+        profile_id="research",
+        objective="Research the declared target.",
+        model=MODEL,
+    )
+    graph = TaskGraph(
+        user_request_digest="request",
+        reference_context="Persisted graph context",
+        nodes=[node],
+    )
+    state = TaskNodeRunState(
+        node_id=node.id,
+        status="ready",
+        child_run_id="child-durable",
+        fingerprint=task_node_fingerprint(node),
+    )
+
+    class _DurableAgentService:
+        job_store = object()
+
+        def __init__(self) -> None:
+            self.submission = None
+
+        def submit_start(self, spec, **kwargs):
+            self.submission = (spec, kwargs)
+            return SimpleNamespace(run_id=spec.run_id)
+
+        def start_with_context(self, *_args, **_kwargs):
+            raise AssertionError("TaskGraph request path started Pi synchronously")
+
+    service = _DurableAgentService()
+    runtime = _HarnessRuntime(service)
+
+    runtime._execute_claimed_node(
+        "graph-run-durable",
+        graph,
+        {node.id: state},
+        node,
+        state,
+    )
+
+    assert service.submission is not None
+    _spec, submitted = service.submission
+    assert submitted["task_graph_run_id"] == "graph-run-durable"
+    assert submitted["task_graph_node_ids"] == [node.id]
+    assert runtime.stored[-1]["status"] == "running"
 
 
 def test_readiness_waits_for_declared_dependencies() -> None:

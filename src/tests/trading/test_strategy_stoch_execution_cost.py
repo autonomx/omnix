@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.strategy_stoch_execution_cost import (
+from app.apps.trading.strategy_stoch_execution_cost import (
     action_for_snapshot,
     build_execution_summary,
     requested_fraction_for_action,
     simulate_stoch_execution,
     spread_tier,
 )
-from app.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
+from app.apps.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

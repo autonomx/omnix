@@ -4,10 +4,10 @@ import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.market_evidence import MARKET_EVIDENCE_POLICY_VERSION
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_v2_qualification import (
+from app.apps.trading.market_evidence import MARKET_EVIDENCE_POLICY_VERSION
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_v2_qualification import (
     FROZEN_V2_PROFILE_FINGERPRINT,
     MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT,
     V2_PROSPECTIVE_START,

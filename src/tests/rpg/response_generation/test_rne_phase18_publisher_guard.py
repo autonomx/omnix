@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.rpg.narrative_engine.publisher_audit import audit_publisher_ownership
-from app.rpg.narrative_engine.publisher_guard import (
+from app.apps.rpg.narrative_engine.publisher_audit import audit_publisher_ownership
+from app.apps.rpg.narrative_engine.publisher_guard import (
     CANONICAL_PUBLISHER,
     LegacyNarrativePublisherError,
     publish_canonical_bundle,

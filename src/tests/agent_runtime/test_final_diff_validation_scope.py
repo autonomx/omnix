@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.coding_quality import diff_review_command_is_complete, validation_result_from_tool_event
-from app.agent_runtime.contracts import AgentEvent, TaskRevision, ValidationSpec
+from app.platform.agent_runtime.coding_quality import diff_review_command_is_complete, validation_result_from_tool_event
+from app.platform.agent_runtime.contracts import AgentEvent, TaskRevision, ValidationSpec
 
 
 def _revision() -> TaskRevision:
@@ -14,7 +14,7 @@ def _revision() -> TaskRevision:
 
 def test_shell_diff_is_inspection_context_not_completion_authority() -> None:
     for command in (
-        "git diff --no-ext-diff", "git diff HEAD", "git diff -- src/apps/web/src/styles.css",
+        "git diff --no-ext-diff", "git diff HEAD", "git diff -- web/src/styles.css",
         "git diff --name-only", "git diff --stat",
     ):
         assert not diff_review_command_is_complete(command)

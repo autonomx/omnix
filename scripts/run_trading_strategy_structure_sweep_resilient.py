@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from app.trading.providers.errors import ProviderRateLimitedError
+from app.apps.trading.providers.errors import ProviderRateLimitedError
 from scripts import run_trading_strategy_structure_sweep as diagnostic
 
 

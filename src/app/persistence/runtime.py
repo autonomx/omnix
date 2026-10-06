@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
+
+from app.config.env import env_bool, env_str
+from app.errors import LegacyPersistenceRetired
 
 from .authority import (
     AuthorityOperation,
@@ -14,17 +16,13 @@ from .authority import (
     require_authority_operation,
 )
 from .database import PostgresDatabase, default_database
-from .migrations import apply_migrations, assert_schema_compatible, migration_status
+from .migrations import assert_schema_compatible, migration_status
 
 
 class PersistenceMode(str, Enum):
     POSTGRESQL = "postgresql"
     LEGACY_TEST = "legacy_test"
     LEGACY_IMPORT = "legacy_import"
-
-
-class LegacyPersistenceRetired(RuntimeError):
-    """Raised when normal runtime attempts to use retired SQLite/JSON authority."""
 
 
 class PersistenceReadinessError(RuntimeError):
@@ -43,12 +41,12 @@ class RuntimePersistenceStatus:
 
 
 def _under_pytest() -> bool:
-    return "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+    return "pytest" in sys.modules or bool(env_str("PYTEST_CURRENT_TEST", ""))
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def persistence_mode() -> PersistenceMode:
-    raw = (os.environ.get("OMNIX_PERSISTENCE_MODE") or "postgresql").strip().lower()
+    raw = (env_str("OMNIX_PERSISTENCE_MODE", "postgresql") or "postgresql").strip().lower()
     try:
         mode = PersistenceMode(raw)
     except ValueError as exc:
@@ -56,13 +54,13 @@ def persistence_mode() -> PersistenceMode:
             "OMNIX_PERSISTENCE_MODE must be postgresql, legacy_test, or legacy_import"
         ) from exc
     if mode == PersistenceMode.LEGACY_TEST:
-        allowed = (os.environ.get("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE") or "").strip() == "1"
-        if not allowed or not (_under_pytest() or os.environ.get("CI")):
+        allowed = env_bool("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", False)
+        if not allowed or not (_under_pytest() or env_bool("CI", False)):
             raise LegacyPersistenceRetired(
                 "legacy_test persistence is restricted to explicit CI or pytest execution"
             )
     if mode == PersistenceMode.LEGACY_IMPORT:
-        allowed = (os.environ.get("OMNIX_ALLOW_LEGACY_IMPORT") or "").strip() == "1"
+        allowed = env_bool("OMNIX_ALLOW_LEGACY_IMPORT", False)
         if not allowed:
             raise LegacyPersistenceRetired(
                 "legacy_import persistence requires OMNIX_ALLOW_LEGACY_IMPORT=1"
@@ -70,8 +68,11 @@ def persistence_mode() -> PersistenceMode:
     return mode
 
 
+_PERSISTENCE_MODE_CACHE_CLEAR = persistence_mode.cache_clear
+
+
 def reset_persistence_mode_cache() -> None:
-    persistence_mode.cache_clear()
+    _PERSISTENCE_MODE_CACHE_CLEAR()
 
 
 def require_legacy_persistence(*, purpose: str) -> None:
@@ -90,8 +91,8 @@ def uses_postgresql_runtime() -> bool:
 def ensure_postgresql_runtime_ready(
     database: PostgresDatabase | None = None,
     *,
-    auto_initialize_fresh_install: bool = True,
-    apply_schema_changes: bool = True,
+    auto_initialize_fresh_install: bool = False,
+    apply_schema_changes: bool = False,
 ) -> RuntimePersistenceStatus:
     mode = persistence_mode()
     if mode != PersistenceMode.POSTGRESQL:
@@ -109,8 +110,10 @@ def ensure_postgresql_runtime_ready(
     if health.get("ok") is not True:
         raise PersistenceReadinessError("PostgreSQL health check failed")
     if apply_schema_changes:
-        apply_migrations(db)
-    migrations = migration_status(db, initialize_table=apply_schema_changes)
+        raise PersistenceReadinessError(
+            "runtime schema mutation is disabled; run python -m app.persistence migrate"
+        )
+    migrations = migration_status(db, initialize_table=False)
     pending = tuple(str(item) for item in migrations.get("pending") or ())
     try:
         assert_schema_compatible(migrations)
@@ -122,7 +125,8 @@ def ensure_postgresql_runtime_ready(
         )
     schema_version = str(migrations.get("current_schema") or "unknown-schema")
     software_revision = (
-        os.environ.get("OMNIX_SOFTWARE_REVISION") or "fresh-install-unversioned"
+        env_str("OMNIX_SOFTWARE_REVISION", "fresh-install-unversioned")
+        or "fresh-install-unversioned"
     ).strip()
     try:
         with db.transaction() as connection:
@@ -139,6 +143,7 @@ def ensure_postgresql_runtime_ready(
     except PostgresAuthorityError as exc:
         raise PersistenceReadinessError(str(exc)) from exc
     cutover_mode = policy.mode
+
     with db.connection() as connection:
         runtime = connection.execute(
             """

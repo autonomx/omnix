@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.image.models import ImageGenerationRequest
-from app.image.service import _map_to_provider_payload
-from app.image.style import apply_image_style, normalize_image_style
+from app.platform.image.models import ImageGenerationRequest
+from app.platform.image.service import _map_to_provider_payload
+from app.platform.image.style import apply_image_style, normalize_image_style
 
 
 def test_anime_style_adds_explicit_non_photographic_directive() -> None:

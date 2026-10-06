@@ -10,13 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.rpg.coherence.reducers import reduce_event
-from app.rpg.creator.presenters import CreatorStatePresenter
-from app.rpg.group_dynamics.group_engine import (
+from app.apps.rpg.coherence.reducers import reduce_event
+from app.apps.rpg.creator.presenters import CreatorStatePresenter
+from app.apps.rpg.group_dynamics.group_engine import (
     SUPPORTED_GROUP_EVENT_TYPES,
     GroupDynamicsEngine,
 )
-from app.rpg.npc_agency.agency_engine import NPCAgencyEngine
+from app.apps.rpg.npc_agency.agency_engine import NPCAgencyEngine
 
 # ===========================================================================
 # Test Helpers / Fakes
@@ -159,7 +159,7 @@ class TestActionResolutionGroupMetadata:
     def test_action_resolution_includes_group_dynamics_metadata(self):
         """When a social contact is resolved through the full resolver,
         group dynamics metadata should appear in resolved action metadata."""
-        from app.rpg.execution.resolver import ActionResolver
+        from app.apps.rpg.execution.resolver import ActionResolver
 
         core = _build_scene_coherence(present_actors=["npc_a", "npc_b"])
         gm = FakeGMState()

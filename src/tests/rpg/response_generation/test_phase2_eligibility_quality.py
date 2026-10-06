@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.rpg.response_generation.candidate_ranker import CandidateRanker
-from app.rpg.response_generation.contracts import (
+from app.apps.rpg.response_generation.candidate_ranker import CandidateRanker
+from app.apps.rpg.response_generation.contracts import (
     AgencyEffect,
     CandidateSource,
     ResponseCandidate,
@@ -13,9 +13,9 @@ from app.rpg.response_generation.contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.rpg.response_generation.eligibility import EligibilityPolicy
-from app.rpg.response_generation.orchestration import RpgResponseGenerator
-from app.rpg.response_generation.quality_gate import QualityGate
+from app.apps.rpg.response_generation.eligibility import EligibilityPolicy
+from app.apps.rpg.response_generation.orchestration import RpgResponseGenerator
+from app.apps.rpg.response_generation.quality_gate import QualityGate
 
 
 def _candidate(

@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.paper import PaperOrder
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_repository import StrategyProtection, TradingStrategyConfigDocument
-from app.trading.strategy_research_outcome_monitor import (
+from app.apps.trading.paper import PaperOrder
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_repository import StrategyProtection, TradingStrategyConfigDocument
+from app.apps.trading.strategy_research_outcome_monitor import (
     capture_closed_paper_outcome,
     strategy_research_outcome_monitor_enabled,
 )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.in_memory_jobs import InMemoryJobStore
 from app.jobs.models import ResourceClass
 from app.jobs.residency import (
     GpuResidencyPolicy,
@@ -9,7 +10,7 @@ from app.jobs.residency import (
     ModelResidencyRecord,
     ModelResidencyStatus,
     ResidencyDecisionAction,
-    SQLiteModelResidencyStore,
+    InMemoryModelResidencyStore,
     create_model_evict_job_request,
     create_model_load_job_request,
     create_model_residency_handlers,
@@ -199,14 +200,14 @@ def test_model_residency_diagnostics_reports_policy_and_error_warnings() -> None
     ]
 
 
-def test_sqlite_model_residency_store_persists_worker_reports(tmp_path) -> None:
-    db_path = tmp_path / "residency.sqlite"
-    store = SQLiteModelResidencyStore(db_path)
+def test_in_memory_model_residency_store_shares_worker_reports_by_namespace(tmp_path) -> None:
+    db_path = tmp_path / "residency"
+    store = InMemoryModelResidencyStore(db_path)
     loaded = _loaded("llm:local-chat", estimated_vram_mb=9000)
 
     store.upsert_record(loaded)
 
-    next_store = SQLiteModelResidencyStore(db_path)
+    next_store = InMemoryModelResidencyStore(db_path)
     records = next_store.list_records()
     diagnostics = next_store.diagnostics()
 
@@ -221,12 +222,12 @@ def test_sqlite_model_residency_store_persists_worker_reports(tmp_path) -> None:
     assert next_store.diagnostics().status == "idle"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_model_residency_handlers_complete_load_and_evict_jobs(tmp_path) -> None:
-    from app.jobs import LocalJobExecutor, SQLiteJobStore
+    from app.jobs import LocalJobExecutor
 
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    residency_store = SQLiteModelResidencyStore(tmp_path / "residency.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
+    residency_store = InMemoryModelResidencyStore(tmp_path / "residency")
     hook_calls: list[tuple[str, str, ModelResidencyStatus]] = []
     load_job = job_store.create_job(
         create_model_load_job_request(
@@ -283,12 +284,12 @@ async def test_model_residency_handlers_complete_load_and_evict_jobs(tmp_path) -
     assert job_store.list_events(after_id=events_after_load[-1].id)[-1].event_type == "job.completed"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_model_residency_load_hook_failure_records_error_and_fails_job(tmp_path) -> None:
-    from app.jobs import LocalJobExecutor, SQLiteJobStore
+    from app.jobs import LocalJobExecutor
 
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    residency_store = SQLiteModelResidencyStore(tmp_path / "residency.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
+    residency_store = InMemoryModelResidencyStore(tmp_path / "residency")
     load_job = job_store.create_job(create_model_load_job_request(_request("llm:broken")))
 
     def fail_load(_record, _job):

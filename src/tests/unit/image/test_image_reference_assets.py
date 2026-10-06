@@ -7,7 +7,7 @@ import pytest
 Image = pytest.importorskip("PIL.Image")
 
 from app.assets import SharedAssetStore
-from app.image.reference_assets import (
+from app.platform.image.reference_assets import (
     close_image_references,
     list_image_reference_assets,
     load_image_reference_assets,
@@ -21,7 +21,10 @@ def _png_bytes(width: int = 640, height: int = 480) -> bytes:
     return buffer.getvalue()
 
 
-def test_reference_upload_is_saved_as_reusable_image_asset(tmp_path) -> None:
+def test_reference_upload_is_saved_as_reusable_image_asset(tmp_path, monkeypatch) -> None:
+    # Manifest-backed stores only: do not read through to PostgreSQL image
+    # assets that other tests in the same database created.
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
     store = SharedAssetStore(tmp_path / "assets.json")
 
     asset = save_image_reference_upload(

@@ -4,19 +4,19 @@ from itertools import product
 
 import pytest
 
-from app.agent_runtime.contracts import EvidenceDecision, EvidencePolicy
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime.contracts import EvidenceDecision, EvidencePolicy
+from app.platform.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
 )
-from app.agent_runtime.profiles import (
+from app.platform.agent_runtime.profiles import (
     get_agent_profile,
     list_agent_profiles,
     profile_external_ceiling,
     resolve_profile_capabilities,
 )
-from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef
+from app.platform.agent_runtime.subagents import ChildRunRequest, derive_child_spec
+from app.platform.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef
 
 
 def test_compiled_authority_is_always_within_profile_ceiling() -> None:

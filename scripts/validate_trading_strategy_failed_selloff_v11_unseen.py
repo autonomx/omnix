@@ -25,7 +25,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-import app.trading.strategy_backtest as _bt
+import app.apps.trading.strategy_backtest as _bt
 import scripts.run_trading_strategy_failed_selloff_v4_management as _v4
 import scripts.run_trading_strategy_failed_selloff_v7_higher_low as _v7
 import scripts.run_trading_strategy_failed_selloff_v8_orderly_base as _v8

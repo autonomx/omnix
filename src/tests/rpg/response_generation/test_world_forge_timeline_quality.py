@@ -1,7 +1,7 @@
-from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_lore_scoring import assess_provider_lore_quality
-from app.rpg.session.genesis.world_forge_timeline_quality import (
+from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_lore_scoring import assess_provider_lore_quality
+from app.apps.rpg.session.genesis.world_forge_timeline_quality import (
     timeline_lore_quality_issues,
 )
 

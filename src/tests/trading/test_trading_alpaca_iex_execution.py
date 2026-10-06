@@ -5,10 +5,10 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.execution import ExecutionEligibilityPolicy
-from app.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
-from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
-from app.trading.providers.registry import ProviderRegistry
+from app.apps.trading.execution import ExecutionEligibilityPolicy
+from app.apps.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
+from app.apps.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
+from app.apps.trading.providers.registry import ProviderRegistry
 
 
 NOW = datetime(2026, 8, 18, 14, 0, 0, 300000, tzinfo=timezone.utc)

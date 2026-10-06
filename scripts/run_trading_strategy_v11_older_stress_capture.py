@@ -15,7 +15,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from app.trading.us_equity_calendar import regular_holidays
+from app.apps.trading.us_equity_calendar import regular_holidays
 
 
 def parse_args():

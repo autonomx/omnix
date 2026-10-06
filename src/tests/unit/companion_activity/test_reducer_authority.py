@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.authority import activity_field_policy
-from app.companion_activity.contracts import EvidenceProposition
-from app.companion_activity.reducer import ActivityReducer
-from app.companion_activity.state import empty_activity_state
+from app.platform.companion_activity.authority import activity_field_policy
+from app.platform.companion_activity.contracts import EvidenceProposition
+from app.platform.companion_activity.reducer import ActivityReducer
+from app.platform.companion_activity.state import empty_activity_state
 
 NOW = datetime(2026, 9, 14, 23, 0, tzinfo=timezone.utc)
 

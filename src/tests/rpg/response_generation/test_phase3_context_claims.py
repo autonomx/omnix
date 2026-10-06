@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from app.rpg.response_generation.claim_ledger import (
+from app.apps.rpg.response_generation.claim_ledger import (
     ClaimLedger,
     ClaimRecord,
     derive_claim_ledger,
 )
-from app.rpg.response_generation.context_compiler import (
+from app.apps.rpg.response_generation.context_compiler import (
     EvidenceCard,
     NarrationContextCompiler,
 )
-from app.rpg.response_generation.contracts import (
+from app.apps.rpg.response_generation.contracts import (
     ResponseMode,
     ResponseRequest,
     SectionType,
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.rpg.response_generation.semantic_plan import validate_semantic_plan
+from app.apps.rpg.response_generation.semantic_plan import validate_semantic_plan
 
 
 def test_phase3_claim_ledger_derives_resolved_state_claims():

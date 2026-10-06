@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
-from app.rpg.worlds.authoring_service import read_authoring_manifest
+from app.apps.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
+from app.apps.rpg.worlds.authoring_service import read_authoring_manifest
 
 
 def _empty_cyberpunk_detail() -> dict[str, object]:
@@ -29,11 +29,11 @@ def test_empty_cyberpunk_world_uses_standard_profile_sections_before_generation(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: _empty_cyberpunk_detail(),
     )
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service._image_section_status",
+        "app.apps.rpg.worlds.authoring_service._image_section_status",
         lambda world_id, database=None: ("empty", 0),
     )
 
@@ -91,11 +91,11 @@ def test_profile_manifest_placeholder_does_not_hide_imported_topics(monkeypatch)
         }
     ]
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service.read_world_detail",
+        "app.apps.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: detail,
     )
     monkeypatch.setattr(
-        "app.rpg.worlds.authoring_service._image_section_status",
+        "app.apps.rpg.worlds.authoring_service._image_section_status",
         lambda world_id, database=None: ("empty", 0),
     )
 

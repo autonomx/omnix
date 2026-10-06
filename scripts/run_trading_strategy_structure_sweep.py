@@ -9,15 +9,15 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.trading.gapper_dataset import freeze_gapper_universe
-from app.trading.historical_gapper_reconstruction import (
+from app.apps.trading.gapper_dataset import freeze_gapper_universe
+from app.apps.trading.historical_gapper_reconstruction import (
     AlpacaHistoricalGapperReconstructor,
     reconstructed_strategy_config,
 )
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.providers.http_runtime import ProviderHttpRuntime
-from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
-from app.trading.strategy_historical_bars import alpaca_historical_session_bars
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
+from app.apps.trading.strategy_historical_bars import alpaca_historical_session_bars
 from scripts.run_trading_strategy_backtest import strict_v11_strategy
 from scripts.run_trading_strategy_liquidity_sweep import (
     _dates,

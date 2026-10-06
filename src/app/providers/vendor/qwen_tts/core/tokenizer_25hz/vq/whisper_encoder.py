@@ -16,7 +16,9 @@
 import math
 import operator
 import os
-from functools import lru_cache
+import threading
+import time
+from collections import OrderedDict
 from itertools import accumulate
 from typing import List, Optional, Union
 
@@ -41,9 +43,12 @@ except ImportError:
 
 N_FFT = 400
 HOP_LENGTH = 160
+_MEL_FILTER_CACHE_MAX_ENTRIES = 4
+_MEL_FILTER_CACHE_TTL_SECONDS = 3600.0
+_MEL_FILTER_CACHE_LOCK = threading.RLock()
+_MEL_FILTER_CACHE: OrderedDict[tuple[str, int], tuple[float, torch.Tensor]] = OrderedDict()
 
 
-@lru_cache(maxsize=None)
 def mel_filters(device, n_mels: int) -> torch.Tensor:
     """
     load the mel filterbank matrix for projecting STFT into a Mel spectrogram.
@@ -57,9 +62,39 @@ def mel_filters(device, n_mels: int) -> torch.Tensor:
     """
     assert n_mels in {80, 128}, f"Unsupported n_mels: {n_mels}"
 
+    now = time.monotonic()
+    cache_key = (str(device), n_mels)
+    with _MEL_FILTER_CACHE_LOCK:
+        for key, (expires_at, _value) in list(_MEL_FILTER_CACHE.items()):
+            if expires_at <= now:
+                _MEL_FILTER_CACHE.pop(key, None)
+        cached = _MEL_FILTER_CACHE.get(cache_key)
+        if cached is not None:
+            _MEL_FILTER_CACHE.move_to_end(cache_key)
+            return cached[1]
+
     filters_path = os.path.join(os.path.dirname(__file__), "assets", "mel_filters.npz")
     with np.load(filters_path, allow_pickle=False) as f:
-        return torch.from_numpy(f[f"mel_{n_mels}"]).to(device)
+        filters = torch.from_numpy(f[f"mel_{n_mels}"]).to(device)
+    with _MEL_FILTER_CACHE_LOCK:
+        for key, (expires_at, _value) in list(_MEL_FILTER_CACHE.items()):
+            if expires_at <= time.monotonic():
+                _MEL_FILTER_CACHE.pop(key, None)
+        while len(_MEL_FILTER_CACHE) >= _MEL_FILTER_CACHE_MAX_ENTRIES:
+            _MEL_FILTER_CACHE.popitem(last=False)
+        _MEL_FILTER_CACHE[cache_key] = (
+            time.monotonic() + _MEL_FILTER_CACHE_TTL_SECONDS,
+            filters,
+        )
+    return filters
+
+
+def _clear_mel_filter_cache() -> None:
+    with _MEL_FILTER_CACHE_LOCK:
+        _MEL_FILTER_CACHE.clear()
+
+
+mel_filters.cache_clear = _clear_mel_filter_cache
 
 
 def log_mel_spectrogram(

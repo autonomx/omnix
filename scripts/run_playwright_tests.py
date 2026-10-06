@@ -109,8 +109,8 @@ def main():
 
     cmd = [
         sys.executable, "-m", "pytest",
-        "--rootdir", str(TESTS_DIR),
-        "-c", str(TESTS_DIR / "pytest.ini"),
+        "--rootdir", str(REPO_ROOT),
+        "-c", str(REPO_ROOT / "pyproject.toml"),
     ]
 
     targets = SUITE_MAP[args.suite]
@@ -133,6 +133,8 @@ def main():
         cmd.extend(["-p", "reports.html_report"])
 
     run_env = os.environ.copy()
+    python_paths = [str(TESTS_DIR), run_env.get("PYTHONPATH", "")]
+    run_env["PYTHONPATH"] = os.pathsep.join(path for path in python_paths if path)
     if args.suite == "live_voice":
         run_env["OMNIX_RUN_LIVE_VOICE_AUDIO"] = "1"
         run_env.setdefault("OMNIX_BASE_URL", "http://127.0.0.1:5173")

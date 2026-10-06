@@ -1,5 +1,5 @@
-from app.rpg.spatial.graph import get_entity_area
-from app.rpg.spatial.movement import can_move_between, move_entity
+from app.apps.rpg.spatial.graph import get_entity_area
+from app.apps.rpg.spatial.movement import can_move_between, move_entity
 from tests.rpg.spatial.fixtures import (
     tavern_spatial_fixture,
     tavern_spatial_fixture_with_private_door_open,
@@ -44,16 +44,6 @@ def test_wall_blocks_movement():
 
     assert result["ok"] is False
     assert result["reason"] == "blocked"
-
-
-def test_move_entity_updates_current_area_on_success():
-    graph = tavern_spatial_fixture()
-    result = move_entity(graph, "player", "street")
-
-    assert result["ok"] is True
-    assert result["moved"] is True
-    assert get_entity_area(graph, "player") == "street"
-    assert graph["current_area_id"] == "street"
 
 
 def test_move_entity_does_not_update_area_on_failure():

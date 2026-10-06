@@ -4,23 +4,23 @@ import json
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_profile_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_profile_deterministic import (
     generate_deterministic_profile_topic,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     resolve_or_generate_genre_profile,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_topic_graph,
 )
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_mission_portfolio import (
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_mission_portfolio import (
     MissionPortfolioCompilationError,
     mission_portfolio_issues,
     mission_portfolio_report,
 )
-from app.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 

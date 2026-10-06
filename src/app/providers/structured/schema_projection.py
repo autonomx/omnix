@@ -140,9 +140,11 @@ def project_provider_schema(
     lookarounds unsupported by the strict schema validator.
     """
 
-    normalized_provider = str(provider_name or "").strip().casefold()
+    from app.providers.catalog import CLOSED_OBJECT_SCHEMA, NATIVE_JSON_SCHEMA, provider_capabilities
+
+    capabilities = provider_capabilities(provider_name)
     inline_refs = mode is StructuredMode.JSON_SCHEMA and (
-        normalized_provider == "lmstudio" or schema_profile in {"local", "canon_strict"}
+        NATIVE_JSON_SCHEMA in capabilities or schema_profile in {"local", "canon_strict"}
     )
     extra_drop_keys = (
         frozenset({"minLength"})
@@ -158,7 +160,7 @@ def project_provider_schema(
     if not isinstance(projected, dict):
         raise TypeError("projected structured schema must be an object")
 
-    if mode is StructuredMode.JSON_SCHEMA and normalized_provider == "chatgpt_codex":
+    if mode is StructuredMode.JSON_SCHEMA and CLOSED_OBJECT_SCHEMA in capabilities:
         projected = _require_all_object_properties(projected)
         projected = _drop_unsupported_regex_lookarounds(projected)
         if not isinstance(projected, dict):

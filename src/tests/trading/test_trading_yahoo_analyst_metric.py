@@ -5,10 +5,10 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.fundamental_metric_data import YahooAnalystMetricAdapter
-from app.trading.providers.errors import ProviderDataUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.fundamental_metric_data import YahooAnalystMetricAdapter
+from app.apps.trading.providers.errors import ProviderDataUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class FakeResponse:
@@ -20,11 +20,11 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            import requests
+            import httpx
 
-            response = requests.Response()
-            response.status_code = self.status_code
-            raise requests.HTTPError(f"HTTP {self.status_code}", response=response)
+            request = httpx.Request("GET", "https://query2.finance.yahoo.com")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError(f"HTTP {self.status_code}", request=request, response=response)
 
     def json(self):
         return self.payload

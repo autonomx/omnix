@@ -1,1 +1,0 @@
-"""Deferred advisory candidate pipeline."""

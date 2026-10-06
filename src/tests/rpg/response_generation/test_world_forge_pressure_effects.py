@@ -1,5 +1,5 @@
-from app.rpg.world.causal_state import build_mutable_world_state
-from app.rpg.world.pressure_effects import apply_pressure_tick, pressure_deltas_for_tick
+from app.apps.rpg.world.causal_state import build_mutable_world_state
+from app.apps.rpg.world.pressure_effects import apply_pressure_tick, pressure_deltas_for_tick
 
 
 def _fixture(trend: str = "escalating"):

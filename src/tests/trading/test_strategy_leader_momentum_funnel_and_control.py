@@ -3,23 +3,23 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.models import MarketBar
-from app.trading.strategy_discovery_replay import (
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_discovery_replay import (
     DiscoveryReplayObservation,
     replay_dynamic_discovery,
 )
-from app.trading.strategy_dynamic_discovery import MarketAnomalyFeatures
-from app.trading.strategy_leader_momentum_control_replay import (
+from app.apps.trading.strategy_dynamic_discovery import MarketAnomalyFeatures
+from app.apps.trading.strategy_leader_momentum_control_replay import (
     build_control_cohort_observations,
     build_leader_momentum_control_plan,
 )
-from app.trading.strategy_leader_momentum_diagnostics import (
+from app.apps.trading.strategy_leader_momentum_diagnostics import (
     LeaderMomentumDiagnosticTrace,
     SetupGateDiagnostic,
     diagnose_leader_momentum_continuation,
 )
-from app.trading.strategy_leader_momentum_funnel_diagnostics import (
+from app.apps.trading.strategy_leader_momentum_funnel_diagnostics import (
     SetupFunnelAttempt,
     diagnose_leader_momentum_funnel,
     summarize_setup_funnel,

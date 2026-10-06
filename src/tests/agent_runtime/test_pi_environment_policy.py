@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentRunSpec,
     ExecutionPolicy,
     ModelRef,
     ResourceScope,
     WorkspaceSpec,
 )
-from app.agent_runtime.pi_runtime import agent_path_roots, build_agent_environment
+from app.platform.agent_runtime.pi_runtime import agent_path_roots, build_agent_environment
 
 
 def test_pi_worker_environment_is_minimal_and_explicit(tmp_path: Path) -> None:

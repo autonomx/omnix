@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     ModelRef,
 )
-from app.agent_runtime.evidence import build_evidence_receipt, evaluate_evidence_set
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.evidence import build_evidence_receipt, evaluate_evidence_set
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticTask,
 )
-from app.agent_runtime.task_graph import TaskEdge, TaskGraph, TaskNode, compile_task_graph
-from app.assistant_tools.repo_adapter import GitHubCliRuntimeAdapter
+from app.platform.agent_runtime.task_graph import TaskEdge, TaskGraph, TaskNode, compile_task_graph
+from app.platform.assistant_tools.repo_adapter import GitHubCliRuntimeAdapter
 
 
 MODEL = ModelRef(provider_id="test", model_id="test-model")

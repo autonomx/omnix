@@ -5,25 +5,25 @@ from pathlib import Path
 import pytest
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_generation_models import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_generation_models import (
     BackfillClonedVoiceCharactersRequest,
     CreateCharacterAvatarGenerationRequest,
 )
-from app.characters.avatar_generation_repository import CharacterAvatarGenerationRepository
-from app.characters.avatar_generation_service import CharacterAvatarGenerationService
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.service import CharacterService
-from app.characters.voice_consent import (
+from app.platform.characters.avatar_generation_repository import CharacterAvatarGenerationRepository
+from app.platform.characters.avatar_generation_service import CharacterAvatarGenerationService
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.service import CharacterService
+from app.platform.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.jobs import CompleteJobRequest, InMemoryJobStore
+from app.jobs import CompleteJobRequest
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _runtime(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     character_repository = CharacterRepository(tmp_path / "characters.sqlite3")
     assets = SharedAssetStore(tmp_path / "assets.json")
     character_service = CharacterService(character_repository, asset_store_factory=lambda: assets)
@@ -167,7 +167,7 @@ def test_generation_reconciles_base_variants_and_avatar_pack(tmp_path: Path, mon
 def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, monkeypatch) -> None:
     characters, avatars, generations, jobs, assets = _runtime(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "app.characters.avatar_generation_service.load_image_reference_assets",
+        "app.platform.characters.avatar_generation_service.load_image_reference_assets",
         lambda *_args, **_kwargs: [],
     )
     characters.create(
@@ -195,7 +195,7 @@ def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, m
     assert base_job.input_payload["reference_asset_ids"] == [source_asset_id]
     assert base_job.input_payload["no_cache"] is True
     assert base_job.input_payload["metadata"]["source_asset_id"] == source_asset_id
-    source = next(asset for asset in assets.list_assets().assets if asset.id == source_asset_id)
+    source = assets.get_asset(source_asset_id)
     assert source.owner_id == "user:local"
     assert source.metadata["source_image_consent_confirmed"] is True
     assert source.metadata["linked_character_ids"] == ["self-avatar"]

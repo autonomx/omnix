@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.trading.metric_monitor import TradingMetricMonitor, trading_liquidation_collector_enabled
+from app.apps.trading.metric_monitor import TradingMetricMonitor, trading_liquidation_collector_enabled
 
 
 class BufferStub:

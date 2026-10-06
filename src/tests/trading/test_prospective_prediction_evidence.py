@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_evidence import (
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.prospective_prediction_evidence import (
     AnalysisSessionPrices,
     BinaryForecastObservation,
     ConfidenceRiskFactors,

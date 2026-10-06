@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicNode,
     build_campaign_topic_graph,
 )
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_domains import (
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_domains import (
     DOMAIN_SPECS,
     normalize_structured_domain,
     validate_structured_domain,
     validate_world_brief_grounding,
 )
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
 
 def test_expanded_graph_contains_gameplay_and_scenario_domains() -> None:
@@ -59,7 +60,7 @@ def test_deterministic_generator_produces_valid_structured_domain_entities() -> 
         starting_location="rusty_flagon_tavern",
         background_expansion=False,
     )
-    generator = ReferenceSafeWorldForgeGenerator()
+    generator = ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
     generated = {}
 
     for node in graph.topological_order():

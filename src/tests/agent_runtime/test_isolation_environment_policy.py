@@ -7,7 +7,7 @@ def test_docker_isolation_preserves_only_explicit_non_agent_environment() -> Non
     source = (
         Path(__file__).parents[2]
         / "app"
-        / "agent_runtime"
+        / "platform" / "agent_runtime"
         / "isolation.py"
     ).read_text(encoding="utf-8")
     assert "spec.execution.allowed_environment_keys" in source

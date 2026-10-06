@@ -4,9 +4,9 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.trading.strategy_ai_shadow_v2_monitor import _research_selection_is_due
-from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
-from app.trading.strategy_research_monitor import _ai_shadow_v2_owns_research
+from app.apps.trading.strategy_ai_shadow_v2_monitor import _research_selection_is_due
+from app.apps.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+from app.apps.trading.strategy_research_monitor import _ai_shadow_v2_owns_research
 
 
 ET = ZoneInfo("America/New_York")

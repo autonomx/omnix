@@ -6,9 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
-from app.agent_runtime import service as service_module
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
@@ -18,7 +16,7 @@ from app.agent_runtime.contracts import (
     ValidationSpec,
     WorkspaceSpec,
 )
-from app.agent_runtime.service import (
+from app.platform.agent_runtime.service import (
     AgentRunService,
     _default_review_root,
     _implementation_candidate_failures,
@@ -261,16 +259,11 @@ def test_quality_repair_is_queued_before_dispatch(monkeypatch) -> None:
         },
         list_validation_results=lambda *_args, **_kwargs: [],
     )
-    monkeypatch.setattr(
-        service_module,
-        "PostgresCodingQualityRepository",
-        lambda _connection, _context: quality,
-    )
-
     service = object.__new__(AgentRunService)
     service.context = SimpleNamespace()
     service.runtime = SimpleNamespace(command=MagicMock())
     service._set_quality_stage = MagicMock()
+    service.quality_repository_factory = lambda _connection, _context: quality
 
     action = service._request_quality_repair(
         Repository(),

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from app.desktop_companion.attention import DesktopAttentionContext, decide_desktop_attention
-from app.desktop_companion.models import (
+from app.apps.desktop_companion.attention import DesktopAttentionContext, decide_desktop_attention
+from app.apps.desktop_companion.models import (
     DesktopActivitySignal,
     DesktopBehaviorState,
     DesktopCompanionPolicy,

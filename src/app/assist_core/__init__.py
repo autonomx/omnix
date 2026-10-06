@@ -1,2 +1,0 @@
-"""Omnix assistant core package."""
-

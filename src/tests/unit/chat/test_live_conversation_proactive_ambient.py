@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.chat import live_conversation_proactive
+from app.platform.chat import live_conversation_proactive
 
 
 class FakeProvider:
@@ -18,7 +18,7 @@ class FakeStore:
 
 def test_ambient_visual_presence_model_skip_is_not_emitted_as_spoken_text(monkeypatch) -> None:
     provider = FakeProvider()
-    monkeypatch.setattr(live_conversation_proactive.shared, "get_provider", lambda _: provider)
+    monkeypatch.setattr(live_conversation_proactive, "get_provider", lambda _: provider)
     session = SimpleNamespace(
         provider_id="lmstudio",
         model_id="local-model",

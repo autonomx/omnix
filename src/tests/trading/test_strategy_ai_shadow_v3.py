@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.trading.models import MarketBar
-from app.trading.strategy_ai_shadow_v3 import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_ai_shadow_v3 import (
     AIShadowV3Decision,
     GeometrySuggestion,
     agreement_cohort,

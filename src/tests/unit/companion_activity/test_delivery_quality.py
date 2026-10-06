@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.cognition import DeliveryIntent
-from app.companion_activity.delivery_quality import (
+from app.platform.companion_activity.cognition import DeliveryIntent
+from app.platform.companion_activity.delivery_quality import (
     CompanionDeliveryQualityMetrics,
     CompanionDeliveryQualityScorer,
     DeliveryQualityFeatures,

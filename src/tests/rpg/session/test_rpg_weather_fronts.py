@@ -1,5 +1,5 @@
-from app.rpg.session.climate_profiles import CLIMATE_PROFILES
-from app.rpg.session.environment_weather import generate_weather_event
+from app.apps.rpg.session.climate_profiles import CLIMATE_PROFILES
+from app.apps.rpg.session.environment_weather import generate_weather_event
 
 
 def test_weather_front_generation_is_deterministic() -> None:

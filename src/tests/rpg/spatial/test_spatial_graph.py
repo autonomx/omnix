@@ -1,10 +1,10 @@
-from app.rpg.spatial.graph import (
+from app.apps.rpg.spatial.graph import (
     find_connection,
     list_area_connections,
     list_entities_in_area,
     set_entity_area,
 )
-from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.apps.rpg.spatial.serialization import normalize_spatial_graph
 from tests.rpg.spatial.fixtures import tavern_spatial_fixture
 
 

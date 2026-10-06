@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.worlds.generation_starting_market import (
+from app.apps.rpg.worlds.generation_starting_market import (
     require_valid_starting_market,
     starting_market_report,
 )

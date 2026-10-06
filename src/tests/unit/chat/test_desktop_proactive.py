@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
-from app.chat.live_conversation_proactive import (
+from app.platform.chat import live_conversation_proactive as proactive_module
+from app.platform.chat.live_conversation_proactive import (
     ProactiveDeliveryRequest,
     commit_proactive_delivery,
     stream_proactive_turn_chunks,
 )
-from app.chat.models import ChatMessage, ChatSession
+from app.platform.chat.models import ChatMessage, ChatSession
 from app.providers import ChatMessage as ProviderMessage
 
 
@@ -71,7 +71,7 @@ def session() -> ChatSession:
 
 def test_desktop_generation_uses_internal_prompt_and_filters_transient_history(monkeypatch):
     provider = FakeProvider(["That inventory grid is packed."])
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(proactive_module, "get_provider", lambda _name=None: provider)
     store = FakeStore(session())
 
     events = list(
@@ -97,7 +97,7 @@ def test_desktop_generation_uses_internal_prompt_and_filters_transient_history(m
 
 def test_desktop_skip_does_not_emit_text_chunk(monkeypatch):
     provider = FakeProvider(["SKIP"])
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(proactive_module, "get_provider", lambda _name=None: provider)
     store = FakeStore(session())
 
     events = list(

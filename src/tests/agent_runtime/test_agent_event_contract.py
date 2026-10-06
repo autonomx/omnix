@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 from typing import get_args
 
-from app.agent_runtime.contracts import AgentEvent, AgentEventType
+from app.platform.agent_runtime.contracts import AgentEvent, AgentEventType
 
 
 def test_planning_conformance_event_is_a_valid_agent_event() -> None:
@@ -28,7 +28,7 @@ def _agent_event_call(node: ast.Call) -> bool:
 def test_literal_agent_event_emitters_are_registered_in_contract() -> None:
     """Fail CI when runtime code emits a literal event missing from AgentEventType."""
 
-    runtime_root = Path(__file__).resolve().parents[2] / "app" / "agent_runtime"
+    runtime_root = Path(__file__).resolve().parents[2] / "app" / "platform" / "agent_runtime"
     registered = set(get_args(AgentEventType))
     unknown: dict[str, list[str]] = {}
 

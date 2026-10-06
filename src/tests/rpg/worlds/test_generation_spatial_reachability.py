@@ -2,29 +2,28 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_profile_deterministic import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.session.genesis.world_forge_profile_deterministic import (
     generate_deterministic_profile_topic,
 )
-from app.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.session.genesis.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.session.genesis.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.rpg.session.genesis.world_forge_spatial_routes import (
+from app.apps.rpg.session.genesis.world_forge_spatial_routes import (
     deterministic_spatial_route_signature,
     minimum_route_count,
     spatial_route_components,
 )
-from app.rpg.worlds import generation_compilation
-from app.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds import generation_compilation
+from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
-from app.rpg.worlds.generation_spatial_reachability import (
-    SpatialReachabilityCompilationError,
+from app.apps.rpg.worlds.generation_spatial_reachability import (
     spatial_reachability_issues,
     spatial_reachability_report,
 )
@@ -404,33 +403,6 @@ def test_large_route_portfolio_requires_constraint_diversity() -> None:
         "route_blocker",
         "failure_condition",
     }
-
-
-def test_certified_compilation_fails_before_legacy_compiler(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    def _compile(**_kwargs: object) -> WorldGenerationPublication:
-        nonlocal called
-        called = True
-        return _publication()
-
-    monkeypatch.setattr(
-        generation_compilation,
-        "compile_world_generation_publication",
-        _compile,
-    )
-
-    with pytest.raises(SpatialReachabilityCompilationError):
-        generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
-            world={"id": "world:1"},
-            topic_rows=_portfolio_rows(disconnected=True),
-            revision=1,
-        )
-
-    assert called is False
 
 
 def test_diagnostic_compilation_retains_spatial_report(

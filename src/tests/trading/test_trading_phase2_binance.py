@@ -5,16 +5,16 @@ import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import INSTRUMENTS
-from app.trading.models import MarketBar
-from app.trading.providers.binance import BinanceMarketDataProvider
-from app.trading.streaming.gap_recovery import (
+from app.apps.trading.cache import TradingMarketDataCache
+from app.apps.trading.catalog import INSTRUMENTS
+from app.apps.trading.models import MarketBar
+from app.apps.trading.providers.binance import BinanceMarketDataProvider
+from app.apps.trading.streaming.gap_recovery import (
     missing_finalized_ranges,
     reconcile_market_bars,
     recovery_window,
 )
-from app.trading.streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
+from app.apps.trading.streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 
 
 class FakeResponse:

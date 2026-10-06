@@ -1,4 +1,4 @@
-from app.gateway.tts_stream_contract import (
+from app.conversation.tts_stream_contract import (
     CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS,
     CHAT_STREAM_MAX_CODEC_CHUNK_STEPS,
     TtsStreamRequest,

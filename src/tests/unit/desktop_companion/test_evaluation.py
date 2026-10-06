@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.desktop_companion.evaluation import (
+from app.apps.desktop_companion.evaluation import (
     DesktopCompanionEvaluationCreate,
     DesktopCompanionEvaluationStore,
     build_desktop_companion_release_gate,

@@ -1,7 +1,7 @@
 from __future__ import annotations
-from app.assistant_tools.home_adapter import run_home_tool_request
-from app.assistant_tools.kasa_adapter import KasaDeviceRecord
-from app.assistant_tools.models import AssistantToolRequest
+from app.platform.assistant_tools.home_adapter import run_home_tool_request
+from app.platform.assistant_tools.kasa_adapter import KasaDeviceRecord
+from app.platform.assistant_tools.models import AssistantToolRequest
 
 class FakeHomeAdapter:
     def discover_devices(self):

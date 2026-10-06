@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading import strategy_leader_momentum_continuation as leader
-from app.trading.models import MarketBar
-from app.trading.strategy_leader_momentum_diagnostics import (
+from app.apps.trading import strategy_leader_momentum_continuation as leader
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_leader_momentum_diagnostics import (
     LeaderMomentumCohortObservation,
     LeaderMomentumDiagnosticTrace,
     build_leader_momentum_cohort_report,

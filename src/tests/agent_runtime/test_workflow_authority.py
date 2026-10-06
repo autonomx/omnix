@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime, WorkflowRuntimeError
-from app.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
+from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime, WorkflowRuntimeError
+from app.platform.agent_runtime.workflows import WorkflowDefinition, WorkflowStepDefinition
 
 
 def test_mutating_capability_retry_is_fail_closed() -> None:

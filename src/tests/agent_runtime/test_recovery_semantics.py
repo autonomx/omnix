@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import threading
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AgentArtifact,
     AgentEvent,
     AgentRunSnapshot,
@@ -15,9 +15,9 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
-from app.agent_runtime.evidence import build_evidence_receipt
-from app.agent_runtime.semantic_classifier import classify_semantic_intent_safely
-from app.agent_runtime.service import AgentRunService
+from app.platform.agent_runtime.evidence import build_evidence_receipt
+from app.platform.agent_runtime.semantic_classifier import classify_semantic_intent_safely
+from app.platform.agent_runtime.service import AgentRunService
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 
 
@@ -270,7 +270,7 @@ def test_partial_evidence_timeout_leaves_requirement_unsatisfied() -> None:
     assert first is not None
     assert timed_out is None
 
-    from app.agent_runtime.evidence import evaluate_evidence_set
+    from app.platform.agent_runtime.evidence import evaluate_evidence_set
 
     result = evaluate_evidence_set("run-1", policy, [first])
     assert result.passed is False
@@ -294,8 +294,6 @@ def test_stale_codex_event_from_cancelled_turn_does_not_match_new_turn() -> None
 
 
 def test_restarted_service_uses_latest_revision_evidence_policy(monkeypatch) -> None:
-    from app.agent_runtime import service as service_module
-
     spec = AgentRunSpec(
         run_id="run-1",
         task="old timeless task",
@@ -356,12 +354,11 @@ def test_restarted_service_uses_latest_revision_evidence_policy(monkeypatch) -> 
         def list_evidence_receipts(self, _run_id):
             return []
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repo)
-
     service = object.__new__(AgentRunService)
     service.database = object()
     service.context = object()
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repo
 
     evidence = service.evidence_set("run-1")
     assert evidence.passed is False
@@ -369,8 +366,6 @@ def test_restarted_service_uses_latest_revision_evidence_policy(monkeypatch) -> 
 
 
 def test_late_runtime_event_cannot_reopen_superseded_run(monkeypatch) -> None:
-    from app.agent_runtime import service as service_module
-
     spec = AgentRunSpec(
         run_id="old",
         task="old task",
@@ -415,14 +410,13 @@ def test_late_runtime_event_cannot_reopen_superseded_run(monkeypatch) -> None:
             updates.append(kwargs)
             return superseded
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repo)
-
     service = object.__new__(AgentRunService)
     service.database = object()
     service.context = object()
     service.worker_id = "worker"
-    service._lock = threading.RLock()
+    service._run_lock = lambda _run_id: threading.RLock()
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repo
 
     service._persist_runtime_event(
         AgentEvent(run_id="old", event_type="run.started")

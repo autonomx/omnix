@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import AgentEvent
-from app.agent_runtime.service import (
+from app.platform.agent_runtime.contracts import AgentEvent
+from app.platform.agent_runtime.service import (
     _self_review_response_from_repository,
     _terminal_message_settles_quality_stage,
 )

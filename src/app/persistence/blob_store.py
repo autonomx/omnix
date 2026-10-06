@@ -1,12 +1,14 @@
 from __future__ import annotations
+from app.config.env import env_str
 
 import hashlib
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 
 class InvalidBlobKey(ValueError):
@@ -17,8 +19,18 @@ class BlobIntegrityError(RuntimeError):
     pass
 
 
+def normalize_blob_key(storage_key: str) -> str:
+    """Validate a relative ``a/b/c`` key shared by every BlobStore backend."""
+    normalized = str(storage_key).strip().replace("\\", "/")
+    if not normalized or normalized.startswith("/"):
+        raise InvalidBlobKey("storage key must be a non-empty relative path")
+    if any(piece in {"", ".", ".."} for piece in normalized.split("/")):
+        raise InvalidBlobKey("storage key contains an unsafe path segment")
+    return normalized
+
+
 def default_blob_root() -> Path:
-    override = (os.environ.get("OMNIX_BLOB_ROOT") or "").strip()
+    override = (env_str("OMNIX_BLOB_ROOT") or "").strip()
     return Path(override) if override else resources_data_root() / "blobs"
 
 
@@ -181,13 +193,60 @@ class LocalBlobStore:
     def exists(self, storage_key: str) -> bool:
         return self._path(storage_key).is_file()
 
+    def put_stream(
+        self,
+        storage_key: str,
+        stream: BinaryIO,
+        *,
+        content_type: str | None = None,
+        max_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        """Store a stream atomically with bounded memory and an optional size cap."""
+        del content_type
+        path = self._path(storage_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp", delete=False,
+            ) as writer:
+                temporary = writer.name
+                digest = hashlib.sha256()
+                size = 0
+                while chunk := stream.read(1024 * 1024):
+                    size += len(chunk)
+                    if max_bytes is not None and size > max_bytes:
+                        raise ValueError("blob exceeds the permitted size")
+                    digest.update(chunk)
+                    writer.write(chunk)
+                writer.flush()
+                os.fsync(writer.fileno())
+            os.replace(temporary, path)
+            temporary = None
+            return self._record(storage_key, path, digest.hexdigest(), size, created=True)
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def open(self, storage_key: str) -> BinaryIO:
+        """Open a blob for streaming reads."""
+        return self._path(storage_key).open("rb")
+
+    def presign_get(self, storage_key: str, ttl_seconds: int = 300) -> str | None:
+        """Local blobs have no directly reachable URL; serve them via the gateway."""
+        del storage_key, ttl_seconds
+        return None
+
+    def scratch_dir(self) -> Path | None:
+        """Staging directory on the blob volume, so staging can hard-link."""
+        return self.root
+
+    def local_path(self, storage_key: str) -> Path:
+        """Filesystem path, for tools that need one; S3 callers stage a copy."""
+        return self._path(storage_key)
+
     def _path(self, storage_key: str) -> Path:
-        normalized = str(storage_key).strip().replace("\\", "/")
-        if not normalized or normalized.startswith("/"):
-            raise InvalidBlobKey("storage key must be a non-empty relative path")
-        pieces = normalized.split("/")
-        if any(piece in {"", ".", ".."} for piece in pieces):
-            raise InvalidBlobKey("storage key contains an unsafe path segment")
+        pieces = normalize_blob_key(storage_key).split("/")
         candidate = self.root.joinpath(*pieces).resolve()
         try:
             candidate.relative_to(self.root)
@@ -220,3 +279,50 @@ class LocalBlobStore:
             "path": str(path),
             "created": created,
         }
+
+
+_DEFAULT_STORE_LOCK = threading.Lock()
+_DEFAULT_STORE: Any = None
+
+
+def blob_backend() -> str:
+    backend = (env_str("OMNIX_BLOB_BACKEND", "local") or "local").strip().lower()
+    if backend not in {"local", "s3"}:
+        raise ValueError("OMNIX_BLOB_BACKEND must be 'local' or 's3'")
+    return backend
+
+
+def create_blob_store() -> Any:
+    """Build the configured BlobStore (WP-5.8); local filesystem by default."""
+    if blob_backend() == "local":
+        return LocalBlobStore()
+    from app.config.env import env_int
+
+    from .s3_blob_store import S3BlobStore, S3Settings
+
+    return S3BlobStore(
+        S3Settings(
+            endpoint=(env_str("OMNIX_S3_ENDPOINT", "") or "").strip(),
+            bucket=(env_str("OMNIX_S3_BUCKET", "") or "").strip(),
+            access_key_id=(env_str("OMNIX_S3_ACCESS_KEY_ID", "") or "").strip(),
+            secret_access_key=(env_str("OMNIX_S3_SECRET_ACCESS_KEY", "") or "").strip(),
+            region=(env_str("OMNIX_S3_REGION", "us-east-1") or "us-east-1").strip(),
+            prefix=(env_str("OMNIX_S3_PREFIX", "") or "").strip(),
+            timeout_seconds=float(env_int("OMNIX_S3_TIMEOUT_SECONDS", 60, minimum=1, maximum=3600)),
+        )
+    )
+
+
+def default_blob_store() -> Any:
+    """The process's shared BlobStore; one HTTP connection pool for S3."""
+    global _DEFAULT_STORE
+    with _DEFAULT_STORE_LOCK:
+        if _DEFAULT_STORE is None:
+            _DEFAULT_STORE = create_blob_store()
+        return _DEFAULT_STORE
+
+
+def reset_default_blob_store_for_tests() -> None:
+    global _DEFAULT_STORE
+    with _DEFAULT_STORE_LOCK:
+        _DEFAULT_STORE = None

@@ -23,7 +23,10 @@ def tenant_security_audit(connection: Any) -> dict[str, Any]:
           FROM information_schema.table_constraints
          WHERE constraint_schema = current_schema()
            AND constraint_type = 'FOREIGN KEY'
-        """
+           AND constraint_name = ANY(%s)
+         LIMIT %s
+        """,
+        (sorted(_REQUIRED_COMPOSITE_CONSTRAINTS), len(_REQUIRED_COMPOSITE_CONSTRAINTS)),
     ).fetchall()
     constraints = {str(row[0]) for row in rows}
     missing = sorted(_REQUIRED_COMPOSITE_CONSTRAINTS - constraints)

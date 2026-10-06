@@ -6,13 +6,15 @@ from app.assets import AssetType, SharedAssetStore
 
 
 def _configure_voice_paths(tmp_path, monkeypatch):
-    from app import shared
+    from app.runtime import paths as runtime_paths
 
     voice_dir = tmp_path / "voice_clones"
     voice_dir.mkdir()
     voice_manifest = voice_dir / "voice_clones.json"
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_manifest))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_FILE", str(voice_manifest))
+    monkeypatch.setattr(runtime_paths, "VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setattr(runtime_paths, "VOICE_CLONES_FILE", str(voice_manifest))
     return voice_dir, voice_manifest
 
 
@@ -32,7 +34,12 @@ def test_voice_library_recovers_audio_files_when_manifests_are_missing_or_invali
     )
 
     assets = SharedAssetStore(shared_manifest).list_assets().assets
-    voice_assets = [asset for asset in assets if asset.type == AssetType.VOICE_PROFILE]
+    voice_assets = [
+        asset
+        for asset in assets
+        if asset.type == AssetType.VOICE_PROFILE
+        and asset.storage_path.startswith(str(voice_dir))
+    ]
 
     assert len(voice_assets) == 1
     asset = voice_assets[0]
@@ -62,7 +69,12 @@ def test_voice_library_reads_wrapped_list_manifest_and_non_wav_clone(tmp_path, m
     )
 
     assets = SharedAssetStore(tmp_path / "assets" / "manifest.json").list_assets().assets
-    voice_assets = [asset for asset in assets if asset.type == AssetType.VOICE_PROFILE]
+    voice_assets = [
+        asset
+        for asset in assets
+        if asset.type == AssetType.VOICE_PROFILE
+        and asset.storage_path == str(clone_path)
+    ]
 
     assert len(voice_assets) == 1
     asset = voice_assets[0]

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.narrative_engine.world_forge import (
+from app.apps.rpg.narrative_engine.world_forge import (
     WorldForgeProposal,
     validate_world_forge_proposal_for_publication,
 )
-from app.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     validate_generated_topic_for_publication,
 )

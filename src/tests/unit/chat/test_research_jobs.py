@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.research_jobs import link_user_message_to_research_job
+from app.platform.chat.models import ChatMessage, ChatSession
+from app.platform.chat.research_jobs import link_user_message_to_research_job
 
 
 class TargetedMetadataStore:
@@ -29,6 +29,9 @@ class TargetedMetadataStore:
                     message.metadata.update(metadata)
                     return True
         return False
+
+    def get_session(self, session_id: str) -> ChatSession | None:
+        return next((session for session in self.sessions if session.id == session_id), None)
 
     def _load_sessions(self) -> list[ChatSession]:
         return self.sessions

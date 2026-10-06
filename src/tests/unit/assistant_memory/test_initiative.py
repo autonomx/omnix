@@ -3,19 +3,20 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.assistant_memory.initiative import (
+from app.platform.assistant_memory import initiative
+from app.platform.assistant_memory.initiative import (
     TrustedCapabilityManifest,
     initiative_prompt_directive,
     plan_companion_initiative,
     record_initiative_surface,
     reset_initiative_surface_history,
 )
-from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
-from app.assistant_memory.temporal_retrieval import (
+from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.platform.assistant_memory.temporal_retrieval import (
     TemporalRetrievalResult,
     rank_temporal_records,
 )
-from app.characters.live_conversation_profile import LiveConversationProfile
+from app.platform.characters.live_conversation_profile import LiveConversationProfile
 
 
 def _record(*, score_kind: str = "routine", content: str = "The user takes Route X to work.") -> MemoryRecord:
@@ -195,3 +196,25 @@ def test_repetition_cooldown_prevents_repeated_morning_prompt() -> None:
 
     assert too_soon.reason == "repetition_cooldown"
     assert later.proactive is True
+
+
+def test_initiative_surface_registry_is_bounded_expiring_and_clearable(monkeypatch) -> None:
+    now = [20.0]
+    monkeypatch.setattr(initiative.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(initiative, "_LAST_SURFACED_TTL_SECONDS", 5)
+    monkeypatch.setattr(initiative, "_MAX_LAST_SURFACED_ENTRIES", 2)
+    reset_initiative_surface_history()
+
+    record_initiative_surface(_context(), "memory:one")
+    record_initiative_surface(_context(), "memory:two")
+    record_initiative_surface(_context(), "memory:three")
+    assert len(initiative._LAST_SURFACED) == 2
+
+    now[0] += 6
+    with initiative._SURFACE_LOCK:
+        initiative._prune_surface_history_locked(now[0])
+    assert not initiative._LAST_SURFACED
+
+    record_initiative_surface(_context(), "memory:four")
+    reset_initiative_surface_history()
+    assert not initiative._LAST_SURFACED

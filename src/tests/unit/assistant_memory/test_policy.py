@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.assistant_memory import (
+from app.platform.assistant_memory import (
     DEFAULT_PROFILE_ID,
     DEFAULT_WORKSPACE_ID,
     MemoryCandidate,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.worlds.generation_manifest_binding import (
+from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.worlds.generation_manifest_binding import (
     EntityManifestBindingError,
     bind_generated_topic_to_manifest,
     dependency_manifest_aliases,

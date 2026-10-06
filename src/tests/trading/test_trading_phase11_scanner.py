@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.trading.models import (
+from app.apps.trading.models import (
     AssetClass,
     BarsResponse,
     CanonicalInstrument,
@@ -22,7 +22,7 @@ from app.trading.models import (
     ProviderBinding,
     UsageScope,
 )
-from app.trading.scanner import (
+from app.apps.trading.scanner import (
     AsyncScannerCancellation,
     TradingScannerDefinition,
     TradingScannerResult,
@@ -32,7 +32,7 @@ from app.trading.scanner import (
     scanner_definition_fingerprint,
     scanner_metric_formula,
 )
-from app.trading.scanner_api import create_trading_scanner_router
+from app.apps.trading.scanner_api import create_trading_scanner_router
 
 
 NOW = datetime(2026, 8, 5, tzinfo=timezone.utc)

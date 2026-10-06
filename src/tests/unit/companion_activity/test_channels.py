@@ -4,14 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.companion_activity.channels import CompanionChannelCoordinator
-from app.companion_activity.cognition import DeliveryIntent
-from app.companion_activity.initiative import (
+from app.platform.companion_activity.channels import CompanionChannelCoordinator
+from app.platform.companion_activity.cognition import DeliveryIntent
+from app.platform.companion_activity.initiative import (
     CompanionInitiativeAuthority,
     InitiativeAcquireRequest,
     InitiativeLease,
 )
-from app.companion_activity.presence import CompanionPresenceDecision
+from app.platform.companion_activity.presence import CompanionPresenceDecision
 
 NOW = datetime(2026, 9, 15, 7, 0, tzinfo=timezone.utc)
 

@@ -5,16 +5,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.companion_activity.contracts import EvidenceProposition
-from app.companion_activity.persistence import (
+from app.platform.companion_activity.contracts import EvidenceProposition
+from app.platform.companion_activity.persistence import (
     CompanionActivityCheckpoint,
     CompanionActivityRecovery,
     CompanionCheckpointPolicy,
     InMemoryCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.runtime import CompanionActivityRuntime
-from app.companion_activity.state import (
+from app.platform.companion_activity.runtime import CompanionActivityRuntime
+from app.platform.companion_activity.state import (
     ActivityTransitionCandidate,
     empty_activity_state,
 )

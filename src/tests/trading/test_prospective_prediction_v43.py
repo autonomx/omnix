@@ -3,18 +3,18 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate
-from app.trading.prospective_prediction_v4 import (
+from app.apps.trading.gapper_dataset import GapperCandidate
+from app.apps.trading.prospective_prediction_v4 import (
     PremarketFeature,
     PremarketMarketStateSnapshot,
 )
-from app.trading.prospective_prediction_v42 import (
+from app.apps.trading.prospective_prediction_v42 import (
     V42Forecast,
     V42MechanismHeads,
     V42ReturnDistribution,
     V42RiskInteractions,
 )
-from app.trading.prospective_prediction_v43 import (
+from app.apps.trading.prospective_prediction_v43 import (
     derive_v43_cohort_regime,
     derive_v43_extension_overlay,
     freeze_v43_forecast,

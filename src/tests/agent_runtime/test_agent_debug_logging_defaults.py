@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app.agent_runtime import debug_logging
+from app.observability import agent_logging as debug_logging
 
 
 def test_agent_debug_logging_is_opt_in(monkeypatch, tmp_path: Path) -> None:

@@ -1,0 +1,1 @@
+{"identities": [{"name": "omnix", "credentials": [{"accessKey": "omnixmultihost", "secretKey": "omnixmultihostsecret"}], "actions": ["Admin", "Read", "Write", "List", "Tagging"]}]}

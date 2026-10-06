@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, SuccessCriterion, WorkspaceSpec
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, SuccessCriterion, WorkspaceSpec
 
 
 def test_run_spec_keeps_model_and_authority_runtime_neutral() -> None:

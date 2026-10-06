@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
-from app.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
-from app.desktop_companion.models import (
+from app.platform.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
+from app.apps.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
+from app.apps.desktop_companion.models import (
     DesktopActivitySignal,
     DesktopBehaviorState,
     DesktopObservation,

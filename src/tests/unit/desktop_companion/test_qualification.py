@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.desktop_companion.evaluation import (
+from app.apps.desktop_companion.evaluation import (
     DesktopCompanionEvaluationCreate,
     DesktopCompanionEvaluationStore,
     hash_vision_model_id,
 )
-from app.desktop_companion.qualification import (
+from app.apps.desktop_companion.qualification import (
     build_desktop_companion_qualification_report,
     main,
     qualification_exit_code,
     render_desktop_companion_qualification_markdown,
 )
-from app.desktop_companion.release_gate import DesktopCompanionEvidencePartition
+from app.apps.desktop_companion.release_gate import DesktopCompanionEvidencePartition
 
 COMMIT_SHA = "2a1a4830efc3b4294702df9d960a0aaf42a96b92"
 MODEL_HASH = hash_vision_model_id("qualification-model")

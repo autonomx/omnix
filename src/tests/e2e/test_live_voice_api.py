@@ -81,7 +81,7 @@ def _base_url(value: str) -> str:
 def _websocket_url(http_url: str, path: str) -> str:
     parsed = urlsplit(http_url)
     scheme = "wss" if parsed.scheme == "https" else "ws"
-    return urlunsplit((scheme, parsed.netloc, path, "", ""))
+    return urlunsplit((scheme, parsed.netloc, parsed.path.rstrip("/") + path, "", ""))
 
 
 def _delta_ms(started_at: float | None, ended_at: float | None) -> float | None:
@@ -836,7 +836,7 @@ async def _stream_chat_to_tts(http: aiohttp.ClientSession, api_url: str, session
 
 async def _run_api_test() -> dict[str, Any]:
     api_url = _base_url(os.environ.get("OMNIX_LIVE_VOICE_API_URL", "http://127.0.0.1:8000"))
-    stt_url = _base_url(os.environ.get("OMNIX_LIVE_VOICE_API_STT_URL", "http://127.0.0.1:5201"))
+    stt_url = _base_url(os.environ.get("OMNIX_LIVE_VOICE_API_STT_URL", f"{api_url}/api/stt"))
     voice = os.environ.get("OMNIX_LIVE_VOICE_API_VOICE", "").strip() or None
     audio_paths = _audio_paths()
     provenance = _git_provenance()

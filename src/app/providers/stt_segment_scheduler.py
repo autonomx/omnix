@@ -40,6 +40,7 @@ class ProviderSegmentScheduler(Generic[T]):
         self._pending: dict[str, deque[SegmentJob[T]]] = {}
         self._session_order: deque[str] = deque()
         self._queued_jobs = 0
+        self._active_jobs = 0
         self._condition = asyncio.Condition()
         self._worker: asyncio.Task[None] | None = None
         self._closed = False
@@ -47,6 +48,10 @@ class ProviderSegmentScheduler(Generic[T]):
     @property
     def queued_jobs(self) -> int:
         return self._queued_jobs
+
+    @property
+    def is_idle(self) -> bool:
+        return self._queued_jobs == 0 and self._active_jobs == 0
 
     def queued_for_session(self, session_id: str) -> int:
         return len(self._pending.get(session_id, ()))
@@ -142,6 +147,7 @@ class ProviderSegmentScheduler(Generic[T]):
                 return
             if job.future.cancelled():
                 continue
+            self._active_jobs += 1
             try:
                 result = await job.run()
             except asyncio.CancelledError:
@@ -154,3 +160,5 @@ class ProviderSegmentScheduler(Generic[T]):
             else:
                 if not job.future.done():
                     job.future.set_result(result)
+            finally:
+                self._active_jobs -= 1

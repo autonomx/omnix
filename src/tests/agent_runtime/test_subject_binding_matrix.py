@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidencePolicy,
     EvidenceReceipt,
     EvidenceRequirement,
     SubjectRef,
 )
-from app.agent_runtime.evidence import evaluate_evidence_set, subject_matches
+from app.platform.agent_runtime.evidence import evaluate_evidence_set, subject_matches
 
 
 def _receipt(

@@ -3,7 +3,7 @@
 Status: **Contract baseline for architecture-frozen Memory v2**  
 Architecture: `docs/MEMORY_V2_ARCHITECTURE.md`
 
-This document defines the semantic meaning of the initial `app.assistant_memory_v2`
+This document defines the semantic meaning of the initial `app.platform.assistant_memory.v2`
 contracts. It is intentionally implementation-neutral. Persistence schemas, VoiceMem
 ports, vector stores, graph traversal engines, and live-runtime integration must conform
 to these contracts rather than redefine them.
@@ -109,9 +109,19 @@ external_observed
 system_event
 imported_legacy_memory
 acoustic_observation
+curated_memory
 ```
 
 `assistant_generated` is never a substitute for `assistant_experienced`.
+
+`curated_memory` (revision 2, WP-8.5) is one revision of a curated memory
+record (saved, approved, edited, pinned, moved or archived) written while v2
+is authoritative; the record is the payload's `memory_record`. A new revision
+revokes the previous one in the same transaction, so a record has at most one
+active observation, and forgetting purges every revision. Its provenance
+source is `user`, `assistant` (an approved suggestion), `external` (Hermes),
+`import` or `system`. Only active, non-secret, approved records are derived
+into retrievable assertions, ending at the record's expiry.
 
 Example:
 

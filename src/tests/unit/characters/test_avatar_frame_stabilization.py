@@ -9,7 +9,7 @@ ImageDraw = pytest.importorskip("PIL.ImageDraw")
 ImageEnhance = pytest.importorskip("PIL.ImageEnhance")
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters.avatar_frame_stabilization import (
+from app.platform.characters.avatar_frame_stabilization import (
     AvatarFrameStabilizationError,
     avatar_frame_region,
     stabilize_generated_avatar_frame,

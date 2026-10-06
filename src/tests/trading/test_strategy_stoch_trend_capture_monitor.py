@@ -5,18 +5,18 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading.models import MarketBar
-from app.trading.strategies.models import (
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
     GapPullbackResult,
 )
-from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_stoch_execution_cost import simulate_stoch_execution
-from app.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
-from app.trading import strategy_monitor as monitor_module
+from app.apps.trading.strategy_intraday_learning import IntradayLearningSnapshot
+from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_stoch_execution_cost import simulate_stoch_execution
+from app.apps.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
+from app.apps.trading import strategy_monitor as monitor_module
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

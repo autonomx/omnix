@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import MarketBar
-from app.trading.strategy_causal_replay import recover_causal_1m_bars
-from app.trading.strategy_repository import StrategyEvent
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_causal_replay import recover_causal_1m_bars
+from app.apps.trading.strategy_repository import StrategyEvent
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

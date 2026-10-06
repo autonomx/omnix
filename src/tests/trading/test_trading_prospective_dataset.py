@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.strategy_prospective_dataset import (
+from app.apps.trading.strategy_prospective_dataset import (
     matched_prospective_signal_outcomes,
     prospective_dataset_readiness,
 )
-from app.trading.strategy_repository import StrategyEvent
-from app.trading.strategy_v2_qualification import (
+from app.apps.trading.strategy_repository import StrategyEvent
+from app.apps.trading.strategy_v2_qualification import (
     FROZEN_V2_PROFILE_FINGERPRINT,
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,

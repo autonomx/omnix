@@ -2,9 +2,27 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, Field
+
+from app.runtime.ports import Port, implementations
+
+
+class ProviderCatalog(Protocol):
+    """A feature's provider list for the facade (ADR-0016)."""
+
+    family: Literal["image", "rpg_visual"]
+
+    def list_providers(self) -> list[dict[str, Any]]: ...
+
+
+PROVIDER_CATALOGS: Port[ProviderCatalog] = Port("providers.catalogs", ProviderCatalog, "many")
+
+
+def _catalog_providers(family: str) -> list[dict[str, Any]]:
+    return [info for catalog in implementations(PROVIDER_CATALOGS) if catalog.family == family
+            for info in catalog.list_providers()]
 
 
 ProviderFamily = Literal["llm", "tts", "stt", "image", "rpg_visual"]
@@ -129,6 +147,14 @@ def _chatgpt_codex_model(settings: dict[str, Any]) -> str:
     return _safe_str(codex.get("model")).strip() or "gpt-5.6-sol"
 
 
+def _claude_cli_model(settings: dict[str, Any]) -> str:
+    profile = settings.get("settings_control_center")
+    configs = profile.get("providerConfigs") if isinstance(profile, dict) else None
+    claude = configs.get("claudeCli") if isinstance(configs, dict) else None
+    model = _safe_str(claude.get("model")).strip() if isinstance(claude, dict) else ""
+    return model or "sonnet"
+
+
 class ProviderFacade:
     """Read-only facade that normalizes existing provider registries."""
 
@@ -192,7 +218,7 @@ class ProviderFacade:
                 _provider_from_info(
                     info,
                     family="image",
-                    source="app.image.providers.registry",
+                    source="app.platform.image.providers.registry",
                     capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
                 )
             )
@@ -202,7 +228,7 @@ class ProviderFacade:
                 _provider_from_info(
                     info,
                     family="rpg_visual",
-                    source="app.rpg.visual.providers.registry",
+                    source="app.apps.rpg.visual.providers.registry",
                     capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
                 )
             )
@@ -222,6 +248,7 @@ class ProviderFacade:
             "llm:openrouter": ("openrouter", settings.get("openrouter", {}).get("model"), "remote"),
             "llm:cerebras": ("cerebras", settings.get("cerebras", {}).get("model"), "remote"),
             "llm:chatgpt_codex": ("ChatGPT Codex", _chatgpt_codex_model(settings), "remote"),
+            "llm:claude_cli": ("Claude CLI", _claude_cli_model(settings), "remote"),
             "llm:llamacpp": ("llamacpp", settings.get("llamacpp", {}).get("model"), "local"),
             "llm:lmstudio": ("lmstudio", settings.get("lmstudio", {}).get("model"), "local"),
             "tts:faster-qwen3-tts": (
@@ -254,7 +281,7 @@ class ProviderFacade:
     def _live_chatgpt_codex_models() -> list[ModelSummary]:
         """Expose the authenticated Codex catalog, falling back inside the provider."""
         try:
-            from app.shared import get_provider
+            from app.providers.service import get_provider
 
             provider = get_provider("chatgpt_codex")
             if provider is None:
@@ -308,21 +335,17 @@ class ProviderFacade:
     def _list_image(self) -> list[dict[str, Any]]:
         if self._image_lister:
             return self._image_lister()
-        from app.image.providers.registry import list_image_providers
-
-        return list_image_providers()
+        return _catalog_providers("image")
 
     def _list_visual(self) -> list[dict[str, Any]]:
         if self._visual_lister:
             return self._visual_lister()
-        from app.rpg.visual.providers.registry import list_visual_provider_options
-
-        return list_visual_provider_options()
+        return _catalog_providers("rpg_visual")
 
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_loader:
             return self._settings_loader()
-        from app.shared import load_settings
+        from app.settings.access import load_settings
 
         return load_settings()
 

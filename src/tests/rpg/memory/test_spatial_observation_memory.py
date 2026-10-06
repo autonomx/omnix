@@ -1,5 +1,5 @@
-from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-from app.rpg.memory.observation import record_event_observations, record_told_memory
+from app.apps.rpg.memory.causal_retrieval import retrieve_causal_memories
+from app.apps.rpg.memory.observation import record_event_observations, record_told_memory
 from tests.rpg.spatial.fixtures import (
     tavern_spatial_fixture,
     tavern_spatial_fixture_with_private_door_open,

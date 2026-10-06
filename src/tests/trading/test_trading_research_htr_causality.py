@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading.research.contracts import (
+from app.apps.trading.research.contracts import (
     ResearchCoverage,
     ResearchValidationReport,
     StrategyResearchFeatures,
     TradingResearchReport,
     ValidationFeatureResult,
 )
-from app.trading.research.knowledge_time import latest_as_of
-from app.trading.research.policy import evaluate_research_policy
+from app.apps.trading.research.knowledge_time import latest_as_of
+from app.apps.trading.research.policy import evaluate_research_policy
 
 
 def _report(version: int, known_at: datetime) -> TradingResearchReport:

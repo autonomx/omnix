@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.providers.errors import ProviderUnavailableError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.providers.errors import ProviderUnavailableError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
 
 
 class _SlowSession:

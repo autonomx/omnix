@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.desktop_companion.memory import DesktopSceneMemory
-from app.desktop_companion.models import DesktopObservation, DesktopObservedChange, DesktopObservedValue
+from app.apps.desktop_companion.memory import DesktopSceneMemory
+from app.apps.desktop_companion.models import DesktopObservation, DesktopObservedChange, DesktopObservedValue
 
 
 BASE = datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc)

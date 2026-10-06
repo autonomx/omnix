@@ -7,11 +7,11 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
-from app.persistence.rpg_turn_service import persist_foreground_turn
+from app.apps.rpg.persistence.rpg_turn_service import persist_foreground_turn
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -44,7 +44,7 @@ def _database() -> PostgresDatabase:
 
 def _create_campaign(database: PostgresDatabase, campaign_id: str) -> None:
     apply_migrations(database)
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         work.rpg.create_campaign(
             context,

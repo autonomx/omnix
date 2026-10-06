@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.agent_runtime.contracts import EvidenceReceipt, SubjectRef
-from app.agent_runtime.evidence import compile_task_authority, evaluate_evidence_set
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_fast_path
-from app.agent_runtime.semantic_normalizer import normalize_semantic_task
-from app.agent_runtime.semantic_task import (
+from app.platform.agent_runtime.contracts import EvidenceReceipt, SubjectRef
+from app.platform.agent_runtime.evidence import compile_task_authority, evaluate_evidence_set
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_fast_path
+from app.platform.agent_runtime.semantic_normalizer import normalize_semantic_task
+from app.platform.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
     SemanticSubject,

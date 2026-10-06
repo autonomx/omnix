@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.desktop_companion.coordinator import DesktopVisionCoordinator
+from app.apps.desktop_companion.coordinator import DesktopVisionCoordinator
 
 
 def test_background_queue_stays_bounded_across_ten_thousand_unique_sessions() -> None:

@@ -3,9 +3,9 @@ from decimal import Decimal
 
 import pytest
 
-import app.trading.trigger_plan as trigger_plan_module
+import app.apps.trading.trigger_plan as trigger_plan_module
 
-from app.trading.trigger_plan import (
+from app.apps.trading.trigger_plan import (
     AuthoritativeTradeGeometry,
     TriggerCondition,
     TriggerMarketSnapshot,

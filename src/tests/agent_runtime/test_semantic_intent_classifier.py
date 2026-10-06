@@ -4,17 +4,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent_runtime import chat_bridge
-from app.agent_runtime.contracts import EvidenceDecision
-from app.agent_runtime.evidence import (
+from app.platform.agent_runtime import chat_bridge
+from app.platform.agent_runtime.contracts import EvidenceDecision
+from app.platform.agent_runtime.evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
     evidence_decision_from_semantic,
 )
-from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
+from app.platform.agent_runtime.profiles import get_agent_profile
+from app.platform.agent_runtime.router import route_omnix_request
+from app.platform.agent_runtime.semantic_classifier import (
     SemanticEvidenceHint,
     SemanticIntentDecision,
 )
@@ -218,7 +218,7 @@ def test_physical_home_light_semantics_are_not_rewritten_to_coding() -> None:
         reason="Physical bedroom light control.",
     )
 
-    from app.agent_runtime.semantic_classifier import classify_semantic_intent_safely
+    from app.platform.agent_runtime.semantic_classifier import classify_semantic_intent_safely
 
     normalized = classify_semantic_intent_safely(
         FakeSemanticClassifier(semantic),

@@ -1,7 +1,7 @@
 from decimal import Decimal
 
-from app.trading.indicator_signals import IndicatorSnapshot
-from app.trading.strategy_entry_quality import evaluate_entry_quality
+from app.apps.trading.indicator_signals import IndicatorSnapshot
+from app.apps.trading.strategy_entry_quality import evaluate_entry_quality
 
 
 def _five(*, ready: bool = True, above: bool = True, rising: bool = True) -> IndicatorSnapshot:

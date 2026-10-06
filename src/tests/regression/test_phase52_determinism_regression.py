@@ -17,10 +17,10 @@ from collections import deque
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.clock import DeterministicClock
-from app.rpg.core.determinism import DeterminismConfig
-from app.rpg.core.event_bus import Event, EventBus, EventContext
-from app.rpg.core.replay_engine import ReplayEngine
+from app.apps.rpg.core.clock import DeterministicClock
+from app.apps.rpg.core.determinism import DeterminismConfig
+from app.apps.rpg.core.event_bus import Event, EventBus, EventContext
+from app.apps.rpg.core.replay_engine import ReplayEngine
 
 # ---------------------------------------------------------------------------
 # Backward Compatibility Tests
@@ -342,20 +342,14 @@ class TestIntegrationRegression(unittest.TestCase):
         self.assertEqual([p.type for p in peeked], [c.type for c in collected])
 
     def test_debug_logging_still_works(self):
-        """Debug mode should still log events."""
-        import io
-        from contextlib import redirect_stdout
-        
+        """Debug mode should still log events (as debug records, WP-10.1)."""
         bus = EventBus(debug=True)
-        
-        # Capture stdout
-        f = io.StringIO()
-        with redirect_stdout(f):
+
+        with self.assertLogs("app.apps.rpg.core.event_bus", level="DEBUG") as captured:
             e = Event(type="debug_test", payload={"x": 1}, source="test")
             bus.emit(e)
-        
-        output = f.getvalue()
-        self.assertIn("debug_test", output)
+
+        self.assertIn("debug_test", " ".join(captured.output))
 
 
 # ---------------------------------------------------------------------------

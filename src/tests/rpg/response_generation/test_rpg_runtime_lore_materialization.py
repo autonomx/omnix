@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
-from app.rpg.session.genesis import turn_grounding
-from app.rpg.session.genesis.runtime_lore_materialization import (
+from app.apps.rpg.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
+from app.apps.rpg.session.genesis import turn_grounding
+from app.apps.rpg.session.genesis.runtime_lore_materialization import (
     materialize_scene_lore,
     scene_lore_entity_is_rich,
 )
-from app.rpg.session.genesis.runtime_lore_store import ensure_turn_scene_lore
+from app.apps.rpg.session.genesis.runtime_lore_store import ensure_turn_scene_lore
 
 
 def _new_town_session() -> dict:
@@ -257,11 +257,11 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
     result = {"scene": {"location_id": "location:grayhaven"}}
 
     monkeypatch.setattr(
-        "app.rpg.session.genesis.runtime_lore_store.default_database",
+        "app.apps.rpg.session.genesis.runtime_lore_store.default_database",
         lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.runtime_lore_store._save_portable_projection",
+        "app.apps.rpg.session.genesis.runtime_lore_store._save_portable_projection",
         lambda value: value,
     )
 
@@ -335,3 +335,110 @@ def test_turn_grounding_fails_closed_when_materialized_canon_cannot_be_loaded(mo
             campaign_id="campaign:lost-town",
             player_input="What is this place?",
         )
+
+
+def test_pregenerated_bundles_merge_without_a_model_call() -> None:
+    # WP-8.6: generate outside the row locks, merge under them.
+    class Gateway:
+        calls = 0
+
+        def generate(self, *_args, **_kwargs):
+            self.calls += 1
+            return "{}"
+
+    session = _new_town_session()
+    result = {"scene": {"location_id": "location:grayhaven"}}
+    generated: dict = {}
+    first, _ = materialize_scene_lore({}, session, result, campaign_id="campaign:new-town",
+                                      llm_gateway=False, generated=generated)
+    assert set(generated) == {"location:grayhaven"}
+
+    gateway = Gateway()
+    second, report = materialize_scene_lore({}, session, result, campaign_id="campaign:new-town",
+                                            llm_gateway=gateway, pregenerated=generated)
+    assert gateway.calls == 0
+    assert report["changed"] is True
+    assert second["entities"] == first["entities"]
+
+
+@pytest.mark.postgres
+def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> None:
+    import os
+
+    if not os.environ.get("OMNIX_TEST_DATABASE_URL"):
+        pytest.skip("OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    from contextlib import contextmanager
+
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.apps.rpg.session.genesis import runtime_lore_store
+
+    bootstrap_postgresql_runtime()
+    real_unit_of_work = runtime_lore_store.unit_of_work
+    open_transactions = []
+
+    @contextmanager
+    def counted_unit_of_work(*args, **kwargs):
+        open_transactions.append(1)
+        try:
+            with real_unit_of_work(*args, **kwargs) as work:
+                yield work
+        finally:
+            open_transactions.pop()
+
+    class Gateway:
+        seen_open: list[int] = []
+
+        def generate(self, *_args, **_kwargs):
+            self.seen_open.append(len(open_transactions))
+            return "{}"
+
+    monkeypatch.setattr(runtime_lore_store, "unit_of_work", counted_unit_of_work)
+    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value: value)
+    import uuid
+
+    campaign_id = f"campaign:lock-{uuid.uuid4().hex[:12]}"
+    session = _new_town_session()
+    session["manifest"] = {"id": campaign_id, "session_id": campaign_id}
+    gateway = Gateway()
+    _, report = ensure_turn_scene_lore(
+        campaign_id, session, {"scene": {"location_id": "location:grayhaven"}}, llm_gateway=gateway,
+    )
+
+    assert report["mode"] == "postgresql_authority"
+    assert gateway.seen_open and set(gateway.seen_open) == {0}
+
+
+def test_documents_named_with_entity_id_and_body_still_document_the_target() -> None:
+    # Claude names a dossier document's reference ``entity_id`` and its text ``body``.
+    class Gateway:
+        def generate(self, *_args, **_kwargs):
+            return """{
+              "entities": [{"id": "location:grayhaven", "kind": "location", "name": "Grayhaven",
+                            "description": "A walled river town of slate roofs and busy wharves."}],
+              "documents": [{"document_id": "doc:grayhaven:overview", "title": "Grayhaven: Overview",
+                             "entity_id": "location:grayhaven", "body": "Grayhaven guards the ford."}],
+              "facts": [{"id": "fact:grayhaven:1", "text": "Grayhaven has a ferry."}],
+              "relationships": []
+            }"""
+
+    bible, _ = materialize_scene_lore({}, _new_town_session(), {"scene": {"location_id": "location:grayhaven"}},
+                                      campaign_id="campaign:new-town", llm_gateway=Gateway())
+
+    document = next(row for row in bible["documents"] if row["document_id"] == "doc:grayhaven:overview")
+    assert document["entity_refs"] == ["location:grayhaven"]
+    assert document["full_text"] == "Grayhaven guards the ford."
+    assert any(row["content"] == "Grayhaven has a ferry." for row in bible["facts"])
+
+
+def test_fallback_lore_names_the_place_not_its_id() -> None:
+    from app.apps.rpg.session.genesis.runtime_lore_materialization import (
+        SceneLoreTarget,
+        _fallback_entity_bundle,
+        _name_from_id,
+    )
+
+    target = SceneLoreTarget(entity_id="npc:bran", kind="npc", name="Bran", location_id="location:loc-tavern")
+    named = _fallback_entity_bundle(target, location_name="The Rusty Flagon Tavern")
+    assert named["relationships"][0]["content"] == "Bran was encountered at The Rusty Flagon Tavern."
+    assert _name_from_id("location:loc-tavern") == "Tavern"
+    assert _name_from_id("location:grayhaven") == "Grayhaven"

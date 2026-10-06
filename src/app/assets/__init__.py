@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from .content import asset_location, open_asset
 from .canonical_voice_clones import (
     canonical_voice_clone_root,
     discover_canonical_voice_clone_assets,
@@ -23,7 +24,13 @@ from .models import (
     AssetMigrationPreview,
     AssetRecord,
     AssetType,
+    PublicAssetLegacyImportDryRun,
+    PublicAssetListResponse,
+    PublicAssetMigrationPreview,
+    PublicAssetRecord,
+    asset_download_url,
 )
+from .paging import iter_assets, paginate_assets
 from .rpg_map_pack import curated_rpg_map_assets
 from .store import (
     _AUDIO_MIME_TYPES,
@@ -102,7 +109,7 @@ def _voice_debug_rows(assets: Iterable[AssetRecord]) -> list[dict[str, str]]:
                     or metadata.get("speaker")
                     or asset.id
                 ),
-                "path": str(asset.storage_path),
+                "path": asset_location(asset),
             }
         )
     return rows
@@ -115,7 +122,14 @@ class SharedAssetStore(ManifestSharedAssetStore):
         """Read voice profiles from configured and compatibility directories."""
         return discover_voice_clone_assets()
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> AssetListResponse:
         # The shared manifest remains authoritative, but each compatibility source
         # is isolated. The canonical clone directory is scanned independently so an
         # environment override can never hide resources/voice_clones.
@@ -152,7 +166,9 @@ class SharedAssetStore(ManifestSharedAssetStore):
             len(voice_rows),
             voice_rows[:50],
         )
-        return AssetListResponse(assets=list(assets.values()))
+        return paginate_assets(
+            assets.values(), asset_type=asset_type, modules=modules, limit=limit, cursor=cursor
+        )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         normalized_id = str(asset_id)
@@ -176,6 +192,19 @@ class SharedAssetStore(ManifestSharedAssetStore):
         _merge_assets(candidates, "legacy_documents", legacy_document_assets)
         _merge_assets(candidates, "curated_rpg_maps", curated_rpg_map_assets)
         return candidates.get(normalized_id)
+
+    def read_asset_bytes(self, asset_id: str, *, max_bytes: int) -> bytes:
+        """Read a small legacy asset without exposing its storage path to callers."""
+        asset = self.get_asset(asset_id)
+        if asset is None:
+            raise FileNotFoundError(asset_id)
+        with open_asset(asset) as handle:
+            content = handle.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            from app.assets.models import AssetContentTooLarge
+
+            raise AssetContentTooLarge(asset_id)
+        return content
 
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
         """Summarize non-image legacy assets without mutating any source."""
@@ -250,7 +279,7 @@ def _voice_clone_roots() -> list[AssetLegacyRootScan]:
 def default_asset_store() -> SharedAssetStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_asset_store
+        from app.persistence.shared_asset_store import production_asset_store
         return production_asset_store()
     return SharedAssetStore()
 
@@ -260,8 +289,15 @@ __all__ = [
     "AssetLegacyImportDryRun",
     "AssetLegacyRootScan",
     "AssetMigrationPreview",
+    "PublicAssetLegacyImportDryRun",
+    "PublicAssetListResponse",
+    "PublicAssetMigrationPreview",
+    "PublicAssetRecord",
+    "asset_download_url",
     "AssetRecord",
     "AssetType",
     "SharedAssetStore",
     "default_asset_store",
+    "iter_assets",
+    "paginate_assets",
 ]

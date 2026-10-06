@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.rpg.response_generation.hermes_adapter import (
+from app.apps.rpg.response_generation.hermes_adapter import (
     HermesCircuitBreaker,
     RpgHermesRecoveryAdapter,
 )
-from app.rpg.response_generation.recovery import LocalRecoveryCoordinator
-from app.rpg.response_generation.retrieval import EvidenceRecord, build_retrieval_sources
+from app.apps.rpg.response_generation.recovery import LocalRecoveryCoordinator
+from app.apps.rpg.response_generation.retrieval import EvidenceRecord, build_retrieval_sources
 
 
 class FakeHermesClient:

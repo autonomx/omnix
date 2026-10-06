@@ -4,12 +4,12 @@ from copy import deepcopy
 
 import pytest
 
-from app.rpg.worlds.generation_authorship_policy_signing import (
+from app.apps.rpg.worlds.generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
     validate_policy_bound_authorship,
 )
-from app.rpg.worlds.generation_authorship_runtime import build_generation_artifact
-from app.rpg.worlds.generation_authorship_signing import (
+from app.apps.rpg.worlds.generation_authorship_runtime import build_generation_artifact
+from app.apps.rpg.worlds.generation_authorship_signing import (
     attach_signed_llm_authorship,
     harden_and_sign_generation_artifact,
 )

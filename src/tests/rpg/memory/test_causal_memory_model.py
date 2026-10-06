@@ -1,4 +1,4 @@
-from app.rpg.memory.causal_memory import (
+from app.apps.rpg.memory.causal_memory import (
     add_causal_memory,
     ensure_npc_memory_state,
     make_causal_memory,

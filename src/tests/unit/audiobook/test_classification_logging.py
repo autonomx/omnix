@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from app.audiobook import annotation
-from app.audiobook.classification_logging import classification_log
-from app.audiobook.extraction import extract_source
+from app.apps.audiobook import annotation
+from app.apps.audiobook.classification_logging import classification_log
+from app.apps.audiobook.extraction import extract_source
 
 
 def test_classification_log_writes_bounded_jsonl(monkeypatch, tmp_path) -> None:

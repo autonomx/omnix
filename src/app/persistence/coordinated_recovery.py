@@ -14,6 +14,30 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+# Backups read every asset, one keyset page at a time (WP-5.5).
+KEYSET_BATCH = 1000
+
+
+def _keyset_rows(connection: Any, sql: str, parameters: tuple[Any, ...], *, key: str) -> list[Any]:
+    """All rows of ``sql``, read in ``(workspace_id, key)`` order by keyset pages.
+
+    ``sql`` has an ``{after}`` placeholder for the keyset condition, is ordered
+    by ``workspace_id, key`` and selects those two columns last.
+    """
+    rows: list[Any] = []
+    after: tuple[str, str] | None = None
+    while True:
+        condition = "" if after is None else f"AND (workspace_id, {key}) > (%s, %s)"
+        batch = connection.execute(
+            sql.replace("{after}", condition) + " LIMIT %s",
+            parameters + (after or ()) + (KEYSET_BATCH,),
+        ).fetchmany(KEYSET_BATCH)
+        rows.extend(batch)
+        if len(batch) < KEYSET_BATCH:
+            return rows
+        after = (str(batch[-1][-2]), str(batch[-1][-1]))
+
+
 class CoordinatedRecoveryError(RuntimeError):
     pass
 
@@ -74,15 +98,18 @@ class CoordinatedRecoveryRepository:
         ).fetchone()
         if status is None or str(status[0]) != "preparing":
             raise CoordinatedRecoveryError("backup generation is not preparing")
-        rows = self.connection.execute(
+        rows = _keyset_rows(
+            self.connection,
             """
             SELECT id, workspace_id, storage_provider, storage_key,
-                   checksum_sha256, byte_size, lifecycle_status
+                   checksum_sha256, byte_size, lifecycle_status, workspace_id, id
               FROM omnix_assets
-             WHERE lifecycle_status NOT IN ('deleted', 'purged')
+             WHERE lifecycle_status NOT IN ('deleted', 'purged') {after}
              ORDER BY workspace_id, id
-            """
-        ).fetchall()
+            """,
+            (),
+            key="id",
+        )
         manifest: list[dict[str, Any]] = [
             {
                 "asset_id": str(row[0]),
@@ -192,15 +219,17 @@ class CoordinatedRecoveryRepository:
             raise CoordinatedRecoveryError("backup BlobStore root must differ from the live root")
         if any(destination.root.rglob("*")):
             raise CoordinatedRecoveryError("backup BlobStore root must be empty")
-        rows = self.connection.execute(
+        rows = _keyset_rows(
+            self.connection,
             """
-            SELECT asset_id, storage_key, checksum_sha256, byte_size
+            SELECT asset_id, storage_key, checksum_sha256, byte_size, workspace_id, asset_id
               FROM omnix_backup_blob_manifest
-             WHERE generation_id = %s
+             WHERE generation_id = %s {after}
              ORDER BY workspace_id, asset_id
             """,
             (generation_id,),
-        ).fetchall()
+            key="asset_id",
+        )
         copied_bytes = 0
         for row in rows:
             asset_id, storage_key, checksum, byte_size = (
@@ -209,18 +238,19 @@ class CoordinatedRecoveryRepository:
                 str(row[2]),
                 int(row[3]),
             )
+            # Stream each blob (bounded memory) instead of loading it whole.
             try:
-                content = source.read_bytes(storage_key, expected_checksum=checksum)
+                with source.open_verified(storage_key, expected_checksum=checksum) as reader:
+                    copied = destination.put_stream(storage_key, reader)
             except Exception as exc:
                 raise CoordinatedRecoveryError(
                     f"cannot copy manifested blob {asset_id}: {exc}"
                 ) from exc
-            if len(content) != byte_size:
+            if int(copied["byte_size"]) != byte_size:
                 raise CoordinatedRecoveryError(
                     f"cannot copy manifested blob {asset_id}: expected {byte_size} bytes, "
-                    f"got {len(content)}"
+                    f"got {copied['byte_size']}"
                 )
-            destination.put_bytes(storage_key, content)
             copied_bytes += byte_size
         self.connection.execute(
             """
@@ -269,16 +299,18 @@ class CoordinatedRecoveryRepository:
             raise CoordinatedRecoveryError(
                 "verification must use a restored BlobStore root, not the live root"
             )
-        rows = self.connection.execute(
+        rows = _keyset_rows(
+            self.connection,
             """
             SELECT asset_id, workspace_id, storage_provider, storage_key,
-                   checksum_sha256, byte_size, lifecycle_status
+                   checksum_sha256, byte_size, lifecycle_status, workspace_id, asset_id
               FROM omnix_backup_blob_manifest
-             WHERE generation_id = %s
+             WHERE generation_id = %s {after}
              ORDER BY workspace_id, asset_id
             """,
             (generation_id,),
-        ).fetchall()
+            key="asset_id",
+        )
         missing: list[str] = []
         mismatched: list[str] = []
         manifest: list[dict[str, Any]] = [
@@ -371,11 +403,7 @@ class CoordinatedRecoveryRepository:
         return {"ok": ok, "checked": len(rows), **verification}
 
     def status(self, generation_id: str | None = None, *, limit: int = 20) -> list[dict[str, Any]]:
-        where = "WHERE id = %s" if generation_id else ""
-        parameters: tuple[Any, ...] = (generation_id,) if generation_id else ()
-        if not generation_id:
-            parameters = (max(1, min(int(limit), 1000)),)
-        limit_sql = "" if generation_id else " LIMIT %s"
+        bound = 1 if generation_id else max(1, min(int(limit), 1000))
         rows = self.connection.execute(
             """
             SELECT id, status, software_revision, schema_version, blob_root,
@@ -384,11 +412,11 @@ class CoordinatedRecoveryRepository:
                    encryption_required, retention_until, created_at,
                    manifested_at, verified_at, failure, metadata
               FROM omnix_backup_generations
-            """
-            + where
-            + " ORDER BY created_at DESC"
-            + limit_sql,
-            parameters,
+             WHERE (%s::text IS NULL OR id = %s)
+             ORDER BY created_at DESC
+             LIMIT %s
+            """,
+            (generation_id, generation_id, bound),
         ).fetchall()
         return [
             {

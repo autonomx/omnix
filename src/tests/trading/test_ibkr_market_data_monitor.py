@@ -1,16 +1,18 @@
-import asyncio
 import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.trading import ibkr_market_data_monitor as monitor_module
-from app.trading.execution import ExecutionObservation, assess_execution_observation
-from app.trading.execution_observation_plane import ExecutionObservationPlane
-from app.trading.ibkr_evidence import IbkrEvidenceStore
-from app.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
-from app.trading.streaming.manager import StreamingQuoteUpdate
+import pytest
+
+from app.apps.trading import ibkr_market_data_monitor as monitor_module
+from app.apps.trading.execution import ExecutionObservation, assess_execution_observation
+from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
+from app.apps.trading.evidence_storage import MemoryIbkrSessionEvidence
+from app.apps.trading.ibkr_evidence import IbkrEvidenceStore
+from app.apps.trading.ibkr_market_data_monitor import TradingIbkrMarketDataMonitor
+from app.apps.trading.streaming.manager import StreamingQuoteUpdate
 
 
 ET = ZoneInfo("America/New_York")
@@ -20,7 +22,7 @@ NOW = datetime(2026, 9, 17, 14, 0, tzinfo=timezone.utc)
 
 def _monitor(tmp_path):
     plane = ExecutionObservationPlane()
-    store = IbkrEvidenceStore(tmp_path)
+    store = IbkrEvidenceStore(MemoryIbkrSessionEvidence())
     monitor = TradingIbkrMarketDataMonitor(
         plane=plane,
         evidence_store=store,
@@ -140,7 +142,7 @@ def test_ibkr_monitor_records_missing_last_as_durable_soak_failure(tmp_path):
 
 
 def test_execution_observation_monitor_does_not_own_ibkr_subscriptions():
-    source = Path("src/app/trading/execution_observation_monitor.py").read_text(
+    source = Path("src/app/apps/trading/execution_observation_monitor.py").read_text(
         encoding="utf-8"
     ).lower()
 
@@ -168,7 +170,8 @@ def test_ibkr_monitor_market_data_line_budget_preserves_existing_lines(tmp_path)
     assert monitor.budget_denied_instrument_count == 1
 
 
-def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_path):
+@pytest.mark.anyio
+async def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_path):
     event_loop_thread_id = threading.get_ident()
     reconciliation_thread_ids: list[int] = []
 
@@ -211,7 +214,7 @@ def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_pa
         ),
     )
 
-    result = asyncio.run(monitor.run_once())
+    result = await monitor.run_once()
 
     assert result == 0
     assert reconciliation_thread_ids

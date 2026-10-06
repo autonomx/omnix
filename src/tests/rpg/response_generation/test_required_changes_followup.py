@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.response_generation.contracts import (
+from app.apps.rpg.response_generation.contracts import (
     CandidateSource,
     ResponseCandidate,
     ResponseMode,
@@ -9,9 +9,9 @@ from app.rpg.response_generation.contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.rpg.response_generation.eligibility import EligibilityPolicy, eligibility_reasons
-from app.rpg.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
-from app.rpg.response_generation.strict_pipeline import (
+from app.apps.rpg.response_generation.eligibility import EligibilityPolicy, eligibility_reasons
+from app.apps.rpg.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
+from app.apps.rpg.response_generation.strict_pipeline import (
     AuthoritativeProfileBoundProvider,
     StrictRpgProductionResponsePipeline,
 )
@@ -182,7 +182,7 @@ def test_authoritative_profile_binds_timeout_before_provider_call():
 
 
 def test_scene_provider_receives_precompiled_canonical_brief(monkeypatch):
-    from app.rpg.response_generation import legacy_bridge
+    from app.apps.rpg.response_generation import legacy_bridge
 
     captured: dict = {}
 
@@ -223,46 +223,3 @@ def test_scene_provider_receives_precompiled_canonical_brief(monkeypatch):
         "canonical_context_compiled_before_generation"
     ] is True
     assert payload["canonical_response"]["quality_report"]["ok"] is True
-
-
-def test_public_apply_turn_wrapper_canonicalizes_early_return():
-    from app.rpg.session import runtime_part39
-
-    payload = runtime_part39.apply_turn(
-        "followup-session",
-        "Bran, join me.",
-        _base_apply_turn=lambda *args, **kwargs: {
-            "ok": True,
-            "narration": "Bran joins your party.",
-            "npc": {"speaker": "Bran", "line": "I am with you."},
-            "turn_contract": {
-                "turn_id": "followup-early-turn",
-                "ok": True,
-                "action_type": "companion_acceptance",
-                "semantic_family": "social",
-                "resolved_result": {
-                    "ok": True,
-                    "action_type": "companion_acceptance",
-                    "summary": "Bran joins the party.",
-                },
-            },
-            "simulation_state": {
-                "session_id": "followup-session",
-                "scene_id": "tavern",
-                "response_rollout_stage": "canonical_default",
-            },
-            "result": {
-                "ok": True,
-                "narration": "Bran joins your party.",
-                "npc": {"speaker": "Bran", "line": "I am with you."},
-                "mechanic_resolved": True,
-                "allowed_speakers": ["Bran"],
-            },
-        },
-    )
-
-    narration_payload = payload["narration_payload"]
-    assert narration_payload["canonical_response_source"] == "rpg_response_generator_v1"
-    assert narration_payload["canonical_response"]["quality_report"]["ok"] is True
-    assert narration_payload["canonical_response"]["developer_trace"]["quality"]["ok"] is True
-    assert payload["presentation_narration_selection"]["source"] == "canonical_runtime_response"

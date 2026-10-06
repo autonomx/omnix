@@ -1,4 +1,4 @@
-from app.trading.market_evidence import DEFAULT_MARKET_EVIDENCE_POLICY
+from app.apps.trading.market_evidence import DEFAULT_MARKET_EVIDENCE_POLICY
 
 
 def test_market_evidence_policy_serializes_independent_provider_roles():

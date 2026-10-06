@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import repo_root, resources_root
+from app.config.env import env_str
+from app.runtime.paths import repo_root, resources_root
 
+from .content import asset_location
 from .models import AssetRecord, AssetType
 
 LOGGER = logging.getLogger("uvicorn.error")
@@ -32,12 +34,11 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
     """Return authoritative voice-clone directories and their metadata manifests.
 
     ``resources/voice_clones`` is always the default source. Environment overrides
-    are authoritative for tests and alternate deployments. Legacy ``app.shared``
-    paths are included only as an additional compatibility source.
+    are authoritative for tests and alternate deployments. No legacy file fallback is consulted.
     """
 
-    override_dir = os.environ.get("OMNIX_VOICE_CLONES_DIR")
-    override_file = os.environ.get("OMNIX_VOICE_CLONES_FILE")
+    override_dir = env_str("OMNIX_VOICE_CLONES_DIR", "") or ""
+    override_file = env_str("OMNIX_VOICE_CLONES_FILE", "") or ""
     if override_dir:
         clones_dir = Path(override_dir)
         manifest_path = Path(override_file) if override_file else clones_dir / "voice_clones.json"
@@ -52,19 +53,6 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
     canonical_manifest = Path(override_file) if override_file else canonical_dir / "voice_clones.json"
     sources: list[tuple[Path, Path]] = [(canonical_dir, canonical_manifest)]
 
-    try:
-        import app.shared as shared
-
-        shared_dir_value = getattr(shared, "VOICE_CLONES_DIR", None)
-        shared_file_value = getattr(shared, "VOICE_CLONES_FILE", None)
-        if shared_dir_value:
-            shared_dir = Path(str(shared_dir_value))
-            shared_file = Path(str(shared_file_value)) if shared_file_value else shared_dir / "voice_clones.json"
-            sources.append((shared_dir, shared_file))
-    except Exception:
-        LOGGER.exception(
-            "[Voice Library][scan] legacy app.shared paths could not be loaded; canonical source remains active"
-        )
 
     deduplicated: list[tuple[Path, Path]] = []
     seen: set[tuple[str, str]] = set()
@@ -241,7 +229,7 @@ def discover_voice_clone_assets() -> list[AssetRecord]:
             {
                 "id": asset.id,
                 "name": asset.metadata.get("profile_name") or asset.metadata.get("voice_id"),
-                "path": asset.storage_path,
+                "path": asset_location(asset),
             }
             for asset in discovered[:100]
         ],

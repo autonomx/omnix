@@ -5,12 +5,12 @@ from decimal import Decimal
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.models import MarketBar
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.strategies.models import GapPullbackConfig
-from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
-from app.trading.strategy_timeframes import proposal_priority, resample_final_bars
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.models import MarketBar
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.strategies.models import GapPullbackConfig
+from app.apps.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
+from app.apps.trading.strategy_timeframes import proposal_priority, resample_final_bars
 
 
 INSTRUMENT = "equity:NASDAQ:TF"

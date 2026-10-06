@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import tempfile
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,8 +15,12 @@ from fastapi.routing import APIWebSocketRoute
 
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_FINAL,
+    CAP_BINARY_AUDIO_FRAMES,
     CAP_RESULT_REPLAY,
     CAP_SEGMENTED_AUDIO,
+    audio_message_has_audio,
+    audio_message_pcm,
+    receive_client_message,
     LiveSttNegotiation,
 )
 from app.providers.stt_live_runtime_support import (
@@ -49,16 +53,22 @@ PARAKEET_NEGOTIATION = LiveSttNegotiation(
             CAP_SEGMENTED_AUDIO,
             CAP_AUTHORITATIVE_FINAL,
             CAP_RESULT_REPLAY,
+            CAP_BINARY_AUDIO_FRAMES,
         }
     ),
 )
 SESSION_TTL_SECONDS = 600.0
 MAX_SESSION_STATES = 64
+MAX_PROVIDER_SCHEDULERS = 4
+PROVIDER_SCHEDULER_TTL_SECONDS = 60 * 60.0
 MAX_OPEN_SEGMENTS = 16
 MAX_REPLAY_RESULTS = 64
 MAX_SEGMENT_AUDIO_MS = 15_000
 MAX_SEGMENT_BYTES = int(DEFAULT_SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
-_PROVIDER_SCHEDULERS: dict[int, ProviderSegmentScheduler[tuple[str, dict[str, float | int | bool]]]] = {}
+_PROVIDER_SCHEDULERS: OrderedDict[
+    int,
+    tuple[ProviderSegmentScheduler[tuple[str, dict[str, float | int | bool]]], float],
+] = OrderedDict()
 _SESSION_STATES: dict[str, "SegmentSessionState"] = {}
 
 
@@ -129,14 +139,46 @@ def _remove_existing_route(app: Any) -> None:
 
 def _scheduler_for(legacy: Any) -> ProviderSegmentScheduler[tuple[str, dict[str, float | int | bool]]]:
     key = id(legacy.model) if legacy.model is not None else id(legacy)
-    scheduler = _PROVIDER_SCHEDULERS.get(key)
-    if scheduler is None:
+    now = time.monotonic()
+    loop = asyncio.get_running_loop()
+    for scheduler_key, (cached_scheduler, expires_at) in list(_PROVIDER_SCHEDULERS.items()):
+        if expires_at <= now and cached_scheduler.is_idle:
+            _PROVIDER_SCHEDULERS.pop(scheduler_key, None)
+            loop.create_task(cached_scheduler.close())
+    cached = _PROVIDER_SCHEDULERS.get(key)
+    if cached is not None:
+        scheduler = cached[0]
+        _PROVIDER_SCHEDULERS.move_to_end(key)
+        _PROVIDER_SCHEDULERS[key] = (scheduler, now + PROVIDER_SCHEDULER_TTL_SECONDS)
+    else:
+        while len(_PROVIDER_SCHEDULERS) >= MAX_PROVIDER_SCHEDULERS:
+            idle_key = next(
+                (
+                    scheduler_key
+                    for scheduler_key, (candidate, _expires_at) in _PROVIDER_SCHEDULERS.items()
+                    if candidate.is_idle
+                ),
+                None,
+            )
+            if idle_key is None:
+                raise SegmentQueueFullError("provider_scheduler_capacity")
+            evicted = _PROVIDER_SCHEDULERS.pop(idle_key)[0]
+            loop.create_task(evicted.close())
         scheduler = ProviderSegmentScheduler(
             max_queued_jobs=env_int("PARAKEET_LIVE_MAX_QUEUED_SEGMENTS", 32),
             max_session_jobs=env_int("PARAKEET_LIVE_MAX_SESSION_SEGMENTS", 8),
         )
-        _PROVIDER_SCHEDULERS[key] = scheduler
+        _PROVIDER_SCHEDULERS[key] = (scheduler, now + PROVIDER_SCHEDULER_TTL_SECONDS)
     return scheduler
+
+
+async def clear_provider_schedulers() -> None:
+    """Close and clear provider-local segment schedulers during shutdown/tests."""
+
+    schedulers = [scheduler for scheduler, _expires_at in _PROVIDER_SCHEDULERS.values()]
+    _PROVIDER_SCHEDULERS.clear()
+    for scheduler in schedulers:
+        await scheduler.close()
 
 
 def _prune_sessions() -> None:
@@ -156,6 +198,12 @@ def _prune_sessions() -> None:
     )
     for state in oldest[: max(0, len(_SESSION_STATES) - MAX_SESSION_STATES)]:
         _SESSION_STATES.pop(state.session_id, None)
+
+
+def clear_stt_session_states() -> None:
+    """Invalidate segmented-transcription replay state."""
+
+    _SESSION_STATES.clear()
 
 
 def _session_state(session_id: str) -> SegmentSessionState:
@@ -452,7 +500,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
 
         try:
             while True:
-                data = await websocket.receive_json()
+                data = await receive_client_message(websocket)
                 message_type = str(data.get("type", ""))
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", default_session_id))[:120]
@@ -470,8 +518,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     continue
                 state = _session_state(str(_field(data, "sessionId", "session_id", active_session_id))[:120])
                 if message_type == "audio":
-                    encoded_audio = str(data.get("data", ""))
-                    if not encoded_audio:
+                    if not audio_message_has_audio(data):
                         continue
                     segmented = _field(data, "segmentId", "segment_id") is not None
                     sample_rate = int(_field(data, "sampleRate", "sample_rate", DEFAULT_SAMPLE_RATE))
@@ -529,7 +576,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                         )
                     segment = state.segments[segment_id]
                     try:
-                        accepted = segment.append(sample_start, base64.b64decode(encoded_audio))
+                        accepted = segment.append(sample_start, audio_message_pcm(data))
                     except Exception as exc:
                         state.release_segment(segment_id)
                         await _safe_send(

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from app.research.contracts import ResearchEvidence, ResearchSource, ResearchSourceSnapshot
-from app.research.executor import ResearchConflict, ResearchExecutionResult
-from app.research.synthesis import DeepResearchSynthesizer, build_synthesis_messages
+from app.platform.research.contracts import ResearchEvidence, ResearchSource, ResearchSourceSnapshot
+from app.platform.research.executor import ResearchConflict, ResearchExecutionResult
+from app.platform.research.synthesis import DeepResearchSynthesizer, build_synthesis_messages
 
 
 def execution_fixture() -> ResearchExecutionResult:

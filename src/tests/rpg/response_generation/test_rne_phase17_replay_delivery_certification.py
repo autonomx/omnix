@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.narrative_engine import (
+from app.apps.rpg.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -10,7 +10,7 @@ from app.rpg.narrative_engine import (
     NarrativeBlock,
     ValidationReport,
 )
-from app.rpg.narrative_engine.certification import (
+from app.apps.rpg.narrative_engine.certification import (
     certify_delivery_equivalence,
     certify_narrative_persistence_and_delivery,
     certify_narrative_roundtrip,

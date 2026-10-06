@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     AcceptancePlan,
     AgentRunSnapshot,
     ModelRef,
     WorkspaceSpec,
 )
-from app.agent_runtime.task_graph import (
+from app.platform.agent_runtime.task_graph import (
     TaskGraph,
     TaskGraphRunSnapshot,
     TaskNode,
     TaskNodeRunState,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
+from app.platform.agent_runtime.task_graph_runtime import PostgresTaskGraphRuntime
 
 
 MODEL = ModelRef(provider_id="test", model_id="quality-model", reasoning_effort="high")

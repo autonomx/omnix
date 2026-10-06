@@ -1,0 +1,22 @@
+{
+  "measurement": "event-delivery-idle-queries",
+  "seconds_per_case": 10.0,
+  "measured_at": "2026-10-01T16:26:55Z",
+  "results": [
+    {
+      "subscribers": 1,
+      "before_queries_per_second": 1.0,
+      "after_queries_per_second": 0.2
+    },
+    {
+      "subscribers": 10,
+      "before_queries_per_second": 10.0,
+      "after_queries_per_second": 0.2
+    },
+    {
+      "subscribers": 100,
+      "before_queries_per_second": 100.0,
+      "after_queries_per_second": 0.2
+    }
+  ]
+}

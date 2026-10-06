@@ -9,12 +9,12 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_range_backtest import (
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_range_backtest import (
     StrategyRangeBacktestRequest,
     run_strategy_range_backtest,
 )
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 _ET = ZoneInfo("America/New_York")

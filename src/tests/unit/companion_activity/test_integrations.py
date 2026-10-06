@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.companion_activity.authority import authority_source_for
-from app.companion_activity.integrations import CompanionIntegrationEvidenceAdapter
+from app.platform.companion_activity.authority import authority_source_for
+from app.platform.companion_activity.integrations import CompanionIntegrationEvidenceAdapter
 
 NOW = datetime(2026, 9, 15, 10, 0, tzinfo=timezone.utc)
 

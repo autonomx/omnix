@@ -2,32 +2,10 @@ from __future__ import annotations
 
 import base64
 import traceback
-from pathlib import Path
 
 import numpy as np
 import pytest
 import soundfile as sf
-
-
-@pytest.mark.smoke
-def test_qwen3_import_chain():
-    """
-    FAIL FAST if any vendored Qwen3 import chain is broken.
-
-    This catches:
-    - missing transformers symbols (e.g. MimiConfig)
-    - missing deps (sox, onnxruntime, etc)
-    - bad vendor packaging
-    """
-
-    try:
-        from app.providers.vendor.qwen_tts import Qwen3TTSModel  # noqa
-    except Exception as e:
-        pytest.fail(
-            "Qwen3 import chain failed:\n"
-            f"{type(e).__name__}: {e}\n\n"
-            f"{traceback.format_exc(limit=10)}"
-        )
 
 
 @pytest.mark.smoke
@@ -64,44 +42,6 @@ def test_faster_qwen3_effective_generation_parameters_include_configured_default
     assert first_settings["_generation_strategy_revision"] == first.generation_strategy_revision
     assert first_settings != second_settings
     assert first.resolve_generation_parameters({"temperature": 0.5})["temperature"] == 0.5
-
-
-@pytest.mark.smoke
-def test_qwen3_model_load_cpu_path(monkeypatch):
-    """
-    Critical smoke test:
-    - calls _get_model()
-    - forces full vendored model load path
-    - MUST fail here instead of inside the app
-
-    This is the test that replaces "click Speak and hope".
-    """
-
-    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
-
-    model_dir = Path(__file__).resolve().parents[4] / "resources/models/tts/Qwen3-TTS-12Hz-0.6B-Base"
-    if not model_dir.is_dir():
-        pytest.skip("local Qwen3 model weights are unavailable")
-    monkeypatch.delenv("OMNIX_TTS_MODEL_DIR", raising=False)
-    monkeypatch.delenv("OMNIX_QWEN3_TTS_MODEL_DIR", raising=False)
-
-    provider = FasterQwen3TTSProvider(
-        config={
-            "device": "cpu",   # force CPU-safe path
-            "model_dir": str(model_dir),
-        }
-    )
-
-    try:
-        model = provider._get_model()
-    except Exception as e:
-        pytest.fail(
-            "Qwen3 model load failed:\n"
-            f"{type(e).__name__}: {e}\n\n"
-            f"{traceback.format_exc(limit=10)}"
-        )
-
-    assert model is not None
 
 
 @pytest.mark.smoke

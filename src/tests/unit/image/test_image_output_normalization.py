@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PIL import Image
 
-from app.image.output_normalization import normalize_generated_image
+from app.platform.image.output_normalization import normalize_generated_image
 
 
 def test_transparent_provider_output_becomes_visible_rgb_image():

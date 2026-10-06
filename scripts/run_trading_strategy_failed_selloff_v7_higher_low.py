@@ -24,9 +24,9 @@ from datetime import date, time
 from decimal import Decimal
 from pathlib import Path
 
-import app.trading.strategy_backtest as _bt
-from app.trading.strategies.gap_pullback import session_vwap
-from app.trading.strategies.models import GapPullbackFeatures, StrategySignal
+import app.apps.trading.strategy_backtest as _bt
+from app.apps.trading.strategies.gap_pullback import session_vwap
+from app.apps.trading.strategies.models import GapPullbackFeatures, StrategySignal
 import scripts.run_trading_strategy_failed_selloff_v2_sweep as _v2
 import scripts.run_trading_strategy_failed_selloff_v4_management as _v4
 from scripts.run_trading_strategy_backtest import strict_v11_strategy

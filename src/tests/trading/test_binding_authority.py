@@ -1,6 +1,6 @@
 import pytest
 
-from app.trading.binding_authority import (
+from app.apps.trading.binding_authority import (
     PurposeBoundBinding,
     binding_can_execute,
     infer_binding_purpose,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from app.trading.models import MarketBar
-from app.trading import strategy_leader_momentum_research as research
+from app.apps.trading.models import MarketBar
+from app.apps.trading import strategy_leader_momentum_research as research
 
 
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)

@@ -1,0 +1,83 @@
+name: RPG tests
+
+# WP-8.6: the RPG module's own test set runs only when RPG code or its tests
+# change; the nightly full suite (nightly.yml) covers it on every other day.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/app/apps/rpg/**"
+      - "src/tests/rpg/**"
+      - "src/tests/unit/rpg/**"
+      - "src/tests/hermes/**"
+      - "src/tests/characterization/test_rpg_production_turn.py"
+      - "src/tests/characterization/golden/rpg-production-turn.json"
+      - "scripts/test_module.py"
+      - ".github/workflows/rpg-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/app/apps/rpg/**"
+      - "src/tests/rpg/**"
+      - "src/tests/unit/rpg/**"
+      - "src/tests/hermes/**"
+      - ".github/workflows/rpg-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpg-tests:
+    name: RPG module tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      RPG_TEST_MODE: deterministic
+      OMNIX_ALLOWED_HOSTS: testserver
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_MIGRATION_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+
+      - name: Apply PostgreSQL migrations and initialize authority
+        run: |
+          python -m app.persistence migrate
+          python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+
+      - name: RPG and Hermes module tests
+        run: |
+          python scripts/test_module.py rpg -q --tb=short -n auto
+          python scripts/test_module.py hermes -q --tb=short
+          python -m pytest src/tests/unit/rpg -q --tb=short -n auto
+
+      - name: RPG reachability and file size
+        run: |
+          python scripts/reachability_report.py --prefix app.apps.rpg.
+          python scripts/check_rpg_file_lines.py

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.persistence import provider_secret_store as store
+from app.security import provider_secret_store as store
 
 
 _RESEARCH_ENV_KEYS = (

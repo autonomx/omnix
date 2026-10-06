@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_generation import generate_campaign_topics
-from app.rpg.worlds.generation_jobs import canonical_hash
-from app.rpg.worlds.generation_publication import (
+from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.apps.rpg.session.genesis.world_forge_generation import generate_campaign_topics
+from app.apps.rpg.worlds.generation_jobs import canonical_hash
+from app.apps.rpg.worlds.generation_publication import (
     compile_world_generation_publication,
 )
 

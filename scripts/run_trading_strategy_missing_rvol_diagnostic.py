@@ -12,9 +12,9 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-import app.trading.strategy_backtest as _backtest_module
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback as _production_evaluate
-from app.trading.strategies.models import GapPullbackConfig
+import app.apps.trading.strategy_backtest as _backtest_module
+from app.apps.trading.strategies.gap_pullback import evaluate_gap_pullback as _production_evaluate
+from app.apps.trading.strategies.models import GapPullbackConfig
 import scripts.run_trading_strategy_liquidity_sweep as _sweep
 
 

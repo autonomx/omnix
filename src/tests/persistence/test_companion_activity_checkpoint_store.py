@@ -6,11 +6,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.companion_activity.persistence import (
+from app.platform.companion_activity.persistence import (
     PostgresCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.state import (
+from app.platform.companion_activity.state import (
     ActivityField,
     ActivityTransitionCandidate,
     empty_activity_state,

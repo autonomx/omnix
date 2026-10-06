@@ -41,15 +41,15 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
-from app.trading.strategy_evolving_top_gainers import (
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
+from app.apps.trading.strategy_evolving_top_gainers import (
     EvolvingTopGainersConfig,
     evaluate_leader_momentum_after_discovery,
     replay_evolving_top_gainers_from_bars,
 )
-from app.trading.strategy_leader_momentum_diagnostics import diagnose_leader_momentum_continuation
-from app.trading.strategy_leader_momentum_continuation import (
+from app.apps.trading.strategy_leader_momentum_diagnostics import diagnose_leader_momentum_continuation
+from app.apps.trading.strategy_leader_momentum_continuation import (
     LeaderMomentumContext,
     POLICY_VERSION,
     evaluate_leader_momentum_continuation,
@@ -61,7 +61,7 @@ UTC = timezone.utc
 WINNER_CSV = REPOSITORY_ROOT / "docs" / "trading" / "HISTORICAL_TOP5_WINNERS_2026-06-11_TO_2026-09-11.csv"
 CACHE_ROOT = REPOSITORY_ROOT / "resources" / "cache" / "leader-momentum-evolving-top-gainers"
 ARTIFACT_ROOT = REPOSITORY_ROOT / "artifacts" / "trading" / "leader-momentum-v1.2-evolving-top-gainers"
-STRATEGY_PATH = REPOSITORY_ROOT / "src" / "app" / "trading" / "strategy_leader_momentum_continuation.py"
+STRATEGY_PATH = REPOSITORY_ROOT / "src" / "app" / "apps" / "trading" / "strategy_leader_momentum_continuation.py"
 EXPECTED_HEAD = "03a92bcaceb5a5a89df6b839b165a65e9d6d6e70"
 CACHE_SCHEMA = "leader-momentum-evolving-sip-cache-v1"
 POPULATION_SCHEMA = "leader-momentum-evolving-population-v1"
@@ -691,7 +691,7 @@ def _simulate_capacity(trades: list[dict[str, object]]) -> list[dict[str, object
 
 
 def _strategy_constants() -> dict[str, str]:
-    import app.trading.strategy_leader_momentum_continuation as module
+    import app.apps.trading.strategy_leader_momentum_continuation as module
 
     values: dict[str, str] = {}
     for name, value in sorted(vars(module).items()):

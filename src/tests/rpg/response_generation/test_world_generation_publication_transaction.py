@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.rpg.worlds import generation_certified_publication as certified
-from app.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.worlds import generation_certified_publication as certified
+from app.apps.rpg.worlds.generation_publication_transaction import (
     WorldGenerationCertificationError,
     publication_transaction_report,
     require_certified_publication,
@@ -152,11 +152,6 @@ def test_failed_certification_performs_no_durable_publication_writes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     work = _Work()
-    monkeypatch.setattr(
-        certified,
-        "bootstrap_local_tenant",
-        lambda _database: SimpleNamespace(workspace_id="workspace:1"),
-    )
     monkeypatch.setattr(certified, "unit_of_work", lambda _database: work)
     monkeypatch.setattr(
         certified,

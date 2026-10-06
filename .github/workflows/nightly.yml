@@ -1,0 +1,206 @@
+name: Omnix nightly validation
+
+on:
+  schedule:
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+  # Changes to drain/rolling-upgrade code or this workflow get the nightly
+  # evidence on the PR itself, not only after merge.
+  pull_request:
+    paths:
+      - ".github/workflows/nightly.yml"
+      - "scripts/rolling_upgrade_test.py"
+      - "src/app/runtime/drain.py"
+      - "docker-compose.multihost-test.yml"
+      - "deploy/multihost/**"
+      - "scripts/multihost_topology_test.py"
+      - "scripts/multihost/**"
+      - "scripts/backup_omnix.py"
+      - "scripts/restore_rehearsal.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omnix-nightly
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: src
+
+jobs:
+  full-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
+      - name: Initialize disposable PostgreSQL runtime authority
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Prepare nightly reports
+        run: mkdir -p artifacts
+      - name: Run complete non-hardware Python suite
+        run: python -m pytest -n auto -m "not gpu and not live_provider and not playwright and not live_codex" --junitxml artifacts/nightly-python-suite.xml
+      - name: Measure the ten-minute mock-compute soak
+        run: python scripts/measure_gateway_soak.py --mock-compute --duration-seconds 600 --output artifacts/nightly-soak.json
+      - name: Measure provider-free gateway responsiveness
+        run: python scripts/benchmark_gateway_baseline.py --samples 30 --output artifacts/nightly-gateway-benchmark.json
+      - name: Check gateway benchmark regression
+        run: python scripts/check_architecture_benchmark.py --baseline resources/benchmarks/gateway/refactor-baseline.json --measured artifacts/nightly-gateway-benchmark.json
+      - name: Upload nightly evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-validation
+          path: artifacts/*.json
+          if-no-files-found: ignore
+
+  rolling-upgrade:
+    # WP-6.7: roll two gateway replicas and two job workers from N to N+1
+    # (extra expand migration, new revision and flag) under load.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_rolling_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_rolling_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_rolling_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: python -m pip install --require-hashes -r requirements/gateway.lock.txt
+      - name: Apply PostgreSQL migrations (version N)
+        run: python -m app.persistence migrate
+      - name: Initialize disposable PostgreSQL runtime authority
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Rolling upgrade under load
+        run: python scripts/rolling_upgrade_test.py --output artifacts/rolling-upgrade.json
+      - name: Upload rolling-upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-rolling-upgrade
+          path: artifacts/rolling-upgrade.json
+          if-no-files-found: ignore
+
+  multihost-topology:
+    # WP-6.8: Nginx, two API replicas, one worker/scheduler gateway, two job
+    # workers, fake model services, PostgreSQL and S3-compatible storage, each
+    # on its own container filesystem.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the topology
+        run: docker compose -f docker-compose.multihost-test.yml up -d --build --wait --wait-timeout 600
+      - name: Drive traffic through Nginx and measure
+        run: |
+          mkdir -p artifacts
+          docker compose -f docker-compose.multihost-test.yml run --no-deps --rm driver
+      - name: Service logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.multihost-test.yml logs --no-color nginx
+          docker compose -f docker-compose.multihost-test.yml logs --no-color --tail 2000 gateway-worker api-1 api-2 job-worker-1 job-worker-2 fake-models
+      - name: Upload topology evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-multihost-topology
+          path: artifacts/multihost-topology.json
+          if-no-files-found: ignore
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.multihost-test.yml down -v
+
+  restore-rehearsal:
+    # WP-10.7: back up a generated dataset (database and blobs), restore it
+    # into a separate disposable database and check it (manifest checksums,
+    # migrations, row counts, blob sample).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_bench_source
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_bench_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_bench_source
+      OMNIX_MIGRATION_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_bench_source
+      OMNIX_BLOB_ROOT: ${{ runner.temp }}/blobs-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: python -m pip install --require-hashes -r requirements/gateway.lock.txt
+      - name: Install PostgreSQL 17 client tools (pg_dump must match the server)
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
+      - name: Initialize disposable PostgreSQL runtime authority
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Generate a dataset
+        run: |
+          python scripts/seed_benchmark_data.py --database-url "$OMNIX_DATABASE_URL" --scale 0.01
+          mkdir -p "$OMNIX_BLOB_ROOT/sample"
+          for index in 1 2 3 4 5; do head -c 4096 /dev/urandom > "$OMNIX_BLOB_ROOT/sample/blob-$index"; done
+      - name: Back up
+        run: python scripts/backup_omnix.py --output-dir "${{ runner.temp }}/backup"
+      - name: Create the restore target
+        run: python -c "import psycopg; psycopg.connect('postgresql://omnix:omnix@127.0.0.1:5432/postgres', autocommit=True).execute('CREATE DATABASE omnix_restore_rehearsal')"
+      - name: Restore rehearsal
+        run: >-
+          python scripts/restore_rehearsal.py --backup-dir "${{ runner.temp }}/backup"
+          --target-url postgresql://omnix:omnix@127.0.0.1:5432/omnix_restore_rehearsal
+          --blob-root "${{ runner.temp }}/blobs-restored" --output artifacts/restore-rehearsal.json
+      - name: Upload restore evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-restore-rehearsal
+          path: artifacts/restore-rehearsal.json
+          if-no-files-found: ignore

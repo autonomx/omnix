@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import (
+from app.platform.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     ModelRef,
 )
-from app.agent_runtime.task_graph import TaskEdge, TaskGraph, TaskNode
-from app.agent_runtime.task_graph_optimizer import optimize_task_graph
+from app.platform.agent_runtime.task_graph import TaskEdge, TaskGraph, TaskNode
+from app.platform.agent_runtime.task_graph_optimizer import optimize_task_graph
 
 
 MODEL = ModelRef(provider_id="test", model_id="default")

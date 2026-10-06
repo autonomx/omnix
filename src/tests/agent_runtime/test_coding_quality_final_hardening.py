@@ -6,10 +6,10 @@ import subprocess
 
 import pytest
 
-from app.agent_runtime.budget import AgentBudgetManager
-from app.agent_runtime.coding_quality import capture_workspace_state, compile_task_engineering_contract, materialize_review_workspace, missing_final_validations, parse_self_review_result, quality_failure_reasons, self_review_is_acceptable
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, SuccessCriterion, TaskRevision, ValidationResult, ValidationSpec, WorkspaceSpec
-from app.agent_runtime.workspace import WorkspacePolicyError
+from app.platform.agent_runtime.budget import AgentBudgetManager
+from app.platform.agent_runtime.coding_quality import capture_workspace_state, compile_task_engineering_contract, materialize_review_workspace, missing_final_validations, parse_self_review_result, quality_failure_reasons, self_review_is_acceptable
+from app.platform.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, SuccessCriterion, TaskRevision, ValidationResult, ValidationSpec, WorkspaceSpec
+from app.platform.agent_runtime.workspace import WorkspacePolicyError
 
 
 def _git(cwd: Path, *args: str) -> str:

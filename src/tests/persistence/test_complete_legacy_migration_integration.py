@@ -13,7 +13,7 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.complete_cutover import CompletePostgresLegacyImporter
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.legacy_backup import create_backup, rehearse_restore
 from app.persistence.legacy_export import build_bundle
 from app.persistence.migrations import apply_migrations
@@ -275,7 +275,7 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(
+        context = ensure_local_identity(
             database,
             authority_operation=AuthorityOperation.LEGACY_IMPORT,
         )

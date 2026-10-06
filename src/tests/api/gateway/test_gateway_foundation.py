@@ -7,7 +7,6 @@ from unittest.mock import patch
 from urllib.error import URLError
 import pytest
 
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -16,9 +15,9 @@ if str(SRC_DIR) not in sys.path:
 
 
 def _client() -> TestClient:
-    from app.gateway.main import create_gateway_app
+    from app.composition.gateway.main import create_gateway_app
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    return TestClient(create_gateway_app(), raise_server_exceptions=False, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
 
 def test_gateway_health_is_provider_free() -> None:
@@ -68,7 +67,7 @@ def test_gateway_runtime_status_does_not_require_workers() -> None:
         "unreachable": 0,
         "mocked": 0,
     }
-    assert payload["compatibility"]["existing_fastapi_app"] == "app.gateway.main:app"
+    assert payload["compatibility"]["existing_fastapi_app"] == "app.composition.gateway.main:app"
 
 
 def test_gateway_worker_health_placeholder_is_explicit() -> None:
@@ -140,7 +139,7 @@ def test_gateway_worker_health_reports_unreachable_worker() -> None:
         "OMNIX_GATEWAY_WORKERS": "tts",
         "OMNIX_WORKER_TTS_URL": "http://127.0.0.1:5101",
     }
-    with patch.dict("os.environ", env, clear=True), patch('app.gateway.workers.urlopen', side_effect=URLError('offline')):
+    with patch.dict("os.environ", env, clear=True), patch('app.runtime.worker_health.urlopen', side_effect=URLError('offline')):
         client = _client()
         response = client.get("/api/workers/health")
 
@@ -174,48 +173,6 @@ def test_gateway_payload_policy_forbids_browser_worker_access() -> None:
     assert payload["base64_media_payloads"] == "transitional_only"
 
 
-def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None:
-    from app.gateway import main as gateway_main
-    from app.trading import strategy_monitor as monitor_module
-    from app.trading.strategy_monitor import TradingStrategyMonitor, register_trading_strategy_monitor
-
-    monkeypatch.setattr(
-        gateway_main,
-        "recover_abandoned_chat_generation_jobs",
-        lambda *_args: 0,
-    )
-    monkeypatch.setattr(
-        monitor_module,
-        "managed_finviz_shadow_autoprovision_enabled",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        monitor_module,
-        "trading_strategy_monitor_enabled",
-        lambda: True,
-    )
-
-    async def no_op_run_once(_monitor: TradingStrategyMonitor) -> None:
-        return None
-
-    monkeypatch.setattr(TradingStrategyMonitor, "run_once", no_op_run_once)
-
-    app = FastAPI(
-        lifespan=lambda current_app: gateway_main._gateway_lifespan(
-            current_app,
-            get_chat_store=lambda: object(),
-            get_job_store=lambda: object(),
-        )
-    )
-    monitor = register_trading_strategy_monitor(app)
-
-    with TestClient(app):
-        assert monitor._task is not None
-        assert not monitor._task.done()
-
-    assert monitor._task is None
-
-
 def test_gateway_compatibility_handoff_reports_current_owners() -> None:
     client = _client()
 
@@ -225,7 +182,7 @@ def test_gateway_compatibility_handoff_reports_current_owners() -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert payload["legacy_ui_status"] == "retired"
-    assert payload["existing_fastapi_app"] == "app.gateway.main:app"
+    assert payload["existing_fastapi_app"] == "app.composition.gateway.main:app"
     assert payload["domain_logic_policy"] == "delegate_to_existing_service_modules"
     namespaces = {target["namespace"] for target in payload["handoff_targets"]}
     assert "/api/rpg" in namespaces

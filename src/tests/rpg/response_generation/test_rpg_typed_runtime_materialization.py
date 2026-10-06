@@ -5,8 +5,8 @@ import json
 import pytest
 
 from app.providers.base import ChatResponse, ProviderConfig
-from app.rpg.llm_app_gateway import AppLLMGateway
-from app.rpg.session.genesis.runtime_materialization import (
+from app.apps.rpg.llm_app_gateway import AppLLMGateway
+from app.apps.rpg.session.genesis.runtime_materialization import (
     RuntimeMaterializationProposal,
     _canonicalize_proposal,
     _expected_proposal_validator,

@@ -11,20 +11,20 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.trading.historical_gapper_reconstruction import (
+from app.apps.trading.historical_gapper_reconstruction import (
     AlpacaHistoricalGapperReconstructor,
     reconstructed_strategy_config,
 )
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError, ProviderRateLimitedError
-from app.trading.providers.http_runtime import ProviderHttpRuntime
-from app.trading.strategy_backtest import (
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError, ProviderRateLimitedError
+from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.strategy_backtest import (
     BacktestSessionDataset,
     freeze_backtest_session,
     run_gap_pullback_backtest,
 )
-from app.trading.strategy_historical_bars import alpaca_historical_session_bars
-from app.trading.us_equity_calendar import regular_holidays
+from app.apps.trading.strategy_historical_bars import alpaca_historical_session_bars
+from app.apps.trading.us_equity_calendar import regular_holidays
 from scripts.run_trading_strategy_backtest import strict_v11_strategy
 
 

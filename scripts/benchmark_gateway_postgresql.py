@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 async def measure(samples):
     import httpx
-    from app.production import create_production_app, production_readiness
+    from app.composition.production import create_production_app, production_readiness
     from app.persistence.database import close_default_database
 
     started = time.perf_counter()

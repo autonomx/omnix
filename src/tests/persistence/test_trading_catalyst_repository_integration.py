@@ -8,10 +8,10 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
-from app.trading.catalyst_evidence import capture_catalyst_evidence
-from app.trading.catalyst_repository import TradingCatalystRepository
+from app.apps.trading.catalyst_evidence import capture_catalyst_evidence
+from app.apps.trading.catalyst_repository import TradingCatalystRepository
 
 
 pytestmark = pytest.mark.skipif(
@@ -36,7 +36,7 @@ def _database() -> PostgresDatabase:
 def test_catalyst_evidence_is_idempotent_across_both_unique_identities() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         repository = TradingCatalystRepository(
             context=context,
             uow_factory=lambda: unit_of_work(database),

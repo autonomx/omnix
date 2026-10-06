@@ -4,17 +4,17 @@ import sqlite3
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest
-from app.characters.avatar_models import UpsertCharacterAvatarPackRequest
-from app.characters.avatar_repository import CharacterAvatarRepository
-from app.characters.avatar_service import CharacterAvatarService
-from app.characters.avatar_viseme_generation import (
+from app.platform.characters import CharacterRepository, CreateCharacterRequest
+from app.platform.characters.avatar_models import UpsertCharacterAvatarPackRequest
+from app.platform.characters.avatar_repository import CharacterAvatarRepository
+from app.platform.characters.avatar_service import CharacterAvatarService
+from app.platform.characters.avatar_viseme_generation import (
     CharacterVisemeGenerationRepository,
     CharacterVisemeGenerationService,
 )
-from app.characters.service import CharacterService
+from app.platform.characters.service import CharacterService
 from app.jobs import CompleteJobRequest, FailJobRequest
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _complete_image_job(
@@ -60,7 +60,6 @@ def _complete_image_job(
 
 
 def _build_viseme_service(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     database = tmp_path / "characters.sqlite3"
     assets = SharedAssetStore(tmp_path / "assets.json")
     closed_path = tmp_path / "maya-closed.png"

@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.trading.research.contracts import TradingEvidence, TradingResearchReport, fingerprint
-from app.trading.research.facts.extraction import build_fact_set
-from app.trading.research.market_brief import generate_trading_market_brief
+from app.apps.trading.research.contracts import TradingEvidence, TradingResearchReport, fingerprint
+from app.apps.trading.research.facts.extraction import build_fact_set
+from app.apps.trading.research.market_brief import generate_trading_market_brief
 
 
 def _evidence() -> TradingEvidence:

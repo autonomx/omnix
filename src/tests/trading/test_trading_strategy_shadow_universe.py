@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
-from app.trading.strategy_dynamic_discovery import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
+from app.apps.trading.strategy_dynamic_discovery import (
     CandidateLifecycleState,
     DiscoveryEvent,
     DiscoveryTriggerType,
@@ -13,14 +13,14 @@ from app.trading.strategy_dynamic_discovery import (
     EvaluationTier,
     INTERDAY_TRADING_STRATEGY_ID,
 )
-from app.trading.strategy_dynamic_discovery_repository import EVENT_CANDIDATE, EVENT_DISCOVERY
-from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
-from app.trading.strategy_shadow_universe import (
+from app.apps.trading.strategy_dynamic_discovery_repository import EVENT_CANDIDATE, EVENT_DISCOVERY
+from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.apps.trading.strategy_shadow_universe import (
     resolve_v2_evidence_archive_for_session,
     resolve_v2_runtime_archive,
     resolve_v2_shadow_archive,
 )
-from app.trading.strategy_universe_archiver import _archive_universe_id
+from app.apps.trading.strategy_universe_archiver import _archive_universe_id
 
 
 NOW = datetime(2026, 8, 24, 13, 25, tzinfo=timezone.utc)  # 09:25 ET

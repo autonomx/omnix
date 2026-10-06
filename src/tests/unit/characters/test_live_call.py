@@ -10,27 +10,32 @@ from app.assets import (
     SharedAssetStore,
     canonical_voice_clones,
 )
-from app.characters import (
+from app.platform.characters import (
     CharacterRepository,
     CreateCharacterRequest,
     SetSessionInteractionRequest,
     UpdateCharacterRequest,
 )
-from app.characters.live_call import normalize_speech_style, resolve_live_call_runtime
-from app.characters.service import CharacterService
-from app.characters.voice_consent import (
+from app.platform.characters.live_call import normalize_speech_style, resolve_live_call_runtime
+from app.platform.characters.service import CharacterService
+from app.platform.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.chat import CreateChatSessionRequest, default_chat_store
+from app.platform.chat import CreateChatSessionRequest, default_chat_store
+from app.persistence.runtime import reset_persistence_mode_cache
 
 
 class _EmptyAssetStore:
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(self, **_page) -> AssetListResponse:
         return AssetListResponse(assets=[])
 
 
 def _configure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
+    reset_persistence_mode_cache()
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))

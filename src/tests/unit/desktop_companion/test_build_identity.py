@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.desktop_companion.build_identity import resolve_desktop_companion_build_identity
+from app.apps.desktop_companion.build_identity import resolve_desktop_companion_build_identity
 
 
 def test_build_identity_prefers_explicit_omnix_commit_sha() -> None:

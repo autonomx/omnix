@@ -1,0 +1,4 @@
+# Replace these placeholders with maintainer usernames or teams before enforcing code-owner review.
+* @OWNER
+/src/app/ @OWNER
+/.github/ @OWNER

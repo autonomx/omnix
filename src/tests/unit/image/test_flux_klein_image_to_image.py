@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
+# Needs the GPU model stack; skipped where torch is not installed.
+pytest.importorskip("torch")
+pytestmark = pytest.mark.gpu
+
+
 from types import SimpleNamespace
 
 import pytest
 
 Image = pytest.importorskip("PIL.Image")
 
-from app.image.providers import flux_klein_provider as flux_module  # noqa: E402
-from app.image.providers.flux_klein_provider import FluxKleinImageProvider  # noqa: E402
+from app.platform.image.providers import flux_klein_provider as flux_module  # noqa: E402
+from app.platform.image.providers.flux_klein_provider import FluxKleinImageProvider  # noqa: E402
 
 
 def test_flux_provider_forwards_reference_image_to_pipeline(tmp_path, monkeypatch) -> None:

@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.strategy_dynamic_discovery_monitor import InterdayDynamicDiscoveryMonitor
-from app.trading.strategy_interday_learning_monitor import InterdayLearningMonitor
-from app.trading.strategy_operations_api import create_trading_strategy_operations_router
+from app.apps.trading.strategy_dynamic_discovery_monitor import InterdayDynamicDiscoveryMonitor
+from app.apps.trading.strategy_interday_learning_monitor import InterdayLearningMonitor
+from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
 
 
 def _core_status(value: dict[str, object]) -> dict[str, object]:

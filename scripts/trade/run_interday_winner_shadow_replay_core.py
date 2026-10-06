@@ -32,22 +32,22 @@ for import_root in (SOURCE_ROOT, REPOSITORY_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.paper import PaperExecutionPolicy
-from app.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
-from app.trading.strategies.models import StochRsi5mConfig, StrategyRiskProfile
-from app.trading.strategy_backtest import run_gap_pullback_backtest, freeze_backtest_session
-from app.trading.strategy_leader_momentum_continuation import (
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading.models import AdjustmentMode, MarketBar
+from app.apps.trading.paper import PaperExecutionPolicy
+from app.apps.trading.providers.alpaca_iex import ALPACA_DATA_URL, alpaca_iex_auth_headers
+from app.apps.trading.strategies.models import StochRsi5mConfig, StrategyRiskProfile
+from app.apps.trading.strategy_backtest import run_gap_pullback_backtest, freeze_backtest_session
+from app.apps.trading.strategy_leader_momentum_continuation import (
     LeaderMomentumContext,
     POLICY_VERSION as LEADER_MOMENTUM_POLICY_VERSION,
     evaluate_leader_momentum_continuation,
 )
-from app.trading.strategy_stoch_rsi_5m_late_stage import evaluate_stoch_rsi_5m_late_stage
-from app.trading.strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
-from app.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
-from app.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture
-from app.trading.strategy_v2_qualification import managed_finviz_v2_config
+from app.apps.trading.strategy_stoch_rsi_5m_late_stage import evaluate_stoch_rsi_5m_late_stage
+from app.apps.trading.strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
+from app.apps.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
+from app.apps.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture
+from app.apps.trading.strategy_v2_qualification import managed_finviz_v2_config
 
 
 ET = ZoneInfo("America/New_York")

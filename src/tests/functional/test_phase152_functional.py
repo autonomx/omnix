@@ -1,5 +1,5 @@
 """Functional tests for Phase 15.2 — Session/package round-trip hardening."""
-from app.rpg.session.package_bridge import (
+from app.apps.rpg.session.package_bridge import (
     package_to_session,
     session_to_package,
     validate_package_payload,

@@ -1,0 +1,114 @@
+"""Canonical owner-aware memory service factory.
+
+Production resolves the PostgreSQL repository only after runtime adapters are
+installed. Pre-bootstrap calls receive an uncached provider-free service and can
+never become the cached production authority.
+"""
+from __future__ import annotations
+
+from collections.abc import Callable
+from threading import RLock
+from typing import Any
+
+from .owner_repository import OwnerAwareInMemoryMemoryRepository
+from .owner_service import OwnerAwareMemoryService
+from .service import LegacyMemoryReadOnlyError
+
+RepositoryFactory = Callable[[], Any]
+
+_lock = RLock()
+_installed_repository_factory: RepositoryFactory | None = None
+_installed_routes_by_authority = False
+_default_service: OwnerAwareMemoryService | None = None
+
+
+def install_default_memory_repository_factory(
+    factory: RepositoryFactory,
+    *,
+    routes_by_authority: bool = False,
+) -> None:
+    """Install the production repository factory and discard any cached service.
+
+    ``routes_by_authority`` marks a repository that sends record writes to
+    Memory v2 once v2 is authoritative; the v1 read-only guard then stays off,
+    since writes no longer go to v1.
+    """
+
+    if not callable(factory):
+        raise TypeError("memory repository factory must be callable")
+    global _installed_repository_factory, _installed_routes_by_authority, _default_service
+    with _lock:
+        _installed_repository_factory = factory
+        _installed_routes_by_authority = routes_by_authority
+        _default_service = None
+
+
+def clear_default_memory_repository_factory() -> None:
+    """Return to provider-free behavior for isolated tests."""
+
+    global _installed_repository_factory, _installed_routes_by_authority, _default_service
+    with _lock:
+        _installed_repository_factory = None
+        _installed_routes_by_authority = False
+        _default_service = None
+
+
+def reset_default_memory_service() -> None:
+    """Discard the resident service without changing the installed repository."""
+
+    global _default_service
+    with _lock:
+        _default_service = None
+
+
+def _runtime_repository_factory() -> RepositoryFactory | None:
+    """Resolve PostgreSQL lazily only after the runtime adapter boundary is active."""
+
+    from app.persistence.runtime import uses_postgresql_runtime
+    if not uses_postgresql_runtime():
+        return None
+    from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+
+    return PostgresOwnerAwareMemoryRepository
+
+
+def _legacy_memory_write_guard() -> None:
+    """Keep the resident v1 service readable but immutable after v2 cutover."""
+
+    from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
+
+    authority = PostgresMemoryV2AuthorityStore().current().epoch.authority
+    if authority != "v1":
+        raise LegacyMemoryReadOnlyError(
+            "legacy assistant_memory is read-only while Memory v2 is authoritative"
+        )
+
+
+def default_memory_service() -> OwnerAwareMemoryService:
+    """Return the resident authoritative service after bootstrap.
+
+    Before PostgreSQL bootstrap the returned in-memory service is intentionally
+    uncached. This prevents an early import or test call from becoming the
+    production authority.
+    """
+
+    global _default_service
+    with _lock:
+        factory = _installed_repository_factory or _runtime_repository_factory()
+        if factory is None:
+            return OwnerAwareMemoryService(OwnerAwareInMemoryMemoryRepository())
+        if _default_service is None:
+            routed = _installed_repository_factory is not None and _installed_routes_by_authority
+            _default_service = OwnerAwareMemoryService(
+                factory(),
+                write_guard=None if routed else _legacy_memory_write_guard,
+            )
+        return _default_service
+
+
+__all__ = [
+    "clear_default_memory_repository_factory",
+    "default_memory_service",
+    "install_default_memory_repository_factory",
+    "reset_default_memory_service",
+]

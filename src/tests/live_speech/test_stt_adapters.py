@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from app.live_speech.stt import BufferedStreamingTranscriber
-from app.live_speech.stt_adapters import ParakeetServiceTranscriber, create_transcriber_from_env
+from app.platform.live_speech.stt import BufferedStreamingTranscriber
+from app.platform.live_speech.stt_adapters import ParakeetServiceTranscriber, create_transcriber_from_env
 
 
 def _pcm(samples: int = 3200) -> bytes:

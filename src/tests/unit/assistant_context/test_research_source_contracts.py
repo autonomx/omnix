@@ -1,5 +1,5 @@
 from app.jobs import JobStatus, ResourceClass
-from app.research import (
+from app.platform.research import (
     RESEARCH_JOB_MODULE,
     RESEARCH_JOB_TYPE,
     RESEARCH_STAGE_IDS,

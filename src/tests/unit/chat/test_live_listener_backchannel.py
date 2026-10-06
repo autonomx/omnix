@@ -1,5 +1,5 @@
-from app.chat.live_conversation_proactive import stream_proactive_turn_chunks
-from app.chat.models import ChatSession
+from app.platform.chat.live_conversation_proactive import stream_proactive_turn_chunks
+from app.platform.chat.models import ChatSession
 
 
 def _session() -> ChatSession:

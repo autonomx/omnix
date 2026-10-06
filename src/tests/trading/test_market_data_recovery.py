@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.trading.market_data_recovery import (
+from app.apps.trading.market_data_recovery import (
     StrategyDataRequirement,
     aggregate_complete_bars,
     assess_data_requirement,
@@ -15,8 +15,8 @@ from app.trading.market_data_recovery import (
     reconcile_recovery,
     recover_market_bars,
 )
-from app.trading.models import MarketBar
-from app.trading.service import TradingMarketDataService
+from app.apps.trading.models import MarketBar
+from app.apps.trading.service import TradingMarketDataService
 
 
 SESSION_DATE = datetime(2026, 9, 16, tzinfo=timezone.utc).date()

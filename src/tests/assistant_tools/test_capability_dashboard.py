@@ -1,10 +1,14 @@
 from fastapi.testclient import TestClient
 
-from app.assistant_tools.capability_dashboard import build_assistant_capability_dashboard
-from app.assistant_tools.config_store import AssistantToolConfigRecord, AssistantToolsConfigPayload, default_assistant_tools_config
-from app.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
-from app.assistant_tools.registry import default_assistant_tools
-from app.gateway.main import create_gateway_app
+from app.platform.assistant_tools.capability_dashboard import build_assistant_capability_dashboard
+from app.platform.assistant_tools.config_store import AssistantToolConfigRecord, AssistantToolsConfigPayload, default_assistant_tools_config
+from app.platform.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
+from app.platform.assistant_tools.registry import default_assistant_tools
+from app.composition.gateway.main import create_gateway_app
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def _config_with_enabled(tool_id: str) -> AssistantToolsConfigPayload:
@@ -45,7 +49,7 @@ def test_capability_dashboard_counts_enabled_tools_and_recent_errors():
 def test_capability_dashboard_route(monkeypatch, tmp_path):
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(tmp_path / "assistant_tools_config.json"))
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH", str(tmp_path / "assistant_tools_ledger.jsonl"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/dashboard")
 

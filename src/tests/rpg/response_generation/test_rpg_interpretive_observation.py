@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.rpg.session.interpretive_adjudication import (
+from app.apps.rpg.session.interpretive_adjudication import (
     build_interpretive_adjudication_result,
 )
 

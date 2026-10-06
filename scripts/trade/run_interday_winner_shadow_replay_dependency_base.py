@@ -27,7 +27,7 @@ from typing import Any
 
 from scripts.trade import run_interday_winner_shadow_replay_recovery_base as _base
 
-from app.trading.market_data_recovery import (
+from app.apps.trading.market_data_recovery import (
     DataEvaluability,
     RecoveryReport,
     StrategyDataRequirement,
@@ -36,8 +36,8 @@ from app.trading.market_data_recovery import (
     finalized_session_bars,
     latest_clean_bars,
 )
-from app.trading.models import MarketBar
-from app.trading.strategy_leader_momentum_continuation import MAX_TRADES as LEADER_MAX_TRADES
+from app.apps.trading.models import MarketBar
+from app.apps.trading.strategy_leader_momentum_continuation import MAX_TRADES as LEADER_MAX_TRADES
 
 
 _core = _base._core

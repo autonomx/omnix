@@ -1,4 +1,4 @@
-from app.rpg.social.reputation import (
+from app.apps.rpg.social.reputation import (
     apply_social_deltas,
     get_global_reputation,
     get_relationship,

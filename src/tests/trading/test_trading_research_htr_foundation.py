@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from app.trading.providers.errors import ProviderUnavailableError
-from app.trading.research.contracts import TradingEvidence, fingerprint
-from app.trading.research.adapters.base import AdapterExecutionResult
-from app.trading.research.coordinator import create_trading_research_request, run_trading_research
-from app.trading.research.facts.metrics import derive_supply_metrics
-from app.trading.research.facts.supply import extract_supply_facts
-from app.trading.research.issuer_identity import fallback_issuer_identity
-from app.trading.research.knowledge_time import latest_as_of
+from app.apps.trading.providers.errors import ProviderUnavailableError
+from app.apps.trading.research.contracts import TradingEvidence, fingerprint
+from app.apps.trading.research.adapters.base import AdapterExecutionResult
+from app.apps.trading.research.coordinator import create_trading_research_request, run_trading_research
+from app.apps.trading.research.facts.metrics import derive_supply_metrics
+from app.apps.trading.research.facts.supply import extract_supply_facts
+from app.apps.trading.research.issuer_identity import fallback_issuer_identity
+from app.apps.trading.research.knowledge_time import latest_as_of
 
 
 def _evidence(text: str, evidence_id: str = "e1") -> TradingEvidence:
@@ -191,7 +191,7 @@ def test_coordinator_returns_failed_report_when_identity_provider_fails():
 
 
 def test_research_package_has_no_order_execution_imports():
-    root = Path(__file__).resolve().parents[2] / "app" / "trading" / "research"
+    root = Path(__file__).resolve().parents[2] / "app" / "apps" / "trading" / "research"
     forbidden_imports = (
         r"(?:from|import)\s+app\.trading\.paper_api\b",
         r"(?:from|import)\s+app\.trading\.execution_api\b",

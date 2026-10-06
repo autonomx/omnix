@@ -2465,7 +2465,7 @@ may_import = ["kernel", "shared_services"]
 
 [layers.features]
 packages = [
-  "app.chat", "app.live_voice", "app.characters", "app.assistant_memory", "app.assistant_memory_v2",
+  "app.chat", "app.live_voice", "app.characters", "app.assistant_memory", "app.assistant_memory.v2",
   "app.rpg", "app.trading", "app.agent_runtime", "app.assistant_tools", "app.audiobook", "app.image",
   "app.voice", "app.research", "app.story", "app.hermes", "app.companion_activity", "app.desktop_companion",
   "app.live_speech", "app.replay",
@@ -2532,6 +2532,7 @@ Measure baselines in WP-1.1. Values marked "measure" must be computed then.
 | `mypy_ignored_modules` | Override patterns with `ignore_errors` | measure | lower | 0 kernel, ≤ 10% total |
 | `compat_modules` | `*_compat.py` files | 17+ | lower | 0 (renamed stable adapters) |
 | `process_local_state_unapproved` | Inventory entries not approved (WP-6.6) | measure | lower | 0 |
+| `unbounded_module_caches` | Scanned module-level caches without a positive size bound, TTL, and invalidation policy (WP-6.6) | measure | lower | 0 |
 | `unreachable_rpg_modules` | Reachability report | 526 | lower | 0 |
 | `rls_coverage_pct` | Tenant tables with RLS | 0 | higher | 100 |
 | `retention_policies_executed_pct` | Policies with a successful run in the last 48 h (test env) | 0 | higher | 100 |
@@ -2543,6 +2544,7 @@ Measure baselines in WP-1.1. Values marked "measure" must be computed then.
 | `web_openapi_path_coverage_pct` | UI-called paths in OpenAPI | 36 | higher | 100 (except documented transport exceptions) |
 | `web_important` | `!important` in CSS | 1,671 | lower | ≤ 50 |
 | `web_hardcoded_colors` | Color literals in CSS/TSX styles | 6,675 | lower | ≤ 300 |
+| `web_global_css_files` | Stylesheets loaded by `main.tsx` (with their `@import`s) | 27 | lower | ≤ 10 |
 | `web_mutation_observer_files` | | 19 | lower | ≤ 2 |
 | `web_set_interval_files` | | 28 | lower | ≤ 5 |
 | `web_custom_event_dispatch_files` | | 61 | lower | 0 |

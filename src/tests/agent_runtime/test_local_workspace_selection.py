@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime import api
-from app.agent_runtime.local_workspace import (
+from app.platform.agent_runtime import api
+from app.platform.agent_runtime.local_workspace import (
     LocalWorkspaceSelectionError,
     local_request_host_allowed,
     local_request_origin_allowed,
@@ -62,9 +62,9 @@ def test_repository_root_detection_is_bounded_to_git_result(monkeypatch, tmp_pat
     repo = tmp_path / "repo"
     child = repo / "src"
     child.mkdir(parents=True)
-    monkeypatch.setattr("app.agent_runtime.local_workspace.shutil.which", lambda name: "git")
+    monkeypatch.setattr("app.platform.agent_runtime.local_workspace.shutil.which", lambda name: "git")
     monkeypatch.setattr(
-        "app.agent_runtime.local_workspace.subprocess.run",
+        "app.platform.agent_runtime.local_workspace.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=0,
             stdout=str(repo),
@@ -75,9 +75,9 @@ def test_repository_root_detection_is_bounded_to_git_result(monkeypatch, tmp_pat
 
 
 def test_repository_root_detection_returns_none_for_non_git_folder(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr("app.agent_runtime.local_workspace.shutil.which", lambda name: "git")
+    monkeypatch.setattr("app.platform.agent_runtime.local_workspace.shutil.which", lambda name: "git")
     monkeypatch.setattr(
-        "app.agent_runtime.local_workspace.subprocess.run",
+        "app.platform.agent_runtime.local_workspace.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=128,
             stdout="",

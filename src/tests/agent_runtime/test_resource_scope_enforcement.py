@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime.broker_api import _request_within_resource_scopes
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope
+from app.platform.agent_runtime.broker_api import _request_within_resource_scopes
+from app.platform.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope
 
 
 def _snapshot(scopes):

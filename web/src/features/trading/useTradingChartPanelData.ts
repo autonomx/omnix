@@ -1,0 +1,214 @@
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo } from 'react';
+import { tradingApi } from './tradingApi';
+import { TradingChartAdapter, type TradingComparisonData } from './chart/chartAdapter';
+import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
+import type { MarketBar } from './tradingTypes';
+import { TRADING_COMPARISON_COLORS } from './tradingComparisons';
+import { resolveTradingTimezone } from './tradingTime';
+import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonLabel } from './tradingChartPanelModel';
+import type { useChartPanelState } from './useTradingChartPanelState';
+
+/** Indicator scheduling: recomputes indicator outputs off the render path. */
+export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState>) {
+  const {
+    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorTimerRef,
+    indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate, onActivateRef,
+    setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
+  } = ws;
+
+  useEffect(() => {
+    onActivateRef.current = onActivate;
+  }, [onActivate, onActivateRef]);
+
+  const clearAlertPlacement = useCallback(() => setAlertPlacement(null), [setAlertPlacement]);
+
+  const refreshIndicatorPanes = useCallback((targetAdapter?: TradingChartAdapter | null) => {
+    if (!targetAdapter) {
+      setIndicatorPaneGeometry([]);
+      return;
+    }
+    try {
+      setIndicatorPaneGeometry(targetAdapter.indicatorPaneGeometry());
+    } catch {
+      setIndicatorPaneGeometry([]);
+    }
+  }, [setIndicatorPaneGeometry]);
+
+  const scheduleIndicators = useCallback((delay = 0) => {
+    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
+    indicatorTimerRef.current = setTimeout(() => {
+      indicatorTimerRef.current = null;
+      const scheduler = indicatorSchedulerRef.current;
+      const targetAdapter = adapterRef.current;
+      if (!scheduler || !targetAdapter) return;
+      void scheduler.calculate(barsRef.current, indicatorsRef.current)
+        .then((outputs) => {
+          if (outputs && adapterRef.current === targetAdapter) {
+            targetAdapter.setIndicatorOutputs(outputs);
+            setIndicatorOutputs(outputs);
+            if (fullscreenIndicatorRef.current) {
+              targetAdapter.setIndicatorPaneFullscreen(fullscreenIndicatorRef.current);
+            } else if (fullscreenMainPaneRef.current) {
+              targetAdapter.setMainPaneFullscreen(true);
+            } else {
+              for (const indicator of indicatorsRef.current) {
+                if (indicatorUsesSeparatePane(indicator.id)) {
+                  targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicatorsRef.current.has(indicator.id));
+                }
+              }
+            }
+            refreshIndicatorPanes(targetAdapter);
+            window.requestAnimationFrame(() => {
+              if (adapterRef.current !== targetAdapter) return;
+              if (fullscreenIndicatorRef.current) {
+                targetAdapter.setIndicatorPaneFullscreen(fullscreenIndicatorRef.current);
+              } else if (fullscreenMainPaneRef.current) {
+                targetAdapter.setMainPaneFullscreen(true);
+              } else {
+                for (const indicator of indicatorsRef.current) {
+                  if (indicatorUsesSeparatePane(indicator.id)) {
+                    targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicatorsRef.current.has(indicator.id));
+                  }
+                }
+              }
+              refreshIndicatorPanes(targetAdapter);
+              window.requestAnimationFrame(() => refreshIndicatorPanes(targetAdapter));
+            });
+            setIndicatorError(null);
+          }
+        })
+        .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
+    }, delay);
+  }, [refreshIndicatorPanes, adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
+
+  const historyLimit = chartHistoryLimit(instrumentId, interval, indicators);
+
+  return {
+    clearAlertPlacement, refreshIndicatorPanes, scheduleIndicators, historyLimit,
+  };
+}
+
+/** Bars, comparisons and currency rates for the chart, and the replay window. */
+export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling>) {
+  const {
+    active, adapter, allBarsRef, bindingId, comparisons, historyLimit, indicators, instrumentId, interval,
+    onActivateRef, priceScaleCurrency, replayCursorIndex, replayMode, replayStartIndex, rightOffset,
+    selectedIndicator, setPriceScaleCurrency, setSelectedIndicator, timezoneId,
+  } = ws;
+
+  const chartQuery = useQuery({
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit],
+    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId),
+    enabled: Boolean(instrumentId),
+    staleTime: 15_000,
+  });
+
+  const comparisonQueries = useQueries({
+    queries: comparisons.map((comparison) => {
+      const comparisonLimit = chartHistoryLimit(comparison.instrumentId, interval, []);
+      return {
+        queryKey: ['trading', 'comparison-bars-v2', comparison.instrumentId, interval, comparisonLimit, comparison.placement],
+        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit),
+        enabled: Boolean(comparison.instrumentId),
+        staleTime: 15_000,
+      };
+    }),
+  });
+
+  const comparisonRenderData = useMemo<TradingComparisonData[]>(() => comparisons.map((comparison, index) => {
+    const result = comparisonQueries[index];
+    return {
+      instrumentId: comparison.instrumentId,
+      label: comparisonLabel(result?.data?.instrument, comparison.instrumentId),
+      placement: comparison.placement,
+      color: TRADING_COMPARISON_COLORS[index % TRADING_COMPARISON_COLORS.length],
+      visible: comparison.visible !== false,
+      bars: (result?.data?.bars ?? []) as MarketBar[],
+    };
+  }), [comparisons, comparisonQueries]);
+
+  const sourceCurrency = chartQuery.data?.instrument.quote_currency?.toUpperCase() ?? 'USD';
+
+  const supportsCurrencyConversion = /^[A-Z]{3}$/u.test(sourceCurrency);
+
+  const currencyRateQuery = useQuery({
+    queryKey: ['trading', 'currency-rate', sourceCurrency, priceScaleCurrency],
+    queryFn: () => tradingApi.currencyRate(sourceCurrency, priceScaleCurrency),
+    enabled: supportsCurrencyConversion
+      && Boolean(sourceCurrency && priceScaleCurrency && sourceCurrency !== priceScaleCurrency),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const priceScaleMultiplier = !supportsCurrencyConversion || sourceCurrency === priceScaleCurrency
+    ? 1
+    : currencyRateQuery.data?.rate ?? 1;
+
+  const selectedTimezone = resolveTradingTimezone(timezoneId, chartQuery.data?.instrument.exchange_timezone);
+
+  useEffect(() => {
+    setPriceScaleCurrency(sourceCurrency);
+  }, [sourceCurrency, instrumentId, setPriceScaleCurrency]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setPriceScaleMultiplier(priceScaleMultiplier);
+  }, [adapter, priceScaleMultiplier]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setComparisonData(comparisonRenderData);
+  }, [adapter, comparisonRenderData]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setRightOffset(rightOffset);
+  }, [adapter, rightOffset]);
+
+  useEffect(() => {
+    if (!adapter) {
+      setSelectedIndicator(null);
+      return;
+    }
+    const unregister = adapter.onIndicatorClick((selection) => {
+      onActivateRef.current();
+      setSelectedIndicator(selection);
+    });
+    return () => {
+      unregister();
+      setSelectedIndicator(null);
+    };
+  }, [adapter, onActivateRef, setSelectedIndicator]);
+
+  useEffect(() => {
+    if (selectedIndicator && !indicators.some((indicator) => indicator.id === selectedIndicator.id && indicator.enabled)) {
+      setSelectedIndicator(null);
+    }
+  }, [indicators, selectedIndicator, setSelectedIndicator]);
+
+  useEffect(() => {
+    if (!selectedIndicator) return;
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.trading-indicator-object-toolbar')) return;
+      setSelectedIndicator(null);
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+  }, [selectedIndicator, setSelectedIndicator]);
+
+  const replayVisible = replayMode && active && replayCursorIndex !== null;
+
+  const replayStartBar = replayStartIndex === null ? null : allBarsRef.current[replayStartIndex] ?? null;
+
+  const replayCurrentBar = replayCursorIndex === null ? null : allBarsRef.current[replayCursorIndex] ?? null;
+
+  const replayHasNextBar = replayCursorIndex !== null && replayCursorIndex < allBarsRef.current.length - 1;
+
+  return {
+    chartQuery, comparisonQueries, comparisonRenderData, sourceCurrency, supportsCurrencyConversion,
+    currencyRateQuery, priceScaleMultiplier, selectedTimezone, replayVisible, replayStartBar, replayCurrentBar,
+    replayHasNextBar,
+  };
+}

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
-from app.agent_runtime.workflows import WORKFLOW_END, WorkflowDefinition, WorkflowStepDefinition
+from app.platform.agent_runtime.workflow_runtime import PostgresWorkflowRuntime
+from app.platform.agent_runtime.workflows import WORKFLOW_END, WorkflowDefinition, WorkflowStepDefinition
 
 
 def test_workflow_definition_rejects_unknown_branch_target() -> None:

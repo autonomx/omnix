@@ -14,8 +14,17 @@ cd "$OMNIX_REPO_ROOT"
 # Create the shared models directory if it doesn't exist
 mkdir -p resources/models/llm
 
-# Install huggingface-hub if not available
-pip install huggingface-hub --quiet
+CONDA_ROOT="${CONDA_ROOT:-$HOME/miniconda3}"
+RPG_FLUX_PYTHON="${RPG_FLUX_PYTHON:-$CONDA_ROOT/envs/rpg-flux/bin/python}"
+if [ ! -x "$RPG_FLUX_PYTHON" ]; then
+    echo "ERROR: The locked image runtime was not found. Run ./setup.sh first."
+    exit 1
+fi
+"$RPG_FLUX_PYTHON" -c 'import sys, huggingface_hub; assert sys.version_info[:2] == (3, 11)'
+if [ $? -ne 0 ]; then
+    echo "ERROR: Activate the Python 3.11 rpg-flux runtime installed by setup.sh."
+    exit 1
+fi
 
 # Download Mistral-7B GGUF model (TheBloke)
 # Using Q4_K_M quantization - good balance of size and quality
@@ -23,7 +32,7 @@ echo "Downloading mistral-7b-instruct-v0.2.Q4_K_M.gguf..."
 echo "This may take a few minutes depending on your internet speed..."
 echo ""
 
-python -c "
+"$RPG_FLUX_PYTHON" -c "
 from huggingface_hub import hf_hub_download
 import os
 
