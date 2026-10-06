@@ -1,4 +1,25 @@
 @layer features {
+  /* Account: guest upgrade, email, password, invites (WP-4.1). */
+  .settings-account-form,
+  .settings-account-invites {
+    display: grid;
+    gap: 0.5rem;
+    max-width: 28rem;
+    margin-block: 0.75rem;
+  }
+
+  .settings-account-form label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .settings-account-invites ul {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0;
+    list-style: none;
+  }
+
   .settings-control-panel{padding:0;overflow:hidden;position:relative}
   .settings-skip-link{position:absolute;left:12px;top:8px;z-index:20;transform:translateY(-160%);padding:8px 12px;border-radius:7px;background:var(--omnix-theme-gradient);color:var(--omnix-theme-on-accent);text-decoration:none}
   .settings-skip-link:focus{transform:translateY(0)}

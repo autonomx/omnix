@@ -17,7 +17,7 @@ function when(value: string): string {
 
 function failureMessage(error: unknown, mode: AuthSession['mode']): string {
   if (error instanceof AuthRequestError && error.status === 401) {
-    return mode === 'local' ? 'The install credential is not correct.' : 'Sign in again, then retry within ten minutes.';
+    return mode === 'local' ? 'That password (or install credential) is not correct.' : 'Sign in again, then retry within ten minutes.';
   }
   if (error instanceof AuthRequestError && error.status === 429) return 'Too many attempts. Wait a minute and retry.';
   return 'The sessions could not be changed.';
@@ -83,7 +83,7 @@ export function SignedInSessionsSection() {
       </ul>
       {local ? (
         <label>
-          <span>Install credential (required to sign out other sessions)</span>
+          <span>Your password, or the install credential (required to sign out other sessions)</span>
           <input type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.currentTarget.value)} />
         </label>
       ) : (

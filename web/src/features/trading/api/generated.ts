@@ -1964,6 +1964,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountResponse */
+        AccountResponse: core["schemas"]["AccountResponse"];
         /** AccountRiskHealth */
         AccountRiskHealth: {
             /** Account Id */
@@ -2122,6 +2124,11 @@ export interface components {
          * @description Backend-owned assistant tool metadata and actions.
          */
         AssistantToolSpec: core["schemas"]["AssistantToolSpec"];
+        /**
+         * AuthOptionsResponse
+         * @description How someone may sign in here; the sign-in page shows only these.
+         */
+        AuthOptionsResponse: core["schemas"]["AuthOptionsResponse"];
         /** AuthSessionListResponse */
         AuthSessionListResponse: core["schemas"]["AuthSessionListResponse"];
         /** AuthSessionResponse */
@@ -3322,6 +3329,8 @@ export interface components {
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** EmailChangeRequest */
+        EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -5166,6 +5175,8 @@ export interface components {
             /** Q90 */
             q90: number | string;
         };
+        /** GuestUpgradeRequest */
+        GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
         /** HermesDiagnosticsPaths */
@@ -5210,6 +5221,16 @@ export interface components {
              */
             observed_at: string;
         };
+        /** InviteCheckResponse */
+        InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
+        /** InviteListResponse */
+        InviteListResponse: core["schemas"]["InviteListResponse"];
+        /** InviteRequest */
+        InviteRequest: core["schemas"]["InviteRequest"];
+        /** InviteResponse */
+        InviteResponse: core["schemas"]["InviteResponse"];
+        /** InviteSummaryResponse */
+        InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
         /** IssuerIdentity */
         IssuerIdentity: {
             /**
@@ -7046,6 +7067,12 @@ export interface components {
             /** Strategy Id */
             strategy_id: string | null;
         };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: core["schemas"]["PasswordChangeResponse"];
+        /** PasswordLoginRequest */
+        PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
         /** PortfolioEPerformance */
@@ -8076,6 +8103,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RedirectUrlResponse */
+        RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /** RegisterRequest */
+        RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
         RenderedPrompt: core["schemas"]["RenderedPrompt"];
         /** ReplayAdvanceRequest */

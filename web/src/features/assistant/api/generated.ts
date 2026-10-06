@@ -2706,6 +2706,8 @@ export interface components {
             /** Required Commands */
             required_commands: string[][];
         };
+        /** AccountResponse */
+        AccountResponse: core["schemas"]["AccountResponse"];
         /** ActivateLive2DAvatarRequest */
         ActivateLive2DAvatarRequest: {
             /**
@@ -3897,6 +3899,11 @@ export interface components {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
+        /**
+         * AuthOptionsResponse
+         * @description How someone may sign in here; the sign-in page shows only these.
+         */
+        AuthOptionsResponse: core["schemas"]["AuthOptionsResponse"];
         /** AuthSessionListResponse */
         AuthSessionListResponse: core["schemas"]["AuthSessionListResponse"];
         /** AuthSessionResponse */
@@ -5906,6 +5913,8 @@ export interface components {
         };
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** EmailChangeRequest */
+        EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -6203,6 +6212,8 @@ export interface components {
         GatewayReadinessPayload: core["schemas"]["GatewayReadinessPayload"];
         /** GpuResidencyPolicy */
         GpuResidencyPolicy: core["schemas"]["GpuResidencyPolicy"];
+        /** GuestUpgradeRequest */
+        GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
         /** HermesAssistantToolExecutePayload */
@@ -6282,6 +6293,16 @@ export interface components {
             /** Validations */
             validations?: components["schemas"]["PlanValidationIntent"][];
         };
+        /** InviteCheckResponse */
+        InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
+        /** InviteListResponse */
+        InviteListResponse: core["schemas"]["InviteListResponse"];
+        /** InviteRequest */
+        InviteRequest: core["schemas"]["InviteRequest"];
+        /** InviteResponse */
+        InviteResponse: core["schemas"]["InviteResponse"];
+        /** InviteSummaryResponse */
+        InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -7688,6 +7709,12 @@ export interface components {
              */
             status: "open" | "resolved" | "abandoned" | "superseded";
         };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: core["schemas"]["PasswordChangeResponse"];
+        /** PasswordLoginRequest */
+        PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
         /** PlanImpactDisposition */
@@ -7939,6 +7966,8 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /** RedirectUrlResponse */
+        RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
         /** RefreshSessionMemoryRequest */
         RefreshSessionMemoryRequest: {
             /** Expected Snapshot Revision */
@@ -7949,6 +7978,8 @@ export interface components {
              */
             token_budget?: number;
         };
+        /** RegisterRequest */
+        RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
         RenderedPrompt: core["schemas"]["RenderedPrompt"];
         /** ReplayPrimitive */

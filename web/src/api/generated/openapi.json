@@ -67,6 +67,55 @@
         "title": "AcceptancePlan",
         "type": "object"
       },
+      "AccountResponse": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "google_linked": {
+            "title": "Google Linked",
+            "type": "boolean"
+          },
+          "has_password": {
+            "title": "Has Password",
+            "type": "boolean"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "standard",
+              "guest"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "kind",
+          "has_password",
+          "google_linked",
+          "is_owner",
+          "email"
+        ],
+        "title": "AccountResponse",
+        "type": "object"
+      },
       "AccountRiskHealth": {
         "additionalProperties": false,
         "properties": {
@@ -3639,6 +3688,50 @@
         "title": "AssistantToolsConfigPayload",
         "type": "object"
       },
+      "AuthOptionsResponse": {
+        "description": "How someone may sign in here; the sign-in page shows only these.",
+        "properties": {
+          "google": {
+            "default": false,
+            "title": "Google",
+            "type": "boolean"
+          },
+          "guests": {
+            "default": false,
+            "title": "Guests",
+            "type": "boolean"
+          },
+          "install_credential": {
+            "default": false,
+            "title": "Install Credential",
+            "type": "boolean"
+          },
+          "min_password_length": {
+            "default": 12,
+            "title": "Min Password Length",
+            "type": "integer"
+          },
+          "registration": {
+            "default": "closed",
+            "enum": [
+              "open",
+              "invite",
+              "closed"
+            ],
+            "title": "Registration",
+            "type": "string"
+          }
+        },
+        "required": [
+          "registration",
+          "guests",
+          "google",
+          "install_credential",
+          "min_password_length"
+        ],
+        "title": "AuthOptionsResponse",
+        "type": "object"
+      },
       "AuthSessionListResponse": {
         "properties": {
           "sessions": {
@@ -3657,6 +3750,16 @@
       },
       "AuthSessionResponse": {
         "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "auth_method": {
             "anyOf": [
               {
@@ -3684,6 +3787,9 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AuthOptionsResponse"
           },
           "roles": {
             "items": {
@@ -3722,7 +3828,9 @@
           "user_id",
           "workspace_id",
           "roles",
-          "auth_method"
+          "auth_method",
+          "options",
+          "account"
         ],
         "title": "AuthSessionResponse",
         "type": "object"
@@ -12661,6 +12769,33 @@
         "title": "DiagnosticsPayload",
         "type": "object"
       },
+      "EmailChangeRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EmailChangeRequest",
+        "type": "object"
+      },
       "EventReaderDiagnostics": {
         "description": "Live job events in this process (WP-5.4).",
         "properties": {
@@ -18360,6 +18495,45 @@
         "title": "GrossReturnDistribution",
         "type": "object"
       },
+      "GuestUpgradeRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "remember": {
+            "default": true,
+            "title": "Remember",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "GuestUpgradeRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -19740,6 +19914,114 @@
           "execution_authority"
         ],
         "title": "InterdayMonitorOperationsStatus",
+        "type": "object"
+      },
+      "InviteCheckResponse": {
+        "properties": {
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "usable"
+        ],
+        "title": "InviteCheckResponse",
+        "type": "object"
+      },
+      "InviteListResponse": {
+        "properties": {
+          "invites": {
+            "items": {
+              "$ref": "#/components/schemas/InviteSummaryResponse"
+            },
+            "title": "Invites",
+            "type": "array"
+          }
+        },
+        "required": [
+          "invites"
+        ],
+        "title": "InviteListResponse",
+        "type": "object"
+      },
+      "InviteRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "InviteRequest",
+        "type": "object"
+      },
+      "InviteResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invite": {
+            "title": "Invite",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invite",
+          "path",
+          "expires_at"
+        ],
+        "title": "InviteResponse",
+        "type": "object"
+      },
+      "InviteSummaryResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "expires_at",
+          "note"
+        ],
+        "title": "InviteSummaryResponse",
         "type": "object"
       },
       "IssuerIdentity": {
@@ -23147,6 +23429,11 @@
             "minLength": 1,
             "title": "Credential",
             "type": "string"
+          },
+          "remember": {
+            "default": false,
+            "title": "Remember",
+            "type": "boolean"
           }
         },
         "required": [
@@ -29838,6 +30125,73 @@
         "title": "PaperTradeJournalResponse",
         "type": "object"
       },
+      "PasswordChangeRequest": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "new_password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_password"
+        ],
+        "title": "PasswordChangeRequest",
+        "type": "object"
+      },
+      "PasswordChangeResponse": {
+        "properties": {
+          "signed_out_sessions": {
+            "title": "Signed Out Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "signed_out_sessions"
+        ],
+        "title": "PasswordChangeResponse",
+        "type": "object"
+      },
+      "PasswordLoginRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "remember": {
+            "default": true,
+            "title": "Remember",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "PasswordLoginRequest",
+        "type": "object"
+      },
       "PersistenceInventory": {
         "properties": {
           "diagnostics": {
@@ -33521,6 +33875,19 @@
         "title": "RecentAutomaticMemoryResponse",
         "type": "object"
       },
+      "RedirectUrlResponse": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "RedirectUrlResponse",
+        "type": "object"
+      },
       "RefreshSessionMemoryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -33545,6 +33912,57 @@
           }
         },
         "title": "RefreshSessionMemoryRequest",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "invite": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "remember": {
+            "default": true,
+            "title": "Remember",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest",
         "type": "object"
       },
       "RenderedPrompt": {
@@ -58082,6 +58500,387 @@
         ]
       }
     },
+    "/api/auth/email": {
+      "post": {
+        "operationId": "change_email_api_auth_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Email",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "operationId": "google_callback_api_auth_google_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/link": {
+      "post": {
+        "description": "Start connecting Google to the signed-in account; the browser then opens ``url``.",
+        "operationId": "google_link_api_auth_google_link_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "title": "Next",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectUrlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Link",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/login": {
+      "get": {
+        "operationId": "google_login_api_auth_google_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "title": "Next",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "invite",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Invite",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remember",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Remember",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/guest": {
+      "post": {
+        "operationId": "guest_api_auth_guest_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Guest",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/guest/upgrade": {
+      "post": {
+        "operationId": "upgrade_guest_api_auth_guest_upgrade_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestUpgradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upgrade Guest",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/invites": {
+      "get": {
+        "operationId": "list_invites_api_auth_invites_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Invites",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "A single-use link that lets one person register, for seven days.",
+        "operationId": "create_invite_api_auth_invites_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Invite",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/invites/check": {
+      "get": {
+        "operationId": "check_invite_api_auth_invites_check_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "invite",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Invite",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Invite",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/invites/{invite_id}/revoke": {
+      "post": {
+        "operationId": "revoke_invite_api_auth_invites__invite_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invite",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/local/callback": {
       "get": {
         "operationId": "local_callback_api_auth_local_callback_get",
@@ -58260,6 +59059,130 @@
           }
         },
         "summary": "Oidc Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/password": {
+      "post": {
+        "description": "Set or change the caller's password; their other sessions are signed out.",
+        "operationId": "change_password_api_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/password/login": {
+      "post": {
+        "operationId": "password_login_api_auth_password_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Password Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
         "tags": [
           "auth"
         ]

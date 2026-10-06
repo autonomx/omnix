@@ -3,6 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage, safeNextPath } from './LoginPage';
 
+const OPEN = { registration: 'open', guests: true, google: true, install_credential: true, min_password_length: 12 };
+const signedOut = (options: Record<string, unknown> = OPEN) =>
+  Response.json({ enforced: true, mode: 'local', authenticated: false, options });
+const signedIn = () => Response.json({ enforced: true, mode: 'local', authenticated: true });
+
 function renderLogin(search = '') {
   window.history.replaceState({}, '', `/login${search}`);
   return render(
@@ -16,6 +21,11 @@ function mockLocationAssign() {
   const assign = vi.fn();
   vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, assign });
   return assign;
+}
+
+function bodyOf(fetchMock: { mock: { calls: unknown[][] } }, path: string): unknown {
+  const call = fetchMock.mock.calls.find((args) => String(args[0]) === path);
+  return JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
 }
 
 describe('LoginPage', () => {
@@ -32,32 +42,116 @@ describe('LoginPage', () => {
     expect(safeNextPath(null)).toBe('/');
   });
 
-  it('signs in with the install credential and returns to the requested page', async () => {
+  it('signs in with email and password, staying signed in by default', async () => {
     const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
-      if (url === '/api/auth/session') return Response.json({ enforced: true, mode: 'local', authenticated: false });
-      if (url === '/api/auth/local/login') return Response.json({ enforced: true, mode: 'local', authenticated: true });
+      if (url === '/api/auth/session') return signedOut();
+      if (url === '/api/auth/password/login') return signedIn();
       throw new Error(`unexpected ${url}`);
     });
     renderLogin('?next=%2Ftrading');
     const assign = mockLocationAssign();
-    const input = await screen.findByLabelText(/install credential/i);
-    fireEvent.change(input, { target: { value: ' secret ' } });
+    fireEvent.change(await screen.findByLabelText(/email/i), { target: { value: ' ada@example.com ' } });
+    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: 'a long passphrase' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/trading'));
-    const loginCall = fetchMock.mock.calls.find(([url]) => url === '/api/auth/local/login');
-    expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({ credential: 'secret' });
+    expect(bodyOf(fetchMock, '/api/auth/password/login')).toEqual({
+      email: 'ada@example.com',
+      password: 'a long passphrase',
+      remember: true,
+    });
   });
 
-  it('reports a rejected credential', async () => {
+  it('reports a wrong password without saying which part was wrong', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
-      if (String(input) === '/api/auth/session') return Response.json({ enforced: true, mode: 'local', authenticated: false });
-      return new Response('{"detail":"invalid_credential"}', { status: 401 });
+      if (String(input) === '/api/auth/session') return signedOut();
+      return new Response('{"detail":"invalid_credentials"}', { status: 401 });
     });
     renderLogin();
-    fireEvent.change(await screen.findByLabelText(/install credential/i), { target: { value: 'wrong' } });
+    fireEvent.change(await screen.findByLabelText(/email/i), { target: { value: 'ada@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: 'wrong' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('not valid');
+    expect(await screen.findByRole('alert')).toHaveTextContent("don't match an account");
+  });
+
+  it('creates an account and explains a taken email', async () => {
+    const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return signedOut();
+      if (url === '/api/auth/register') return new Response('{"detail":"email_taken"}', { status: 409 });
+      throw new Error(`unexpected ${url}`);
+    });
+    renderLogin();
+    fireEvent.click(await screen.findByRole('button', { name: 'New account' }));
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Ada' } });
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'ada@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: 'a long passphrase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
+    expect(bodyOf(fetchMock, '/api/auth/register')).toMatchObject({ email: 'ada@example.com', display_name: 'Ada', invite: null });
+  });
+
+  it('opens on account creation for an invite and carries it to Google too', async () => {
+    const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return signedOut({ ...OPEN, registration: 'invite', guests: false });
+      if (url.startsWith('/api/auth/invites/check')) return Response.json({ usable: true });
+      if (url === '/api/auth/register') return signedIn();
+      throw new Error(`unexpected ${url}`);
+    });
+    renderLogin('?invite=abc123');
+    const assign = mockLocationAssign();
+    expect(await screen.findByText(/you were invited/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Continue with Google' })).toHaveAttribute(
+      'href',
+      '/api/auth/google/login?next=%2F&invite=abc123',
+    );
+    expect(screen.queryByRole('button', { name: 'Continue as guest' })).toBeNull();
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'sam@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: 'a long passphrase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
+    expect(bodyOf(fetchMock, '/api/auth/register')).toMatchObject({ invite: 'abc123' });
+  });
+
+  it('continues as a guest', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return signedOut();
+      if (url === '/api/auth/guest') return signedIn();
+      throw new Error(`unexpected ${url}`);
+    });
+    renderLogin('?next=%2Fchatbot');
+    const assign = mockLocationAssign();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue as guest' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/chatbot'));
+  });
+
+  it('hides sign-up, Google and guests when they are off', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      signedOut({ registration: 'closed', guests: false, google: false, install_credential: true, min_password_length: 12 }),
+    );
+    renderLogin();
+    expect(await screen.findByText(/doesn't take new accounts/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New account' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue as guest' })).toBeNull();
+  });
+
+  it('still signs the owner in with the install credential', async () => {
+    const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return signedOut();
+      if (url === '/api/auth/local/login') return signedIn();
+      throw new Error(`unexpected ${url}`);
+    });
+    renderLogin('?next=%2Ftrading');
+    const assign = mockLocationAssign();
+    fireEvent.click(await screen.findByRole('button', { name: 'Use the install credential' }));
+    fireEvent.change(screen.getByLabelText(/install credential/i), { target: { value: ' secret ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with the credential' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/trading'));
+    expect(bodyOf(fetchMock, '/api/auth/local/login')).toEqual({ credential: 'secret', remember: true });
   });
 
   it('offers single sign-on in OIDC mode', async () => {
@@ -68,8 +162,14 @@ describe('LoginPage', () => {
   });
 
   it('explains an expired launcher link', async () => {
-    vi.spyOn(window, 'fetch').mockResolvedValue(Response.json({ enforced: true, mode: 'local', authenticated: false }));
+    vi.spyOn(window, 'fetch').mockResolvedValue(signedOut());
     renderLogin('?error=login_link_expired');
     expect(await screen.findByRole('alert')).toHaveTextContent('expired');
+  });
+
+  it('explains a Google account whose email belongs to another account', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(signedOut());
+    renderLogin('?error=google_email_in_use');
+    expect(await screen.findByRole('alert')).toHaveTextContent('connect Google in Settings');
   });
 });
