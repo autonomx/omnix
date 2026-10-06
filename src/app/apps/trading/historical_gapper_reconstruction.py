@@ -44,7 +44,7 @@ class HistoricalUniverseReconstruction:
 def reconstructed_strategy_config(config: GapPullbackConfig) -> tuple[GapPullbackConfig, tuple[str, ...]]:
     """Return an explicit market-data-only variant for reconstructed sessions."""
 
-    updates: dict[str, object] = {}
+    updates: dict[str, Any] = {}
     warnings: list[str] = []
     if config.require_catalyst_evidence:
         updates["require_catalyst_evidence"] = False
@@ -143,7 +143,7 @@ def _alpaca_bars(
         page_token: str | None = None
         pages = 0
         while True:
-            params: dict[str, object] = {
+            params: dict[str, Any] = {
                 "symbols": ",".join(chunk),
                 "timeframe": timeframe,
                 "start": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from statistics import median
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,7 +37,7 @@ class DiscoveryDailyReport(BaseModel):
     median_mfe_pct: float | None = None
     median_mae_pct: float | None = None
     plus_2r_before_minus_1r_rate: float | None = None
-    top_candidates: tuple[dict[str, object], ...] = ()
+    top_candidates: tuple[dict[str, Any], ...] = ()
     notes: tuple[str, ...] = ()
 
 

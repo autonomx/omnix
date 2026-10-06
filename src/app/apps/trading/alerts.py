@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -75,7 +75,7 @@ class TradingAlertParameters(BaseModel):
     anchor_bars_ago: int = Field(default=0, ge=0, le=499)
     message: str = Field(default="", max_length=500)
     notification_channels: list[Literal["app", "toast", "sound"]] = Field(
-        default_factory=lambda: ["app", "toast"],
+        default_factory=lambda: list[Literal["app", "toast", "sound"]](["app", "toast"]),
         max_length=3,
     )
     trigger_policy: Literal["once", "once_per_bar", "every_time"] = "every_time"
@@ -201,7 +201,7 @@ class TradingAlertTrigger(BaseModel):
     observed_at: datetime
     evaluated_at: datetime
     idempotency_key: str
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class UnitOfWorkFactory(Protocol):
@@ -287,10 +287,10 @@ def _alert(row) -> TradingAlert:
         alert_id=str(row[0]),
         instrument_id=str(row[1]),
         binding_id=str(row[2]) if row[2] is not None else None,
-        condition_type=str(row[3]),
+        condition_type=cast(Any, str(row[3])),
         threshold=Decimal(row[4]),
-        parameters=dict(row[5] or {}),
-        evaluation_policy=dict(row[6] or {}),
+        parameters=cast(Any, dict(row[5] or {})),
+        evaluation_policy=cast(Any, dict(row[6] or {})),
         enabled=bool(row[7]),
         cooldown_seconds=int(row[8]),
         expires_at=row[9],
@@ -313,7 +313,7 @@ def _trigger(row) -> TradingAlertTrigger:
         observed_value=Decimal(row[5]),
         observed_price=Decimal(row[6]),
         threshold=Decimal(row[7]),
-        condition_type=str(row[8]),
+        condition_type=cast(Any, str(row[8])),
         observed_at=row[9],
         evaluated_at=row[10],
         idempotency_key=str(row[11]),

@@ -8,7 +8,7 @@ import copy
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,8 +18,8 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 FULL_SESSION_1M_LIMIT = 500
 
-TREND_CONTINUATION_SETUP_ID = "trend_continuation_v1"
-TREND_CONTINUATION_RULE_VERSION = "1.0.0-shadow"
+TREND_CONTINUATION_SETUP_ID: Final = "trend_continuation_v1"
+TREND_CONTINUATION_RULE_VERSION: Final = "1.0.0-shadow"
 TREND_MIN_1M_BARS = 20
 TREND_MIN_SESSION_RETURN_PCT = Decimal("5")
 TREND_MIN_VOLUME_RATIO = Decimal("1.25")
@@ -122,7 +122,7 @@ def evaluate_trend_continuation_shadow(
     current = regular[-1]
     observed_at = current.end_time
     observed_et = observed_at.astimezone(_ET).time()
-    base = {"observed_at": observed_at, "current_price": current.close}
+    base: dict[str, Any] = {"observed_at": observed_at, "current_price": current.close}
     if observed_et < entry_start_et:
         return TrendContinuationShadowEvaluation(
             state="waiting_session",
@@ -160,7 +160,7 @@ def evaluate_trend_continuation_shadow(
         if ema9 is not None and ema9 > 0
         else None
     )
-    common = {
+    common: dict[str, Any] = {
         **base,
         "session_vwap": vwap,
         "session_return_pct": session_return,
@@ -288,7 +288,7 @@ def _copy_response_with_bars(response: Any, bars: list[MarketBar]) -> Any:
             }
         )
     if hasattr(response, "model_copy"):
-        updates: dict[str, object] = {"bars": bars}
+        updates: dict[str, Any] = {"bars": bars}
         if updated_provenance is not None:
             updates["provenance"] = updated_provenance
         return response.model_copy(update=updates)

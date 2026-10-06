@@ -727,7 +727,7 @@ class TradingMarketDataService:
         instrument_id: str,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self.registry.quote(instrument_id, binding_id, cancellation)
 
     def execution_observation(
@@ -765,7 +765,7 @@ class TradingMarketDataService:
         base_currency: str,
         quote_currency: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self.registry.currency_rate(base_currency, quote_currency, cancellation)
 
     async def stream_updates(
@@ -820,7 +820,7 @@ class TradingMarketDataService:
             if bar.is_final and start <= bar.start_time < end
         ]
 
-    def provider_descriptors(self) -> list[dict[str, object]]:
+    def provider_descriptors(self) -> list[dict[str, Any]]:
         return self.registry.descriptors()
 
     def diagnostics(self) -> dict[str, Any]:
@@ -840,7 +840,7 @@ class TradingMarketDataService:
             "cache": {
                 "authority": False,
                 "disposable": True,
-                "directory": str(self.cache.cache_dir) if self.cache.cache_dir else None,
+                "directory": None,
                 "max_entries": self.cache.max_entries,
                 "disk_bounded": True,
                 "atomic_writes": True,

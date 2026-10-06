@@ -13,7 +13,7 @@ import json
 import math
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Any, Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -26,7 +26,7 @@ PREMARKET_EVIDENCE_SCHEMA_VERSION = "premarket-evidence-v1"
 FEATURE_SCHEMA_VERSION = "prospective-gap-features-v1"
 PREDICTOR_VERSION = "prospective-gap-v3"
 PRICE_CONTRACT_VERSION = "sip-analysis-prices-v1"
-OUTCOME_MEASUREMENTS_VERSION = "outcome-measurements-v1"
+OUTCOME_MEASUREMENTS_VERSION: Final = "outcome-measurements-v1"
 CLOSE_ABOVE_OPEN_LABEL_VERSION = "close_above_open_v1"
 PERSISTENT_UPTREND_LABEL_VERSION = "persistent_uptrend_v1"
 SESSION_REGIME_VERSION = "session_regime_v1"
@@ -107,7 +107,7 @@ class PremarketEvidenceItem(BaseModel):
     instrument_id: str | None = None
     source_type: str
     source_locator: str
-    values: dict[str, object] = Field(default_factory=dict)
+    values: dict[str, Any] = Field(default_factory=dict)
     timestamps: EvidenceTimestamps
     source_fingerprint: str | None = None
 
@@ -917,7 +917,7 @@ class ChallengerComparison(BaseModel):
     statistical_evidence_fingerprint: str
 
 
-def frozen_climatology_baseline(*, prior_valid_outcomes: Sequence[bool], frozen_at: datetime) -> dict[str, object]:
+def frozen_climatology_baseline(*, prior_valid_outcomes: Sequence[bool], frozen_at: datetime) -> dict[str, Any]:
     return {
         "version": CLIMATOLOGY_BASELINE_VERSION,
         "frozen_at": _utc(frozen_at).isoformat(),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -89,7 +89,7 @@ class StrategyRuntimeMonitorStatus(BaseModel):
     last_run_at: datetime | None = None
     last_error: str | None = None
     counters: dict[str, int] = Field(default_factory=dict)
-    details: dict[str, object] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class StrategyOperationsStatus(BaseModel):
@@ -166,7 +166,7 @@ def _monitor_status(
         for name in counter_names
     }
     raw_interval = getattr(monitor, interval_attribute, None)
-    details: dict[str, object] = {}
+    details: dict[str, Any] = {}
     diagnostics = getattr(monitor, "diagnostics", None)
     if callable(diagnostics):
         try:

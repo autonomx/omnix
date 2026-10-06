@@ -18,6 +18,7 @@ from .strategy_dynamic_discovery import (
 )
 from .strategy_repository import TradingStrategyRepository
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any
 
 _STATE_KEY = "_omnix_interday_dynamic_discovery_monitor"
 
@@ -70,7 +71,7 @@ class InterdayDynamicDiscoveryMonitor(ScheduledTradingMonitor):
 
     error_event = "interday_dynamic_discovery_error"
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {
             "strategy_id": INTERDAY_TRADING_STRATEGY_ID,
             "observed_at": datetime.now(timezone.utc),

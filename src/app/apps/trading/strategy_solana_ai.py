@@ -118,7 +118,7 @@ def _normalized_usage(
     )
 
 
-def _bar_payload(bar: Any) -> dict[str, object]:
+def _bar_payload(bar: Any) -> dict[str, Any]:
     return {
         "end_time": bar.end_time.isoformat(),
         "open": str(bar.open),
@@ -133,9 +133,9 @@ def solana_ai_snapshot(
     bars: list[Any],
     *,
     observed_at: datetime,
-    quote: dict[str, object] | None = None,
+    quote: dict[str, Any] | None = None,
     previous_decision: SolanaAIDecision | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Build the model input without calculating a deterministic signal."""
 
     recent = bars[-60:]
@@ -176,7 +176,7 @@ class SolanaAIAnalyzer:
         *,
         bars: list[Any],
         observed_at: datetime,
-        quote: dict[str, object] | None = None,
+        quote: dict[str, Any] | None = None,
         previous_decision: SolanaAIDecision | None = None,
     ) -> SolanaAIResult:
         provider = self.provider_factory()
@@ -212,7 +212,7 @@ class SolanaAIAnalyzer:
         input_characters = sum(len(message.content) for message in messages)
         model = getattr(getattr(provider, "config", None), "model", None) or None
         provider_name = str(getattr(provider, "provider_name", "") or type(provider).__name__)
-        response_format: dict[str, object]
+        response_format: dict[str, Any]
         if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
             schema = project_provider_schema(
                 SolanaAIBatchResponse.model_json_schema(),

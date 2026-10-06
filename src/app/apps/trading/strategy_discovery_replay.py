@@ -8,7 +8,7 @@ observable population for the session.
 """
 
 from datetime import date, datetime, timezone
-from typing import Sequence
+from typing import Any, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -29,7 +29,7 @@ class DiscoveryReplayObservation(BaseModel):
     source: str
     source_locator: str | None = None
     market: MarketAnomalyFeatures | None = None
-    catalyst_payload: dict[str, object] | None = None
+    catalyst_payload: dict[str, Any] | None = None
     catalyst_known: bool = False
 
     @field_validator("observed_at")

@@ -12,7 +12,7 @@ import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -79,7 +79,7 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _float(value: object, default: float = 0.0) -> float:
+def _float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
     try:
@@ -135,7 +135,7 @@ class DiscoveryEvent(BaseModel):
     attention_score: float = Field(default=0.0, ge=0.0, le=100.0)
     catalyst_score: float = Field(default=0.0, ge=0.0, le=100.0)
     unexplained_attention: bool = False
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     shadow_only: bool = True
     execution_authority: bool = False
 
@@ -213,7 +213,7 @@ class OpportunityCharacterization(BaseModel):
     execution_quality: float = Field(default=50.0, ge=0.0, le=100.0)
     market_context_confirmation: float = Field(default=50.0, ge=0.0, le=100.0)
     relationship_exposure: float = Field(default=0.0, ge=0.0, le=100.0)
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("observed_at")
     @classmethod
@@ -262,8 +262,8 @@ class DynamicCandidate(BaseModel):
     catalyst_raw_score: float = Field(default=0.0, ge=0.0, le=100.0)
     catalyst_last_seen_at: datetime | None = None
     catalyst_expected_attention_duration: str | None = None
-    catalyst_snapshot: dict[str, object] | None = None
-    latest_candidate_payload: dict[str, object] | None = None
+    catalyst_snapshot: dict[str, Any] | None = None
+    latest_candidate_payload: dict[str, Any] | None = None
     below_retention_since: datetime | None = None
     experiment_states: dict[str, ExperimentCandidateState] = Field(default_factory=dict)
     selected_for_strategies: tuple[str, ...] = ()
@@ -308,7 +308,7 @@ class AttributionEvent(BaseModel):
     sub_strategy: str | None = None
     passed: bool = True
     reason: str | None = None
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("observed_at")
     @classmethod
@@ -393,7 +393,7 @@ class DiscoveryScanResult(BaseModel):
     candidates: tuple[DynamicCandidate, ...]
     events: tuple[DiscoveryEvent, ...]
     violations: tuple[DiscoveryScanViolation, ...] = ()
-    latest_observations: dict[str, dict[str, object]] = Field(default_factory=dict)
+    latest_observations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     experiment_cohorts: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 
@@ -612,7 +612,7 @@ def merge_discovery_event(
 def apply_discovery_scan(
     *,
     previous_state: Mapping[str, DynamicCandidate],
-    observations: Sequence[object],
+    observations: Sequence[Any],
     watermark: datetime,
     session_date: date,
     config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
@@ -770,7 +770,7 @@ def build_attribution_event(
     sub_strategy: str | None = None,
     passed: bool = True,
     reason: str | None = None,
-    payload: dict[str, object] | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> AttributionEvent:
     same = [row for row in prior_events if row.instrument_id == instrument_id and row.sub_strategy == sub_strategy and row.passed]
     if passed and same:
@@ -844,7 +844,7 @@ def trend_durability_from_prices(
     )
 
 
-def evaluate_shadow_qualification(metrics: Mapping[str, object]) -> ShadowQualificationEvidence:
+def evaluate_shadow_qualification(metrics: Mapping[str, Any]) -> ShadowQualificationEvidence:
     from .strategy_dynamic_discovery_quality import _qualification_refined
 
     return _qualification_refined(metrics)

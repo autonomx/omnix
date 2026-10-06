@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -319,13 +319,20 @@ def evaluate_stoch_rsi_5m(
                         pre_gap.entry_time,
                         pre_gap.entry_price,
                     )
-                    if all(value is not None for value in position_values):
+                    arm_time, cross_time, signal_time, entry_time, entry_price = position_values
+                    if (
+                        arm_time is not None
+                        and cross_time is not None
+                        and signal_time is not None
+                        and entry_time is not None
+                        and entry_price is not None
+                    ):
                         carried_position = _CarriedPosition(
-                            oversold_arm_time=pre_gap.oversold_arm_time,
-                            momentum_cross_time=pre_gap.momentum_cross_time,
-                            entry_signal_time=pre_gap.entry_signal_time,
-                            entry_time=pre_gap.entry_time,
-                            entry_price=pre_gap.entry_price,
+                            oversold_arm_time=arm_time,
+                            momentum_cross_time=cross_time,
+                            entry_signal_time=signal_time,
+                            entry_time=entry_time,
+                            entry_price=entry_price,
                             trades=pre_gap.trades,
                         )
                     else:
@@ -417,7 +424,7 @@ def evaluate_stoch_rsi_5m(
     last_d = d_values[-1] if d_values else None
     previous_k = k_values[-2] if len(k_values) > 1 else None
     previous_d = d_values[-2] if len(d_values) > 1 else None
-    common = {
+    common: dict[str, Any] = {
         "session_date": session_date.isoformat(),
         "as_of": last.end_time,
         "five_minute_bar_count": len(sampled),
@@ -500,15 +507,15 @@ def evaluate_stoch_rsi_5m(
     def crossed_down(index: int) -> bool:
         return (
             stochastic_crossed_down(index)
-            and k_values[index] is not None
-            and k_values[index] > active.overbought_threshold
+            and (k_value := k_values[index]) is not None
+            and k_value > active.overbought_threshold
         )
 
     def crossed_down_below_midline(index: int) -> bool:
         return (
             stochastic_crossed_down(index)
-            and k_values[index] is not None
-            and k_values[index] < _STOCH_RSI_MIDLINE_EXIT_THRESHOLD
+            and (k_value := k_values[index]) is not None
+            and k_value < _STOCH_RSI_MIDLINE_EXIT_THRESHOLD
         )
 
     def _entry_search(start_index: int) -> _EntrySearch:
@@ -531,8 +538,8 @@ def evaluate_stoch_rsi_5m(
             if current_k < active.oversold_threshold and active_momentum_cross_index is None:
                 if (
                     active_arm_index is None
-                    or k_values[active_arm_index] is None
-                    or current_k <= k_values[active_arm_index]
+                    or (arm_k := k_values[active_arm_index]) is None
+                    or current_k <= arm_k
                 ):
                     active_arm_index = index
                     latest_arm_index = index
@@ -927,7 +934,7 @@ def evaluate_stoch_rsi_5m(
             (
                 index
                 for index, bar in enumerate(sampled)
-                if bar.start_time >= gap[1]
+                if bar.start_time >= cast(datetime, gap[1])
             ),
             len(sampled),
         )
@@ -969,10 +976,13 @@ def evaluate_stoch_rsi_5m(
             return _snapshot_for_entry_wait(entry, completed)
 
         assert entry.entry_index is not None
+        assert entry.entry_signal_index is not None
+        assert entry.entry_arm_index is not None
+        assert entry.entry_momentum_cross_index is not None
         exit = _exit_search(entry.entry_index)
         entry_bar = sampled[entry.entry_index]
         entry_signal_bar = sampled[entry.entry_signal_index]
-        entry_evidence = {
+        entry_evidence: dict[str, Any] = {
             "oversold_arm_time": sampled[entry.entry_arm_index].end_time,
             "momentum_cross_time": sampled[entry.entry_momentum_cross_index].end_time,
         }

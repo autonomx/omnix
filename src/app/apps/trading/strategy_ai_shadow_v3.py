@@ -15,7 +15,7 @@ import json
 import time as monotonic_time
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -122,7 +122,7 @@ class V3FeatureSnapshot(BaseModel):
 
     instrument_id: str
     observed_at: datetime
-    market: dict[str, object]
+    market: dict[str, Any]
     certificates: tuple[CoverageCertificate, ...]
     alpha_input_ready: bool
     alpha_input_reason_codes: tuple[str, ...] = ()
@@ -280,7 +280,7 @@ class AIShadowV3Analyzer:
         provider_name, model = _provider_identity(provider, None)
         return str(provider_name), model
 
-    def assess(self, rows: list[dict[str, object]]) -> AIShadowV3AnalysisResult:
+    def assess(self, rows: list[dict[str, Any]]) -> AIShadowV3AnalysisResult:
         if not rows:
             return AIShadowV3AnalysisResult(
                 provider="none",
@@ -317,7 +317,7 @@ class AIShadowV3Analyzer:
                 ),
             ),
         ]
-        response_format: dict[str, object]
+        response_format: dict[str, Any]
         if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
             schema = project_provider_schema(
                 AIShadowV3BatchResponse.model_json_schema(),
@@ -473,7 +473,7 @@ def build_authoritative_runner_geometry(
 
 
 def _champion_geometry(
-    decision: dict[str, object],
+    decision: dict[str, Any],
     *,
     entry_reference: Decimal,
     estimated_cost_bps: Decimal,
@@ -502,7 +502,7 @@ def _champion_geometry(
 def compare_runner_geometry_challenger(
     *,
     instrument_id: str,
-    v2_decision: dict[str, object],
+    v2_decision: dict[str, Any],
     bars: list[MarketBar],
     feature_snapshot: V3FeatureSnapshot,
     estimated_cost_bps: Decimal,

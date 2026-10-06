@@ -14,7 +14,7 @@ import hashlib
 import time as monotonic_time
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable, cast
 
 from app.runtime.features import FeatureContext
 
@@ -242,7 +242,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         identity: tuple[object, ...],
     ) -> bool:
         idem = _key(
@@ -325,7 +325,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             knowledge_mode=recovered.report.knowledge_mode,
             knowledge_cutoff=recovered.report.knowledge_cutoff,
             bars=tuple(recovered.bars),
-            status=status,
+            status=cast(Any, status),
             unresolved_starts=tuple(unresolved),
             confirmed_nontrading_starts=recovered.report.confirmed_nontrading_starts,
             attempts=attempts,
@@ -491,7 +491,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         final_status = "FILLED" if simulation.should_fill else "REJECTED"
         final = transition_trigger_plan(
             current,
-            status=final_status,
+            status=cast(Any, final_status),
             reason=simulation.fill_reason,
             observed_at=selection.first_post_decision_quote_at,
         )
@@ -532,7 +532,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         *,
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
-        rows_by_id: dict[str, dict[str, object]],
+        rows_by_id: dict[str, dict[str, Any]],
         events: list[StrategyEvent],
     ) -> None:
         existing_sources = {
@@ -728,8 +728,8 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             limit=50_000,
         )
 
-        rows: list[dict[str, object]] = []
-        rows_by_id: dict[str, dict[str, object]] = {}
+        rows: list[dict[str, Any]] = []
+        rows_by_id: dict[str, dict[str, Any]] = {}
         for candidate in universe.candidates:
             recovered = await asyncio.to_thread(
                 self._recover_candidate,
@@ -759,9 +759,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         for plan in active_plans:
             if plan.arm_id != AI_SHADOW_V3_POLICY_VERSION:
                 continue
-            row = rows_by_id.get(plan.instrument_id)
-            if row is None:
+            found_row = rows_by_id.get(plan.instrument_id)
+            if found_row is None:
                 continue
+            row = found_row
             await self._service_trigger(
                 plan=plan,
                 candidate=row["candidate"],
@@ -790,8 +791,8 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             if prior is None or event.observed_at > prior:
                 latest_decision_at[event.instrument_id] = event.observed_at
 
-        prepared: list[dict[str, object]] = []
-        prepared_rows: dict[str, dict[str, object]] = {}
+        prepared: list[dict[str, Any]] = []
+        prepared_rows: dict[str, dict[str, Any]] = {}
         for row in rows:
             candidate = row["candidate"]
             feature = row["feature"]
@@ -873,9 +874,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         emitted_events: list[StrategyEvent] = []
         decision_completed_at = self.now_factory()
         for decision in result.decisions:
-            row = prepared_rows.get(decision.instrument_id)
-            if row is None:
+            found_row = prepared_rows.get(decision.instrument_id)
+            if found_row is None:
                 continue
+            row = found_row
             feature = row["feature"]
             recovered = row["recovered"]
             candidate = row["candidate"]
@@ -1060,7 +1062,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return total
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": ai_shadow_v3_monitor_enabled(),
             "running": self.scheduled,

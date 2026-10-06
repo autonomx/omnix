@@ -13,7 +13,7 @@ from app.config.env import env_str as _env_str
 import asyncio
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.features import FeatureContext
 
@@ -205,8 +205,8 @@ def _decimal(value: object) -> Decimal | None:
 def _prospective_experiment_outcomes(
     events: list[StrategyEvent],
     trades,
-) -> list[dict[str, object]]:
-    records: list[dict[str, object]] = []
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     for event in events:
         payload = event.payload if isinstance(event.payload, dict) else {}
         if event.event_type == "ai_v3_geometry_challenger":
@@ -318,10 +318,10 @@ def _mean_decimal(values: list[Decimal]) -> str | None:
 
 
 def _summarize_experiment_outcomes(
-    records: list[dict[str, object]],
-) -> dict[str, object]:
-    agreement: dict[str, list[dict[str, object]]] = {}
-    geometry: dict[str, list[dict[str, object]]] = {}
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    agreement: dict[str, list[dict[str, Any]]] = {}
+    geometry: dict[str, list[dict[str, Any]]] = {}
     for record in records:
         if record.get("experiment") == "ai_v1_v2_agreement":
             agreement.setdefault(str(record.get("cohort")), []).append(record)
@@ -388,7 +388,7 @@ def _serializable_outcome(
     measurements,
     labels,
     coverage_certificate,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "analysis_prices": prices.model_dump(mode="json"),
         "measurements": measurements.model_dump(mode="json"),
@@ -512,7 +512,7 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         instrument_id: str,
         session_date: date,
         events: list[StrategyEvent],
-    ) -> tuple[dict[str, object], tuple[object, ...]]:
+    ) -> tuple[dict[str, Any], tuple[object, ...]]:
         trades = await asyncio.to_thread(
             provider.regular_session_trade_events,
             instrument_id,
@@ -647,8 +647,8 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                 ).append(event)
 
             provider = self.sip_provider_factory()
-            outcomes: dict[str, object] = {}
-            evidence = []
+            outcomes: dict[str, Any] = {}
+            evidence: list[Any] = []
             errors: dict[str, str] = {}
             for candidate in universe.candidates:
                 try:
@@ -677,7 +677,7 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                 )
                 if isinstance(record, dict)
             ]
-            payload: dict[str, object] = {
+            payload: dict[str, Any] = {
                 "authority": {
                     "prices": "consolidated_sip_trade_events",
                     "bars": "single_provider_raw_finalized_sip_5m",
@@ -816,7 +816,7 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return len(pending)
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": session_reconciliation_monitor_enabled(),
             "running": self.scheduled,

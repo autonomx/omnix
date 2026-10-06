@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
@@ -47,7 +47,7 @@ class BacktestRunRequest(BaseModel):
 
 
 class BacktestListResponse(BaseModel):
-    runs: list[dict[str, object]]
+    runs: list[dict[str, Any]]
 
 
 RepositoryFactory = Callable[[], TradingReplayRepository]

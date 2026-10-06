@@ -79,6 +79,11 @@ warn_redundant_casts = true
 check_untyped_defs = true
 ignore_missing_imports = true
 
+# Our own modules must resolve: a mistyped internal import is an error, not Any.
+[[tool.mypy.overrides]]
+module = ["app.*"]
+ignore_missing_imports = false
+
 # Packages not yet type-checked; remove a package once mypy passes on it.
 [[tool.mypy.overrides]]
 module = [
@@ -92,7 +97,6 @@ module = [
   "app.platform.research", "app.platform.research.*",
   "app.apps.rpg", "app.apps.rpg.*",
   "app.settings", "app.settings.*",
-  "app.apps.trading", "app.apps.trading.*",
 ]
 ignore_errors = true
 

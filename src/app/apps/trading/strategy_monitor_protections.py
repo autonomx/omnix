@@ -8,7 +8,6 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 from .binding_authority import require_execution_binding
 from .paper import PaperOrderRequest, paper_protection_trigger
-from .paper_repository import TradingPaperRepository
 from .service import TradingMarketDataService
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
@@ -30,13 +29,17 @@ from .strategy_v2_management import (
     v2_management_levels,
 )
 from .trade_logging import trade_log
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from .order_gateway import StrategyPaperAccess
 
 
 async def reconcile_protections(
     monitor: TradingStrategyMonitor,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
-    paper_repository: TradingPaperRepository,
+    paper_repository: StrategyPaperAccess,
     market_service: TradingMarketDataService,
 ) -> None:
     protections = await asyncio.to_thread(
@@ -67,7 +70,7 @@ async def reconcile_protections(
             if entry_order is not None and entry_order.status == "filled":
                 position = positions.get(protection.instrument_id)
                 if position is not None and position.quantity > 0:
-                    activated_at = entry_order.updated_at or entry_order.created_at or datetime.now(timezone.utc)
+                    activated_at: datetime | None = entry_order.updated_at or entry_order.created_at or datetime.now(timezone.utc)
                     fill_price = entry_order.average_fill_price
                     if protection.initial_stop_price is None:
                         protection.initial_stop_price = protection.stop_price
@@ -123,7 +126,7 @@ async def reconcile_protections(
                             event_type="protection",
                             state="active",
                             reason_code="V2_PROTECTION_ANCHORED_TO_FILL",
-                            observed_at=activated_at,
+                            observed_at=cast(datetime, activated_at),
                             payload={
                                 "entry_fill_price": str(entry_order.average_fill_price),
                                 "initial_stop": str(saved.stop_price),

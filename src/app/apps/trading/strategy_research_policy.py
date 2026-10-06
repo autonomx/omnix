@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .research.fact_repository import TradingFactRepository, default_fact_repository
 from .research.policy import ResearchPolicyDecision, evaluate_research_policy
+from typing import Any
 
 
 class ResearchQualityDecision(BaseModel):
@@ -47,7 +48,7 @@ def apply_research_policy_to_quality(
     base = max(0, min(10, int(base_quality_score)))
     minimum = max(0, min(10, int(minimum_quality_score)))
     proposed = int(decision.score_adjustment) if decision.authoritative else 0
-    visibility = {"proposed_score_adjustment": proposed, "score_adjustment_enabled": score_adjustment_enabled}
+    visibility: dict[str, Any] = {"proposed_score_adjustment": proposed, "score_adjustment_enabled": score_adjustment_enabled}
 
     if not decision.authoritative:
         return ResearchQualityDecision(

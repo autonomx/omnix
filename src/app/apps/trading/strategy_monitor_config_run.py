@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
-from .order_gateway import strategy_paper_access
+from .order_gateway import StrategyPaperAccess, strategy_paper_access
 from .paper import PaperOrderRequest
 from .paper_repository import TradingPaperRepository
 from .service import TradingMarketDataService
@@ -42,11 +42,11 @@ async def run_config(
     monitor: TradingStrategyMonitor,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
-    paper_repository: TradingPaperRepository,
+    raw_paper_repository: TradingPaperRepository,
     market_service: TradingMarketDataService,
 ) -> None:
-    paper_repository = strategy_paper_access(
-        paper_repository,
+    paper_repository: StrategyPaperAccess = strategy_paper_access(
+        raw_paper_repository,
         monitor=monitor,
         config=config,
         strategy_repository=strategy_repository,

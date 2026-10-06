@@ -171,7 +171,7 @@ def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
-def _event_payload_readiness(readiness) -> dict[str, object]:
+def _event_payload_readiness(readiness) -> dict[str, Any]:
     return readiness.model_dump(mode="json")
 
 
@@ -207,7 +207,7 @@ class StrategyEntryAuthorizer:
             20_000,
         )
 
-    def _persist_authorization(self, assessment, *, observed_at: datetime, payload: dict[str, object]) -> None:
+    def _persist_authorization(self, assessment, *, observed_at: datetime, payload: dict[str, Any]) -> None:
         from .strategy_repository import StrategyEvent
 
         idem = _key(
@@ -288,7 +288,7 @@ class StrategyEntryAuthorizer:
         morning_eligible = False
         morning_reasons: tuple[str, ...] = ("CANDIDATE_MISSING",)
         session_complete = False
-        session_payload: dict[str, object] | None = None
+        session_payload: dict[str, Any] | None = None
         coverage = None
         if universe is not None and candidate is not None:
             source_valid = source_member_valid(universe, candidate)
@@ -392,7 +392,7 @@ class StrategyEntryAuthorizer:
         kill_switch_clear = not self._config.risk.kill_switch
 
         qualification_authorized = True
-        qualification_payload: dict[str, object] | None = None
+        qualification_payload: dict[str, Any] | None = None
         if self._config.config.strategy_version == "2.0.0":
             qualification_events = self._monitor_module._v2_qualification_events(
                 self._strategy_repository,

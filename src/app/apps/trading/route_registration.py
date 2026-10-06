@@ -1,11 +1,10 @@
 """Trading router composition and scheduler-owned monitor tasks."""
 from __future__ import annotations
 
-from collections.abc import Callable
 
 from fastapi import APIRouter
 
-from app.runtime.features import FeatureContext
+from app.runtime.features import FeatureContext, ScheduledTaskFactory
 from app.runtime.scheduler import ScheduledTaskSpec
 
 
@@ -64,7 +63,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     return router
 
 
-def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], ScheduledTaskSpec | None], ...]:
+def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
     """Each monitor is a task on the shared scheduler (WP-8.3); enablement stays with its module."""
     from app.apps.trading.alerts_monitor import create_trading_alert_monitor_task
     from app.apps.trading.execution_observation_monitor import create_trading_execution_observation_monitor_task

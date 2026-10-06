@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
@@ -47,7 +47,7 @@ def _run(row) -> TradingScannerRun:
     return TradingScannerRun(
         run_id=str(row[0]),
         scanner_id=str(row[1]),
-        status=str(row[2]),
+        status=cast(Any, str(row[2])),
         cancellation_requested=bool(row[3]),
         universe_count=int(row[4]),
         completed_count=int(row[5]),

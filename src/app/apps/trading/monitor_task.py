@@ -56,7 +56,7 @@ class ScheduledTradingMonitor:
         self._wake_requested = False
         self._last_cycle_at = now
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {"execution_authority": False}
 
     def record_cycle_error(self, exc: Exception) -> None:
@@ -88,8 +88,8 @@ class SingleFlightTasks:
         return True
 
     def _finished(self, task: asyncio.Task[Any]) -> None:
-        if not task.cancelled() and task.exception() is not None:
-            self.on_error(task.exception())
+        if not task.cancelled() and (error := task.exception()) is not None:
+            self.on_error(error)
 
     async def close(self) -> None:
         running = [task for task in self._tasks.values() if not task.done()]
@@ -124,8 +124,9 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
         monitor.begin_cycle(now)
         return True
 
+    run: Callable[[TaskContext], Any]
     if inspect.iscoroutinefunction(run_once):
-        async def run(_task_context: TaskContext) -> None:
+        async def run_async(_task_context: TaskContext) -> None:
             if not due():
                 return
             try:
@@ -134,9 +135,10 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
                 monitor.record_cycle_error(exc)
                 raise
 
+        run = run_async
         executor = "async"
     else:
-        def run(_task_context: TaskContext) -> None:
+        def run_sync(_task_context: TaskContext) -> None:
             if not due():
                 return
             try:
@@ -147,6 +149,7 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
             if inspect.isawaitable(result):
                 raise TypeError(f"Synchronous trading monitor {task.name} returned an awaitable")
 
+        run = run_sync
         executor = "thread"
 
     startup = task.startup

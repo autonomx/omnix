@@ -3,7 +3,7 @@ from app.config.env import env_str as _env_str
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from httpx import HTTPError
 
@@ -92,7 +92,7 @@ class SecIssuerIdentityResolver:
             source="sec_company_tickers",
             source_available_at=captured,
             captured_at=captured,
-            confidence=confidence,
+            confidence=cast(Any, confidence),
             immutable_fingerprint=fp,
         )
 
@@ -121,6 +121,6 @@ def fallback_issuer_identity(instrument_id: str) -> IssuerIdentity:
         source="instrument_id_fallback",
         source_available_at=None,
         captured_at=captured,
-        confidence="0",
+        confidence=cast(Any, "0"),
         immutable_fingerprint=fingerprint(payload),
     )

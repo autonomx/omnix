@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -85,7 +85,7 @@ class TradingScannerRun(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error_message: str | None = None
-    definition_snapshot: dict[str, object]
+    definition_snapshot: dict[str, Any]
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

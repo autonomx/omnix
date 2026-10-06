@@ -154,7 +154,7 @@ def trading_model_call(
         deadline_seconds=request_timeout_seconds + 5.0,
     )
     try:
-        value = StructuredOutputGateway(analyzer_request).generate(
+        value = StructuredOutputGateway[T](analyzer_request).generate(
             messages, contract=contract, model=model, retry_budget=budget,
         )
     except (StructuredOutputExhausted, StructuredOutputError) as exc:

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 """Point-in-time premarket liquidity evidence for prospective Finviz cohorts."""
 
 from collections import defaultdict
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -111,10 +111,10 @@ def alpaca_premarket_liquidity_evidence(
     ).get(symbol.upper(), [])
 
     cutoff_clock = _latest_completed_start_clock(evaluation_et)
-    volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
-    dollar_volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
-    bar_count_by_date: dict[object, int] = defaultdict(int)
-    nonzero_count_by_date: dict[object, int] = defaultdict(int)
+    volume_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    dollar_volume_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    bar_count_by_date: dict[date, int] = defaultdict(int)
+    nonzero_count_by_date: dict[date, int] = defaultdict(int)
 
     for item in raw:
         observed = _timestamp(item.get("t"))

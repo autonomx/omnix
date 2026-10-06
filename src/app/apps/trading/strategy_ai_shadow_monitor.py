@@ -22,7 +22,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from app.runtime.features import FeatureContext
 
@@ -214,7 +214,7 @@ def _eligible(config: TradingStrategyConfigDocument) -> bool:
     )
 
 
-def _execution_payload(observation: Any) -> dict[str, object]:
+def _execution_payload(observation: Any) -> dict[str, Any]:
     payload = {field: getattr(observation, field, None) for field in _EXECUTION_FIELDS}
     spread = getattr(observation, "spread_bps", None)
     payload["spread_bps"] = spread
@@ -503,7 +503,7 @@ def _max_drawdown(values: list[Decimal]) -> Decimal | None:
     return worst
 
 
-def _batch_request_members(rows: list[dict[str, object]]) -> list[dict[str, str]]:
+def _batch_request_members(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     members: list[dict[str, str]] = []
     for row in rows:
         candidate = row["candidate"]
@@ -608,7 +608,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         identity: tuple[object, ...],
     ) -> bool:
         if event_type in {"ai_shadow_input_gap", "ai_shadow_data_gap"}:
@@ -684,7 +684,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         *,
         policy: AIShadowPolicy,
         decision: AIShadowDecision,
-        row: dict[str, object],
+        row: dict[str, Any],
         candidate,
         bars: list[MarketBar],
         config: TradingStrategyConfigDocument,
@@ -695,7 +695,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         batch_result,
         trigger_reasons: tuple[str, ...],
         record_decision: bool = True,
-        execution_override: dict[str, object] | None = None,
+        execution_override: dict[str, Any] | None = None,
         decision_completed_at: datetime | None = None,
         reference_price_override: Decimal | None = None,
     ) -> None:
@@ -767,7 +767,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             if batch_result is not None
             else 0
         )
-        decision_payload: dict[str, object] = {
+        decision_payload: dict[str, Any] = {
             "policy_version": AI_SHADOW_POLICY_VERSION,
             "policy": policy,
             "universe_id": row["universe_id"],
@@ -886,7 +886,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if side is None or units <= 0:
             return
 
-        execution: dict[str, object]
+        execution: dict[str, Any]
         pending_entry = _pending_entry_intent(
             events,
             policy=policy,
@@ -1012,8 +1012,8 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                         state="rejected",
                         reason_code="AI_SHADOW_ENTRY_EXECUTION_VETO",
                         observed_at=(
-                            execution.get("source_time")
-                            if isinstance(execution.get("source_time"), datetime)
+                            source_time
+                            if isinstance(source_time := execution.get("source_time"), datetime)
                             else completed_at
                         ),
                         payload={
@@ -1276,11 +1276,11 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
-    ) -> list[dict[str, object]]:
-        prepared: list[dict[str, object]] = []
+    ) -> list[dict[str, Any]]:
+        prepared: list[dict[str, Any]] = []
         for row in rows:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
@@ -1336,7 +1336,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
     ) -> bool:
@@ -1416,12 +1416,12 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
-    ) -> list[dict[str, object]]:
-        valid_rows: list[dict[str, object]] = []
+    ) -> list[dict[str, Any]]:
+        valid_rows: list[dict[str, Any]] = []
         for row in rows:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
@@ -1515,11 +1515,11 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         if rows and all(
             not isinstance(row.get("candidate"), GapperCandidate)
             for row in rows
@@ -1550,7 +1550,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
@@ -1566,7 +1566,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if not rows:
             return
 
-        due: list[dict[str, object]] = []
+        due: list[dict[str, Any]] = []
         reasons_by_id: dict[str, tuple[str, ...]] = {}
         for row in rows:
             candidate = row["candidate"]
@@ -1870,9 +1870,10 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if decision_completed_at.tzinfo is None:
             raise ValueError("ai shadow decision completion must be timezone-aware")
         for decision in batch.decisions:
-            row = by_id.get(decision.instrument_id)
-            if row is None:
+            due_row = by_id.get(decision.instrument_id)
+            if due_row is None:
                 continue
+            row = due_row
             await self._apply_decision(
                 policy=policy,
                 decision=decision,
@@ -1892,7 +1893,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
     async def _force_flat_open_positions(
         self,
         *,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
@@ -2256,7 +2257,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             if drag is not None:
                 stoch_drag.append(drag)
 
-        def ai_arm(policy: AIShadowPolicy) -> dict[str, object]:
+        def ai_arm(policy: AIShadowPolicy) -> dict[str, Any]:
             all_trades = sorted(
                 [
                     event
@@ -2469,17 +2470,17 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         *,
         now: datetime,
     ) -> None:
-        market_service = _CurrentSessionMarketDataProxy(
+        market_service = cast(TradingMarketDataService, _CurrentSessionMarketDataProxy(
             market_service,
             session_date=now.astimezone(_ET).date(),
             observed_at=now,
-        )
-        market_service = _FullSessionMarketServiceProxy(
+        ))
+        market_service = cast(TradingMarketDataService, _FullSessionMarketServiceProxy(
             market_service,
             session_date=now.astimezone(_ET).date(),
             observed_at=now,
             allow_shadow_fallback=True,
-        )
+        ))
         universe = await asyncio.to_thread(
             resolve_v2_shadow_archive,
             config,
@@ -2495,7 +2496,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             now=now,
         )
 
-        rows: list[dict[str, object]] = []
+        rows: list[dict[str, Any]] = []
         for rank, candidate in enumerate(universe.candidates, start=1):
             try:
                 response = await asyncio.to_thread(
@@ -2628,15 +2629,16 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     policy=policy,
                 )
 
-        policy_batches: dict[AIShadowPolicy, list[dict[str, object]]] = {
+        policy_batches: dict[AIShadowPolicy, list[dict[str, Any]]] = {
             "minute": [],
             "event": [],
         }
-        for policy in ("minute", "event"):
+        batch_policy: AIShadowPolicy
+        for batch_policy in ("minute", "event"):
             for row in rows:
                 copied = dict(row)
-                copied["feature_snapshot"] = row["feature_by_policy"][policy]
-                policy_batches[policy].append(copied)
+                copied["feature_snapshot"] = row["feature_by_policy"][batch_policy]
+                policy_batches[batch_policy].append(copied)
 
         # The two AI arms are independent SHADOW namespaces. Run their model
         # calls concurrently so event-driven analysis cannot make the every-
@@ -2749,7 +2751,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return self.decision_count
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": ai_shadow_monitor_enabled(),
             "running": self.scheduled,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from enum import StrEnum
 
@@ -192,7 +192,7 @@ class ChartState(BaseModel):
     binding_id: str
     interval: str = "1m"
     chart_type: Literal["candlestick", "line", "volume"] = "candlestick"
-    indicators: list[dict[str, object]] = Field(default_factory=list)
+    indicators: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TradingWorkspaceDocument(BaseModel):
@@ -200,7 +200,7 @@ class TradingWorkspaceDocument(BaseModel):
     name: str
     layout: Literal["one", "four", "two-horizontal", "two-vertical"] = "one"
     charts: list[ChartState] = Field(default_factory=list)
-    link_groups: list[dict[str, object]] = Field(default_factory=list)
+    link_groups: list[dict[str, Any]] = Field(default_factory=list)
     panels: dict[str, bool] = Field(default_factory=dict)
     revision: int = Field(default=1, ge=1)
 
@@ -216,5 +216,5 @@ class TradingDocumentEnvelope(BaseModel):
     record_id: str
     record_type: str
     revision: int
-    payload: dict[str, object]
+    payload: dict[str, Any]
     updated_at: datetime | None = None

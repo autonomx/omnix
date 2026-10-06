@@ -4,7 +4,7 @@ import sys
 import uuid
 import logging
 from types import TracebackType
-from typing import Any, Callable, Hashable, Literal
+from typing import Any, Callable, Hashable, Literal, cast
 
 from .background_authority import require_background_owner
 from .authority import (
@@ -180,7 +180,7 @@ def unit_of_work(
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
     job_priority_aging_seconds: int | None = None,
-) -> PostgresUnitOfWork | _JoinedUnitOfWork:
+) -> PostgresUnitOfWork:
     from .transaction_binding import shared_work
 
     resolved = database or default_database()
@@ -188,7 +188,8 @@ def unit_of_work(
     if parent is not None:
         if parent.authority_operation != authority_operation:
             raise RuntimeError('A shared transaction cannot change its authority operation')
-        return _JoinedUnitOfWork(parent)
+        # The joined unit forwards everything but commit and rollback to its parent.
+        return cast(PostgresUnitOfWork, _JoinedUnitOfWork(parent))
     return PostgresUnitOfWork(
         resolved,
         authority_operation=authority_operation,

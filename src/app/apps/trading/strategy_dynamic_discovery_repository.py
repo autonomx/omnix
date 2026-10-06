@@ -19,6 +19,7 @@ from .strategy_dynamic_discovery import (
 )
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any
 
 EVENT_DISCOVERY = "interday_discovery_event"
 EVENT_CANDIDATE = "interday_dynamic_candidate"
@@ -47,7 +48,7 @@ _LEGACY_CORRELATION_ENVELOPE_KEYS = frozenset(
 )
 
 
-def _candidate_domain_payload(payload: dict[str, object]) -> dict[str, object]:
+def _candidate_domain_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in payload.items()
@@ -163,7 +164,7 @@ class DynamicDiscoveryEventRepository:
         *,
         session_date: date,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
     ) -> bool:
         event_id = _event_id(EVENT_DAILY_REPORT, session_date)
         return self.repository.append_event(
@@ -211,7 +212,7 @@ class DynamicDiscoveryEventRepository:
         *,
         session_date: date,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
     ) -> bool:
         event_id = _event_id(EVENT_REPLAY, session_date, payload.get("fingerprint"))
         return self.repository.append_event(

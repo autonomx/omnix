@@ -17,7 +17,7 @@ import logging
 
 import re
 from collections import defaultdict
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from typing import Any, Callable
@@ -224,11 +224,11 @@ def _yahoo_chart_snapshot(
     evaluation_et = evaluation_time.astimezone(_ET)
     current_date = evaluation_et.date()
     same_clock = evaluation_et.timetz().replace(tzinfo=None)
-    cumulative_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
-    dollar_volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
-    premarket_bar_count_by_date: dict[object, int] = defaultdict(int)
-    nonzero_count_by_date: dict[object, int] = defaultdict(int)
-    regular_closes_by_date: dict[object, list[tuple[datetime, Decimal]]] = defaultdict(list)
+    cumulative_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    dollar_volume_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    premarket_bar_count_by_date: dict[date, int] = defaultdict(int)
+    nonzero_count_by_date: dict[date, int] = defaultdict(int)
+    regular_closes_by_date: dict[date, list[tuple[datetime, Decimal]]] = defaultdict(list)
     latest_current: tuple[datetime, Decimal] | None = None
     premarket_volume_missing = False
 
@@ -313,6 +313,7 @@ def _yahoo_chart_snapshot(
         current_bar_count = relative.current_bar_count
         current_nonzero = relative.current_nonzero_bar_count
 
+    denominator: Decimal | None
     if (
         relative.baseline_mean_volume is not None
         and relative.baseline_session_count >= response_baseline_count

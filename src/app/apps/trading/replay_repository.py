@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
@@ -37,7 +37,7 @@ def _dataset(row) -> FrozenDatasetSnapshot:
         adjustment_mode=str(row[6]),
         session_calendar=str(row[7]),
         exchange_timezone=str(row[8]),
-        gap_policy=str(row[9]),
+        gap_policy=cast(Any, str(row[9])),
         dataset_fingerprint=str(row[10]),
         source_as_of=row[11],
         bars=tuple(row[12] or []),
@@ -249,7 +249,7 @@ class TradingReplayRepository:
             uow.commit()
         return result
 
-    def list_backtests(self, limit: int = 100) -> list[dict[str, object]]:
+    def list_backtests(self, limit: int = 100) -> list[dict[str, Any]]:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 """
@@ -350,7 +350,7 @@ class TradingReplayRepository:
         trades = tuple(
             BacktestTrade(
                 trade_index=int(row[0]),
-                side=str(row[1]),
+                side=cast(Any, str(row[1])),
                 signal_bar_index=int(row[2]),
                 fill_bar_index=int(row[3]),
                 signal_time=row[4],
@@ -424,7 +424,7 @@ class TradingReplayRepository:
             strategy_parameters=dict(run[2] or {}),
             execution_policy=dict(run[3] or {}),
             formula_version=str(run[4]),
-            status=str(run[5]),
+            status=cast(Any, str(run[5])),
             initial_cash=Decimal(run[6]),
             ending_cash=ending_cash,
             ending_position=ending_position,
@@ -437,7 +437,7 @@ class TradingReplayRepository:
             win_rate_percent=Decimal(run[15]),
             exposure_percent=Decimal(run[16]),
             trade_count=int(run[17]),
-            mark_to_market_policy=policy,
+            mark_to_market_policy=cast(Any, policy),
             economic_result_fingerprint=fingerprint,
             error_message=str(run[20]) if run[20] is not None else None,
             started_at=run[21],
@@ -448,7 +448,7 @@ class TradingReplayRepository:
                 BacktestLogEntry(
                     log_index=int(row[0]),
                     bar_time=row[1],
-                    level=str(row[2]),
+                    level=cast(Any, str(row[2])),
                     message=str(row[3]),
                     payload=dict(row[4] or {}),
                 )

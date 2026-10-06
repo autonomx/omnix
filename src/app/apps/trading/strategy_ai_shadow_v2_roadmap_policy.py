@@ -28,7 +28,7 @@ The module remains research-only. It does not create real-money order authority.
 import hashlib
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from . import strategy_ai_shadow_v2_hardening as hardening
 from . import strategy_ai_shadow_v2_monitor as monitor
@@ -267,7 +267,7 @@ def _slope_pct_per_bar(values: list[Decimal]) -> Decimal | None:
     )
 
 
-def _multi_timeframe_context(row: dict[str, object]) -> dict[str, object]:
+def _multi_timeframe_context(row: dict[str, Any]) -> dict[str, Any]:
     bars = row.get("bars")
     structure = row.get("structure")
     if not isinstance(bars, list) or not isinstance(structure, monitor.MarketStructureSnapshot):
@@ -332,7 +332,7 @@ def _multi_timeframe_context(row: dict[str, object]) -> dict[str, object]:
     five_slope = _slope_pct_per_bar([item["close"] for item in five[-6:]])
 
     session_open = Decimal(regular[0].open)
-    compressed: list[dict[str, object]] = []
+    compressed: list[dict[str, Any]] = []
     for item in five[-24:]:
         return_from_open = _pct(item["close"], session_open)
         compressed.append(
@@ -359,7 +359,7 @@ def _multi_timeframe_context(row: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _cohort_context(rows: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+def _cohort_context(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     values: list[tuple[str, Decimal, Decimal | None]] = []
     for row in rows:
         candidate = row.get("candidate")
@@ -376,10 +376,10 @@ def _cohort_context(rows: list[dict[str, object]]) -> dict[str, dict[str, object
     returns = [item[1] for item in values]
     five_returns = [item[2] for item in values if item[2] is not None]
     median_return = _median(returns)
-    median_five = _median(five_returns)  # type: ignore[arg-type]
+    median_five = _median(five_returns)
     ranked = sorted(values, key=lambda item: (-item[1], item[0]))
     rank_by_id = {item[0]: index for index, item in enumerate(ranked, start=1)}
-    result: dict[str, dict[str, object]] = {}
+    result: dict[str, dict[str, Any]] = {}
     for instrument_id, session_return, five_return in values:
         result[instrument_id] = {
             "cohort_size": len(values),
@@ -465,8 +465,8 @@ def _due_reasons(
     structure: monitor.MarketStructureSnapshot,
     current_catalyst_fingerprint: str | None = None,
 ) -> tuple[str, ...]:
-    own = monitor._previous_decision(events, arm, instrument_id)
-    pair = monitor._previous_decision(events, paired_arm, instrument_id) if paired_arm is not None else None
+    own = monitor._previous_decision(events, cast(Any, arm), instrument_id)
+    pair = monitor._previous_decision(events, cast(Any, paired_arm), instrument_id) if paired_arm is not None else None
     previous = [item for item in (own, pair) if item is not None]
     reasons: list[str] = []
 
@@ -517,7 +517,7 @@ def _due_reasons(
     return tuple(dict.fromkeys(reasons))
 
 
-def _decision_at(row: dict[str, object], *, arm: str, events: list[StrategyEvent]) -> datetime:
+def _decision_at(row: dict[str, Any], *, arm: str, events: list[StrategyEvent]) -> datetime:
     structure = row["structure"]
     assert isinstance(structure, monitor.MarketStructureSnapshot)
     value = structure.observed_at.astimezone(timezone.utc)
@@ -537,7 +537,7 @@ def _decision_at(row: dict[str, object], *, arm: str, events: list[StrategyEvent
 def _enforce_confirmation_hurdle(
     decision: AIShadowV2AlphaDecision,
     *,
-    feature: dict[str, object],
+    feature: dict[str, Any],
 ) -> tuple[AIShadowV2AlphaDecision, str | None]:
     if decision.state not in {"armed", "enter"}:
         return decision, None
@@ -583,7 +583,7 @@ async def _run_arm_policy(
     repository,
     events,
 ):
-    prepared: list[dict[str, object]] = []
+    prepared: list[dict[str, Any]] = []
     reasons_by_id: dict[str, tuple[str, ...]] = {}
     observed_spreads: dict[str, Decimal] = {}
     cohort = _cohort_context(rows)
@@ -769,9 +769,10 @@ async def _run_arm_policy(
 
         by_id = {row["candidate"].instrument_id: row for row in prepared}
         for raw_decision in decisions:
-            row = by_id.get(raw_decision.instrument_id)
-            if row is None:
+            found_row = by_id.get(raw_decision.instrument_id)
+            if found_row is None:
                 continue
+            row = found_row
             feature = row["feature_by_arm"][arm]
             decision, veto = _enforce_confirmation_hurdle(raw_decision, feature=feature)
             if veto is not None:
@@ -862,10 +863,10 @@ def _event_outcome(
     invalidation = Decimal(str(decision["invalidation_price"])) if decision.get("invalidation_price") is not None else None
     target = Decimal(str(decision["target_1"])) if decision.get("target_1") is not None else None
     return monitor.evaluate_opportunity_episode(
-        arm=arm,
+        arm=cast(Any, arm),
         instrument_id=instrument_id,
         episode_id=identifier,
-        setup_family=str(decision.get("setup_family") or "unresolved"),
+        setup_family=cast(Any, str(decision.get("setup_family") or "unresolved")),
         started_at=event.observed_at,
         ended_at=_outcome_end(event.observed_at, bars),
         entry_price=structure.current_price,
@@ -1023,14 +1024,14 @@ async def _label_episodes_policy(
                 )
 
 
-def _historical_episodes_policy(repository, strategy_id: str) -> list[dict[str, object]]:
+def _historical_episodes_policy(repository, strategy_id: str) -> list[dict[str, Any]]:
     from .strategy_outcome_quality import outcome_is_valid_compat
 
     try:
         recent = repository.recent_events(strategy_id, 50_000)
     except Exception:
         return []
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for event in recent:
         if (
@@ -1050,7 +1051,7 @@ def _historical_episodes_policy(repository, strategy_id: str) -> list[dict[str, 
 
 
 def _persistence_calibration_policy(
-    episodes: list[dict[str, object]],
+    episodes: list[dict[str, Any]],
     persistence: str,
 ) -> tuple[Decimal | None, int]:
     values = [
@@ -1066,10 +1067,10 @@ def _persistence_calibration_policy(
 
 
 def _setup_calibration_policy(
-    episodes: list[dict[str, object]],
+    episodes: list[dict[str, Any]],
     persistence: str,
-) -> dict[str, dict[str, object]]:
-    result: dict[str, dict[str, object]] = {}
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
     for setup in (
         "trend_continuation",
         "failed_selloff_reclaim",
@@ -1096,7 +1097,7 @@ def _setup_calibration_policy(
     return result
 
 
-def _decision_outcome_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]:
+def _decision_outcome_metrics(events: list[StrategyEvent], arm: str) -> dict[str, Any]:
     from .strategy_outcome_quality import outcome_is_valid_compat
 
     paired_arm = _paired_arm(arm)
@@ -1148,7 +1149,7 @@ def _decision_outcome_metrics(events: list[StrategyEvent], arm: str) -> dict[str
         for row in avoids
         if row["outcome"].get("mfe_pct") is not None
     ]
-    result: dict[str, object] = {
+    result: dict[str, Any] = {
         "decision_outcome_count": len(rows),
         "avoid_decision_count": len(avoids),
         "avoid_positive_opportunity_count": len(regretted),
@@ -1170,7 +1171,7 @@ def _paired_observation_stats(
     events: list[StrategyEvent],
     control_arm: str,
     catalyst_arm: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     def keys(arm: str) -> set[tuple[str, str]]:
         result: set[tuple[str, str]] = set()
         for event in events:
@@ -1213,7 +1214,7 @@ async def _summary_policy(
     if not after_regular_close(now):
         return
 
-    arm_metrics: dict[str, dict[str, object]] = {}
+    arm_metrics: dict[str, dict[str, Any]] = {}
     for arm in monitor._ARMS:
         metrics = hardening._episode_metrics(events, arm)
         metrics["decisions"] = _decision_outcome_metrics(events, arm)
@@ -1224,7 +1225,7 @@ async def _summary_policy(
         "full_session": _paired_observation_stats(events, "full_session_control", "full_session_catalyst"),
     }
     lift = hardening._lift_metrics(events)
-    decision_lift: dict[str, object] = {}
+    decision_lift: dict[str, Any] = {}
     for name, (control_arm, catalyst_arm) in {
         "morning": ("morning_control", "morning_catalyst"),
         "full_session": ("full_session_control", "full_session_catalyst"),

@@ -5,7 +5,7 @@ import asyncio
 import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.features import FeatureContext
 
@@ -43,7 +43,7 @@ _REPLAY_SPREAD_BPS = Decimal("150")
 _REPLAY_INITIAL_CASH = Decimal("100000")
 _REPLAY_LOOKBACK_DAYS = 7
 _REPLAY_CLOSE_GRACE_MINUTES = 10
-BarLoader = Callable[..., dict[str, list[object]]]
+BarLoader = Callable[..., dict[str, list[Any]]]
 
 
 def _flag(name: str, default: str = "1") -> bool:

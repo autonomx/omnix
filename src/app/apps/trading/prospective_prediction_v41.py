@@ -11,15 +11,15 @@ import hashlib
 import json
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-V41_PREDICTOR_VERSION = "prospective-gap-v4.1-shadow"
-V41_FEATURE_SCHEMA_VERSION = "prospective-gap-features-v4.1"
-V41_SPEC_VERSION = "prospective-gap-v4.1-preregistered-spec-v1"
-V41_ACTIVATION_STATE = "PRE_REGISTERED_NOT_ACTIVE"
+V41_PREDICTOR_VERSION: Final = "prospective-gap-v4.1-shadow"
+V41_FEATURE_SCHEMA_VERSION: Final = "prospective-gap-features-v4.1"
+V41_SPEC_VERSION: Final = "prospective-gap-v4.1-preregistered-spec-v1"
+V41_ACTIVATION_STATE: Final = "PRE_REGISTERED_NOT_ACTIVE"
 
 V41_DESIGN_EVIDENCE_SESSIONS = (
     date(2026, 9, 15),

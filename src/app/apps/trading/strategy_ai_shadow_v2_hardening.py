@@ -34,6 +34,7 @@ from .strategy_ai_shadow_v2 import (
     deterministic_risk_geometry as _BASE_RISK_GEOMETRY,
 )
 from .strategy_repository import StrategyEvent
+from typing import Any, cast
 
 _OBSERVED_SPREAD_BPS: ContextVar[dict[str, Decimal]] = ContextVar(
     "ai_shadow_v2_observed_spread_bps",
@@ -63,10 +64,10 @@ def _morning_snapshot(
 
 
 def _sanitized_alpha_feature(
-    feature: dict[str, object],
+    feature: dict[str, Any],
     *,
     frozen_catalyst: CatalystIntelligenceSnapshot | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Return an alpha-only feature projection.
 
     Bid/ask/spread belong to deterministic execution/risk evaluation. Keeping
@@ -164,7 +165,7 @@ def _active_stop_price(
         return None
 
 
-def _stop_was_breached(row: dict[str, object], *, stop: Decimal, entry_time: datetime | None) -> bool:
+def _stop_was_breached(row: dict[str, Any], *, stop: Decimal, entry_time: datetime | None) -> bool:
     bars = row.get("bars")
     if not isinstance(bars, list):
         return False
@@ -189,7 +190,7 @@ def _episode_reference_event(group: list[StrategyEvent]) -> StrategyEvent:
     return group[0]
 
 
-def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]:
+def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, Any]:
     from .strategy_outcome_quality import outcome_is_valid_compat
 
     relevant = [
@@ -248,7 +249,7 @@ def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]
     }
 
 
-def _metric_delta(catalyst: dict[str, object], control: dict[str, object], field: str) -> str | None:
+def _metric_delta(catalyst: dict[str, Any], control: dict[str, Any], field: str) -> str | None:
     left, right = catalyst.get(field), control.get(field)
     if left is None or right is None:
         return None
@@ -274,12 +275,12 @@ def _decision_schedule(events: list[StrategyEvent], arm: str) -> set[tuple[str, 
     }
 
 
-def _lift_metrics(events: list[StrategyEvent]) -> dict[str, object]:
+def _lift_metrics(events: list[StrategyEvent]) -> dict[str, Any]:
     pairs = {
         "morning": ("morning_control", "morning_catalyst"),
         "full_session": ("full_session_control", "full_session_catalyst"),
     }
-    output: dict[str, object] = {}
+    output: dict[str, Any] = {}
     for name, (control_arm, catalyst_arm) in pairs.items():
         control = _episode_metrics(events, control_arm)
         catalyst = _episode_metrics(events, catalyst_arm)
@@ -375,7 +376,7 @@ async def run_arm_with_risk_guards(
 ):
     from . import strategy_ai_shadow_v2_monitor as monitor
 
-    prepared: list[dict[str, object]] = []
+    prepared: list[dict[str, Any]] = []
     observed_spreads: dict[str, Decimal] = {}
     for source in rows:
         row = dict(source)
@@ -519,7 +520,7 @@ async def label_opportunity_episodes(
                         arm=arm,
                         instrument_id=instrument_id,
                         episode_id=episode_id,
-                        setup_family=str(decision.get("setup_family") or "unresolved"),
+                        setup_family=cast(Any, str(decision.get("setup_family") or "unresolved")),
                         started_at=reference.observed_at,
                         ended_at=max(group[-1].observed_at, row["bars"][-1].end_time),
                         entry_price=structure.current_price,

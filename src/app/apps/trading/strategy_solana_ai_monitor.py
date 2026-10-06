@@ -29,6 +29,7 @@ from .strategy_solana_ai import (
     SolanaAIAnalyzer,
 )
 from .trade_logging import trade_log
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +169,8 @@ class TradingSolanaAIMonitor(ScheduledTradingMonitor):
                 logger.debug("suppressed error in %s", "TradingSolanaAIMonitor.recent_decisions", exc_info=True)
         return list(reversed(self._decision_events[-normalized_limit:]))
 
-    def _decision_event(self, payload: dict[str, object], observed_at: datetime) -> StrategyEvent:
-        decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+    def _decision_event(self, payload: dict[str, Any], observed_at: datetime) -> StrategyEvent:
+        decision = raw_decision if isinstance(raw_decision := payload.get("decision"), dict) else {}
         timestamp = observed_at.astimezone(timezone.utc).isoformat()
         return StrategyEvent(
             strategy_id=SOLANA_AI_STRATEGY_ID,
@@ -217,7 +218,7 @@ class TradingSolanaAIMonitor(ScheduledTradingMonitor):
                 return False
         return True
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {
             "strategy_id": SOLANA_AI_STRATEGY_ID,
             "instrument_id": SOLANA_INSTRUMENT_ID,
@@ -311,7 +312,7 @@ class TradingSolanaAIMonitor(ScheduledTradingMonitor):
             self.last_error = None
             return 0
 
-        quote: dict[str, object] | None = None
+        quote: dict[str, Any] | None = None
         try:
             raw_quote = await asyncio.to_thread(
                 market_service.quote,

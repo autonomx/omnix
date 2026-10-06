@@ -79,9 +79,9 @@ def cross_check_analysis_prices(
     if not raw:
         flags.append("RAW_INTRADAY_VALIDATION_UNAVAILABLE")
     else:
-        if _bps(prices.open_price, first_open) > tolerance_bps:
+        if _bps(prices.open_price, raw[0].open) > tolerance_bps:
             flags.append("INTRADAY_OPEN_MISMATCH")
-        if _bps(prices.close_price, last_close) > tolerance_bps:
+        if _bps(prices.close_price, raw[-1].close) > tolerance_bps:
             flags.append("INTRADAY_CLOSE_MISMATCH")
         session_high = max(bar.high for bar in raw)
         session_low = min(bar.low for bar in raw)

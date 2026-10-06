@@ -4,7 +4,7 @@ import hashlib
 import math
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from .contracts import ResearchValidationReport, ValidationFeatureResult, fingerprint
 
@@ -133,7 +133,7 @@ def _recommended_level(
         and two_r_delta is not None and two_r_delta > Decimal("0")
         and stable
     )
-    if not base:
+    if not base or ins is None or outs is None or exact_effect is None or ci_low is None or two_r_delta is None:
         return "observe_only"
     recommendation = "score_only"
     if (
@@ -228,7 +228,7 @@ def build_validation_report(
             in_sample_effect_r=ins, out_of_sample_effect_r=outs,
             win_probability_delta=two_r_delta,
             confidence_interval_low=ci_low, confidence_interval_high=ci_high,
-            recommendation=recommendation,
+            recommendation=cast(Any, recommendation),
             reason="; ".join(reasons) or "observe only",
         ))
 

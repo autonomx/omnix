@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -229,7 +229,7 @@ class PaperLedgerEntry(BaseModel):
     order_id: str | None = None
     fill_id: str | None = None
     idempotency_key: str
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime | None = None
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -66,8 +66,8 @@ class PaperTradeJournalEntry(BaseModel):
     fill_slippage_bps: Decimal | None = None
     implementation_shortfall_bps: Decimal | None = None
     exit_reason: str | None = None
-    setup_features: dict[str, object] = Field(default_factory=dict)
-    execution_features: dict[str, object] = Field(default_factory=dict)
+    setup_features: dict[str, Any] = Field(default_factory=dict)
+    execution_features: dict[str, Any] = Field(default_factory=dict)
     outcome: Literal["win", "loss", "flat"]
     automatic_observations: list[str] = Field(default_factory=list)
     events: list[PaperTradeJournalEvent] = Field(default_factory=list)
@@ -96,7 +96,7 @@ def _json_list(value: object) -> list[str]:
     return [str(item) for item in value if item is not None]
 
 
-def _record(value: object) -> dict[str, object]:
+def _record(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
@@ -123,7 +123,7 @@ def automatic_trade_observations(
     initial_risk_dollars: Decimal | None,
     holding_seconds: int,
     exit_reason: str | None,
-    setup_features: dict[str, object],
+    setup_features: dict[str, Any],
 ) -> list[str]:
     """Create deterministic journal observations from persisted trade evidence.
 
@@ -204,7 +204,7 @@ class TradingPaperJournal:
         limit: int = 100,
     ) -> PaperTradeJournalResponse:
         clauses = ["trade.workspace_id = %s", "trade.account_id = %s"]
-        params: list[object] = [self.context.workspace_id, account_id]
+        params: list[Any] = [self.context.workspace_id, account_id]
         if strategy_id:
             clauses.append("trade.strategy_id = %s")
             params.append(strategy_id)
@@ -320,7 +320,7 @@ class TradingPaperJournal:
                         if item.get("reason_code") is not None
                         else None
                     ),
-                    observed_at=item.get("observed_at"),
+                    observed_at=cast(Any, item.get("observed_at")),
                 )
                 for item in raw_events
                 if isinstance(item, dict) and item.get("event_id") and item.get("observed_at")

@@ -10,6 +10,7 @@ import httpx
 
 from .errors import (
     ProviderCancelledError,
+    ProviderFallbackEligibleError,
     ProviderRateLimitedError,
     ProviderUnavailableError,
 )
@@ -245,6 +246,7 @@ class ProviderHttpRuntime:
                             if retry_after and retry_after.replace(".", "", 1).isdigit()
                             else self.initial_backoff_seconds * (2**attempt)
                         )
+                        error: ProviderFallbackEligibleError
                         if status_code == 429:
                             error = ProviderRateLimitedError(
                                 f"{self.provider_id} rate limited request: HTTP 429"

@@ -15,6 +15,7 @@ from .strategy_v2_qualification import (
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
 )
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class ProspectiveSignalOutcomeRow(BaseModel):
     mfe_r: Decimal | None = None
     mae_r: Decimal | None = None
     feature_fingerprint: str
-    features: dict[str, object]
+    features: dict[str, Any]
 
     @property
     def won(self) -> bool:
@@ -174,7 +175,7 @@ def matched_prospective_signal_outcomes(
 
 def prospective_dataset_readiness(
     rows: list[ProspectiveSignalOutcomeRow] | tuple[ProspectiveSignalOutcomeRow, ...],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     total = len(rows)
     winners = sum(row.won for row in rows)
 

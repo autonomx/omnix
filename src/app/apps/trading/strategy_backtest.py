@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .gapper_dataset import GapperUniverseSnapshot
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .indicators.engine import relative_strength_index
 from .models import MarketBar
 from .paper import (
@@ -179,7 +179,7 @@ def freeze_backtest_session(
     *,
     session_date: date,
     universe: GapperUniverseSnapshot,
-    bars_by_instrument: dict[str, list[MarketBar] | tuple[MarketBar, ...]],
+    bars_by_instrument: Mapping[str, Sequence[MarketBar]],
 ) -> BacktestSessionDataset:
     if session_date != universe.session_date:
         raise ValueError("backtest session_date must match frozen universe session_date")
@@ -704,7 +704,7 @@ def run_gap_pullback_backtest(
     # First pass discovers causal trigger times with one share only. No portfolio
     # decision is made here; it exists solely to establish chronological proposals.
     attempts: list[_TradeAttempt] = []
-    proposed: list[tuple[object, GapPullbackBacktestTrade]] = []
+    proposed: list[tuple[GapperCandidate, GapPullbackBacktestTrade]] = []
     decision_by_instrument: dict[str, GapPullbackBacktestCandidateDecision] = {}
     for candidate in dataset.universe.candidates:
         attempt = _find_trade(
@@ -745,7 +745,8 @@ def run_gap_pullback_backtest(
     risk_rejections: dict[str, int] = {}
     research_rejections: dict[str, int] = {}
     execution_rejections: list[str] = []
-    ranked_proposals: list[tuple[object, GapPullbackBacktestTrade, int]] = []
+    ranked_proposals: list[tuple[GapperCandidate, GapPullbackBacktestTrade, int]] = []
+    research_reason: str | None
     for candidate, proposal in proposed:
         adjusted_quality_score = proposal.quality_score
         if active.strategy_version == "1.2.0":

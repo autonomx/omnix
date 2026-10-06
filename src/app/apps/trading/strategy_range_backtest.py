@@ -288,8 +288,8 @@ def run_strategy_range_backtest(
     alpaca_runtime = ProviderHttpRuntime("alpaca_strategy_range_backtest", max_concurrency=4)
 
     grouped: dict[date, list[GapperUniverseSnapshot]] = defaultdict(list)
-    for universe in universes:
-        grouped[universe.session_date].append(universe)
+    for archived in universes:
+        grouped[archived.session_date].append(archived)
 
     active_reconstructor: Reconstructor = reconstructor
     if reconstructor is reconstruct_recent_alpaca_gapper_universe and request.universe_mode != "captured_only":
@@ -311,7 +311,7 @@ def run_strategy_range_backtest(
 
     for session_date in sessions:
         starting_cash = current_cash
-        captured = None
+        captured: GapperUniverseSnapshot | None = None
         if request.universe_mode != "reconstructed_only":
             captured = choose_causal_universe(
                 grouped.get(session_date, []),
@@ -320,7 +320,7 @@ def run_strategy_range_backtest(
                 grace_minutes=strategy.config.universe_archive_grace_minutes,
             )
 
-        universe = captured
+        universe: GapperUniverseSnapshot | None = captured
         origin: HistoricalUniverseOrigin | None = "captured" if captured is not None else None
         fidelity = "captured_point_in_time" if captured is not None else None
         fidelity_warnings: tuple[str, ...] = ()

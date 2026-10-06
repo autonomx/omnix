@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -451,8 +451,8 @@ def derive_catalyst_influence(
     return CatalystInfluence(
         persistence_class=persistence_class,
         alpha_bias=bias,
-        conviction_modifier=conviction,
-        preferred_behavior=behavior,
+        conviction_modifier=cast(Any, conviction),
+        preferred_behavior=cast(Any, behavior),
         confirmation_hurdle=hurdle,
         empirical_persistence_rate=empirical_persistence_rate,
         empirical_sample_size=empirical_sample_size,
@@ -486,7 +486,7 @@ class CatalystIntelligenceAnalyzer:
         as_of: datetime,
         report: TradingResearchReport | None,
         evidence: list[TradingEvidence],
-        morning_context: dict[str, object] | None = None,
+        morning_context: dict[str, Any] | None = None,
         empirical_persistence_rate: Decimal | None = None,
         empirical_sample_size: int = 0,
     ) -> CatalystIntelligenceSnapshot:
@@ -572,7 +572,7 @@ class CatalystIntelligenceAnalyzer:
                     mode=StructuredMode.JSON_SCHEMA,
                     provider_name=provider_name,
                 )
-                response_format: dict[str, object] = {
+                response_format: dict[str, Any] = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "catalyst_intelligence_semantics",
@@ -627,7 +627,7 @@ class CatalystIntelligenceAnalyzer:
         as_of: datetime,
         report: TradingResearchReport | None,
         evidence: list[TradingEvidence],
-        morning_context: dict[str, object] | None = None,
+        morning_context: dict[str, Any] | None = None,
         empirical_persistence_rate: Decimal | None = None,
         empirical_sample_size: int = 0,
     ) -> CatalystIntelligenceSnapshot:
@@ -651,12 +651,12 @@ def alpha_prompt_snapshot(
     *,
     instrument_id: str,
     structure: MarketStructureSnapshot,
-    morning: dict[str, object],
+    morning: dict[str, Any],
     catalyst: CatalystIntelligenceSnapshot | None,
     include_catalyst: bool,
-    trusted_microstructure: dict[str, object] | None = None,
-) -> dict[str, object]:
-    payload: dict[str, object] = {
+    trusted_microstructure: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "instrument_id": instrument_id,
         "market_structure": structure.model_dump(mode="json"),
         "morning_context": morning,
@@ -677,7 +677,7 @@ class AIShadowV2Analyzer:
     def __init__(self, provider_factory=default_research_provider) -> None:
         self.provider_factory = provider_factory
 
-    def assess(self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]]) -> tuple[AIShadowV2AlphaDecision, ...]:
+    def assess(self, *, arm: AIShadowV2Arm, rows: list[dict[str, Any]]) -> tuple[AIShadowV2AlphaDecision, ...]:
         from .strategy_ai_shadow_provider import assess_ai_shadow_v2_with_shared_circuit
 
         return assess_ai_shadow_v2_with_shared_circuit(
@@ -687,7 +687,7 @@ class AIShadowV2Analyzer:
             original=type(self)._assess_core,
         )
 
-    def _assess_core(self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]]) -> tuple[AIShadowV2AlphaDecision, ...]:
+    def _assess_core(self, *, arm: AIShadowV2Arm, rows: list[dict[str, Any]]) -> tuple[AIShadowV2AlphaDecision, ...]:
         if not rows:
             return ()
         provider = self.provider_factory()
@@ -731,7 +731,7 @@ class AIShadowV2Analyzer:
                 mode=StructuredMode.JSON_SCHEMA,
                 provider_name=provider_name,
             )
-            response_format: dict[str, object] = {
+            response_format: dict[str, Any] = {
                 "type": "json_schema",
                 "json_schema": {"name": "ai_shadow_v2_batch_response", "strict": True, "schema": schema},
             }
@@ -821,7 +821,7 @@ def deterministic_risk_geometry(
 
 
 def calibrate_persistence_prior(
-    outcomes: list[dict[str, object]],
+    outcomes: list[dict[str, Any]],
     *,
     persistence_class: PersistenceClass,
     setup_family: SetupFamily,

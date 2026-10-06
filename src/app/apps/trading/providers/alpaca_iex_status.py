@@ -186,7 +186,7 @@ class AlpacaIexStatusCache:
                     return False
             return state_at_start is True
 
-    def history_snapshot(self, symbol: str, *, as_of: datetime) -> dict[str, object]:
+    def history_snapshot(self, symbol: str, *, as_of: datetime) -> dict[str, Any]:
         cutoff = _utc(as_of)
         local_cutoff = cutoff.astimezone(_ET)
         session_start = datetime.combine(
@@ -242,7 +242,7 @@ class AlpacaIexStatusCache:
                 "error": None,
             }
 
-    def snapshot(self) -> dict[str, object]:
+    def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "connected": self._connected,
@@ -413,7 +413,7 @@ class AlpacaIexStatusMonitor(ScheduledTradingMonitor):
             await asyncio.sleep(delay)
             delay = min(30.0, delay * 2)
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": _enabled(),
             "running": self._task is not None,

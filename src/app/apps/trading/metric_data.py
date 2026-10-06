@@ -554,13 +554,13 @@ class BinanceLiquidationBuffer:
         self.connect_factory = connect_factory
         self._events: dict[str, deque[LiquidationEvent]] = {}
         self._threads: dict[str, threading.Thread] = {}
-        self._runs = {}
+        self._runs: dict[str, Any] = {}
         self._stopping = threading.Event()
         self._lock = threading.RLock()
 
     @staticmethod
     def parse(payload: dict[str, Any]) -> LiquidationEvent:
-        event = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        event = raw_data if isinstance(raw_data := payload.get("data"), dict) else payload
         order = event.get("o") if isinstance(event, dict) else None
         if not isinstance(order, dict):
             raise ProviderContractError("Binance force-order payload is malformed")
@@ -835,7 +835,7 @@ class YahooFundamentalMetricAdapter:
             result = (((payload or {}).get("chart") or {}).get("result") or [None])[0]
             if not isinstance(result, dict):
                 raise ProviderDataUnavailableError("Yahoo returned no dividend chart")
-            meta = result.get("meta") if isinstance(result.get("meta"), dict) else {}
+            meta = raw_meta if isinstance(raw_meta := result.get("meta"), dict) else {}
             price = meta.get("regularMarketPrice")
             if price is None:
                 quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]

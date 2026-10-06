@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
@@ -59,13 +59,13 @@ def _order(row) -> PaperOrder:
         order_id=str(row[1]),
         instrument_id=str(row[2]),
         binding_id=str(row[3]) if row[3] is not None else None,
-        side=str(row[4]),
-        order_type=str(row[5]),
+        side=cast(Any, str(row[4])),
+        order_type=cast(Any, str(row[5])),
         quantity=Decimal(row[6]),
         limit_price=Decimal(row[7]) if row[7] is not None else None,
         stop_price=Decimal(row[8]) if row[8] is not None else None,
         reference_price=Decimal(row[9]) if row[9] is not None else None,
-        status=str(row[10]),
+        status=cast(Any, str(row[10])),
         filled_quantity=Decimal(row[11]),
         average_fill_price=Decimal(row[12]) if row[12] is not None else None,
         idempotency_key=str(row[13]),
@@ -953,7 +953,7 @@ class TradingPaperRepository:
                     fill_id=str(row[0]),
                     order_id=str(row[1]),
                     instrument_id=str(row[2]),
-                    side=str(row[3]),
+                    side=cast(Any, str(row[3])),
                     quantity=Decimal(row[4]),
                     price=Decimal(row[5]),
                     commission=Decimal(row[6]),
@@ -969,7 +969,7 @@ class TradingPaperRepository:
             ledger = [
                 PaperLedgerEntry(
                     ledger_id=str(row[0]),
-                    entry_type=str(row[1]),
+                    entry_type=cast(Any, str(row[1])),
                     currency=str(row[2]),
                     amount=Decimal(row[3]),
                     order_id=str(row[4]) if row[4] else None,

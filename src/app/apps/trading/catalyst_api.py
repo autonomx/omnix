@@ -27,7 +27,7 @@ class CatalystEvidenceCaptureRequest(BaseModel):
     published_at: datetime
     headline: str | None = Field(default=None, max_length=2000)
     raw_text: str = Field(min_length=1, max_length=100_000)
-    facts: dict[str, object] = Field(default_factory=dict)
+    facts: dict[str, Any] = Field(default_factory=dict)
 
 
 class CatalystEvidenceListResponse(BaseModel):

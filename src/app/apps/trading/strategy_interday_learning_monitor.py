@@ -27,6 +27,8 @@ from .strategy_interday_postclose import (
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any
+from .strategy_repository import StrategyEvent
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ async def _run_interday_learning_once_core(
         if item.strategy_id == INTERDAY_TRADING_STRATEGY_ID
         or item.parent_strategy_id == INTERDAY_TRADING_STRATEGY_ID
     }
-    events_by_strategy = {}
+    events_by_strategy: dict[str, list[StrategyEvent]] = {}
     for strategy_id in sorted(strategy_ids):
         rows = await asyncio.to_thread(repo.recent_events, strategy_id, 10_000)
         events_by_strategy[strategy_id] = [
@@ -241,7 +243,7 @@ async def run_interday_learning_once(
 class InterdayLearningMonitor(ScheduledTradingMonitor):
     error_event = "interday_learning_monitor_error"
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {
             "strategy_id": INTERDAY_TRADING_STRATEGY_ID,
             "observed_at": datetime.now(timezone.utc),

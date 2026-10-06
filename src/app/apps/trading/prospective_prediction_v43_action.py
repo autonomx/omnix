@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -23,8 +23,8 @@ from .prospective_prediction_v42_action import (
 from .prospective_prediction_v43 import V43Forecast
 
 
-V43_ACTION_VERSION = "prospective-gap-v4.3-action-v1"
-PORTFOLIO_G_VERSION = "prospective-gap-portfolio-g-v1"
+V43_ACTION_VERSION: Final = "prospective-gap-v4.3-action-v1"
+PORTFOLIO_G_VERSION: Final = "prospective-gap-portfolio-g-v1"
 
 V43WatchClass = Literal["REJECT", "WATCH", "HIGH_PRIORITY_WATCH"]
 V43ActionState = Literal[
@@ -244,7 +244,7 @@ def evaluate_v43_post_open_action(
         raise ValueError("v43_action_base_snapshot_forecast_mismatch")
 
     required = _confirmation_threshold(forecast, policy)
-    common = dict(
+    common: dict[str, Any] = dict(
         instrument_id=forecast.instrument_id,
         forecast_fingerprint=forecast.immutable_fingerprint,
         base_v42_forecast_fingerprint=base_v42.immutable_fingerprint,
@@ -345,7 +345,7 @@ def authorize_v43_action(
 ) -> V43AuthorizationReceipt:
     base = snapshot.base_snapshot
     decision_at = base.evaluated_at
-    common = dict(
+    common: dict[str, Any] = dict(
         instrument_id=forecast.instrument_id,
         forecast_fingerprint=forecast.immutable_fingerprint,
         decision_at=decision_at,
@@ -514,8 +514,8 @@ def build_portfolio_g(
                 weight=allocation / policy.starting_equity,
                 trade_quality=row.trade_quality,
                 net_expected_return=row.net_expected_return or Decimal("0"),
-                reference_price=row.reference_price,
-                total_cost_bps=row.total_cost_bps,
+                reference_price=cast(Decimal, row.reference_price),
+                total_cost_bps=cast(Decimal, row.total_cost_bps),
                 cohort_regime=row.cohort_regime,
             )
         )

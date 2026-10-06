@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from ..contracts import SupplyFact, TradingEvidence, fingerprint
+from typing import Any, cast
 
 _TYPE_PATTERNS = (
     ("atm", re.compile(r"\b(?:at[- ]the[- ]market|ATM (?:facility|offering|program|sales agreement))\b", re.I)),
@@ -90,15 +91,15 @@ def extract_supply_facts(evidence: list[TradingEvidence] | tuple[TradingEvidence
                 facts.append(SupplyFact(
                     fact_id=f"supply-{hashlib.sha256((item.evidence_id + '|' + supply_type + '|' + fp).encode()).hexdigest()[:24]}",
                     instrument_id=item.instrument_id,
-                    supply_type=supply_type,
-                    status=status,
+                    supply_type=cast(Any, supply_type),
+                    status=cast(Any, status),
                     shares=shares,
                     remaining_capacity_usd=remaining_capacity,
                     strike_price=strike,
                     exercise_status="exercisable" if status == "exercisable" else None,
                     registration_status=registration_status,
                     source_evidence_ids=(item.evidence_id,),
-                    resolution_status=resolution,
+                    resolution_status=cast(Any, resolution),
                     confidence=confidence,
                     generated_at=generated,
                     immutable_fingerprint=fp,

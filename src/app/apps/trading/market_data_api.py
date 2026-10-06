@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from datetime import date
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -72,7 +72,7 @@ class IbkrSettingsStatus(BaseModel):
     official_ibapi_available: bool
     connected: bool
     last_error: str | None = None
-    diagnostics: dict[str, object] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 def _ibkr_status() -> IbkrSettingsStatus:
@@ -118,7 +118,7 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
     return CoinMarketCapCredentialStatus(
         configured=bool(api_key),
         api_key_masked=_mask_key(api_key),
-        api_key_source=sources["api_key"],
+        api_key_source=cast(Any, sources["api_key"]),
         api_key_editable=sys.platform == "win32" and sources["api_key"] != "environment",
         storage="Windows DPAPI user store" if sys.platform == "win32" else "environment only",
     )
@@ -128,7 +128,7 @@ def create_trading_market_data_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/market-data", tags=["trading-market-data"])
 
     @router.get("/yahoo-evidence/diagnostics")
-    async def yahoo_evidence_diagnostics() -> dict[str, object]:
+    async def yahoo_evidence_diagnostics() -> dict[str, Any]:
         """Operator diagnostics for durable Yahoo evidence and gap recovery."""
 
         diagnostics = await asyncio.to_thread(default_market_data_service().diagnostics)
@@ -138,7 +138,7 @@ def create_trading_market_data_router() -> APIRouter:
     @router.get("/yahoo-evidence/diagnostics/{session_date}")
     async def yahoo_evidence_session_diagnostics(
         session_date: date,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         """Durable Yahoo repair/block metrics for one U.S.-equity session."""
 
         service = default_market_data_service()
@@ -148,7 +148,7 @@ def create_trading_market_data_router() -> APIRouter:
         )
 
     @router.get("/providers/ibkr/diagnostics")
-    async def ibkr_diagnostics() -> dict[str, object]:
+    async def ibkr_diagnostics() -> dict[str, Any]:
         """Operator view of Gateway/client/rollout state without storing credentials."""
 
         service = default_market_data_service()
@@ -172,7 +172,7 @@ def create_trading_market_data_router() -> APIRouter:
         return await asyncio.to_thread(_ibkr_status)
 
     @router.get("/providers/ibkr/diagnostics/{session_date}")
-    async def ibkr_session_diagnostics(session_date: date) -> dict[str, object]:
+    async def ibkr_session_diagnostics(session_date: date) -> dict[str, Any]:
         """Durable zero-authority IBKR quote/recovery soak metrics for one session."""
 
         return await asyncio.to_thread(
@@ -181,7 +181,7 @@ def create_trading_market_data_router() -> APIRouter:
         )
 
     @router.get("/providers/ibkr/authority/{instrument_id:path}")
-    async def ibkr_authority(instrument_id: str) -> dict[str, object]:
+    async def ibkr_authority(instrument_id: str) -> dict[str, Any]:
         """Explain per-contract IBKR LIVE_DATA authority for an already observed symbol."""
 
         service = default_market_data_service()

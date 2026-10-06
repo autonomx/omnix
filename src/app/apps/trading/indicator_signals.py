@@ -125,9 +125,10 @@ def _macd_aligned(
     dense: list[Decimal] = []
     dense_indexes: list[int] = []
     for index in range(len(values)):
-        if fast[index] is None or slow[index] is None:
+        fast_value, slow_value = fast[index], slow[index]
+        if fast_value is None or slow_value is None:
             continue
-        value = fast[index] - slow[index]
+        value = fast_value - slow_value
         macd[index] = value
         dense.append(value)
         dense_indexes.append(index)
@@ -139,8 +140,9 @@ def _macd_aligned(
         if signal_value is None:
             continue
         signal[original_index] = signal_value
-        assert macd[original_index] is not None
-        histogram[original_index] = macd[original_index] - signal_value
+        macd_value = macd[original_index]
+        assert macd_value is not None
+        histogram[original_index] = macd_value - signal_value
     return macd, signal, histogram
 
 

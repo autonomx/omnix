@@ -7,7 +7,7 @@ import hashlib
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.runtime.features import FeatureContext
 
@@ -267,7 +267,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
                     order_id=order_id,
                     instrument_id=instrument_id,
                     binding_id=protection.binding_id or execution.binding_id,
-                    side=close_side,
+                    side=cast(Any, close_side),
                     order_type="market",
                     quantity=abs(position.quantity),
                     reference_price=reference,

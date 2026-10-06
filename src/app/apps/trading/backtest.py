@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Final, Literal, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -13,7 +13,7 @@ from .indicators.engine import CORE_INDICATOR_FORMULA_VERSION, simple_moving_ave
 from .replay import FrozenDatasetSnapshot
 
 
-BACKTEST_MARK_TO_MARKET_POLICY = "final_finalized_bar_close"
+BACKTEST_MARK_TO_MARKET_POLICY: Final = "final_finalized_bar_close"
 
 
 class MovingAverageCrossStrategy(BaseModel):
@@ -106,7 +106,7 @@ class BacktestLogEntry(BaseModel):
     bar_time: datetime | None = None
     level: Literal["info", "warning", "error"] = "info"
     message: str
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class BacktestArtifactReference(BaseModel):
@@ -125,8 +125,8 @@ class BacktestRunResult(BaseModel):
     dataset_id: str
     dataset_fingerprint: str
     strategy_id: str
-    strategy_parameters: dict[str, object]
-    execution_policy: dict[str, object]
+    strategy_parameters: dict[str, Any]
+    execution_policy: dict[str, Any]
     formula_version: str
     status: Literal["completed", "failed"]
     initial_cash: Decimal
@@ -323,8 +323,8 @@ def backtest_economic_result_fingerprint(
     *,
     dataset_fingerprint: str,
     strategy_id: str,
-    strategy_parameters: dict[str, object],
-    execution_policy: dict[str, object],
+    strategy_parameters: dict[str, Any],
+    execution_policy: dict[str, Any],
     formula_version: str,
     status: str,
     initial_cash: Decimal,
@@ -520,7 +520,7 @@ def run_backtest(
                 trades.append(
                     BacktestTrade(
                         trade_index=len(trades),
-                        side=side,
+                        side=cast(Any, side),
                         signal_bar_index=signal_bar_index,
                         fill_bar_index=index,
                         signal_time=signal_time,

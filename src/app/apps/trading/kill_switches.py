@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -102,7 +102,7 @@ class TradingKillSwitchRepository:
 
 def _switch(row) -> TradingKillSwitch:
     return TradingKillSwitch(
-        scope=str(row[0]),
+        scope=cast(Any, str(row[0])),
         scope_id=str(row[1]),
         engaged=bool(row[2]),
         reason=str(row[3]),

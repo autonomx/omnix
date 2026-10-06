@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from .gap_recovery import recovery_window
 
@@ -147,7 +147,7 @@ class SharedSubscriptionManager:
             instrument_id=instrument_id,
             interval=interval,
             stream_kind="BAR",
-            listener=listener,
+            listener=cast(Callable[[StreamingUpdate], None], listener),
         )
 
     def subscribe_quote(
@@ -164,7 +164,7 @@ class SharedSubscriptionManager:
             instrument_id=instrument_id,
             interval=None,
             stream_kind="QUOTE",
-            listener=listener,
+            listener=cast(Callable[[StreamingUpdate], None], listener),
         )
 
     def unsubscribe(self, key: str, listener_id: str) -> bool:

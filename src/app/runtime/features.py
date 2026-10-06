@@ -67,7 +67,7 @@ class ScheduledTaskSpec(Protocol):
 class ScheduledTaskFactory(Protocol):
     """Feature factory that builds a task against the composed services."""
 
-    def __call__(self, context: "FeatureContext") -> ScheduledTaskSpec | None: ...
+    def __call__(self, context: "FeatureContext", /) -> ScheduledTaskSpec | None: ...
 
 
 class RepositorySpec(Protocol):

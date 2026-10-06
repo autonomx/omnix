@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,8 +61,8 @@ def _alpaca_credential_status() -> AlpacaIexCredentialStatus:
     return AlpacaIexCredentialStatus(
         configured=bool(api_key and secret),
         api_key_id_masked=_mask_key(api_key),
-        api_key_source=sources["api_key_id"],
-        secret_key_source=sources["secret_key"],
+        api_key_source=cast(Any, sources["api_key_id"]),
+        secret_key_source=cast(Any, sources["secret_key"]),
         api_key_editable=windows_store and sources["api_key_id"] != "environment",
         secret_key_editable=windows_store and sources["secret_key"] != "environment",
         storage="Windows DPAPI user store" if windows_store else "environment only",

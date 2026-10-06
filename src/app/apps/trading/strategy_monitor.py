@@ -50,6 +50,10 @@ from .strategy_v2_qualification import (
     V2_QUALIFICATION_EVENT_TYPES,
 )
 from .trade_logging import trade_log
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .order_gateway import StrategyPaperAccess
 
 _STATE_KEY = "_omnix_trading_strategy_monitor"
 _REGULAR_OPEN = time(9, 30)
@@ -156,7 +160,7 @@ def _run_id(prefix: str, observed_at: datetime) -> str:
     return f"{prefix}-{observed_at.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')}"
 
 
-def _execution_audit_payload(execution) -> dict[str, object]:
+def _execution_audit_payload(execution) -> dict[str, Any]:
     fields = (
         "instrument_id",
         "binding_id",
@@ -180,7 +184,7 @@ def _execution_audit_payload(execution) -> dict[str, object]:
     return {field: getattr(execution, field, None) for field in fields}
 
 
-def _bar_audit_payload(bar) -> dict[str, object]:
+def _bar_audit_payload(bar) -> dict[str, Any]:
     fields = (
         "instrument_id",
         "interval",
@@ -319,8 +323,10 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
     """
 
     error_event = "monitor_loop_error"
+    # Strategy diagnostics count their evaluations here.
+    diagnostic_evaluation_count: int = 0
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {"run_id": self.current_run_id}
 
     def __init__(
@@ -357,9 +363,9 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
         self.intraday_llm_estimated_usage_count = 0
         self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
-        self.managed_finviz_shadow_provision: dict[str, object] | None = None
+        self.managed_finviz_shadow_provision: dict[str, Any] | None = None
         self.managed_finviz_shadow_provision_error: str | None = None
-        self.auto_paper_readiness_by_strategy: dict[str, dict[str, object]] = {}
+        self.auto_paper_readiness_by_strategy: dict[str, dict[str, Any]] = {}
         self.auto_paper_ready_strategy_count = 0
         self.auto_paper_blocked_strategy_count = 0
         self.auto_paper_archive_not_ready_strategy_count = 0
@@ -412,7 +418,7 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> bool:
         idem = _key(
             config.strategy_id,
@@ -454,7 +460,7 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
         self,
         config: TradingStrategyConfigDocument,
         strategy_repository: TradingStrategyRepository,
-        paper_repository: TradingPaperRepository,
+        paper_repository: StrategyPaperAccess,
         market_service: TradingMarketDataService,
     ) -> None:
         from .strategy_monitor_protections import reconcile_protections

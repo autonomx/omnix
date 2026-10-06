@@ -36,6 +36,7 @@ from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
+from .research.policy import ResearchPolicyDecision
 from .strategy_research_policy import (
     apply_research_policy_to_quality,
     resolve_strategy_research_policy,
@@ -63,6 +64,7 @@ from .strategy_v2_qualification import (
     v2_profile_fingerprint,
 )
 from .trade_logging import trade_log
+from typing import Any, cast
 
 
 async def evaluate_candidates(
@@ -78,12 +80,12 @@ async def evaluate_candidates(
         universe_session_date is None
         or universe_session_date == now.astimezone(_ET).date()
     ):
-        market_service = _session_evidence._CurrentSessionMarketDataProxy(
+        market_service = cast(TradingMarketDataService, _session_evidence._CurrentSessionMarketDataProxy(
             market_service,
             session_date=universe_session_date or now.astimezone(_ET).date(),
             observed_at=now,
-        )
-    market_service = _session_evidence._FullSessionMarketServiceProxy(
+        ))
+    market_service = cast(TradingMarketDataService, _session_evidence._FullSessionMarketServiceProxy(
         market_service,
         session_date=getattr(
             universe,
@@ -92,7 +94,7 @@ async def evaluate_candidates(
         ),
         observed_at=now,
         allow_shadow_fallback=config.mode == "shadow",
-    )
+    ))
     if isinstance(universe, GapperUniverseSnapshot):
         session_assessment = assess_session_evaluability(universe, config.config)
         await monitor._event(
@@ -116,10 +118,10 @@ async def evaluate_candidates(
 
     captured_stoch_entry_signals: set[tuple[str, str]] = set()
     captured_stoch_execution_actions: set[tuple[str, str, str]] = set()
-    stoch_entry_payload_by_instrument: dict[str, dict[str, object]] = {}
+    stoch_entry_payload_by_instrument: dict[str, dict[str, Any]] = {}
     stoch_action_payloads_by_instrument: dict[
         str,
-        dict[StochExecutionAction, dict[str, object]],
+        dict[StochExecutionAction, dict[str, Any]],
     ] = {}
     stoch_execution_history_available = True
     if config.config.stoch_trend_capture_enabled:
@@ -774,7 +776,7 @@ async def evaluate_candidates(
                         event_type="stoch_trend_capture_entry",
                         state="entry_evidence",
                         reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
-                        observed_at=stoch_capture.entry_signal_time,
+                        observed_at=cast(datetime, stoch_capture.entry_signal_time),
                         payload={
                             "universe_id": universe.universe_id,
                             "policy_version": stoch_capture.policy_version,
@@ -1020,10 +1022,10 @@ async def evaluate_candidates(
                 except Exception as exc:
                     research_decision = None
                     reason_code = "RESEARCH_POLICY_RESOLUTION_ERROR"
-                    detail = f"{type(exc).__name__}: {exc}"
+                    detail: str | None = f"{type(exc).__name__}: {exc}"
                 else:
                     quality_gate = apply_research_policy_to_quality(
-                        research_decision,
+                        cast(ResearchPolicyDecision, research_decision),
                         base_quality_score=result.features.quality_score,
                         minimum_quality_score=config.config.minimum_quality_score,
                         score_adjustment_enabled=config.config.research_score_adjustment_enabled,

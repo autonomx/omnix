@@ -287,3 +287,17 @@ def test_every_registered_provider_implements_the_adapter_interface() -> None:
         assert isinstance(status, str) and isinstance(runtime, dict)
     descriptors = source_inspect.getsource(ProviderRegistry.descriptors)
     assert 'provider_id == "' not in descriptors
+
+
+def test_diagnostics_report_the_in_memory_cache() -> None:
+    # The cache keeps provider responses in memory only (WP-8.3): no directory to report.
+    service = TradingMarketDataService(registry=registry_with_fixtures())
+    app = FastAPI()
+    app.include_router(create_trading_router(market_service_factory=lambda: service))
+
+    response = TestClient(app).get("/api/trading/diagnostics")
+
+    assert response.status_code == 200
+    cache = response.json()["diagnostics"]["cache"]
+    assert cache["directory"] is None
+    assert cache["max_entries"] == service.cache.max_entries

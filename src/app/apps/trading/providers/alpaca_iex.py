@@ -270,7 +270,7 @@ class AlpacaIexExecutionProvider(ProviderAdapter):
 
         binding = self.get_binding(instrument_id)
         headers = alpaca_iex_auth_headers()
-        params: dict[str, object] = {
+        params: dict[str, Any] = {
             "timeframe": "1Min",
             "start": session_start.isoformat().replace("+00:00", "Z"),
             "end": cutoff.isoformat().replace("+00:00", "Z"),
@@ -375,11 +375,12 @@ class AlpacaIexExecutionProvider(ProviderAdapter):
             raise ProviderDataUnavailableError("Alpaca IEX snapshot has no latest trade")
 
         quote_available = isinstance(latest_quote, dict)
+        quote_payload: dict[str, Any] = latest_quote if isinstance(latest_quote, dict) else {}
         quote_timestamp_degraded = False
         quote_time = None
         if quote_available:
             try:
-                quote_time = _parse_timestamp(latest_quote.get("t"), field="quote")
+                quote_time = _parse_timestamp(quote_payload.get("t"), field="quote")
             except ProviderContractError:
                 # A malformed quote timestamp makes the book non-causal. Keep a
                 # valid latest trade as research/SHADOW price evidence, but drop
@@ -414,14 +415,14 @@ class AlpacaIexExecutionProvider(ProviderAdapter):
         if now.tzinfo is None:
             raise ProviderContractError("Alpaca IEX provider clock must be timezone-aware")
         now = now.astimezone(timezone.utc)
-        quote: dict[str, object] = {
+        quote: dict[str, Any] = {
             "instrument_id": instrument_id,
             "binding_id": binding.binding_id,
             "provider": self.provider_id,
-            "bid": latest_quote.get("bp") if quote_available else None,
-            "ask": latest_quote.get("ap") if quote_available else None,
-            "bid_size": _round_lot_shares(latest_quote.get("bs")) if quote_available else None,
-            "ask_size": _round_lot_shares(latest_quote.get("as")) if quote_available else None,
+            "bid": quote_payload.get("bp") if quote_available else None,
+            "ask": quote_payload.get("ap") if quote_available else None,
+            "bid_size": _round_lot_shares(quote_payload.get("bs")) if quote_available else None,
+            "ask_size": _round_lot_shares(quote_payload.get("as")) if quote_available else None,
             "last": latest_trade.get("p"),
             "high": bar_high,
             "low": bar_low,

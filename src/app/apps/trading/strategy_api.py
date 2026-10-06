@@ -5,7 +5,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,7 +94,7 @@ class V2QualificationReviewRequest(BaseModel):
 
 class StrategyEvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    candidate: dict[str, object]
+    candidate: dict[str, Any]
     bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
 
@@ -189,7 +189,7 @@ RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
 
-def _range_backtest_job_store(factory: Callable[[], object] | None):
+def _range_backtest_job_store(factory: Callable[[], Any] | None):
     if factory is None:
         from app.jobs.store import default_job_store
 
@@ -245,7 +245,7 @@ def _range_backtest_progress_response(job, strategy_id: str) -> StrategyRangeBac
     return StrategyRangeBacktestProgressResponse(
         run_id=job.id,
         strategy_id=strategy_id,
-        status=response_status,
+        status=cast(Any, response_status),
         completed_sessions=completed,
         total_sessions=total,
         percent=percent,
@@ -277,7 +277,7 @@ def _research_event(
     observed_at: datetime,
     state: str,
     reason_code: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
 ) -> StrategyEvent:
     raw = "|".join((strategy_id, instrument_id, universe_id, observed_at.astimezone(timezone.utc).isoformat(), state, reason_code))
     idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -351,8 +351,8 @@ def _require_v2_auto_paper_authorized(
         raise ValueError("v2_auto_paper_requires_reviewed_prospective_qualification")
 
 
-def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, object]]:
-    coverage: dict[str, dict[str, object]] = {}
+def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, Any]]:
+    coverage: dict[str, dict[str, Any]] = {}
     for instrument_id, bars in sorted(bars_by_instrument.items()):
         ordered = sorted(bars, key=lambda bar: bar.start_time)
         coverage[instrument_id] = {

@@ -15,7 +15,7 @@ from app.config.env import env_str as _env_str
 import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.features import FeatureContext
 
@@ -401,7 +401,7 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
         # on one worker thread so those waits cannot stall FastAPI health or chat.
         return await asyncio.to_thread(self._run_once_blocking)
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         settings = load_ibkr_settings()[0]
         return {
             "enabled": settings.monitor_enabled,

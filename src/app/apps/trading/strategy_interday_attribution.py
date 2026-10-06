@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .strategy_dynamic_discovery import AttributionStage, INTERDAY_TRADING_STRATEGY_ID
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
+from collections.abc import Mapping
 
 
 _IGNORE_TYPES = {
@@ -74,7 +75,7 @@ def bridge_strategy_events(
     repository: TradingStrategyRepository,
     *,
     session_date: date,
-    events_by_strategy: dict[str, Iterable[StrategyEvent]],
+    events_by_strategy: Mapping[str, Iterable[StrategyEvent]],
 ) -> int:
     """Persist monotonic, event-level attribution through the discovery owner."""
 

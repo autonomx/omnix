@@ -21,6 +21,7 @@ from .strategy_repository import (
 )
 from .trade_logging import trade_log
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any, cast
 
 _STATE_KEY = "_omnix_trading_strategy_research_outcome_monitor"
 
@@ -167,7 +168,7 @@ class TradingStrategyResearchOutcomeMonitor(ScheduledTradingMonitor):
         paper_repository = default_runtime_paper_repository()
         configs = await asyncio.to_thread(strategy_repository.list_configs, active_only=False)
         captured = 0
-        snapshots: dict[str, object] = {}
+        snapshots: dict[str, Any] = {}
         for config in configs:
             protections = await asyncio.to_thread(
                 strategy_repository.list_protections,
@@ -184,7 +185,7 @@ class TradingStrategyResearchOutcomeMonitor(ScheduledTradingMonitor):
             if snapshot is None:
                 snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)
                 snapshots[config.account_id] = snapshot
-            history = {order.order_id: order for order in snapshot.order_history}
+            history = {order.order_id: order for order in cast(Any, snapshot).order_history}
             for protection in closed:
                 entry = history.get(protection.entry_order_id)
                 exit_order = history.get(protection.exit_order_id or "")

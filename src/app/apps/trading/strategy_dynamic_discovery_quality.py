@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from . import strategy_dynamic_discovery as dd
 from . import strategy_dynamic_discovery_runtime as runtime
@@ -31,7 +31,7 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _float(value: object, default: float = 0.0) -> float:
+def _float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
     try:
@@ -47,7 +47,7 @@ def _key(*parts: object) -> str:
 def _apply_scan_refined(
     *,
     previous_state: Mapping[str, dd.DynamicCandidate],
-    observations: Sequence[object],
+    observations: Sequence[Any],
     watermark: datetime,
     session_date: date,
     config: dd.DynamicDiscoveryConfig = dd.DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
@@ -161,7 +161,7 @@ def _replay_dynamic_discovery_refined(
     )
 
 
-def _legacy_qualification(metrics: Mapping[str, object]):
+def _legacy_qualification(metrics: Mapping[str, Any]):
     sessions = int(metrics.get("independent_sessions", 0) or 0)
     opportunities = int(metrics.get("labeled_opportunities", 0) or 0)
     recall = _float(metrics.get("discovery_recall"))
@@ -207,7 +207,7 @@ def _legacy_qualification(metrics: Mapping[str, object]):
     )
 
 
-def _qualification_refined(metrics: Mapping[str, object]):
+def _qualification_refined(metrics: Mapping[str, Any]):
     """Keep legacy research helper compatibility; production uses strong gates."""
 
     strong_keys = {
@@ -279,7 +279,7 @@ def _explicit_relationships(instrument_id: str, observed_at: datetime):
     try:
         from .research.repository import default_research_repository
 
-        evidence = default_research_repository().list_evidence_as_of(
+        evidence: Sequence[Any] = default_research_repository().list_evidence_as_of(
             instrument_id, observed_at, limit=200
         )
     except Exception:
@@ -331,7 +331,7 @@ def _context_from_research(
     try:
         from .research.repository import default_research_repository
 
-        evidence = default_research_repository().list_evidence_as_of(
+        evidence: Sequence[Any] = default_research_repository().list_evidence_as_of(
             instrument_id, observed_at, limit=100
         )
     except Exception:
@@ -374,14 +374,11 @@ def _build_characterization_refined(
         candidate.instrument_id, observed_at
     )
     execution_quality = 50.0
-    if (
-        observation is not None
-        and getattr(observation, "market", None) is not None
-        and observation.market.spread_bps is not None
-    ):
+    market = getattr(observation, "market", None) if observation is not None else None
+    if market is not None and market.spread_bps is not None:
         execution_quality = max(
             0.0,
-            min(100.0, 100.0 - float(observation.market.spread_bps) / 2.0),
+            min(100.0, 100.0 - float(market.spread_bps) / 2.0),
         )
     return _characterization_refined(
         candidate,
@@ -453,7 +450,7 @@ def _union_refined(
     if not eligible:
         return result
 
-    payload_by_symbol: dict[str, dict[str, object]] = {}
+    payload_by_symbol: dict[str, dict[str, Any]] = {}
     for event in events:
         if event.event_type != EVENT_DISCOVERY or event.instrument_id not in eligible:
             continue
@@ -593,7 +590,7 @@ def _replay_captured_scans(
     session_date: date,
     labels,
 ):
-    groups: dict[datetime, list[object]] = defaultdict(list)
+    groups: dict[datetime, list[Any]] = defaultdict(list)
     for watermark_raw, observation in stored:
         if observation.observed_at.astimezone(_ET).date() != session_date:
             continue
@@ -610,7 +607,7 @@ def _replay_captured_scans(
     state: dict[str, dd.DynamicCandidate] = {}
     events = []
     violations = []
-    all_observations = []
+    all_observations: list[Any] = []
     fingerprint_records = []
     for watermark in sorted(groups):
         batch = tuple(groups[watermark])
@@ -658,7 +655,7 @@ def _persist_automatic_replay_refined(
     if not stored:
         return None
     observations = [observation for _, observation in stored]
-    first_by_symbol: dict[str, object] = {}
+    first_by_symbol: dict[str, Any] = {}
     for observation in sorted(observations, key=lambda row: row.observed_at):
         first_by_symbol.setdefault(observation.instrument_id, observation)
 

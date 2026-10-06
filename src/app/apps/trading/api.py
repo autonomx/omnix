@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field
@@ -294,7 +294,7 @@ def create_trading_router(
                 else service.stream_updates(instrument_id, interval, binding_id)
             )
             # Closing the generator releases this client's share of the upstream.
-            async with aclosing(updates):
+            async with aclosing(cast(Any, updates)):
                 async for update in updates:
                     await websocket.send_json(_stream_payload(update))
         except WebSocketDisconnect:

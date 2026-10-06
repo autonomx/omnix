@@ -18,7 +18,7 @@ import hashlib
 import json
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -55,9 +55,9 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
 
-PROSPECTIVE_OPERATIONAL_VERSION = "prospective-gap-operational-v1"
+PROSPECTIVE_OPERATIONAL_VERSION: Final = "prospective-gap-operational-v1"
 RAW_5M_FALLBACK_PRICE_VERSION = "sip-analysis-prices-raw-5m-fallback-v1"
-CONFIRMATION_NET_ALPHA_PORTFOLIO_VERSION = "confirmation-net-alpha-capped-v1"
+CONFIRMATION_NET_ALPHA_PORTFOLIO_VERSION: Final = "confirmation-net-alpha-capped-v1"
 
 CORE_PREMARKET_FEATURES = ("gap_from_prior_close_pct",)
 IMPORTANT_PREMARKET_FEATURES = (
@@ -754,7 +754,7 @@ def build_cash_preserving_shadow_portfolio(
                 forecast_fingerprint=receipt.forecast_fingerprint,
                 allocation=available_cap,
                 weight=available_cap / starting_equity,
-                expected_net_return=receipt.net_expected_return,
+                expected_net_return=cast(Decimal, receipt.net_expected_return),
                 authorization_decision_at=receipt.decision_at,
             )
         )

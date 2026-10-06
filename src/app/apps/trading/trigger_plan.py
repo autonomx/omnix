@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -328,7 +328,7 @@ def _row_to_plan(row) -> TriggerPlan:
         strategy_id=str(row[1]),
         arm_id=str(row[2]),
         instrument_id=str(row[3]),
-        status=str(row[4]),
+        status=cast(Any, str(row[4])),
         created_at=row[5],
         expires_at=row[6],
         trigger=TriggerCondition.model_validate(row[7]),

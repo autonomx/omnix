@@ -5,7 +5,7 @@ from app.config.env import environment
 """Idempotent startup provisioning for the managed interday SHADOW profile."""
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -252,14 +252,14 @@ def provision_managed_finviz_shadow_strategy(
                     strategy_id=created.strategy_id,
                     account_id=created.account_id,
                     action="created",
-                    mode=created.mode,
+                    mode=cast(Any, created.mode),
                     enabled=created.enabled,
                 )
                 return ManagedFinvizShadowProvisionResult(
                     account_id=created.account_id,
                     action="created",
                     enabled=created.enabled,
-                    mode=created.mode,
+                    mode=cast(Any, created.mode),
                 )
 
         if current.archived_at is not None:
@@ -284,7 +284,7 @@ def provision_managed_finviz_shadow_strategy(
                 account_id=current.account_id,
                 action="unchanged",
                 enabled=True,
-                mode=current.mode,
+                mode=cast(Any, current.mode),
             )
 
         replacement = desired_for_current.model_copy(
@@ -311,7 +311,7 @@ def provision_managed_finviz_shadow_strategy(
             strategy_id=updated.strategy_id,
             account_id=updated.account_id,
             action="updated",
-            mode=updated.mode,
+            mode=cast(Any, updated.mode),
             enabled=updated.enabled,
             revision=updated.revision,
         )
@@ -319,7 +319,7 @@ def provision_managed_finviz_shadow_strategy(
             account_id=updated.account_id,
             action="updated",
             enabled=updated.enabled,
-            mode=updated.mode,
+            mode=cast(Any, updated.mode),
         )
 
     raise RuntimeError("managed_finviz_shadow_provision_retry_exhausted")

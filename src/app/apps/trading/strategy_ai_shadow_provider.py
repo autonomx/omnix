@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -306,7 +306,7 @@ def assess_ai_shadow_v2_with_shared_circuit(
     analyzer: Any,
     *,
     arm: Any,
-    rows: list[dict[str, object]],
+    rows: list[dict[str, Any]],
     original,
 ):
     """Run V2 alpha through the isolated trading-research lane and circuit."""
@@ -543,7 +543,7 @@ def _output_error(content: str, requested_ids: set[str]):
     try:
         parsed = shadow.AIShadowBatchResponse.model_validate(raw)
     except ValidationError as exc:
-        first = exc.errors(include_url=False)[0] if exc.errors(include_url=False) else {}
+        first: dict[str, Any] = cast(dict[str, Any], exc.errors(include_url=False)[0]) if exc.errors(include_url=False) else {}
         raise AIShadowReliabilityError(
             "ai_shadow_output_schema_error",
             f"location={first.get('loc')};type={first.get('type')};message={first.get('msg')}",
@@ -588,7 +588,7 @@ def _cadence(policy: shadow.AIShadowPolicy) -> str:
     )
 
 
-def _messages(policy: shadow.AIShadowPolicy, payload: dict[str, object]) -> list[ChatMessage]:
+def _messages(policy: shadow.AIShadowPolicy, payload: dict[str, Any]) -> list[ChatMessage]:
     return [
         ChatMessage(
             role="system",
@@ -630,7 +630,7 @@ def _reliable_assess(
     self: shadow.AIShadowPolicyAnalyzer,
     *,
     policy: shadow.AIShadowPolicy,
-    rows: list[dict[str, object]],
+    rows: list[dict[str, Any]],
 ) -> shadow.AIShadowResult:
     if not rows:
         return shadow.AIShadowResult(policy=policy, decisions=(), provider="none")
@@ -724,7 +724,7 @@ def _reliable_assess(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
-            usage_source=usage_source,
+            usage_source=cast(Any, usage_source),
         )
 
     raise AIShadowReliabilityError("ai_shadow_output_repair_exhausted")

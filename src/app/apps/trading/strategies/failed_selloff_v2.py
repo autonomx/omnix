@@ -20,6 +20,7 @@ from app.apps.trading.models import MarketBar
 
 from .gap_pullback import _ET, _regular_bars, session_vwap
 from .models import GapPullbackConfig, GapPullbackFeatures, GapPullbackResult, StrategySignal
+from typing import Any, cast
 
 
 def _quality(features: GapPullbackFeatures) -> int:
@@ -44,10 +45,10 @@ def _result(
     scored = features.model_copy(update={"quality_score": _quality(features)})
     return GapPullbackResult(
         instrument_id=candidate.instrument_id,
-        state=state,
+        state=cast(Any, state),
         reason_code=reason,
         features=scored,
-        transitions=tuple(transitions),
+        transitions=cast(Any, tuple(transitions)),
         signal=signal,
         evaluated_bar_count=len(regular),
     )

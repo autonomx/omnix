@@ -19,7 +19,7 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -177,7 +177,7 @@ def replay_evolving_top_gainers(
     transitions: list[TopGainerMembershipTransition] = []
     previous_members: set[str] = set()
     ever_members: set[str] = set()
-    summary: dict[str, dict[str, object]] = {}
+    summary: dict[str, dict[str, Any]] = {}
 
     for observed_at in sorted(grouped):
         for row in grouped[observed_at]:
@@ -422,7 +422,7 @@ def replay_evolving_top_gainers_from_bars(
         checkpoints.append(current.astimezone(timezone.utc))
         current += step
 
-    state: dict[str, dict[str, object]] = {
+    state: dict[str, dict[str, Any]] = {
         instrument_id: {"bars": bars, "previous_close": previous, "index": 0, "latest": None, "cumulative": Decimal("0")}
         for instrument_id, (bars, previous) in sorted(prepared.items())
     }
@@ -433,7 +433,7 @@ def replay_evolving_top_gainers_from_bars(
     transitions: list[TopGainerMembershipTransition] = []
     previous_members: set[str] = set()
     ever_members: set[str] = set()
-    summary: dict[str, dict[str, object]] = {}
+    summary: dict[str, dict[str, Any]] = {}
 
     for observed_at in checkpoints:
         eligible: list[tuple[Decimal, Decimal, str, Decimal, Decimal, Decimal]] = []

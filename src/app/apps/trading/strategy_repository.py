@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Union
+from typing import Any, ClassVar, Literal, TYPE_CHECKING, Union, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
@@ -26,6 +26,14 @@ class _StrategyConfigDocumentBase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     strategy_registry: ClassVar[StrategyRegistry]
+    if TYPE_CHECKING:
+        # Fields the registry's model adds (strategy_config_document_model).
+        strategy_id: str
+        parent_strategy_id: str | None
+        strategy_kind: str
+        strategy_version: str
+        mode: StrategyMode
+        config: Any
 
     @model_validator(mode="before")
     @classmethod
@@ -97,21 +105,21 @@ if TYPE_CHECKING:
         """What type checkers see; the runtime model is built from the registry below."""
 
         strategy_id: str
-        parent_strategy_id: str | None
+        parent_strategy_id: str | None = None
         account_id: str
-        strategy_kind: str
-        strategy_version: str
-        mode: StrategyMode
-        active_universe_id: str | None
+        strategy_kind: str = "gap_pullback_v1"
+        strategy_version: str = "1.0.0"
+        mode: StrategyMode = "off"
+        active_universe_id: str | None = None
         # The kind's own configuration model (gap pullback, Stoch RSI, ...).
-        config: Any
-        risk: StrategyRiskProfile
-        enabled: bool
-        archived_at: datetime | None
-        archived_reason: str | None
-        revision: int
-        created_at: datetime | None
-        updated_at: datetime | None
+        config: Any = None
+        risk: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
+        enabled: bool = True
+        archived_at: datetime | None = None
+        archived_reason: str | None = None
+        revision: int = 1
+        created_at: datetime | None = None
+        updated_at: datetime | None = None
 else:
     TradingStrategyConfigDocument = strategy_config_document_model(STRATEGY_REGISTRY)
 
@@ -135,7 +143,7 @@ class StrategyEvent(BaseModel):
     trade_attempt_id: str | None = None
     trade_intent_id: str | None = None
     risk_decision_id: str | None = None
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class StrategyProtection(BaseModel):
@@ -168,7 +176,7 @@ def _config(row) -> TradingStrategyConfigDocument:
         account_id=str(row[2]),
         strategy_kind=str(row[3]),
         strategy_version=str(row[4]),
-        mode=str(row[5]),
+        mode=cast(Any, str(row[5])),
         active_universe_id=str(row[6]) if row[6] is not None else None,
         config=STRATEGY_REGISTRY.get(str(row[3])).config_model.model_validate(row[7]),
         risk=StrategyRiskProfile.model_validate(row[8]),
@@ -218,7 +226,7 @@ def _protection(row) -> StrategyProtection:
         mae_price=Decimal(row[10]) if row[10] is not None else None,
         mfe_price=Decimal(row[11]) if row[11] is not None else None,
         quantity=Decimal(row[12]),
-        status=str(row[13]),
+        status=cast(Any, str(row[13])),
         trigger_reason=str(row[14]) if row[14] is not None else None,
         revision=int(row[15]),
         created_at=row[16],

@@ -23,6 +23,7 @@ from .issuer_identity import SecIssuerIdentityResolver, fallback_issuer_identity
 from .novelty_shadow import generate_novelty_shadow
 from .repository import TradingResearchRepository, default_research_repository
 from .shadow_repository import TradingShadowResearchRepository, default_shadow_repository
+from typing import Any, cast
 
 
 class TradingResearchCoordinatorResult(BaseModel):
@@ -95,7 +96,7 @@ def _harvest_action(repository: TradingResearchRepository, request: TradingResea
         completed = datetime.now(timezone.utc)
         repository.save_action(ResearchActionRecord(
             action_id=action_id, trace_id=trace_id, strategy_id=request.strategy_id, instrument_id=request.instrument_id,
-            step=step, operation=operation, args={"query": query or "", "limit": limit},
+            step=step, operation=cast(Any, operation), args={"query": query or "", "limit": limit},
             reason="deterministic_primary_source_harvest", status="completed",
             result_summary={"detail": result.detail, "evidence_count": len(ids)}, evidence_ids=tuple(ids),
             requested_at=started, completed_at=completed,
@@ -106,7 +107,7 @@ def _harvest_action(repository: TradingResearchRepository, request: TradingResea
         completed = datetime.now(timezone.utc)
         repository.save_action(ResearchActionRecord(
             action_id=action_id, trace_id=trace_id, strategy_id=request.strategy_id, instrument_id=request.instrument_id,
-            step=step, operation=operation, args={"query": query or "", "limit": limit},
+            step=step, operation=cast(Any, operation), args={"query": query or "", "limit": limit},
             reason="deterministic_primary_source_harvest", status="failed", result_summary={}, evidence_ids=(),
             requested_at=started, completed_at=completed, error_code=type(exc).__name__,
             immutable_fingerprint=fingerprint({"trace": trace_id, "step": step, "operation": operation, "error": type(exc).__name__}),
@@ -283,7 +284,7 @@ def run_trading_research(
         report_id=f"trr-{hashlib.sha256((request.instrument_id+'|'+str(version)+'|'+fingerprint(report_payload)).encode()).hexdigest()[:24]}",
         report_version=version, strategy_id=request.strategy_id, instrument_id=request.instrument_id,
         research_started_at=request.requested_at, research_completed_at=finished, evidence_cutoff_at=finished,
-        catalyst_status=catalyst_status, supply_status=supply_status, research_status=status,
+        catalyst_status=cast(Any, catalyst_status), supply_status=cast(Any, supply_status), research_status=cast(Any, status),
         coverage=coverage, unresolved_facts=fact_preview.unresolved_facts,
         source_evidence_ids=tuple(item.evidence_id for item in evidence), hermes_trace_id=loop.trace_id,
         planner_backend=loop.planner_backend, stop_reason=loop.stop_reason,
@@ -305,7 +306,7 @@ def run_trading_research(
         "auto_trading", "trading_research_completed", trace_id=loop.trace_id, strategy_id=request.strategy_id,
         instrument_id=request.instrument_id, report_id=report.report_id, report_version=report.report_version,
         fact_set_id=fact_set.fact_set_id, feature_id=features.feature_id, omnix_known_at=features.omnix_known_at,
-        coverage=coverage, research_status=status, unresolved_facts=fact_set.unresolved_facts, warnings=warnings,
+        coverage=coverage, research_status=cast(Any, status), unresolved_facts=fact_set.unresolved_facts, warnings=warnings,
     )
     return TradingResearchCoordinatorResult(
         request=request, report=report, fact_set=fact_set, features=features, trace_id=loop.trace_id,

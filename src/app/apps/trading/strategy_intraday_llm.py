@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -131,7 +131,7 @@ def _usage_int(usage: Any, *keys: str) -> int | None:
     for key in keys:
         raw = usage.get(key)
         try:
-            value = int(raw)
+            value = int(cast(Any, raw))
         except (TypeError, ValueError):
             continue
         if value >= 0:

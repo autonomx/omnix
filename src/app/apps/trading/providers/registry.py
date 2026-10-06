@@ -408,7 +408,7 @@ class ProviderRegistry:
         instrument_id: str,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         binding = self.resolve_binding(instrument_id, binding_id)
         provider = self.provider(binding.provider)
         if self._supports_cancellation(provider.get_quote):
@@ -486,7 +486,7 @@ class ProviderRegistry:
         base_currency: str,
         quote_currency: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         provider = self.provider("yahoo")
         method = getattr(provider, "get_currency_rate", None)
         if not callable(method):
@@ -495,8 +495,8 @@ class ProviderRegistry:
             return method(base_currency, quote_currency, cancellation=cancellation)
         return method(base_currency, quote_currency)
 
-    def descriptors(self) -> list[dict[str, object]]:
-        descriptors: list[dict[str, object]] = []
+    def descriptors(self) -> list[dict[str, Any]]:
+        descriptors: list[dict[str, Any]] = []
         for provider_id, policy in POLICIES.items():
             provider: MarketDataProvider = self.provider(provider_id)
             status, runtime_payload = provider.runtime_status()

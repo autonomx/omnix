@@ -13,7 +13,7 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.apps.trading.binding_authority import MarketDataAuthorityDecision
+from app.apps.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
 from app.apps.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
 from app.apps.trading.execution import (
     ExecutionEligibilityPolicy,
@@ -161,7 +161,7 @@ class IbkrEquityProvider(ProviderAdapter):
         if now.tzinfo is None:
             raise ProviderContractError("IBKR provider clock must be timezone-aware")
         now = now.astimezone(timezone.utc)
-        capabilities = (
+        capabilities: tuple[MarketDataCapability, ...] = (
             "QUOTE",
             "BID_ASK",
             "HISTORICAL_BARS",
@@ -352,7 +352,7 @@ class IbkrEquityProvider(ProviderAdapter):
             authoritative=True,
         )
 
-    def get_quote(self, instrument_id: str, cancellation=None) -> dict[str, object]:
+    def get_quote(self, instrument_id: str, cancellation=None) -> dict[str, Any]:
         binding = self.get_binding(instrument_id)
         contract = self._contract(instrument_id)
         self.runtime.subscribe_quote(instrument_id, contract=contract)
@@ -576,7 +576,7 @@ class IbkrEquityProvider(ProviderAdapter):
             return response
         return response.model_copy(update={"bars": response.bars[-limit:]})
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return self.runtime.diagnostics()
 
 

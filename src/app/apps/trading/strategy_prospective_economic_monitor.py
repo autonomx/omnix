@@ -42,6 +42,7 @@ from .strategy_repository import (
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +222,7 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         identity: tuple[object, ...],
     ) -> bool:
         idem = _key(config.strategy_id, PROSPECTIVE_ECONOMIC_VERSION, event_type, instrument_id, *identity)
@@ -273,7 +274,7 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
             observed_at = source.observed_at.astimezone(timezone.utc)
             evaluation = source.payload.get("evaluation")
             evaluation_dict = evaluation if isinstance(evaluation, dict) else {}
-            payload: dict[str, object] = {
+            payload: dict[str, Any] = {
                 "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
                 "profile_fingerprint": profile,
                 "source_event_id": source.event_id,
@@ -340,7 +341,7 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
             execution_eligible = bool(execution_dict.get("execution_eligible"))
             entry_time = _datetime(execution_dict.get("source_time"), source.observed_at)
             matched = bool(execution_eligible and entry is not None and risk is not None and risk > 0)
-            payload: dict[str, object] = {
+            payload: dict[str, Any] = {
                 "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
                 "profile_fingerprint": profile,
                 "source_event_id": source.event_id,
@@ -613,7 +614,7 @@ class TradingStrategyProspectiveEconomicMonitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return captured
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": strategy_prospective_economic_monitor_enabled(),
             "running": self.scheduled,

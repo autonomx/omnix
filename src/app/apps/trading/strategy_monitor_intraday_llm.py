@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -132,7 +132,7 @@ async def run_intraday_llm(
         row[0].instrument_id: rank
         for rank, row in enumerate(ranked_learning, start=1)
     }
-    payload_modes: dict[str, str] = {}
+    payload_modes: dict[str, Literal["delta", "full"]] = {}
     for candidate, _, row_observed_at, _ in selected:
         instrument_id = candidate.instrument_id
         previous = previous_by_instrument.get(instrument_id)

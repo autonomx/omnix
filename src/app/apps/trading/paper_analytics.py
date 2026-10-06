@@ -6,7 +6,7 @@ import math
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -78,7 +78,7 @@ class PaperAnalyticsTrade(BaseModel):
     implementation_shortfall_bps: Decimal | None = None
     initial_stop: Decimal | None = None
     initial_target: Decimal | None = None
-    setup_features: dict[str, object] = Field(default_factory=dict)
+    setup_features: dict[str, Any] = Field(default_factory=dict)
 
 
 class PaperPerformanceSummary(BaseModel):
@@ -389,7 +389,7 @@ _FUNNEL_STAGES = (
 
 def _event_stage(event: StrategyEvent) -> int:
     payload = event.payload or {}
-    execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
+    execution = raw_execution if isinstance(raw_execution := payload.get("execution"), dict) else {}
     explicit = payload.get("lifecycle_stage")
     if isinstance(explicit, int) and 0 <= explicit <= 8:
         return explicit
@@ -436,7 +436,7 @@ def _event_stage(event: StrategyEvent) -> int:
 
 
 def lifecycle_funnel(events: list[StrategyEvent]) -> list[PaperFunnelStage]:
-    lifecycles: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    lifecycles: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for event in sorted(events, key=lambda item: (item.observed_at, item.event_id)):
         session = str(event.payload.get("session_date") or event.observed_at.astimezone(_ET).date())
         universe = str(event.payload.get("universe_id") or event.payload.get("universe_source") or "unscoped")
@@ -493,7 +493,7 @@ _FACTOR_DEFINITIONS: dict[str, tuple[str, tuple[Decimal, ...]]] = {
 }
 
 
-def _feature_value(features: dict[str, object], key: str) -> Decimal | None:
+def _feature_value(features: dict[str, Any], key: str) -> Decimal | None:
     direct = _decimal(features.get(key))
     if direct is not None:
         return direct
@@ -595,7 +595,7 @@ class TradingPaperAnalytics:
         end_date: date | None,
     ) -> list[PaperEquityPoint]:
         clauses = ["workspace_id = %s", "account_id = %s"]
-        params: list[object] = [self.context.workspace_id, account_id]
+        params: list[Any] = [self.context.workspace_id, account_id]
         if epoch_id:
             clauses.append("epoch_id = %s")
             params.append(epoch_id)
@@ -643,7 +643,7 @@ class TradingPaperAnalytics:
         end_date: date | None,
     ) -> list[PaperAnalyticsTrade]:
         clauses = ["workspace_id = %s", "account_id = %s"]
-        params: list[object] = [self.context.workspace_id, account_id]
+        params: list[Any] = [self.context.workspace_id, account_id]
         if strategy_id:
             clauses.append("strategy_id = %s")
             params.append(strategy_id)
@@ -724,7 +724,7 @@ class TradingPaperAnalytics:
                 "strategy_id = %s",
                 "event_type = 'v2_shadow_replay_trade'",
             ]
-            params: list[object] = [self.context.workspace_id, strategy_id]
+            params: list[Any] = [self.context.workspace_id, strategy_id]
             if start_date:
                 clauses.append("(payload ->> 'session_date')::date >= %s")
                 params.append(start_date)

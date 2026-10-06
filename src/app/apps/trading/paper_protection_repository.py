@@ -7,6 +7,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .binding_authority import infer_binding_purpose
 from .paper_protection import PaperPositionProtection, PaperProtectionStatus, PaperProtectionUpsert
+from typing import Any, cast
 
 
 _COLUMNS = """
@@ -20,12 +21,12 @@ def _protection(row) -> PaperPositionProtection:
         account_id=str(row[0]),
         instrument_id=str(row[1]),
         binding_id=str(row[2]) if row[2] is not None else None,
-        binding_purpose=str(row[3]),
+        binding_purpose=cast(Any, str(row[3])),
         entry_order_id=str(row[4]) if row[4] is not None else None,
         exit_order_id=str(row[5]) if row[5] is not None else None,
         take_profit=Decimal(row[6]) if row[6] is not None else None,
         stop_loss=Decimal(row[7]) if row[7] is not None else None,
-        status=str(row[8]),
+        status=cast(Any, str(row[8])),
         trigger_reason=str(row[9]) if row[9] is not None else None,
         revision=int(row[10]),
         created_at=row[11],

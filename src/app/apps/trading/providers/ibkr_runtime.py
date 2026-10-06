@@ -122,13 +122,13 @@ class IbkrTransport(Protocol):
         use_rth: bool,
         timeout_seconds: float = 20.0,
     ) -> list[IbkrHistoricalBar]: ...
-    def request_health(self, token: int) -> dict[str, object]: ...
-    def diagnostics(self) -> dict[str, object]: ...
+    def request_health(self, token: int) -> dict[str, Any]: ...
+    def diagnostics(self) -> dict[str, Any]: ...
 
 
 def official_ibapi_available() -> bool:
     try:
-        import ibapi  # type: ignore[import-not-found]  # noqa: F401
+        import ibapi  # noqa: F401
     except Exception:
         return False
     return True
@@ -139,9 +139,9 @@ class OfficialIbapiTransport:
 
     def __init__(self) -> None:
         try:
-            from ibapi.client import EClient  # type: ignore[import-not-found]
-            from ibapi.contract import Contract  # type: ignore[import-not-found]
-            from ibapi.wrapper import EWrapper  # type: ignore[import-not-found]
+            from ibapi.client import EClient
+            from ibapi.contract import Contract
+            from ibapi.wrapper import EWrapper
         except Exception as exc:
             raise IbkrClientUnavailableError(
                 "official IBKR ibapi package is not installed"
@@ -158,9 +158,9 @@ class OfficialIbapiTransport:
         self._historical_events: dict[int, threading.Event] = {}
         self._quote_contracts: dict[int, IbkrContractIdentity] = {}
         self._quote_listeners: dict[int, Callable[[IbkrQuoteSnapshot], None]] = {}
-        self._quote_values: dict[int, dict[str, object]] = {}
+        self._quote_values: dict[int, dict[str, Any]] = {}
         self._market_data_types: dict[int, str] = {}
-        self._request_errors: dict[int, dict[str, object]] = {}
+        self._request_errors: dict[int, dict[str, Any]] = {}
         self._farm_status: dict[str, str] = {}
         self._sequence = 0
         self._last_error: str | None = None
@@ -537,7 +537,7 @@ class OfficialIbapiTransport:
             self._historical_events.pop(req_id, None)
             self._request_errors.pop(req_id, None)
 
-    def request_health(self, token: int) -> dict[str, object]:
+    def request_health(self, token: int) -> dict[str, Any]:
         request_id = int(token)
         error = self._request_errors.get(request_id)
         return {
@@ -547,7 +547,7 @@ class OfficialIbapiTransport:
             "entitlement_denied": bool(error and error.get("entitlement_denied")),
         }
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         recent_errors = {
             str(key): dict(value)
             for key, value in sorted(self._request_errors.items())[-20:]
@@ -577,7 +577,7 @@ class FakeIbkrTransport:
         self.history = history or {}
         self.connected = False
         self.listeners: dict[int, tuple[IbkrContractIdentity, Callable[[IbkrQuoteSnapshot], None]]] = {}
-        self.request_health_by_token: dict[int, dict[str, object]] = {}
+        self.request_health_by_token: dict[int, dict[str, Any]] = {}
         self._next_token = 1
 
     def connect(self, host: str, port: int, client_id: int, timeout_seconds: float = 8.0) -> None:
@@ -628,7 +628,7 @@ class FakeIbkrTransport:
             if start <= row.start_time.astimezone(timezone.utc).timestamp() < end.astimezone(timezone.utc).timestamp()
         ]
 
-    def request_health(self, token: int) -> dict[str, object]:
+    def request_health(self, token: int) -> dict[str, Any]:
         return dict(
             self.request_health_by_token.get(
                 int(token),
@@ -641,7 +641,7 @@ class FakeIbkrTransport:
             )
         )
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "transport": "fake",
             "connected": self.connected,
@@ -924,7 +924,7 @@ class IbkrRuntime:
         with self._lock:
             return self._latest_quotes.get(instrument_id)
 
-    def subscription_health(self, instrument_id: str) -> dict[str, object]:
+    def subscription_health(self, instrument_id: str) -> dict[str, Any]:
         with self._lock:
             token = self._quote_tokens.get(instrument_id)
         if token is None or self.transport is None:
@@ -1000,7 +1000,7 @@ class IbkrRuntime:
         end_utc = end.astimezone(timezone.utc)
         return [row for row in rows if start_utc <= row.start_time < end_utc]
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         self.refresh_settings()
         transport_diagnostics = self.transport.diagnostics() if self.transport is not None else {}
         settings, settings_source = load_ibkr_settings() if self._settings_managed else (

@@ -121,25 +121,25 @@ def _indicator_value(alert: TradingAlert, bars: Sequence[MarketBar]) -> Decimal 
         values = average_true_range(highs, lows, closes, parameters.period)
         return values[-1] if values else None
     if indicator_id == "bollinger":
-        values = bollinger_bands(closes, parameters.period)
-        if not values:
+        bands = bollinger_bands(closes, parameters.period)
+        if not bands:
             return None
-        middle, upper, lower = values[-1]
+        middle, upper, lower = bands[-1]
         return {
             "upper": upper,
             "middle": middle,
             "lower": lower,
         }.get(parameters.component, middle)
     if indicator_id == "macd":
-        values = moving_average_convergence_divergence(
+        macd_values = moving_average_convergence_divergence(
             closes,
             parameters.fast_period,
             parameters.slow_period,
             parameters.signal_period,
         )
-        if not values:
+        if not macd_values:
             return None
-        line, signal, histogram = values[-1]
+        line, signal, histogram = macd_values[-1]
         return {
             "line": line,
             "signal": signal,

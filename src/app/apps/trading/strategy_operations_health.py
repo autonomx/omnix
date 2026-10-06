@@ -96,11 +96,11 @@ def _protection_stops(
             continue
         previous = stops.get(item.instrument_id)
         stops[item.instrument_id] = item.stop_loss if previous is None else max(previous, item.stop_loss)
-    for item in strategy:
-        if item.status not in {"pending_entry", "active", "exit_submitted"}:
+    for strategy_protection in strategy:
+        if strategy_protection.status not in {"pending_entry", "active", "exit_submitted"}:
             continue
-        previous = stops.get(item.instrument_id)
-        stops[item.instrument_id] = item.stop_price if previous is None else max(previous, item.stop_price)
+        previous = stops.get(strategy_protection.instrument_id)
+        stops[strategy_protection.instrument_id] = strategy_protection.stop_price if previous is None else max(previous, strategy_protection.stop_price)
     return stops
 
 

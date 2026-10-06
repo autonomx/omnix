@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -43,7 +43,7 @@ class CatalystEvidence(BaseModel):
     headline: str | None = None
     content: str = Field(min_length=1, max_length=100_000)
     text_hash: str = Field(min_length=64, max_length=64)
-    facts: dict[str, object] = Field(default_factory=dict)
+    facts: dict[str, Any] = Field(default_factory=dict)
     dilution_flags: tuple[str, ...] = ()
     immutable_fingerprint: str = Field(min_length=64, max_length=64)
 
@@ -135,7 +135,7 @@ def supply_facts(text: str) -> tuple[CatalystSupplyFact, ...]:
             output.append(CatalystSupplyFact(
                 supply_type=supply_type,
                 status=status,
-                resolution_status=resolution,
+                resolution_status=cast(Any, resolution),
                 source_excerpt=statement[:500],
             ))
     unique: dict[tuple[str, str, str], CatalystSupplyFact] = {}
@@ -149,7 +149,7 @@ def dilution_flags(text: str) -> tuple[str, ...]:
     return tuple(sorted({fact.supply_type for fact in supply_facts(text) if fact.status == "active"}))
 
 
-def _provided_supply_facts(facts: dict[str, object]) -> tuple[CatalystSupplyFact, ...] | None:
+def _provided_supply_facts(facts: dict[str, Any]) -> tuple[CatalystSupplyFact, ...] | None:
     raw = facts.get("supply_facts")
     if raw is None:
         return None
@@ -176,7 +176,7 @@ def capture_catalyst_evidence(
     raw_text: str,
     headline: str | None = None,
     captured_at: datetime | None = None,
-    facts: dict[str, object] | None = None,
+    facts: dict[str, Any] | None = None,
 ) -> CatalystEvidence:
     captured = captured_at or datetime.now(timezone.utc)
     normalized = " ".join(raw_text.split())
@@ -189,7 +189,7 @@ def capture_catalyst_evidence(
         typed_supply = supply_facts(normalized)
     fact_payload["supply_facts"] = [item.model_dump(mode="json") for item in typed_supply]
     flags = tuple(sorted({item.supply_type for item in typed_supply if item.status == "active"}))
-    payload = {
+    payload: dict[str, Any] = {
         "evidence_id": evidence_id,
         "instrument_id": instrument_id,
         "source_type": source_type,

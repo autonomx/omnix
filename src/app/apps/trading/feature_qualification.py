@@ -418,6 +418,8 @@ def qualify_bar_feature(
     if gaps and requirement.dependency_class == "RECURSIVE":
         if requirement.allow_approximate_reseed and requirement.reseed_after_clean_bars:
             clean_needed = requirement.reseed_after_clean_bars
+            # Gaps are only found inside a started window.
+            assert required_latest is not None
             clean_start = required_latest - step * (clean_needed - 1)
             clean = True
             cursor = clean_start

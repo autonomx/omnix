@@ -17,7 +17,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from statistics import mean, stdev
 from types import SimpleNamespace
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from . import strategy_dynamic_discovery as dd
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
@@ -43,7 +43,7 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _float(value: object, default: float = 0.0) -> float:
+def _float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
     try:
@@ -60,7 +60,7 @@ def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
-def _semantic_level(value: object, *, unknown: float = 50.0) -> float:
+def _semantic_level(value: Any, *, unknown: float = 50.0) -> float:
     if value is None:
         return unknown
     text = str(value).strip().lower()
@@ -182,7 +182,7 @@ def _duration_from_event(event: dd.DiscoveryEvent) -> str | None:
     return str(value) if value is not None else None
 
 
-def _snapshot_from_event(event: dd.DiscoveryEvent) -> dict[str, object] | None:
+def _snapshot_from_event(event: dd.DiscoveryEvent) -> dict[str, Any] | None:
     value = event.payload.get("snapshot")
     return dict(value) if isinstance(value, dict) else None
 
@@ -658,7 +658,7 @@ def _events_from_observation(observation, *, config: dd.DynamicDiscoveryConfig):
 def apply_discovery_scan(
     *,
     previous_state: Mapping[str, dd.DynamicCandidate],
-    observations: Sequence[object],
+    observations: Sequence[Any],
     watermark: datetime,
     session_date: date,
     config: dd.DynamicDiscoveryConfig = dd.DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
@@ -672,7 +672,7 @@ def apply_discovery_scan(
     }
     emitted: list[dd.DiscoveryEvent] = []
     violations: list[dd.DiscoveryScanViolation] = []
-    latest: dict[str, object] = {}
+    latest: dict[str, Any] = {}
 
     ordered = sorted(
         observations,
@@ -901,13 +901,10 @@ def _build_complete_characterization(
     context = _market_context(market_service, observed_at)
     relationships = _relationships_from_snapshot(candidate)
     execution_quality = 50.0
-    if (
-        observation is not None
-        and getattr(observation, "market", None) is not None
-        and observation.market.spread_bps is not None
-    ):
+    market = getattr(observation, "market", None) if observation is not None else None
+    if market is not None and market.spread_bps is not None:
         execution_quality = max(
-            0.0, min(100.0, 100.0 - observation.market.spread_bps / 2.0)
+            0.0, min(100.0, 100.0 - market.spread_bps / 2.0)
         )
 
     # Unknown catalyst risk is neutral, not benign. A real snapshot may override it.
@@ -1070,7 +1067,7 @@ def _complete_strategy_rankings(
         ordered = sorted(
             eligible,
             key=lambda item: (
-                -dd.strategy_specific_score(arm, item.characterization),
+                -dd.strategy_specific_score(arm, cast(dd.OpportunityCharacterization, item.characterization)),
                 item.discovered_at,
                 item.instrument_id,
             ),
@@ -1100,9 +1097,9 @@ def _append_parent_event(
     observed_at: datetime,
     instrument_id: str,
     state: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
     reason_code: str | None = None,
-    identity: Sequence[object] = (),
+    identity: Sequence[Any] = (),
 ) -> bool:
     event_id = _key(
         event_type,
@@ -1346,7 +1343,7 @@ async def _run_dynamic_discovery_once_complete(
     )
 
 
-def _complete_evaluate_shadow_qualification(metrics: Mapping[str, object]):
+def _complete_evaluate_shadow_qualification(metrics: Mapping[str, Any]):
     sessions = int(metrics.get("independent_sessions", 0) or 0)
     opportunities = int(metrics.get("labeled_opportunities", 0) or 0)
     recall = _float(metrics.get("discovery_recall"))
@@ -1501,7 +1498,7 @@ def _complete_trend_outcome_from_ohlc(
     discovery_at: datetime,
     reference_at: datetime,
     reference_price: float,
-    bars: Sequence[object],
+    bars: Sequence[Any],
     stop_fraction: float = 0.05,
     reference_mode: str = "discovery_close",
 ):
@@ -1689,7 +1686,7 @@ def _bridge_strategy_events_complete(
     repository: TradingStrategyRepository,
     *,
     session_date: date,
-    events_by_strategy: dict[str, Iterable[StrategyEvent]],
+    events_by_strategy: Mapping[str, Iterable[StrategyEvent]],
 ) -> int:
     from . import strategy_interday_attribution as attribution
 

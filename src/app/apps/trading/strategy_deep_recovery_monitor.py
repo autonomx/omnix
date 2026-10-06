@@ -40,6 +40,7 @@ from .strategy_session_evidence import (
     _PartialCurrentSessionMarketDataProxy,
 )
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from typing import Any, cast
 
 
 _STATE_KEY = "_omnix_trading_strategy_deep_recovery_shadow_monitor"
@@ -112,7 +113,7 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         identity: tuple[object, ...],
     ) -> bool:
         idem = _key(
@@ -190,22 +191,22 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
         now: datetime,
     ) -> int:
         if not getattr(market_service, "allow_partial_current_session", False):
-            market_service = _PartialCurrentSessionMarketDataProxy(
+            market_service = cast(TradingMarketDataService, _PartialCurrentSessionMarketDataProxy(
                 market_service,
                 session_date=now.astimezone(_ET).date(),
                 observed_at=now,
-            )
-        market_service = _FullSessionMarketServiceProxy(
+            ))
+        market_service = cast(TradingMarketDataService, _FullSessionMarketServiceProxy(
             market_service,
             session_date=now.astimezone(_ET).date(),
             observed_at=now,
             allow_shadow_fallback=True,
-        )
-        market_service = _CoverageMarketService(
+        ))
+        market_service = cast(TradingMarketDataService, _CoverageMarketService(
             market_service,
             session_date=now.astimezone(_ET).date(),
             observed_at=now,
-        )
+        ))
         if not _eligible(config):
             return 0
         today_et = now.astimezone(_ET).date()
@@ -332,7 +333,7 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
                 )
                 self.execution_observation_count += 1
                 signal_payload["execution"] = evidence.execution
-                signal_reason = evidence.reason_code
+                signal_reason: str = evidence.reason_code
             except Exception as exc:
                 signal_payload["execution"] = None
                 signal_payload["execution_error"] = f"{type(exc).__name__}: {exc}"
@@ -397,7 +398,7 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return emitted
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": strategy_deep_recovery_shadow_monitor_enabled(),
             "running": self.scheduled,

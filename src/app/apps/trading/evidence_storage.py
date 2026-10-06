@@ -142,7 +142,7 @@ class PostgresEvidenceBackend:
         distinct = list(distinct_revisions(records).items())
         if not distinct:
             return 0
-        columns = {name: [] for name in ("start_time", "content_sha256", "end_time", "open", "high", "low", "close",
+        columns: dict[str, list[Any]] = {name: [] for name in ("start_time", "content_sha256", "end_time", "open", "high", "low", "close",
                                          "volume", "session", "provider_event_id", "received_at")}
         for (start, digest), record in distinct:
             columns["start_time"].append(start)

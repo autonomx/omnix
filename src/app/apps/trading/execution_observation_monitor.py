@@ -6,7 +6,7 @@ from app.config.env import environment
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.model_executor import ModelExecutor
 from app.runtime.features import FeatureContext
@@ -180,7 +180,7 @@ class TradingExecutionObservationMonitor(ScheduledTradingMonitor):
             for instrument_id in [key for key in state if key not in instrument_ids]:
                 del state[instrument_id]
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": execution_observation_monitor_enabled(),
             "running": self.scheduled,
