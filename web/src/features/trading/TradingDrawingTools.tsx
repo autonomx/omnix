@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DrawingTool } from './drawings/drawingCommands';
+import { DRAWING_TOOL_DEFINITIONS } from './drawings/tools/registry';
 import './TradingDrawingTools.css';
 
 type DrawingToolItem = {
@@ -8,6 +9,7 @@ type DrawingToolItem = {
   glyph: string;
   tool?: DrawingTool;
   shortcut?: string;
+  /** Marks a catalogue placeholder; a registered tool with the same label makes it available. */
   available?: boolean;
 };
 
@@ -18,7 +20,8 @@ type DrawingToolGroup = {
   items: DrawingToolItem[];
 };
 
-const drawingToolGroups: DrawingToolGroup[] = [
+/** The toolbar catalogue. Items without a `tool` light up once a registered tool has their label. */
+export const drawingToolGroups: DrawingToolGroup[] = [
   {
     id: 'cursor',
     label: 'Cursor',
@@ -255,8 +258,15 @@ const drawingToolGroups: DrawingToolGroup[] = [
   },
 ];
 
+const registeredToolsByLabel = new Map<string, DrawingTool>(DRAWING_TOOL_DEFINITIONS.map((definition) => [definition.label, definition.id]));
+
+/** The tool an item selects: its own, or the registered drawing tool with its label. */
+export function drawingToolItemTool(item: DrawingToolItem): DrawingTool | undefined {
+  return item.tool ?? registeredToolsByLabel.get(item.label);
+}
+
 function itemIsAvailable(item: DrawingToolItem): boolean {
-  return item.available !== false && item.tool !== undefined;
+  return drawingToolItemTool(item) !== undefined;
 }
 
 const favoritesStorageKey = 'omnix.trading.drawing-tool-favorites';
@@ -328,7 +338,7 @@ export function TradingDrawingTools({
     <aside ref={rootRef} className="trading-tools trading-drawing-tools" aria-label="Chart drawing tools">
       {drawingToolGroups.filter((group) => group.id !== 'measurers').map((group) => {
         const isCursorGroup = group.id === 'cursor';
-        const selectedItem = group.items.find((item) => item.tool === selectedTool && itemIsAvailable(item));
+        const selectedItem = group.items.find((item) => drawingToolItemTool(item) === selectedTool);
         const active = selectedTool === 'cursor' && isCursorGroup ? true : selectedItem !== undefined;
         const expanded = openGroup === group.id;
         const activeLabel = selectedItem?.label ?? group.label;
@@ -411,7 +421,7 @@ export function TradingDrawingTools({
                   const favoriteId = `${group.id}:${item.label}`;
                   const favorite = favorites.has(favoriteId);
                   return (
-                    <div key={item.label} className={`trading-drawing-tool-row${item.tool === selectedTool ? ' selected' : ''}`}>
+                    <div key={item.label} className={`trading-drawing-tool-row${drawingToolItemTool(item) === selectedTool ? ' selected' : ''}`}>
                       <button
                         type="button"
                         role="menuitem"
@@ -420,8 +430,9 @@ export function TradingDrawingTools({
                         disabled={!available}
                         title={available ? item.label : `${item.label} is not available yet`}
                         onClick={() => {
-                          if (!item.tool || !available) return;
-                          onSelect(item.tool);
+                          const tool = drawingToolItemTool(item);
+                          if (!tool) return;
+                          onSelect(tool);
                           setOpenGroup(null);
                         }}
                       >

@@ -1,24 +1,12 @@
-export type DrawingPoint = { time: string; price: number };
-export type DrawingTool =
-  | 'cursor'
-  | 'alert'
-  | 'dot'
-  | 'arrow'
-  | 'horizontal-line'
-  | 'horizontal-ray'
-  | 'trend-line'
-  | 'vertical-line'
-  | 'crossline'
-  | 'ray'
-  | 'rectangle'
-  | 'circle'
-  | 'ellipse'
-  | 'fibonacci'
-  | 'text'
-  | 'measurement'
-  | 'eraser';
+import { drawingPropertiesWithDefaults, type DrawingToolId } from './tools/registry';
+import { DEFAULT_DRAWING_STYLE, type DrawingPoint, type DrawingProperties, type DrawingStyle } from './tools/types';
+
+export { DEFAULT_DRAWING_STYLE };
+export type { DrawingPoint, DrawingProperties, DrawingStyle };
+
+/** A toolbar tool: the registered drawing tools (`tools/registry.ts`) plus three modes. */
+export type DrawingTool = 'cursor' | 'alert' | 'eraser' | DrawingToolId;
 export type DrawingSnapMode = 'none' | 'time' | 'price' | 'ohlc';
-export type DrawingStyle = { color: string; lineWidth: number; lineStyle: 'solid' | 'dashed' };
 export type TradingDrawing = {
   drawingId: string;
   instrumentId: string;
@@ -30,6 +18,8 @@ export type TradingDrawing = {
   locked?: boolean;
   hidden?: boolean;
   text?: string;
+  /** Tool-specific properties (fib levels, extensions, ...); defaults come from the tool definition. */
+  properties?: DrawingProperties;
 };
 
 export type DrawingState = {
@@ -39,10 +29,9 @@ export type DrawingState = {
   future: TradingDrawing[][];
 };
 
-export const DEFAULT_DRAWING_STYLE: DrawingStyle = { color: '#66d9e8', lineWidth: 2, lineStyle: 'solid' };
 export const emptyDrawingState = (): DrawingState => ({ drawings: [], selectedId: null, history: [], future: [] });
 
-function normalize(drawing: TradingDrawing): TradingDrawing {
+export function normalizeDrawing(drawing: TradingDrawing): TradingDrawing {
   return {
     ...drawing,
     points: drawing.points.map((point) => ({ ...point })),
@@ -50,11 +39,12 @@ function normalize(drawing: TradingDrawing): TradingDrawing {
     locked: drawing.locked ?? false,
     hidden: drawing.hidden ?? false,
     text: drawing.text ?? '',
+    properties: drawingPropertiesWithDefaults(drawing.toolType, drawing.properties),
   };
 }
 
 function cloneDrawings(drawings: TradingDrawing[]): TradingDrawing[] {
-  return drawings.map(normalize);
+  return drawings.map(normalizeDrawing);
 }
 
 function snapshot(state: DrawingState): DrawingState {
@@ -62,12 +52,12 @@ function snapshot(state: DrawingState): DrawingState {
 }
 
 export function replaceDrawings(drawings: TradingDrawing[]): DrawingState {
-  return { drawings: drawings.map((drawing) => ({ ...normalize(drawing), selected: false })), selectedId: null, history: [], future: [] };
+  return { drawings: drawings.map((drawing) => ({ ...normalizeDrawing(drawing), selected: false })), selectedId: null, history: [], future: [] };
 }
 
 export function addDrawing(state: DrawingState, drawing: TradingDrawing): DrawingState {
   const next = snapshot(state);
-  return { ...next, drawings: [...next.drawings.map((item) => ({ ...item, selected: false })), { ...normalize(drawing), selected: true }], selectedId: drawing.drawingId };
+  return { ...next, drawings: [...next.drawings.map((item) => ({ ...item, selected: false })), { ...normalizeDrawing(drawing), selected: true }], selectedId: drawing.drawingId };
 }
 
 export function selectDrawing(state: DrawingState, drawingId: string | null): DrawingState {
@@ -118,7 +108,7 @@ export function translateDrawing(
 
 export function updateSelectedDrawing(
   state: DrawingState,
-  patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text'>>,
+  patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text' | 'properties'>>,
 ): DrawingState {
   if (!state.selectedId) return state;
   const next = snapshot(state);
@@ -128,6 +118,9 @@ export function updateSelectedDrawing(
       ...drawing,
       ...patch,
       style: patch.style ? { ...drawing.style, ...patch.style } as DrawingStyle : drawing.style,
+      properties: patch.properties
+        ? drawingPropertiesWithDefaults(drawing.toolType, { ...drawing.properties, ...patch.properties })
+        : drawing.properties,
       revision: drawing.revision + 1,
     }),
   };
