@@ -1120,33 +1120,46 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4 (first part), 1.1, 1.2, 2.1, 2.3, 2.4, 2.5, 5.1–5.3, 6.1, 7.1 and 8.1 (wave 1). The TVP-0.4 readiness round is built and reviewed; it needs one decision (see its row) before the TVP-3 drawing tools start. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
+**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4 (first part), 1.1, 1.2, 2.1, 2.3, 2.4, 2.5, 5.1–5.3, 6.1, 7.1 and 8.1 (wave 1). The TVP-0.4 readiness round has its decision and fixes; its last review said go once five small findings are fixed, and then the TVP-3 drawing tools start. TVP-0.5a (webhook delivery) is in progress. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
+
+**Completion.**
+
+| Measure | Done | How it is counted |
+|---|---|---|
+| TradingView parity, all features in scope | **61%** | Ledger features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out. Includes what Omnix had before this roadmap |
+| TradingView parity, daily + weekly features | **68%** | The same, for the features traders use daily or weekly |
+| Roadmap work packages | **21%** (14 of 67) | Work packages merged in full: TVP-0.1, 0.2, 0.3, 1.1, 1.2, 2.1, 2.3, 2.4, 2.5, 5.1, 5.2, 5.3, 6.1, 7.1. Two more are merged in part (TVP-0.4, TVP-8.1) and not counted. The 67 include the deferred TVP-4.6 |
+| Daily + weekly gap closed | **27%** (41 of 150) | Missing daily + weekly features: 150 at the first ledger count, 109 now |
+
+The per-area and per-tier **Done** columns below use the same rule as the first row.
 
 Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parity.json) (`python scripts/tradingview_parity_report.py`). The ledger was checked against the code in TVP-0.1 and updated after each merge; the running app was not available for a visual check.
 
-| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded |
-|---|---|---|---|---|---|
-| Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 |
-| Drawing tools | 17 | 4 | 19 / 14 / 47 | 0 | 0 |
-| Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 |
-| User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 |
-| Alerts | 15 | 3 | 4 / 2 / 0 | 0 | 0 |
-| Shortcuts | 25 | 7 | 18 / 0 / 0 | 0 | 0 |
-| Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 |
-| Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 |
-| Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 |
-| Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 |
-| Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 |
-| Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 |
-| **Total** | 253 | 24 | 54 / 55 / 52 | 55 | 0 |
-
-| Tier | Have | Partial | Missing | Pending decision | Excluded | Total |
+| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
-| Daily | 94 | 15 | 54 | 0 | 0 | 163 |
-| Weekly | 146 | 9 | 55 | 0 | 0 | 210 |
-| Rare | 13 | 0 | 52 | 55 | 0 | 120 |
+| Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 | 86% |
+| Drawing tools | 17 | 4 | 19 / 14 / 47 | 0 | 0 | 19% |
+| Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
+| User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
+| Alerts | 15 | 3 | 4 / 2 / 0 | 0 | 0 | 69% |
+| Shortcuts | 25 | 7 | 18 / 0 / 0 | 0 | 0 | 57% |
+| Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 | 86% |
+| Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
+| Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
+| Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 | 55% |
+| Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
+| Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
+| **Total** | 253 | 24 | 54 / 55 / 52 | 55 | 0 | 61% |
+
+| Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
+|---|---|---|---|---|---|---|---|
+| Daily | 94 | 15 | 54 | 0 | 0 | 163 | 62% |
+| Weekly | 146 | 9 | 55 | 0 | 0 | 210 | 72% |
+| Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
 Missing daily + weekly features: **109**
+
+Done (have counts 1, partial 0.5, of the features in scope): **61%** overall, **68%** of daily + weekly.
 
 **How the work runs.**
 - Integration branch `tradingview-parity`, checked out in the worktree `F:/LLM/omnix-tvp`.
@@ -1164,11 +1177,12 @@ Missing daily + weekly features: **109**
 | TVP-2.1 + 2.3 + 2.4 | **Done** | merged `d7e84f2f5d` | Chart shortcuts (type-to-search, interval box, `/`, Ctrl+K palette, Ctrl+S, `.`, arrows, zoom, Alt+R/I/L/P/S, Ctrl+Y), layout shortcuts (Tab between charts, Alt+Enter, Alt+W), tab shortcuts (Alt-based in the browser, TradingView's Ctrl keys for the installed app), closed-tab stack, shortcut dialog with rebinding and conflict checks. Own hotkey matcher for keyboard layouts (decision TVP-0.3 rev). Three review rounds. Alt+G bound with the TVP-2.5 merge. Follow-up: Alt+A (add alert) |
 | TVP-2.5 | **Done** | merged `a4275fd16c` | Custom intervals with favourites (the keyboard interval box uses the same parser), countdown, go to date (Alt+G), copy image, duplicate layout, double-click maximise/collapse, extended-hours toggle and price line, chart templates, market status and delay badges (new `/api/trading/market-status`). Review fixes: **clock-aligned chart aggregation** (`providers/clock_aggregation.py`; the strategy runner's count mode is unchanged and pinned by goldens), multi-day equity buckets count trading days, a bucket is final only when its last base bar is, comparison series and the data window use the chart's alignment and extended-hours setting. Two review rounds. Remaining: snapshot links (need a hosted snapshot service) |
 | TVP-6.1 | **Done** | merged `fe21951c71` | 9 indicators in browser and server, bit-exact: Rob Booker ADX Breakout, Knoxville Divergence, Intraday Pivot Points, Missed Pivot Points, Reversal, Ziv Ghost Pivots; Relative Volume at Time; 24-hour Volume; Correlation Coefficient with a second series. Review fixes: definitions aligned with TradingView's help pages, sessions in the exchange timezone (futures roll at 18:00 ET despite the catalog's 24x7 tag), levels and markers rendering, compare-symbol loading. Two review rounds. Follow-ups: alerts pass `params`/session/compare bars (TVP-1.x); Intraday Pivot Points period as a 1/4/8 select; unlabelled US-equity bars count as regular |
-| TVP-0.4 | **Merged** (first part); readiness round reviewed, one decision open | merged `e1a0dae44a`; `tvp/0.4-drawing-registry` | Registry with renderer-agnostic geometry, creation gestures, generic properties dialog, gap-aware time index, safe document upgrades; SVG host pixel-identical; canvas behind a switch (decision logged). Readiness round: bar-index alert-level contract shared with the server, handles that edit any anchor or property, `onCreate`, an action bus, anchors mapped against the chart's own time scale. Review: GO for TVP-3 once a drawing line and its alert agree when comparisons or Renko change the bar index (align comparisons to the main series' times, as TradingView does, or give alert levels the raw-bar timeline), plus small spec fixes |
+| TVP-0.4 | **Merged** (first part); readiness round fixed, last findings open | merged `e1a0dae44a`; `tvp/0.4-drawing-registry` (`6100b3021c`) | Registry with renderer-agnostic geometry, creation gestures, generic properties dialog, gap-aware time index, safe document upgrades; SVG host pixel-identical; canvas behind a switch (decision logged). Readiness round: bar-index alert-level contract shared with the server, handles that edit any anchor or property, `onCreate`, an action bus, anchors mapped against the chart's own time scale. Decision: comparison series are plotted on the main series' bar times, as TradingView does, so a drawing and its alert share one bar index; brick-type charts (Renko, range, line break, Kagi, P&F) offer only flat alert levels. Also: spec fixes (lower median, rounding, alert history start), guarded tool callbacks, action bus fixes. Review: go once these are fixed: external-metric indicators still add chart times; sloped alerts with anchors before the loaded bars; `constrain` unguarded; tool return values unchecked; 1px handle jitter adds an undo step |
 | TVP-1.1 + 1.2 | **Done** | merged `0331302776` | Server-side frequency (once / every time / once per bar / once per bar close / once per minute; intrabar derived from frequency); conditions child table (≤5, 13 operators, price/change/indicator/trendline sources, value/source/channel targets, RLS, `definition_revision`); bar-based evaluation on the server indicator registry; legacy adapter for all 15 types; channel schema with webhook URL and secret stored together in the protected store (write-only, masked URL, atomic with the row, advisory lock per alert); unreadable alerts reported, not fatal; migration `0141_trading_alert_conditions.sql`. Fixed pre-existing: server alerts never fired (0027 trigger); a decrypt failure made credential saves wipe all stored credentials; saves dropped other providers' keys after a failed read. Five review rounds. Follow-ups: monitor indicator cache and per-workspace limits; message placeholders and delivery senders (TVP-1.5/0.5); backfilling bars missed while the monitor is down |
 | TVP-5.1–5.3 | **Done** | merged `cf37311dbc` | Payload v2 with sections (v2 keeps writing `instrumentIds` for stale old-client tabs; unknown versions read-only), colour flags (`watchlist_flag_set`), column choice and sorting, `.txt` import/export (1 MB / 2,000 symbols, exact-spelling preference, class-share symbols), keyboard navigation as an ARIA tree grid. Edits are saved one at a time per list as operations on the last server revision. Three review rounds. Follow-ups: flag from chart and screener; indicator columns (registry now available); incremental quote refresh for large lists; the TradingView-listed watchlist shortcuts join the command catalogue in TVP-2.3 (grid navigation keys stay local) |
 | TVP-7.1 | **Done** | merged `8ea2f9bcf9` | Stop-limit, trailing stop (amount or %), DAY/GTC/GTD, `expired` status, trailing bracket stop-loss; migration `0140_trading_paper_order_types.sql`; live gateway untouched (empty diff, tested). Three review rounds:<br>• trailing stops trust only bars that start after their last move (`trail_moved_at` = later of quote time and bar start, `clock_timestamp()`), for orders and bracket legs, plain legs included;<br>• chart edits keep the trail;<br>• expired DAY entries cancel their bracket without market data;<br>• tick rounding against the trader;<br>• stop-through-market warning.<br>Follow-ups: DAY for futures/forex at venue close; new order types in replay; keep the bar low at move time to catch a real dip later in the same bar |
 | TVP-8.1 (wave 1 part) | **Done** | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
+| TVP-0.5a | In progress | `tvp/0.5a-webhooks` | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor with leases, fencing, exponential backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, 5 s timeout, no redirects or proxies, HMAC-SHA256 signature, JSON or text body; `GET /api/trading/alerts/deliveries` (status only). Tests pass locally; review next |
 
 
 **Pre-existing issues found during this work** (outside any WP's scope unless noted):

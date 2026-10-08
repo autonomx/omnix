@@ -10,6 +10,7 @@ import pytest
 
 from scripts.tradingview_parity_report import (
     DEFAULT_LEDGER,
+    done_percent,
     load_ledger,
     main,
     render,
@@ -137,12 +138,21 @@ def test_a_valid_ledger_reports_counts_per_area_and_tier(tmp_path: Path, capsys:
 
     assert main(["--ledger", str(ledger), "--root", str(tmp_path)]) == 0
     output = capsys.readouterr().out
-    assert "| Alerts | 1 | 1 | 1 / 1 / 0 | 0 | 0 |" in output
-    assert "| Research data | 0 | 0 | 0 / 0 / 1 | 1 | 0 |" in output
-    assert "| **Total** | 1 | 1 | 1 / 1 / 1 | 1 | 0 |" in output
-    assert "| Rare | 0 | 0 | 1 | 1 | 0 | 2 |" in output
+    assert "| Alerts | 1 | 1 | 1 / 1 / 0 | 0 | 0 | 38% |" in output
+    assert "| Research data | 0 | 0 | 0 / 0 / 1 | 1 | 0 | 0% |" in output
+    assert "| **Total** | 1 | 1 | 1 / 1 / 1 | 1 | 0 | 30% |" in output
+    assert "| Rare | 0 | 0 | 1 | 1 | 0 | 2 | 0% |" in output
     assert "Missing daily + weekly features: **2**" in output
+    assert "| Daily | 1 | 0 | 1 | 0 | 0 | 2 | 50% |" in output
+    assert "| Weekly | 0 | 1 | 1 | 0 | 0 | 2 | 25% |" in output
+    assert "**30%** overall, **38%** of daily + weekly." in output
 
     summary = summarize(entries)
     assert summary.daily_weekly_missing == 2
     assert render(summary, "ledger.json").startswith("Ledger: `ledger.json`, 6 features.")
+
+
+def test_done_percent_counts_partial_as_half_and_ignores_out_of_scope() -> None:
+    assert done_percent(1, 1, 2) == "38%"
+    assert done_percent(0, 0, 0) == "—"
+    assert done_percent(3, 0, 0) == "100%"

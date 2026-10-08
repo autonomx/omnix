@@ -164,11 +164,23 @@ def summarize(entries: Sequence[dict[str, Any]]) -> Summary:
     return summary
 
 
+def done_percent(have: int, partial: int, missing: int) -> str:
+    """Completion of the features in scope: have counts fully, partial half, missing not at all.
+
+    Features excluded or waiting for a decision are not in scope. Rounds half up; "—" with nothing in scope.
+    """
+    in_scope = have + partial + missing
+    if in_scope == 0:
+        return "—"
+    return f"{int(100 * (have + partial / 2) / in_scope + 0.5)}%"
+
+
 def _area_row(name: str, counts: Counter[tuple[str, str]]) -> str:
     missing = " / ".join(str(counts[("missing", tier)]) for tier in TIERS)
+    done = done_percent(counts[("have", "*")], counts[("partial", "*")], counts[("missing", "*")])
     return (
         f"| {name} | {counts[('have', '*')]} | {counts[('partial', '*')]} | {missing} "
-        f"| {counts[('excluded-pending-decision', '*')]} | {counts[('excluded', '*')]} |"
+        f"| {counts[('excluded-pending-decision', '*')]} | {counts[('excluded', '*')]} | {done} |"
     )
 
 
@@ -176,8 +188,8 @@ def render(summary: Summary, ledger: str) -> str:
     lines = [
         f"Ledger: `{ledger}`, {summary.total} features.",
         "",
-        "| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded |",
-        "|---|---|---|---|---|---|",
+        "| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |",
+        "|---|---|---|---|---|---|---|",
     ]
     total: Counter[tuple[str, str]] = Counter()
     for area in summary.areas:
@@ -186,16 +198,25 @@ def render(summary: Summary, ledger: str) -> str:
     lines.append(_area_row("**Total**", total))
     lines += [
         "",
-        "| Tier | Have | Partial | Missing | Pending decision | Excluded | Total |",
-        "|---|---|---|---|---|---|---|",
+        "| Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for tier in TIERS:
         counts = summary.by_tier[tier]
         lines.append(
             f"| {tier.capitalize()} | {counts['have']} | {counts['partial']} | {counts['missing']} "
-            f"| {counts['excluded-pending-decision']} | {counts['excluded']} | {sum(counts.values())} |"
+            f"| {counts['excluded-pending-decision']} | {counts['excluded']} | {sum(counts.values())} "
+            f"| {done_percent(counts['have'], counts['partial'], counts['missing'])} |"
         )
-    lines += ["", f"Missing daily + weekly features: **{summary.daily_weekly_missing}**"]
+    daily_weekly = [summary.by_tier[tier] for tier in ("daily", "weekly")]
+    daily_weekly_done = done_percent(*(sum(counts[status] for counts in daily_weekly) for status in ("have", "partial", "missing")))
+    overall = done_percent(total[("have", "*")], total[("partial", "*")], total[("missing", "*")])
+    lines += [
+        "",
+        f"Missing daily + weekly features: **{summary.daily_weekly_missing}**",
+        "",
+        f"Done (have counts 1, partial 0.5, of the features in scope): **{overall}** overall, **{daily_weekly_done}** of daily + weekly.",
+    ]
     return "\n".join(lines)
 
 
