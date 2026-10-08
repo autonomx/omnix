@@ -104,7 +104,19 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
                     current.revision,
                 )
 
+        before_keys = dict(secrets.get("api_keys") or {})
         secrets_changed = apply_settings_payload(settings, secrets, legacy) if legacy else False
+        if secrets_changed:
+            # Only the keys this request changed, before anything else is saved: a
+            # secret-store failure then leaves the settings untouched, and a store
+            # that read as empty cannot erase the providers the user did not edit.
+            after_keys = dict(secrets.get("api_keys") or {})
+            changed_keys = {
+                provider: str(after_keys.get(provider) or "")
+                for provider in set(before_keys) | set(after_keys)
+                if before_keys.get(provider) != after_keys.get(provider)
+            }
+            save_secrets({"api_keys": changed_keys})
         if isinstance(patch, dict):
             save_settings_profile(settings, patch, None)
         elif legacy:
@@ -119,8 +131,6 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
             stored = service.get(key)
             revisions[key] = 0 if stored is None else int(stored["revision"])
 
-        if secrets_changed:
-            save_secrets(secrets)
         if changed:
             service.patch(SettingsPatch(values=changed, revisions=revisions))
 

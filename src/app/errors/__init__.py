@@ -18,6 +18,22 @@ class LegacyPersistenceRetired(RuntimeError):
     """Raised when normal runtime attempts to use retired SQLite/JSON authority."""
 
 
+class DependencyUnavailable(RuntimeError):
+    """A local dependency a request needs cannot be used right now.
+
+    The gateway answers 503 with ``code``, the message and a recovery
+    ``hint``; nothing the request asked for was changed.
+    """
+
+    code = "dependency_unavailable"
+
+    def __init__(self, message: str, *, hint: str | None = None, code: str | None = None) -> None:
+        super().__init__(message)
+        self.hint = hint
+        if code is not None:
+            self.code = code
+
+
 def _status_code_name(status: int) -> str:
     try:
         return HTTPStatus(status).phrase.lower().replace(" ", "_").replace("-", "_")
@@ -104,6 +120,11 @@ def install_error_envelope(app: Any) -> None:
         logger.info("request_validation_failed path=%s errors=%d", request.url.path, len(errors))
         return respond(request, 422, jsonable_encoder(errors), code="invalid_request")
 
+    async def dependency_unavailable(request: Any, exc: DependencyUnavailable) -> JSONResponse:
+        logger.warning("dependency_unavailable path=%s code=%s", request.url.path, exc.code)
+        detail = {"code": exc.code, "message": str(exc), "hint": exc.hint}
+        return respond(request, 503, detail, code=exc.code)
+
     async def unhandled_error(request: Any, exc: Exception) -> JSONResponse:
         from app.observability.logging import log_context
 
@@ -115,6 +136,7 @@ def install_error_envelope(app: Any) -> None:
 
     app.add_exception_handler(StarletteHTTPException, http_error)
     app.add_exception_handler(RequestValidationError, validation_error)
+    app.add_exception_handler(DependencyUnavailable, dependency_unavailable)
     app.add_exception_handler(Exception, unhandled_error)
 
 
@@ -161,6 +183,7 @@ def redact_validation_error(error: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "DependencyUnavailable",
     "LegacyPersistenceRetired",
     "PROBLEM_MEDIA_TYPE",
     "error_code",
