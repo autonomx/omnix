@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { paperOrderTerms, paperOrderTypeLabel } from './paperOrderTypes';
 import { TradingPaperDashboard } from './TradingPaperDashboard';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingReplayStore } from './tradingReplayStore';
@@ -15,7 +16,7 @@ import { downloadBlob } from '../../shared/download';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
-type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
+type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected' | 'expired';
 type AccountModal = 'create' | 'settings' | null;
 type CommissionType = 'Percent' | 'Fixed';
 type Leverage = { stocks: string; futures: string; forex: string; crypto: string; others: string };
@@ -40,6 +41,7 @@ const tabs: Array<{ id: DockTab; label: string }> = [
 const orderFilters: Array<{ id: OrderFilter; label: string }> = [
   { id: 'all', label: 'All' }, { id: 'working', label: 'Working' }, { id: 'inactive', label: 'Inactive' },
   { id: 'filled', label: 'Filled' }, { id: 'cancelled', label: 'Cancelled' }, { id: 'rejected', label: 'Rejected' },
+  { id: 'expired', label: 'Expired' },
 ];
 const leverageOptions = ['1:1', '10:1', '20:1', '50:1', '100:1', '500:1'];
 const settingsStorageKey = 'omnix.trading.paper-account-settings';
@@ -102,6 +104,11 @@ function rejectionMessage(reason?: string | null): string {
     case 'paper_account_disabled': return 'This paper account is disabled.';
     default: return reason ? `Order rejected: ${reason.replaceAll('_', ' ')}` : 'The order was rejected.';
   }
+}
+
+function OrderType({ order }: { order: PaperOrder }) {
+  const plain = (order.time_in_force ?? 'gtc') === 'gtc' && order.order_type !== 'trailing_stop';
+  return <>{paperOrderTypeLabel(order.order_type)}{plain ? null : <small> {paperOrderTerms(order)}</small>}</>;
 }
 
 function OrderStatus({ order }: { order: PaperOrder }) {
@@ -226,6 +233,7 @@ export function TradingTerminalDock({
     filled: orderHistory.filter((order) => order.status === 'filled').length,
     cancelled: orderHistory.filter((order) => order.status === 'cancelled').length,
     rejected: orderHistory.filter((order) => order.status === 'rejected').length,
+    expired: orderHistory.filter((order) => order.status === 'expired').length,
   }), [orderHistory]);
   const filteredOrders = useMemo(() => {
     if (orderFilter === 'all') return orderHistory;
@@ -233,7 +241,7 @@ export function TradingTerminalDock({
     if (orderFilter === 'inactive') return [];
     return orderHistory.filter((order) => order.status === orderFilter);
   }, [orderFilter, orderHistory]);
-  const historyFilters = orderFilters.filter((filter) => ['all', 'filled', 'cancelled', 'rejected'].includes(filter.id));
+  const historyFilters = orderFilters.filter((filter) => ['all', 'filled', 'cancelled', 'rejected', 'expired'].includes(filter.id));
   const balanceHistory = useMemo(() => {
     if (!displayedSnapshot) return [];
     const ledger = displayedSnapshot.recent_ledger;
@@ -427,13 +435,13 @@ export function TradingTerminalDock({
             ) : null}
             {displayedSnapshot && tab === 'orders' ? (
               <div className="trading-dock-table-scroll"><table className="trading-orders-table"><thead><tr><th>Symbol</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Take profit</th><th>Stop loss</th><th>Instruction</th><th>Status</th></tr></thead><tbody>
-                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.filled_quantity !== '0' ? order.filled_quantity : order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td>—</td><td>—</td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td></tr>)}
+                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td><OrderType order={order} /></td><td>{quantity(order.filled_quantity !== '0' ? order.filled_quantity : order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td>—</td><td>—</td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={10}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}
             {displayedSnapshot && tab === 'history' ? (
               <div className="trading-dock-table-scroll trading-order-history-scroll"><table className="trading-order-history-table"><thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Status</th><th>Commission</th><th>Placing time ↓</th><th>Closing time</th><th>Order ID</th><th>Level ID</th><th>Leverage</th><th>Margin</th></tr></thead><tbody>
-                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
+                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td><OrderType order={order} /></td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={15}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}

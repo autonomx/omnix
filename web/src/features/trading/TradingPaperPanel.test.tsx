@@ -197,6 +197,70 @@ describe('TradingPaperPanel', () => {
     expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
 
+  it('sends a stop-limit entry with time in force and a trailing stop-loss leg', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Stop limit' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Stop price' }), { target: { value: '76' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Limit price' }), { target: { value: '76.40' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Time in force' }), { target: { value: 'day' } });
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable stop loss' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Stop loss price' }), { target: { value: '74.50' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trailing stop loss' }));
+    // A stop-limit entry is sized at its limit price.
+    await waitFor(() => expect(paperApi.riskPreview).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      entry_price: '76.4',
+      stop_price: '74.5',
+    })));
+    fireEvent.click(await screen.findByRole('button', { name: /Buy 3 SOL\/USDT STOP LIMIT/ }));
+
+    await waitFor(() => expect(paperApi.placeRiskOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      order_type: 'stop_limit',
+      trigger_price: '76',
+      limit_price: '76.40',
+      time_in_force: 'day',
+      expires_at: null,
+      trailing_stop_loss: true,
+    })));
+  });
+
+  it('offers trailing stops for exits and sends the trail and expiry', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    expect(await screen.findByRole('tab', { name: 'Stop limit' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Trailing' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Sell/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Trailing' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Trail distance' }), { target: { value: '2.5' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Trail unit' }), { target: { value: 'percent' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Time in force' }), { target: { value: 'gtd' } });
+    fireEvent.change(screen.getByLabelText('Order expiry'), { target: { value: '2030-01-02T15:30' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sell 1 SOL\/USDT TRAILING STOP/ }));
+
+    await waitFor(() => expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      side: 'sell',
+      order_type: 'trailing_stop',
+      trail_amount: null,
+      trail_percent: '2.5',
+      limit_price: null,
+      stop_price: null,
+      reference_price: null,
+      time_in_force: 'gtd',
+      expires_at: new Date('2030-01-02T15:30').toISOString(),
+    })));
+  });
+
+  it('keeps replay tickets to market, limit and stop orders', async () => {
+    useTradingStore.setState({ replayMode: true, replaySessionId: 3 });
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await screen.findByRole('textbox', { name: 'Order quantity' });
+    const types = screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(types).toEqual(expect.arrayContaining(['Market', 'Limit', 'Stop']));
+    expect(types).not.toContain('Stop limit');
+    expect(types).not.toContain('Trailing');
+    fireEvent.click(screen.getByRole('tab', { name: 'Limit' }));
+    expect(screen.queryByRole('combobox', { name: 'Time in force' })).not.toBeInTheDocument();
+  });
+
   it('uses the replay bar through the shared server kernel without creating a persisted paper order', async () => {
     useTradingStore.setState({ replayMode: true, replaySessionId: 7 });
     useTradingReplayStore.getState().setBar({
