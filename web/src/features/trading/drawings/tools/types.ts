@@ -152,6 +152,8 @@ export type DrawingToolDefinition<Id extends string = string> = {
   defaultText?: string;
   /** Draft preview while creating: an outline through the anchors (default) or the tool's own shapes. */
   draftPreview?: 'outline' | 'shapes';
+  /** Which anchors get edit handles when selected (default `all`; freehand strokes want `ends`). */
+  handles?: 'all' | 'ends' | 'none';
   /** Extra class for the edit handles of a selected drawing. */
   handleClassName?: string;
   geometry: (context: DrawingGeometryContext) => DrawingShape[];
@@ -166,6 +168,13 @@ export type DrawingToolDefinition<Id extends string = string> = {
 /** Declares a tool and keeps its id as a literal type. */
 export function defineDrawingTool<const Id extends string>(definition: DrawingToolDefinition<Id>): DrawingToolDefinition<Id> {
   return definition;
+}
+
+/** Indices of the anchors that get edit handles. */
+export function handleIndices(definition: Pick<DrawingToolDefinition, 'handles'>, anchors: number): number[] {
+  if (definition.handles === 'none' || anchors === 0) return [];
+  if (definition.handles === 'ends') return anchors === 1 ? [0] : [0, anchors - 1];
+  return Array.from({ length: anchors }, (_, index) => index);
 }
 
 export function anchorCount(creation: DrawingCreation): { min: number; max: number | null } {

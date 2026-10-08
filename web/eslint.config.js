@@ -348,7 +348,6 @@ const functionLengthBaseline = {
   'src/features/trading/TradingTerminalDock.tsx': 296,
   'src/features/trading/TradingWatchlist.tsx': 321,
   'src/features/trading/TradingWorkspace.tsx': 607,
-  'src/features/trading/drawings/TradingDrawingOverlay.tsx': 519,
   'src/features/trading/indicators/tradingViewBuiltIns.ts': 254,
   'src/features/trading/persistence/useTradingWorkspacePersistence.ts': 263,
   'src/features/voice/VoiceWorkspace.tsx': 499,
