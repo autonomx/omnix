@@ -364,7 +364,7 @@ TVP-11.0 spike (needs TVP-0.2 first batch) ─► TVP-11.1 interpreter ─► 11
 | Wave | WPs | Why |
 |---|---|---|
 | 1 | TVP-0.1, 0.3, 1.2 → 0.5a, 0.2 (first batch), 1.1, 2.1, 2.3–2.5, 5.1–5.3, 7.1, 8.1 (speed and sync part) | Small, used every day; webhooks make server alerts useful; 0.2 is the longest pole and starts now |
-| 2 | TVP-0.2 (rest), 0.4, 0.5b, 0.6, 1.3, 1.5, 1.6, 2.2, 3.1, 3.6, 4.1, 6.1, 7.2a, 9.4, 11.0 | Foundations, the most-used drawing tools, shorting, cheap Hermes screener, script spike |
+| 2 | TVP-0.2 (rest), 0.4, 0.5b, 0.6, 1.3, 1.5, 1.6, 2.2, 3.1, 3.6, 3.8, 4.1, 6.1, 7.2a, 9.4, 11.0 | Foundations, the most-used drawing tools, shorting, cheap Hermes screener, script spike |
 | 3 | TVP-0.5c, 1.4, 1.7, 3.2–3.5, 3.8, 4.2–4.5, 7.2b, 7.3, 7.4, 8.1 (rest), 9.1, 9.2, 11.1–11.3 | Fill out drawings, alerts and chart trading; margin modelling; scripts on charts |
 | 4 | TVP-3.7, 5.4, 6.2–6.6, 9.3, 10.1–10.3, 11.4, 11.5 | Depth: auto-drawings, intrabar, breadth, research panels, script alerts and strategies |
 | 5 | TVP-4.6, 6.7, 10.4, 10.5, 11.6 | Rare-tier or vendor-gated |
@@ -1127,10 +1127,10 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 <!-- parity-completion:start -->
 | Measure | Done |
 |---|---|
-| TradingView parity, all features in scope | 68% |
-| TradingView parity, daily + weekly features | 77% |
-| Roadmap work packages merged in full | 28% (19 of 67) |
-| Daily + weekly gap closed since the first count | 50% (75 of 150) |
+| TradingView parity, all features in scope | 70% |
+| TradingView parity, daily + weekly features | 78% |
+| Roadmap work packages merged in full | 30% (20 of 67) |
+| Daily + weekly gap closed since the first count | 53% (79 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1140,8 +1140,8 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 <!-- parity-report:start -->
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
-| Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 | 86% |
-| Drawing tools | 39 | 2 | 4 / 9 / 47 | 0 | 0 | 40% |
+| Charts and layouts | 28 | 2 | 2 / 0 / 1 | 0 | 0 | 88% |
+| Drawing tools | 44 | 1 | 0 / 9 / 47 | 0 | 0 | 44% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
 | Alerts | 16 | 3 | 3 / 2 / 0 | 0 | 0 | 73% |
@@ -1152,17 +1152,17 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 | 55% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 289 | 22 | 25 / 50 / 52 | 55 | 0 | 68% |
+| **Total** | 295 | 20 | 21 / 50 / 52 | 55 | 0 | 70% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 125 | 13 | 25 | 0 | 0 | 163 | 81% |
-| Weekly | 151 | 9 | 50 | 0 | 0 | 210 | 74% |
+| Daily | 130 | 12 | 21 | 0 | 0 | 163 | 83% |
+| Weekly | 152 | 8 | 50 | 0 | 0 | 210 | 74% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **75**
+Missing daily + weekly features: **71**
 
-Done (have counts 1, partial 0.5, of the features in scope): **68%** overall, **77%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **70%** overall, **78%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**
@@ -1190,6 +1190,7 @@ Done (have counts 1, partial 0.5, of the features in scope): **68%** overall, **
 | TVP-0.5a | **Done** | merged (this commit) | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor across workspaces (system operation `notifications.delivery`) with leases, fencing and backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, one deadline per send, no redirects, proxies or body reads, URL never logged, HMAC-SHA256 signature; `GET /api/trading/alerts/deliveries` (status only). Two review rounds (the first found token logging, unbounded sends and CGNAT addresses; all fixed). Follow-ups: webhook editor and message placeholders (TVP-1.5); throughput is about 24 sends a minute |
 | TVP-3.1 | **Done** | merged (this commit) | Eight tools: info line (price change, percent, bars, angle), extended line, trend angle, parallel channel (middle line, fill, width-keeping handles), flat top/bottom, disjoint channel, regression trend (least squares of closes on bar index, deviation bands), anchored VWAP (the indicator's formula). Channel lines are built in time/price and both drawn and alerted on, so drawings and alerts agree on a log scale too; alert levels on every line. One review round. Follow-ups: regression deviation is the population one (TradingView may use n-1); info line shows no time span or distance |
 | TVP-3.6 | **Done** | merged (this commit) | Long and short position (one click; entry, stop and target zones with amounts, quantity from account size and risk %, risk/reward, P&L once a bar reaches the entry; "Create buy/sell order" fills the paper ticket, which the user places), date range and date-and-price range (TradingView's labels: change, percent, ticks; bars, span; volume), price range with ticks, position forecast, bars pattern, ghost feed, sector, fixed range volume profile. One review round: the ticket's limit price and protection were wrong (entry went to the stop-limit field; stop and target shown but not sent for sells and replay); fixed and tested against the real panel. Follow-ups: protection for sell and replay orders in the paper panel; the panel's risk % is used, not the drawing's |
+| TVP-3.8 | **Done** | merged (this commit) | Drawing toolbar behaviour: stay in drawing mode, lock all, hide all, drawing sync between a tab's charts (off: each chart keeps its own), favourites toolbar; per-interval visibility (TradingView's Visibility tab, "only this interval"); each tool remembers its last style; named drawing templates per tool (saved with the preset documents). One review round: lock all didn't stop nudges, templates copied per-drawing data, duplicates lost per-chart drawings; fixed. Follow-ups: the favourites toolbar isn't draggable; object tree grouping, rename and reorder |
 
 
 **Pre-existing issues found during this work** (outside any WP's scope unless noted):

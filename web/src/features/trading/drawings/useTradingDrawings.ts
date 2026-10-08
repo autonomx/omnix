@@ -27,6 +27,8 @@ import {
   type TradingDrawing,
 } from './drawingCommands';
 import type { DrawingEditPatch } from './tools/types';
+import type { DrawingVisibility } from './drawingVisibility';
+import { rememberToolDefaults } from './drawingTemplates';
 import { drawingDocumentPayload, mergePreserved, upgradeDrawingDocument, type DrawingDocument } from './drawingDocument';
 
 /** `read-only`: the stored document is from a newer schema; edits stay local and are never saved over it. */
@@ -226,6 +228,14 @@ async function resolveConflict(entry: DrawingEntry, resolution: 'reload' | 'over
   await saveEntry(entry);
 }
 
+/** A style or property change becomes the tool's default for its next drawings (TVP-3.8). */
+function rememberStyle(state: DrawingState, patch: { style?: unknown; properties?: unknown }): DrawingState {
+  if (patch.style === undefined && patch.properties === undefined) return state;
+  const drawing = state.drawings.find((item) => item.drawingId === state.selectedId);
+  if (drawing) rememberToolDefaults(drawing);
+  return state;
+}
+
 export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
   const workspaceScopeId = currentTradingWorkspaceScopeId();
   const scopeId = `${workspaceScopeId}:${tabScopeId ?? 'global'}`;
@@ -267,8 +277,8 @@ export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
     paste: (copied: readonly TradingDrawing[]) => persist(entry, pasteDrawings(entry.state, copied, instrumentId)),
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(entry, moveDrawingPoint(entry.state, id, index, point)),
     translate: (id: string, from: DrawingPoint, to: DrawingPoint) => persist(entry, translateDrawing(entry.state, id, from, to)),
-    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties }, mergeKey?: string) => (
-      persist(entry, updateSelectedDrawing(entry.state, patch, mergeKey))
+    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties; visibility?: DrawingVisibility }, mergeKey?: string) => (
+      persist(entry, rememberStyle(updateSelectedDrawing(entry.state, patch, mergeKey), patch))
     ),
     /** A tool handle's edit of anchors and/or properties, one undo step. */
     edit: (id: string, patch: DrawingEditPatch) => persist(entry, editDrawing(entry.state, id, patch)),

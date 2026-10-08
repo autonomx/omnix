@@ -1,3 +1,4 @@
+import { loadDrawingToolSettings, saveDrawingToolSettings, type DrawingToolSettings } from './drawings/drawingToolSettings';
 import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
@@ -87,6 +88,8 @@ type TradingWorkspaceState = {
   drawingSnapMode: DrawingSnapMode;
   /** Ctrl+Alt+H hides every drawing on every chart (TVP-2.2); they stay stored. */
   drawingsHidden: boolean;
+  /** Drawing tool behaviour (TVP-3.8), kept in this browser: see `drawingToolSettings.ts`. */
+  drawingToolSettings: DrawingToolSettings;
   charts: TradingChartState[];
   links: TradingLinkState;
   panels: TradingPanelState;
@@ -107,6 +110,7 @@ type TradingWorkspaceState = {
   setChartCount: (count: number) => void;
   setDrawingTool: (tool: DrawingTool) => void;
   toggleDrawingsHidden: () => void;
+  setDrawingToolSetting: <K extends keyof DrawingToolSettings>(key: K, value: DrawingToolSettings[K]) => void;
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
@@ -299,6 +303,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
   drawingsHidden: false,
+  drawingToolSettings: loadDrawingToolSettings(),
   charts: [initialChart()],
   links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
@@ -450,6 +455,11 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   }),
   setDrawingTool: (drawingTool) => set({ drawingTool }),
   toggleDrawingsHidden: () => set((state) => ({ drawingsHidden: !state.drawingsHidden })),
+  setDrawingToolSetting: (key, value) => set((state) => {
+    const drawingToolSettings = { ...state.drawingToolSettings, [key]: value };
+    saveDrawingToolSettings(drawingToolSettings);
+    return { drawingToolSettings };
+  }),
   setDrawingSnapMode: (drawingSnapMode) => set({ drawingSnapMode }),
   updateChart: (chartId, patch) => set((state) => {
     const instrumentChanged = patch.instrumentId !== undefined;

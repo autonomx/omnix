@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import { type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
@@ -8,6 +8,8 @@ import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { UTC_SESSION, type TradingSessionSpec } from './indicators/tradingSessions';
 import { type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore } from './tradingStore';
+import { drawingScopeId } from './drawings/drawingToolSettings';
+import { drawingVisibleOnInterval } from './drawings/drawingVisibility';
 import type { MarketBar } from './tradingTypes';
 import { readTradingTimezoneId } from './tradingTime';
 import { SelectedVisibleRange, TradingChartPanelProps, TradingContextMenuState, readTradingRightOffset } from './tradingChartPanelModel';
@@ -61,6 +63,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const drawingsHidden = useTradingStore((state) => state.drawingsHidden);
+  const drawingToolSettings = useTradingStore((state) => state.drawingToolSettings);
   const toggleDrawingsHidden = useTradingStore((state) => state.toggleDrawingsHidden);
 
   const replayMode = useTradingStore((state) => state.replayMode);
@@ -71,9 +74,14 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const restartReplaySession = useTradingStore((state) => state.restartReplaySession);
 
-  const drawings = useTradingDrawings(instrumentId, sessionId);
+  const drawings = useTradingDrawings(instrumentId, drawingScopeId(sessionId, chartId, drawingToolSettings.syncDrawings));
 
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
+  // A selected drawing that this interval doesn't show is deselected, so keys and the header never act on it (TVP-3.8).
+  const selectedHiddenHere = selectedDrawing !== null && !drawingVisibleOnInterval(selectedDrawing.visibility, interval);
+  useEffect(() => {
+    if (selectedHiddenHere) drawings.select(null);
+  }, [selectedHiddenHere, drawings]);
 
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
 
@@ -172,7 +180,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
     selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, drawingTool,
-    setDrawingTool, drawingSnapMode, drawingsHidden, toggleDrawingsHidden, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
+    setDrawingTool, drawingSnapMode, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
     selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
     setStreamError, indicatorError, setIndicatorError, alertPlacement, setAlertPlacement, contextMenu,
     setContextMenu, priceScaleMenuOpen, setPriceScaleMenuOpen, priceScaleSettings, setPriceScaleSettings,

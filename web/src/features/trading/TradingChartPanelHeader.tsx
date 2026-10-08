@@ -90,7 +90,14 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
                 <button type="button" aria-pressed={Boolean(selectedDrawing.locked)} onClick={() => drawings.updateSelected({ locked: !selectedDrawing.locked })}>{selectedDrawing.locked ? 'Unlock' : 'Lock'}</button>
                 <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
                 {drawingToolDefinition(selectedDrawing.toolType)?.editableText ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
-                <DrawingPropertiesButton key={selectedDrawing.drawingId} drawing={selectedDrawing} onChange={(properties, mergeKey) => drawings.updateSelected({ properties }, mergeKey)} />
+                <DrawingPropertiesButton
+                  key={selectedDrawing.drawingId}
+                  drawing={selectedDrawing}
+                  interval={interval}
+                  onChange={(properties, mergeKey) => drawings.updateSelected({ properties }, mergeKey)}
+                  onVisibilityChange={(visibility, mergeKey) => drawings.updateSelected({ visibility }, mergeKey && `visibility:${mergeKey}`)}
+                  onApplyTemplate={(style, properties) => drawings.updateSelected({ style, properties })}
+                />
                 <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawings" title="Delete selected drawings">×</button>
               </>
             ) : null}

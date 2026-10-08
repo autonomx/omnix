@@ -6,7 +6,9 @@
 // (the merge key). Stored values of an unexpected shape are shown as such and
 // never overwritten from here.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import type { TradingDrawing } from './drawingCommands';
+import type { DrawingStyle, TradingDrawing } from './drawingCommands';
+import { DrawingTemplateSection, DrawingVisibilitySection } from './DrawingSettingsSections';
+import type { DrawingVisibility } from './drawingVisibility';
 import { clampToField, numberListProperty, propertyValueReadable, recordsProperty } from './tools/properties';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from './tools/registry';
 import type { DrawingProperties, DrawingPropertyField, DrawingPropertyRecord, DrawingPropertyValue, DrawingRecordField } from './tools/types';
@@ -142,10 +144,15 @@ function PropertyInput({ field, value, onCommit }: { field: DrawingPropertyField
  * tool has no properties. Render it with `key={drawing.drawingId}` so another
  * selection starts closed.
  */
-export function DrawingPropertiesButton({ drawing, onChange }: {
+export function DrawingPropertiesButton({ drawing, onChange, interval, onVisibilityChange, onApplyTemplate }: {
   drawing: TradingDrawing;
   /** `mergeKey`: commits with the same key belong to one undo step. */
   onChange: (properties: DrawingProperties, mergeKey: string) => void;
+  /** With it, the dialog has the Visibility section (TVP-3.8); `interval` is the chart's, for "Only this interval". */
+  interval?: string;
+  onVisibilityChange?: (visibility: DrawingVisibility, mergeKey?: string) => void;
+  /** With it, the dialog has the Template section (TVP-3.8). */
+  onApplyTemplate?: (style: DrawingStyle, properties: DrawingProperties) => void;
 }) {
   const [open, setOpen] = useState(false);
   const session = useId();
@@ -155,7 +162,7 @@ export function DrawingPropertiesButton({ drawing, onChange }: {
     if (open) dialogRef.current?.querySelector<HTMLElement>('input, select, button')?.focus();
   }, [open]);
   const definition = drawingToolDefinition(drawing.toolType);
-  if (!definition || definition.propertySchema.length === 0) return null;
+  if (!definition || (definition.propertySchema.length === 0 && !onVisibilityChange && !onApplyTemplate)) return null;
   const stored = drawing.properties ?? {};
   const properties = drawingPropertiesWithDefaults(drawing.toolType, stored);
   const close = () => setOpen(false);
@@ -188,6 +195,8 @@ export function DrawingPropertiesButton({ drawing, onChange }: {
               ? <div key={field.key} className="trading-drawing-properties-row"><span>{field.label}</span>{input}</div>
               : <label key={field.key} className="trading-drawing-properties-row"><span>{field.label}</span>{input}</label>;
           })}
+          {onVisibilityChange ? <DrawingVisibilitySection visibility={drawing.visibility} interval={interval ?? '1m'} onChange={onVisibilityChange} /> : null}
+          {onApplyTemplate ? <DrawingTemplateSection drawing={drawing} onApply={onApplyTemplate} /> : null}
           <button type="button" onClick={close}>Close</button>
         </div>
       ) : null}

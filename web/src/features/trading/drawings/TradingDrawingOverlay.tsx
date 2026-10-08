@@ -3,7 +3,6 @@ import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { CoreIndicatorId } from '../indicators/coreIndicators';
 import type { TradingAlertIndicatorId } from '../tradingTypes';
 import {
-  DEFAULT_DRAWING_STYLE,
   type DrawingPoint,
   type DrawingSnapMode,
   type DrawingTool,
@@ -44,6 +43,8 @@ import {
 import { useCanvasDrawingHost } from './useCanvasDrawingHost';
 import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
 import { CLONE_GHOST_SUFFIX, cloneGhosts, useDrawingEditing, type TranslationPreview } from './useDrawingEditing';
+import { toolDefaults } from './drawingTemplates';
+import { drawingVisibleOnInterval } from './drawingVisibility';
 import { useProjectionSync } from './useProjectionSync';
 import './TradingDrawingMeasurement.css';
 
@@ -70,6 +71,7 @@ export type ChartAlertPlacement = DrawingPoint & {
 function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[], services: DrawingToolServices): TradingDrawing {
   const { onCreate } = definition;
   const created = onCreate ? guardToolCall(definition.id, 'onCreate', () => onCreate(points, services), { points }) : { points };
+  const defaults = toolDefaults(definition.id);
   return {
     drawingId: crypto.randomUUID(),
     instrumentId,
@@ -77,11 +79,12 @@ function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToo
     points: created.points,
     selected: true,
     revision: 1,
-    style: DEFAULT_DRAWING_STYLE,
+    // The tool's last-used style and properties (TVP-3.8); what onCreate fills in wins.
+    style: defaults.style,
     locked: false,
     hidden: false,
     text: definition.defaultText ?? '',
-    properties: drawingPropertiesWithDefaults(definition.id, created.properties),
+    properties: drawingPropertiesWithDefaults(definition.id, { ...defaults.properties, ...created.properties }),
   };
 }
 
@@ -240,6 +243,8 @@ export type TradingDrawingOverlayProps = {
   onCloneDrawings?: (ids: readonly string[], from: DrawingPoint, to: DrawingPoint) => void;
   /** Ctrl+Alt+H: every drawing hidden (they stay stored and selectable from the object tree). */
   allHidden?: boolean;
+  /** "Lock all drawings" (TVP-3.8): none can be moved or edited on the chart; each keeps its own lock. */
+  allLocked?: boolean;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
   /** A handle's edit of anchors and/or properties; without it, single-anchor edits fall back to onMovePoint. */
   onEditDrawing?: (id: string, patch: DrawingEditPatch) => void;
@@ -253,6 +258,12 @@ export type TradingDrawingOverlayProps = {
   /** Overrides the stored renderer switch (`drawingRenderer.ts`). */
   renderer?: DrawingRendererMode;
 };
+
+/** The drawings this chart shows (per-interval visibility), all locked while "Lock all drawings" is on. */
+function chartDrawings(drawings: TradingDrawing[], interval: string, allLocked: boolean): TradingDrawing[] {
+  const shown = drawings.filter((drawing) => drawingVisibleOnInterval(drawing.visibility, interval));
+  return allLocked ? shown.map((drawing) => (drawing.locked ? drawing : { ...drawing, locked: true })) : shown;
+}
 
 /** The drawings a drag of `id` moves: the whole selection when `id` is part of a multi-selection. */
 function selectionGroup(drawings: readonly TradingDrawing[], id: string): readonly string[] {
@@ -285,11 +296,10 @@ export function TradingDrawingOverlay({
   interval,
   tool,
   snapMode,
-  drawings,
-  selectedId,
+  drawings: storedDrawings, selectedId,
   onAdd,
   onSelect,
-  onToggleSelect, onCloneDrawings, allHidden = false,
+  onToggleSelect, onCloneDrawings, allHidden = false, allLocked = false,
   onMovePoint,
   onEditDrawing,
   onTranslateDrawing,
@@ -301,6 +311,7 @@ export function TradingDrawingOverlay({
   renderer,
 }: TradingDrawingOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const drawings = chartDrawings(storedDrawings, interval, allLocked);
   const [storedRenderer] = useState(storedDrawingRendererMode);
   const canvas = (renderer ?? storedRenderer) === 'canvas';
   const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });

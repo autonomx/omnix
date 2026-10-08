@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DrawingTool } from './drawings/drawingCommands';
 import { DRAWING_TOOL_DEFINITIONS } from './drawings/tools/registry';
+import { TradingDrawingFavoritesBar, TradingDrawingToolToggles, type FavoriteTool } from './TradingDrawingToolToggles';
 import './TradingDrawingTools.css';
 
 type DrawingToolItem = {
@@ -271,6 +272,15 @@ function itemIsAvailable(item: DrawingToolItem): boolean {
 
 const favoritesStorageKey = 'omnix.trading.drawing-tool-favorites';
 
+/** The starred tools that can be selected, in toolbar order, for the favourites toolbar (TVP-3.8). */
+function favoriteTools(favorites: ReadonlySet<string>): FavoriteTool[] {
+  return drawingToolGroups.flatMap((group) => group.items.flatMap((item) => {
+    const tool = drawingToolItemTool(item);
+    const id = `${group.id}:${item.label}`;
+    return tool && favorites.has(id) ? [{ id, label: item.label, glyph: item.glyph, tool }] : [];
+  }));
+}
+
 export function TradingDrawingTools({
   selectedTool,
   onSelect,
@@ -463,6 +473,8 @@ export function TradingDrawingTools({
           </div>
         );
       })}
+      <TradingDrawingToolToggles />
+      <TradingDrawingFavoritesBar tools={favoriteTools(favorites)} selectedTool={selectedTool} onSelect={onSelect} />
     </aside>
   );
 }
