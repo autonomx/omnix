@@ -26,6 +26,8 @@ export type TradingLayout =
 export const MIN_TRADING_CHARTS = 1;
 export const MAX_TRADING_CHARTS = 16;
 export const MAX_TRADING_TABS = 12;
+/** Closed tabs that Reopen closed tab can bring back, newest last. Session only: never saved. */
+export const MAX_CLOSED_TRADING_TABS = 10;
 
 export type TradingChartState = {
   chartId: string;
@@ -58,9 +60,13 @@ export type TradingTabState = {
   panels: TradingPanelState;
 };
 
+/** A closed tab and where it was, so reopening puts it back in place. */
+export type ClosedTradingTab = { tab: TradingTabState; index: number };
+
 type TradingWorkspaceState = {
   activeTabId: string;
   tabs: TradingTabState[];
+  closedTabs: ClosedTradingTab[];
   layout: TradingLayout;
   activeChartId: string;
   replayMode: boolean;
@@ -76,6 +82,8 @@ type TradingWorkspaceState = {
   addTab: (name?: string) => string | null;
   renameTab: (tabId: string, name: string) => void;
   removeTab: (tabId?: string) => void;
+  /** Reopens the most recently closed tab and returns its id, or null when there is none or no room. */
+  reopenClosedTab: () => string | null;
   setActiveChart: (chartId: string) => void;
   setReplayMode: (enabled: boolean) => void;
   restartReplaySession: () => void;
@@ -217,6 +225,37 @@ function sessionFromState(state: TradingWorkspaceState, tab: TradingTabState): T
   };
 }
 
+/** Session-only state that a freshly loaded workspace starts without. */
+export function freshTradingSessionState(): Pick<TradingWorkspaceState, 'replayMode' | 'closedTabs'> {
+  return { replayMode: false, closedTabs: [] };
+}
+
+function rememberClosedTab(closed: readonly ClosedTradingTab[], tab: TradingTabState, index: number): ClosedTradingTab[] {
+  return [...closed, { tab, index }].slice(-MAX_CLOSED_TRADING_TABS);
+}
+
+function reopenedTabState(state: TradingWorkspaceState): Partial<TradingWorkspaceState> | null {
+  const entry = state.closedTabs.at(-1);
+  if (!entry || state.tabs.length >= MAX_TRADING_TABS) return null;
+  const closedTabs = state.closedTabs.slice(0, -1);
+  if (state.tabs.some((tab) => tab.tabId === entry.tab.tabId)) return { closedTabs };
+  const tabs = state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab);
+  const index = Math.min(entry.index, tabs.length);
+  const { tab } = entry;
+  return {
+    activeTabId: tab.tabId,
+    tabs: [...tabs.slice(0, index), tab, ...tabs.slice(index)],
+    closedTabs,
+    layout: tab.layout,
+    activeChartId: tab.activeChartId,
+    charts: tab.charts,
+    links: tab.links,
+    panels: tab.panels,
+    replayMode: false,
+    replaySessionId: state.replaySessionId + 1,
+  };
+}
+
 function syncActiveTab(
   state: TradingWorkspaceState,
   patch: Partial<Pick<TradingWorkspaceState, 'layout' | 'activeChartId' | 'charts' | 'links' | 'panels'>> = {},
@@ -233,6 +272,7 @@ function syncActiveTab(
 export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   activeTabId: 'tab-1',
   tabs: [initialSessionTab()],
+  closedTabs: [],
   layout: 'auto',
   activeChartId: 'chart-1',
   replayMode: false,
@@ -319,11 +359,13 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab)
       : state.tabs;
     const tabs = syncedTabs.filter((tab) => tab.tabId !== targetId);
-    if (targetId !== state.activeTabId) return { tabs };
+    const closedTabs = rememberClosedTab(state.closedTabs, syncedTabs[targetIndex], targetIndex);
+    if (targetId !== state.activeTabId) return { tabs, closedTabs };
     const selected = tabs[Math.min(targetIndex, tabs.length - 1)];
     return {
       activeTabId: selected.tabId,
       tabs,
+      closedTabs,
       layout: selected.layout,
       activeChartId: selected.activeChartId,
       charts: selected.charts,
@@ -333,6 +375,15 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       replaySessionId: state.replaySessionId + 1,
     };
   }),
+  reopenClosedTab: () => {
+    let reopenedId: string | null = null;
+    set((state) => {
+      const next = reopenedTabState(state);
+      reopenedId = next?.activeTabId ?? null;
+      return next ?? state;
+    });
+    return reopenedId;
+  },
   setActiveChart: (activeChartId) => set((state) => (
     state.charts.some((chart) => chart.chartId === activeChartId) ? syncActiveTab(state, { activeChartId }) : state
   )),

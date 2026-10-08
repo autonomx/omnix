@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingFormula } from './tradingFormula';
+import { returnKeyboardToChart } from './commands/chartKeyContext';
 import './TradingSymbolSearch.css';
 
 export type SymbolSearchCategory =
@@ -143,9 +144,12 @@ export function TradingSymbolSearch({
   onSelect,
   onSelectFormula,
   onClose,
+  selectQueryOnOpen = true,
 }: {
   open: boolean;
   query: string;
+  /** Select the query when the search opens, so typing replaces it. False keeps typed text and puts the caret after it. */
+  selectQueryOnOpen?: boolean;
   instruments: readonly CanonicalInstrument[];
   activeInstrumentId: string;
   loading?: boolean;
@@ -161,11 +165,22 @@ export function TradingSymbolSearch({
   useEffect(() => {
     if (!open) return;
     setCategory('all');
-    const frame = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => window.cancelAnimationFrame(frame);
+    const focusInput = () => {
+      const input = inputRef.current;
+      input?.focus();
+      if (selectQueryOnOpen) input?.select();
+      else input?.setSelectionRange(input.value.length, input.value.length);
+    };
+    // Typed text keeps arriving, so take focus at once as well as after layout.
+    if (!selectQueryOnOpen) focusInput();
+    const frame = window.requestAnimationFrame(focusInput);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      // Choosing a symbol (or closing the search) is a chart action: chart keys work again without a click.
+      returnKeyboardToChart();
+    };
+    // Runs when the search opens, not when the selection mode changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const results = useMemo(() => {

@@ -17,6 +17,7 @@ import {
   type IndicatorMarketFilter,
 } from './indicators/indicatorCatalogFilters';
 import { externalIndicatorRequirement, isExternalIndicatorId } from './indicators/externalIndicatorData';
+import { useTradingCommand } from './commands/useTradingCommands';
 import './TradingIndicatorManager.css';
 
 type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
@@ -197,6 +198,7 @@ export function TradingIndicatorManager({
   const [favoriteIds, setFavoriteIds] = useState<Set<CoreIndicatorId>>(
     () => new Set(indicatorDefinitions.map((definition) => definition.id)),
   );
+  useTradingCommand('chart.indicators', () => setOpen(true), () => !open);
 
   useEffect(() => {
     if (!open) return undefined;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tradingApi } from '../tradingApi';
-import { useTradingStore } from '../tradingStore';
+import { freshTradingSessionState, useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { tradingDraftRecovery } from './draftRecovery';
 import {
@@ -29,6 +29,8 @@ export type TradingWorkspacePersistence = {
   renameWorkspace: (name: string) => Promise<void>;
   deleteWorkspace: () => Promise<void>;
   resolveConflict: (resolution: 'reload' | 'overwrite') => Promise<void>;
+  /** Saves the open workspace now instead of after the edit delay. */
+  saveNow: () => Promise<void>;
 };
 
 let activeWorkspaceScopeId = 'workspace-uninitialized';
@@ -116,7 +118,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       tabs,
       layout: activeTab.layout,
       activeChartId: activeTab.activeChartId,
-      replayMode: false,
+      ...freshTradingSessionState(),
       charts: activeTab.charts,
       links: activeTab.links,
       panels: activeTab.panels,
@@ -170,6 +172,13 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     if (!record || conflictRef.current) return;
     await savePayload(record, currentPayload());
   }, [currentPayload, savePayload]);
+
+  /** Saves now instead of after the edit delay (Ctrl+S, switching workspaces). */
+  const saveNow = useCallback(async (): Promise<void> => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    await saveActive();
+  }, [saveActive]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -238,11 +247,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
 
   const selectWorkspace = useCallback(async (id: string) => {
     if (id === activeIdRef.current || !recordsRef.current.has(id)) return;
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    if (!conflictRef.current) await saveActive();
+    await saveNow();
     const record = recordsRef.current.get(id);
     if (!record) return;
     setTradingWorkspaceScopeId(id);
@@ -251,13 +256,12 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     setActiveWorkspaceId(id);
     conflictRef.current = null;
     setStatus('saved');
-  }, [hydrate, saveActive]);
+  }, [hydrate, saveNow]);
 
   const createWorkspace = useCallback(async (name: string) => {
     const cleanName = name.trim();
     if (!cleanName) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (!conflictRef.current) await saveActive();
+    await saveNow();
     setStatus('saving');
     try {
       const id = workspaceId(cleanName);
@@ -276,7 +280,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     } catch {
       setStatus('error');
     }
-  }, [currentPayload, refreshSummaries, saveActive]);
+  }, [currentPayload, refreshSummaries, saveNow]);
 
   const renameWorkspace = useCallback(async (name: string) => {
     const cleanName = name.trim();
@@ -341,6 +345,6 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     createWorkspace,
     renameWorkspace,
     deleteWorkspace,
-    resolveConflict,
+    resolveConflict, saveNow,
   };
 }

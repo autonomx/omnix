@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
 import type { CanonicalInstrument } from './tradingTypes';
 import { parseTradingFormula } from './tradingFormula';
+import { chartKeyContextActive, noteTradingPointerDown, resetTradingPointerContext } from './commands/chartKeyContext';
 
 const crypto: CanonicalInstrument = {
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
@@ -167,5 +168,21 @@ describe('TradingSymbolSearch', () => {
     expect(result).toBeEnabled();
     fireEvent.click(result);
     expect(onSelectFormula).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TradingSymbolSearch and chart keys', () => {
+  it('returns the keyboard to the chart when a symbol is chosen', () => {
+    const header = document.createElement('button');
+    document.body.append(header);
+    noteTradingPointerDown(header);
+    header.remove();
+    expect(chartKeyContextActive('chart')).toBe(false);
+    const props = { query: 'AAPL', instruments: [crypto, stock], activeInstrumentId: crypto.instrument_id, onQueryChange: vi.fn(), onSelect: vi.fn(), onClose: vi.fn() };
+    const view = render(<TradingSymbolSearch open {...props} />);
+    fireEvent.click(screen.getByRole('option', { name: /AAPL/ }).querySelector('button')!);
+    view.rerender(<TradingSymbolSearch open={false} {...props} />);
+    expect(chartKeyContextActive('chart')).toBe(true);
+    resetTradingPointerContext();
   });
 });

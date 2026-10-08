@@ -12,9 +12,11 @@ import { ChartPanelIndicatorPanes, ChartPanelReplayMarkers, ChartPanelScaleContr
 import { ChartPanelLegend, ChartPanelPaneControls } from './TradingChartPanelLegend';
 import { ChartPanelOverlays, ChartPanelContextMenu } from './TradingChartPanelOverlays';
 import { ChartPanelFooter } from './TradingChartPanelFooter';
+import { useTradingChartPanelCommands } from './commands/useTradingChartPanelCommands';
 
 export function TradingChartPanel(props: TradingChartPanelProps) {
   const ws = useTradingChartPanel(props);
+  useTradingChartPanelCommands(ws);
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
     drawingTool, handleReplayStageClick, handleStageContextMenu, handleStagePointerLeave, handleStagePointerMove,
