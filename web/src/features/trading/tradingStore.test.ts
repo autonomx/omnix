@@ -44,6 +44,7 @@ beforeEach(() => {
     panels: { right: true, bottom: true },
     favoriteInstrumentIds: [],
     closedTabs: [],
+    favoriteIntervals: ['1h', '2h', '4h'],
   });
 });
 
@@ -95,6 +96,25 @@ describe('Trading multi-chart store', () => {
     useTradingStore.getState().setLink('interval', true);
     useTradingStore.getState().updateChart('chart-4', { interval: '2h' });
     expect(useTradingStore.getState().charts.every((item) => item.interval === '2h')).toBe(true);
+  });
+
+  it('keeps interval favourites sorted and distinct (TVP-2.5)', () => {
+    const store = useTradingStore.getState();
+    store.addFavoriteInterval('7m');
+    store.addFavoriteInterval('7m');
+    store.toggleFavoriteInterval('1d');
+    expect(useTradingStore.getState().favoriteIntervals).toEqual(['7m', '1h', '2h', '4h', '1d']);
+    useTradingStore.getState().toggleFavoriteInterval('2h');
+    expect(useTradingStore.getState().favoriteIntervals).toEqual(['7m', '1h', '4h', '1d']);
+  });
+
+  it('copies chart settings with the chart it was added from', () => {
+    useTradingStore.getState().updateChart('chart-1', { settings: { extendedHours: false } });
+    useTradingStore.getState().setActiveChart('chart-1');
+    useTradingStore.getState().addChart();
+    const added = useTradingStore.getState().charts.at(-1);
+    expect(added?.settings).toEqual({ extendedHours: false });
+    expect(added?.settings).not.toBe(useTradingStore.getState().charts[0].settings);
   });
 
   it('stores panel visibility and canonical instrument favorites', () => {

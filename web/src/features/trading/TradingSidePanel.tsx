@@ -62,6 +62,7 @@ export function TradingSidePanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
+  onDuplicateLayout,
 }: {
   sessionId?: string;
   instruments: CanonicalInstrument[];
@@ -92,6 +93,7 @@ export function TradingSidePanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
+  onDuplicateLayout?: () => void;
 }) {
   const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
   const activeTab = selectedTab ?? internalTab;
@@ -220,6 +222,7 @@ export function TradingSidePanel({
             onRemoveChart={onRemoveChart}
             onSetLink={onSetLink}
             onSetSnapMode={onSetSnapMode}
+            onDuplicateLayout={onDuplicateLayout}
           />
         ) : null}
         </Suspense>

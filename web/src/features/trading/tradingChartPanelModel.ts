@@ -253,16 +253,19 @@ export function firstBarTime(response: BarsResponse): number {
   return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
 }
 
+/** Comparison bars on the same clock-aligned buckets as the main chart, so derived intervals (7m, 2h) line up. */
 export async function comparisonBars(
   instrumentId: string,
   interval: string,
   limit: number,
+  extendedHours = true,
 ): Promise<ComparisonBars> {
-  const selected = await tradingApi.bars(instrumentId, interval, limit);
+  const options = { alignment: 'clock', extendedHours } as const;
+  const selected = await tradingApi.bars(instrumentId, interval, limit, undefined, options);
   const equivalent = longHistoryEquivalent(instrumentId, interval);
   if (!equivalent || equivalent === instrumentId) return selected;
   try {
-    const candidate = await tradingApi.bars(equivalent, interval, limit);
+    const candidate = await tradingApi.bars(equivalent, interval, limit, undefined, options);
     if (candidate.bars.length > selected.bars.length && firstBarTime(candidate) < firstBarTime(selected)) {
       return { ...selected, bars: candidate.bars, historySourceInstrumentId: candidate.instrument.instrument_id };
     }
@@ -274,8 +277,8 @@ export async function comparisonBars(
 }
 
 /** Query key of a comparison's bars; compare series and compare-symbol indicators share it (placement does not change the data). */
-export function comparisonBarsQueryKey(instrumentId: string, interval: string, limit: number): readonly unknown[] {
-  return ['trading', 'comparison-bars-v2', instrumentId, interval, limit];
+export function comparisonBarsQueryKey(instrumentId: string, interval: string, limit: number, extendedHours = true): readonly unknown[] {
+  return ['trading', 'comparison-bars-v3', instrumentId, interval, limit, 'clock', extendedHours];
 }
 
 const COMPARE_BAR_LIMITS = [1_000, 2_000, 5_000] as const;
@@ -300,11 +303,12 @@ export async function loadCompareSymbolBars(
   interval: string,
   range: { from: number; to: number },
   now = Date.now(),
+  extendedHours = true,
 ): Promise<MarketBar[]> {
   const limit = compareBarsLimit(instrumentId, interval, range.from, now);
   const response = await queryClient.fetchQuery({
-    queryKey: comparisonBarsQueryKey(instrumentId, interval, limit),
-    queryFn: () => comparisonBars(instrumentId, interval, limit),
+    queryKey: comparisonBarsQueryKey(instrumentId, interval, limit, extendedHours),
+    queryFn: () => comparisonBars(instrumentId, interval, limit, extendedHours),
     staleTime: 15_000,
   });
   return response.bars as MarketBar[];

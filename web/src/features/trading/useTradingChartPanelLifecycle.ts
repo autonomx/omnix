@@ -1,6 +1,6 @@
 import { APPEARANCE_CHANGE_EVENT, onOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { defaultTradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
@@ -19,15 +19,22 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     selectedRangeRef, setAdapter, setChartPanning, setContextMenu, setCustomRangeOpen, setFullscreenIndicator,
     setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPanningIndicatorPane,
     setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedIndicator, setSelectedRangeLabel, setTimezoneId,
-    setTimezoneMenuOpen, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
+    setTimezoneMenuOpen, showExtendedHours, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
     timezoneMenuRef,
   } = ws;
   const queryClient = useQueryClient();
+  // Compare-symbol indicators read the compare symbol's bars with the chart's extended-hours setting.
+  const extendedHoursRef = useRef(showExtendedHours);
+  useEffect(() => {
+    extendedHoursRef.current = showExtendedHours;
+  }, [showExtendedHours]);
 
   useEffect(() => {
     if (!hostRef.current) return;
     const next = new TradingChartAdapter(hostRef.current, chartType);
-    const scheduler = new TradingIndicatorScheduler(undefined, (id, barInterval, range) => loadCompareSymbolBars(queryClient, id, barInterval, range));
+    const scheduler = new TradingIndicatorScheduler(undefined, (id, barInterval, range) => (
+      loadCompareSymbolBars(queryClient, id, barInterval, range, Date.now(), extendedHoursRef.current)
+    ));
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     fittedBarsKeyRef.current = null;

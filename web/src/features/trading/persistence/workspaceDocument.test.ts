@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseTradingWorkspace, serializeTradingWorkspace } from './workspaceDocument';
 
 const state = {
@@ -108,6 +108,38 @@ describe('Trading workspace document', () => {
       charts: [{ chartId: 42 }],
       links: state.links,
     })).toBeNull();
+  });
+
+  it('round trips interval favourites and per-chart settings (TVP-2.5)', () => {
+    const serialized = serializeTradingWorkspace({
+      ...state,
+      favoriteIntervals: ['7m', '4h'],
+      charts: [{ ...state.charts[0], interval: '7m', settings: { barCountdown: false, extendedHours: false } }],
+      activeChartId: 'chart-1',
+    });
+    expect(serialized.favoriteIntervals).toEqual(['7m', '4h']);
+    expect(serialized.charts[0].settings).toEqual({ barCountdown: false, extendedHours: false });
+    expect(parseTradingWorkspace(serialized)).toEqual(serialized);
+  });
+
+  it('drops malformed favourites and chart settings without failing the workspace', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const legacy = serializeTradingWorkspace(state);
+    expect(parseTradingWorkspace(legacy)?.favoriteIntervals).toBeUndefined();
+    expect(parseTradingWorkspace({ ...legacy, favoriteIntervals: ['7m', 'nonsense', 3] })?.favoriteIntervals).toEqual(['7m']);
+    const parsed = parseTradingWorkspace({
+      ...legacy,
+      charts: [{ ...legacy.charts[0], settings: { extendedHours: 'no', barCountdown: false } }, legacy.charts[1]],
+    });
+    expect(parsed?.charts[0].settings).toEqual({ barCountdown: false });
+    expect(parsed?.charts).toHaveLength(2);
+    expect(parseTradingWorkspace({ ...legacy, charts: [{ ...legacy.charts[0], settings: 'broken' }] })?.charts[0].settings).toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    expect(parseTradingWorkspace({
+      ...legacy,
+      charts: [{ ...legacy.charts[0], settings: { extendedHours: true, unknown: 1 } }],
+    })?.charts[0].settings).toEqual({ extendedHours: true });
   });
 
   it('does not persist runtime functions or provider payloads', () => {

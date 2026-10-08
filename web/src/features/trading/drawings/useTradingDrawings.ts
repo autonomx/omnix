@@ -231,3 +231,13 @@ export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
     resolveConflict: (resolution: 'reload' | 'overwrite') => resolveConflict(entry, resolution),
   };
 }
+
+/** Saves every drawing change still waiting on its debounce, e.g. before a layout is duplicated (TVP-2.5). */
+export async function flushTradingDrawingSaves(): Promise<void> {
+  const pending = [...entries.values()].filter((entry) => entry.timer !== null);
+  await Promise.all(pending.map((entry) => {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = null;
+    return saveEntry(entry);
+  }));
+}

@@ -66,7 +66,14 @@ class TradingDocumentRepository:
                 record_id=record_id,
             )
 
-    def list(self, record_type: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    def list(
+        self,
+        record_type: str,
+        *,
+        limit: int = 100,
+        after: tuple[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Most recently updated first; ``after`` is the last ``(updated_at, record_id)`` of the previous page."""
         clean_type = self._require_type(record_type)
         with self.uow_factory() as uow:
             return uow.module_records.list(
@@ -74,6 +81,7 @@ class TradingDocumentRepository:
                 module=TRADING_MODULE,
                 record_type=clean_type,
                 limit=limit,
+                after=after,
             )
 
     def iter(self, record_type: str) -> Iterator[dict[str, Any]]:

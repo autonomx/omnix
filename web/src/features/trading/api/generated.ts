@@ -615,6 +615,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/market-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Market Status */
+        get: operations["market_status_api_trading_market_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/metrics": {
         parameters: {
             query?: never;
@@ -5870,6 +5887,30 @@ export interface components {
             source: components["schemas"]["ResearchSource"];
             /** Summary */
             summary: string;
+        };
+        /**
+         * MarketStatusResponse
+         * @description An instrument's market session right now, for the chart legend (TVP-2.5).
+         */
+        MarketStatusResponse: {
+            /** Always Open */
+            always_open: boolean;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Exchange Timezone */
+            exchange_timezone: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Session Calendar */
+            session_calendar: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "pre_market" | "post_market" | "closed" | "unknown";
         };
         /**
          * MechanismRiskScores
@@ -12379,6 +12420,8 @@ export interface operations {
                 interval?: string;
                 limit?: number;
                 binding_id?: string | null;
+                alignment?: "count" | "clock";
+                extended_hours?: boolean;
             };
             header?: never;
             path?: never;
@@ -12561,6 +12604,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -13072,6 +13117,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -13553,6 +13600,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_status_api_trading_market_status_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16209,6 +16287,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -16374,6 +16454,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -16539,6 +16621,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;

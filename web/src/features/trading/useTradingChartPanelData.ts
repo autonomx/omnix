@@ -8,14 +8,15 @@ import { useChartReplayClock } from './useTradingChartPanelReplayClock';
 import { TRADING_COMPARISON_COLORS } from './tradingComparisons';
 import { resolveTradingTimezone } from './tradingTime';
 import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonBarsQueryKey, comparisonLabel } from './tradingChartPanelModel';
+import { filterExtendedHours } from './tradingChartWorkflow';
 import type { useChartPanelState } from './useTradingChartPanelState';
 
 /** Indicator scheduling: recomputes indicator outputs off the render path. */
 export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState>) {
   const {
-    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef,
-    indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate, onActivateRef,
-    setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
+    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, historyLimitOverride, indicatorSchedulerRef, indicatorSessionRef,
+    indicatorTimerRef, indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate,
+    onActivateRef, setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
   } = ws;
 
   useEffect(() => {
@@ -83,7 +84,12 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
     }, delay);
   }, [refreshIndicatorPanes, adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
 
-  const historyLimit = chartHistoryLimit(instrumentId, interval, indicators);
+  const defaultHistoryLimit = chartHistoryLimit(instrumentId, interval, indicators);
+
+  // Go to date (TVP-2.5) asks for more history on the same bars request; it applies to this symbol and interval only.
+  const historyLimit = historyLimitOverride?.key === `${instrumentId}|${interval}`
+    ? Math.max(defaultHistoryLimit, historyLimitOverride.limit)
+    : defaultHistoryLimit;
 
   return {
     clearAlertPlacement, refreshIndicatorPanes, scheduleIndicators, historyLimit,
@@ -93,14 +99,17 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
 /** Bars, comparisons and currency rates for the chart, and the replay window. */
 export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling>) {
   const {
-    active, adapter, bindingId, comparisons, historyLimit, indicators, instrumentId, interval,
+    active, adapter, bindingId, chartSettings, comparisons, historyLimit, indicators, instrumentId, interval,
     onActivateRef, priceScaleCurrency, replayMode, rightOffset,
     selectedIndicator, setPriceScaleCurrency, setSelectedIndicator, timezoneId,
   } = ws;
 
+  const showExtendedHours = chartSettings?.extendedHours !== false;
+
+  // The chart asks for clock-aligned derived intervals (TVP-2.5); strategies keep count mode.
   const chartQuery = useQuery({
-    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit],
-    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId),
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit, 'clock', showExtendedHours],
+    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId, { alignment: 'clock', extendedHours: showExtendedHours }),
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });
@@ -109,8 +118,8 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     queries: comparisons.map((comparison) => {
       const comparisonLimit = chartHistoryLimit(comparison.instrumentId, interval, []);
       return {
-        queryKey: comparisonBarsQueryKey(comparison.instrumentId, interval, comparisonLimit),
-        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit),
+        queryKey: comparisonBarsQueryKey(comparison.instrumentId, interval, comparisonLimit, showExtendedHours),
+        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit, showExtendedHours),
         enabled: Boolean(comparison.instrumentId),
         staleTime: 15_000,
       };
@@ -199,8 +208,12 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
   }, [selectedIndicator, setSelectedIndicator]);
 
-  // Normalized once per load; replay and the chart's data effect share it.
-  const loadedBars = useMemo(() => normalizeChartBars((chartQuery.data?.bars ?? []) as MarketBar[]), [chartQuery.data]);
+  // Normalized once per load; replay and the chart's data effect share it. Hidden
+  // extended hours (TVP-2.5) drop pre- and post-market bars before either sees them.
+  const loadedBars = useMemo(
+    () => normalizeChartBars(filterExtendedHours((chartQuery.data?.bars ?? []) as MarketBar[], showExtendedHours)),
+    [chartQuery.data, showExtendedHours],
+  );
 
   const { refetch: refetchBars } = chartQuery;
 
@@ -217,6 +230,6 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
 
   return {
     chartQuery, comparisonQueries, comparisonRenderData, sourceCurrency, supportsCurrencyConversion,
-    currencyRateQuery, priceScaleMultiplier, selectedTimezone, loadedBars, ...replay,
+    currencyRateQuery, priceScaleMultiplier, selectedTimezone, loadedBars, showExtendedHours, ...replay,
   };
 }

@@ -87,7 +87,19 @@ describe('compare-symbol bars', () => {
     const second = await loadCompareSymbolBars(client, 'equity:NASDAQ:QQQ', '1h', range, now);
     expect(first).toEqual(second);
     expect(tradingApi.bars).toHaveBeenCalledTimes(1);
-    expect(tradingApi.bars).toHaveBeenCalledWith('equity:NASDAQ:QQQ', '1h', 2_000);
+    expect(tradingApi.bars).toHaveBeenCalledWith('equity:NASDAQ:QQQ', '1h', 2_000, undefined, { alignment: 'clock', extendedHours: true });
     expect(client.getQueryData(comparisonBarsQueryKey('equity:NASDAQ:QQQ', '1h', 2_000))).toBeTruthy();
+  });
+
+  it('keeps regular-hours compare bars apart from extended-hours ones', async () => {
+    const client = new QueryClient();
+    const now = Date.UTC(2026, 9, 8);
+    tradingApi.bars.mockResolvedValue({ bars: [bar('2026-10-07T00:00:00Z')], instrument: qqq, binding: {} });
+    const range = { from: now - 1_500 * 3_600_000, to: now };
+    await loadCompareSymbolBars(client, 'equity:NASDAQ:QQQ', '1h', range, now, true);
+    await loadCompareSymbolBars(client, 'equity:NASDAQ:QQQ', '1h', range, now, false);
+    expect(tradingApi.bars).toHaveBeenCalledTimes(2);
+    expect(tradingApi.bars).toHaveBeenLastCalledWith('equity:NASDAQ:QQQ', '1h', 2_000, undefined, { alignment: 'clock', extendedHours: false });
+    expect(client.getQueryData(comparisonBarsQueryKey('equity:NASDAQ:QQQ', '1h', 2_000, false))).toBeTruthy();
   });
 });

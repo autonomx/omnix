@@ -236,8 +236,9 @@ function TradingDataWindow({
   indicators: CoreIndicatorInstance[];
 }) {
   const barsQuery = useQuery({
-    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, 1_000],
-    queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
+    // The same clock-aligned buckets as the chart, so data-window values match what is drawn.
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, 1_000, 'clock', true],
+    queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId, { alignment: 'clock', extendedHours: true }),
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });

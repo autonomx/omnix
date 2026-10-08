@@ -22,7 +22,8 @@ export function TradingIndicatorPresets({
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
 
   const refresh = () => tradingApi.documents('indicator-presets').then((items) => {
-    setRecords(items.filter((item) => item.status === 'active'));
+    // Chart templates (TVP-2.5) share these documents; they are listed in chart settings instead.
+    setRecords(items.filter((item) => item.status === 'active' && !('templateKind' in item.payload)));
     setStatus('ready');
   }).catch(() => setStatus('error'));
 

@@ -4,6 +4,7 @@ import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { chartPalette } from './chartPalette';
 import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
 import { drawingToolDefinition } from './drawings/tools/registry';
+import { ChartCopyImageButton, ChartMarketStatusBadges } from './TradingChartWorkflowControls';
 
 /** The chart's header: symbol, quote, interval and chart controls. */
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
@@ -38,6 +39,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             >+</button>
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} role="img" aria-label={`Feed ${streamStatus}`} />
+            <ChartMarketStatusBadges ws={ws} />
           </div>
           {latest ? (
             <div className="trading-chart-ohlc">
@@ -74,6 +76,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
             <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
             <button type="button" onClick={() => adapterRef.current && downloadUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
+            <ChartCopyImageButton ws={ws} />
             {drawings.hasConflict ? (
               <>
                 <span role="status">Drawing conflict</span>
