@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { alertSoundName, playAlertSound, resetAlertSounds } from './alertSounds';
+import { alertSoundName, playAlertSound, resetAlertSounds, soundChange } from './alertSounds';
 
 function fakeAudio() {
   const started: number[] = [];
@@ -32,5 +32,25 @@ describe('alert sounds', () => {
     expect(playAlertSound('beep', () => null)).toBe(false);
     resetAlertSounds();
     expect(playAlertSound('beep', () => { throw new Error('blocked'); })).toBe(false);
+  });
+});
+
+describe('alert sounds before a user gesture', () => {
+  it('plays nothing while the browser keeps audio suspended, and asks to resume', () => {
+    const { audio, started } = fakeAudio();
+    const suspended = { ...audio, state: 'suspended' };
+    expect(playAlertSound('chime', () => suspended as never)).toBe(false);
+    expect(started).toEqual([]);
+    expect(suspended.resume).toHaveBeenCalled();
+  });
+});
+
+describe('soundChange', () => {
+  it('saves the sound only with the Sound channel and only when it changed', () => {
+    expect(soundChange({ notifications: ['app'], sound: 'beep' })).toBeUndefined();
+    expect(soundChange({ notifications: ['sound'] })).toBe('chime');
+    expect(soundChange({ notifications: ['sound'], sound: 'chime', storedSound: 'siren' })).toBeUndefined();
+    expect(soundChange({ notifications: ['sound'], sound: 'beep', storedSound: 'siren' })).toBe('beep');
+    expect(soundChange({ notifications: ['sound'], sound: 'alarm', storedSound: 'alarm' })).toBeUndefined();
   });
 });

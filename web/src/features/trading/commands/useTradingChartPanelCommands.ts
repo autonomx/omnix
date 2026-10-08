@@ -83,5 +83,5 @@ export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
     if (!latest || !Number.isFinite(price)) return;
     const at = target.projectDrawingPoint({ time: latest.start_time, price });
     setAlertPlacement({ time: latest.start_time, price, x: at?.x ?? 0, y: at?.y ?? 0, source: 'context-menu' });
-  }), () => ready() && latest !== undefined);
+  }), () => ready() && latest !== undefined && !replayMode);
 }

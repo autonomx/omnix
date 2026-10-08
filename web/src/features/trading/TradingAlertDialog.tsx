@@ -23,6 +23,8 @@ export type TradingAlertEditorState = {
   notifications: TradingAlertNotificationChannel[];
   /** The Sound channel's sound (chime when unset). */
   sound?: AlertSoundName;
+  /** The sound name the alert has stored, which may be one this client doesn't know. */
+  storedSound?: string;
   indicator: TradingAlertIndicatorId;
   period: string;
   lookback: string;

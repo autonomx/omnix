@@ -1128,9 +1128,9 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 | Measure | Done |
 |---|---|
 | TradingView parity, all features in scope | 70% |
-| TradingView parity, daily + weekly features | 78% |
+| TradingView parity, daily + weekly features | 79% |
 | Roadmap work packages merged in full | 30% (20 of 67) |
-| Daily + weekly gap closed since the first count | 53% (79 of 150) |
+| Daily + weekly gap closed since the first count | 54% (81 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1140,29 +1140,29 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 <!-- parity-report:start -->
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
-| Charts and layouts | 28 | 2 | 2 / 0 / 1 | 0 | 0 | 88% |
-| Drawing tools | 44 | 1 | 0 / 9 / 47 | 0 | 0 | 44% |
+| Charts and layouts | 29 | 2 | 1 / 0 / 1 | 0 | 0 | 91% |
+| Drawing tools | 45 | 0 | 0 / 9 / 47 | 0 | 0 | 45% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
-| Alerts | 16 | 3 | 3 / 2 / 0 | 0 | 0 | 73% |
-| Shortcuts | 38 | 7 | 5 / 0 / 0 | 0 | 0 | 83% |
+| Alerts | 17 | 2 | 3 / 2 / 0 | 0 | 0 | 75% |
+| Shortcuts | 39 | 7 | 4 / 0 / 0 | 0 | 0 | 85% |
 | Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 | 86% |
 | Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
 | Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
 | Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 | 55% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 295 | 20 | 21 / 50 / 52 | 55 | 0 | 70% |
+| **Total** | 299 | 18 | 19 / 50 / 52 | 55 | 0 | 70% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 130 | 12 | 21 | 0 | 0 | 163 | 83% |
+| Daily | 134 | 10 | 19 | 0 | 0 | 163 | 85% |
 | Weekly | 152 | 8 | 50 | 0 | 0 | 210 | 74% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **71**
+Missing daily + weekly features: **69**
 
-Done (have counts 1, partial 0.5, of the features in scope): **70%** overall, **78%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **70%** overall, **79%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**

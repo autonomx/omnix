@@ -37,7 +37,12 @@ export function playAlertSound(name: unknown, create: () => AudioContextLike | n
   try {
     const audio = context(create);
     if (!audio) return false;
-    if (audio.state === 'suspended') void audio.resume().catch(() => undefined);
+    if (audio.state !== 'running') {
+      // Without a user gesture yet the browser keeps it suspended; ask to resume for the next sound, play nothing
+      // now (scheduled notes would wait and play together once a click resumes it).
+      void audio.resume().catch(() => undefined);
+      return false;
+    }
     const start = audio.currentTime;
     for (const note of NOTES[alertSoundName(name)]) {
       const oscillator = audio.createOscillator();
@@ -55,6 +60,14 @@ export function playAlertSound(name: unknown, create: () => AudioContextLike | n
   } catch {
     return false;
   }
+}
+
+/** The sound to save: only with the Sound channel, and only when it differs from the stored one (kept if unknown here). */
+export function soundChange(editor: { notifications: readonly string[]; sound?: AlertSoundName; storedSound?: string }): string | undefined {
+  if (!editor.notifications.includes('sound')) return undefined;
+  const chosen = editor.sound ?? 'chime';
+  if (editor.storedSound === undefined) return chosen;
+  return alertSoundName(editor.storedSound) === chosen ? undefined : chosen;
 }
 
 /** Tests only: forget the audio context. */

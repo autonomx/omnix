@@ -128,6 +128,13 @@ describe('chart panel shortcuts (TVP-2.1)', () => {
     chart.hook.unmount();
   });
 
+  it('adds no live alert at a replay price', () => {
+    const chart = mount(true, true);
+    press({ key: 'a', code: 'KeyA', altKey: true });
+    expect(chart.setAlertPlacement).not.toHaveBeenCalled();
+    chart.hook.unmount();
+  });
+
   it('leaves inactive charts alone', () => {
     const chart = mount(false);
     press({ key: 'ArrowLeft' });
