@@ -497,7 +497,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)} disabled={!workspaceHydrated}>Right panel</button>
           <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)} disabled={!workspaceHydrated}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
-          <TradingKeyboardLayer persistence={persistence} supportedIntervals={supportedIntervals} onOpenSymbolSearch={(typed) => openSymbolSearch(activeChartId, typed)} />
+          <TradingKeyboardLayer persistence={persistence} supportedIntervals={supportedIntervals} onOpenSymbolSearch={(typed) => openSymbolSearch(activeChartId, typed)} onCloseTab={closeTabSession} />
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
       </div>
       <section className="trading-command-bar" aria-label="Trading command bar">

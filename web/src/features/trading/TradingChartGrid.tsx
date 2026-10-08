@@ -5,6 +5,7 @@ import { installTradingChartViewportPersistence } from './chart/chartViewportPer
 import { currentTradingWorkspaceScopeId } from './persistence/useTradingWorkspacePersistence';
 import { useTradingStore, type TradingLayout } from './tradingStore';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
+import { useTradingCommand } from './commands/useTradingCommands';
 
 installTradingChartViewportPersistence();
 
@@ -65,6 +66,13 @@ export function TradingChartGrid({
   useEffect(() => {
     setFocusedChartId(null);
   }, [activeTabId, workspaceScopeId]);
+
+  // A maximised layout shows the active chart, so switching charts (Tab) moves the maximised view.
+  useEffect(() => {
+    setFocusedChartId((current) => current === null ? current : activeChartId);
+  }, [activeChartId]);
+
+  useTradingCommand('layout.maximizeChart', () => setFocusedChartId((current) => current === null ? activeChartId : null));
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {

@@ -38,6 +38,7 @@ import { useTradingWatchlistImport } from './useTradingWatchlistImport';
 import { TradingWatchlistOptionsMenu } from './TradingWatchlistOptionsMenu';
 import { TradingWatchlistHeader, TradingWatchlistSectionRow, TradingWatchlistSymbolRow } from './TradingWatchlistRows';
 import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
+import { useTradingCommand } from './commands/useTradingCommands';
 import './TradingWatchlist.css';
 
 function mergeInstruments(
@@ -130,6 +131,11 @@ export function TradingWatchlist({
   const listName = flagColor ? flagListName(flagColor).toLowerCase() : 'watchlist';
   const editable = !flagColor && !readOnly;
   const sectionIds = listItems.flatMap((item) => item.type === 'section' ? [item.id] : []);
+  // Alt+W (TVP-2.3): add the chart's symbol to the open list, or flag it when a flag list is open.
+  useTradingCommand('watchlist.addActiveSymbol', () => {
+    if (flagColor) void setFlag([normalizedActiveInstrumentId], flagColor);
+    else if (!instrumentIds.includes(normalizedActiveInstrumentId)) commit((payload) => addWatchlistSymbols(payload, [normalizedActiveInstrumentId]));
+  }, () => Boolean(normalizedActiveInstrumentId) && status !== 'loading' && (flagColor != null || (selected != null && !readOnly)));
 
   const addInstrument = async (instrument: CanonicalInstrument) => {
     const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);

@@ -14,12 +14,14 @@ import {
 import {
   canRunTradingCommand,
   runTradingCommand,
+  setTradingCommandAvailability,
   setTradingCommandKeyOverrides,
   useTradingCommand,
   useTradingCommandDispatcher,
 } from './useTradingCommands';
 import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
 import { formatCommandKeys, formatHotkey } from './hotkeyLabels';
+import { watchlistKeyCommand } from '../useTradingWatchlistSelection';
 
 function key(init: KeyboardEventInit, target?: EventTarget): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
@@ -220,5 +222,67 @@ describe('hotkey labels', () => {
     expect(formatHotkey('mod+arrowleft', false)).toBe('Ctrl+←');
     expect(formatHotkey('alt+pagedown', true)).toBe('⌥+Page Down');
     expect(formatCommandKeys(symbolSearch, [], false)).toEqual(['A–Z']);
+  });
+});
+
+describe('browser and installed-app keys (TVP-2.3)', () => {
+  const newTab = tradingCommandDefinition('tab.new')!;
+
+  it('uses TradingView keys the browser keeps only in the installed app', () => {
+    const tab = command(newTab);
+    expect(resolveCommand([tab], key({ key: 't', ctrlKey: true }))).toBeNull();
+    expect(resolveCommand([tab], key({ key: 'T', code: 'KeyT', altKey: true, shiftKey: true }))).toBe(tab);
+    expect(resolveCommand([tab], key({ key: 't', ctrlKey: true }), {}, 'installed')).toBe(tab);
+    expect(resolveCommand([tab], key({ key: 'T', code: 'KeyT', altKey: true, shiftKey: true }), {}, 'installed')).toBe(tab);
+  });
+
+  it('has no conflicting default keys in either mode', () => {
+    expect(findKeyConflicts(TRADING_COMMANDS, {}, 'browser')).toEqual([]);
+    expect(findKeyConflicts(TRADING_COMMANDS, {}, 'installed')).toEqual([]);
+  });
+
+  it('switches the dispatcher to installed-app keys', () => {
+    const run = vi.fn();
+    const dispatcher = renderHook(() => useTradingCommandDispatcher());
+    const binding = renderHook(() => useTradingCommand('tab.new', run));
+    window.dispatchEvent(key({ key: 't', ctrlKey: true }));
+    expect(run).not.toHaveBeenCalled();
+    setTradingCommandAvailability('installed');
+    window.dispatchEvent(key({ key: 't', ctrlKey: true }));
+    expect(run).toHaveBeenCalledTimes(1);
+    setTradingCommandAvailability('browser');
+    binding.unmount();
+    dispatcher.unmount();
+  });
+
+  it('matches Alt+digit by physical key', () => {
+    expect(matchesHotkey('alt+1', key({ key: '¡', code: 'Digit1', altKey: true }))).toBe(true);
+    expect(matchesHotkey('alt+1', key({ key: '2', code: 'Digit2', altKey: true }))).toBe(false);
+  });
+});
+
+describe('watchlist grid keys (TVP-2.3)', () => {
+  const ids = ['watchlist.next', 'watchlist.previous', 'watchlist.extendNext', 'watchlist.extendPrevious', 'watchlist.selectAll'];
+  const expected: Record<string, string> = {
+    'watchlist.next': 'next',
+    'watchlist.previous': 'previous',
+    'watchlist.extendNext': 'extendNext',
+    'watchlist.extendPrevious': 'extendPrevious',
+    'watchlist.selectAll': 'selectAll',
+  };
+  const eventFor = (hotkey: string) => {
+    const parts = hotkey.split('+');
+    const name = parts.at(-1)!;
+    const keyName = ({ arrowdown: 'ArrowDown', arrowup: 'ArrowUp', space: ' ' } as Record<string, string>)[name] ?? name;
+    return { key: keyName, shiftKey: parts.includes('shift'), ctrlKey: parts.includes('mod'), metaKey: false, altKey: false };
+  };
+
+  it('lists exactly the keys the watchlist grid reads, and never dispatches them', () => {
+    for (const id of ids) {
+      const definition = tradingCommandDefinition(id)!;
+      expect(definition.handledLocally).toBe(true);
+      for (const hotkey of definition.defaultKeys) expect(watchlistKeyCommand(eventFor(hotkey))).toBe(expected[id]);
+      expect(resolveCommand([command(definition)], key(eventFor(definition.defaultKeys[0])))).toBeNull();
+    }
   });
 });

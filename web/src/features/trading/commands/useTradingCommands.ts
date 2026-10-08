@@ -4,12 +4,14 @@ import {
   tradingCommandDefinition,
   type KeyOverrides,
   type RegisteredCommand,
+  type TradingCommandAvailability,
   type TradingCommandId,
 } from './tradingCommands';
 import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
 
 const registered: RegisteredCommand[] = [];
 let keyOverrides: KeyOverrides = {};
+let availability: TradingCommandAvailability = 'browser';
 let dispatchers = 0;
 const listeners = new Set<() => void>();
 
@@ -31,6 +33,20 @@ export function tradingCommandKeyOverrides(): KeyOverrides {
   return keyOverrides;
 }
 
+/** Browser mode by default; the installed app (TVP-4.5) switches to `installed` so TradingView's browser-reserved keys work. */
+export function setTradingCommandAvailability(next: TradingCommandAvailability): void {
+  availability = next;
+  notify();
+}
+
+export function tradingCommandAvailability(): TradingCommandAvailability {
+  return availability;
+}
+
+export function useTradingCommandAvailability(): TradingCommandAvailability {
+  return useSyncExternalStore(subscribe, tradingCommandAvailability, tradingCommandAvailability);
+}
+
 /** The current key overrides; re-renders when they change. */
 export function useTradingCommandKeyOverrides(): KeyOverrides {
   return useSyncExternalStore(subscribe, tradingCommandKeyOverrides, tradingCommandKeyOverrides);
@@ -38,7 +54,7 @@ export function useTradingCommandKeyOverrides(): KeyOverrides {
 
 function dispatch(event: KeyboardEvent): void {
   if (event.defaultPrevented) return;
-  const match = resolveCommand(registered, event, keyOverrides);
+  const match = resolveCommand(registered, event, keyOverrides, availability);
   if (!match) return;
   event.preventDefault();
   event.stopPropagation();

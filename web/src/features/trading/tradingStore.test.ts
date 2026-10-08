@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  MAX_CLOSED_TRADING_TABS,
   MAX_TRADING_CHARTS,
+  MAX_TRADING_TABS,
+  freshTradingSessionState,
   defaultTradingIndicators,
   useTradingStore,
   type TradingChartState,
@@ -40,6 +43,7 @@ beforeEach(() => {
     links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
     panels: { right: true, bottom: true },
     favoriteInstrumentIds: [],
+    closedTabs: [],
   });
 });
 
@@ -175,5 +179,51 @@ describe('Trading multi-chart store', () => {
 
     useTradingStore.getState().moveIndicator('chart-1', 'macd', 'down');
     expect(useTradingStore.getState().charts[0].indicators.map((item) => item.id)).toEqual(before);
+  });
+});
+
+describe('closed tab stack (TVP-2.3)', () => {
+  const tabIds = () => useTradingStore.getState().tabs.map((tab) => tab.tabId);
+
+  it('reopens closed tabs newest first, in their old place, with their charts', () => {
+    const store = useTradingStore.getState;
+    const second = store().addTab('Second')!;
+    const third = store().addTab('Third')!;
+    store().updateChart(store().activeChartId, { interval: '4h' });
+    store().setActiveTab(second);
+    store().removeTab(second);
+    store().removeTab(third);
+    expect(tabIds()).toEqual(['tab-1']);
+    expect(store().closedTabs.map((entry) => entry.tab.tabId)).toEqual([second, third]);
+
+    expect(store().reopenClosedTab()).toBe(third);
+    expect(store().activeTabId).toBe(third);
+    expect(store().charts[0].interval).toBe('4h');
+    expect(store().reopenClosedTab()).toBe(second);
+    expect(tabIds()).toEqual(['tab-1', second, third]);
+    expect(store().reopenClosedTab()).toBeNull();
+  });
+
+  it('keeps the last ten closed tabs and does nothing when the tab bar is full', () => {
+    const store = useTradingStore.getState;
+    for (let index = 0; index < MAX_CLOSED_TRADING_TABS + 2; index += 1) {
+      const id = store().addTab(`Tab ${index}`)!;
+      store().removeTab(id);
+    }
+    expect(store().closedTabs).toHaveLength(MAX_CLOSED_TRADING_TABS);
+    expect(store().closedTabs[0].tab.name).toBe('Tab 2');
+
+    while (store().tabs.length < MAX_TRADING_TABS) store().addTab();
+    expect(store().reopenClosedTab()).toBeNull();
+    expect(store().closedTabs).toHaveLength(MAX_CLOSED_TRADING_TABS);
+  });
+
+  it('starts a loaded workspace without closed tabs from another one', () => {
+    const store = useTradingStore.getState;
+    const id = store().addTab()!;
+    store().removeTab(id);
+    useTradingStore.setState(freshTradingSessionState());
+    expect(store().closedTabs).toEqual([]);
+    expect(store().reopenClosedTab()).toBeNull();
   });
 });

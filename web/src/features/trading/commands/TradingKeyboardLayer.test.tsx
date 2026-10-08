@@ -2,10 +2,11 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/renderWithProviders';
 import { tradingApi } from '../tradingApi';
-import { useTradingStore } from '../tradingStore';
+import { useTradingStore, type TradingTabState } from '../tradingStore';
 import type { CanonicalInstrument } from '../tradingTypes';
 import { TradingKeyboardLayer } from './TradingKeyboardLayer';
-import { useTradingCommandDispatcher } from './useTradingCommands';
+import { noteTradingPointerDown } from './chartKeyContext';
+import { setTradingCommandAvailability, useTradingCommandDispatcher } from './useTradingCommands';
 
 const initialStore = useTradingStore.getState();
 
@@ -35,10 +36,11 @@ function setup() {
     saveNow: vi.fn(async () => undefined),
   };
   const onOpenSymbolSearch = vi.fn();
+  const onCloseTab = vi.fn((tab: TradingTabState) => useTradingStore.getState().removeTab(tab.tabId));
   renderWithProviders(
-    <Harness persistence={persistence} supportedIntervals={['1m', '1h', '4h', '1d']} onOpenSymbolSearch={onOpenSymbolSearch} />,
+    <Harness persistence={persistence} supportedIntervals={['1m', '1h', '4h', '1d']} onOpenSymbolSearch={onOpenSymbolSearch} onCloseTab={onCloseTab} />,
   );
-  return { persistence, onOpenSymbolSearch };
+  return { persistence, onOpenSymbolSearch, onCloseTab };
 }
 
 const press = (init: KeyboardEventInit, target: Element = document.body) => act(() => { fireEvent.keyDown(target, init); });
@@ -123,5 +125,70 @@ describe('command palette and layouts (TVP-2.1)', () => {
     expect(persistence.selectWorkspace).toHaveBeenCalledWith('swing');
     press({ key: 's', ctrlKey: true });
     expect(persistence.saveNow).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('tab and layout shortcuts (TVP-2.3)', () => {
+  const store = useTradingStore.getState;
+  const tabIds = () => store().tabs.map((tab) => tab.tabId);
+  const alt = (code: string, extra: KeyboardEventInit = {}) => press({ key: code.replace(/^(Key|Digit)/, '').toLowerCase(), code, altKey: true, ...extra });
+
+  it('opens, switches, closes and reopens tabs with the browser keys', () => {
+    const { onCloseTab } = setup();
+    alt('KeyT', { shiftKey: true });
+    alt('KeyT', { shiftKey: true });
+    const [first, second, third] = tabIds();
+    expect(tabIds()).toHaveLength(3);
+    expect(store().activeTabId).toBe(third);
+
+    alt('PageDown', { key: 'PageDown' });
+    expect(store().activeTabId).toBe(first);
+    alt('PageUp', { key: 'PageUp' });
+    expect(store().activeTabId).toBe(third);
+    alt('Digit2');
+    expect(store().activeTabId).toBe(second);
+    alt('Digit9');
+    expect(store().activeTabId).toBe(third);
+    alt('Digit8');
+    expect(store().activeTabId).toBe(third);
+
+    alt('KeyW', { shiftKey: true });
+    expect(onCloseTab).toHaveBeenCalledWith(expect.objectContaining({ tabId: third }));
+    expect(tabIds()).toEqual([first, second]);
+    alt('KeyZ', { shiftKey: true });
+    expect(tabIds()).toEqual([first, second, third]);
+    expect(store().activeTabId).toBe(third);
+  });
+
+  it('keeps the browser-reserved keys for the installed app', () => {
+    setup();
+    press({ key: 't', ctrlKey: true });
+    expect(tabIds()).toHaveLength(1);
+    setTradingCommandAvailability('installed');
+    press({ key: 't', ctrlKey: true });
+    expect(tabIds()).toHaveLength(2);
+    press({ key: '1', ctrlKey: true });
+    expect(store().activeTabId).toBe(tabIds()[0]);
+    setTradingCommandAvailability('browser');
+  });
+
+  it('switches charts with Tab only after a click in the chart area', () => {
+    setup();
+    act(() => store().setChartCount(3));
+    const [chartOne, chartTwo, chartThree] = store().charts.map((chart) => chart.chartId);
+    act(() => store().setActiveChart(chartOne));
+    press({ key: 'Tab' });
+    expect(store().activeChartId).toBe(chartOne);
+
+    const shell = document.createElement('section');
+    shell.className = 'trading-chart-shell';
+    document.body.append(shell);
+    noteTradingPointerDown(shell);
+    press({ key: 'Tab' });
+    expect(store().activeChartId).toBe(chartTwo);
+    press({ key: 'Tab', shiftKey: true });
+    press({ key: 'Tab', shiftKey: true });
+    expect(store().activeChartId).toBe(chartThree);
+    shell.remove();
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tradingApi } from '../tradingApi';
-import { useTradingStore } from '../tradingStore';
+import { freshTradingSessionState, useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { tradingDraftRecovery } from './draftRecovery';
 import {
@@ -118,7 +118,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       tabs,
       layout: activeTab.layout,
       activeChartId: activeTab.activeChartId,
-      replayMode: false,
+      ...freshTradingSessionState(),
       charts: activeTab.charts,
       links: activeTab.links,
       panels: activeTab.panels,

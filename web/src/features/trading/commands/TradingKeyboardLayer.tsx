@@ -2,12 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { tradingApi } from '../tradingApi';
 import { isIntervalAvailable, TRADING_VIEW_INTERVAL_GROUPS } from '../tradingIntervals';
-import { useTradingStore } from '../tradingStore';
+import { useTradingStore, type TradingTabState } from '../tradingStore';
 import type { TradingWorkspacePersistence } from '../persistence/useTradingWorkspacePersistence';
 import { formatCommandKeys } from './hotkeyLabels';
 import { TRADING_COMMANDS, commandKeys } from './tradingCommands';
 import { TradingCommandPalette, type TradingPaletteItem } from './TradingCommandPalette';
 import { TradingIntervalInputBox } from './TradingIntervalInputBox';
+import { useTradingTabCommands } from './useTradingTabCommands';
 import {
   canRunTradingCommand,
   runTradingCommand,
@@ -23,16 +24,20 @@ function restoreFocus(element: Element | null): void {
 
 /**
  * Workspace keyboard commands and the surfaces they open: the command
- * palette (Ctrl+K), the layout list (.) and the interval box (digits).
+ * palette (Ctrl+K), the layout list (.) and the interval box (digits), plus
+ * the tab and chart-switching commands.
  */
 export function TradingKeyboardLayer({
   persistence,
   supportedIntervals,
   onOpenSymbolSearch,
+  onCloseTab,
 }: {
   persistence: Pick<TradingWorkspacePersistence, 'status' | 'workspaces' | 'activeWorkspaceId' | 'selectWorkspace' | 'saveNow'>;
   supportedIntervals: readonly string[];
   onOpenSymbolSearch: (typed?: string) => void;
+  /** The workspace's close-tab action, which asks before closing. */
+  onCloseTab: (tab: TradingTabState) => void;
 }) {
   const [paletteMode, setPaletteMode] = useState<PaletteMode | null>(null);
   const [intervalText, setIntervalText] = useState<string | null>(null);
@@ -59,6 +64,7 @@ export function TradingKeyboardLayer({
   useTradingCommand('workspace.commandPalette', () => openPalette('all'));
   useTradingCommand('layout.load', () => openPalette('layouts'), () => workspaceReady);
   useTradingCommand('layout.save', () => void persistence.saveNow(), () => workspaceReady);
+  useTradingTabCommands(onCloseTab);
 
   const layoutItems = useMemo<TradingPaletteItem[]>(() => persistence.workspaces.map((workspace) => ({
     id: `layout:${workspace.workspaceId}`,

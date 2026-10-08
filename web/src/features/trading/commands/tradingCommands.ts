@@ -6,6 +6,14 @@ export type CommandScope = 'workspace' | 'chart' | 'watchlist' | 'drawing';
 
 const SCOPE_PRIORITY: Record<CommandScope, number> = { workspace: 0, chart: 1, watchlist: 2, drawing: 3 };
 
+/**
+ * Where Omnix runs. Browsers keep some keys for themselves (Ctrl+T, Ctrl+W,
+ * Ctrl+N, Ctrl+Tab, Ctrl+PgUp/PgDn, Ctrl+1-9) and a page can't override them,
+ * so those TradingView keys only work in the installed app (TVP-4.5). The
+ * browser is the default.
+ */
+export type TradingCommandAvailability = 'browser' | 'installed';
+
 /** Keys matched by a pattern rather than a hotkey string. Pattern keys can't be rebound. */
 export type CommandKeyPattern = 'letter' | 'interval';
 
@@ -16,12 +24,16 @@ export type TradingCommandDefinition = {
   scope: CommandScope;
   /** Mantine hotkey strings, e.g. `mod+z`, `alt+t`, `shift+alt+b`. `mod` is Ctrl on Windows/Linux and ⌘ on macOS. */
   defaultKeys: readonly string[];
+  /** TradingView's keys that browsers keep for themselves; they only work in the installed app, alongside `defaultKeys`. */
+  installedKeys?: readonly string[];
   /** Runs even while a text field has focus (for keys such as Escape). */
   allowInInputs?: boolean;
   /** Matches typed characters instead of hotkeys: `letter` is A–Z, `interval` is 0–9 and comma. */
   keyPattern?: CommandKeyPattern;
   /** The keys only fire while the chart area has the keyboard (see `chartKeyContext`). */
   keyContext?: ChartKeyContext;
+  /** Keys a component's own keyboard pattern reads (the watchlist tree grid). Listed in the shortcut dialog; never dispatched or rebound. */
+  handledLocally?: boolean;
 };
 
 export type TradingCommandHandler = {
@@ -57,6 +69,32 @@ export const TRADING_COMMANDS = [
   { id: 'workspace.commandPalette', label: 'Open command palette', group: 'General', scope: 'workspace', defaultKeys: ['mod+k'] },
   { id: 'layout.save', label: 'Save layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['mod+s'] },
   { id: 'layout.load', label: 'Load layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['.'] },
+  // Layout and watchlist (TVP-2.3)
+  { id: 'layout.nextChart', label: 'Next chart in the layout', group: 'Layout', scope: 'chart', defaultKeys: ['tab'], keyContext: 'chartClicked' },
+  { id: 'layout.previousChart', label: 'Previous chart in the layout', group: 'Layout', scope: 'chart', defaultKeys: ['shift+tab'], keyContext: 'chartClicked' },
+  { id: 'layout.maximizeChart', label: 'Maximise or restore the active chart', group: 'Layout', scope: 'workspace', defaultKeys: ['alt+enter'] },
+  { id: 'watchlist.addActiveSymbol', label: 'Add the chart symbol to the open watchlist', group: 'Watchlist', scope: 'workspace', defaultKeys: ['alt+w'] },
+  // Tabs (TVP-2.3). In the browser they use Alt, because the browser keeps Ctrl+T, W, N, Tab, PgUp/PgDn and 1-9.
+  { id: 'tab.new', label: 'New tab, copying this one (browser Alt+Shift+T, app Ctrl+T)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+shift+t'], installedKeys: ['mod+t', 'mod+u'] },
+  { id: 'tab.close', label: 'Close tab (browser Alt+Shift+W, app Ctrl+W)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+shift+w'], installedKeys: ['mod+w'] },
+  { id: 'tab.next', label: 'Next tab (browser Alt+Page Down, app Ctrl+Tab)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+pagedown'], installedKeys: ['mod+tab', 'mod+pagedown'] },
+  { id: 'tab.previous', label: 'Previous tab (browser Alt+Page Up, app Ctrl+Shift+Tab)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+pageup'], installedKeys: ['mod+shift+tab', 'mod+pageup'] },
+  { id: 'tab.goTo1', label: 'Go to tab 1 (browser Alt+1, app Ctrl+1)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+1'], installedKeys: ['mod+1'] },
+  { id: 'tab.goTo2', label: 'Go to tab 2 (browser Alt+2, app Ctrl+2)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+2'], installedKeys: ['mod+2'] },
+  { id: 'tab.goTo3', label: 'Go to tab 3 (browser Alt+3, app Ctrl+3)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+3'], installedKeys: ['mod+3'] },
+  { id: 'tab.goTo4', label: 'Go to tab 4 (browser Alt+4, app Ctrl+4)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+4'], installedKeys: ['mod+4'] },
+  { id: 'tab.goTo5', label: 'Go to tab 5 (browser Alt+5, app Ctrl+5)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+5'], installedKeys: ['mod+5'] },
+  { id: 'tab.goTo6', label: 'Go to tab 6 (browser Alt+6, app Ctrl+6)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+6'], installedKeys: ['mod+6'] },
+  { id: 'tab.goTo7', label: 'Go to tab 7 (browser Alt+7, app Ctrl+7)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+7'], installedKeys: ['mod+7'] },
+  { id: 'tab.goTo8', label: 'Go to tab 8 (browser Alt+8, app Ctrl+8)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+8'], installedKeys: ['mod+8'] },
+  { id: 'tab.goToLast', label: 'Go to the last tab (browser Alt+9, app Ctrl+9)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+9'], installedKeys: ['mod+9'] },
+  { id: 'tab.reopenClosed', label: 'Reopen closed tab (browser Alt+Shift+Z, app Ctrl+Shift+T)', group: 'Tabs', scope: 'workspace', defaultKeys: ['alt+shift+z'], installedKeys: ['mod+shift+t'] },
+  // The watchlist tree grid reads these keys itself (TVP-5.3); they stay fixed so the grid keeps its ARIA keyboard pattern.
+  { id: 'watchlist.next', label: 'Next symbol', group: 'Watchlist', scope: 'watchlist', defaultKeys: ['arrowdown', 'space'], handledLocally: true },
+  { id: 'watchlist.previous', label: 'Previous symbol', group: 'Watchlist', scope: 'watchlist', defaultKeys: ['arrowup', 'shift+space'], handledLocally: true },
+  { id: 'watchlist.extendNext', label: 'Extend the selection down', group: 'Watchlist', scope: 'watchlist', defaultKeys: ['shift+arrowdown'], handledLocally: true },
+  { id: 'watchlist.extendPrevious', label: 'Extend the selection up', group: 'Watchlist', scope: 'watchlist', defaultKeys: ['shift+arrowup'], handledLocally: true },
+  { id: 'watchlist.selectAll', label: 'Select all symbols', group: 'Watchlist', scope: 'watchlist', defaultKeys: ['mod+a'], handledLocally: true },
 ] as const satisfies readonly TradingCommandDefinition[];
 
 export type TradingCommandId = typeof TRADING_COMMANDS[number]['id'];
@@ -67,13 +105,22 @@ export function tradingCommandDefinition(id: string): TradingCommandDefinition |
   return definitionsById.get(id);
 }
 
-/** Pattern keys are fixed; every other command can be rebound. */
+/** Pattern keys and the watchlist grid keys are fixed; every other command can be rebound. */
 export function isRebindable(definition: TradingCommandDefinition): boolean {
-  return !definition.keyPattern;
+  return !definition.keyPattern && !definition.handledLocally;
 }
 
-export function commandKeys(definition: TradingCommandDefinition, overrides: KeyOverrides = {}): readonly string[] {
-  return (isRebindable(definition) ? overrides[definition.id] : undefined) ?? definition.defaultKeys;
+/** A command's keys: the user's override, else its defaults plus, in the installed app, TradingView's browser-reserved keys. */
+export function commandKeys(
+  definition: TradingCommandDefinition,
+  overrides: KeyOverrides = {},
+  availability: TradingCommandAvailability = 'browser',
+): readonly string[] {
+  const override = isRebindable(definition) ? overrides[definition.id] : undefined;
+  if (override) return override;
+  return availability === 'installed' && definition.installedKeys
+    ? [...definition.defaultKeys, ...definition.installedKeys]
+    : definition.defaultKeys;
 }
 
 function hotkeyParts(hotkey: string): string[] {
@@ -136,6 +183,7 @@ export function resolveCommand(
   registered: readonly RegisteredCommand[],
   event: KeyboardEvent,
   overrides: KeyOverrides = {},
+  availability: TradingCommandAvailability = 'browser',
 ): RegisteredCommand | null {
   const blocked = isEditableTarget(event.target) || modalDialogOpen(event)
     || (!event.ctrlKey && !event.metaKey && !event.altKey && isCompositeWidgetTarget(event.target));
@@ -143,9 +191,9 @@ export function resolveCommand(
   let bestIsPattern = true;
   for (const candidate of registered) {
     const { definition, handler } = candidate;
-    if (blocked && !definition.allowInInputs) continue;
+    if (definition.handledLocally || (blocked && !definition.allowInInputs)) continue;
     const pattern = definition.keyPattern ? matchesKeyPattern(definition.keyPattern, event) : false;
-    if (!pattern && !commandKeys(definition, overrides).some((hotkey) => matchesHotkey(hotkey, event))) continue;
+    if (!pattern && !commandKeys(definition, overrides, availability).some((hotkey) => matchesHotkey(hotkey, event))) continue;
     if (definition.keyContext && !chartKeyContextActive(definition.keyContext, event)) continue;
     if (!handler.isActive()) continue;
     const better = !best
@@ -169,10 +217,14 @@ export function normalizeHotkey(hotkey: string): string {
 export type KeyConflict = { hotkey: string; scope: CommandScope; ids: string[] };
 
 /** Commands that share a key in the same scope; the shortcut dialog shows these and a test keeps the defaults free of them. */
-export function findKeyConflicts(definitions: readonly TradingCommandDefinition[], overrides: KeyOverrides = {}): KeyConflict[] {
+export function findKeyConflicts(
+  definitions: readonly TradingCommandDefinition[],
+  overrides: KeyOverrides = {},
+  availability: TradingCommandAvailability = 'browser',
+): KeyConflict[] {
   const byKey = new Map<string, KeyConflict>();
   for (const definition of definitions) {
-    for (const hotkey of commandKeys(definition, overrides)) {
+    for (const hotkey of commandKeys(definition, overrides, availability)) {
       const normalized = normalizeHotkey(hotkey);
       const slot = `${definition.scope}|${normalized}`;
       const entry = byKey.get(slot) ?? { hotkey: normalized, scope: definition.scope, ids: [] };

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tradingApi } from './tradingApi';
 import type { BarsResponse, CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
 import { TradingWatchlist } from './TradingWatchlist';
+import { useTradingCommandDispatcher } from './commands/useTradingCommands';
 
 const apple: CanonicalInstrument = {
   instrument_id: 'equity:NASDAQ:AAPL',
@@ -819,5 +820,39 @@ describe('TradingWatchlist keyboard and import', () => {
     fireEvent.change(screen.getByLabelText('Import watchlist file'), { target: { files: [huge] } });
     expect(await screen.findByText('huge.txt is too large to import (the limit is 1 MB).')).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+function WatchlistWithShortcuts(props: Parameters<typeof TradingWatchlist>[0]) {
+  useTradingCommandDispatcher();
+  return <TradingWatchlist {...props} />;
+}
+
+describe('TradingWatchlist Alt+W (TVP-2.3)', () => {
+  it('adds the chart symbol to the open list once', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    const update = echoUpdates();
+    render(<WatchlistWithShortcuts instruments={[apple, gameStop]} activeInstrumentId={gameStop.instrument_id} interval="1m" onSelect={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Select AAPL' });
+
+    fireEvent.keyDown(document.body, { key: 'w', code: 'KeyW', altKey: true });
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0][2]).toMatchObject({ instrumentIds: [apple.instrument_id, gameStop.instrument_id] });
+    await screen.findByRole('button', { name: 'Select GME' });
+
+    fireEvent.keyDown(document.body, { key: 'w', code: 'KeyW', altKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the grid keys to the watchlist', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    render(<WatchlistWithShortcuts instruments={[apple]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />);
+    const grid = await screen.findByRole('treegrid', { name: 'Watchlist symbols' });
+    const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    grid.querySelector<HTMLElement>('[data-row-key]')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });
