@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { fuzzyFilter } from './fuzzyMatch';
+import { useModalDialog } from './useModalDialog';
 import './TradingKeyboard.css';
 
 export type TradingPaletteItem = {
@@ -11,6 +12,8 @@ export type TradingPaletteItem = {
   keys?: readonly string[];
   /** Listed but not runnable now (no chart, dialog or panel to act on). */
   disabled?: boolean;
+  /** Why a disabled item can't run; defaults to "not available now". */
+  unavailableText?: string;
   run: () => void;
 };
 
@@ -18,7 +21,8 @@ const MAX_RESULTS = 80;
 
 /**
  * Ctrl+K: a searchable list of commands and quick actions. Keyboard only:
- * type to filter, ↑/↓ to move, Enter to run, Escape to close.
+ * type to filter, ↑/↓ to move, Enter to run, Escape to close. Tab stays in
+ * the palette, and closing returns focus to where it was.
  */
 export function TradingCommandPalette({
   open,
@@ -36,6 +40,8 @@ export function TradingCommandPalette({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const onDialogKeyDown = useModalDialog(open, dialogRef, onClose);
   const listId = useId();
   const results = useMemo(
     () => fuzzyFilter(items, query, (item) => `${item.label} ${item.group}`).slice(0, MAX_RESULTS),
@@ -72,15 +78,12 @@ export function TradingCommandPalette({
     } else if (event.key === 'Enter') {
       event.preventDefault();
       runItem(active);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      onClose();
     }
   };
 
   return createPortal(
     <div className="trading-command-palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="trading-command-palette" role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={dialogRef} className="trading-command-palette" role="dialog" aria-modal="true" aria-label={title} onKeyDown={onDialogKeyDown}>
         <input
           ref={inputRef}
           className="trading-command-palette-input"
@@ -95,6 +98,9 @@ export function TradingCommandPalette({
           onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
           onKeyDown={onKeyDown}
         />
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {results.length === 1 ? '1 result' : `${results.length} results`}
+        </p>
         <ul id={listId} className="trading-command-palette-list" role="listbox" aria-label={`${title} results`}>
           {results.map((item, index) => (
             <li
@@ -109,7 +115,7 @@ export function TradingCommandPalette({
               onClick={() => runItem(item)}
             >
               <span className="trading-command-palette-label">{item.label}</span>
-              <span className="trading-command-palette-group">{item.disabled ? `${item.group} · not available now` : item.group}</span>
+              <span className="trading-command-palette-group">{item.disabled ? `${item.group} · ${item.unavailableText ?? 'not available now'}` : item.group}</span>
               {item.keys?.length ? <span className="trading-command-palette-keys">{item.keys.map((key) => <kbd key={key}>{key}</kbd>)}</span> : null}
             </li>
           ))}

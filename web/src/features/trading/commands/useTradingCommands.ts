@@ -7,7 +7,7 @@ import {
   type TradingCommandAvailability,
   type TradingCommandId,
 } from './tradingCommands';
-import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
+import { forgetChartClick, noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
 
 const registered: RegisteredCommand[] = [];
 let keyOverrides: KeyOverrides = {};
@@ -53,6 +53,7 @@ export function useTradingCommandKeyOverrides(): KeyOverrides {
 }
 
 function dispatch(event: KeyboardEvent): void {
+  if (event.key === 'Escape') forgetChartClick();
   if (event.defaultPrevented) return;
   const match = resolveCommand(registered, event, keyOverrides, availability);
   if (!match) return;

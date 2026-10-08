@@ -373,7 +373,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     if (!toolPanelFullscreen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setToolPanelFullscreen(false);
+      if (event.key === 'Escape' && !event.defaultPrevented) setToolPanelFullscreen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -665,7 +665,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <div className="trading-body">
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
-          <section className="trading-chart-shell" aria-label="Trading chart workspace">
+          <section className="trading-chart-shell" aria-label="Trading chart workspace" tabIndex={0}>
             <TradingChartGrid
               paperAccountId={paperAccountId}
               onOpenSymbolSearch={openSymbolSearch}

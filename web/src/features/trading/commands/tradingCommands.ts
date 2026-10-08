@@ -1,5 +1,7 @@
-import { getHotkeyHandler } from '@mantine/hooks';
 import { chartKeyContextActive, type ChartKeyContext } from './chartKeyContext';
+import { isBrowserReservedHotkey, isPlainHotkey, matchesHotkey, normalizeHotkey, parseHotkey } from './hotkeys';
+
+export { matchesHotkey, normalizeHotkey } from './hotkeys';
 
 /** Where a command applies. When one key matches in several scopes, the most specific scope wins. */
 export type CommandScope = 'workspace' | 'chart' | 'watchlist' | 'drawing';
@@ -22,7 +24,7 @@ export type TradingCommandDefinition = {
   label: string;
   group: string;
   scope: CommandScope;
-  /** Mantine hotkey strings, e.g. `mod+z`, `alt+t`, `shift+alt+b`. `mod` is Ctrl on Windows/Linux and ⌘ on macOS. */
+  /** Hotkey strings (see `hotkeys.ts`), e.g. `mod+z`, `alt+t`, `shift+alt+b`. `mod` is Ctrl on Windows/Linux and ⌘ on macOS. */
   defaultKeys: readonly string[];
   /** TradingView's keys that browsers keep for themselves; they only work in the installed app, alongside `defaultKeys`. */
   installedKeys?: readonly string[];
@@ -30,10 +32,12 @@ export type TradingCommandDefinition = {
   allowInInputs?: boolean;
   /** Matches typed characters instead of hotkeys: `letter` is A–Z, `interval` is 0–9 and comma. */
   keyPattern?: CommandKeyPattern;
-  /** The keys only fire while the chart area has the keyboard (see `chartKeyContext`). */
+  /** The keys only fire while the chart area has the keyboard (see `chartKeyContext`). Keys without Ctrl, ⌘ or Alt always need it. */
   keyContext?: ChartKeyContext;
   /** Keys a component's own keyboard pattern reads (the watchlist tree grid). Listed in the shortcut dialog; never dispatched or rebound. */
   handledLocally?: boolean;
+  /** Catalogued ahead of its action (it arrives with another work package): listed as not available yet, never dispatched or rebound. */
+  planned?: boolean;
 };
 
 export type TradingCommandHandler = {
@@ -48,7 +52,7 @@ export const TRADING_COMMANDS = [
   // Chart (TVP-2.1)
   { id: 'chart.symbolSearch', label: 'Change symbol (type a letter)', group: 'Chart', scope: 'chart', defaultKeys: [], keyPattern: 'letter', keyContext: 'chart' },
   { id: 'chart.intervalInput', label: 'Change interval (type a number or comma)', group: 'Chart', scope: 'chart', defaultKeys: [], keyPattern: 'interval', keyContext: 'chart' },
-  { id: 'chart.indicators', label: 'Open indicators', group: 'Chart', scope: 'chart', defaultKeys: ['/'] },
+  { id: 'chart.indicators', label: 'Open indicators', group: 'Chart', scope: 'chart', defaultKeys: ['/'], keyContext: 'chart' },
   { id: 'chart.moveLeft', label: 'Move chart one bar left', group: 'Chart', scope: 'chart', defaultKeys: ['arrowleft'], keyContext: 'chart' },
   { id: 'chart.moveRight', label: 'Move chart one bar right', group: 'Chart', scope: 'chart', defaultKeys: ['arrowright'], keyContext: 'chart' },
   { id: 'chart.moveFurtherLeft', label: 'Move chart further left', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowleft'], keyContext: 'chart' },
@@ -60,16 +64,16 @@ export const TRADING_COMMANDS = [
   { id: 'chart.logScale', label: 'Logarithmic price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+l'] },
   { id: 'chart.percentScale', label: 'Percent price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+p'] },
   { id: 'chart.snapshot', label: 'Chart snapshot (download PNG)', group: 'Chart', scope: 'chart', defaultKeys: ['alt+s'] },
-  { id: 'chart.goToDate', label: 'Go to date', group: 'Chart', scope: 'chart', defaultKeys: ['alt+g'] },
+  { id: 'chart.goToDate', label: 'Go to date', group: 'Chart', scope: 'chart', defaultKeys: ['alt+g'], planned: true },
   // Drawings
   { id: 'drawing.undo', label: 'Undo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+z'] },
   { id: 'drawing.redo', label: 'Redo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+shift+z', 'mod+y'] },
-  { id: 'drawing.delete', label: 'Delete selected drawing', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'] },
+  { id: 'drawing.delete', label: 'Delete selected drawing', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'], keyContext: 'chart' },
   // General and layouts. Omnix calls a saved TradingView layout a workspace.
   { id: 'workspace.commandPalette', label: 'Open command palette', group: 'General', scope: 'workspace', defaultKeys: ['mod+k'] },
   { id: 'workspace.shortcuts', label: 'Keyboard shortcuts', group: 'General', scope: 'workspace', defaultKeys: ['mod+/'] },
-  { id: 'layout.save', label: 'Save layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['mod+s'] },
-  { id: 'layout.load', label: 'Load layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['.'] },
+  { id: 'layout.save', label: 'Save layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['mod+s'], allowInInputs: true },
+  { id: 'layout.load', label: 'Load layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['.'], keyContext: 'chart' },
   // Layout and watchlist (TVP-2.3)
   { id: 'layout.nextChart', label: 'Next chart in the layout', group: 'Layout', scope: 'chart', defaultKeys: ['tab'], keyContext: 'chartClicked' },
   { id: 'layout.previousChart', label: 'Previous chart in the layout', group: 'Layout', scope: 'chart', defaultKeys: ['shift+tab'], keyContext: 'chartClicked' },
@@ -106,54 +110,29 @@ export function tradingCommandDefinition(id: string): TradingCommandDefinition |
   return definitionsById.get(id);
 }
 
-/** Pattern keys and the watchlist grid keys are fixed; every other command can be rebound. */
+/** Pattern keys, the watchlist grid keys and planned commands are fixed; every other command can be rebound. */
 export function isRebindable(definition: TradingCommandDefinition): boolean {
-  return !definition.keyPattern && !definition.handledLocally;
+  return !definition.keyPattern && !definition.handledLocally && !definition.planned;
 }
 
-/** A command's keys: the user's override, else its defaults plus, in the installed app, TradingView's browser-reserved keys. */
+/**
+ * A command's keys: the user's keys (or the defaults) plus, in the installed
+ * app, TradingView's browser-reserved keys. Rebinding replaces the browser
+ * keys only, so the installed app keeps TradingView's keys.
+ */
 export function commandKeys(
   definition: TradingCommandDefinition,
   overrides: KeyOverrides = {},
   availability: TradingCommandAvailability = 'browser',
 ): readonly string[] {
-  const override = isRebindable(definition) ? overrides[definition.id] : undefined;
-  if (override) return override;
-  return availability === 'installed' && definition.installedKeys
-    ? [...definition.defaultKeys, ...definition.installedKeys]
-    : definition.defaultKeys;
+  const keys = (isRebindable(definition) ? overrides[definition.id] : undefined) ?? definition.defaultKeys;
+  return availability === 'installed' && definition.installedKeys ? [...keys, ...definition.installedKeys] : keys;
 }
 
-function hotkeyParts(hotkey: string): string[] {
-  return hotkey.toLowerCase().split('+').map((part) => part.trim());
-}
-
-/** `event.code` names for keys Mantine's physical matching doesn't map (it compares `Digit1` with `1`). */
-const PHYSICAL_KEY_NAMES: Record<string, string> = {
-  '0': 'digit0', '1': 'digit1', '2': 'digit2', '3': 'digit3', '4': 'digit4',
-  '5': 'digit5', '6': 'digit6', '7': 'digit7', '8': 'digit8', '9': 'digit9',
-  '.': 'period', ',': 'comma', ';': 'semicolon', "'": 'quote', '[': 'bracketleft', ']': 'bracketright',
-};
-
-/**
- * True when the event is exactly this hotkey. Alt combinations match the
- * physical key, because macOS Option changes `event.key` (Option+T types
- * "†"); so do Shift+digit combinations, because Shift+1 types "!".
- */
-export function matchesHotkey(hotkey: string, event: KeyboardEvent): boolean {
-  const parts = hotkeyParts(hotkey);
-  const physical = parts.includes('alt') || (parts.includes('shift') && parts.some((part) => /^\d$/.test(part)));
-  const target = physical ? parts.map((part) => PHYSICAL_KEY_NAMES[part] ?? part).join('+') : hotkey;
-  let matched = false;
-  getHotkeyHandler([[target, () => { matched = true; }, { preventDefault: false, usePhysicalKeys: physical }]])(event);
-  return matched;
-}
-
-/** Typed-character matching for pattern commands: no Ctrl, ⌘ or Alt; Shift is allowed for capital letters. */
+/** Typed-character matching for pattern commands: no Ctrl, ⌘ or Alt. Shift is allowed (capital letters; the AZERTY digit row). */
 export function matchesKeyPattern(pattern: CommandKeyPattern, event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey) return false;
-  if (pattern === 'letter') return /^[a-z]$/i.test(event.key);
-  return !event.shiftKey && /^[0-9,]$/.test(event.key);
+  return pattern === 'letter' ? /^[a-z]$/i.test(event.key) : /^[0-9,]$/.test(event.key);
 }
 
 export function isEditableTarget(target: EventTarget | null): boolean {
@@ -169,10 +148,12 @@ export function isCompositeWidgetTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(COMPOSITE_WIDGETS) !== null;
 }
 
+export const MODAL_DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]';
+
 function modalDialogOpen(event: KeyboardEvent): boolean {
   const target = event.target instanceof Node ? event.target : null;
   const owner = target?.ownerDocument ?? (typeof document === 'undefined' ? null : document);
-  return owner?.querySelector('[role="dialog"][aria-modal="true"]') != null;
+  return owner?.querySelector(MODAL_DIALOG_SELECTOR) != null;
 }
 
 export type RegisteredCommand = { definition: TradingCommandDefinition; handler: TradingCommandHandler };
@@ -180,9 +161,10 @@ export type RegisteredCommand = { definition: TradingCommandDefinition; handler:
 /**
  * The command a key event triggers, or null. Text fields and open modal
  * dialogs are skipped unless a command allows inputs, and plain keys are
- * skipped in widgets that navigate with them. Inactive handlers are skipped.
- * A hotkey beats a typed-character pattern; then the most specific scope wins,
- * then the latest registration.
+ * skipped in widgets that navigate with them. A key without Ctrl, ⌘ or Alt
+ * only fires while the chart area has the keyboard. Inactive handlers are
+ * skipped. A hotkey beats a typed-character pattern; then the most specific
+ * scope wins, then the latest registration.
  */
 export function resolveCommand(
   registered: readonly RegisteredCommand[],
@@ -196,10 +178,12 @@ export function resolveCommand(
   let bestIsPattern = true;
   for (const candidate of registered) {
     const { definition, handler } = candidate;
-    if (definition.handledLocally || (blocked && !definition.allowInInputs)) continue;
+    if (definition.handledLocally || definition.planned || (blocked && !definition.allowInInputs)) continue;
     const pattern = definition.keyPattern ? matchesKeyPattern(definition.keyPattern, event) : false;
-    if (!pattern && !commandKeys(definition, overrides, availability).some((hotkey) => matchesHotkey(hotkey, event))) continue;
-    if (definition.keyContext && !chartKeyContextActive(definition.keyContext, event)) continue;
+    const hotkey = pattern ? null : commandKeys(definition, overrides, availability).find((key) => matchesHotkey(key, event));
+    if (!pattern && !hotkey) continue;
+    const context = definition.keyContext ?? (hotkey && !definition.allowInInputs && isPlainHotkey(hotkey) ? 'chart' : undefined);
+    if (context && !chartKeyContextActive(context, event)) continue;
     if (!handler.isActive()) continue;
     const better = !best
       || (bestIsPattern && !pattern)
@@ -212,11 +196,28 @@ export function resolveCommand(
   return best;
 }
 
-export function normalizeHotkey(hotkey: string): string {
-  const parts = hotkeyParts(hotkey);
-  const modifiers = ['mod', 'ctrl', 'meta', 'alt', 'shift'].filter((modifier) => parts.includes(modifier));
-  const key = parts.find((part) => !['mod', 'ctrl', 'meta', 'alt', 'shift'].includes(part)) ?? '';
-  return [...modifiers, key].join('+');
+const FOCUS_KEYS = new Set(['enter', 'space', 'tab', 'escape']);
+
+/**
+ * Why a key can't be bound to a command, or null when it can. Enter, Space,
+ * Tab and Escape work buttons, focus and dialogs, so they need Ctrl, ⌘ or
+ * Alt. Other keys without a modifier are typing keys and are only allowed
+ * for commands that fire while the chart has the keyboard. Keys the browser
+ * keeps are refused in the browser, so the command keeps working.
+ */
+export function rebindProblem(
+  definition: TradingCommandDefinition,
+  hotkey: string,
+  availability: TradingCommandAvailability = 'browser',
+): string | null {
+  if (!isRebindable(definition)) return `${definition.label} can't be rebound.`;
+  const plain = isPlainHotkey(hotkey);
+  const { key } = parseHotkey(hotkey);
+  if (!key) return 'Press a key.';
+  if (plain && FOCUS_KEYS.has(key)) return 'Enter, Space, Tab and Escape need Ctrl, Alt or ⌘: on their own they work buttons, focus and dialogs.';
+  if (plain && !definition.keyContext) return 'Keys without Ctrl, Alt or ⌘ are only for commands that act on the chart. Add a modifier.';
+  if (availability === 'browser' && isBrowserReservedHotkey(hotkey)) return 'The browser keeps this key for itself, so it only works in the installed app. The current keys stay.';
+  return null;
 }
 
 export type KeyConflict = { hotkey: string; scope: CommandScope; ids: string[] };
@@ -238,4 +239,41 @@ export function findKeyConflicts(
     }
   }
   return [...byKey.values()].filter((entry) => entry.ids.length > 1);
+}
+
+/**
+ * - `conflict`: same key, same scope (`findKeyConflicts`);
+ * - `shadowed`: same key in different scopes, so the more specific scope wins while it is active;
+ * - `typing`: a plain letter, digit or comma that typing on the chart already uses (symbol search, interval box).
+ */
+export type KeyClash = { hotkey: string; ids: string[]; kind: 'conflict' | 'shadowed' | 'typing' };
+
+/** Every way two shortcuts can get in each other's way; the shortcut dialog lists them all. */
+export function findKeyClashes(
+  definitions: readonly TradingCommandDefinition[],
+  overrides: KeyOverrides = {},
+  availability: TradingCommandAvailability = 'browser',
+): KeyClash[] {
+  const clashes: KeyClash[] = findKeyConflicts(definitions, overrides, availability)
+    .map(({ hotkey, ids }) => ({ hotkey, ids, kind: 'conflict' }));
+  const users = new Map<string, TradingCommandDefinition[]>();
+  const patterns = new Map(definitions.filter((definition) => definition.keyPattern).map((definition) => [definition.keyPattern, definition.id]));
+  for (const definition of definitions) {
+    if (definition.handledLocally || definition.keyPattern) continue;
+    for (const hotkey of commandKeys(definition, overrides, availability)) {
+      const normalized = normalizeHotkey(hotkey);
+      users.set(normalized, [...(users.get(normalized) ?? []), definition]);
+      const parsed = parseHotkey(normalized);
+      const typed = !isPlainHotkey(normalized) ? null
+        : /^[a-z]$/.test(parsed.key) ? patterns.get('letter')
+          : /^[0-9,]$/.test(parsed.key) ? patterns.get('interval') : null;
+      if (typed) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
+    }
+  }
+  for (const [hotkey, sharing] of users) {
+    if (new Set(sharing.map((definition) => definition.scope)).size > 1) {
+      clashes.push({ hotkey, ids: [...new Set(sharing.map((definition) => definition.id))], kind: 'shadowed' });
+    }
+  }
+  return clashes;
 }

@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from '../tradingApi';
 import { isIntervalAvailable, TRADING_VIEW_INTERVAL_GROUPS } from '../tradingIntervals';
 import { useTradingStore, type TradingTabState } from '../tradingStore';
 import type { TradingWorkspacePersistence } from '../persistence/useTradingWorkspacePersistence';
 import { formatCommandKeys } from './hotkeyLabels';
 import { loadStoredKeyOverrides } from './keyOverridesStorage';
-import { TRADING_COMMANDS, commandKeys, tradingCommandDefinition } from './tradingCommands';
+import { TRADING_COMMANDS, commandKeys, tradingCommandDefinition, type TradingCommandDefinition } from './tradingCommands';
 import { TradingCommandPalette, type TradingPaletteItem } from './TradingCommandPalette';
 import { TradingIntervalInputBox } from './TradingIntervalInputBox';
 import { TradingShortcutDialog } from './TradingShortcutDialog';
@@ -24,10 +24,6 @@ import {
 type PaletteMode = 'all' | 'layouts';
 
 const SHORTCUTS_COMMAND = tradingCommandDefinition('workspace.shortcuts')!;
-
-function restoreFocus(element: Element | null): void {
-  if (element instanceof HTMLElement && element.isConnected) element.focus();
-}
 
 /**
  * Workspace keyboard commands and the surfaces they open: the command
@@ -50,23 +46,22 @@ export function TradingKeyboardLayer({
   const [intervalText, setIntervalText] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const overrides = useTradingCommandKeyOverrides();
-  const focusBeforeRef = useRef<Element | null>(null);
+  const [saveNotice, setSaveNotice] = useState('');
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const updateChart = useTradingStore((state) => state.updateChart);
   const activeChartId = useTradingStore((state) => state.activeChartId);
   const workspaceReady = persistence.status !== 'loading';
 
-  const openPalette = (mode: PaletteMode) => {
-    focusBeforeRef.current = document.activeElement;
-    setPaletteMode(mode);
-  };
-  const closePalette = () => {
-    setPaletteMode(null);
-    restoreFocus(focusBeforeRef.current);
-  };
-  const openShortcuts = () => {
-    focusBeforeRef.current = document.activeElement;
-    setShortcutsOpen(true);
+  const openPalette = (mode: PaletteMode) => setPaletteMode(mode);
+  const openShortcuts = () => setShortcutsOpen(true);
+  // Ctrl+S also works in fields and dialogs, so the browser's Save dialog never opens.
+  const saveLayout = () => {
+    if (persistence.status === 'conflict') {
+      setSaveNotice('Layout not saved: this workspace changed elsewhere. Choose Reload server or Overwrite server first.');
+      return;
+    }
+    setSaveNotice('');
+    if (workspaceReady) void persistence.saveNow();
   };
 
   // Rebound keys from earlier visits (TVP-2.4).
@@ -75,14 +70,11 @@ export function TradingKeyboardLayer({
   }, []);
 
   useTradingCommand('chart.symbolSearch', (event) => onOpenSymbolSearch(event?.key));
-  useTradingCommand('chart.intervalInput', (event) => {
-    focusBeforeRef.current = document.activeElement;
-    setIntervalText(event && event.key !== ',' ? event.key : '');
-  });
+  useTradingCommand('chart.intervalInput', (event) => setIntervalText(event && event.key !== ',' ? event.key : ''));
   useTradingCommand('workspace.commandPalette', () => openPalette('all'));
   useTradingCommand('workspace.shortcuts', openShortcuts);
   useTradingCommand('layout.load', () => openPalette('layouts'), () => workspaceReady);
-  useTradingCommand('layout.save', () => void persistence.saveNow(), () => workspaceReady);
+  useTradingCommand('layout.save', saveLayout);
   useTradingTabCommands(onCloseTab);
 
   const layoutItems = useMemo<TradingPaletteItem[]>(() => persistence.workspaces.map((workspace) => ({
@@ -96,7 +88,7 @@ export function TradingKeyboardLayer({
     if (paletteMode !== 'all') return [];
     const currentOverrides = tradingCommandKeyOverrides();
     const availability = tradingCommandAvailability();
-    const commands = TRADING_COMMANDS
+    const commands = (TRADING_COMMANDS as readonly TradingCommandDefinition[])
       .filter((definition) => definition.id !== 'workspace.commandPalette')
       .map((definition) => ({
         id: `command:${definition.id}`,
@@ -104,6 +96,7 @@ export function TradingKeyboardLayer({
         group: definition.group,
         keys: formatCommandKeys(definition, commandKeys(definition, currentOverrides, availability)),
         disabled: !canRunTradingCommand(definition.id),
+        unavailableText: definition.planned ? 'not available yet' : undefined,
         run: () => { runTradingCommand(definition.id); },
       }));
     const intervals = TRADING_VIEW_INTERVAL_GROUPS.flatMap((group) => group.options)
@@ -132,19 +125,20 @@ export function TradingKeyboardLayer({
       <button type="button" aria-haspopup="dialog" aria-expanded={shortcutsOpen} title={shortcutKeys.length ? `Keyboard shortcuts (${shortcutKeys.join(', ')})` : 'Keyboard shortcuts'} onClick={openShortcuts}>
         Shortcuts
       </button>
-      <TradingShortcutDialog open={shortcutsOpen} onClose={() => { setShortcutsOpen(false); restoreFocus(focusBeforeRef.current); }} />
+      <span className="trading-save-notice" role="status">{saveNotice}</span>
+      <TradingShortcutDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <TradingCommandPalette
         open={paletteMode !== null}
         title={paletteMode === 'layouts' ? 'Load layout' : 'Command palette'}
         placeholder={paletteMode === 'layouts' ? 'Search layouts' : 'Search commands, symbols, intervals and layouts'}
         items={paletteMode === 'layouts' ? layoutItems : paletteItems}
-        onClose={closePalette}
+        onClose={() => setPaletteMode(null)}
       />
       <TradingIntervalInputBox
         initialText={intervalText}
         supportedIntervals={supportedIntervals}
         onApply={(interval) => updateChart(activeChartId, { interval })}
-        onClose={() => { setIntervalText(null); restoreFocus(focusBeforeRef.current); }}
+        onClose={() => setIntervalText(null)}
       />
     </>
   );

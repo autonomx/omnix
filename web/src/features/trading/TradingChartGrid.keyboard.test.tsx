@@ -42,4 +42,17 @@ describe('TradingChartGrid Alt+Enter (TVP-2.3)', () => {
     altEnter();
     expect(visibleCharts()).toHaveLength(3);
   });
+
+  it('stays maximised when a dialog has already handled Escape', () => {
+    act(() => useTradingStore.getState().setChartCount(2));
+    render(<Grid />);
+    altEnter();
+    expect(visibleCharts()).toHaveLength(1);
+    const handled = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    handled.preventDefault();
+    act(() => { window.dispatchEvent(handled); });
+    expect(visibleCharts()).toHaveLength(1);
+    act(() => { fireEvent.keyDown(document.body, { key: 'Escape' }); });
+    expect(visibleCharts()).toHaveLength(2);
+  });
 });

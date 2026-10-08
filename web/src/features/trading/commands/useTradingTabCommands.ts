@@ -30,14 +30,18 @@ export function useTradingTabCommands(onCloseTab: (tab: TradingTabState) => void
     const next = cycleId(tabs, activeTabId, (tab) => tab.tabId, step);
     if (next) setActiveTab(next);
   };
+  // Tab stops at the first and last chart, so the next Tab moves focus on as usual.
+  const neighbourChart = (step: 1 | -1) => {
+    const { charts, activeChartId } = store();
+    return charts[charts.findIndex((chart) => chart.chartId === activeChartId) + step]?.chartId ?? null;
+  };
   const switchChart = (step: 1 | -1) => () => {
-    const { charts, activeChartId, setActiveChart } = store();
-    const next = cycleId(charts, activeChartId, (chart) => chart.chartId, step);
-    if (next) setActiveChart(next);
+    const next = neighbourChart(step);
+    if (next) store().setActiveChart(next);
   };
 
-  useTradingCommand('layout.nextChart', switchChart(1), () => store().charts.length > 1);
-  useTradingCommand('layout.previousChart', switchChart(-1), () => store().charts.length > 1);
+  useTradingCommand('layout.nextChart', switchChart(1), () => neighbourChart(1) !== null);
+  useTradingCommand('layout.previousChart', switchChart(-1), () => neighbourChart(-1) !== null);
   useTradingCommand('tab.new', () => { store().addTab(); }, () => store().tabs.length < MAX_TRADING_TABS);
   useTradingCommand('tab.close', () => {
     const { tabs, activeTabId } = store();

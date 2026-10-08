@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import {
   TRADING_COMMANDS,
+  commandKeys,
+  findKeyClashes,
   findKeyConflicts,
   matchesHotkey,
   matchesKeyPattern,
   normalizeHotkey,
+  rebindProblem,
   resolveCommand,
   tradingCommandDefinition,
   type RegisteredCommand,
@@ -19,7 +22,8 @@ import {
   useTradingCommand,
   useTradingCommandDispatcher,
 } from './useTradingCommands';
-import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
+import { chartKeyContextActive, noteTradingPointerDown, resetTradingPointerContext, returnKeyboardToChart } from './chartKeyContext';
+import { hotkeyFromEvent } from './hotkeys';
 import { formatCommandKeys, formatHotkey } from './hotkeyLabels';
 import { watchlistKeyCommand } from '../useTradingWatchlistSelection';
 
@@ -255,15 +259,13 @@ describe('browser and installed-app keys (TVP-2.3)', () => {
     dispatcher.unmount();
   });
 
-  it('matches Alt+digit and Shift+digit by physical key', () => {
+  it('matches Alt+digit by physical key', () => {
     expect(matchesHotkey('alt+1', key({ key: '¡', code: 'Digit1', altKey: true }))).toBe(true);
     expect(matchesHotkey('alt+1', key({ key: '2', code: 'Digit2', altKey: true }))).toBe(false);
-    expect(matchesHotkey('shift+1', key({ key: '!', code: 'Digit1', shiftKey: true }))).toBe(true);
   });
 });
 
 describe('watchlist grid keys (TVP-2.3)', () => {
-  const ids = ['watchlist.next', 'watchlist.previous', 'watchlist.extendNext', 'watchlist.extendPrevious', 'watchlist.selectAll'];
   const expected: Record<string, string> = {
     'watchlist.next': 'next',
     'watchlist.previous': 'previous',
@@ -275,15 +277,180 @@ describe('watchlist grid keys (TVP-2.3)', () => {
     const parts = hotkey.split('+');
     const name = parts.at(-1)!;
     const keyName = ({ arrowdown: 'ArrowDown', arrowup: 'ArrowUp', space: ' ' } as Record<string, string>)[name] ?? name;
-    return { key: keyName, shiftKey: parts.includes('shift'), ctrlKey: parts.includes('mod'), metaKey: false, altKey: false };
+    return { key: keyName, code: '', shiftKey: parts.includes('shift'), ctrlKey: parts.includes('mod'), metaKey: false, altKey: false };
+  };
+  const gridDefinitions = TRADING_COMMANDS.filter((definition: TradingCommandDefinition) => definition.handledLocally);
+
+  it('lists every catalogued grid key as the command the grid runs, and never dispatches them', () => {
+    expect(gridDefinitions.map((definition) => definition.id).sort()).toEqual(Object.keys(expected).sort());
+    for (const definition of gridDefinitions) {
+      for (const hotkey of definition.defaultKeys) expect(watchlistKeyCommand(eventFor(hotkey))).toBe(expected[definition.id]);
+      expect(resolveCommand([command(definition)], key(eventFor(definition.defaultKeys[0]!)))).toBeNull();
+    }
+  });
+
+  it('catalogues every key the grid reads', () => {
+    const candidates = ['ArrowDown', 'ArrowUp', ' ', 'a', 'Home', 'End', 'Enter', 'ArrowLeft', 'ArrowRight', 'j']
+      .flatMap((name) => [false, true].flatMap((shiftKey) => [false, true].flatMap((ctrlKey) => [false, true].map((metaKey) => (
+        { key: name, code: '', shiftKey, ctrlKey, metaKey, altKey: false }
+      )))));
+    for (const event of candidates) {
+      const gridCommand = watchlistKeyCommand(event);
+      if (!gridCommand) continue;
+      const id = Object.keys(expected).find((candidate) => expected[candidate] === gridCommand)!;
+      const definition = tradingCommandDefinition(id)!;
+      expect(definition.defaultKeys.some((hotkey) => matchesHotkey(hotkey, key(event))), `${JSON.stringify(event)} → ${gridCommand}`).toBe(true);
+    }
+  });
+});
+
+describe('one key rule for recording and matching', () => {
+  const layouts: Array<[string, KeyboardEventInit]> = [
+    ['US Ctrl+Z', { key: 'z', code: 'KeyZ', ctrlKey: true }],
+    ['QWERTZ Ctrl+Z (physical Y)', { key: 'z', code: 'KeyY', ctrlKey: true }],
+    ['QWERTZ / (Shift+7)', { key: '/', code: 'Digit7', shiftKey: true }],
+    ['QWERTZ Ctrl+/ (Ctrl+Shift+7)', { key: '/', code: 'Digit7', ctrlKey: true, shiftKey: true }],
+    ['AZERTY Ctrl+& (digit row)', { key: '&', code: 'Digit1', ctrlKey: true }],
+    ['AZERTY Ctrl+Shift+1', { key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true }],
+    ['US Shift+1', { key: '!', code: 'Digit1', shiftKey: true }],
+    ['macOS Option+T', { key: '†', code: 'KeyT', altKey: true }],
+    ['Alt+Shift+T', { key: 'T', code: 'KeyT', altKey: true, shiftKey: true }],
+    ['Ctrl+Shift+K', { key: 'K', code: 'KeyK', ctrlKey: true, shiftKey: true }],
+    ['⌘+←', { key: 'ArrowLeft', code: 'ArrowLeft', metaKey: true }],
+    ['Alt+Page Down', { key: 'PageDown', code: 'PageDown', altKey: true }],
+    ['Shift+Tab', { key: 'Tab', code: 'Tab', shiftKey: true }],
+    ['Ctrl++', { key: '+', code: 'Equal', ctrlKey: true, shiftKey: true }],
+  ];
+
+  it.each(layouts)('a recorded %s matches the same key press', (_name, init) => {
+    const event = key(init);
+    const hotkey = hotkeyFromEvent(event);
+    expect(hotkey).not.toBeNull();
+    expect(matchesHotkey(hotkey!, event)).toBe(true);
+  });
+
+  it('records and matches what the key types, so layouts keep TradingView defaults', () => {
+    expect(hotkeyFromEvent(key({ key: 'z', code: 'KeyY', ctrlKey: true }))).toBe('mod+z');
+    expect(matchesHotkey('mod+z', key({ key: 'z', code: 'KeyY', ctrlKey: true }))).toBe(true);
+    expect(matchesHotkey('mod+z', key({ key: 'y', code: 'KeyZ', ctrlKey: true }))).toBe(false);
+    expect(hotkeyFromEvent(key({ key: '&', code: 'Digit1', ctrlKey: true }))).toBe('mod+&');
+    expect(matchesHotkey('mod+1', key({ key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(matchesHotkey('/', key({ key: '/', code: 'Digit7', shiftKey: true }))).toBe(true);
+    expect(matchesHotkey('mod+/', key({ key: '/', code: 'Digit7', ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(hotkeyFromEvent(key({ key: '!', code: 'Digit1', shiftKey: true }))).toBe('!');
+    expect(hotkeyFromEvent(key({ key: 'Shift', code: 'ShiftLeft', shiftKey: true }))).toBeNull();
+    expect(hotkeyFromEvent(key({ key: 'Dead', code: 'BracketLeft' }))).toBeNull();
+  });
+
+  it('accepts a digit typed with Shift (AZERTY) for the interval box', () => {
+    expect(matchesKeyPattern('interval', key({ key: '5', code: 'Digit5', shiftKey: true }))).toBe(true);
+  });
+});
+
+describe('chart key context for plain keys', () => {
+  const outsideButton = () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    noteTradingPointerDown(button);
+    button.focus();
+    return button;
   };
 
-  it('lists exactly the keys the watchlist grid reads, and never dispatches them', () => {
-    for (const id of ids) {
-      const definition = tradingCommandDefinition(id)!;
-      expect(definition.handledLocally).toBe(true);
-      for (const hotkey of definition.defaultKeys) expect(watchlistKeyCommand(eventFor(hotkey))).toBe(expected[id]);
-      expect(resolveCommand([command(definition)], key(eventFor(definition.defaultKeys[0])))).toBeNull();
+  it('keeps /, . and Delete on the chart', () => {
+    const button = outsideButton();
+    const commands = ['chart.indicators', 'layout.load', 'drawing.delete'].map((id) => command(tradingCommandDefinition(id)!));
+    expect(resolveCommand(commands, key({ key: '/' }, button))).toBeNull();
+    expect(resolveCommand(commands, key({ key: '.' }, button))).toBeNull();
+    expect(resolveCommand(commands, key({ key: 'Backspace' }, button))).toBeNull();
+    resetTradingPointerContext();
+    button.blur();
+    expect(resolveCommand(commands, key({ key: 'Backspace' }, document.body))).toBe(commands[2]);
+  });
+
+  it('gives any key without a modifier the chart context, even from stored overrides', () => {
+    const reset = command(tradingCommandDefinition('chart.reset')!);
+    const overrides = { 'chart.reset': ['x'] };
+    expect(resolveCommand([reset], key({ key: 'x' }, document.body), overrides)).toBe(reset);
+    const button = outsideButton();
+    expect(resolveCommand([reset], key({ key: 'x' }, button), overrides)).toBeNull();
+  });
+
+  it('forgets a chart click on Escape, ignores clicks in modal dialogs and returns to the chart after symbol search', () => {
+    const shell = document.createElement('section');
+    shell.className = 'trading-chart-shell';
+    shell.tabIndex = 0;
+    document.body.append(shell);
+    noteTradingPointerDown(shell);
+    shell.focus();
+    expect(chartKeyContextActive('chartClicked')).toBe(true);
+    const dispatcher = renderHook(() => useTradingCommandDispatcher());
+    window.dispatchEvent(key({ key: 'Escape' }));
+    expect(chartKeyContextActive('chartClicked')).toBe(false);
+    dispatcher.unmount();
+
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    const result = document.createElement('button');
+    dialog.append(result);
+    document.body.append(dialog);
+    shell.blur();
+    noteTradingPointerDown(result);
+    expect(chartKeyContextActive('chart')).toBe(true);
+    dialog.remove();
+    noteTradingPointerDown(document.body);
+    expect(chartKeyContextActive('chart')).toBe(false);
+    returnKeyboardToChart();
+    expect(chartKeyContextActive('chart')).toBe(true);
+  });
+
+  it('never dispatches planned commands', () => {
+    const goToDate = command(tradingCommandDefinition('chart.goToDate')!);
+    expect(resolveCommand([goToDate], key({ key: 'g', code: 'KeyG', altKey: true }))).toBeNull();
+  });
+});
+
+describe('rebinding rules (TVP-2.4)', () => {
+  const definition = (id: string) => tradingCommandDefinition(id)!;
+
+  it('refuses unmodified Enter, Space, Tab and Escape, and typing keys outside the chart', () => {
+    for (const hotkey of ['enter', 'space', 'tab', 'escape', 'shift+tab']) {
+      expect(rebindProblem(definition('chart.zoomIn'), hotkey)).toMatch(/Enter, Space, Tab and Escape/);
     }
+    expect(rebindProblem(definition('chart.zoomIn'), 'mod+enter')).toBeNull();
+    expect(rebindProblem(definition('chart.reset'), 'x')).toMatch(/Add a modifier/);
+    expect(rebindProblem(definition('layout.save'), 'arrowup')).toMatch(/Add a modifier/);
+    expect(rebindProblem(definition('chart.moveLeft'), 'h')).toBeNull();
+    expect(rebindProblem(definition('chart.reset'), 'alt+x')).toBeNull();
+  });
+
+  it('refuses browser-reserved keys in the browser and keeps installed-app keys after a rebind', () => {
+    expect(rebindProblem(definition('layout.save'), 'mod+t')).toMatch(/browser keeps/);
+    expect(rebindProblem(definition('layout.save'), 'mod+t', 'installed')).toBeNull();
+    const overrides = { 'tab.new': ['alt+shift+n'] };
+    expect(commandKeys(definition('tab.new'), overrides, 'installed')).toEqual(['alt+shift+n', 'mod+t', 'mod+u']);
+    expect(commandKeys(definition('tab.new'), overrides, 'browser')).toEqual(['alt+shift+n']);
+  });
+
+  it('refuses fixed and planned commands', () => {
+    expect(rebindProblem(definition('chart.symbolSearch'), 'mod+q')).toMatch(/can't be rebound/);
+    expect(rebindProblem(definition('chart.goToDate'), 'mod+q')).toMatch(/can't be rebound/);
+  });
+});
+
+describe('key clashes across scopes and with typing', () => {
+  it('has none in the defaults', () => {
+    expect(findKeyClashes(TRADING_COMMANDS, {}, 'browser')).toEqual([]);
+    expect(findKeyClashes(TRADING_COMMANDS, {}, 'installed')).toEqual([]);
+  });
+
+  it('finds a workspace key shadowed by a chart key, and plain letters or digits typing already uses', () => {
+    expect(findKeyClashes(TRADING_COMMANDS, { 'layout.save': ['alt+r'] })).toEqual([
+      { hotkey: 'alt+r', ids: ['chart.reset', 'layout.save'], kind: 'shadowed' },
+    ]);
+    expect(findKeyClashes(TRADING_COMMANDS, { 'chart.moveLeft': ['h'], 'chart.moveRight': ['5'] })).toEqual([
+      { hotkey: 'h', ids: ['chart.moveLeft', 'chart.symbolSearch'], kind: 'typing' },
+      { hotkey: '5', ids: ['chart.moveRight', 'chart.intervalInput'], kind: 'typing' },
+    ]);
   });
 });

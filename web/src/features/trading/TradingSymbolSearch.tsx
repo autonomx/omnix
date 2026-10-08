@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingFormula } from './tradingFormula';
+import { returnKeyboardToChart } from './commands/chartKeyContext';
 import './TradingSymbolSearch.css';
 
 export type SymbolSearchCategory =
@@ -173,7 +174,11 @@ export function TradingSymbolSearch({
     // Typed text keeps arriving, so take focus at once as well as after layout.
     if (!selectQueryOnOpen) focusInput();
     const frame = window.requestAnimationFrame(focusInput);
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      // Choosing a symbol (or closing the search) is a chart action: chart keys work again without a click.
+      returnKeyboardToChart();
+    };
     // Runs when the search opens, not when the selection mode changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

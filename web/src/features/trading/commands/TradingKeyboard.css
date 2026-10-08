@@ -39,4 +39,7 @@
   .trading-shortcut-actions button+button{margin-left:6px}
   .trading-shortcut-fixed{color:var(--c-slate-630);font-size:12px}
   @media(max-width:640px){.trading-shortcut-dialog-backdrop{padding:0}.trading-shortcut-dialog{max-height:100vh;height:100vh;border:0;border-radius:0}.trading-shortcut-groups tr{display:grid;grid-template-columns:1fr auto}.trading-shortcut-groups th{grid-column:1/-1}}
+  .trading-save-notice{color:var(--c-red-560);font-size:12px}
+  .trading-save-notice:empty{display:none}
+  .trading-workspace .trading-chart-shell:focus-visible{outline:2px solid var(--c-blue-580);outline-offset:-2px}
 }

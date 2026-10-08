@@ -76,7 +76,7 @@ export function TradingChartGrid({
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && focusedChartId !== null) setFocusedChartId(null);
+      if (event.key === 'Escape' && !event.defaultPrevented && focusedChartId !== null) setFocusedChartId(null);
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);

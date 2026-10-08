@@ -1,4 +1,5 @@
-import { isRebindable, normalizeHotkey, tradingCommandDefinition, type KeyOverrides } from './tradingCommands';
+import { normalizeHotkey } from './hotkeys';
+import { isRebindable, rebindProblem, tradingCommandDefinition, type KeyOverrides } from './tradingCommands';
 import { setTradingCommandKeyOverrides } from './useTradingCommands';
 
 /**
@@ -8,14 +9,18 @@ import { setTradingCommandKeyOverrides } from './useTradingCommands';
  */
 export const KEY_OVERRIDES_STORAGE_KEY = 'omnix.trading.key-overrides';
 
-/** Keeps only rebindable, known commands with a list of hotkey strings. */
+/**
+ * Keeps only known, rebindable commands with keys the dialog would accept
+ * (browser-reserved keys are kept: the installed app can use them).
+ */
 export function sanitizeKeyOverrides(value: unknown): KeyOverrides {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
   const overrides: Record<string, readonly string[]> = {};
   for (const [id, keys] of Object.entries(value)) {
     const definition = tradingCommandDefinition(id);
     if (!definition || !isRebindable(definition) || !Array.isArray(keys)) continue;
-    const hotkeys = keys.filter((key): key is string => typeof key === 'string' && key.trim() !== '').map(normalizeHotkey);
+    const hotkeys = keys.filter((key): key is string => typeof key === 'string' && key.trim() !== '').map(normalizeHotkey)
+      .filter((key) => rebindProblem(definition, key, 'installed') === null);
     overrides[id] = [...new Set(hotkeys)];
   }
   return overrides;

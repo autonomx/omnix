@@ -1,15 +1,18 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { formatCommandKeys, formatHotkey, hotkeyFromEvent, isBrowserReservedHotkey } from './hotkeyLabels';
+import { formatCommandKeys, formatHotkey } from './hotkeyLabels';
+import { hotkeyFromEvent } from './hotkeys';
 import { saveKeyOverrides } from './keyOverridesStorage';
 import {
   TRADING_COMMANDS,
   commandKeys,
-  findKeyConflicts,
+  findKeyClashes,
   isRebindable,
-  normalizeHotkey,
+  rebindProblem,
+  type KeyClash,
   type TradingCommandDefinition,
 } from './tradingCommands';
+import { useModalDialog } from './useModalDialog';
 import { useTradingCommandAvailability, useTradingCommandKeyOverrides } from './useTradingCommands';
 import './TradingKeyboard.css';
 
@@ -17,42 +20,57 @@ const COMMANDS: readonly TradingCommandDefinition[] = TRADING_COMMANDS;
 const GROUPS = [...new Set(COMMANDS.map((command) => command.group))];
 const labelById = new Map(COMMANDS.map((command) => [command.id, command.label]));
 
-function ShortcutRow({
-  definition,
-  keys,
-  appOnlyKeys,
-  overridden,
-  capturing,
-  sharedWith,
-  onToggleCapture,
-  onCaptureKeyDown,
-  onCancelCapture,
-  onReset,
-}: {
+const CLASH_TEXT: Record<KeyClash['kind'], string> = {
+  conflict: 'Same key as',
+  shadowed: 'Same key, other context:',
+  typing: 'Clashes with typing:',
+};
+
+/** One line per clash a command is part of, naming the other commands. */
+function clashNotes(clashes: readonly KeyClash[]): Map<string, string[]> {
+  const notes = new Map<string, string[]>();
+  for (const clash of clashes) {
+    for (const id of clash.ids) {
+      const others = clash.ids.filter((other) => other !== id).map((other) => labelById.get(other) ?? other);
+      notes.set(id, [...(notes.get(id) ?? []), `${CLASH_TEXT[clash.kind]} ${others.join(', ')}`]);
+    }
+  }
+  return notes;
+}
+
+type RowProps = {
   definition: TradingCommandDefinition;
   keys: readonly string[];
   appOnlyKeys: readonly string[];
   overridden: boolean;
   capturing: boolean;
-  sharedWith?: readonly string[];
+  notes?: readonly string[];
   onToggleCapture: () => void;
   onCaptureKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   onCancelCapture: () => void;
   onReset: () => void;
-}) {
+};
+
+function ShortcutKeys({ definition, keys, appOnlyKeys }: Pick<RowProps, 'definition' | 'keys' | 'appOnlyKeys'>) {
+  if (definition.planned) return <em>Not available yet</em>;
+  return (
+    <span className="trading-shortcut-keys">
+      {keys.map((key) => <kbd key={key}>{key}</kbd>)}
+      {keys.length === 0 ? <em>Not set</em> : null}
+      {appOnlyKeys.map((key) => <kbd key={key} className="is-app-only" title="Installed app only">{key} · app</kbd>)}
+    </span>
+  );
+}
+
+function ShortcutRow({ definition, keys, appOnlyKeys, overridden, capturing, notes, onToggleCapture, onCaptureKeyDown, onCancelCapture, onReset }: RowProps) {
+  const fixedText = definition.planned ? 'Not available yet' : definition.handledLocally ? 'Watchlist grid' : 'Fixed';
   return (
     <tr data-command-id={definition.id}>
       <th scope="row">
         {definition.label}
-        {sharedWith ? <small className="trading-shortcut-conflict">Same key as {sharedWith.join(', ')}</small> : null}
+        {notes?.map((note) => <small key={note} className="trading-shortcut-conflict">{note}</small>)}
       </th>
-      <td>
-        <span className="trading-shortcut-keys">
-          {keys.map((key) => <kbd key={key}>{key}</kbd>)}
-          {keys.length === 0 ? <em>Not set</em> : null}
-          {appOnlyKeys.map((key) => <kbd key={key} className="is-app-only" title="Installed app only">{key} · app</kbd>)}
-        </span>
-      </td>
+      <td><ShortcutKeys definition={definition} keys={keys} appOnlyKeys={appOnlyKeys} /></td>
       <td className="trading-shortcut-actions">
         {isRebindable(definition) ? (
           <>
@@ -68,7 +86,7 @@ function ShortcutRow({
             </button>
             {overridden ? <button type="button" aria-label={`Reset ${definition.label}`} onClick={onReset}>Reset</button> : null}
           </>
-        ) : <span className="trading-shortcut-fixed">{definition.handledLocally ? 'Watchlist grid' : 'Fixed'}</span>}
+        ) : <span className="trading-shortcut-fixed">{fixedText}</span>}
       </td>
     </tr>
   );
@@ -76,8 +94,9 @@ function ShortcutRow({
 
 /**
  * Ctrl+/: every shortcut by context, searchable, with rebinding. Change waits
- * for the next key press (Escape cancels, Tab leaves); conflicts with other
- * commands in the same context are listed. Overrides persist in this browser.
+ * for the next key press (Escape cancels, Tab leaves); keys that can't be
+ * bound are refused with the reason, and clashes with other commands or with
+ * typing on the chart are listed. Overrides persist in this browser.
  */
 export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const overrides = useTradingCommandKeyOverrides();
@@ -86,6 +105,8 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
   const [capturingId, setCapturingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const onDialogKeyDown = useModalDialog(open, dialogRef, onClose);
 
   useEffect(() => {
     if (!open) return;
@@ -95,47 +116,24 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
     searchRef.current?.focus();
   }, [open]);
 
-  const conflicts = useMemo(() => findKeyConflicts(COMMANDS, overrides, availability), [availability, overrides]);
-  const conflictsById = useMemo(() => {
-    const byId = new Map<string, string[]>();
-    for (const conflict of conflicts) {
-      for (const id of conflict.ids) {
-        const others = conflict.ids.filter((other) => other !== id).map((other) => labelById.get(other) ?? other);
-        byId.set(id, [...(byId.get(id) ?? []), ...others]);
-      }
-    }
-    return byId;
-  }, [conflicts]);
+  const clashes = useMemo(() => findKeyClashes(COMMANDS, overrides, availability), [availability, overrides]);
+  const notesById = useMemo(() => clashNotes(clashes), [clashes]);
 
   if (!open || typeof document === 'undefined') return null;
 
   const keysFor = (definition: TradingCommandDefinition) => formatCommandKeys(definition, commandKeys(definition, overrides, availability));
   const appOnlyKeys = (definition: TradingCommandDefinition) => (
-    availability === 'browser' && !overrides[definition.id] ? (definition.installedKeys ?? []).map((key) => formatHotkey(key)) : []
+    availability === 'browser' ? (definition.installedKeys ?? []).map((key) => formatHotkey(key)) : []
   );
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (definition: TradingCommandDefinition) => !normalizedQuery
     || [definition.label, definition.group, ...keysFor(definition), ...appOnlyKeys(definition)].join(' ').toLowerCase().includes(normalizedQuery);
-
-  const rebind = (definition: TradingCommandDefinition, hotkey: string) => {
-    const normalized = normalizeHotkey(hotkey);
-    saveKeyOverrides({ ...overrides, [definition.id]: [normalized] });
-    setCapturingId(null);
-    setNotice(availability === 'browser' && isBrowserReservedHotkey(normalized)
-      ? `The browser keeps ${formatHotkey(normalized)} for itself, so it only works in the installed app.`
-      : `${definition.label}: ${formatHotkey(normalized)}`);
-  };
 
   const reset = (id: string) => {
     const next = { ...overrides };
     delete next[id];
     saveKeyOverrides(next);
     setNotice(`${labelById.get(id) ?? id}: default keys restored`);
-  };
-
-  const resetAll = () => {
-    saveKeyOverrides({});
-    setNotice('All shortcuts restored to their defaults');
   };
 
   const onCaptureKeyDown = (definition: TradingCommandDefinition) => (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -151,21 +149,36 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
       return;
     }
     const hotkey = hotkeyFromEvent(event);
-    if (hotkey) rebind(definition, hotkey);
+    if (!hotkey) return;
+    const problem = rebindProblem(definition, hotkey, availability);
+    if (problem) {
+      setNotice(`${formatHotkey(hotkey)}: ${problem}`);
+      return;
+    }
+    saveKeyOverrides({ ...overrides, [definition.id]: [hotkey] });
+    setCapturingId(null);
+    setNotice(`${definition.label}: ${formatHotkey(hotkey)}`);
   };
 
   return createPortal(
     <div className="trading-shortcut-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section
+        ref={dialogRef}
         className="trading-shortcut-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="trading-shortcut-dialog-title"
-        onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}
+        onKeyDown={onDialogKeyDown}
       >
         <header>
           <h2 id="trading-shortcut-dialog-title">Keyboard shortcuts</h2>
-          <button type="button" onClick={resetAll} disabled={Object.keys(overrides).length === 0}>Reset all</button>
+          <button
+            type="button"
+            onClick={() => { saveKeyOverrides({}); setNotice('All shortcuts restored to their defaults'); }}
+            disabled={Object.keys(overrides).length === 0}
+          >
+            Reset all
+          </button>
           <button type="button" aria-label="Close keyboard shortcuts" onClick={onClose}>×</button>
         </header>
         <input
@@ -176,9 +189,9 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        {conflicts.length > 0 ? (
+        {clashes.length > 0 ? (
           <p className="trading-shortcut-conflicts" role="alert">
-            {conflicts.length === 1 ? '1 key is' : `${conflicts.length} keys are`} used by more than one command in the same context.
+            {clashes.length === 1 ? '1 key is' : `${clashes.length} keys are`} used by more than one command or by typing on the chart.
           </p>
         ) : null}
         <p className="trading-shortcut-notice" role="status">{notice ?? ''}</p>
@@ -200,7 +213,7 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
                         appOnlyKeys={appOnlyKeys(definition)}
                         overridden={Boolean(overrides[definition.id])}
                         capturing={capturingId === definition.id}
-                        sharedWith={conflictsById.get(definition.id)}
+                        notes={notesById.get(definition.id)}
                         onToggleCapture={() => setCapturingId(capturingId === definition.id ? null : definition.id)}
                         onCaptureKeyDown={onCaptureKeyDown(definition)}
                         onCancelCapture={() => setCapturingId(null)}

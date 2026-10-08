@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/renderWithProviders';
 import { tradingApi } from '../tradingApi';
@@ -25,9 +25,9 @@ function Harness(props: Parameters<typeof TradingKeyboardLayer>[0]) {
   return <TradingKeyboardLayer {...props} />;
 }
 
-function setup() {
+function setup(status: 'saved' | 'conflict' = 'saved') {
   const persistence = {
-    status: 'saved' as const,
+    status,
     workspaces: [
       { workspaceId: 'main', name: 'Main Workspace', revision: 1 },
       { workspaceId: 'swing', name: 'Swing setups', revision: 1 },
@@ -83,7 +83,7 @@ describe('chart typing shortcuts (TVP-2.1)', () => {
     expect(box).toHaveFocus();
     fireEvent.change(box, { target: { value: '5s' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    expect(screen.getByRole('alert')).toHaveTextContent("doesn't support 5s");
+    expect(within(screen.getByRole('dialog', { name: 'Change interval' })).getByRole('alert')).toHaveTextContent("doesn't support 5s");
     fireEvent.change(box, { target: { value: '4h' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(screen.queryByRole('textbox', { name: 'Interval' })).not.toBeInTheDocument();
@@ -97,7 +97,7 @@ describe('chart typing shortcuts (TVP-2.1)', () => {
     expect(box).toHaveValue('');
     fireEvent.change(box, { target: { value: '7q' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    expect(screen.getByRole('alert')).toHaveTextContent('not an interval');
+    expect(within(screen.getByRole('dialog', { name: 'Change interval' })).getByRole('alert')).toHaveTextContent('not an interval');
     fireEvent.keyDown(box, { key: 'Escape' });
     expect(screen.queryByRole('textbox', { name: 'Interval' })).not.toBeInTheDocument();
   });
@@ -178,7 +178,7 @@ describe('tab and layout shortcuts (TVP-2.3)', () => {
   it('switches charts with Tab only after a click in the chart area', () => {
     setup();
     act(() => store().setChartCount(3));
-    const [chartOne, chartTwo, chartThree] = store().charts.map((chart) => chart.chartId);
+    const [chartOne, chartTwo] = store().charts.map((chart) => chart.chartId);
     act(() => store().setActiveChart(chartOne));
     press({ key: 'Tab' });
     expect(store().activeChartId).toBe(chartOne);
@@ -190,9 +190,95 @@ describe('tab and layout shortcuts (TVP-2.3)', () => {
     press({ key: 'Tab' });
     expect(store().activeChartId).toBe(chartTwo);
     press({ key: 'Tab', shiftKey: true });
-    press({ key: 'Tab', shiftKey: true });
-    expect(store().activeChartId).toBe(chartThree);
+    expect(store().activeChartId).toBe(chartOne);
     shell.remove();
+  });
+
+  it('lets Tab leave past the last chart, and Escape forgets the chart click', () => {
+    setup();
+    act(() => store().setChartCount(3));
+    const [chartOne, chartTwo, chartThree] = store().charts.map((chart) => chart.chartId);
+    act(() => store().setActiveChart(chartTwo));
+    const shell = document.createElement('section');
+    shell.className = 'trading-chart-shell';
+    shell.tabIndex = 0;
+    document.body.append(shell);
+    noteTradingPointerDown(shell);
+    shell.focus();
+
+    press({ key: 'Tab' }, shell);
+    expect(store().activeChartId).toBe(chartThree);
+    const leaving = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    act(() => { shell.dispatchEvent(leaving); });
+    expect(leaving.defaultPrevented).toBe(false);
+    expect(store().activeChartId).toBe(chartThree);
+
+    press({ key: 'Escape' }, shell);
+    press({ key: 'Tab', shiftKey: true }, shell);
+    expect(store().activeChartId).toBe(chartThree);
+    expect(chartOne).toBeDefined();
+    shell.remove();
+  });
+});
+
+describe('dialog focus (TVP-2.4 review)', () => {
+  it('keeps Tab in the palette, closes it with Escape and returns focus to the opener', () => {
+    setup();
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    press({ key: 'k', ctrlKey: true }, opener);
+    const input = screen.getByRole('combobox', { name: 'Command palette' });
+    expect(input).toHaveFocus();
+    expect(within(screen.getByRole('dialog', { name: 'Command palette' })).getByRole('status')).toHaveTextContent(/\d+ results/);
+    fireEvent.keyDown(input, { key: 'Tab' });
+    expect(input).toHaveFocus();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    press({ key: 'k', ctrlKey: true }, opener);
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    opener.remove();
+  });
+
+  it('keeps Tab in the interval box, points its description at the error, and Escape returns focus', () => {
+    setup();
+    press({ key: '7' });
+    const box = screen.getByRole('textbox', { name: 'Interval' });
+    expect(box).toHaveAttribute('aria-describedby', 'trading-interval-box-hint');
+    fireEvent.keyDown(box, { key: 'Tab', shiftKey: true });
+    expect(box).toHaveFocus();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(box).toHaveAttribute('aria-describedby', 'trading-interval-box-error');
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Change interval' })).not.toBeInTheDocument();
+    expect(document.body).toHaveFocus();
+  });
+
+  it('marks planned commands as not available yet in the palette', () => {
+    setup();
+    press({ key: 'k', ctrlKey: true });
+    expect(screen.getByRole('option', { name: /Go to date.*not available yet/ })).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('Ctrl+S (TVP-2.4 review)', () => {
+  it('saves from text fields without the browser Save dialog', () => {
+    const { persistence } = setup();
+    const input = document.createElement('input');
+    document.body.append(input);
+    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    act(() => { input.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    expect(persistence.saveNow).toHaveBeenCalledTimes(1);
+    input.remove();
+  });
+
+  it('explains a save conflict instead of saving', () => {
+    const { persistence } = setup('conflict');
+    press({ key: 's', ctrlKey: true });
+    expect(persistence.saveNow).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('Reload server or Overwrite server');
   });
 });
 

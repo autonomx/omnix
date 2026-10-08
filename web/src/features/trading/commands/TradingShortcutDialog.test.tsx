@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { hotkeyFromEvent } from './hotkeyLabels';
+import { hotkeyFromEvent } from './hotkeys';
 import { KEY_OVERRIDES_STORAGE_KEY, loadStoredKeyOverrides, sanitizeKeyOverrides } from './keyOverridesStorage';
 import { TradingShortcutDialog } from './TradingShortcutDialog';
 import { setTradingCommandAvailability, setTradingCommandKeyOverrides, tradingCommandKeyOverrides } from './useTradingCommands';
@@ -13,7 +13,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-const row = (label: string) => screen.getByRole('rowheader', { name: new RegExp(`^${label}`) }).closest('tr') as HTMLElement;
+const row = (label: string) => screen.getAllByRole('rowheader').find((header) => header.textContent?.startsWith(label))!.closest('tr') as HTMLElement;
 
 function capture(label: string, init: KeyboardEventInit) {
   fireEvent.click(screen.getByRole('button', { name: `Change keys for ${label}` }));
@@ -87,6 +87,66 @@ describe('TradingShortcutDialog (TVP-2.4)', () => {
   });
 });
 
+describe('TradingShortcutDialog review fixes', () => {
+  it('refuses keys that would break typing, buttons or focus, and says why', () => {
+    render(<TradingShortcutDialog open onClose={() => undefined} />);
+    capture('Reset chart view', { key: 'x', code: 'KeyX' });
+    expect(screen.getByRole('status')).toHaveTextContent('Add a modifier');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Press new keys for Reset chart view' }), { key: 'Enter', code: 'Enter', ctrlKey: false });
+    expect(screen.getByRole('status')).toHaveTextContent('Enter, Space, Tab and Escape');
+    expect(tradingCommandKeyOverrides()).toEqual({});
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Press new keys for Reset chart view' }), { key: 'Escape' });
+
+    capture('Save layout (workspace)', { key: 't', code: 'KeyT', ctrlKey: true });
+    expect(tradingCommandKeyOverrides()).toEqual({});
+    expect(within(row('Save layout (workspace)')).getByText('Ctrl+S')).toBeInTheDocument();
+  });
+
+  it('allows plain keys for chart commands and shows the clash with typing', () => {
+    render(<TradingShortcutDialog open onClose={() => undefined} />);
+    capture('Move chart one bar left', { key: 'h', code: 'KeyH' });
+    expect(tradingCommandKeyOverrides()).toEqual({ 'chart.moveLeft': ['h'] });
+    expect(within(row('Move chart one bar left')).getByText(/Clashes with typing: Change symbol/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('typing on the chart');
+  });
+
+  it('shows a workspace key shadowed by a chart key', () => {
+    render(<TradingShortcutDialog open onClose={() => undefined} />);
+    capture('Save layout (workspace)', { key: 'r', code: 'KeyR', altKey: true });
+    expect(within(row('Save layout (workspace)')).getByText('Same key, other context: Reset chart view')).toBeInTheDocument();
+  });
+
+  it('keeps the installed-app keys visible after a rebind and lists planned commands as not available yet', () => {
+    render(<TradingShortcutDialog open onClose={() => undefined} />);
+    capture('New tab, copying this one (browser Alt+Shift+T, app Ctrl+T)', { key: 'N', code: 'KeyN', altKey: true, shiftKey: true });
+    expect(within(row('New tab')).getByText('Alt+Shift+N')).toBeInTheDocument();
+    expect(within(row('New tab')).getByText('Ctrl+T · app')).toBeInTheDocument();
+    const goToDate = row('Go to date');
+    expect(within(goToDate).getAllByText('Not available yet')).toHaveLength(2);
+    expect(within(goToDate).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps Tab inside the dialog, closes with Escape from any control and returns focus', () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const view = render(<TradingShortcutDialog open onClose={() => view.rerender(<TradingShortcutDialog open={false} onClose={() => undefined} />)} />);
+    const search = screen.getByRole('searchbox', { name: 'Search shortcuts' });
+    expect(search).toHaveFocus();
+    const close = screen.getByRole('button', { name: 'Close keyboard shortcuts' });
+    const last = screen.getAllByRole('button').at(-1)!;
+    close.focus();
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Change keys for Zoom in' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+});
+
 describe('stored key overrides', () => {
   it('keeps only known, rebindable commands and survives bad storage', () => {
     expect(sanitizeKeyOverrides({
@@ -103,7 +163,7 @@ describe('stored key overrides', () => {
   it('turns key presses into hotkey strings', () => {
     expect(hotkeyFromEvent({ key: 'K', code: 'KeyK', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe('mod+shift+k');
     expect(hotkeyFromEvent({ key: '†', code: 'KeyT', ctrlKey: false, metaKey: false, altKey: true, shiftKey: false })).toBe('alt+t');
-    expect(hotkeyFromEvent({ key: '!', code: 'Digit1', ctrlKey: false, metaKey: false, altKey: false, shiftKey: true })).toBe('shift+1');
+    expect(hotkeyFromEvent({ key: '!', code: 'Digit1', ctrlKey: false, metaKey: false, altKey: false, shiftKey: true })).toBe('!');
     expect(hotkeyFromEvent({ key: 'ArrowLeft', code: 'ArrowLeft', ctrlKey: false, metaKey: true, altKey: false, shiftKey: false })).toBe('mod+arrowleft');
     expect(hotkeyFromEvent({ key: 'Shift', code: 'ShiftLeft', ctrlKey: false, metaKey: false, altKey: false, shiftKey: true })).toBeNull();
   });
