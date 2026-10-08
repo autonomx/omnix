@@ -197,6 +197,21 @@ def test_sessions_follow_the_exchange_calendar_across_daylight_saving() -> None:
     assert weeks[0] != weeks[1]
 
 
+def test_catalog_instruments_get_their_market_session() -> None:
+    from app.apps.trading.catalog import all_instruments
+    from app.apps.trading.indicators.registry import UTC_SESSION, session_for_instrument
+
+    by_class = {}
+    for instrument in all_instruments():
+        by_class.setdefault(instrument.asset_class.value, instrument)
+    commodity = by_class["commodity"]
+    assert commodity.session_calendar == "24x7"  # the catalog tags futures 24x7, which must not win
+    session = session_for_instrument(commodity.asset_class.value, commodity.session_calendar, commodity.exchange_timezone, commodity.instrument_type.value)
+    assert (session.timezone, session.start_minute) == ("America/New_York", 1080)
+    crypto = by_class["crypto"]
+    assert session_for_instrument(crypto.asset_class.value, crypto.session_calendar, crypto.exchange_timezone, crypto.instrument_type.value) == UTC_SESSION
+
+
 def test_params_accept_a_mapping_and_stay_hashable() -> None:
     inputs = IndicatorInputs(period=14, params={"upper": 50, "lower": 50})
     assert inputs.params == (("lower", 50), ("upper", 50))

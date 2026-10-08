@@ -108,14 +108,17 @@ def session_for_instrument(
 ) -> TradingSession:
     """The session calendar of an instrument, like ``sessionForInstrument`` in the browser: UTC for 24x7 markets,
     the regular session in New York for US equities, the 17:00 ET (forex) or 18:00 ET (commodities) roll."""
-    if session_calendar == "24x7" or asset_class == "crypto" or asset_class is None:
+    # Asset class decides before the calendar: catalog futures are tagged "24x7" but trade from the 18:00 ET roll.
+    if asset_class == "crypto" or asset_class is None:
         return UTC_SESSION
-    if asset_class == "equity" or instrument_type == "equity":
-        return TradingSession(exchange_timezone or "America/New_York", 0, 570, True)
     if asset_class == "forex":
         return TradingSession("America/New_York", 1020)
     if asset_class == "commodity":
         return TradingSession("America/New_York", 1080)
+    if session_calendar == "24x7":
+        return UTC_SESSION
+    if asset_class == "equity" or instrument_type == "equity":
+        return TradingSession(exchange_timezone or "America/New_York", 0, 570, True)
     return UTC_SESSION
 
 

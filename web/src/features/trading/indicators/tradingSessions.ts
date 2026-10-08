@@ -29,12 +29,14 @@ type SessionInstrument = { asset_class?: string; session_calendar?: string; exch
 
 /** The session calendar of an instrument: UTC for 24x7 markets, the regular session in New York for US equities, 17:00/18:00 ET roll for forex and commodities. */
 export function sessionForInstrument(instrument: SessionInstrument | null | undefined): TradingSessionSpec {
-  if (!instrument || instrument.session_calendar === '24x7' || instrument.asset_class === 'crypto') return UTC_SESSION;
+  // Asset class decides before the calendar: catalog futures are tagged `24x7` but trade from the 18:00 ET roll.
+  if (!instrument || instrument.asset_class === 'crypto') return UTC_SESSION;
+  if (instrument.asset_class === 'forex') return { timezone: 'America/New_York', startMinute: 1020 };
+  if (instrument.asset_class === 'commodity') return { timezone: 'America/New_York', startMinute: 1080 };
+  if (instrument.session_calendar === '24x7') return UTC_SESSION;
   if (instrument.asset_class === 'equity' || instrument.instrument_type === 'equity') {
     return { timezone: instrument.exchange_timezone || 'America/New_York', startMinute: 0, regularStartMinute: 570, regularOnly: true };
   }
-  if (instrument.asset_class === 'forex') return { timezone: 'America/New_York', startMinute: 1020 };
-  if (instrument.asset_class === 'commodity') return { timezone: 'America/New_York', startMinute: 1080 };
   return UTC_SESSION;
 }
 
