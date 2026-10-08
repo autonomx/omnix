@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, DrawingTimeIndex, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 import { fixture } from '../../../test/fixture';
 
@@ -126,5 +126,19 @@ describe('Trading chart adapter normalization', () => {
     const bars = [bar, secondBar];
     expect(drawingTimeForLogicalIndex(2, bars)).toBe('2026-08-05T12:02:00.000Z');
     expect(drawingLogicalIndexForTime('2026-08-05T12:03:00.000Z', bars)).toBe(3);
+  });
+
+  it('indexes bar times once for repeated drawing projections', () => {
+    const thirdBar = { ...bar, start_time: '2026-08-05T12:02:00+00:00' };
+    const index = new DrawingTimeIndex([bar, secondBar, thirdBar]);
+    expect(index.logicalIndexForTime('2026-08-05T12:01:00.000Z')).toBe(1);
+    expect(index.logicalIndexForTime('2026-08-05T12:02:00.000Z')).toBe(2);
+    // Between or beyond bars, times extrapolate from the first bar by the bar cadence.
+    expect(index.logicalIndexForTime('2026-08-05T12:00:30.000Z')).toBe(0.5);
+    expect(index.logicalIndexForTime('2026-08-05T12:05:00.000Z')).toBe(5);
+    expect(index.logicalIndexForTime('not-a-date')).toBeNull();
+    expect(index.timeForLogicalIndex(1.2)).toBe(secondBar.start_time);
+    expect(index.timeForLogicalIndex(6)).toBe('2026-08-05T12:06:00.000Z');
+    expect(new DrawingTimeIndex([]).logicalIndexForTime('2026-08-05T12:00:00.000Z')).toBeNull();
   });
 });

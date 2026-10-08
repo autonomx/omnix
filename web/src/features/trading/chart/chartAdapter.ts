@@ -194,26 +194,59 @@ function visiblePrimaryPriceRange(
   };
 }
 
+/**
+ * Time lookups for drawing anchors over one bar array. Exact bar times resolve
+ * through a map and the bar cadence is computed once, so projecting many
+ * anchors (or a long freehand stroke) costs O(1) per point instead of a scan
+ * of every bar per point.
+ */
+export class DrawingTimeIndex {
+  private readonly firstIndexByTime = new Map<number, number>();
+  private cadence: number | null | undefined;
+
+  constructor(private readonly bars: readonly MarketBar[]) {
+    bars.forEach((bar, index) => {
+      const time = Date.parse(bar.start_time);
+      if (!this.firstIndexByTime.has(time)) this.firstIndexByTime.set(time, index);
+    });
+  }
+
+  private barCadence(): number | null {
+    if (this.cadence === undefined) this.cadence = barCadenceMilliseconds(this.bars);
+    return this.cadence;
+  }
+
+  timeForLogicalIndex(logical: number): string | null {
+    const bars = this.bars;
+    if (!Number.isFinite(logical) || bars.length === 0) return null;
+    const nearestIndex = Math.round(logical);
+    if (nearestIndex >= 0 && nearestIndex < bars.length) return bars[nearestIndex]?.start_time ?? null;
+    const firstTime = Date.parse(bars[0].start_time);
+    const cadence = this.barCadence();
+    if (!Number.isFinite(firstTime) || cadence === null) return null;
+    return new Date(firstTime + nearestIndex * cadence).toISOString();
+  }
+
+  logicalIndexForTime(value: string): number | null {
+    const bars = this.bars;
+    if (bars.length === 0) return null;
+    const milliseconds = Date.parse(value);
+    if (!Number.isFinite(milliseconds)) return null;
+    const exactIndex = this.firstIndexByTime.get(milliseconds);
+    if (exactIndex !== undefined) return exactIndex;
+    const firstTime = Date.parse(bars[0].start_time);
+    const cadence = this.barCadence();
+    if (!Number.isFinite(firstTime) || cadence === null) return null;
+    return (milliseconds - firstTime) / cadence;
+  }
+}
+
 export function drawingTimeForLogicalIndex(logical: number, bars: readonly MarketBar[]): string | null {
-  if (!Number.isFinite(logical) || bars.length === 0) return null;
-  const nearestIndex = Math.round(logical);
-  if (nearestIndex >= 0 && nearestIndex < bars.length) return bars[nearestIndex]?.start_time ?? null;
-  const firstTime = Date.parse(bars[0].start_time);
-  const cadence = barCadenceMilliseconds(bars);
-  if (!Number.isFinite(firstTime) || cadence === null) return null;
-  return new Date(firstTime + nearestIndex * cadence).toISOString();
+  return new DrawingTimeIndex(bars).timeForLogicalIndex(logical);
 }
 
 export function drawingLogicalIndexForTime(value: string, bars: readonly MarketBar[]): number | null {
-  if (bars.length === 0) return null;
-  const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds)) return null;
-  const exactIndex = bars.findIndex((bar) => Date.parse(bar.start_time) === milliseconds);
-  if (exactIndex >= 0) return exactIndex;
-  const firstTime = Date.parse(bars[0].start_time);
-  const cadence = barCadenceMilliseconds(bars);
-  if (!Number.isFinite(firstTime) || cadence === null) return null;
-  return (milliseconds - firstTime) / cadence;
+  return new DrawingTimeIndex(bars).logicalIndexForTime(value);
 }
 
 export function candlestickData(bar: MarketBar, multiplier = 1): CandlestickData<UTCTimestamp> {
@@ -471,6 +504,7 @@ export class TradingChartAdapter {
   private comparisonRenderInProgress = false;
   private comparisonRenderPending = false;
   private bars: MarketBar[] = [];
+  private barTimeIndex: DrawingTimeIndex | null = null;
   private indicatorOutputs: IndicatorOutput[] = [];
   private comparisonData: TradingComparisonData[] = [];
   private priceScaleMultiplier = 1;
@@ -613,6 +647,7 @@ export class TradingChartAdapter {
     this.assertActive();
     const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
     this.bars = normalizeChartBars(bars);
+    this.barTimeIndex = null;
     this.revisions.clear();
     for (const bar of this.bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(this.bars);
@@ -1018,6 +1053,7 @@ export class TradingChartAdapter {
     const existingIndex = this.bars.findIndex((item) => timestamp(item.start_time) === time);
     if (existingIndex >= 0) this.bars[existingIndex] = bar;
     else this.bars.push(bar);
+    this.barTimeIndex = null;
     this.updatePriceData(bar);
     this.volumeSeries.update(volumeData(bar));
     return true;
@@ -1029,8 +1065,8 @@ export class TradingChartAdapter {
     const time = timestamp(point.time);
     const x = timeScale.timeToCoordinate(time)
       ?? (() => {
-        const logical = drawingLogicalIndexForTime(point.time, this.bars);
-        return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
+        const logical = this.timeIndex().logicalIndexForTime(point.time);
+        return logical === null ? null : this.logicalCoordinate(logical);
       })();
     const y = this.priceSeries.priceToCoordinate(point.price * this.priceScaleMultiplier);
     return x === null || y === null ? null : { x, y };
@@ -1078,7 +1114,7 @@ export class TradingChartAdapter {
     const logical = timeScale.coordinateToLogical(x);
     const time = logical === null
       ? timeScale.coordinateToTime(x)
-      : drawingTimeForLogicalIndex(logical, this.bars);
+      : this.timeIndex().timeForLogicalIndex(logical);
     const price = this.priceSeries.coordinateToPrice(y);
     const seconds = typeof time === 'number' ? time : typeof time === 'string' ? timestamp(time) : null;
     if (seconds === null || price === null) return null;
@@ -1413,13 +1449,13 @@ export class TradingChartAdapter {
     const timeScale = this.chart.timeScale();
     const direct = timeScale.timeToCoordinate(timestamp(value));
     if (direct !== null) return direct;
-    const logical = drawingLogicalIndexForTime(value, this.bars);
-    return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
+    const logical = this.timeIndex().logicalIndexForTime(value);
+    return logical === null ? null : this.logicalCoordinate(logical);
   }
   barTimeToCoordinate(value: string): number | null {
     this.assertActive();
-    const logical = drawingLogicalIndexForTime(value, this.bars);
-    return logical === null ? null : this.chart.timeScale().logicalToCoordinate(logical as Logical);
+    const logical = this.timeIndex().logicalIndexForTime(value);
+    return logical === null ? null : this.logicalCoordinate(logical);
   }
   barIndexAtCoordinate(x: number, barCount: number): number | null {
     this.assertActive();
@@ -1452,7 +1488,24 @@ export class TradingChartAdapter {
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.barTimeIndex = null; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  /**
+   * The x coordinate of a logical index. Lightweight Charts returns 0 for a
+   * fractional logical index, so a time between bars (another interval's
+   * bar, a freehand point) interpolates between its neighbouring bars.
+   */
+  private logicalCoordinate(logical: number): number | null {
+    const timeScale = this.chart.timeScale();
+    const lower = Math.floor(logical);
+    const from = timeScale.logicalToCoordinate(lower as Logical);
+    if (logical === lower || from === null) return from;
+    const to = timeScale.logicalToCoordinate((lower + 1) as Logical);
+    return to === null ? null : from + (to - from) * (logical - lower);
+  }
+  private timeIndex(): DrawingTimeIndex {
+    this.barTimeIndex ??= new DrawingTimeIndex(this.bars);
+    return this.barTimeIndex;
+  }
   private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }
