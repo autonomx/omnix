@@ -65,6 +65,7 @@ def _inputs(raw: dict[str, Any]) -> IndicatorInputs:
         signal_period=raw.get("signalPeriod"),
         standard_deviations=raw.get("standardDeviations"),
         anchor_time=raw.get("anchorTime"),
+        compare_symbol=raw.get("compareSymbol"),
     )
 
 
@@ -110,11 +111,31 @@ def test_indicators_return_non_finite_values_instead_of_raising(series_name: str
     volume = tuple(-1.0 if index % 3 == 2 else 1.0 for index in range(len(values)))
     bars = BarSeries(times, tuple(values), tuple(values), tuple(values), tuple(values), volume)
     for indicator_id in server_indicator_ids():
-        for inputs in (IndicatorInputs(period=2), IndicatorInputs(period=14, fast_period=3, slow_period=5, signal_period=2)):
+        for inputs in (
+            IndicatorInputs(period=2, compare_symbol="pathological"),
+            IndicatorInputs(period=14, fast_period=3, slow_period=5, signal_period=2, compare_symbol="pathological"),
+        ):
             try:
-                compute_indicator(indicator_id, bars, inputs)
+                compute_indicator(indicator_id, bars, inputs, bars)
             except ValueError as error:
                 assert "must be" in str(error), f"{indicator_id} {series_name}: {error}"
+
+
+def test_compare_series_indicators_align_the_second_series_by_time() -> None:
+    indicator = server_indicator("tv-correlation-coefficient-cc")
+    assert indicator is not None and indicator.uses_compare_series
+    bars = _dataset("random-walk-300")
+    with_symbol = IndicatorInputs(period=20, compare_symbol="golden:compare")
+    # Itself, in reverse order: the series is sorted and aligned by start time, so every window correlates perfectly.
+    reversed_bars = BarSeries(*(tuple(reversed(column)) for column in (bars.start_times, bars.open, bars.high, bars.low, bars.close, bars.volume)))
+    [series] = compute_indicator(indicator.id, bars, with_symbol, reversed_bars)
+    assert len(series.points) == len(bars) - 19
+    assert all(math.isclose(value, 1.0, rel_tol=1e-12) for _, value in series.points)
+    # Without a second series, or without a symbol naming one, there is nothing to plot; other indicators ignore it.
+    assert compute_indicator(indicator.id, bars, with_symbol)[0].points == ()
+    assert compute_indicator(indicator.id, bars, IndicatorInputs(period=20), bars)[0].points == ()
+    assert indicator.compute(bars, with_symbol)[0].points == ()
+    assert compute_indicator("sma", bars, IndicatorInputs(period=20), bars) == compute_indicator("sma", bars, IndicatorInputs(period=20))
 
 
 def test_market_bars_convert_like_the_golden_datasets() -> None:
@@ -141,13 +162,14 @@ def test_server_indicator_matches_browser_goldens(indicator_id: str) -> None:
     failures: list[str] = []
     for case in golden["cases"]:
         bars = _dataset(case["dataset"])
+        compare = _dataset(case["compare_dataset"]) if "compare_dataset" in case else None
         inputs = _inputs(case["inputs"])
         label = f"{indicator_id} {case['case_id']}"
         if case.get("error"):
             with pytest.raises(ValueError):
-                compute_indicator(indicator_id, bars, inputs)
+                compute_indicator(indicator_id, bars, inputs, compare)
             continue
-        actual = {series.key: series.points for series in compute_indicator(indicator_id, bars, inputs)}
+        actual = {series.key: series.points for series in compute_indicator(indicator_id, bars, inputs, compare)}
         expected = {output["key"]: output["points"] for output in case["outputs"]}
         if list(actual) != list(expected):
             failures.append(f"{label}: output keys {list(actual)} != {list(expected)}")

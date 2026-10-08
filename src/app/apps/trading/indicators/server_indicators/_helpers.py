@@ -17,7 +17,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeGuard
 
-from ..registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, NumericClass, register
+from ..registry import (
+    BarSeries,
+    IndicatorInputs,
+    IndicatorOutputSeries,
+    NumericClass,
+    register,
+    register_with_compare_series,
+)
 
 MaybeNumber = float | None
 Values = Sequence[float]
@@ -427,6 +434,8 @@ class Chart:
     period: int
     inputs: IndicatorInputs
     bars: BarSeries
+    # The second series, for indicators registered with ``builtin_with_compare_series``.
+    compare: BarSeries | None = None
 
     @property
     def open(self) -> Values:
@@ -465,6 +474,27 @@ def builtin(indicator_id: str, name: str, numeric_class: NumericClass, default_p
             return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars))
 
         register(indicator_id, name, numeric_class)(compute)
+        return build
+
+    return decorate
+
+
+def builtin_with_compare_series(
+    indicator_id: str, name: str, numeric_class: NumericClass, default_period: int
+) -> Callable[[Builder], Builder]:
+    """Like ``builtin`` for an indicator that also reads a second series, given to the builder as ``chart.compare``.
+
+    The browser passes the compare symbol's bars when ``compareSymbol`` is set, so the server uses the second series only
+    when ``inputs.compare_symbol`` is set too."""
+
+    def decorate(build: Builder) -> Builder:
+        def compute(bars: BarSeries, inputs: IndicatorInputs, compare: BarSeries | None) -> Outputs:
+            if len(bars) == 0:
+                return []
+            series = compare if inputs.compare_symbol else None
+            return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars, series))
+
+        register_with_compare_series(indicator_id, name, numeric_class)(compute)
         return build
 
     return decorate

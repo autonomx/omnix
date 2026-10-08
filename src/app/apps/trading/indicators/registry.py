@@ -88,6 +88,9 @@ class IndicatorInputs:
     signal_period: int | float | None = None
     standard_deviations: float | None = None
     anchor_time: str | None = None
+    # Instrument id of the second series an indicator reads (Correlation Coefficient). The caller loads that
+    # symbol's bars and passes them to ``compute_indicator(..., compare_bars=...)``; this field only records the choice.
+    compare_symbol: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("period", "fast_period", "slow_period", "signal_period"):
@@ -106,6 +109,8 @@ class IndicatorOutputSeries:
 
 
 ComputeFunction = Callable[[BarSeries, IndicatorInputs], list[IndicatorOutputSeries]]
+# For indicators that also read a second series; it is None when the caller has none, like a chart with no compare symbol.
+CompareComputeFunction = Callable[[BarSeries, IndicatorInputs, BarSeries | None], list[IndicatorOutputSeries]]
 
 
 @dataclass(frozen=True)
@@ -114,17 +119,41 @@ class ServerIndicator:
     name: str
     numeric_class: NumericClass
     compute: ComputeFunction
+    compare_compute: CompareComputeFunction | None = None
+
+    @property
+    def uses_compare_series(self) -> bool:
+        return self.compare_compute is not None
 
 
 _REGISTRY: dict[str, ServerIndicator] = {}
 _LOADED = False
 
 
+def _add(indicator: ServerIndicator) -> None:
+    if indicator.id in _REGISTRY:
+        raise ValueError(f"indicator {indicator.id!r} is registered twice")
+    _REGISTRY[indicator.id] = indicator
+
+
 def register(indicator_id: str, name: str, numeric_class: NumericClass) -> Callable[[ComputeFunction], ComputeFunction]:
     def decorate(compute: ComputeFunction) -> ComputeFunction:
-        if indicator_id in _REGISTRY:
-            raise ValueError(f"indicator {indicator_id!r} is registered twice")
-        _REGISTRY[indicator_id] = ServerIndicator(indicator_id, name, numeric_class, compute)
+        _add(ServerIndicator(indicator_id, name, numeric_class, compute))
+        return compute
+
+    return decorate
+
+
+def register_with_compare_series(
+    indicator_id: str, name: str, numeric_class: NumericClass
+) -> Callable[[CompareComputeFunction], CompareComputeFunction]:
+    """Registers an indicator that reads a second series. Its plain ``compute`` runs it without one."""
+
+    def decorate(compute: CompareComputeFunction) -> CompareComputeFunction:
+        def without_compare_series(bars: BarSeries, inputs: IndicatorInputs) -> list[IndicatorOutputSeries]:
+            return compute(bars, inputs, None)
+
+        _add(ServerIndicator(indicator_id, name, numeric_class, without_compare_series, compute))
         return compute
 
     return decorate
@@ -152,8 +181,18 @@ def server_indicator_ids() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def compute_indicator(indicator_id: str, bars: BarSeries, inputs: IndicatorInputs) -> list[IndicatorOutputSeries]:
+def compute_indicator(
+    indicator_id: str,
+    bars: BarSeries,
+    inputs: IndicatorInputs,
+    compare_bars: BarSeries | None = None,
+) -> list[IndicatorOutputSeries]:
+    """Computes one indicator. ``compare_bars`` are the bars of ``inputs.compare_symbol`` for indicators that read a
+    second series (``ServerIndicator.uses_compare_series``), in any order and over any range: the indicator aligns
+    them to ``bars`` by start time, carrying the last close forward. Other indicators ignore them."""
     indicator = server_indicator(indicator_id)
     if indicator is None:
         raise KeyError(f"no server implementation for indicator {indicator_id!r}")
+    if indicator.compare_compute is not None:
+        return indicator.compare_compute(bars, inputs, compare_bars)
     return indicator.compute(bars, inputs)

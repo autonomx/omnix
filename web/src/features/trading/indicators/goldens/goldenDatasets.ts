@@ -112,6 +112,17 @@ export function generateGoldenDatasets(): GoldenDataset[] {
   ];
 }
 
+/**
+ * Second series for indicators that read a compare symbol (Correlation Coefficient). It starts 5 hours after the other
+ * datasets and misses every 23rd hour, so alignment by start time and carrying the last close forward are both exercised.
+ */
+export function generateCompareDatasets(): GoldenDataset[] {
+  return [{ name: 'compare-walk-291', bars: randomWalk(0x5eed6, 310).filter((_, index) => index >= 5 && index % 23 !== 7) }];
+}
+
+export const COMPARE_DATASET = 'compare-walk-291';
+export const COMPARE_SYMBOL = 'golden:compare';
+
 export const ALTERNATIVE_PERIOD_DATASET = 'random-walk-300';
 export const INPUT_VARIANT_DATASET = 'mixed-90';
 

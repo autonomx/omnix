@@ -32,6 +32,13 @@ export type TradingViewBuiltInInstance = {
   signalPeriod?: number;
   standardDeviations?: number;
   anchorTime?: string | null;
+  /** Instrument id of the second series (Correlation Coefficient). */
+  compareSymbol?: string | null;
+};
+/** Series an indicator reads besides the chart's own bars. */
+export type TradingViewBuiltInSeries = {
+  /** Bars of `compareSymbol`, in any order; aligned to the chart by start time. Ignored when the instance has no `compareSymbol`. */
+  compareBars?: readonly MarketBar[];
 };
 
 type MaybeNumber = number | null;
@@ -261,6 +268,7 @@ const NATIVE_ALIASES: Record<string, { id: string; defaultPeriod: number; pane: 
 };
 
 const SUPPORTED: Record<string, SupportedConfig> = {
+  '24-hour Volume': { defaultPeriod: 1, pane: 1 },
   'Accumulation Distribution (ADL)': { defaultPeriod: 1, pane: 1 },
   'Arnaud Legoux Moving Average': { defaultPeriod: 9, pane: 0 },
   'Aroon Indicator': { defaultPeriod: 14, pane: 1 },
@@ -282,6 +290,7 @@ const SUPPORTED: Record<string, SupportedConfig> = {
   'Commodity Channel Index (CCI)': { defaultPeriod: 20, pane: 1 },
   'Connors RSI (CRSI)': { defaultPeriod: 100, pane: 1 },
   'Coppock Curve': { defaultPeriod: 14, pane: 1 },
+  'Correlation Coefficient (CC)': { defaultPeriod: 20, pane: 1 },
   'Detrended Price Oscillator (DPO)': { defaultPeriod: 20, pane: 1 },
   'Directional Movement (DMI)': { defaultPeriod: 14, pane: 1 },
   'Donchian Channels (DC)': { defaultPeriod: 20, pane: 0 },
@@ -327,6 +336,13 @@ const SUPPORTED: Record<string, SupportedConfig> = {
   'RCI Ribbon': { defaultPeriod: 9, pane: 1 },
   'Relative Vigor Index': { defaultPeriod: 10, pane: 1 },
   'Relative Volatility Index': { defaultPeriod: 14, pane: 1 },
+  'Relative Volume at Time': { defaultPeriod: 10, pane: 1 },
+  'Rob Booker - ADX Breakout': { defaultPeriod: 14, pane: 0 },
+  'Rob Booker - Knoxville Divergence': { defaultPeriod: 150, pane: 0 },
+  'Rob Booker Intraday Pivot Points': { defaultPeriod: 1, pane: 0 },
+  'Rob Booker Missed Pivot Points': { defaultPeriod: 10, pane: 0 },
+  'Rob Booker Reversal': { defaultPeriod: 14, pane: 0 },
+  'Rob Booker Ziv Ghost Pivots': { defaultPeriod: 1, pane: 0 },
   'SMI Ergodic Indicator': { defaultPeriod: 20, pane: 1 },
   'SMI Ergodic Oscillator': { defaultPeriod: 20, pane: 1 },
   'Smoothed Moving Average': { defaultPeriod: 20, pane: 0 },
@@ -423,10 +439,18 @@ export function tradingViewBuiltInPaneScale(id: string): { min: number; max: num
   if (['Williams %R (%R)'].includes(name)) {
     return { min: -100, max: 0, band: { from: -80, to: -20, color: '#74c0fc' }, levels: [{ value: -80, lineStyle: 'dashed' }, { value: -50, lineStyle: 'dotted' }, { value: -20, lineStyle: 'dashed' }] };
   }
-  if (['Trend Strength Index'].includes(name)) {
+  if (['Trend Strength Index', 'Correlation Coefficient (CC)'].includes(name)) {
     return { min: -1, max: 1, levels: [{ value: 0, lineStyle: 'dotted' }] };
   }
   return null;
+}
+
+const COMPARE_SERIES_INDICATORS = new Set(['Correlation Coefficient (CC)']);
+
+/** Whether the indicator reads a second symbol (`compareSymbol`), loaded like a compare symbol. */
+export function tradingViewBuiltInUsesCompareSeries(id: string): boolean {
+  const name = definitionById.get(id)?.name;
+  return name !== undefined && COMPARE_SERIES_INDICATORS.has(name);
 }
 
 function nums(bars: readonly MarketBar[], key: 'open' | 'high' | 'low' | 'close' | 'volume'): number[] {
@@ -906,9 +930,255 @@ function technicalRating(high: readonly number[], low: readonly number[], close:
   });
 }
 
+// TVP-6.1 helpers. Sessions are UTC days of the bar start time (like the TWAP above); times are epoch milliseconds.
+const DAY_MS = 86_400_000;
+
+function startTimes(bars: readonly MarketBar[]): number[] { return bars.map((bar) => Date.parse(bar.start_time)); }
+
+type PivotLevels = { pp: MaybeNumber[]; r1: MaybeNumber[]; r2: MaybeNumber[]; r3: MaybeNumber[]; s1: MaybeNumber[]; s2: MaybeNumber[]; s3: MaybeNumber[] };
+
+/**
+ * Classic floor pivots of a session's high H, low L and close C: PP = (H + L + C) / 3, R1 = 2PP - L, S1 = 2PP - H,
+ * R2 = PP + (H - L), S2 = PP - (H - L), R3 = H + 2(PP - L), S3 = L - 2(H - PP).
+ * `developing` false: each bar gets the pivots of the previous session with bars (Intraday Pivot Points).
+ * `developing` true: each bar gets the pivots of its own session so far (Ziv Ghost Pivots: the next session's levels, as they form).
+ */
+function sessionPivots(times: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[], developing: boolean): PivotLevels {
+  const levels: PivotLevels = { pp: full(close.length), r1: full(close.length), r2: full(close.length), r3: full(close.length), s1: full(close.length), s2: full(close.length), s3: full(close.length) };
+  let day = 0; let started = false;
+  let h = 0; let l = 0; let c = 0;
+  let previous: [number, number, number] | null = null;
+  for (let i = 0; i < close.length; i += 1) {
+    const barDay = Math.floor(times[i] / DAY_MS);
+    if (!started || barDay !== day) {
+      if (started) previous = [h, l, c];
+      started = true; day = barDay; h = high[i]; l = low[i]; c = close[i];
+    } else {
+      h = Math.max(h, high[i]); l = Math.min(l, low[i]); c = close[i];
+    }
+    const source: [number, number, number] | null = developing ? [h, l, c] : previous;
+    if (!source) continue;
+    const [sh, sl, sc] = source;
+    const pp = (sh + sl + sc) / 3;
+    levels.pp[i] = pp; levels.r1[i] = 2 * pp - sl; levels.s1[i] = 2 * pp - sh;
+    levels.r2[i] = pp + (sh - sl); levels.s2[i] = pp - (sh - sl);
+    levels.r3[i] = sh + 2 * (pp - sl); levels.s3[i] = sl - 2 * (sh - pp);
+  }
+  return levels;
+}
+
+/**
+ * Missed pivots: each session's pivot PP = (H + L + C) / 3 of the session before it. A pivot that no bar's high-low range has
+ * touched since its session began, once that session is over, is "missed" and stays a target until price touches it.
+ * Only pivots of the last `sessionsBack` sessions count. Returns the nearest missed pivot above and below each close.
+ */
+function missedPivots(times: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[], sessionsBack: number): { above: MaybeNumber[]; below: MaybeNumber[] } {
+  const above = full(close.length); const below = full(close.length);
+  let open: Array<{ value: number; session: number }> = [];
+  let day = 0; let session = -1;
+  let h = 0; let l = 0; let c = 0;
+  for (let i = 0; i < close.length; i += 1) {
+    const barDay = Math.floor(times[i] / DAY_MS);
+    if (session < 0 || barDay !== day) {
+      if (session >= 0) open.push({ value: (h + l + c) / 3, session: session + 1 });
+      session += 1; day = barDay; h = high[i]; l = low[i]; c = close[i];
+    } else {
+      h = Math.max(h, high[i]); l = Math.min(l, low[i]); c = close[i];
+    }
+    open = open.filter((level) => level.session >= session - sessionsBack && !(low[i] <= level.value && level.value <= high[i]));
+    let up: MaybeNumber = null; let down: MaybeNumber = null;
+    for (const level of open) {
+      if (level.session >= session) continue;
+      if (level.value > close[i] && (up === null || level.value < up)) up = level.value;
+      if (level.value < close[i] && (down === null || level.value > down)) down = level.value;
+    }
+    above[i] = up; below[i] = down;
+  }
+  return { above, below };
+}
+
+/**
+ * Relative Volume at Time (cumulative): volume of the bar's UTC session up to and including the bar, divided by the average of the
+ * same cumulative volume at the same UTC time of day over the last `sessions` earlier sessions that have a bar starting at that time.
+ * No value until that many sessions exist, or when their average is zero.
+ */
+function relativeVolumeAtTime(times: readonly number[], volume: readonly number[], sessions: number): MaybeNumber[] {
+  const result = full(volume.length);
+  const history = new Map<number, number[]>();
+  let day = 0; let cumulative = 0;
+  for (let i = 0; i < volume.length; i += 1) {
+    const barDay = Math.floor(times[i] / DAY_MS);
+    if (i === 0 || barDay !== day) { day = barDay; cumulative = 0; }
+    cumulative += volume[i];
+    const timeOfDay = times[i] - barDay * DAY_MS;
+    const past = history.get(timeOfDay) ?? [];
+    if (past.length >= sessions) {
+      let total = 0;
+      for (let k = past.length - sessions; k < past.length; k += 1) total += past[k];
+      const average = total / sessions;
+      if (average !== 0) result[i] = cumulative / average;
+    }
+    past.push(cumulative);
+    history.set(timeOfDay, past);
+  }
+  return result;
+}
+
+/**
+ * 24-hour volume: the sum of the volume of bars that started in the 24 hours up to and including this bar's start
+ * (start > this start - 24h). Shown once the loaded bars cover a whole 24 hours: the first bar started at least
+ * 24h minus one bar interval (the smallest gap between bar starts, at most 24h) earlier. Bars of a day or longer report their own volume.
+ */
+function rollingDayVolume(times: readonly number[], volume: readonly number[]): MaybeNumber[] {
+  const result = full(volume.length);
+  let step = Infinity;
+  for (let i = 1; i < times.length; i += 1) {
+    const gap = times[i] - times[i - 1];
+    if (gap > 0 && gap < step) step = gap;
+  }
+  const covered = Math.min(step, DAY_MS);
+  let left = 0; let running = 0;
+  for (let i = 0; i < volume.length; i += 1) {
+    running += volume[i];
+    while (left < i && times[left] <= times[i] - DAY_MS) { running -= volume[left]; left += 1; }
+    if (times[0] <= times[i] - DAY_MS + covered) result[i] = running;
+  }
+  return result;
+}
+
+/** The compare series' close at each bar: the close of its latest bar starting at or before the bar's start (gaps carry the last close forward). */
+function alignedCompareCloses(times: readonly number[], compareBars: readonly MarketBar[]): MaybeNumber[] {
+  const series = compareBars
+    .map((bar) => { const value = Number(bar.close); return { time: Date.parse(bar.start_time), close: Number.isFinite(value) ? value : 0 }; })
+    .sort((a, b) => a.time - b.time);
+  let j = -1;
+  return times.map((time) => {
+    while (j + 1 < series.length && series[j + 1].time <= time) j += 1;
+    return j >= 0 ? series[j].close : null;
+  });
+}
+
+/** Pearson correlation of x and y over the last `period` bars: sum(dx·dy) / sqrt(sum(dx²)·sum(dy²)) around the window means; none if either is flat. */
+function pearson(x: readonly number[], y: readonly MaybeNumber[], period: number): MaybeNumber[] {
+  const result = full(x.length);
+  for (let i = period - 1; i < x.length; i += 1) {
+    let complete = true;
+    let sx = 0; let sy = 0;
+    for (let j = i - period + 1; j <= i; j += 1) {
+      const yj = y[j];
+      if (yj === null) { complete = false; break; }
+      sx += x[j]; sy += yj;
+    }
+    if (!complete) continue;
+    const mx = sx / period; const my = sy / period;
+    let sxx = 0; let syy = 0; let sxy = 0;
+    for (let j = i - period + 1; j <= i; j += 1) {
+      const dx = x[j] - mx; const dy = (y[j] as number) - my;
+      sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+    }
+    result[i] = sxx === 0 || syy === 0 ? null : sxy / Math.sqrt(sxx * syy);
+  }
+  return result;
+}
+
+/**
+ * Knoxville Divergence: a bearish signal at a bar whose high exceeds the highest high of the previous `lookback` bars while
+ * Momentum(20) = close - close[20] is lower than at that earlier high, with RSI(21) above 70 at some bar from the earlier high to now;
+ * bullish mirrors it with lows, higher momentum and RSI below 30. The signal plots at the bar's high (bearish) or low (bullish).
+ */
+function knoxvilleDivergence(high: readonly number[], low: readonly number[], close: readonly number[], lookback: number): { bearish: MaybeNumber[]; bullish: MaybeNumber[] } {
+  const bearish = full(close.length); const bullish = full(close.length);
+  const momentum = close.map((value, i) => i >= 20 ? value - close[i - 20] : null);
+  const strength = rsi(close, 21);
+  const overbought: number[] = []; const oversold: number[] = [];
+  strength.forEach((value, i) => {
+    overbought.push((i > 0 ? overbought[i - 1] : 0) + (finite(value) && value > 70 ? 1 : 0));
+    oversold.push((i > 0 ? oversold[i - 1] : 0) + (finite(value) && value < 30 ? 1 : 0));
+  });
+  const flagged = (counts: readonly number[], from: number, to: number) => counts[to] - (from > 0 ? counts[from - 1] : 0) > 0;
+  // Monotonic queues of the previous `lookback` bars: the front is the latest index of the highest high (lowest low).
+  const highs: number[] = []; const lows: number[] = [];
+  for (let i = 1; i < close.length; i += 1) {
+    while (highs.length && high[highs[highs.length - 1]] <= high[i - 1]) highs.pop();
+    highs.push(i - 1);
+    while (lows.length && low[lows[lows.length - 1]] >= low[i - 1]) lows.pop();
+    lows.push(i - 1);
+    while (highs[0] < i - lookback) highs.shift();
+    while (lows[0] < i - lookback) lows.shift();
+    const now = momentum[i];
+    if (now === null) continue;
+    const h = highs[0]; const l = lows[0];
+    const atHigh = momentum[h]; const atLow = momentum[l];
+    if (high[i] > high[h] && atHigh !== null && now < atHigh && flagged(overbought, h, i)) bearish[i] = high[i];
+    if (low[i] < low[l] && atLow !== null && now > atLow && flagged(oversold, l, i)) bullish[i] = low[i];
+  }
+  return { bearish, bullish };
+}
+
+/** TVP-6.1 indicators, built from public descriptions of the TradingView indicators; the helpers above state each definition. */
+function quickWinOutputs(
+  name: string,
+  id: string,
+  period: number,
+  instance: TradingViewBuiltInInstance,
+  series: TradingViewBuiltInSeries,
+  bars: readonly MarketBar[],
+): TradingViewBuiltInOutput[] | null {
+  const high = nums(bars, 'high'); const low = nums(bars, 'low'); const close = nums(bars, 'close'); const volume = nums(bars, 'volume');
+  if (name === '24-hour Volume') return [output(id, 'volume-24h', '24h Volume', 1, 'histogram', rollingDayVolume(startTimes(bars), volume), bars)];
+  if (name === 'Correlation Coefficient (CC)') {
+    // The second series counts only while the instance names its symbol, like the server registry.
+    const compareBars = instance.compareSymbol ? series.compareBars : undefined;
+    const compare = compareBars?.length ? alignedCompareCloses(startTimes(bars), compareBars) : full(close.length);
+    return [output(id, 'cc', `CC ${period}`, 1, 'line', pearson(close, compare, period), bars)];
+  }
+  if (name === 'Relative Volume at Time') return [output(id, 'rvol-at-time', `RVol at Time ${period}`, 1, 'histogram', relativeVolumeAtTime(startTimes(bars), volume, period), bars)];
+  if (name === 'Rob Booker - ADX Breakout') {
+    // The N-bar high-low box of the latest bar whose ADX(N) is below 18 (a consolidation), held until the next such bar, so breakouts show against it.
+    const { adx } = dmi(high, low, close, period); const hh = highest(high, period); const ll = lowest(low, period);
+    const upper = full(close.length); const lower = full(close.length); let top: MaybeNumber = null; let bottom: MaybeNumber = null;
+    for (let i = 0; i < close.length; i += 1) {
+      const strength = adx[i];
+      if (finite(strength) && strength < 18 && finite(hh[i]) && finite(ll[i])) { top = hh[i]; bottom = ll[i]; }
+      upper[i] = top; lower[i] = bottom;
+    }
+    return [fixedLine(id, 'upper', 'Breakout Upper', upper, bars, '#20c997'), fixedLine(id, 'lower', 'Breakout Lower', lower, bars, '#f23645')];
+  }
+  if (name === 'Rob Booker - Knoxville Divergence') {
+    const values = knoxvilleDivergence(high, low, close, period);
+    return [fixedLine(id, 'bearish', 'Bearish Divergence', values.bearish, bars, '#f23645'), fixedLine(id, 'bullish', 'Bullish Divergence', values.bullish, bars, '#20c997')];
+  }
+  if (name === 'Rob Booker Intraday Pivot Points' || name === 'Rob Booker Ziv Ghost Pivots') {
+    const ghost = name === 'Rob Booker Ziv Ghost Pivots';
+    const levels = sessionPivots(startTimes(bars), high, low, close, ghost);
+    const lines: Array<[keyof PivotLevels, string, string | undefined]> = ghost
+      ? [['pp', 'Ghost Pivot', undefined], ['r1', 'Ghost R1', '#f23645'], ['s1', 'Ghost S1', '#20c997']]
+      : [['pp', 'Pivot', undefined], ['r1', 'R1', '#f23645'], ['r2', 'R2', '#f23645'], ['r3', 'R3', '#f23645'], ['s1', 'S1', '#20c997'], ['s2', 'S2', '#20c997'], ['s3', 'S3', '#20c997']];
+    return lines.map(([key, title, color]) => fixedLine(id, key, title, levels[key], bars, color));
+  }
+  if (name === 'Rob Booker Missed Pivot Points') {
+    const levels = missedPivots(startTimes(bars), high, low, close, period);
+    return [fixedLine(id, 'missed-above', 'Missed Pivot Above', levels.above, bars, '#f23645'), fixedLine(id, 'missed-below', 'Missed Pivot Below', levels.below, bars, '#20c997')];
+  }
+  if (name === 'Rob Booker Reversal') {
+    // MACD(12, 26) line turning up (down) - rising after a bar that did not rise - while the raw Stochastic %K(N) is below 30 (above 70).
+    const fast = ema(close, 12); const slow = ema(close, 26); const k = stochastic(high, low, close, period);
+    const macd = close.map((_, i) => finite(fast[i]) && finite(slow[i]) ? fast[i]! - slow[i]! : null);
+    const bullish = full(close.length); const bearish = full(close.length);
+    for (let i = 2; i < close.length; i += 1) {
+      const now = macd[i]; const before = macd[i - 1]; const earlier = macd[i - 2]; const stoch = k[i];
+      if (now === null || before === null || earlier === null || !finite(stoch)) continue;
+      if (now > before && before <= earlier && stoch < 30) bullish[i] = low[i];
+      if (now < before && before >= earlier && stoch > 70) bearish[i] = high[i];
+    }
+    return [fixedLine(id, 'bullish', 'Bullish Reversal', bullish, bars, '#20c997'), fixedLine(id, 'bearish', 'Bearish Reversal', bearish, bars, '#f23645')];
+  }
+  return null;
+}
+
 export function calculateTradingViewBuiltInOutputs(
   bars: readonly MarketBar[],
-  instance: TradingViewBuiltInInstance,
+  instance: TradingViewBuiltInInstance, series: TradingViewBuiltInSeries = {}, // series: the compare symbol's bars, if any
 ): TradingViewBuiltInOutput[] {
   const definition = definitionById.get(instance.id);
   if (!definition?.available || !isTradingViewBuiltInId(instance.id) || bars.length === 0) return [];
@@ -1159,7 +1429,7 @@ export function calculateTradingViewBuiltInOutputs(
   if (name === 'Zig Zag') {
     const pivots = findPatternPivots(bars, Math.max(2, Math.min(8, period))); const values = full(close.length); pivots.forEach((pivot) => { values[pivot.index] = pivot.price; }); return [fixedLine(id, 'zigzag', 'Zig Zag', values, bars)];
   }
-  return [];
+  return quickWinOutputs(name, id, period, instance, series, bars) ?? [];
 }
 
 export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInInstance): Array<{ key: string; title: string }> {
@@ -1187,6 +1457,12 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Pivot Points High Low': [['pivot-high', 'Pivot High'], ['pivot-low', 'Pivot Low']],
     'Pivot Points Standard': [['pp', 'Pivot'], ['r1', 'R1'], ['s1', 'S1']],
     'Relative Vigor Index': [['rvi', 'RVI'], ['signal', 'Signal']],
+    'Rob Booker - ADX Breakout': [['upper', 'Breakout Upper'], ['lower', 'Breakout Lower']],
+    'Rob Booker - Knoxville Divergence': [['bearish', 'Bearish Divergence'], ['bullish', 'Bullish Divergence']],
+    'Rob Booker Intraday Pivot Points': [['pp', 'Pivot'], ['r1', 'R1'], ['r2', 'R2'], ['r3', 'R3'], ['s1', 'S1'], ['s2', 'S2'], ['s3', 'S3']],
+    'Rob Booker Missed Pivot Points': [['missed-above', 'Missed Pivot Above'], ['missed-below', 'Missed Pivot Below']],
+    'Rob Booker Reversal': [['bullish', 'Bullish Reversal'], ['bearish', 'Bearish Reversal']],
+    'Rob Booker Ziv Ghost Pivots': [['pp', 'Ghost Pivot'], ['r1', 'Ghost R1'], ['s1', 'Ghost S1']],
     'SMI Ergodic Indicator': [['smi', 'SMI Ergodic'], ['signal', 'Signal']],
     'Stochastic (STOCH)': [['k', '%K'], ['d', '%D']],
     'Stochastic Momentum Index (SMI)': [['smi', 'SMI'], ['signal', 'Signal']],
@@ -1202,6 +1478,7 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
   const plots = multi[name];
   if (plots) return plots.map(([suffix, title]) => ({ key: `${id}:${suffix}`, title }));
   const suffixByName: Record<string, string> = {
+    '24-hour Volume': 'volume-24h', 'Correlation Coefficient (CC)': 'cc', 'Relative Volume at Time': 'rvol-at-time',
     'Accumulation Distribution (ADL)': 'adl', 'Arnaud Legoux Moving Average': 'alma', 'Aroon Oscillator': 'oscillator',
     'Average Daily Range (ADR) indicator': 'adr', 'Average Directional Index (ADX)': 'adx', 'Awesome Oscillator (AO)': 'ao',
     'Balance of Power (BOP)': 'bop', 'BBTrend': 'bbtrend', 'Bollinger Bands %b (%b)': 'percent-b', 'Bollinger BandWidth (BBW)': 'bandwidth',
