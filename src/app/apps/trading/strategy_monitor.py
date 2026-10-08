@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.config.env import env_str as _env_str
@@ -50,7 +50,6 @@ from .strategy_v2_qualification import (
     V2_QUALIFICATION_EVENT_TYPES,
 )
 from .trade_logging import trade_log
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .order_gateway import StrategyPaperAccess
@@ -315,36 +314,25 @@ class _EntryProposal:
         )
 
 
-class TradingStrategyMonitor(ScheduledTradingMonitor):
-    """Deterministic strategy runner with OFF/SHADOW/AUTO_PAPER modes only.
+class StrategyRunHost:
+    """The state and helpers one strategy configuration pass uses.
 
-    AUTO_PAPER can create orders exclusively in the existing paper repository.
-    There is intentionally no live-broker adapter or AI order-placement path.
+    The scheduled strategy monitor is one host; the strategy runner owns
+    another for the gap pullback configurations it runs. The pass itself
+    (``strategy_monitor_config_run.run_config``) and the entry submission path
+    (``strategy_entry_path``) are shared.
     """
 
-    error_event = "monitor_loop_error"
     # Strategy diagnostics count their evaluations here.
     diagnostic_evaluation_count: int = 0
-
-    def error_log_fields(self) -> dict[str, Any]:
-        return {"run_id": self.current_run_id}
 
     def __init__(
         self,
         *,
-        strategy_repository_factory: Callable[[], TradingStrategyRepository] = default_strategy_repository,
-        paper_repository_factory: Callable[[], TradingPaperRepository] = default_runtime_paper_repository,
-        market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         intraday_llm_analyzer_factory: Callable[[], IntradayLLMAnalyzer] = IntradayLLMAnalyzer,
-        interval_seconds: float | None = None,
     ) -> None:
-        self.strategy_repository_factory = strategy_repository_factory
-        self.paper_repository_factory = paper_repository_factory
-        self.market_service_factory = market_service_factory
         self.intraday_llm_analyzer_factory = intraday_llm_analyzer_factory
-        self.interval_seconds = interval_seconds or _interval_seconds()
         self.current_run_id: str | None = None
-        self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.evaluation_count = 0
         self.signal_count = 0
@@ -363,8 +351,6 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
         self.intraday_llm_estimated_usage_count = 0
         self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
-        self.managed_finviz_shadow_provision: dict[str, Any] | None = None
-        self.managed_finviz_shadow_provision_error: str | None = None
         self.auto_paper_readiness_by_strategy: dict[str, dict[str, Any]] = {}
         self.auto_paper_ready_strategy_count = 0
         self.auto_paper_blocked_strategy_count = 0
@@ -587,6 +573,38 @@ class TradingStrategyMonitor(ScheduledTradingMonitor):
         from .strategy_monitor_config_run import run_config
 
         return await run_config(self, config, strategy_repository, paper_repository, market_service)
+
+
+
+class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
+    """Deterministic strategy runner with OFF/SHADOW/AUTO_PAPER modes only.
+
+    AUTO_PAPER can create orders exclusively in the existing paper repository.
+    There is intentionally no live-broker adapter or AI order-placement path.
+    """
+
+    error_event = "monitor_loop_error"
+
+    def error_log_fields(self) -> dict[str, Any]:
+        return {"run_id": self.current_run_id}
+
+    def __init__(
+        self,
+        *,
+        strategy_repository_factory: Callable[[], TradingStrategyRepository] = default_strategy_repository,
+        paper_repository_factory: Callable[[], TradingPaperRepository] = default_runtime_paper_repository,
+        market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+        intraday_llm_analyzer_factory: Callable[[], IntradayLLMAnalyzer] = IntradayLLMAnalyzer,
+        interval_seconds: float | None = None,
+    ) -> None:
+        StrategyRunHost.__init__(self, intraday_llm_analyzer_factory=intraday_llm_analyzer_factory)
+        self.strategy_repository_factory = strategy_repository_factory
+        self.paper_repository_factory = paper_repository_factory
+        self.market_service_factory = market_service_factory
+        self.interval_seconds = interval_seconds or _interval_seconds()
+        self.last_run_at: datetime | None = None
+        self.managed_finviz_shadow_provision: dict[str, Any] | None = None
+        self.managed_finviz_shadow_provision_error: str | None = None
 
     async def run_once(self) -> int:
         strategy_repository = self.strategy_repository_factory()

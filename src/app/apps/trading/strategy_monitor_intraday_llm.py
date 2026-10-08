@@ -19,7 +19,7 @@ from .strategy_intraday_llm import (
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
-    TradingStrategyMonitor,
+    StrategyRunHost,
 )
 from .strategy_repository import (
     TradingStrategyConfigDocument,
@@ -29,7 +29,7 @@ from .trade_logging import trade_log
 
 
 async def run_intraday_llm(
-    monitor: TradingStrategyMonitor,
+    monitor: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     universe,

@@ -14,7 +14,7 @@ from .strategy_evaluability import (
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
-    TradingStrategyMonitor,
+    StrategyRunHost,
 )
 from .strategy_repository import (
     TradingStrategyConfigDocument,
@@ -24,7 +24,7 @@ from .strategy_timeframes import resample_final_bars
 
 
 async def record_diagnostic_v2_candidates(
-    monitor: TradingStrategyMonitor,
+    monitor: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     market_service: TradingMarketDataService,

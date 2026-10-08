@@ -14,7 +14,7 @@ from .strategy_entry_path import submit_entry_proposals
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
-    TradingStrategyMonitor,
+    StrategyRunHost,
     _v2_qualification_events,
 )
 from .strategy_repository import (
@@ -33,7 +33,7 @@ from .trade_logging import trade_log
 
 
 async def run_config(
-    monitor: TradingStrategyMonitor,
+    monitor: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     raw_paper_repository: TradingPaperRepository,

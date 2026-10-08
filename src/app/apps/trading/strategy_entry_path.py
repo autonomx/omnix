@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING, Any
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 from .paper import PaperOrderRequest
-from .strategy_monitor import _execution_audit_payload, _key, _trade_attempt_id
+from .strategy_monitor import (
+    StrategyRunHost,
+    _execution_audit_payload,
+    _key,
+    _trade_attempt_id,
+)
 from .strategy_repository import StrategyProtection
 from .strategy_risk import size_strategy_entry
 from .strategy_v2_qualification import v2_profile_fingerprint
@@ -26,11 +31,14 @@ from .trade_logging import trade_log
 if TYPE_CHECKING:
     from .order_gateway import StrategyPaperAccess
     from .service import TradingMarketDataService
-    from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
+    from .strategy_repository import (
+        TradingStrategyConfigDocument,
+        TradingStrategyRepository,
+    )
 
 
 async def submit_entry_proposals(
-    host: Any,
+    host: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     paper_repository: StrategyPaperAccess,

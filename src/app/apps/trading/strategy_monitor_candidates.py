@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any, cast
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -11,6 +12,7 @@ from . import strategy_session_evidence as _session_evidence
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
+from .research.policy import ResearchPolicyDecision
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackResult
@@ -25,7 +27,7 @@ from .strategy_intraday_learning import (
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
     _REGULAR_OPEN,
-    TradingStrategyMonitor,
+    StrategyRunHost,
     _bar_audit_payload,
     _candidate_lifecycle_stage,
     _current_session_1m_integrity,
@@ -36,7 +38,6 @@ from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
-from .research.policy import ResearchPolicyDecision
 from .strategy_research_policy import (
     apply_research_policy_to_quality,
     resolve_strategy_research_policy,
@@ -64,11 +65,10 @@ from .strategy_v2_qualification import (
     v2_profile_fingerprint,
 )
 from .trade_logging import trade_log
-from typing import Any, cast
 
 
 async def evaluate_candidates(
-    monitor: TradingStrategyMonitor,
+    monitor: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     market_service: TradingMarketDataService,

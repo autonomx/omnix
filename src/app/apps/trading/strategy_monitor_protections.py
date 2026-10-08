@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, cast
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -12,7 +13,7 @@ from .service import TradingMarketDataService
 
 # The monitor imports this module lazily, so importing it here makes no cycle.
 from .strategy_monitor import (
-    TradingStrategyMonitor,
+    StrategyRunHost,
     _execution_audit_payload,
     _key,
     _paper_observation,
@@ -29,14 +30,13 @@ from .strategy_v2_management import (
     v2_management_levels,
 )
 from .trade_logging import trade_log
-from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from .order_gateway import StrategyPaperAccess
 
 
 async def reconcile_protections(
-    monitor: TradingStrategyMonitor,
+    monitor: StrategyRunHost,
     config: TradingStrategyConfigDocument,
     strategy_repository: TradingStrategyRepository,
     paper_repository: StrategyPaperAccess,
