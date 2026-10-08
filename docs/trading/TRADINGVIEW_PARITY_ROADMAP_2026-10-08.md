@@ -1135,7 +1135,8 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 
 | WP | Status | Branch / commit | Notes |
 |---|---|---|---|
-| TVP-0.2 | In progress (lead) | `tradingview-parity` | Scaffold first: golden generator, Python registry, first batch |
+| TVP-0.2 | In progress | `tradingview-parity` `451eda57b`; `tvp/0.2-builtins-a`, `tvp/0.2-builtins-b` | Scaffold done (lead): goldens for all 100 available indicators, server registry, 9 core indicators bit-exact. In review. Two agents port the 91 built-ins (45 + 46). Switching alerts and scanner to the registry follows |
+| TVP-0.3 | In progress (lead) | `tradingview-parity` | Command and shortcut layer |
 | TVP-5.1–5.3 | In progress (agent) | `tvp/5-watchlists` | Indicator columns (part of 5.2) wait for TVP-0.2 |
 | TVP-7.1 | In progress (agent) | `tvp/7.1-order-types` | Migration 0140 |
 | TVP-8.1 (wave 1 part) | In progress (agent) | `tvp/8.1-replay-clock` | Speed control and shared clock; sub-bar playback waits for TVP-0.6 |
