@@ -1715,9 +1715,10 @@ export class TradingChartAdapter {
 
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
     this.assertActive();
-    const handler = (parameter: { time?: Time; point?: { x: number; y: number }; seriesData: Map<unknown, unknown> }) => {
+    const handler = (parameter: { time?: Time; point?: { x: number; y: number }; paneIndex?: number; seriesData: Map<unknown, unknown> }) => {
       if (parameter.time === undefined || parameter.point === undefined) { listener(null); return; }
-      const pointerPrice = this.priceSeries.coordinateToPrice(parameter.point.y);
+      // The y is measured within the pane under the pointer: it is a price only in the main pane.
+      const pointerPrice = (parameter.paneIndex ?? 0) === 0 ? this.priceSeries.coordinateToPrice(parameter.point.y) : null;
       if (typeof pointerPrice === 'number' && Number.isFinite(pointerPrice)) {
         listener({ time: parameter.time, price: pointerPrice / this.priceScaleMultiplier });
         return;

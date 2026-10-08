@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
+import { TradingNotificationsLog } from './TradingNotificationsLog';
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
@@ -15,7 +16,7 @@ import './TradingTerminalDockData.css';
 import { downloadBlob } from '../../shared/download';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
-type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
+type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal' | 'notifications';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected' | 'expired';
 type AccountModal = 'create' | 'settings' | null;
 type CommissionType = 'Percent' | 'Fixed';
@@ -37,6 +38,7 @@ const tabs: Array<{ id: DockTab; label: string }> = [
   { id: 'positions', label: 'Positions' }, { id: 'orders', label: 'Orders' },
   { id: 'history', label: 'Order history' }, { id: 'balance', label: 'Balance history' },
   { id: 'journal', label: 'Trading journal' },
+  { id: 'notifications', label: 'Notifications' },
 ];
 const orderFilters: Array<{ id: OrderFilter; label: string }> = [
   { id: 'all', label: 'All' }, { id: 'working', label: 'Working' }, { id: 'inactive', label: 'Inactive' },
@@ -417,8 +419,8 @@ export function TradingTerminalDock({
           <nav className="trading-dock-tabs" role="tablist" aria-label="Paper trading activity">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); if (item.id === 'history' && !historyFilters.some((filter) => filter.id === orderFilter)) setOrderFilter('all'); }}>{item.id === 'positions' && displayedPositions.length > 0 ? `${item.label} ${displayedPositions.length}` : item.label}</button>)}</nav>
           {tab === 'orders' || tab === 'history' ? <nav className="trading-order-filters" role="tablist" aria-label="Order status filters">{(tab === 'orders' ? orderFilters : historyFilters).map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={orderFilter === filter.id} onClick={() => setOrderFilter(filter.id)}>{filter.label}<small>{orderCounts[filter.id]}</small></button>)}</nav> : null}
           <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}${tab === 'dashboard' ? ' trading-dock-content-dashboard' : ''}`} role="tabpanel" tabIndex={0}>
-            {tab !== 'dashboard' && !displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
-            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}
+            {tab !== 'dashboard' && tab !== 'notifications' && !displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
+            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}{tab === 'notifications' ? <TradingNotificationsLog /> : null}
             {displayedSnapshot && tab === 'positions' ? (
               <div className="trading-dock-table-scroll">
                 <table className="trading-positions-table"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Avg fill price</th><th>Take profit</th><th>Stop loss</th><th>Last price</th><th>Unrealized PnL ↑</th><th>Unrealized PnL %</th><th aria-label="Actions" /></tr></thead><tbody>

@@ -39,8 +39,9 @@ export type TradingCommandDefinition = {
   /** Fires again while the key is held (moving and zooming the chart); other commands run once per press. */
   repeatable?: boolean;
   /**
-   * Commands of a less specific scope this one deliberately takes a key from while it is active, as TradingView
-   * does (the arrow keys move a selected drawing instead of the chart). Not reported as shadowing.
+   * Commands this one deliberately takes a key from while it is active, as TradingView does: the arrow keys move a
+   * selected drawing instead of the chart; Shift+B/S trade instead of typing a symbol while the paper ticket is open.
+   * Not reported as a clash for the default keys.
    */
   shadows?: readonly string[];
   /** Catalogued ahead of its action (it arrives with another work package): listed as not available yet, never dispatched or rebound. */
@@ -75,6 +76,11 @@ export const TRADING_COMMANDS = [
   // Drawings
   { id: 'drawing.undo', label: 'Undo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+z'] },
   { id: 'drawing.redo', label: 'Redo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+shift+z', 'mod+y'] },
+  // TVP-7.4: trading hotkeys fill the paper order ticket; the user places the order. They take Shift+B/S from typing.
+  { id: 'trading.buyMarket', label: 'Buy at market (fills the order ticket)', group: 'Trading', scope: 'chart', defaultKeys: ['shift+b'], keyContext: 'chart', shadows: ['chart.symbolSearch'] },
+  { id: 'trading.sellMarket', label: 'Sell at market (fills the order ticket)', group: 'Trading', scope: 'chart', defaultKeys: ['shift+s'], keyContext: 'chart', shadows: ['chart.symbolSearch'] },
+  { id: 'trading.buyLimit', label: 'Buy limit at the crosshair price (fills the order ticket)', group: 'Trading', scope: 'chart', defaultKeys: ['alt+shift+b'], keyContext: 'chart' },
+  { id: 'trading.sellLimit', label: 'Sell limit at the crosshair price (fills the order ticket)', group: 'Trading', scope: 'chart', defaultKeys: ['alt+shift+s'], keyContext: 'chart' },
   { id: 'drawing.delete', label: 'Delete selected drawings', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'], keyContext: 'chart' },
   // TVP-2.2: drawing tools, clipboard, nudge and hide-all.
   { id: 'drawing.trendLine', label: 'Trend line tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+t'] },
@@ -297,7 +303,8 @@ export function findKeyClashes(
       const typed = !isPlainHotkey(normalized) ? null
         : /^[a-z]$/.test(parsed.key) ? patterns.get('letter')
           : /^[0-9,]$/.test(parsed.key) ? patterns.get('interval') : null;
-      if (typed) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
+      const intended = definition.shadows?.includes(typed ?? '') && definition.defaultKeys.some((key) => normalizeHotkey(key) === normalized);
+      if (typed && !intended) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
     }
   }
   const intended = (left: TradingCommandDefinition, right: TradingCommandDefinition) => (

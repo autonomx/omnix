@@ -126,7 +126,7 @@ describe('TradingPaperPanel', () => {
   it('fills the real ticket from a long position drawing: limit price, stop, target (TVP-3.6)', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
     await screen.findByRole('switch', { name: 'Enable stop loss' });
-    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'buy', entry: 75, stop: 74, target: 78, quantity: 40 }));
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'buy', orderType: 'limit' as const, entry: 75, stop: 74, target: 78, quantity: 40 }));
     expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('75');
     expect(screen.getByRole('textbox', { name: 'Stop loss price' })).toHaveValue('74');
     await waitFor(() => expect(paperApi.riskPreview).toHaveBeenCalledWith('paper-1', expect.objectContaining({ entry_price: '75', stop_price: '74' })));
@@ -137,11 +137,21 @@ describe('TradingPaperPanel', () => {
   it('fills a short position as a plain limit sell with its quantity and no protection (TVP-3.6)', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
     await screen.findByRole('switch', { name: 'Enable stop loss' });
-    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'sell', entry: 80, stop: 85, target: 70, quantity: 2 }));
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'sell', orderType: 'limit' as const, entry: 80, stop: 85, target: 70, quantity: 2 }));
     expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('80');
     expect(screen.getByRole('textbox', { name: 'Order quantity' })).toHaveValue('2');
     expect(screen.queryByRole('textbox', { name: 'Stop loss price' })).toBeNull();
-    expect(screen.getByText(/add them after it fills/)).toBeInTheDocument();
+    expect(screen.getByText(/opening a short is not available yet/)).toBeInTheDocument();
+  });
+
+  it('a market buy hotkey fills the ticket and asks for the stop the risk rule needs (TVP-7.4)', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await screen.findByRole('switch', { name: 'Enable stop loss' });
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'buy', orderType: 'market', entry: null, stop: null, target: null, quantity: null, source: 'hotkey' }));
+    expect(await screen.findByText(/Ticket filled from the trading hotkey. Set a stop loss/)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Limit price' })).toBeNull();
+    expect(paperApi.placeRiskOrder).not.toHaveBeenCalled();
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
   });
 
   it('shows the server rejection when a risk-sized order cannot be funded', async () => {

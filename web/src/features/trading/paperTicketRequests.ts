@@ -9,10 +9,15 @@ import { onDrawingActionRequest } from './drawings/drawingActions';
 export type PaperTicketPrefill = {
   instrumentId: string;
   side: 'buy' | 'sell';
-  entry: number;
+  /** A limit order at `entry` (position drawings, limit hotkeys) or a market order (TVP-7.4 hotkeys). */
+  orderType: 'market' | 'limit';
+  /** The limit price; null for a market order. */
+  entry: number | null;
   stop: number | null;
   target: number | null;
   quantity: number | null;
+  /** Where it came from, for the notice; a drawing's request when absent. */
+  source?: 'drawing' | 'hotkey';
 };
 
 const positive = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
@@ -22,8 +27,13 @@ export function parsePaperTicketRequest(payload: unknown): PaperTicketPrefill | 
   if (!payload || typeof payload !== 'object') return null;
   const value = payload as Record<string, unknown>;
   const entry = positive(value.entry);
-  if (typeof value.instrumentId !== 'string' || !value.instrumentId || (value.side !== 'buy' && value.side !== 'sell') || entry === null) return null;
-  return { instrumentId: value.instrumentId, side: value.side, entry, stop: positive(value.stop), target: positive(value.target), quantity: positive(value.quantity) };
+  const orderType = value.orderType === 'market' ? 'market' : 'limit';
+  if (typeof value.instrumentId !== 'string' || !value.instrumentId || (value.side !== 'buy' && value.side !== 'sell')) return null;
+  if (orderType === 'limit' && entry === null) return null;
+  return {
+    instrumentId: value.instrumentId, side: value.side, orderType, entry: orderType === 'market' ? null : entry,
+    stop: positive(value.stop), target: positive(value.target), quantity: positive(value.quantity),
+  };
 }
 
 /** A pre-fill the panel doesn't take within this long is dropped: it never fills a ticket much later. */
@@ -44,6 +54,28 @@ export function takePaperTicketPrefill(now = Date.now()): PaperTicketPrefill | n
   return taken && now - taken.at <= PREFILL_LIFETIME_MS ? taken.prefill : null;
 }
 
+let openPanels = 0;
+
+/** Whether a paper order ticket is on screen (the trading hotkeys act only then, TVP-7.4). */
+export function paperTicketOpen(): boolean {
+  return openPanels > 0;
+}
+
+/** The paper panel calls this while it is mounted. */
+export function usePaperTicketPresence(): void {
+  useEffect(() => {
+    openPanels += 1;
+    return () => {
+      openPanels -= 1;
+    };
+  }, []);
+}
+
+/** The pending pre-fill's source, without taking it. */
+function pendingSource(): PaperTicketPrefill['source'] {
+  return pending?.prefill.source;
+}
+
 export function onPaperTicketRequest(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -57,9 +89,11 @@ export function usePaperTicketRequests(openPaperPanel: () => void): void {
   });
   useEffect(() => onDrawingActionRequest('order-ticket', (payload) => {
     const prefill = parsePaperTicketRequest(payload);
-    if (!prefill) return;
-    requestPaperTicket(prefill);
-    open.current();
+    if (prefill) requestPaperTicket(prefill);
+  }), []);
+  // A drawing's request opens the paper panel; hotkeys only act while it is open, so they rearrange nothing.
+  useEffect(() => onPaperTicketRequest(() => {
+    if (pendingSource() !== 'hotkey') open.current();
   }), []);
 }
 
@@ -67,7 +101,7 @@ export function usePaperTicketRequests(openPaperPanel: () => void): void {
 export type PaperTicketForm = {
   setTicketTab: (tab: 'order') => void;
   setSide: (side: 'buy' | 'sell') => void;
-  setOrderType: (type: 'limit') => void;
+  setOrderType: (type: 'limit' | 'market') => void;
   /** A limit order's price (the panel's "Limit price" field). */
   setTriggerPrice: (value: string) => void;
   /** Only a stop-limit's second price; cleared. */
@@ -80,7 +114,7 @@ export type PaperTicketForm = {
 };
 
 /** How the panel will place this order: a risk-managed entry carries stop and target and sizes the quantity itself. */
-export type PaperTicketMode = { riskManaged: boolean; riskPercent: string };
+export type PaperTicketMode = { riskManaged: boolean; riskPercent: string; /** The open long position's quantity, if any. */ longQuantity?: number | null };
 
 /**
  * Fills the ticket from a pre-fill: a limit order at the entry. A risk-managed entry (a buy outside replay) also
@@ -96,27 +130,36 @@ export function applyPaperTicketPrefill(
   symbolOf: (instrumentId: string) => string = (id) => id,
 ): { kind: 'success' | 'error'; message: string } {
   if (prefill.instrumentId !== instrumentId) {
-    return { kind: 'error', message: `The drawing is on ${symbolOf(prefill.instrumentId)}; open that chart to trade it.` };
+    return { kind: 'error', message: `The order is for ${symbolOf(prefill.instrumentId)}; open that chart to trade it.` };
   }
   form.setTicketTab('order');
   form.setSide(prefill.side);
-  form.setOrderType('limit');
-  form.setTriggerPrice(String(prefill.entry));
+  form.setOrderType(prefill.orderType);
+  form.setTriggerPrice(prefill.entry === null ? '' : String(prefill.entry));
   form.setLimitPrice('');
   const protect = mode.riskManaged;
   form.setStopLossEnabled(protect && prefill.stop !== null);
   form.setStopLoss(protect && prefill.stop !== null ? String(prefill.stop) : '');
   form.setTakeProfitEnabled(protect && prefill.target !== null);
   form.setTakeProfit(protect && prefill.target !== null ? String(prefill.target) : '');
-  if (!protect && prefill.quantity !== null) form.setQuantity(String(Number(prefill.quantity.toPrecision(6))));
-  const detail = protect
-    ? `The account's ${mode.riskPercent}% risk rule sizes the quantity.`
-    : 'This order can\'t carry a stop and target: add them after it fills.';
-  return { kind: 'success', message: `Ticket filled from the position drawing. ${detail} Check it, then place the order.` };
+  // A sell's default quantity is the long position it closes (TradingView's default quantity for a reducing order).
+  const quantity = prefill.quantity ?? (prefill.side === 'sell' ? mode.longQuantity ?? null : null);
+  if (!protect && quantity !== null) form.setQuantity(String(Number(quantity.toPrecision(6))));
+  const detail = !protect
+    ? prefill.side === 'sell'
+      ? 'A sell closes or reduces a long position (opening a short is not available yet).'
+      : 'This order can\'t carry a stop and target: add them after it fills.'
+    : prefill.stop === null
+      ? `Set a stop loss: the account's ${mode.riskPercent}% risk rule sizes the quantity from it.`
+      : `The account's ${mode.riskPercent}% risk rule sizes the quantity.`;
+  const from = prefill.source === 'hotkey' ? 'Ticket filled from the trading hotkey.' : 'Ticket filled from the position drawing.';
+  return { kind: 'success', message: `${from} ${detail} Check it, then place the order.` };
 }
 
 /** Panel side: calls `apply` with each pre-fill, also one left before the panel mounted. */
 export function usePaperTicketPrefill(apply: (prefill: PaperTicketPrefill) => void): void {
+  // The ticket that takes pre-fills is on screen while this is mounted.
+  usePaperTicketPresence();
   const handler = useRef(apply);
   useEffect(() => {
     handler.current = apply;

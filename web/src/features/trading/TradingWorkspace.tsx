@@ -14,6 +14,8 @@ import type { TradingSideTab } from './TradingSidePanel';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
+import { TradingOrderToastLayer } from './TradingOrderToastLayer';
+import { PaperOrderNotificationsWatch } from './PaperOrderNotificationsWatch';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { TradingSessionTabs } from './TradingSessionTabs';
 import { tradingApi } from './tradingApi';
@@ -611,6 +613,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         selectQueryOnOpen={!symbolSearchTyped}
       />
       <TradingAlertToastLayer />
+      <TradingOrderToastLayer />
+      <PaperOrderNotificationsWatch accountId={paperAccountId} />
 
       <div className="trading-body">
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />

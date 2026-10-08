@@ -12,7 +12,7 @@ function form(): PaperTicketForm & Record<string, ReturnType<typeof vi.fn>> {
 describe('order ticket from a position drawing (TVP-3.6)', () => {
   it('a risk-managed buy: limit price at the entry, stop and target on, quantity left to the risk rule', () => {
     const fields = form();
-    const prefill = { instrumentId: 'crypto:BTC', side: 'buy' as const, entry: 100, stop: 95, target: 110, quantity: 4 };
+    const prefill = { instrumentId: 'crypto:BTC', side: 'buy' as const, orderType: 'limit' as const, entry: 100, stop: 95, target: 110, quantity: 4 };
     expect(applyPaperTicketPrefill(prefill, 'crypto:BTC', fields, { riskManaged: true, riskPercent: '0.35' }).message).toContain('0.35% risk rule');
     // The panel's "Limit price" field (and the order's limit_price) is the trigger price for a limit order.
     expect(fields.setTriggerPrice).toHaveBeenCalledWith('100');
@@ -25,8 +25,8 @@ describe('order ticket from a position drawing (TVP-3.6)', () => {
 
   it('a sell (or any replay order) gets the quantity and no protection it could not send', () => {
     const fields = form();
-    const prefill = { instrumentId: 'crypto:BTC', side: 'sell' as const, entry: 100, stop: 105, target: 90, quantity: 1.234567891 };
-    expect(applyPaperTicketPrefill(prefill, 'crypto:BTC', fields, { riskManaged: false, riskPercent: '0.35' }).message).toContain('add them after it fills');
+    const prefill = { instrumentId: 'crypto:BTC', side: 'sell' as const, orderType: 'limit' as const, entry: 100, stop: 105, target: 90, quantity: 1.234567891 };
+    expect(applyPaperTicketPrefill(prefill, 'crypto:BTC', fields, { riskManaged: false, riskPercent: '0.35' }).message).toContain('opening a short is not available yet');
     expect(fields.setSide).toHaveBeenCalledWith('sell');
     expect(fields.setTriggerPrice).toHaveBeenCalledWith('100');
     expect(fields.setStopLossEnabled).toHaveBeenCalledWith(false);
@@ -34,19 +34,19 @@ describe('order ticket from a position drawing (TVP-3.6)', () => {
     expect(fields.setQuantity).toHaveBeenCalledWith('1.23457');
     const other = form();
     expect(applyPaperTicketPrefill(prefill, 'crypto:ETH', other, { riskManaged: false, riskPercent: '1' }, () => 'BTC'))
-      .toEqual({ kind: 'error', message: 'The drawing is on BTC; open that chart to trade it.' });
+      .toEqual({ kind: 'error', message: 'The order is for BTC; open that chart to trade it.' });
     expect(other.setSide).not.toHaveBeenCalled();
   });
 
   it('drops a pre-fill nobody took in time', () => {
-    requestPaperTicket({ instrumentId: 'crypto:BTC', side: 'buy', entry: 100, stop: null, target: null, quantity: null }, 0);
+    requestPaperTicket({ instrumentId: 'crypto:BTC', side: 'buy', orderType: 'limit' as const, entry: 100, stop: null, target: null, quantity: null }, 0);
     expect(takePaperTicketPrefill(PREFILL_LIFETIME_MS + 1)).toBeNull();
   });
 
   it('the workspace opens the paper panel and leaves the pre-fill for it', () => {
     const open = vi.fn();
     const hook = renderHook(() => usePaperTicketRequests(open));
-    dispatchDrawingActionRequest({ type: 'order-ticket', payload: { instrumentId: 'crypto:BTC', side: 'buy', entry: 100, stop: 95, target: 110, quantity: 4 } });
+    dispatchDrawingActionRequest({ type: 'order-ticket', payload: { instrumentId: 'crypto:BTC', side: 'buy', orderType: 'limit' as const, entry: 100, stop: 95, target: 110, quantity: 4 } });
     expect(open).toHaveBeenCalledTimes(1);
     expect(takePaperTicketPrefill()).toMatchObject({ entry: 100, quantity: 4 });
     expect(takePaperTicketPrefill()).toBeNull();
