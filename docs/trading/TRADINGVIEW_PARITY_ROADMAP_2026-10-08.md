@@ -453,6 +453,7 @@ The rest of wave 1 (0.1, 0.2 first batch, 1.1, 5.1–5.3, 7.1, 8.1 speed and syn
 - **Goal:** triggered alerts leave the process reliably, starting with webhooks (Discord, Slack, Telegram bots, automation tools).
 - **Design:**
   - **Outbox:** a delivery table (`omnix_trading_notification_deliveries`) with one row per trigger × channel: status, attempts, next attempt time, last error and an idempotency key. A delivery monitor sends with retries and exponential backoff. Triggers stay authoritative, and delivery is at-least-once.
+  - **Storage:** webhook URL and secret come from the provider secret store by the alert's key (TVP-1.2). That store is DPAPI-encrypted, which ties webhooks to one Windows user and host; decide before deploying elsewhere whether to move alert credentials to a portable encrypted store.
   - **Webhook rules:**
     - HTTPS only;
     - destinations checked with `app.security.url_policy` after DNS resolution, rejecting private, loopback and link-local addresses unless `OMNIX_ALLOWED_PRIVATE_NETWORKS` allows them;
@@ -516,7 +517,7 @@ The rest of wave 1 (0.1, 0.2 first batch, 1.1, 5.1–5.3, 7.1, 8.1 speed and syn
     - The target is a value, a second source, or a channel of two values or sources.
     - Moving operators take an amount and a bar count.
   - **Child table:** conditions live in `omnix_trading_alert_conditions` (ordered, at most 5 per alert).
-  - **Channels in the same migration:** `notification_channels` accepts `webhook`, `email` and `push` as well as `app`, `toast` and `sound`. A per-alert channel settings column holds the webhook destination (the secret itself goes through `provider_secret_store`), email recipient and sound choice. The API rejects a channel whose sender isn't deployed yet, so TVP-0.5a–c each switch theirs on without another migration.
+  - **Channels in the same migration:** `notification_channels` accepts `webhook`, `email` and `push` as well as `app`, `toast` and `sound`. Message, channels and delivery settings live in their own `notification_settings` column, so editing them doesn't reset trigger state. A webhook's URL and signing secret are credentials: both are stored together in the provider secret store under a versioned key, and the alert row keeps only that key, a masked URL and `has_secret`. The API rejects a channel whose sender isn't deployed yet, so TVP-0.5a–c each switch theirs on without another migration.
   - **Migration:** existing alerts become one-condition rows, following the `0036_trading_trendline_alerts.sql` constraint-replacement precedent. The old `condition_type` column stays readable until a later cleanup.
 - **Tests:** a truth table per operator, including touches and gaps across a boundary; migration of every existing condition type and channel list; channel settings validation; round-trip through the API.
 - **Size:** M.
