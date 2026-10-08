@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CanonicalInstrument } from './tradingTypes';
+import * as watchlistModel from './tradingWatchlistModel';
 import {
   MAX_WATCHLIST_IMPORT_SYMBOLS,
   WatchlistImportError,
@@ -9,6 +10,17 @@ import {
   importWatchlistText,
   parseWatchlistText,
 } from './tradingWatchlistTransfer';
+
+// Wrap the list builders so a test can count how often the import rebuilds a list.
+vi.mock('./tradingWatchlistModel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tradingWatchlistModel')>();
+  return {
+    ...actual,
+    watchlistPayloadFromItems: vi.fn(actual.watchlistPayloadFromItems),
+    addWatchlistSymbols: vi.fn(actual.addWatchlistSymbols),
+    addWatchlistSection: vi.fn(actual.addWatchlistSection),
+  };
+});
 
 function instrument(instrumentId: string, venue: string, displaySymbol: string, venueSymbol = displaySymbol, type = 'equity'): CanonicalInstrument {
   return {
@@ -120,9 +132,16 @@ describe('watchlist text files', () => {
   it('builds a long list in one pass', async () => {
     const catalog = Array.from({ length: MAX_WATCHLIST_IMPORT_SYMBOLS }, (_, index) => instrument(`equity:NASDAQ:S${index}`, 'NASDAQ', `S${index}`));
     const text = catalog.map((item) => `NASDAQ:${item.display_symbol}`).join(',');
-    const started = performance.now();
-    const result = await importWatchlistText('Long', text, catalog, vi.fn(async () => []));
-    expect(result.payload.items).toHaveLength(MAX_WATCHLIST_IMPORT_SYMBOLS);
-    expect(performance.now() - started).toBeLessThan(1_000);
+    vi.mocked(watchlistModel.watchlistPayloadFromItems).mockClear();
+    vi.mocked(watchlistModel.addWatchlistSymbols).mockClear();
+    vi.mocked(watchlistModel.addWatchlistSection).mockClear();
+    const search = vi.fn(async () => []);
+    const result = await importWatchlistText('Long', `###Top,${text}`, catalog, search);
+    expect(result.payload.items).toHaveLength(MAX_WATCHLIST_IMPORT_SYMBOLS + 1);
+    // One build of the whole list, never a rebuild per symbol or section.
+    expect(watchlistModel.watchlistPayloadFromItems).toHaveBeenCalledTimes(1);
+    expect(watchlistModel.addWatchlistSymbols).not.toHaveBeenCalled();
+    expect(watchlistModel.addWatchlistSection).not.toHaveBeenCalled();
+    expect(search).not.toHaveBeenCalled();
   });
 });
