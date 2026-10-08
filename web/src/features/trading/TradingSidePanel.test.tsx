@@ -41,6 +41,7 @@ describe('TradingSidePanel deferred panels', () => {
     expect(screen.getByText('Watchlist ready')).toBeInTheDocument();
     rerender(<TradingSidePanel {...props} selectedTab="pine" />);
     expect(await screen.findByText('Pine editor ready')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Omnix Scripts editor' })).toBeInTheDocument();
     expect(imports.pine).toBe(1);
   });
 });

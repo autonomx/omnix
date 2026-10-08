@@ -30,20 +30,20 @@ export function TradingPinePanel({
   };
 
   if (!selected) {
-    return <div className="trading-pine-panel trading-pine-empty">Add an indicator to view its Pine Script.</div>;
+    return <div className="trading-pine-panel trading-pine-empty">Add an indicator to view its Pine-compatible script source.</div>;
   }
 
   return (
-    <div role="group" className="trading-pine-panel" aria-label="Pine Editor">
+    <div role="group" className="trading-pine-panel" aria-label="Omnix Scripts editor">
       <header className="trading-pine-header">
-        <div className="trading-pine-heading"><span className="trading-pine-glyph" aria-hidden="true">{'{}'}</span><strong>Pine Editor</strong></div>
+        <div className="trading-pine-heading"><span className="trading-pine-glyph" aria-hidden="true">{'{}'}</span><strong>Omnix Scripts</strong></div>
         <span className="trading-pine-readonly">Read-only</span>
       </header>
       <div className="trading-pine-toolbar">
         <label>
           <span>Indicator</span>
           <select
-            aria-label="Pine indicator"
+            aria-label="Script indicator"
             value={selected.id}
             onChange={(event) => onActiveIndicatorChange(event.target.value as CoreIndicatorId)}
           >
@@ -54,7 +54,7 @@ export function TradingPinePanel({
       </div>
       <div className="trading-pine-script-title">
         <strong>{indicatorPineTitle(selected.id)}</strong>
-        <span>{selected.id.toUpperCase()} · {selected.period} · Pine v6</span>
+        <span>{selected.id.toUpperCase()} · {selected.period} · Pine-compatible v6</span>
       </div>
       <div className="trading-pine-notice"><span aria-hidden="true">!</span><strong>This script is read-only.</strong><span>Use Copy script to create an editable version.</span></div>
       <div className="trading-pine-code" role="textbox" aria-label="Script source (Pine-compatible)" aria-readonly="true" tabIndex={0}>
