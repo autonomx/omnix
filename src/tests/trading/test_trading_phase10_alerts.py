@@ -56,6 +56,9 @@ class FakeAlertRepository:
         self.alerts[alert.alert_id] = alert
         return alert
 
+    def get(self, alert_id: str):
+        return self.alerts.get(alert_id)
+
     def update(self, alert_id: str, request: TradingAlertUpdate, expected_revision: int):
         current = self.alerts[alert_id]
         if current.revision != expected_revision:

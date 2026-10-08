@@ -320,6 +320,60 @@ def test_legacy_requests_derive_conditions_and_reject_disagreeing_ones() -> None
         _create(condition_type="price_above", threshold="100", conditions=[{"source": CLOSE, "operator": "less_than", "target": value(1)}])
 
 
+@pytest.mark.parametrize(
+    ("source", "extra", "message"),
+    [
+        ({"kind": "indicator", "indicator_id": "sma", "inputs": {"period": 1000}, "output": "sma:1000"}, {}, "at most 500"),
+        ({"kind": "indicator", "indicator_id": "stochastic-rsi", "inputs": {"period": 500, "fast_period": 3, "signal_period": 3}, "output": "stochastic-rsi:k"}, {}, "bars of history"),
+        ({"kind": "indicator", "indicator_id": "macd", "inputs": {"fast_period": 500, "slow_period": 501, "signal_period": 9}, "output": "macd:500:501:line"}, {}, "at most 500"),
+        ({"kind": "indicator", "indicator_id": "sma", "inputs": {"period": 500}, "output": "sma:500"}, {"operator": "moving_up", "amount": "1", "bars": 500}, "bars of history"),
+        ({"kind": "change_percent", "lookback_bars": 500}, {"operator": "moving_up", "amount": "1", "bars": 500}, "bars of history"),
+    ],
+)
+def test_conditions_the_monitor_could_never_evaluate_are_rejected(source, extra, message) -> None:
+    condition = {"source": source, "operator": "greater_than", "target": value(0), **extra}
+    if "bars" in extra:
+        condition.pop("target")
+    with pytest.raises(ValidationError, match=message):
+        _create(conditions=[condition])
+
+
+def test_an_output_without_any_value_is_rejected(monkeypatch) -> None:
+    from app.apps.trading import alerts_evaluation
+
+    monkeypatch.setattr(alerts_evaluation, "indicator_output_profile", lambda source: (("sma:5", None),))
+    with pytest.raises(ValidationError, match="never has a value"):
+        _create(conditions=[{"source": {"kind": "indicator", "indicator_id": "sma", "inputs": {"period": 5}, "output": "sma:5"}, "operator": "greater_than", "target": value(0)}])
+
+
+def test_the_largest_accepted_conditions_fit_one_history_fetch() -> None:
+    created = _create(conditions=[{"source": {"kind": "indicator", "indicator_id": "sma", "inputs": {"period": 500}, "output": "sma:500"}, "operator": "crossing_up", "target": value(0)}])
+    assert required_bars(created.conditions) + 2 <= 1000
+
+
+def test_only_bar_close_alerts_wait_for_closed_bars() -> None:
+    for frequency in ("once", "every_time", "once_per_bar", "once_per_minute"):
+        request = _create(condition_type="price_above", threshold="1", frequency=frequency, evaluation_policy={"allow_partial_bars": False})
+        assert request.evaluation_policy.allow_partial_bars is True
+    request = _create(condition_type="price_above", threshold="1", frequency="once_per_bar_close", evaluation_policy={"allow_partial_bars": True})
+    assert request.evaluation_policy.allow_partial_bars is False
+    # Stored alerts keep what they have.
+    stored = TradingAlert(alert_id="s", instrument_id="crypto:X:Y", condition_type="price_above", threshold=D(1), evaluation_policy={"allow_partial_bars": False})
+    assert stored.evaluation_policy.allow_partial_bars is False
+
+
+def test_stored_alerts_that_break_write_rules_still_read() -> None:
+    alert = TradingAlert(
+        alert_id="old",
+        instrument_id="crypto:X:Y",
+        condition_type="indicator_above",
+        threshold=D(1),
+        parameters={"delivery": {"webhook": {"url": "http://169.254.169.254/x"}}},
+        evaluation_policy={"formula_version": "omnix-indicators-v1"},
+    )
+    assert alert.conditions == []  # no indicator_id: never fires
+
+
 def test_frequency_comes_from_trigger_policy_when_omitted_and_is_mirrored() -> None:
     assert _create(condition_type="price_above", threshold="1").frequency == "every_time"
     legacy = _create(condition_type="price_above", threshold="1", parameters={"trigger_policy": "once_per_bar"})
@@ -337,8 +391,10 @@ def test_channels_and_delivery_settings() -> None:
     assert parameters.delivery.webhook.has_secret is False
     with pytest.raises(ValidationError):
         TradingAlertParameters(notification_channels=["fax"])
+    # The URL policy is a write rule: a stored URL stays readable.
+    assert TradingAlertParameters(delivery={"webhook": {"url": "file:///etc/passwd"}}).delivery.webhook.url == "file:///etc/passwd"
     with pytest.raises(ValidationError, match="not allowed"):
-        TradingAlertParameters(delivery={"webhook": {"url": "file:///etc/passwd"}})
+        _create(condition_type="price_above", threshold="1", parameters={"delivery": {"webhook": {"url": "file:///etc/passwd"}}})
     with pytest.raises(ValidationError):
         TradingAlertParameters(delivery={"email": {"to": "not-an-address"}})
     request = _create(condition_type="price_above", threshold="1", webhook_secret="s3cret")
@@ -497,14 +553,14 @@ def test_history_limit_rule() -> None:
     assert required_bars([moving]) == 30
 
 
-def _outcome(bar_minute: int, close: str = "1") -> AlertConditionOutcome:
+def _outcome(bar_minute: int, close: str = "1", final: bool = False) -> AlertConditionOutcome:
     from app.apps.trading.alerts_evaluation import ConditionObservation
 
     return AlertConditionOutcome(
         met=True,
         bar_start=START + timedelta(minutes=bar_minute),
         bar_end=START + timedelta(minutes=bar_minute + 1),
-        bar_is_final=False,
+        bar_is_final=final,
         close=D(close),
         volume=D(0),
         observations=(ConditionObservation(0, "greater_than", True, D(close)),),
@@ -512,8 +568,8 @@ def _outcome(bar_minute: int, close: str = "1") -> AlertConditionOutcome:
 
 
 def test_trigger_keys_follow_the_frequency() -> None:
-    def key(frequency, minute, close="1", revision=1):
-        return alert_trigger_key("a", revision, frequency, _outcome(minute, close))
+    def key(frequency, minute, close="1", revision=1, final=False):
+        return alert_trigger_key("a", revision, frequency, _outcome(minute, close, final))
 
     assert key("once", 0) == key("once", 5, "2")
     assert key("once", 0) != key("once", 0, revision=2)
@@ -522,7 +578,11 @@ def test_trigger_keys_follow_the_frequency() -> None:
         assert key(per_bar, 0) != key(per_bar, 1)
     for value_based in ("every_time", "once_per_minute"):
         assert key(value_based, 0) == key(value_based, 0)
-        assert key(value_based, 0) != key(value_based, 0, "2")
+        assert key(value_based, 0) != key(value_based, 0, "2")  # forming bar: one per value
+        # A closed bar is keyed by the bar alone: a revised or re-served bar cannot fire twice.
+        assert key(value_based, 0, final=True) == key(value_based, 0, "2", final=True)
+        assert key(value_based, 0, final=True) != key(value_based, 1, final=True)
+        assert key(value_based, 0, final=True) != key(value_based, 0)
     assert len({key(frequency, 0) for frequency in ("once", "once_per_bar", "every_time")}) == 3
 
 
@@ -539,3 +599,15 @@ def test_observation_payload_is_json() -> None:
     outcome = evaluate_conditions([spec(source=CLOSE, operator="crossing_up", target=value(100))], bars_from([99, 101]), final_only=False)
     payload = json.loads(json.dumps(outcome.observation_payload()))
     assert payload == [{"position": 0, "operator": "crossing_up", "met": True, "source": "101", "source_previous": "99", "target": "100", "target_previous": "100"}]
+
+
+def test_sources_and_targets_resolve_by_kind() -> None:
+    from app.apps.trading.alert_conditions import ChangePercentSource, ChannelTarget, PriceSource, SourceTarget
+
+    assert isinstance(spec(source={"kind": "change_percent"}, operator="greater_than", target=value(1)).source, ChangePercentSource)
+    assert isinstance(spec(source={"kind": "price"}, operator="greater_than", target=value(1)).source, PriceSource)
+    target = spec(source=CLOSE, operator="inside_channel", target={"kind": "channel", "upper": value(2), "lower": {"kind": "source", "source": CLOSE}}).target
+    assert isinstance(target, ChannelTarget) and isinstance(target.lower, SourceTarget)
+    for bad in ({"kind": "price", "lookback_bars": 3}, {"kind": "volume"}):
+        with pytest.raises(ValidationError):
+            spec(source=bad, operator="greater_than", target=value(1))

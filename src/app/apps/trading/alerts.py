@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, ClassVar, Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
@@ -27,8 +28,10 @@ from .alert_conditions import (
     legacy_conditions,
     validate_conditions_against_registry,
 )
-from .alerts_evaluation import AlertConditionOutcome, ConditionObservation, operator_met
+from .alerts_evaluation import AlertConditionOutcome, ConditionObservation, operator_met, validate_conditions_can_fire
 from .indicators.engine import CORE_INDICATOR_FORMULA_VERSION
+
+logger = logging.getLogger(__name__)
 
 
 AlertCondition = Literal[
@@ -72,17 +75,11 @@ AlertNotificationChannel = Literal["app", "toast", "sound", "webhook", "email", 
 class AlertWebhookSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # The outbound URL policy is checked on writes only (_AlertWrite), so a
+    # stored URL that a later policy rejects can still be read and removed.
     url: str = Field(min_length=1, max_length=2000)
     # Read-only: the server sets it from the protected secret store.
     has_secret: bool = False
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, value: str) -> str:
-        try:
-            return check_outbound_url(value.strip())
-        except UrlPolicyError as exc:
-            raise ValueError(f"webhook url is not allowed: {exc}") from exc
 
 
 class AlertEmailSettings(BaseModel):
@@ -145,10 +142,20 @@ class TradingAlertEvaluationPolicy(BaseModel):
     formula_version: str = CORE_INDICATOR_FORMULA_VERSION
 
 
+# Settings that say how an alert notifies, not when it fires. They are stored
+# apart from condition_parameters (notification_settings), so editing them
+# keeps the alert's trigger history.
+NOTIFICATION_PARAMETER_FIELDS = ("message", "notification_channels", "delivery")
+
+
 class _AlertContract(BaseModel):
+    """Fields shared by stored alerts and requests.
+
+    Validators here only normalise: reading a stored alert must never fail
+    because a write rule changed. Write rules live in ``_AlertWrite``.
+    """
+
     model_config = ConfigDict(extra="forbid")
-    # Requests must not send conditions that disagree with a legacy condition_type.
-    _require_legacy_agreement: ClassVar[bool] = False
 
     instrument_id: str = Field(min_length=3, max_length=200)
     binding_id: str | None = Field(default=None, max_length=240)
@@ -164,30 +171,72 @@ class _AlertContract(BaseModel):
     expires_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_condition_contract(self):
+    def normalize_contract(self):
         if "frequency" not in self.model_fields_set:
             self.frequency = self.parameters.trigger_policy
         self.parameters.trigger_policy = self.frequency
+        if self.condition_type != "conditions" and not self.conditions:
+            try:
+                self.conditions = legacy_conditions(self.condition_type, self.threshold, self.parameters)
+            except (ValueError, ValidationError):
+                # A stored legacy alert that cannot be described has no conditions and never fires.
+                self.conditions = []
+        return self
+
+
+class TradingAlert(_AlertContract):
+    alert_id: str
+    enabled: bool = True
+    last_observed_price: Decimal | None = None
+    last_observed_value: Decimal | None = None
+    last_triggered_at: datetime | None = None
+    revision: int = Field(default=1, ge=1)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    def is_expired(self, at: datetime | None = None) -> bool:
+        if self.expires_at is None:
+            return False
+        moment = at or datetime.now(timezone.utc)
+        return self.expires_at <= moment
+
+
+class _AlertWrite(_AlertContract):
+    # Write-only; stored in the protected secret store, never returned.
+    webhook_secret: SecretStr | None = Field(default=None, max_length=500, exclude=True)
+
+    @model_validator(mode="after")
+    def validate_write(self):
         if self.evaluation_policy.formula_version != CORE_INDICATOR_FORMULA_VERSION:
             raise ValueError(
                 f"unsupported alert formula version: {self.evaluation_policy.formula_version}"
             )
         if self.expires_at is not None and self.expires_at.tzinfo is None:
             raise ValueError("expires_at must include a timezone")
+        webhook = self.parameters.delivery.webhook
+        if webhook is not None:
+            try:
+                webhook.url = check_outbound_url(webhook.url.strip())
+            except UrlPolicyError as exc:
+                raise ValueError(f"webhook url is not allowed: {exc}") from exc
         if self.condition_type == "conditions":
             if not self.conditions:
                 raise ValueError("condition_type 'conditions' needs one to five conditions")
             if self.threshold != 0:
                 raise ValueError("alerts described by conditions use a zero threshold")
-            return self
-        self._validate_legacy_fields()
-        derived = legacy_conditions(self.condition_type, self.threshold, self.parameters)
-        if not self.conditions:
+        else:
+            self._validate_legacy_fields()
+            derived = legacy_conditions(self.condition_type, self.threshold, self.parameters)
+            if "conditions" in self.model_fields_set and self.conditions and self.conditions != derived:
+                raise ValueError(
+                    "conditions disagree with the legacy condition_type; send condition_type 'conditions'"
+                )
             self.conditions = derived
-        elif self._require_legacy_agreement and self.conditions != derived:
-            raise ValueError(
-                "conditions disagree with the legacy condition_type; send condition_type 'conditions'"
-            )
+        validate_conditions_against_registry(self.conditions)
+        validate_conditions_can_fire(self.conditions)
+        # Only "once per bar close" waits for closed bars; every other frequency
+        # is intrabar, whatever an older client sends.
+        self.evaluation_policy.allow_partial_bars = self.frequency != "once_per_bar_close"
         return self
 
     def _validate_legacy_fields(self) -> None:
@@ -215,35 +264,6 @@ class _AlertContract(BaseModel):
             }[self.condition_type]
             if self.parameters.trendline_mode not in (None, expected_mode):
                 raise ValueError("trendline_mode must match condition_type")
-
-
-class TradingAlert(_AlertContract):
-    alert_id: str
-    enabled: bool = True
-    last_observed_price: Decimal | None = None
-    last_observed_value: Decimal | None = None
-    last_triggered_at: datetime | None = None
-    revision: int = Field(default=1, ge=1)
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-    def is_expired(self, at: datetime | None = None) -> bool:
-        if self.expires_at is None:
-            return False
-        moment = at or datetime.now(timezone.utc)
-        return self.expires_at <= moment
-
-
-class _AlertWrite(_AlertContract):
-    _require_legacy_agreement: ClassVar[bool] = True
-
-    # Write-only; stored in the protected secret store, never returned.
-    webhook_secret: SecretStr | None = Field(default=None, max_length=500, exclude=True)
-
-    @model_validator(mode="after")
-    def validate_against_registry(self):
-        validate_conditions_against_registry(self.conditions)
-        return self
 
 
 class TradingAlertCreate(_AlertWrite):
@@ -349,15 +369,20 @@ def alert_trigger_key(
     """The idempotency key of a trigger.
 
     ``once`` has one key per alert revision; the per-bar frequencies one per
-    bar; ``every_time`` and ``once_per_minute`` one per bar and observed values.
-    Keys live in PostgreSQL, so a restart cannot trigger the same thing twice.
+    bar. ``every_time`` and ``once_per_minute`` have one per closed bar, and
+    on a forming bar one per bar and observed values, so a revised or
+    re-served closed bar (provider failover) cannot trigger twice. Keys live
+    in PostgreSQL, so a restart cannot trigger the same thing twice either.
     """
     parts = [alert_id, str(revision), frequency]
     if frequency != "once":
         parts.append(outcome.bar_start.astimezone(timezone.utc).isoformat())
     if frequency in {"every_time", "once_per_minute"}:
-        parts.append(outcome.bar_end.astimezone(timezone.utc).isoformat())
-        parts.extend(json.dumps(observation.payload(), sort_keys=True) for observation in outcome.observations)
+        if outcome.bar_is_final:
+            parts.append("closed")
+        else:
+            parts.append("forming")
+            parts.extend(json.dumps(observation.payload(), sort_keys=True) for observation in outcome.observations)
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -429,14 +454,22 @@ def _condition(row) -> AlertConditionSpec:
     )
 
 
+def _split_parameters(parameters: TradingAlertParameters) -> tuple[str, str]:
+    """(condition_parameters, notification_settings) JSON for storage."""
+    data = parameters.model_dump(mode="json")
+    notification = {name: data.pop(name) for name in NOTIFICATION_PARAMETER_FIELDS}
+    return json.dumps(data), json.dumps(notification)
+
+
 def _alert(row, conditions: list[AlertConditionSpec] | None = None) -> TradingAlert:
+    # Rows are trusted on read: only normalising validators run (see _AlertContract).
     return TradingAlert(
         alert_id=str(row[0]),
         instrument_id=str(row[1]),
         binding_id=str(row[2]) if row[2] is not None else None,
         condition_type=cast(Any, str(row[3])),
         threshold=Decimal(row[4]),
-        parameters=cast(Any, dict(row[5] or {})),
+        parameters=cast(Any, {**dict(row[5] or {}), **dict(row[17] or {})}),
         evaluation_policy=cast(Any, dict(row[6] or {})),
         enabled=bool(row[7]),
         cooldown_seconds=int(row[8]),
@@ -474,7 +507,7 @@ _ALERT_COLUMNS = """
     alert_id, instrument_id, binding_id, condition_type, threshold,
     condition_parameters, evaluation_policy, enabled, cooldown_seconds,
     expires_at, last_observed_price, last_observed_value, last_triggered_at,
-    revision, created_at, updated_at, frequency
+    revision, created_at, updated_at, frequency, notification_settings
 """
 _TRIGGER_COLUMNS = """
     trigger_id, alert_id, instrument_id, binding_id, provider,
@@ -515,7 +548,29 @@ class TradingAlertRepository:
 
     def _alerts(self, connection, rows) -> list[TradingAlert]:
         conditions = self._conditions(connection, (str(row[0]) for row in rows))
-        return [_alert(row, conditions.get(str(row[0]))) for row in rows]
+        alerts: list[TradingAlert] = []
+        for row in rows:
+            try:
+                alerts.append(_alert(row, conditions.get(str(row[0]))))
+            except ValidationError:
+                # One unreadable row must not hide every other alert or stop the monitor.
+                logger.warning("trading_alert_unreadable alert_id=%s", row[0])
+        return alerts
+
+    def get(self, alert_id: str) -> TradingAlert | None:
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                f"""
+                SELECT {_ALERT_COLUMNS}
+                  FROM omnix_trading_alerts
+                 WHERE workspace_id = %s AND alert_id = %s
+                """,
+                (self.context.workspace_id, alert_id),
+            ).fetchone()
+            if row is None:
+                return None
+            alerts = self._alerts(uow.connection, [row])
+            return alerts[0] if alerts else None
 
     def _write_conditions(self, connection, alert_id: str, conditions: list[AlertConditionSpec]) -> None:
         connection.execute(
@@ -557,13 +612,18 @@ class TradingAlertRepository:
 
     def create(self, request: TradingAlertCreate) -> TradingAlert:
         with self.uow_factory() as uow:
+            if uow.connection.execute(
+                "SELECT 1 FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
+                (self.context.workspace_id, request.alert_id),
+            ).fetchone() is not None:
+                raise RevisionConflict(f"Trading alert already exists: {request.alert_id}")
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_alerts (
                     workspace_id, alert_id, owner_user_id, instrument_id, binding_id,
                     condition_type, threshold, condition_parameters, evaluation_policy,
-                    cooldown_seconds, expires_at, frequency
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
+                    cooldown_seconds, expires_at, frequency, notification_settings
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s::jsonb)
                 RETURNING {_ALERT_COLUMNS}
                 """,
                 (
@@ -574,11 +634,12 @@ class TradingAlertRepository:
                     request.binding_id,
                     request.condition_type,
                     request.threshold,
-                    request.parameters.model_dump_json(),
+                    _split_parameters(request.parameters)[0],
                     request.evaluation_policy.model_dump_json(),
                     request.cooldown_seconds,
                     request.expires_at,
                     request.frequency,
+                    _split_parameters(request.parameters)[1],
                 ),
             ).fetchone()
             self._write_conditions(uow.connection, request.alert_id, request.conditions)
@@ -600,6 +661,7 @@ class TradingAlertRepository:
                        threshold = %s, condition_parameters = %s::jsonb,
                        evaluation_policy = %s::jsonb, enabled = %s,
                        cooldown_seconds = %s, expires_at = %s, frequency = %s,
+                       notification_settings = %s::jsonb,
                        last_observed_price = NULL, last_observed_value = NULL,
                        last_triggered_at = NULL, revision = revision + 1,
                        updated_at = CURRENT_TIMESTAMP
@@ -611,12 +673,13 @@ class TradingAlertRepository:
                     request.binding_id,
                     request.condition_type,
                     request.threshold,
-                    request.parameters.model_dump_json(),
+                    _split_parameters(request.parameters)[0],
                     request.evaluation_policy.model_dump_json(),
                     request.enabled,
                     request.cooldown_seconds,
                     request.expires_at,
                     request.frequency,
+                    _split_parameters(request.parameters)[1],
                     self.context.workspace_id,
                     alert_id,
                     expected_revision,
@@ -706,6 +769,8 @@ class TradingAlertRepository:
                     continue
                 if alert.evaluation_policy.interval != evaluation.interval:
                     continue
+                if alert.frequency in {"once_per_bar", "once_per_bar_close"}:
+                    continue  # a pushed price carries no bar
                 outcome = pushed_price_outcome(alert, evaluation)
                 if outcome is None:
                     continue

@@ -11,8 +11,15 @@
 --   they have always had; condition_type stays readable.
 -- * condition_type accepts 'conditions' for alerts described only by their
 --   conditions (threshold 0).
--- * Channel settings (webhook, email, sound) live in condition_parameters
---   JSON, so they need no column; webhook secrets are kept out of PostgreSQL.
+-- * notification_settings holds how an alert notifies (message, channels,
+--   and webhook/email/sound settings), apart from condition_parameters, so
+--   editing it keeps the alert's trigger history. Webhook secrets are kept
+--   out of PostgreSQL.
+-- * allow_partial_bars follows the frequency: only once_per_bar_close waits
+--   for closed bars. Clients always sent false, which made every frequency
+--   bar-close only.
+-- * Legacy alerts that get their condition here count as edited now, so a
+--   bar that closed before this migration cannot trigger them.
 -- * The lifecycle-history trigger from 0027 now acts only on revisioned
 --   edits. It also matched the evaluator's own state update, so the
 --   observed value and the last trigger time were never kept.
@@ -43,6 +50,18 @@ ALTER TABLE omnix_trading_alerts
     ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT 'every_time';
 
 ALTER TABLE omnix_trading_alerts
+    ADD COLUMN IF NOT EXISTS notification_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+UPDATE omnix_trading_alerts
+   SET notification_settings = notification_settings || jsonb_strip_nulls(jsonb_build_object(
+           'message', condition_parameters->'message',
+           'notification_channels', condition_parameters->'notification_channels',
+           'delivery', condition_parameters->'delivery'
+       )),
+       condition_parameters = condition_parameters - 'message' - 'notification_channels' - 'delivery'
+ WHERE condition_parameters ?| ARRAY['message', 'notification_channels', 'delivery'];
+
+ALTER TABLE omnix_trading_alerts
     DROP CONSTRAINT IF EXISTS omnix_trading_alerts_frequency_check;
 
 ALTER TABLE omnix_trading_alerts
@@ -66,6 +85,12 @@ UPDATE omnix_trading_alerts
        cooldown_seconds = 0
  WHERE frequency = 'every_time'
    AND condition_parameters->>'trigger_policy' = 'once_per_bar';
+
+UPDATE omnix_trading_alerts
+   SET evaluation_policy = jsonb_set(
+           evaluation_policy, '{allow_partial_bars}', to_jsonb(frequency <> 'once_per_bar_close'), true
+       )
+ WHERE (evaluation_policy->'allow_partial_bars') IS DISTINCT FROM to_jsonb(frequency <> 'once_per_bar_close');
 
 ALTER TABLE omnix_trading_alerts
     DROP CONSTRAINT IF EXISTS omnix_trading_alerts_condition_type_check;
@@ -117,6 +142,16 @@ DROP POLICY IF EXISTS tenant_isolation ON omnix_trading_alert_conditions;
 CREATE POLICY tenant_isolation ON omnix_trading_alert_conditions
     USING (workspace_id = current_setting('omnix.workspace_id', true) OR current_setting('omnix.system', true) = 'on')
     WITH CHECK (workspace_id = current_setting('omnix.workspace_id', true) OR current_setting('omnix.system', true) = 'on');
+
+UPDATE omnix_trading_alerts AS alert
+   SET updated_at = CURRENT_TIMESTAMP
+ WHERE alert.condition_type <> 'conditions'
+   AND NOT EXISTS (
+       SELECT 1
+         FROM omnix_trading_alert_conditions AS existing
+        WHERE existing.workspace_id = alert.workspace_id
+          AND existing.alert_id = alert.alert_id
+   );
 
 -- Existing alerts become one condition each. This mirrors legacy_conditions()
 -- in app/apps/trading/alert_conditions.py; every legacy family fires on a

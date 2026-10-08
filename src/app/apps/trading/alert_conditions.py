@@ -18,7 +18,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from functools import lru_cache
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -125,10 +125,11 @@ class TrendlineSource(BaseModel):
     points: list[TrendlineAlertPoint] = Field(min_length=2, max_length=2)
 
 
-AlertSource = Annotated[
-    PriceSource | ChangePercentSource | IndicatorSource | TrendlineSource,
-    Field(discriminator="kind"),
-]
+# The unions are told apart by each member's literal ``kind`` (pydantic's smart
+# union). A ``discriminator`` would be faster, but FastAPI's split input/output
+# schemas then publish a mapping that names the wrong schemas, and the
+# generated TypeScript types become unusable.
+AlertSource = PriceSource | ChangePercentSource | IndicatorSource | TrendlineSource
 
 
 class ValueTarget(BaseModel):
@@ -145,7 +146,7 @@ class SourceTarget(BaseModel):
     source: AlertSource
 
 
-ChannelBound = Annotated[ValueTarget | SourceTarget, Field(discriminator="kind")]
+ChannelBound = ValueTarget | SourceTarget
 
 
 class ChannelTarget(BaseModel):
@@ -156,7 +157,7 @@ class ChannelTarget(BaseModel):
     lower: ChannelBound
 
 
-AlertTarget = Annotated[ValueTarget | SourceTarget | ChannelTarget, Field(discriminator="kind")]
+AlertTarget = ValueTarget | SourceTarget | ChannelTarget
 
 
 class AlertConditionSpec(BaseModel):

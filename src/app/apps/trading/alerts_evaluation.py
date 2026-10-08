@@ -410,6 +410,34 @@ def required_bars(conditions: Sequence[AlertConditionSpec]) -> int:
     return required
 
 
+MAX_INDICATOR_PERIOD = 500
+
+
+def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec]) -> None:
+    """Reject conditions the monitor could never evaluate (write-time check).
+
+    Periods are capped at 500 like the legacy parameters; every indicator
+    output must produce a value; and the bars the conditions need, plus the
+    previous bar and room for a forming bar, must fit in one history fetch.
+    """
+    for condition in conditions:
+        for source in condition_sources(condition):
+            if not isinstance(source, IndicatorSource):
+                continue
+            inputs = source.inputs
+            for name in ("period", "fast_period", "slow_period", "signal_period"):
+                value = getattr(inputs, name)
+                if value is not None and value > MAX_INDICATOR_PERIOD:
+                    raise ValueError(f"indicator {name} must be at most {MAX_INDICATOR_PERIOD}")
+            if dict(indicator_output_profile(source)).get(source.output) is None:
+                raise ValueError(f"indicator output {source.output!r} never has a value with these inputs")
+    required = required_bars(conditions)
+    if required + 2 > HISTORY_LIMIT_MAX:
+        raise ValueError(
+            f"these conditions need {required} bars of history; alerts can use at most {HISTORY_LIMIT_MAX - 2}"
+        )
+
+
 def history_limit(required: int) -> int:
     """Bars to fetch: the requirement plus a warm-up so recursive indicators converge.
 
@@ -431,4 +459,5 @@ __all__ = [
     "history_limit",
     "operator_met",
     "required_bars",
+    "validate_conditions_can_fire",
 ]
