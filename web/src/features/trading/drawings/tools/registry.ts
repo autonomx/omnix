@@ -1,10 +1,13 @@
 // The drawing tool registry (TVP-0.4). To add a tool, write one module in
 // `definitions/` and list it here; hosts and the toolbar pick it up from here.
 import { arrowTool } from './definitions/arrow';
+import { anchoredVwapTool, regressionTrendTool } from './definitions/barTools';
 import { circleTool, ellipseTool, rectangleTool } from './definitions/boxShapes';
+import { disjointChannelTool, flatTopBottomTool, parallelChannelTool } from './definitions/channels';
 import { dotTool } from './definitions/dot';
 import { fibonacciTool } from './definitions/fibonacci';
 import { horizontalLineTool, horizontalRayTool } from './definitions/horizontalLines';
+import { extendedLineTool, infoLineTool, trendAngleTool } from './definitions/lineVariants';
 import { measurementTool } from './definitions/measurement';
 import { textTool } from './definitions/text';
 import { rayTool, trendLineTool } from './definitions/trendLines';
@@ -20,6 +23,14 @@ export const DRAWING_TOOL_DEFINITIONS = [
   verticalLineTool,
   crosslineTool,
   rayTool,
+  infoLineTool,
+  extendedLineTool,
+  trendAngleTool,
+  parallelChannelTool,
+  regressionTrendTool,
+  flatTopBottomTool,
+  disjointChannelTool,
+  anchoredVwapTool,
   rectangleTool,
   circleTool,
   ellipseTool,

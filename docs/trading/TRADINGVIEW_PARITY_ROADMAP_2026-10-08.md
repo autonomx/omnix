@@ -1127,10 +1127,10 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 <!-- parity-completion:start -->
 | Measure | Done |
 |---|---|
-| TradingView parity, all features in scope | 61% |
-| TradingView parity, daily + weekly features | 68% |
+| TradingView parity, all features in scope | 62% |
+| TradingView parity, daily + weekly features | 70% |
 | Roadmap work packages merged in full | 22% (15 of 67) |
-| Daily + weekly gap closed since the first count | 27% (41 of 150) |
+| Daily + weekly gap closed since the first count | 33% (49 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1141,7 +1141,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
 | Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 | 86% |
-| Drawing tools | 17 | 4 | 19 / 14 / 47 | 0 | 0 | 19% |
+| Drawing tools | 25 | 4 | 11 / 14 / 47 | 0 | 0 | 27% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
 | Alerts | 15 | 3 | 4 / 2 / 0 | 0 | 0 | 69% |
@@ -1152,17 +1152,17 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 | 55% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 253 | 24 | 54 / 55 / 52 | 55 | 0 | 61% |
+| **Total** | 261 | 24 | 46 / 55 / 52 | 55 | 0 | 62% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 94 | 15 | 54 | 0 | 0 | 163 | 62% |
+| Daily | 102 | 15 | 46 | 0 | 0 | 163 | 67% |
 | Weekly | 146 | 9 | 55 | 0 | 0 | 210 | 72% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **109**
+Missing daily + weekly features: **101**
 
-Done (have counts 1, partial 0.5, of the features in scope): **61%** overall, **68%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **62%** overall, **70%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**

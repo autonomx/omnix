@@ -7,11 +7,14 @@ import { clampToField, propertyValueReadable } from './properties';
 import { constrainTo45Degrees, shapeSignature, simplifyPolyline } from './shapes';
 import { anchorCount } from './types';
 
-// The 14 tools that existed before the registry; each must keep a definition.
+// The 14 tools that existed before the registry, then TVP-3.x tools; each must keep a definition.
 // Add new tools here as they are registered.
 const DRAWING_TOOLS = [
   'dot', 'arrow', 'horizontal-line', 'horizontal-ray', 'trend-line', 'vertical-line', 'crossline',
   'ray', 'rectangle', 'circle', 'ellipse', 'fibonacci', 'text', 'measurement',
+  // TVP-3.1 lines and channels
+  'info-line', 'extended-line', 'trend-angle', 'parallel-channel', 'regression-trend', 'flat-top-bottom',
+  'disjoint-channel', 'anchored-vwap',
 ] as const satisfies readonly Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>[];
 
 describe('drawing tool registry', () => {
