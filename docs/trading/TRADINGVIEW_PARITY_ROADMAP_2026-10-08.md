@@ -310,7 +310,7 @@ These shape the foundations phase. Ignoring them would mean building the same th
    - Research and scripts never gain trading execution authority.
    - LLM output is a proposal; deterministic code decides.
    - PostgreSQL is authoritative for alert, delivery and order state.
-   - Schema changes need a forward migration under `src/app/apps/trading/migrations` plus persistence tests. Two existing migrations share the number `0036`; a new migration takes the next free number, checked again before merge, and the doc cites migrations by full filename.
+   - Schema changes need a forward migration under `src/app/apps/trading/migrations` plus persistence tests. Two existing migrations share the number `0036`. This roadmap's migrations use the reserved range 0140–0179, assigned per WP and checked again before merge; the doc cites migrations by full filename.
    - Order work changes paper behaviour only. A WP that touches `order_gateway.py` or `execution*.py` is out of scope unless D-7 is decided.
    - Changing defaults must not change the behaviour of existing paper accounts, especially strategy-owned ones.
 2. **Clean-room implementation.** Use TradingView's public docs and the app's visible behaviour as the spec. Do not copy TradingView code, icons, images, sounds or help text. Name things in Omnix terms where a TradingView name is a trademark: the product is "Omnix Scripts", described as Pine-compatible.
@@ -1127,9 +1127,18 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 | Research data | 4 | 1 | 0 / 1 / 3 | — |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | — |
 
-| WP | Status | PR / commit | Notes |
+**How the work runs.**
+- Integration branch `tradingview-parity`, checked out in the worktree `F:/LLM/omnix-tvp`.
+- Each work package is built on its own `tvp/<wp>` branch in its own worktree, reviewed by a separate review agent, then merged into the integration branch.
+- Migrations for this roadmap use the reserved range **0140–0179**: 0140 is TVP-7.1; the next ones are assigned at merge.
+- PostgreSQL tests run against scratch databases in the `omnix-architecture-test` container, never the live database.
+
+| WP | Status | Branch / commit | Notes |
 |---|---|---|---|
-| — | — | — | No WPs started |
+| TVP-0.2 | In progress (lead) | `tradingview-parity` | Scaffold first: golden generator, Python registry, first batch |
+| TVP-5.1–5.3 | In progress (agent) | `tvp/5-watchlists` | Indicator columns (part of 5.2) wait for TVP-0.2 |
+| TVP-7.1 | In progress (agent) | `tvp/7.1-order-types` | Migration 0140 |
+| TVP-8.1 (wave 1 part) | In progress (agent) | `tvp/8.1-replay-clock` | Speed control and shared clock; sub-bar playback waits for TVP-0.6 |
 
 ---
 
