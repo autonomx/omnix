@@ -1870,10 +1870,9 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if decision_completed_at.tzinfo is None:
             raise ValueError("ai shadow decision completion must be timezone-aware")
         for decision in batch.decisions:
-            due_row = by_id.get(decision.instrument_id)
-            if due_row is None:
+            row = cast(dict[str, Any], by_id.get(decision.instrument_id))
+            if row is None:
                 continue
-            row = due_row
             await self._apply_decision(
                 policy=policy,
                 decision=decision,
@@ -2633,8 +2632,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             "minute": [],
             "event": [],
         }
-        batch_policy: AIShadowPolicy
-        for batch_policy in ("minute", "event"):
+        for batch_policy in cast(tuple[AIShadowPolicy, ...], ("minute", "event")):
             for row in rows:
                 copied = dict(row)
                 copied["feature_snapshot"] = row["feature_by_policy"][batch_policy]
