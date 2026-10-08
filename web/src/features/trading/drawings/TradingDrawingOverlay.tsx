@@ -10,12 +10,15 @@ import {
   type DrawingTool,
   type TradingDrawing,
 } from './drawingCommands';
+import type { CanvasDrawingEntry } from './DrawingCanvasPrimitive';
+import { storedDrawingRendererMode, type DrawingRendererMode } from './drawingRenderer';
 import { ShapeElement, patchShapeElement, svgPoints } from './svgShapes';
 import { drawingPropertiesWithDefaults, drawingToolDefinition, isDrawingToolId } from './tools/registry';
 import { drawingGeometry, type DrawingProjector } from './tools/scene';
 import { shapeSignature } from './tools/shapes';
 import { handleIndices, type DrawingGeometryContext, type DrawingShape, type DrawingToolDefinition, type ScreenPoint } from './tools/types';
 import { previewPoints, useDrawingEditing, type HandlePreview, type TranslationPreview } from './useDrawingEditing';
+import { useCanvasDrawingHost } from './useCanvasDrawingHost';
 import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
 import './TradingDrawingMeasurement.css';
 
@@ -83,9 +86,10 @@ function svgViewport(svg: SVGSVGElement): Viewport {
 /**
  * Moves every mounted drawing to the current projection without React, so
  * drawings stay on the chart while it pans. Returns false when a drawing's
- * shape structure changed and React must re-render it.
+ * shape structure changed and React must re-render it. With the canvas
+ * renderer only edit handles are in the DOM.
  */
-function patchDrawings(svg: SVGSVGElement, frame: DrawingFrame, project: DrawingProjector): boolean {
+function patchDrawings(svg: SVGSVGElement, frame: DrawingFrame, project: DrawingProjector, shapesInDom: boolean): boolean {
   const viewport = svgViewport(svg);
   const byId = new Map(frame.drawings.map((drawing) => [drawing.drawingId, drawing]));
   let inSync = true;
@@ -93,7 +97,7 @@ function patchDrawings(svg: SVGSVGElement, frame: DrawingFrame, project: Drawing
     const drawing = byId.get(group.dataset.drawingId ?? '');
     const item = drawing ? renderDrawing(drawing, frame, project, viewport) : null;
     if (!item) continue;
-    if (shapeSignature(item.shapes) !== group.dataset.shapeSignature) {
+    if (shapesInDom && shapeSignature(item.shapes) !== group.dataset.shapeSignature) {
       inSync = false;
       continue;
     }
@@ -114,6 +118,48 @@ function patchDrawings(svg: SVGSVGElement, frame: DrawingFrame, project: Drawing
     }
   }
   return inSync;
+}
+
+/** The snapped chart point under the pointer, with its overlay coordinates. */
+function pointerPoint(
+  svg: SVGSVGElement | null,
+  adapter: TradingChartAdapter | null,
+  snapMode: DrawingSnapMode,
+  clientX: number,
+  clientY: number,
+): PointerPoint | null {
+  if (!svg) return null;
+  const bounds = svg.getBoundingClientRect();
+  const x = clientX - bounds.left;
+  const y = clientY - bounds.top;
+  const point = adapter?.drawingPointFromCoordinate(x, y) ?? null;
+  return point ? { ...snapDrawingPoint(point, snapMode), x, y } : null;
+}
+
+function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[]): TradingDrawing {
+  return {
+    drawingId: crypto.randomUUID(),
+    instrumentId,
+    toolType,
+    points,
+    selected: true,
+    revision: 1,
+    style: DEFAULT_DRAWING_STYLE,
+    locked: false,
+    hidden: false,
+    text: definition.defaultText ?? '',
+    properties: drawingPropertiesWithDefaults(definition.id, undefined),
+  };
+}
+
+/** Every visible drawing's shapes for the canvas renderer, at paint time. */
+function canvasScene(frame: DrawingFrame, adapter: TradingChartAdapter | null, viewport: Viewport): CanvasDrawingEntry[] {
+  const project: DrawingProjector = (point) => adapter?.projectDrawingPoint(point) ?? null;
+  return frame.drawings
+    .filter((drawing) => !drawing.hidden)
+    .map((drawing) => renderDrawing(drawing, frame, project, viewport))
+    .filter((item): item is RenderedDrawing => item !== null)
+    .map((item) => ({ drawingId: item.drawing.drawingId, definition: item.definition, shapes: item.shapes, context: item.context }));
 }
 
 function DraftPreview({ draft, definition, project, viewport, interval }: {
@@ -147,9 +193,10 @@ function DraftPreview({ draft, definition, project, viewport, interval }: {
     : <polyline points={svgPoints(points as ScreenPoint[])} fill="none" className="draft" />;
 }
 
-function DrawingGroup({ item, project, onPressDrawing, onPressHandle }: {
+function DrawingGroup({ item, project, withShapes, onPressDrawing, onPressHandle }: {
   item: RenderedDrawing;
   project: DrawingProjector;
+  withShapes: boolean;
   onPressDrawing: (event: ReactPointerEvent<SVGElement>) => void;
   onPressHandle: (index: number) => (event: ReactPointerEvent<SVGElement>) => void;
 }) {
@@ -160,10 +207,10 @@ function DrawingGroup({ item, project, onPressDrawing, onPressHandle }: {
       data-drawing-id={drawing.drawingId}
       data-locked={drawing.locked}
       data-selected={selected}
-      data-shape-signature={shapeSignature(shapes)}
+      data-shape-signature={withShapes ? shapeSignature(shapes) : undefined}
       onPointerDown={onPressDrawing}
     >
-      {shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />)}
+      {withShapes ? shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />) : null}
       {positions.length > 0 ? handleIndices(definition, positions.length).map((index) => {
         const point = positions[index];
         return point ? (
@@ -278,6 +325,8 @@ export type TradingDrawingOverlayProps = {
   onToolComplete?: () => void;
   onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
   onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  /** Overrides the stored renderer switch (`drawingRenderer.ts`). */
+  renderer?: DrawingRendererMode;
 };
 
 export function TradingDrawingOverlay({
@@ -296,40 +345,23 @@ export function TradingDrawingOverlay({
   onToolComplete,
   onAlertAtPoint,
   onContextMenu: onChartContextMenu,
+  renderer,
 }: TradingDrawingOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const [storedRenderer] = useState(storedDrawingRendererMode);
+  const canvas = (renderer ?? storedRenderer) === 'canvas';
   const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });
   const drawingTool = isDrawingToolId(tool) ? tool : null;
   const definition = drawingTool ? drawingToolDefinition(drawingTool) : undefined;
 
-  const pointFromClient = (clientX: number, clientY: number): PointerPoint | null => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const bounds = svg.getBoundingClientRect();
-    const x = clientX - bounds.left;
-    const y = clientY - bounds.top;
-    const point = adapter?.drawingPointFromCoordinate(x, y) ?? null;
-    return point ? { ...snapDrawingPoint(point, snapMode), x, y } : null;
-  };
+  const pointFromClient = (clientX: number, clientY: number) => pointerPoint(svgRef.current, adapter, snapMode, clientX, clientY);
 
   const editing = useDrawingEditing({
     tool, enabled: adapter !== null, pointFromClient, onSelect, onMovePoint, onTranslateDrawing, onRemove, onToolComplete,
   });
   const creation = useDrawingCreation(definition, (points) => {
     if (!definition || !drawingTool) return;
-    onAdd({
-      drawingId: crypto.randomUUID(),
-      instrumentId,
-      toolType: drawingTool,
-      points,
-      selected: true,
-      revision: 1,
-      style: DEFAULT_DRAWING_STYLE,
-      locked: false,
-      hidden: false,
-      text: definition.defaultText ?? '',
-      properties: drawingPropertiesWithDefaults(definition.id, undefined),
-    });
+    onAdd(newDrawing(drawingTool, definition, instrumentId, points));
     onToolComplete?.();
   });
 
@@ -338,20 +370,37 @@ export function TradingDrawingOverlay({
   };
   const frameRef = useRef(frame);
   frameRef.current = frame;
+  const drawingsRef = useRef(drawings);
+  drawingsRef.current = drawings;
+  const canvasHost = useCanvasDrawingHost({
+    enabled: canvas,
+    adapter,
+    svgRef,
+    drawingsRef,
+    scene: (size) => canvasScene(frameRef.current, adapter, size),
+  });
+  /** With the canvas renderer, a press on a painted drawing; the SVG renderer's drawings handle their own. */
+  const pressCanvasDrawing = (event: ReactPointerEvent<SVGSVGElement>): boolean => {
+    const drawing = canvas ? canvasHost.drawingAt(event.clientX, event.clientY) : null;
+    if (!drawing) return false;
+    editing.dragDrawing(drawing)(event);
+    return true;
+  };
 
   const refreshProjection = useCallback(() => {
     const svg = svgRef.current;
     if (!svg || !adapter) return;
-    if (!patchDrawings(svg, frameRef.current, (point) => adapter.projectDrawingPoint(point))) {
+    if (!patchDrawings(svg, frameRef.current, (point) => adapter.projectDrawingPoint(point), !canvas)) {
       setViewport((value) => ({ ...value, revision: value.revision + 1 }));
     }
-  }, [adapter]);
+  }, [adapter, canvas]);
 
   useProjectionSync(adapter, svgRef, refreshProjection, (width, height) => {
     setViewport((value) => ({ width, height, revision: value.revision + 1 }));
   });
 
   const onPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (pressCanvasDrawing(event)) return;
     if (tool === 'cursor') {
       if (event.target === event.currentTarget) onSelect(null);
       return;
@@ -379,8 +428,8 @@ export function TradingDrawingOverlay({
     event.preventDefault();
     event.stopPropagation();
     if (!point) return;
-    const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-drawing-id]') : null;
-    const drawingId = target?.dataset.drawingId;
+    const target = event.target instanceof Element ? event.target.closest<SVGElement>('[data-drawing-id]') : null;
+    const drawingId = target?.dataset.drawingId ?? (canvas ? canvasHost.drawingAt(event.clientX, event.clientY)?.drawingId : undefined);
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
     const { placement, indicatorId } = chartPlacement(adapter, point, event.clientY, 'context-menu');
     onChartContextMenu?.({
@@ -404,7 +453,7 @@ export function TradingDrawingOverlay({
   // Measure like the imperative refresh does, so both always agree on shape structure.
   const size = svgRef.current ? svgViewport(svgRef.current) : { width: viewport.width, height: viewport.height };
   const rendered = drawings
-    .filter((drawing) => !drawing.hidden)
+    .filter((drawing) => !drawing.hidden && (!canvas || drawing.drawingId === selectedId))
     .map((drawing) => renderDrawing(drawing, frame, project, size))
     .filter((item): item is RenderedDrawing => item !== null);
 
@@ -425,6 +474,7 @@ export function TradingDrawingOverlay({
           key={item.drawing.drawingId}
           item={item}
           project={project}
+          withShapes={!canvas}
           onPressDrawing={editing.dragDrawing(item.drawing)}
           onPressHandle={(index) => editing.dragHandle(item.drawing, index)}
         />

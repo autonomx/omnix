@@ -14,6 +14,7 @@ import {
   type HistogramData,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesPrimitive,
   type LineData,
   type Logical,
   type MouseEventParams,
@@ -500,6 +501,7 @@ export class TradingChartAdapter {
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private readonly viewportListeners = new Set<() => void>();
+  private readonly priceSeriesPrimitives = new Set<ISeriesPrimitive<Time>>();
   private readonly comparisonViewportHandler = () => this.renderComparisonSeries();
   private comparisonRenderInProgress = false;
   private comparisonRenderPending = false;
@@ -609,10 +611,12 @@ export class TradingChartAdapter {
   setChartType(type: TradingChartType, bars: readonly MarketBar[]): void {
     this.assertActive();
     if (type === this.chartType) return;
+    for (const primitive of this.priceSeriesPrimitives) this.priceSeries.detachPrimitive(primitive);
     this.chart.removeSeries(this.priceSeries);
     this.chartType = type;
     this.priceSeries = this.createPriceSeries(type);
     this.priceSeries.applyOptions({ lastValueVisible: this.latestValueLabelVisible });
+    for (const primitive of this.priceSeriesPrimitives) this.priceSeries.attachPrimitive(primitive);
     this.setBars(bars, false);
   }
 
@@ -1487,6 +1491,16 @@ export class TradingChartAdapter {
     this.chart.timeScale().applyOptions({ rightOffset: this.rightOffset });
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
+  /** Attaches a primitive to the main price series; it follows chart type changes. Returns a detach function. */
+  attachPriceSeriesPrimitive(primitive: ISeriesPrimitive<Time>): () => void {
+    this.assertActive();
+    this.priceSeriesPrimitives.add(primitive);
+    this.priceSeries.attachPrimitive(primitive);
+    return () => {
+      if (!this.priceSeriesPrimitives.delete(primitive) || this.destroyed) return;
+      this.priceSeries.detachPrimitive(primitive);
+    };
+  }
   api(): IChartApi { this.assertActive(); return this.chart; }
   destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.barTimeIndex = null; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
   /**

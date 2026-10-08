@@ -4,6 +4,7 @@ import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { DrawingTool, TradingDrawing } from './drawingCommands';
 import { TradingDrawingOverlay, type TradingDrawingOverlayProps } from './TradingDrawingOverlay';
 import { pointAt, testProjector } from './tools/testing';
+import type { DrawingCanvasPrimitive } from './DrawingCanvasPrimitive';
 
 beforeAll(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
@@ -26,7 +27,12 @@ afterEach(cleanup);
 function fakeAdapter() {
   let offset = 0;
   const listeners = new Set<() => void>();
+  const primitives: DrawingCanvasPrimitive[] = [];
   const adapter = {
+    attachPriceSeriesPrimitive: (primitive: DrawingCanvasPrimitive) => {
+      primitives.push(primitive);
+      return () => primitives.splice(primitives.indexOf(primitive), 1);
+    },
     projectDrawingPoint: (point: { time: string; price: number }) => {
       const projected = testProjector(point);
       return projected ? { x: projected.x + offset, y: projected.y } : null;
@@ -45,7 +51,7 @@ function fakeAdapter() {
     offset += dx;
     listeners.forEach((listener) => listener());
   });
-  return { adapter: adapter as unknown as TradingChartAdapter, pan };
+  return { adapter: adapter as unknown as TradingChartAdapter, pan, primitives };
 }
 
 function drawing(toolType: TradingDrawing['toolType'], pixels: [number, number][], extra: Partial<TradingDrawing> = {}): TradingDrawing {
@@ -61,7 +67,7 @@ function drawing(toolType: TradingDrawing['toolType'], pixels: [number, number][
 }
 
 function renderOverlay(props: Partial<TradingDrawingOverlayProps> & { tool?: DrawingTool } = {}) {
-  const { adapter, pan } = fakeAdapter();
+  const { adapter, pan, primitives } = fakeAdapter();
   const handlers = {
     onAdd: vi.fn(), onSelect: vi.fn(), onMovePoint: vi.fn(), onTranslateDrawing: vi.fn(), onRemove: vi.fn(),
     onToolComplete: vi.fn(), onAlertAtPoint: vi.fn(), onContextMenu: vi.fn(),
@@ -82,7 +88,7 @@ function renderOverlay(props: Partial<TradingDrawingOverlayProps> & { tool?: Dra
     </div>,
   );
   const svg = view.container.querySelector('svg')!;
-  return { ...view, svg, pan, handlers };
+  return { ...view, svg, pan, handlers, primitives };
 }
 
 describe('TradingDrawingOverlay', () => {
@@ -169,5 +175,26 @@ describe('TradingDrawingOverlay', () => {
     const selecting = renderOverlay({ drawings: [drawing('dot', [[100, 100]])] });
     fireEvent.pointerDown(selecting.svg.querySelector('circle')!, { clientX: 100, clientY: 100 });
     expect(selecting.handlers.onSelect).toHaveBeenCalledWith('dot-1');
+  });
+
+  it('with the canvas renderer, paints through a chart primitive and hit-tests presses', () => {
+    const trend = drawing('trend-line', [[100, 300], [200, 200]]);
+    const { svg, handlers, primitives } = renderOverlay({ renderer: 'canvas', drawings: [trend, drawing('dot', [[400, 100]], { drawingId: 'dot' })] });
+    expect(svg.querySelector('g[data-drawing-id]')).toBeNull();
+    expect(primitives).toHaveLength(1);
+    const painted: string[] = [];
+    const context = new Proxy({}, { get: (_, key: string) => (...args: unknown[]) => painted.push(`${key}(${args.join(',')})`), set: () => true });
+    primitives[0].paneViews()[0].renderer()!.draw({ useMediaCoordinateSpace: (paint: (scope: unknown) => void) => paint({ context, mediaSize: { width: 800, height: 600 } }) } as never);
+    expect(painted).toContain('moveTo(100,300)');
+    expect(painted).toContain('arc(400,100,4,0,6.283185307179586)');
+
+    fireEvent.pointerMove(window, { clientX: 150, clientY: 250, buttons: 0 });
+    expect(svg.style.pointerEvents).toBe('auto');
+    expect(svg.dataset.drawingId).toBe('trend-line-1');
+    fireEvent.pointerDown(svg, { clientX: 150, clientY: 250, pointerId: 1 });
+    expect(handlers.onSelect).toHaveBeenCalledWith('trend-line-1');
+    fireEvent.pointerMove(window, { clientX: 600, clientY: 500, buttons: 0 });
+    expect(svg.style.pointerEvents).toBe('');
+    expect(svg.dataset.drawingId).toBeUndefined();
   });
 });
