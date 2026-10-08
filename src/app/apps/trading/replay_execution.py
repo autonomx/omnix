@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -57,6 +57,9 @@ class ReplayOrderRequest(BaseModel):
     snapshot: PaperAccountSnapshot
     bar: ReplayExecutionBar
     order: PaperOrderRequest
+    # False when the snapshot has already been advanced through ``bar``: the
+    # bar is then not applied to working orders a second time.
+    advance_bar: bool = True
 
 
 class ReplayOrderResult(BaseModel):
@@ -134,6 +137,11 @@ def _replace_order(snapshot: PaperAccountSnapshot, order: PaperOrder) -> PaperAc
 
 
 def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccountSnapshot:
+    """Mark positions in the bar's instrument at its close.
+
+    Positions in other instruments keep their last mark: a bar never prices
+    another instrument.
+    """
     positions = [
         position.model_copy(
             update={
@@ -141,6 +149,8 @@ def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccou
                 "unrealized_pnl": paper_unrealized_pnl(position.quantity, position.average_cost, bar.close),
             }
         )
+        if position.instrument_id == bar.instrument_id
+        else position
         for position in snapshot.positions
     ]
     return snapshot.model_copy(update={"positions": positions})
@@ -392,9 +402,16 @@ def place_replay_order(
     bar: ReplayExecutionBar,
     *,
     policy: PaperExecutionPolicy | None = None,
+    advance_bar: bool = True,
 ) -> ReplayOrderResult:
+    """Place a replay order at ``bar``.
+
+    By default the snapshot is first advanced through ``bar``. Pass
+    ``advance_bar=False`` when the caller has already advanced it, so working
+    orders see each bar exactly once.
+    """
     active = policy or PaperExecutionPolicy()
-    prepared = advance_replay_snapshot(source, bar, policy=active)
+    prepared = advance_replay_snapshot(source, bar, policy=active) if advance_bar else _mark(source, bar)
     # Place the order just before the immutable bar close so the same execution
     # policy latency check remains meaningful without using wall-clock time.
     created_at = bar.end_time - timedelta(milliseconds=active.latency_ms)

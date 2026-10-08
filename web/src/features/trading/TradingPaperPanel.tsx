@@ -1,9 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskPreview, PaperSide } from './paperTypes';
 import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
-import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
+import { createReplaySnapshot } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
@@ -95,10 +95,8 @@ export function TradingPaperPanel({
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);
   const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
-  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
-  const replayContextRef = useRef<string | null>(null);
-  const replayBarContextRef = useRef<string | null>(null);
-  const replaySeedPendingRef = useRef(false);
+  const seedReplaySnapshot = useTradingReplayStore((state) => state.seedSnapshot);
+  const replayExecutionError = useTradingReplayStore((state) => state.executionError);
 
   const activeAccount = useMemo(
     () => accounts.find((account) => account.account_id === accountId) ?? accounts[0] ?? null,
@@ -146,41 +144,17 @@ export function TradingPaperPanel({
   }, [preferredAccountId]);
 
   useEffect(() => {
-    if (!replayMode) {
-      replayContextRef.current = null;
-      replayBarContextRef.current = null;
-      replaySeedPendingRef.current = false;
-      return;
-    }
-    if (!snapshot || !activeAccount) return;
-    const context = `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`;
-    if (replayContextRef.current === context) return;
-    replayContextRef.current = context;
-    replaySeedPendingRef.current = true;
-    setReplaySnapshot(createReplaySnapshot(snapshot));
-  }, [activeAccount, instrumentId, replayMode, replaySessionId, setReplaySnapshot, snapshot]);
+    // The replay store owns the replay account and advances it bar by bar;
+    // the ticket only seeds it from the live account (once per session).
+    if (!replayMode || !snapshot || !activeAccount) return;
+    seedReplaySnapshot(createReplaySnapshot(snapshot), `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`);
+  }, [activeAccount, instrumentId, replayMode, replaySessionId, seedReplaySnapshot, snapshot]);
 
   useEffect(() => {
-    if (!replayMode || !replaySnapshot || !replayBar || !activeAccount) return;
-    if (replayContextRef.current !== `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`) return;
-    if (replaySeedPendingRef.current) {
-      replaySeedPendingRef.current = false;
-      return;
-    }
-    const context = `${replaySessionId}:${replayBar.start_time}:${replayBar.end_time}`;
-    if (replayBarContextRef.current === context) return;
-    replayBarContextRef.current = context;
-    let cancelled = false;
-    void advanceReplaySnapshot(replaySnapshot, replayBar).then((nextSnapshot) => {
-      if (!cancelled) setReplaySnapshot(nextSnapshot);
-    }).catch((error) => {
-      if (!cancelled) {
-        setStatus('error');
-        setNotice({ kind: 'error', message: paperErrorMessage(error, 'Replay execution') });
-      }
-    });
-    return () => { cancelled = true; };
-  }, [activeAccount, instrumentId, replayBar, replayMode, replaySessionId, replaySnapshot, setReplaySnapshot]);
+    if (!replayMode || !replayExecutionError) return;
+    setStatus('error');
+    setNotice({ kind: 'error', message: paperErrorMessage(new Error(replayExecutionError), 'Replay execution') });
+  }, [replayExecutionError, replayMode]);
 
   useEffect(() => {
     if (!accountId) return;
@@ -359,8 +333,7 @@ export function TradingPaperPanel({
         };
         if (replayMode) {
           if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
-          const result = await placeReplayOrder(replaySnapshot, input, replayBar);
-          setReplaySnapshot(result.snapshot);
+          const result = await useTradingReplayStore.getState().placeOrder(input);
           order = result.order;
           setStatus('ready');
         } else {

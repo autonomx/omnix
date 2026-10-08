@@ -7,7 +7,6 @@ import { type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput 
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore } from './tradingStore';
-import { useTradingReplayStore } from './tradingReplayStore';
 import type { MarketBar } from './tradingTypes';
 import { readTradingTimezoneId } from './tradingTime';
 import { SelectedVisibleRange, TradingChartPanelProps, TradingContextMenuState, readTradingRightOffset } from './tradingChartPanelModel';
@@ -65,10 +64,6 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   const setReplayMode = useTradingStore((state) => state.setReplayMode);
 
   const restartReplaySession = useTradingStore((state) => state.restartReplaySession);
-
-  const setReplayBar = useTradingReplayStore((state) => state.setBar);
-
-  const clearReplayState = useTradingReplayStore((state) => state.clear);
 
   const drawings = useTradingDrawings(instrumentId, sessionId);
 
@@ -142,14 +137,6 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const [rightOffset, setRightOffset] = useState(readTradingRightOffset);
 
-  const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
-
-  const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null);
-
-  const [replayPlaying, setReplayPlaying] = useState(false);
-
-  const [replaySpeed, setReplaySpeed] = useState('1');
-
   const [replayMarkerX, setReplayMarkerX] = useState<number | null>(null);
 
   const [replaySelectionIndex, setReplaySelectionIndex] = useState<number | null>(null);
@@ -174,8 +161,8 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
     selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorTimerRef, drawingTool,
-    setDrawingTool, drawingSnapMode, replayMode, replaySessionId, setReplayMode, restartReplaySession, setReplayBar,
-    clearReplayState, drawings, selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
+    setDrawingTool, drawingSnapMode, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
+    selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
     setStreamError, indicatorError, setIndicatorError, alertPlacement, setAlertPlacement, contextMenu,
     setContextMenu, priceScaleMenuOpen, setPriceScaleMenuOpen, priceScaleSettings, setPriceScaleSettings,
     priceScaleCurrency, setPriceScaleCurrency, priceScaleHovered, setPriceScaleHovered, tableVisible,
@@ -187,9 +174,8 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     setSettingsIndicator, selectedIndicator, setSelectedIndicator, selectedRangeLabel, setSelectedRangeLabel,
     customRangeOpen, setCustomRangeOpen, customRangeStart, setCustomRangeStart, customRangeEnd, setCustomRangeEnd,
     customRangeError, setCustomRangeError, timezoneId, setTimezoneId, timezoneMenuOpen, setTimezoneMenuOpen,
-    customRangeRef, timezoneMenuRef, rightOffset, setRightOffset, replayStartIndex, setReplayStartIndex,
-    replayCursorIndex, setReplayCursorIndex, replayPlaying, setReplayPlaying, replaySpeed, setReplaySpeed,
-    replayMarkerX, setReplayMarkerX, replaySelectionIndex, setReplaySelectionIndex, replaySelectionX,
+    customRangeRef, timezoneMenuRef, rightOffset, setRightOffset, replayMarkerX, setReplayMarkerX,
+    replaySelectionIndex, setReplaySelectionIndex, replaySelectionX,
     setReplaySelectionX, minimizedIndicators, setMinimizedIndicators, minimizedIndicatorsRef, fullscreenIndicator,
     setFullscreenIndicator, fullscreenIndicatorRef, fullscreenMainPane, setFullscreenMainPane, fullscreenMainPaneRef,
     indicatorResizeRef,

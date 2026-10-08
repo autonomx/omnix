@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import type { PaperOrder, PaperPosition, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
-import { placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 import { readPaperPositionProtection, writePaperPositionProtection, type PositionProtectionLevels } from './paperPositionProtection';
@@ -61,7 +60,6 @@ export function TradingPositionOverlay({
   const replayMode = useTradingStore((state) => state.replayMode);
   const replayBar = useTradingReplayStore((state) => state.bar);
   const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
-  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
 
   useEffect(() => {
     setProtection(replayMode ? { takeProfit: null, stopLoss: null } : accountId ? readPaperPositionProtection(accountId, instrumentId) : { takeProfit: null, stopLoss: null });
@@ -192,7 +190,7 @@ export function TradingPositionOverlay({
     const orderId = `paper-overlay-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     if (replayMode) {
       if (!replaySnapshot || !replayBar) throw new Error('Select a replay bar before trading.');
-      const result = await placeReplayOrder(replaySnapshot, {
+      const result = await useTradingReplayStore.getState().placeOrder({
         order_id: orderId,
         instrument_id: instrumentId,
         binding_id: null,
@@ -203,8 +201,7 @@ export function TradingPositionOverlay({
         stop_price: null,
         reference_price: String(referencePrice),
         idempotency_key: orderId,
-      }, replayBar);
-      setReplaySnapshot(result.snapshot);
+      });
       if (result.order.status === 'rejected') throw new Error(result.order.rejection_reason ?? 'Replay order rejected.');
       return result.order;
     }

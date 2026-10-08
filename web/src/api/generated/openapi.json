@@ -34186,6 +34186,11 @@
       "ReplayOrderRequest": {
         "additionalProperties": false,
         "properties": {
+          "advance_bar": {
+            "default": true,
+            "title": "Advance Bar",
+            "type": "boolean"
+          },
           "bar": {
             "$ref": "#/components/schemas/ReplayExecutionBar"
           },

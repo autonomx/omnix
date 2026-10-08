@@ -1,17 +1,28 @@
 import type { PaperAccountSnapshot, PaperOrder, PaperOrderInput } from './paperTypes';
 import type { BacktestRunResult, FrozenDatasetSnapshot } from './replayTypes';
+import { barCloseTime } from './replayClock';
 import type { MarketBar } from './tradingTypes';
 import { unwrapLabelled } from '../../api/http';
 import { api } from './api/gateway';
 
 const replay = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading replay');
 
-function replayBar(bar: MarketBar) {
+/** A bar sent to the replay kernel, with the feed binding of the replay session's data. */
+export type ReplayExecutionMarketBar = MarketBar & { binding_id?: string | null };
+
+/**
+ * The kernel's form of a bar. An unreadable end time is sent as the derived
+ * close the replay clock uses (start + interval); a bar with no knowable
+ * close cannot be executed against.
+ */
+export function replayExecutionBar(bar: ReplayExecutionMarketBar) {
+  const close = barCloseTime(bar);
+  if (!Number.isFinite(close)) throw new Error('This replay bar has no known close time.');
   return {
     instrument_id: bar.instrument_id,
-    binding_id: null,
+    binding_id: bar.binding_id ?? null,
     start_time: bar.start_time,
-    end_time: bar.end_time,
+    end_time: Number.isFinite(Date.parse(bar.end_time)) ? bar.end_time : new Date(close).toISOString(),
     open: bar.open,
     high: bar.high,
     low: bar.low,
@@ -63,8 +74,9 @@ export const tradingReplayApi = {
   })),
   backtest: (runId: string): Promise<BacktestRunResult> =>
     replay(api.GET('/api/trading/replay/backtests/{run_id}', { params: { path: { run_id: runId } } })),
-  advanceExecution: (snapshot: PaperAccountSnapshot, bar: MarketBar): Promise<PaperAccountSnapshot> =>
-    replay(api.POST('/api/trading/replay/execution/advance', { body: { snapshot, bar: replayBar(bar) } })),
-  placeExecutionOrder: (snapshot: PaperAccountSnapshot, order: PaperOrderInput, bar: MarketBar): Promise<{ snapshot: PaperAccountSnapshot; order: PaperOrder }> =>
-    replay(api.POST('/api/trading/replay/execution/orders', { body: { snapshot, order, bar: replayBar(bar) } })),
+  advanceExecution: (snapshot: PaperAccountSnapshot, bar: ReplayExecutionMarketBar): Promise<PaperAccountSnapshot> =>
+    replay(api.POST('/api/trading/replay/execution/advance', { body: { snapshot, bar: replayExecutionBar(bar) } })),
+  /** `advanceBar: false` when the snapshot has already been advanced through `bar`. */
+  placeExecutionOrder: (snapshot: PaperAccountSnapshot, order: PaperOrderInput, bar: ReplayExecutionMarketBar, advanceBar = true): Promise<{ snapshot: PaperAccountSnapshot; order: PaperOrder }> =>
+    replay(api.POST('/api/trading/replay/execution/orders', { body: { snapshot, order, bar: replayExecutionBar(bar), advance_bar: advanceBar } })),
 };
