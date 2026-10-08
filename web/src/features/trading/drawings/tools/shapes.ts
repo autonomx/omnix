@@ -1,4 +1,4 @@
-import type { DrawingGeometryContext, DrawingShape, ScreenPoint, ShapePaint } from './types';
+import type { DrawingGeometryContext, DrawingModifiers, DrawingShape, ScreenPoint, ShapePaint } from './types';
 
 /** The drawing's line paint from its style, with the selection class the overlay CSS highlights. */
 export function lineStroke(context: Pick<DrawingGeometryContext, 'style' | 'selected'>): ShapePaint {
@@ -59,9 +59,38 @@ export function arrowHead(from: ScreenPoint, tip: ScreenPoint, lineWidth: number
   return { kind: 'polygon', points: [at(-5, -3), at(1, 0), at(-5, 3)], ...paint };
 }
 
-/** The structure of a shape list; the host re-renders through React only when it changes. */
+/**
+ * Everything about a shape list except coordinates and text: kinds, paint,
+ * classes, hit roles and text layout. The host patches coordinates in place
+ * and re-renders through React whenever this changes.
+ */
 export function shapeSignature(shapes: readonly DrawingShape[]): string {
-  return shapes.map((shape) => shape.kind).join(',');
+  return shapes.map((shape) => [
+    shape.kind,
+    shape.className ?? '',
+    shape.stroke ?? '',
+    shape.strokeWidth ?? '',
+    shape.dash?.join(' ') ?? '',
+    shape.fill ?? '',
+    shape.fillOpacity ?? '',
+    shape.opacity ?? '',
+    shape.hit ?? '',
+    shape.kind === 'text' ? `${shape.align ?? ''}/${shape.fontSize ?? ''}/${shape.fontWeight ?? ''}` : '',
+  ].join('|')).join(';');
+}
+
+/**
+ * Shift-constrain for two-anchor tools: with Shift held, snaps the candidate
+ * to the nearest 45-degree direction from the previous anchor.
+ */
+export function constrainTo45Degrees(candidate: ScreenPoint, others: readonly ScreenPoint[], modifiers: DrawingModifiers): ScreenPoint {
+  const origin = others[others.length - 1];
+  if (!modifiers.shift || !origin) return candidate;
+  const dx = candidate.x - origin.x;
+  const dy = candidate.y - origin.y;
+  const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  const length = Math.hypot(dx, dy) * Math.abs(Math.cos(Math.atan2(dy, dx) - angle));
+  return { x: origin.x + Math.cos(angle) * length, y: origin.y + Math.sin(angle) * length };
 }
 
 /**

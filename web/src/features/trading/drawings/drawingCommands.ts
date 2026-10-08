@@ -99,8 +99,12 @@ export function translateDrawing(
       ...drawing,
       revision: drawing.revision + 1,
       points: drawing.points.map((point) => ({
+        ...point,
         time: new Date(Date.parse(point.time) + timeDelta).toISOString(),
         price: point.price + priceDelta,
+        ...(point.screen && from.screen && to.screen
+          ? { screen: { x: point.screen.x + to.screen.x - from.screen.x, y: point.screen.y + to.screen.y - from.screen.y } }
+          : {}),
       })),
     }),
   };

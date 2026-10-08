@@ -1,14 +1,15 @@
 import type { DrawingAlertLevel, DrawingPoint } from './types';
 
-/** A level at one price for every time from `from` (null = always). */
-export function horizontalAlertLevel(key: string, label: string, point: DrawingPoint, from: string | null): DrawingAlertLevel {
-  return { key, label, anchor: { ...point }, slope: 0, from, to: null };
+function anchor(point: DrawingPoint): DrawingPoint {
+  return { time: point.time, price: point.price };
 }
 
-/**
- * The line through two anchors, bounded by them unless extended. Returns null
- * when both anchors share a time (a vertical line has no price over time).
- */
+/** A horizontal level at the anchor's price; from the anchor's time onward unless extended left. */
+export function horizontalAlertLevel(key: string, label: string, point: DrawingPoint, extendLeft: boolean): DrawingAlertLevel {
+  return { key, label, anchors: [anchor(point)], extend: { left: extendLeft, right: true }, interpolation: 'bars' };
+}
+
+/** The line through two anchors in bar-index space, ordered by time. Null when both share a time. */
 export function lineAlertLevel(
   key: string,
   label: string,
@@ -20,22 +21,26 @@ export function lineAlertLevel(
   const firstTime = Date.parse(first.time);
   const secondTime = Date.parse(second.time);
   if (!Number.isFinite(firstTime) || !Number.isFinite(secondTime) || firstTime === secondTime) return null;
-  const [left, right] = firstTime < secondTime ? [first, second] : [second, first];
-  return {
-    key,
-    label,
-    anchor: { ...first },
-    slope: (second.price - first.price) / (secondTime - firstTime),
-    from: extendLeft ? null : new Date(Date.parse(left.time)).toISOString(),
-    to: extendRight ? null : new Date(Date.parse(right.time)).toISOString(),
-  };
+  const anchors = firstTime < secondTime ? [anchor(first), anchor(second)] : [anchor(second), anchor(first)];
+  return { key, label, anchors, extend: { left: extendLeft, right: extendRight }, interpolation: 'bars' };
 }
 
-/** The level's price at `time`, or null outside its time range. */
-export function alertLevelPrice(level: DrawingAlertLevel, time: string): number | null {
-  const at = Date.parse(time);
-  if (!Number.isFinite(at)) return null;
-  if (level.from !== null && at < Date.parse(level.from)) return null;
-  if (level.to !== null && at > Date.parse(level.to)) return null;
-  return level.anchor.price + level.slope * (at - Date.parse(level.anchor.time));
+/**
+ * The level's price at a bar index, or null outside its range. `barIndex`
+ * maps a time to its (possibly fractional) bar index on the alert's interval;
+ * the server evaluates levels the same way.
+ */
+export function alertLevelPriceAtBar(level: DrawingAlertLevel, index: number, barIndex: (time: string) => number | null): number | null {
+  const [first, second] = level.anchors;
+  if (!first) return null;
+  const firstIndex = barIndex(first.time);
+  if (firstIndex === null) return null;
+  if (!second) {
+    return index < firstIndex && !level.extend.left ? null : first.price;
+  }
+  const secondIndex = barIndex(second.time);
+  if (secondIndex === null || secondIndex === firstIndex) return null;
+  if (index < firstIndex && !level.extend.left) return null;
+  if (index > secondIndex && !level.extend.right) return null;
+  return first.price + (second.price - first.price) * (index - firstIndex) / (secondIndex - firstIndex);
 }

@@ -1,8 +1,8 @@
 // Test helpers for drawing tool definitions: a linear projector and a
 // geometry runner, so tool tests read in pixels.
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from './registry';
-import { drawingGeometry, hitTestDrawing } from './scene';
-import { DEFAULT_DRAWING_STYLE, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from './types';
+import { drawingGeometry, hitTestDrawing, staticChartAccess } from './scene';
+import { DEFAULT_DRAWING_STYLE, type DrawingChartAccess, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from './types';
 
 const BASE_TIME = Date.parse('2026-08-05T00:00:00.000Z');
 
@@ -20,13 +20,14 @@ export function pointAt(x: number, y: number): DrawingPoint {
 export function runTool(
   toolId: string,
   pixels: readonly [number, number][],
-  options: { properties?: DrawingProperties; style?: Partial<DrawingStyle>; text?: string; selected?: boolean; interval?: string; viewport?: { width: number; height: number } } = {},
+  options: { access?: Partial<DrawingChartAccess>; properties?: DrawingProperties; style?: Partial<DrawingStyle>; text?: string; selected?: boolean; interval?: string; viewport?: { width: number; height: number } } = {},
 ) {
   const definition = drawingToolDefinition(toolId);
   if (!definition) throw new Error(`no tool ${toolId}`);
   const result = drawingGeometry({
     definition,
-    project: testProjector,
+    ...staticChartAccess(testProjector),
+    ...options.access,
     rawPoints: pixels.map(([x, y]) => pointAt(x, y)),
     viewport: options.viewport ?? { width: 800, height: 600 },
     style: { ...DEFAULT_DRAWING_STYLE, ...options.style },

@@ -16,6 +16,7 @@ export function measurementLabel(first: DrawingPoint, second: DrawingPoint, inte
 export const measurementTool = defineDrawingTool({
   id: 'measurement',
   label: 'Price range',
+  displayName: 'Measure',
   group: 'measurers',
   creation: { gesture: 'drag' },
   defaultProperties: {},

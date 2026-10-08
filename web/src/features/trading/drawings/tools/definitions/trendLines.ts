@@ -1,10 +1,12 @@
 import { lineAlertLevel } from '../alertLevels';
 import { extendedSegment, lineStroke, rayEnd } from '../shapes';
+import { booleanProperty } from '../properties';
 import { defineDrawingTool, type DrawingAlertLevel } from '../types';
 
 export const trendLineTool = defineDrawingTool({
   id: 'trend-line',
   label: 'Trend line',
+  displayName: 'Trendline',
   group: 'lines',
   creation: { gesture: 'drag' },
   defaultProperties: { extendLeft: false, extendRight: false },
@@ -18,17 +20,23 @@ export const trendLineTool = defineDrawingTool({
       first,
       second,
       context.viewport,
-      context.properties.extendLeft === true,
-      context.properties.extendRight === true,
+      booleanProperty(context.properties, 'extendLeft', false),
+      booleanProperty(context.properties, 'extendRight', false),
     );
     return [{ kind: 'segment', x1: start.x, y1: start.y, x2: end.x, y2: end.y, ...lineStroke(context) }];
   },
   alertLevels: ([first, second], properties) => {
     if (!first || !second) return [];
-    const level = lineAlertLevel('line', 'Trend line', first, second, properties.extendLeft === true, properties.extendRight === true);
+    const level = lineAlertLevel(
+      'line',
+      'Trend line',
+      first,
+      second,
+      booleanProperty(properties, 'extendLeft', false),
+      booleanProperty(properties, 'extendRight', false),
+    );
     return level ? [level] : [];
   },
-  lineAlertAnchors: (points) => points.slice(0, 2),
 });
 
 export const rayTool = defineDrawingTool({

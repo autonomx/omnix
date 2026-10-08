@@ -4,6 +4,7 @@ import { defineDrawingTool } from '../types';
 export const verticalLineTool = defineDrawingTool({
   id: 'vertical-line',
   label: 'Vertical line',
+  icon: 'M12 3v18',
   group: 'lines',
   creation: { gesture: 'click' },
   defaultProperties: {},
@@ -17,6 +18,7 @@ export const verticalLineTool = defineDrawingTool({
 export const crosslineTool = defineDrawingTool({
   id: 'crossline',
   label: 'Crossline',
+  displayName: 'Cross line',
   group: 'lines',
   creation: { gesture: 'click' },
   defaultProperties: {},

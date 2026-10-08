@@ -7,56 +7,67 @@ export type PointerPoint = DrawingPoint & ScreenPoint;
 /** Minimum pointer travel, in pixels, before a freehand stroke takes another point. */
 const FREEHAND_STEP = 2;
 
-function anchor(point: PointerPoint): DrawingPoint {
-  return { time: point.time, price: point.price };
+/** The stored anchor of a pointer point: time, price and (screen-anchored tools) pane fractions. */
+export function anchorOf(point: PointerPoint): DrawingPoint {
+  return point.screen ? { time: point.time, price: point.price, screen: point.screen } : { time: point.time, price: point.price };
 }
 
 /**
  * Creation gestures for every tool, driven by its `creation` declaration. The
- * draft holds the anchors placed so far; for drag and click-click its last
- * anchor follows the pointer.
+ * draft (anchors placed so far; for drag and click-click the last one follows
+ * the pointer) lives in a ref: pointer moves update it in place and call
+ * `moved`, so the host patches the preview without a React render. React
+ * renders only when the draft starts, gains an anchor or ends.
  */
-export function useDrawingCreation(definition: DrawingToolDefinition | undefined, complete: (points: DrawingPoint[]) => void) {
-  const [draft, setDraft] = useState<PointerPoint[] | null>(null);
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
+export function useDrawingCreation(definition: DrawingToolDefinition | undefined, complete: (points: DrawingPoint[]) => void, moved: () => void) {
+  const draftRef = useRef<PointerPoint[] | null>(null);
+  const [, setRevision] = useState(0);
   const creation = definition?.creation;
+  const replace = (points: PointerPoint[] | null) => {
+    draftRef.current = points;
+    setRevision((value) => value + 1);
+  };
 
   useEffect(() => {
-    setDraft(null);
+    draftRef.current = null;
+    setRevision((value) => value + 1);
   }, [definition]);
 
+  const active = draftRef.current !== null;
   useEffect(() => {
-    if (!draft || creation?.gesture !== 'click-click') return;
+    if (!active || creation?.gesture !== 'click-click') return;
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDraft(null);
+      if (event.key !== 'Escape') return;
+      draftRef.current = null;
+      setRevision((value) => value + 1);
     };
     window.addEventListener('keydown', cancel);
     return () => window.removeEventListener('keydown', cancel);
-  }, [draft, creation]);
+  }, [active, creation]);
 
   const finish = (points: PointerPoint[]) => {
-    setDraft(null);
-    complete(points.map(anchor));
+    replace(null);
+    complete(points.map(anchorOf));
   };
 
-  /** Returns true when the pointer down started or continued a gesture. */
-  const pointerDown = (point: PointerPoint): boolean => {
-    if (!creation) return false;
+  const pointerDown = (point: PointerPoint): void => {
+    if (!creation) return;
     switch (creation.gesture) {
       case 'click':
         finish([point]);
-        return true;
+        return;
       case 'drag':
+        replace([point, point]);
+        return;
       case 'freehand':
-        setDraft([point, ...(creation.gesture === 'drag' ? [point] : [])]);
-        return true;
+        replace([point]);
+        return;
       case 'click-click': {
-        const placed = draftRef.current ? [...draftRef.current.slice(0, -1), point] : [point];
+        const current = draftRef.current;
+        const placed = current ? [...current.slice(0, -1), point] : [point];
         const { max } = anchorCount(creation);
         if (max !== null && placed.length >= max) finish(placed);
-        else setDraft([...placed, point]);
-        return true;
+        else replace([...placed, point]);
       }
     }
   };
@@ -66,10 +77,12 @@ export function useDrawingCreation(definition: DrawingToolDefinition | undefined
     if (!current || !creation) return;
     if (creation.gesture === 'freehand') {
       const last = current[current.length - 1];
-      if (Math.hypot(point.x - last.x, point.y - last.y) >= FREEHAND_STEP) setDraft([...current, point]);
-      return;
+      if (Math.hypot(point.x - last.x, point.y - last.y) < FREEHAND_STEP) return;
+      current.push(point);
+    } else {
+      current[current.length - 1] = point;
     }
-    setDraft([...current.slice(0, -1), point]);
+    moved();
   };
 
   const pointerUp = () => {
@@ -80,7 +93,7 @@ export function useDrawingCreation(definition: DrawingToolDefinition | undefined
     } else if (creation.gesture === 'freehand') {
       const points = simplifyPolyline(current, creation.simplifyTolerance ?? 1);
       if (points.length >= anchorCount(creation).min) finish(points);
-      else setDraft(null);
+      else replace(null);
     }
   };
 
@@ -93,5 +106,5 @@ export function useDrawingCreation(definition: DrawingToolDefinition | undefined
     if (placed.length >= anchorCount(creation).min) finish(placed);
   };
 
-  return { draft, pointerDown, pointerMove, pointerUp, doubleClick };
+  return { draftRef, active, pointerDown, pointerMove, pointerUp, doubleClick };
 }

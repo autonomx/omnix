@@ -1,6 +1,8 @@
 import { DRAWING_HIT_TOLERANCE, hitTestShapes } from './hitTest';
 import {
   anchorCount,
+  EMPTY_DRAWING_BARS,
+  type DrawingChartAccess,
   type DrawingGeometryContext,
   type DrawingHit,
   type DrawingPoint,
@@ -11,10 +13,27 @@ import {
 
 export type DrawingProjector = (point: DrawingPoint) => ScreenPoint | null;
 
-export type DrawingShapeInput = Omit<DrawingGeometryContext, 'points' | 'project'> & {
+export type DrawingShapeInput = Omit<DrawingGeometryContext, 'points'> & {
   definition: DrawingToolDefinition;
-  project: DrawingProjector;
+  /** Run geometry from this many anchors (draft previews); default the tool's minimum. */
+  minAnchors?: number;
 };
+
+/** Chart access for code without a chart (tests, previews before the chart exists). */
+export function staticChartAccess(project: DrawingProjector): DrawingChartAccess {
+  return {
+    project,
+    bars: EMPTY_DRAWING_BARS,
+    timeAfterBars: () => null,
+    formatPrice: (price) => price.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+  };
+}
+
+/** Projects an anchor: screen-anchored tools place it by its pane fractions, others by time and price. */
+export function anchorProjector(definition: Pick<DrawingToolDefinition, 'anchoring'>, project: DrawingProjector, viewport: { width: number; height: number }): DrawingProjector {
+  if (definition.anchoring !== 'screen') return project;
+  return (point) => (point.screen ? { x: point.screen.x * viewport.width, y: point.screen.y * viewport.height } : project(point));
+}
 
 /**
  * Projects a drawing's anchors and runs its geometry. Returns no shapes (and
@@ -22,27 +41,16 @@ export type DrawingShapeInput = Omit<DrawingGeometryContext, 'points' | 'project
  * project onto the chart.
  */
 export function drawingGeometry(input: DrawingShapeInput): { shapes: DrawingShape[]; context: DrawingGeometryContext | null } {
-  const { definition, project, rawPoints } = input;
-  if (rawPoints.length < anchorCount(definition.creation).min) return { shapes: [], context: null };
+  const { definition, minAnchors, ...rest } = input;
+  if (rest.rawPoints.length < (minAnchors ?? anchorCount(definition.creation).min)) return { shapes: [], context: null };
+  const projectAnchor = anchorProjector(definition, rest.project, rest.viewport);
   const points: ScreenPoint[] = [];
-  for (const point of rawPoints) {
-    const projected = project(point);
+  for (const point of rest.rawPoints) {
+    const projected = projectAnchor(point);
     if (!projected) return { shapes: [], context: null };
     points.push(projected);
   }
-  const context: DrawingGeometryContext = {
-    points,
-    rawPoints,
-    viewport: input.viewport,
-    style: input.style,
-    properties: input.properties,
-    text: input.text,
-    interval: input.interval,
-    selected: input.selected,
-    locked: input.locked,
-    draft: input.draft,
-    project,
-  };
+  const context: DrawingGeometryContext = { ...rest, points };
   return { shapes: definition.geometry(context), context };
 }
 

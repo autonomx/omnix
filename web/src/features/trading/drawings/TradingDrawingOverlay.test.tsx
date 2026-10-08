@@ -4,7 +4,35 @@ import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { DrawingTool, TradingDrawing } from './drawingCommands';
 import { TradingDrawingOverlay, type TradingDrawingOverlayProps } from './TradingDrawingOverlay';
 import { pointAt, testProjector } from './tools/testing';
+import { EMPTY_DRAWING_BARS, type DrawingGeometryContext, type DrawingToolDefinition } from './tools/types';
 import type { DrawingCanvasPrimitive } from './DrawingCanvasPrimitive';
+
+// Test-only tools for the gestures no shipped tool uses yet (TVP-3 adds the real ones).
+const testTools = vi.hoisted(() => {
+  const polyline = (context: DrawingGeometryContext) => [{ kind: 'polyline' as const, points: [...context.points], stroke: '#fff', strokeWidth: 2 }];
+  return {
+    polyline,
+    brushGeometry: vi.fn(polyline),
+  };
+});
+
+vi.mock('./tools/registry', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./tools/registry')>();
+  const { constrainTo45Degrees } = await import('./tools/shapes');
+  const base = { group: 'shapes', defaultProperties: {}, propertySchema: [] } as const;
+  const extra: DrawingToolDefinition[] = [
+    { ...base, id: 'pitchfork', label: 'Pitchfork', creation: { gesture: 'click-click', anchors: 3 }, draftPreview: 'shapes', previewAnchors: 2, geometry: testTools.polyline },
+    { ...base, id: 'path', label: 'Path', creation: { gesture: 'click-click' }, constrain: constrainTo45Degrees, geometry: testTools.polyline },
+    { ...base, id: 'brush', label: 'Brush', creation: { gesture: 'freehand', simplifyTolerance: 0 }, handles: 'ends', geometry: testTools.brushGeometry },
+    { ...base, id: 'note', label: 'Anchored note', creation: { gesture: 'click' }, anchoring: 'screen', geometry: (context) => [{ kind: 'marker', x: context.points[0].x, y: context.points[0].y, radius: 3, fill: '#fff' }] },
+  ];
+  const byId = new Map(extra.map((definition) => [definition.id, definition]));
+  return {
+    ...original,
+    drawingToolDefinition: (id: string) => byId.get(id) ?? original.drawingToolDefinition(id),
+    isDrawingToolId: (id: string) => byId.has(id) || original.isDrawingToolId(id),
+  };
+});
 
 beforeAll(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
@@ -37,7 +65,13 @@ function fakeAdapter() {
       const projected = testProjector(point);
       return projected ? { x: projected.x + offset, y: projected.y } : null;
     },
-    drawingPointFromCoordinate: (x: number, y: number) => pointAt(x - offset, y),
+    // Bars are 10px apart: times snap to them unless the caller asks for the exact time.
+    drawingPointFromCoordinate: (x: number, y: number, options: { exactTime?: boolean } = {}) => (
+      pointAt(options.exactTime ? x - offset : Math.round((x - offset) / 10) * 10, y)
+    ),
+    drawingBars: () => EMPTY_DRAWING_BARS,
+    drawingTimeAfterBars: () => null,
+    formatDrawingPrice: (price: number) => price.toFixed(2),
     onViewportChange: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -144,7 +178,7 @@ describe('TradingDrawingOverlay', () => {
     expect(handlers.onAdd).toHaveBeenCalledWith(expect.objectContaining({
       toolType: 'fibonacci',
       points: [pointAt(100, 100), pointAt(200, 300)],
-      properties: expect.objectContaining({ levels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] }),
+      properties: expect.objectContaining({ levels: expect.arrayContaining([{ value: 0.618, color: '', visible: true }]) }),
     }));
     expect(svg.querySelector('line.draft')).toBeNull();
   });
@@ -162,6 +196,7 @@ describe('TradingDrawingOverlay', () => {
     fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="trend-line-1"] line')!, { clientX: 150, clientY: 250 });
     expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
       source: 'context-menu', drawingId: 'trend-line-1', drawingTool: 'trend-line', trendlinePoints: trend.points,
+      drawingAlertLevels: [expect.objectContaining({ anchors: trend.points, interpolation: 'bars' })],
     }), undefined);
     fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="box"] rect')!, { clientX: 350, clientY: 150 });
     expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({ drawingId: 'box', trendlinePoints: undefined }), undefined);
@@ -197,4 +232,83 @@ describe('TradingDrawingOverlay', () => {
     expect(svg.style.pointerEvents).toBe('');
     expect(svg.dataset.drawingId).toBeUndefined();
   });
+
+  it('places click-click anchors, previews the tool from two anchors and completes on the last', () => {
+    const { svg, handlers } = renderOverlay({ tool: 'pitchfork' as DrawingTool });
+    click(svg, 100, 100);
+    fireEvent.pointerMove(svg, { clientX: 150, clientY: 150 });
+    expect(svg.querySelector('[data-drawing-draft] polyline')).toHaveAttribute('points', '100,100 150,150');
+    click(svg, 200, 200);
+    expect(handlers.onAdd).not.toHaveBeenCalled();
+    click(svg, 300, 100);
+    expect(handlers.onAdd).toHaveBeenCalledWith(expect.objectContaining({ points: [pointAt(100, 100), pointAt(200, 200), pointAt(300, 100)] }));
+  });
+
+  it('places creation anchors on top of existing drawings instead of selecting them', () => {
+    const existing = drawing('horizontal-line', [[0, 200]], { drawingId: 'line' });
+    const { svg, handlers } = renderOverlay({ tool: 'pitchfork' as DrawingTool, drawings: [existing], selectedId: 'line' });
+    click(svg, 100, 100);
+    click(svg.querySelector('g[data-drawing-id="line"] line')!, 200, 200);
+    click(svg.querySelector('g[data-drawing-id="line"] [data-drawing-point-index]')!, 0, 200);
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    expect(handlers.onAdd).toHaveBeenCalledWith(expect.objectContaining({ points: [pointAt(100, 100), pointAt(200, 200), pointAt(0, 200)] }));
+  });
+
+  it('keeps the creation preview on the chart while it pans between clicks', () => {
+    const { svg, pan } = renderOverlay({ tool: 'trend-line' });
+    fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(svg, { clientX: 200, clientY: 200 });
+    const line = svg.querySelector('line.draft')!;
+    expect(line).toHaveAttribute('x2', '200');
+    pan(50);
+    expect(svg.querySelector('line.draft')).toBe(line);
+    expect(line).toHaveAttribute('x1', '150');
+    expect(line).toHaveAttribute('x2', '250');
+  });
+
+  it('completes an open-ended path on double click and constrains with Shift', () => {
+    const { svg, handlers } = renderOverlay({ tool: 'path' as DrawingTool });
+    click(svg, 100, 100);
+    fireEvent.pointerMove(svg, { clientX: 200, clientY: 110, shiftKey: true });
+    expect(svg.querySelector('line.draft')).toHaveAttribute('y2', '100');
+    click(svg, 200, 200);
+    click(svg, 300, 100);
+    click(svg, 300, 100);
+    fireEvent.doubleClick(svg, { clientX: 300, clientY: 100 });
+    expect(handlers.onAdd).toHaveBeenCalledWith(expect.objectContaining({ points: [pointAt(100, 100), pointAt(200, 200), pointAt(300, 100)] }));
+  });
+
+  it('records freehand strokes at exact times without re-rendering the chart drawings per move', () => {
+    const existing = drawing('brush' as TradingDrawing['toolType'], [[10, 10], [20, 20]], { drawingId: 'stroke' });
+    const { svg, handlers } = renderOverlay({ tool: 'brush' as DrawingTool, drawings: [existing] });
+    fireEvent.pointerDown(svg, { clientX: 103, clientY: 100, pointerId: 1 });
+    testTools.brushGeometry.mockClear();
+    for (let step = 1; step <= 30; step += 1) fireEvent.pointerMove(svg, { clientX: 103 + step * 3, clientY: 100 + (step % 2) * 5 });
+    expect(svg.querySelector('[data-drawing-draft] polyline')?.getAttribute('points')?.split(' ')).toHaveLength(31);
+    // Moves patch only the preview; React re-renders (and reruns the existing stroke's
+    // geometry) only when the preview's structure changes: outline segment, then polyline.
+    expect(testTools.brushGeometry.mock.calls.length).toBeLessThanOrEqual(2);
+    fireEvent.pointerUp(svg, { clientX: 193, clientY: 100, pointerId: 1 });
+    const added = handlers.onAdd.mock.calls[0][0] as TradingDrawing;
+    expect(added.points).toHaveLength(31);
+    // Freehand keeps times between bars (bars are 10px apart in this fixture).
+    expect(added.points[0]).toEqual(pointAt(103, 100));
+  });
+
+  it('keeps screen-anchored drawings in place while the chart pans', () => {
+    const { svg, handlers, pan } = renderOverlay({ tool: 'note' as DrawingTool });
+    click(svg, 400, 300);
+    const note = handlers.onAdd.mock.calls[0][0] as TradingDrawing;
+    expect(note.points[0].screen).toEqual({ x: 0.5, y: 0.5 });
+    cleanup();
+    const view = renderOverlay({ drawings: [note] });
+    view.pan(80);
+    expect(view.svg.querySelector('circle')).toHaveAttribute('cx', '400');
+    void pan;
+  });
 });
+
+function click(element: Element, x: number, y: number) {
+  fireEvent.pointerDown(element, { clientX: x, clientY: y, pointerId: 1 });
+  fireEvent.pointerUp(element, { clientX: x, clientY: y, pointerId: 1 });
+}

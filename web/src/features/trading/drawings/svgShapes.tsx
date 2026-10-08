@@ -41,7 +41,9 @@ function geometryAttributes(shape: DrawingShape): Record<string, number | string
     case 'polygon':
       return { points: svgPoints(shape.points) };
     case 'rect':
-      return { x: shape.x, y: shape.y, width: shape.width, height: shape.height };
+      return shape.radius === undefined
+        ? { x: shape.x, y: shape.y, width: shape.width, height: shape.height }
+        : { x: shape.x, y: shape.y, width: shape.width, height: shape.height, rx: shape.radius };
     case 'ellipse':
       return { cx: shape.cx, cy: shape.cy, rx: shape.rx, ry: shape.ry };
     case 'path':
@@ -74,7 +76,7 @@ export function ShapeElement({ shape, index }: { shape: DrawingShape; index: num
     case 'polygon':
       return <polygon {...props as SVGProps<SVGPolygonElement>} />;
     case 'rect':
-      return <rect {...props as SVGProps<SVGRectElement>} rx={shape.radius} />;
+      return <rect {...props as SVGProps<SVGRectElement>} />;
     case 'ellipse':
       return <ellipse {...props as SVGProps<SVGEllipseElement>} />;
     case 'path':
@@ -95,9 +97,14 @@ export function ShapeElement({ shape, index }: { shape: DrawingShape; index: num
   }
 }
 
-/** Moves a mounted shape element to `shape`'s coordinates (and text). */
+/**
+ * Moves a mounted shape element to `shape`'s coordinates (and text). Paint is
+ * not patched: the host compares `shapeSignature`, which covers paint, and
+ * re-renders through React when it changes.
+ */
 export function patchShapeElement(element: SVGElement, shape: DrawingShape): void {
   const attributes = geometryAttributes(shape);
   for (const name in attributes) element.setAttribute(name, String(attributes[name]));
+  if (shape.kind === 'rect' && shape.radius === undefined) element.removeAttribute('rx');
   if (shape.kind === 'text' && element.textContent !== shape.text) element.textContent = shape.text;
 }

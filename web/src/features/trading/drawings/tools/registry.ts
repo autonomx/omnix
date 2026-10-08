@@ -9,7 +9,7 @@ import { measurementTool } from './definitions/measurement';
 import { textTool } from './definitions/text';
 import { rayTool, trendLineTool } from './definitions/trendLines';
 import { crosslineTool, verticalLineTool } from './definitions/verticalLines';
-import type { DrawingProperties, DrawingPropertyField, DrawingPropertyValue, DrawingToolDefinition } from './types';
+import type { DrawingProperties, DrawingPropertyValue, DrawingToolDefinition } from './types';
 
 export const DRAWING_TOOL_DEFINITIONS = [
   dotTool,
@@ -41,37 +41,26 @@ export function isDrawingToolId(id: string): id is DrawingToolId {
   return byId.has(id);
 }
 
-function valueMatches(field: DrawingPropertyField, value: DrawingPropertyValue): boolean {
-  switch (field.type) {
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value);
-    case 'number-list':
-      return Array.isArray(value) && value.every((item) => typeof item === 'number' && Number.isFinite(item));
-    case 'select':
-      return typeof value === 'string' && field.options.some((option) => option.value === value);
-    case 'color':
-    case 'text':
-      return typeof value === 'string';
-  }
-}
-
 /**
- * A drawing's properties with the tool's defaults filled in. Stored values of
- * the wrong type fall back to the default; keys the tool doesn't declare are
- * kept, so a newer client's properties survive an older one.
+ * A drawing's properties with the tool's defaults filled in for missing keys.
+ * Stored values are kept as they are, even when they don't match the schema,
+ * so nothing written by another client version is lost; geometry reads them
+ * defensively (`properties.ts`).
  */
 export function drawingPropertiesWithDefaults(toolType: string, stored: DrawingProperties | undefined): DrawingProperties {
   const definition = byId.get(toolType);
-  if (!definition) return { ...(stored ?? {}) };
   const properties: Record<string, DrawingPropertyValue> = { ...(stored ?? {}) };
+  if (!definition) return properties;
   for (const [key, fallback] of Object.entries(definition.defaultProperties)) {
-    const field = definition.propertySchema.find((item) => item.key === key);
-    const value = properties[key];
-    if (value === undefined || (field && !valueMatches(field, value))) {
-      properties[key] = Array.isArray(fallback) ? [...fallback] : fallback;
-    }
+    if (properties[key] === undefined) properties[key] = Array.isArray(fallback) ? [...fallback] : fallback;
   }
   return properties;
+}
+
+/** The object-tree name of a drawing: its text for text tools, the tool's name otherwise. */
+export function drawingDisplayName(drawing: { toolType: string; text?: string }): string {
+  const definition = byId.get(drawing.toolType);
+  if (!definition) return `${drawing.toolType} (unsupported)`;
+  if (definition.editableText && drawing.text) return drawing.text;
+  return definition.displayName ?? definition.label;
 }
