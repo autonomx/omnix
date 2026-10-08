@@ -98,7 +98,7 @@ def install_error_envelope(app: Any) -> None:
     async def validation_error(request: Any, exc: RequestValidationError) -> JSONResponse:
         from fastapi.encoders import jsonable_encoder
 
-        errors = exc.errors()
+        errors = [redact_validation_error(error) for error in exc.errors()]
         # Validation failures are security events (ASVS 7.1.3); the rejected
         # values are not logged.
         logger.info("request_validation_failed path=%s errors=%d", request.url.path, len(errors))
@@ -118,6 +118,39 @@ def install_error_envelope(app: Any) -> None:
     app.add_exception_handler(Exception, unhandled_error)
 
 
+_SECRET_KEY_MARKERS = ("secret", "password", "api_key", "apikey", "token", "credential")
+_REDACTED = "[redacted]"
+
+
+def _is_secret_key(key: object) -> bool:
+    name = str(key).lower()
+    return any(marker in name for marker in _SECRET_KEY_MARKERS)
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _REDACTED if _is_secret_key(key) else _redact(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact(item) for item in value]
+    return value
+
+
+def redact_validation_error(error: dict[str, Any]) -> dict[str, Any]:
+    """A validation error safe to send back: no secret-named field's value.
+
+    A model-level error echoes the whole request body as ``input``, and a
+    field error on a secret echoes the secret itself.
+    """
+    redacted = dict(error)
+    if "input" in redacted:
+        location = redacted.get("loc") or ()
+        secret_field = any(_is_secret_key(part) for part in location if isinstance(part, str))
+        redacted["input"] = _REDACTED if secret_field else _redact(redacted["input"])
+    if "ctx" in redacted:
+        redacted["ctx"] = _redact(redacted["ctx"])
+    return redacted
+
+
 __all__ = [
     "LegacyPersistenceRetired",
     "PROBLEM_MEDIA_TYPE",
@@ -125,4 +158,5 @@ __all__ = [
     "install_error_envelope",
     "problem_body",
     "problem_code",
+    "redact_validation_error",
 ]

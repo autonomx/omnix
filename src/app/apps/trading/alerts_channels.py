@@ -8,6 +8,7 @@ TVP-0.5b (email) and TVP-0.5c (push) each add theirs to
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable
 from typing import Protocol
 
@@ -27,6 +28,7 @@ def unavailable_channels(channels: Iterable[str], available: Iterable[str] = AVA
 class AlertSecretStore(Protocol):
     def save(self, workspace_id: str, alert_id: str, secret: str | None) -> None: ...
     def has(self, workspace_id: str, alert_id: str) -> bool: ...
+    def available(self) -> bool: ...
 
 
 def _key(workspace_id: str, alert_id: str) -> str:
@@ -41,6 +43,10 @@ class ProtectedAlertSecretStore:
 
     def has(self, workspace_id: str, alert_id: str) -> bool:
         return has_alert_webhook_secret(_key(workspace_id, alert_id))
+
+    def available(self) -> bool:
+        # The store is DPAPI-backed; elsewhere setting a secret fails closed.
+        return sys.platform == "win32"
 
 
 __all__ = [

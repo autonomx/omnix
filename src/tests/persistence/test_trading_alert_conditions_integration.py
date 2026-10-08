@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import uuid
@@ -283,6 +284,17 @@ def test_pushed_prices_evaluate_price_alerts_only(alerts) -> None:
     assert _alert(alerts, "push-rsi").last_observed_value is None
 
 
+def test_pushed_prices_skip_per_bar_frequencies(alerts) -> None:
+    for frequency in ("once_per_bar", "once_per_bar_close"):
+        _create(alerts, frequency, frequency=frequency)
+    now = datetime.now(timezone.utc) + timedelta(minutes=1)
+    for minute, price in enumerate(("99", "101")):
+        assert alerts.repository.evaluate(
+            TradingAlertEvaluation(instrument_id=alerts.instrument, observed_price=Decimal(price), observed_at=now + timedelta(minutes=minute))
+        ) == []
+    assert _alert(alerts, "once_per_bar").last_observed_value is None
+
+
 def test_migration_backfills_legacy_alerts(alerts) -> None:
     points = [{"time": "2026-08-05T12:00:00+00:00", "price": "100"}, {"time": "2026-08-05T13:00:00+00:00", "price": "110"}]
     legacy = {
@@ -322,7 +334,8 @@ def test_migration_backfills_legacy_alerts(alerts) -> None:
         connection.execute(MIGRATION.read_text(encoding="utf-8"))
         connection.execute(MIGRATION.read_text(encoding="utf-8"))  # idempotent
         rows = connection.execute(
-            "SELECT alert_id, frequency, cooldown_seconds, enabled FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id LIKE %s",
+            "SELECT alert_id, frequency, cooldown_seconds, enabled, condition_parameters, notification_settings,"
+            " evaluation_policy FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id LIKE %s",
             (workspace, f"legacy-%-{alerts.suffix}"),
         ).fetchall()
         stored_rows = {str(row[0]): row for row in rows}
@@ -341,9 +354,14 @@ def test_migration_backfills_legacy_alerts(alerts) -> None:
             )
             expected = legacy_conditions(condition_type, Decimal(threshold), TradingAlertParameters(**parameters))
             assert [stored_condition] == expected, condition_type
-        assert stored_rows[f"legacy-0-{alerts.suffix}"][1:] == ("once", 0, False)  # already fired: stays stopped
-        assert stored_rows[f"legacy-1-{alerts.suffix}"][1:] == ("once_per_bar", 0, True)
-        assert stored_rows[f"legacy-4-{alerts.suffix}"][1:] == ("every_time", 60, True)
+        assert stored_rows[f"legacy-0-{alerts.suffix}"][1:4] == ("once", 0, False)  # already fired: stays stopped
+        assert stored_rows[f"legacy-1-{alerts.suffix}"][1:4] == ("once_per_bar", 0, True)
+        assert stored_rows[f"legacy-4-{alerts.suffix}"][1:4] == ("every_time", 60, True)
+        for row in stored_rows.values():
+            # Notification settings moved out of condition_parameters; intrabar evaluation follows the frequency.
+            assert not {"message", "notification_channels", "delivery"} & set(row[4])
+            assert row[5]["notification_channels"] == ["app", "toast"] and row[5]["message"] == ""
+            assert row[6]["allow_partial_bars"] is (row[1] != "once_per_bar_close")
         uow.rollback()
 
 
@@ -360,13 +378,24 @@ class MemorySecrets:
     def has(self, workspace_id, alert_id) -> bool:
         return (workspace_id, alert_id) in self.values
 
+    def available(self) -> bool:
+        return True
+
+
+def _client(env, secrets):
+    from app.errors import install_error_envelope
+
+    app = FastAPI()
+    install_error_envelope(app)
+    app.include_router(create_trading_alert_router(repository_factory=lambda: env.repository, secret_store=secrets))
+    return TestClient(app)
+
 
 def test_api_rejects_unavailable_channels_and_never_returns_the_webhook_secret(alerts) -> None:
     secrets = MemorySecrets()
-    app = FastAPI()
-    app.include_router(create_trading_alert_router(repository_factory=lambda: alerts.repository, secret_store=secrets))
-    client = TestClient(app)
+    client = _client(alerts, secrets)
     alert_id = f"api-{alerts.suffix}"
+    key = (alerts.context.workspace_id, alert_id)
     body = {
         "alert_id": alert_id,
         "instrument_id": alerts.instrument,
@@ -379,37 +408,170 @@ def test_api_rejects_unavailable_channels_and_never_returns_the_webhook_secret(a
     for channel in ("email", "push"):
         assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": [channel]}}).status_code == 422
 
-    body["parameters"] = {"notification_channels": ["app", "sound"], "delivery": {"webhook": {"url": "https://hooks.example.com/a", "has_secret": False}, "sound": {"name": "chime"}}}
+    body["parameters"] = {
+        "notification_channels": ["app", "sound"],
+        "delivery": {"webhook": {"url": "https://hooks.example.com/a", "has_secret": False}, "sound": {"name": "chime"}},
+    }
     created = client.post("/api/trading/alerts", json={**body, "webhook_secret": "very-secret-value"})
     assert created.status_code == 201, created.text
     assert "very-secret-value" not in created.text and "webhook_secret" not in created.text
     assert created.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
-    assert secrets.values[(alerts.context.workspace_id, alert_id)] == "very-secret-value"
+    assert secrets.values[key] == "very-secret-value"
     with alerts.uow() as uow:
         stored = uow.connection.execute(
-            "SELECT condition_parameters::text FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
+            "SELECT condition_parameters::text || notification_settings::text FROM omnix_trading_alerts"
+            " WHERE workspace_id = %s AND alert_id = %s",
             (alerts.context.workspace_id, alert_id),
         ).fetchone()[0]
-    assert "very-secret-value" not in stored
-    listed = client.get("/api/trading/alerts")
-    assert "very-secret-value" not in listed.text
+    assert "very-secret-value" not in stored and "hooks.example.com" in stored
+    assert "very-secret-value" not in client.get("/api/trading/alerts").text
 
-    # An update without a secret keeps it; a client cannot claim one.
-    update = {key: value for key, value in body.items() if key != "alert_id"}
-    update["parameters"]["delivery"]["webhook"]["has_secret"] = True
+    # Reusing the alert id fails without touching the stored secret.
+    duplicate = client.post("/api/trading/alerts", json={**body, "webhook_secret": "other-secret"})
+    assert duplicate.status_code == 409
+    assert secrets.values[key] == "very-secret-value"
+
+    # An update without a secret keeps it.
+    update = {name: value for name, value in body.items() if name != "alert_id"}
     kept = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=update)
     assert kept.status_code == 200 and kept.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
+    # A stale update fails without touching the secret.
+    stale = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json={**update, "webhook_secret": "stale-secret"})
+    assert stale.status_code == 409
+    assert secrets.values[key] == "very-secret-value"
     cleared = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json={**update, "webhook_secret": ""})
     assert cleared.json()["parameters"]["delivery"]["webhook"]["has_secret"] is False
     assert secrets.values == {}
-    secrets.save(alerts.context.workspace_id, alert_id, "again")
-    restored = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "3"}, json=update)
-    assert restored.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
-    assert client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "4"}).status_code == 200
+    # A client cannot claim a secret: the stored flag decides.
+    claim = {**update, "parameters": {**update["parameters"], "delivery": {"webhook": {"url": "https://hooks.example.com/a", "has_secret": True}}}}
+    claimed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "3"}, json=claim)
+    assert claimed.json()["parameters"]["delivery"]["webhook"]["has_secret"] is False
+    replaced = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "4"}, json={**update, "webhook_secret": "new-secret"})
+    assert replaced.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
+    # Removing the webhook removes its secret.
+    removed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "5"}, json={**update, "parameters": {"notification_channels": ["app"]}})
+    assert removed.status_code == 200 and secrets.values == {}
+    again = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "6"}, json={**update, "webhook_secret": "last"})
+    assert again.status_code == 200 and secrets.values[key] == "last"
+    assert client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "7"}).status_code == 200
     assert secrets.values == {}
 
     no_webhook = client.post("/api/trading/alerts", json={**body, "parameters": {}, "webhook_secret": "x"})
     assert no_webhook.status_code == 422
+
+
+def test_validation_errors_never_echo_the_webhook_secret(alerts) -> None:
+    client = _client(alerts, MemorySecrets())
+    base = {
+        "alert_id": f"leak-{alerts.suffix}",
+        "instrument_id": alerts.instrument,
+        "parameters": {"delivery": {"webhook": {"url": "https://hooks.example.com/a"}}},
+        "webhook_secret": "leaky-secret-value",
+    }
+    for body in (
+        {**base, "conditions": []},  # model-level error: the whole body is the input
+        {**base, "conditions": [{"source": CLOSE, "operator": "inside_channel", "target": {"kind": "value", "value": "1"}}]},
+        {**base, "condition_type": "conditions", "threshold": "5"},
+        {**base, "webhook_secret": "leaky-secret-value" * 40},  # field error on the secret itself
+        {**base, "parameters": {"delivery": {"webhook": {"url": "file:///etc/passwd"}}}},
+    ):
+        response = client.post("/api/trading/alerts", json=body)
+        assert response.status_code == 422, response.text
+        assert "leaky-secret-value" not in response.text
+    update = {name: value for name, value in base.items() if name != "alert_id"}
+    put = client.put(f"/api/trading/alerts/{base['alert_id']}", headers={"If-Match": "1"}, json=update)
+    assert put.status_code == 422 and "leaky-secret-value" not in put.text
+
+
+def test_editing_notification_settings_keeps_trigger_state(alerts) -> None:
+    market = Market()
+    created = _create(
+        alerts, "notify", frequency="once_per_minute",
+        conditions=[{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "100"}}],
+    )
+    market.set([99], forming=101)
+    assert _run(alerts, market) == ["notify"]
+    fired = _alert(alerts, "notify")
+    fields = set(TradingAlertUpdate.model_fields) - {"webhook_secret"}
+    update = TradingAlertUpdate(**{
+        **fired.model_dump(include=fields),
+        "parameters": {
+            **fired.parameters.model_dump(),
+            "message": "new text",
+            "notification_channels": ["app", "sound"],
+            "delivery": {"sound": {"name": "bell"}},
+        },
+    })
+    edited = alerts.repository.update(created.alert_id, update, expected_revision=fired.revision)
+    assert edited.parameters.message == "new text"
+    assert _alert(alerts, "notify").last_triggered_at == fired.last_triggered_at
+    market.set([99], forming=102)
+    assert _run(alerts, market) == []  # still inside the minute
+    # A condition change starts a new history.
+    changed = TradingAlertUpdate(**{
+        **edited.model_dump(include=fields),
+        "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "101"}}],
+    })
+    alerts.repository.update(created.alert_id, changed, expected_revision=edited.revision)
+    assert _alert(alerts, "notify").last_triggered_at is None
+
+
+def test_unreadable_rows_do_not_break_listing_or_the_monitor(alerts) -> None:
+    market = Market()
+    _create(alerts, "healthy")
+    workspace = alerts.context.workspace_id
+    with alerts.uow() as uow:
+        for alert_id, condition_type, notification in (
+            # Breaks today's write rules but reads: a blocked webhook URL, a legacy indicator without an id.
+            (f"blocked-url-{alerts.suffix}", "price_above", {"delivery": {"webhook": {"url": "http://169.254.169.254/"}}}),
+            (f"no-indicator-{alerts.suffix}", "indicator_above", {}),
+            # Cannot be read at all.
+            (f"broken-{alerts.suffix}", "price_above", {"notification_channels": ["fax"]}),
+        ):
+            uow.connection.execute(
+                "INSERT INTO omnix_trading_alerts (workspace_id, alert_id, instrument_id, condition_type, threshold,"
+                " notification_settings) VALUES (%s, %s, %s, %s, 100, %s::jsonb)",
+                (workspace, alert_id, alerts.instrument, condition_type, json.dumps(notification)),
+            )
+        uow.commit()
+    try:
+        listed = {alert.alert_id for alert in alerts.repository.list_alerts(500) if alert.instrument_id == alerts.instrument}
+        assert listed == {f"healthy-{alerts.suffix}", f"blocked-url-{alerts.suffix}", f"no-indicator-{alerts.suffix}"}
+        market.set([99, 101])
+        assert _run(alerts, market) == ["blocked-url", "healthy"]
+    finally:
+        with alerts.uow() as uow:
+            uow.connection.execute(
+                "DELETE FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
+                (workspace, f"broken-{alerts.suffix}"),
+            )
+            uow.commit()
+
+
+def test_migrated_legacy_alerts_ignore_bars_closed_before_the_migration(alerts) -> None:
+    market = Market()
+    workspace = alerts.context.workspace_id
+    alert_id = f"stale-legacy-{alerts.suffix}"
+    month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    with alerts.uow() as uow:
+        uow.connection.execute(
+            "INSERT INTO omnix_trading_alerts (workspace_id, alert_id, instrument_id, condition_type, threshold,"
+            " condition_parameters, created_at, updated_at)"
+            " VALUES (%s, %s, %s, 'price_above', 100, %s::jsonb, %s, %s)",
+            (workspace, alert_id, alerts.instrument, json.dumps({"message": "old", "trigger_policy": "every_time"}), month_ago, month_ago),
+        )
+        uow.connection.execute(MIGRATION.read_text(encoding="utf-8"))
+        uow.commit()
+    alert = next(item for item in alerts.repository.list_alerts(500) if item.alert_id == alert_id)
+    assert alert.updated_at > month_ago + timedelta(days=29)
+    assert alert.parameters.message == "old" and alert.evaluation_policy.allow_partial_bars is True
+    # Bars that closed after the alert's old updated_at but before the migration are history.
+    market.base = datetime.now(timezone.utc) - timedelta(hours=2)
+    market.set([99, 101])
+    assert _run(alerts, market) == []
+    market.base = datetime.now(timezone.utc) + timedelta(minutes=1)
+    market.set([99, 101])
+    assert _run(alerts, market) == ["stale-legacy"]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the protected store needs DPAPI")

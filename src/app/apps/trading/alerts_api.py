@@ -5,7 +5,6 @@ from collections.abc import Callable, Iterable
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
-from app.errors import LegacyPersistenceRetired
 from app.persistence.errors import RevisionConflict
 
 from .alerts import (
@@ -48,9 +47,13 @@ def create_trading_alert_router(
 
     def prepare_channels(
         request: TradingAlertCreate | TradingAlertUpdate,
-        repository: TradingAlertRepository,
-        alert_id: str,
-    ) -> None:
+        previous: TradingAlert | None,
+    ) -> str | None:
+        """Check channels and set ``has_secret``; return the secret change to save.
+
+        Nothing is written here: the secret store changes only after the
+        alert itself was saved (``finish_channels``).
+        """
         missing = unavailable_channels(request.parameters.notification_channels, channels)
         if missing:
             raise HTTPException(status_code=422, detail=f"alert channel {missing[0]} is not available yet")
@@ -59,17 +62,33 @@ def create_trading_alert_router(
         if secret is not None and webhook is None:
             raise HTTPException(status_code=422, detail="webhook_secret needs parameters.delivery.webhook")
         if webhook is None:
-            return
-        workspace_id = repository.context.workspace_id
+            return None
         if secret is None:
-            webhook.has_secret = store.has(workspace_id, alert_id)
-            return
+            previous_webhook = previous.parameters.delivery.webhook if previous is not None else None
+            webhook.has_secret = previous_webhook is not None and previous_webhook.has_secret
+            return None
         value = secret.get_secret_value().strip()
-        try:
-            store.save(workspace_id, alert_id, value or None)
-        except LegacyPersistenceRetired as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if value and not store.available():
+            raise HTTPException(
+                status_code=422,
+                detail="alert webhook secrets require an operating-system credential store",
+            )
         webhook.has_secret = bool(value)
+        return value
+
+    def finish_channels(
+        repository: TradingAlertRepository,
+        alert_id: str,
+        request: TradingAlertCreate | TradingAlertUpdate,
+        previous: TradingAlert | None,
+        secret: str | None,
+    ) -> None:
+        if secret is not None:
+            store.save(repository.context.workspace_id, alert_id, secret or None)
+            return
+        previous_webhook = previous.parameters.delivery.webhook if previous is not None else None
+        if request.parameters.delivery.webhook is None and previous_webhook is not None and previous_webhook.has_secret:
+            store.save(repository.context.workspace_id, alert_id, None)
 
     @router.get("", response_model=TradingAlertListResponse)
     def list_alerts(
@@ -82,11 +101,13 @@ def create_trading_alert_router(
     @router.post("", response_model=TradingAlert, status_code=201)
     def create_alert(request: TradingAlertCreate) -> TradingAlert:
         repository = repository_factory()
-        prepare_channels(request, repository, request.alert_id)
+        secret = prepare_channels(request, None)
         try:
-            return repository.create(request)
+            created = repository.create(request)
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        finish_channels(repository, created.alert_id, request, None, secret)
+        return created
 
     @router.get("/triggers", response_model=TradingAlertTriggerListResponse)
     def list_triggers(
@@ -107,8 +128,11 @@ def create_trading_alert_router(
         targets are evaluated: the alert's ``last_observed_value`` is the
         previous value and the pushed value the current one. Every other alert
         (indicators, percent change, trendlines, moving operators) is skipped;
-        the server monitor evaluates those on bars. Frequency, cooldown and
-        idempotency apply as for monitored alerts, with ``observed_at`` as the bar.
+        the server monitor evaluates those on bars. Alerts with a per-bar
+        frequency (``once_per_bar``, ``once_per_bar_close``) are skipped too: a
+        pushed price carries no bar. Other frequencies, cooldown and
+        idempotency apply as for monitored alerts, with ``observed_at`` as the
+        observation's time.
         """
         return TradingAlertTriggerListResponse(
             triggers=repository_factory().evaluate(request)
@@ -121,9 +145,10 @@ def create_trading_alert_router(
         if_match: int = Header(alias="If-Match", ge=1),
     ) -> TradingAlert:
         repository = repository_factory()
-        prepare_channels(request, repository, alert_id)
+        previous = repository.get(alert_id)
+        secret = prepare_channels(request, previous)
         try:
-            return repository.update(
+            updated = repository.update(
                 alert_id,
                 request,
                 expected_revision=if_match,
@@ -136,6 +161,8 @@ def create_trading_alert_router(
                     "message": str(exc),
                 },
             ) from exc
+        finish_channels(repository, alert_id, request, previous, secret)
+        return updated
 
     @router.delete("/{alert_id}", response_model=TradingAlert)
     def archive_alert(

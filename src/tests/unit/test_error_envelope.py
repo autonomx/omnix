@@ -130,3 +130,16 @@ def test_error_code_keeps_only_the_leading_code(message, code) -> None:
     from app.errors import error_code
 
     assert error_code(RuntimeError(message), "fallback_code") == code
+
+
+def test_validation_errors_redact_secret_named_values() -> None:
+    from app.errors import redact_validation_error
+
+    body = {"alert_id": "a", "webhook_secret": "s3cret", "nested": {"api_key": "k", "password": "p", "keep": 1}}
+    model_error = redact_validation_error({"type": "value_error", "loc": ("body",), "msg": "bad", "input": body})
+    assert model_error["input"] == {"alert_id": "a", "webhook_secret": "[redacted]", "nested": {"api_key": "[redacted]", "password": "[redacted]", "keep": 1}}
+    assert body["webhook_secret"] == "s3cret"  # the original is untouched
+    field_error = redact_validation_error({"type": "string_too_long", "loc": ("body", "webhook_secret"), "msg": "long", "input": "s3cret"})
+    assert field_error["input"] == "[redacted]"
+    plain = {"type": "missing", "loc": ("body", "alert_id"), "msg": "missing", "input": {"alert_id": None}}
+    assert redact_validation_error(plain) == plain
