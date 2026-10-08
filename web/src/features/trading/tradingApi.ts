@@ -16,7 +16,7 @@ import { unwrapLabelled } from '../../api/http';
 import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
 import { api } from './api/gateway';
 
-export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
+export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'watchlist-flags' | 'drawings' | 'indicator-presets';
 
 export type TradingCurrencyRate = components['schemas']['CurrencyRateResponse'];
 export type TradingQuote = components['schemas']['QuoteResponse'];
@@ -27,6 +27,7 @@ const trading = <T>(call: Promise<{ data?: T; error?: unknown; response: Respons
 const DOCUMENT_PATHS = {
   workspaces: { list: '/api/trading/workspaces', record: '/api/trading/workspaces/{record_id}' },
   watchlists: { list: '/api/trading/watchlists', record: '/api/trading/watchlists/{record_id}' },
+  'watchlist-flags': { list: '/api/trading/watchlist-flags', record: '/api/trading/watchlist-flags/{record_id}' },
   drawings: { list: '/api/trading/drawings', record: '/api/trading/drawings/{record_id}' },
   'indicator-presets': { list: '/api/trading/indicator-presets', record: '/api/trading/indicator-presets/{record_id}' },
 } as const;

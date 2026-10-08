@@ -213,6 +213,10 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       });
       return;
     }
+    if (path === '/api/trading/watchlist-flags' && method === 'GET') {
+      await fulfill(route, { records: [] });
+      return;
+    }
     if (path === '/api/trading/workspaces' && method === 'POST') {
       const input = request.postDataJSON() as { record_id: string; payload: Record<string, unknown> };
       const record = { record_id: input.record_id, record_type: 'workspace', revision: 1, payload: input.payload, status: 'active' };
