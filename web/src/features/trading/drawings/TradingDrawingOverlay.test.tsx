@@ -457,3 +457,28 @@ describe('selection gestures (TVP-2.2)', () => {
     expect(svg.querySelector('[data-drawing-id]')).toBeNull();
   });
 });
+
+describe('tool behaviour (TVP-3.8)', () => {
+  it('shows only the drawings visible on the chart\'s interval', () => {
+    const daily = { ...drawing('trend-line', [[100, 300], [300, 100]]), visibility: { minutes: { visible: false } } };
+    const { svg } = renderOverlay({ drawings: [daily, drawing('trend-line', [[100, 500], [300, 400]], { drawingId: 'any' })], interval: '1m' });
+    expect(svg.querySelector('g[data-drawing-id="trend-line-1"]')).toBeNull();
+    expect(svg.querySelector('g[data-drawing-id="any"]')).not.toBeNull();
+  });
+
+  it('lock all keeps every drawing in place', () => {
+    const { svg, handlers } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], allLocked: true });
+    fireEvent.pointerDown(svg.querySelector('g[data-drawing-id="trend-line-1"] line')!, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 240, clientY: 200 });
+    fireEvent.pointerUp(window, { clientX: 240, clientY: 200 });
+    expect(handlers.onTranslateDrawing).not.toHaveBeenCalled();
+  });
+
+  it('a new drawing starts with its tool\'s remembered style', () => {
+    window.localStorage.setItem('omnix.trading.drawing-tool-defaults', JSON.stringify({ dot: { style: { color: '#123456', lineWidth: 4, lineStyle: 'dashed' }, properties: {} } }));
+    const { svg, handlers } = renderOverlay({ tool: 'dot' });
+    click(svg, 100, 200);
+    expect(handlers.onAdd).toHaveBeenCalledWith(expect.objectContaining({ style: { color: '#123456', lineWidth: 4, lineStyle: 'dashed' } }));
+    window.localStorage.clear();
+  });
+});

@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, MarketBar } from './tradingTypes';
 import { intervalCompactLabel } from './tradingIntervals';
+import { useTradingStore } from './tradingStore';
+import { drawingScopeId } from './drawings/drawingToolSettings';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
 import { drawingDisplayName, drawingToolDefinition } from './drawings/tools/registry';
@@ -127,7 +129,10 @@ function TradingObjectTree({
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
-  const drawings = useTradingDrawings(instrumentId, sessionId);
+  const activeChartId = useTradingStore((state) => state.activeChartId);
+  const syncDrawings = useTradingStore((state) => state.drawingToolSettings.syncDrawings);
+  // The active chart's drawings: its own when drawings don't sync between charts (TVP-3.8).
+  const drawings = useTradingDrawings(instrumentId, drawingScopeId(sessionId, activeChartId, syncDrawings));
   const [chartExpanded, setChartExpanded] = useState(true);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(true);
   const symbol = displaySymbol(instrument, instrumentId);

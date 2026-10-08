@@ -1,5 +1,6 @@
 import { drawingPropertiesWithDefaults, type DrawingToolId } from './tools/registry';
 import { DEFAULT_DRAWING_STYLE, type DrawingEditPatch, type DrawingPoint, type DrawingProperties, type DrawingStyle } from './tools/types';
+import type { DrawingVisibility } from './drawingVisibility';
 
 export { DEFAULT_DRAWING_STYLE };
 export type { DrawingPoint, DrawingProperties, DrawingStyle };
@@ -20,6 +21,8 @@ export type TradingDrawing = {
   text?: string;
   /** Tool-specific properties (fib levels, extensions, ...); defaults come from the tool definition. */
   properties?: DrawingProperties;
+  /** Which intervals the drawing shows on (TVP-3.8); every interval when absent. */
+  visibility?: DrawingVisibility;
 };
 
 export type DrawingState = {
@@ -209,7 +212,7 @@ export function pasteDrawings(
 
 export function updateSelectedDrawing(
   state: DrawingState,
-  patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text' | 'properties'>>,
+  patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text' | 'properties' | 'visibility'>>,
   /** Edits with the same key in a row are one undo step (e.g. one settings field while it is edited). */
   mergeKey?: string,
 ): DrawingState {
