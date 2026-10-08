@@ -5,6 +5,7 @@ import { type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import { type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
+import { UTC_SESSION, type TradingSessionSpec } from './indicators/tradingSessions';
 import { type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore } from './tradingStore';
 import type { MarketBar } from './tradingTypes';
@@ -48,6 +49,9 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   const indicatorsRef = useRef<CoreIndicatorInstance[]>(indicators);
 
   const indicatorSchedulerRef = useRef<TradingIndicatorScheduler | null>(null);
+
+  // The chart instrument's session calendar, for session-aware indicators.
+  const indicatorSessionRef = useRef<TradingSessionSpec>(UTC_SESSION);
 
   const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -160,7 +164,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   return {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
-    selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorTimerRef, drawingTool,
+    selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, drawingTool,
     setDrawingTool, drawingSnapMode, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
     selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
     setStreamError, indicatorError, setIndicatorError, alertPlacement, setAlertPlacement, contextMenu,

@@ -10,7 +10,18 @@
   "mixed-90",
   "negative-prices-60"
  ],
+ "compare_datasets": [
+  "compare-walk-291"
+ ],
+ "session_datasets": [
+  "equity-dst-30m"
+ ],
  "indicators": [
+  {
+   "id": "tv-24-hour-volume",
+   "name": "24-hour Volume",
+   "default_period": 1
+  },
   {
    "id": "tv-accumulation-distribution-adl",
    "name": "Accumulation Distribution (ADL)",
@@ -125,6 +136,11 @@
    "id": "tv-coppock-curve",
    "name": "Coppock Curve",
    "default_period": 14
+  },
+  {
+   "id": "tv-correlation-coefficient-cc",
+   "name": "Correlation Coefficient (CC)",
+   "default_period": 20
   },
   {
    "id": "tv-detrended-price-oscillator-dpo",
@@ -365,6 +381,41 @@
    "id": "tv-relative-volatility-index",
    "name": "Relative Volatility Index",
    "default_period": 14
+  },
+  {
+   "id": "tv-relative-volume-at-time",
+   "name": "Relative Volume at Time",
+   "default_period": 5
+  },
+  {
+   "id": "tv-rob-booker-adx-breakout",
+   "name": "Rob Booker - ADX Breakout",
+   "default_period": 20
+  },
+  {
+   "id": "tv-rob-booker-knoxville-divergence",
+   "name": "Rob Booker - Knoxville Divergence",
+   "default_period": 150
+  },
+  {
+   "id": "tv-rob-booker-intraday-pivot-points",
+   "name": "Rob Booker Intraday Pivot Points",
+   "default_period": 1
+  },
+  {
+   "id": "tv-rob-booker-missed-pivot-points",
+   "name": "Rob Booker Missed Pivot Points",
+   "default_period": 10
+  },
+  {
+   "id": "tv-rob-booker-reversal",
+   "name": "Rob Booker Reversal",
+   "default_period": 14
+  },
+  {
+   "id": "tv-rob-booker-ziv-ghost-pivots",
+   "name": "Rob Booker Ziv Ghost Pivots",
+   "default_period": 1
   },
   {
    "id": "rsi-divergence",

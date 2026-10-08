@@ -54,6 +54,9 @@ export type IndicatorOutput = {
   valuesInStatusLine?: boolean;
   inputsInStatusLine?: boolean;
   volumeProfile?: VolumeProfileData;
+  /** Line outputs: joined (default), horizontal levels with gaps on bars without a value, or point markers. */
+  render?: 'line' | 'levels' | 'markers';
+  marker?: 'arrowUp' | 'arrowDown' | 'circle';
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
@@ -70,6 +73,10 @@ export type CoreIndicatorInstance = {
   signalPeriod?: number;
   standardDeviations?: number;
   anchorTime?: string | null;
+  /** Instrument id of the second series, for indicators that read one (Correlation Coefficient). */
+  compareSymbol?: string | null;
+  /** Built-in inputs beyond the period (`tradingViewBuiltInInputs`), by key. */
+  params?: Record<string, number | string>;
   style?: CoreIndicatorStyle;
 };
 

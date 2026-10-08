@@ -7,9 +7,8 @@ operation for operation; see ``_helpers.py`` for the shared rules.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC
 
-from ..registry import BarSeries
+from ..registry import BarSeries, TradingSession
 from ._helpers import (
     EPSILON,
     Chart,
@@ -52,6 +51,7 @@ from ._helpers import (
     typical_price,
     wma,
 )
+from ._sessions import session_clock
 
 
 def _money_flow_index(high: Values, low: Values, close: Values, volume: Values, period: int) -> list[MaybeNumber]:
@@ -208,16 +208,14 @@ def _volume_weighted_ma(close: Values, volume: Values, period: int) -> list[Mayb
     return _ratio(rolling_sum(price_volume, period), rolling_sum(volume, period))
 
 
-def _session_twap(bars: BarSeries, typical: Values) -> list[MaybeNumber]:
+def _session_twap(bars: BarSeries, typical: Values, session: TradingSession | None) -> list[MaybeNumber]:
+    # Sessions are the shared session days (UTC dates without a session calendar), like the browser's sessionClock.
     result = full(len(bars))
-    current_day = ""
+    day = session_clock(bars, session).day
     running = 0.0
     count = 0
-    for i, start_time in enumerate(bars.start_times):
-        # The browser groups by the first ten characters of the bar's ISO start_time string, which the API sends in UTC.
-        day = (start_time if start_time.tzinfo is None else start_time.astimezone(UTC)).date().isoformat()
-        if day != current_day:
-            current_day = day
+    for i in range(len(bars)):
+        if i == 0 or day[i] != day[i - 1]:
             running = 0.0
             count = 0
         running += typical[i]
@@ -490,7 +488,7 @@ def _technical_ratings(chart: Chart) -> Outputs:
 
 @builtin("tv-time-weighted-average-price", "Time Weighted Average Price", "exact", 1)
 def _twap(chart: Chart) -> Outputs:
-    return [chart.out("twap", _session_twap(chart.bars, typical_price(chart.bars)))]
+    return [chart.out("twap", _session_twap(chart.bars, typical_price(chart.bars), chart.inputs.session))]
 
 
 @builtin("tv-trend-strength-index", "Trend Strength Index", "exact", 20)

@@ -42,6 +42,11 @@ describe('indicator catalog filters', () => {
       markets: ['crypto', 'derivatives'],
       category: 'derivatives',
     });
+    // Calculated from bars, so a volume study rather than on-chain data; still a crypto (24/7) market study.
+    expect(classifyIndicatorCatalogEntry('24-hour Volume', 'indicator')).toEqual({
+      markets: ['crypto'],
+      category: 'volume',
+    });
     expect(classifyIndicatorCatalogEntry('Mark price', 'indicator')).toEqual({
       markets: ['derivatives'],
       category: 'derivatives',

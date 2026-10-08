@@ -15,9 +15,18 @@ import math
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Literal, TypeGuard
 
-from ..registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, NumericClass, register
+from ..registry import (
+    BarSeries,
+    IndicatorInputs,
+    IndicatorOutputSeries,
+    NumericClass,
+    register,
+    register_with_compare_series,
+)
+from ._sessions import epoch_ms
 
 MaybeNumber = float | None
 Values = Sequence[float]
@@ -427,6 +436,8 @@ class Chart:
     period: int
     inputs: IndicatorInputs
     bars: BarSeries
+    # The second series, for indicators registered with ``builtin_with_compare_series``.
+    compare: BarSeries | None = None
 
     @property
     def open(self) -> Values:
@@ -451,6 +462,43 @@ class Chart:
     def out(self, suffix: str, values: Sequence[MaybeNumber]) -> IndicatorOutputSeries:
         return output(self.id, suffix, values)
 
+    @cached_property
+    def compare_close(self) -> list[MaybeNumber]:
+        """The second series' close at each bar: the close of its latest bar starting at or before the bar's start, so gaps
+        carry the last close forward (the browser's ``alignedCompareCloses``). None everywhere without a second series."""
+        if self.compare is None or len(self.compare) == 0:
+            return full(len(self.bars))
+        # A stable sort by start time, like the browser's Array.prototype.sort.
+        series = sorted(
+            zip((epoch_ms(start) for start in self.compare.start_times), self.compare.close, strict=True),
+            key=lambda item: item[0],
+        )
+        j = -1
+        result: list[MaybeNumber] = []
+        for start in self.bars.start_times:
+            time = epoch_ms(start)
+            while j + 1 < len(series) and series[j + 1][0] <= time:
+                j += 1
+            result.append(series[j][1] if j >= 0 else None)
+        return result
+
+    def number_param(self, key: str, default: int | float, minimum: float, integer: bool = False) -> float:
+        """A ``params`` number like the browser's ``numberParam``: finite, at least ``minimum``, whole when ``integer``."""
+        value = self.inputs.param(key)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and value >= minimum
+            and (not integer or float(value).is_integer())
+        ):
+            return int(value) if integer else value
+        return default
+
+    def select_param(self, key: str, default: str, options: Sequence[str]) -> str:
+        value = self.inputs.param(key)
+        return value if isinstance(value, str) and value in options else default
+
 
 Builder = Callable[[Chart], Outputs]
 
@@ -465,6 +513,27 @@ def builtin(indicator_id: str, name: str, numeric_class: NumericClass, default_p
             return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars))
 
         register(indicator_id, name, numeric_class)(compute)
+        return build
+
+    return decorate
+
+
+def builtin_with_compare_series(
+    indicator_id: str, name: str, numeric_class: NumericClass, default_period: int
+) -> Callable[[Builder], Builder]:
+    """Like ``builtin`` for an indicator that also reads a second series, given to the builder as ``chart.compare``.
+
+    The browser passes the compare symbol's bars when ``compareSymbol`` is set, so the server uses the second series only
+    when ``inputs.compare_symbol`` is set too."""
+
+    def decorate(build: Builder) -> Builder:
+        def compute(bars: BarSeries, inputs: IndicatorInputs, compare: BarSeries | None) -> Outputs:
+            if len(bars) == 0:
+                return []
+            series = compare if inputs.compare_symbol else None
+            return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars, series))
+
+        register_with_compare_series(indicator_id, name, numeric_class)(compute)
         return build
 
     return decorate

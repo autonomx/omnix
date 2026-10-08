@@ -1,10 +1,11 @@
 import { APPEARANCE_CHANGE_EVENT, onOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { defaultTradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS } from './tradingTime';
-import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY } from './tradingChartPanelModel';
+import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY, loadCompareSymbolBars } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
@@ -21,11 +22,12 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     setTimezoneMenuOpen, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
     timezoneMenuRef,
   } = ws;
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!hostRef.current) return;
     const next = new TradingChartAdapter(hostRef.current, chartType);
-    const scheduler = new TradingIndicatorScheduler();
+    const scheduler = new TradingIndicatorScheduler(undefined, (id, barInterval, range) => loadCompareSymbolBars(queryClient, id, barInterval, range));
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     fittedBarsKeyRef.current = null;
@@ -57,7 +59,7 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     };
     // Creates the chart once per chart and synchronization group; it reads later values through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartId, synchronization, adapterRef, fittedBarsKeyRef, fullscreenIndicatorRef, fullscreenMainPaneRef, hostRef, indicatorSchedulerRef, indicatorTimerRef, pendingRangeIntervalRef, selectedRangeRef, setAdapter, setFullscreenIndicator, setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
+  }, [chartId, synchronization, queryClient, adapterRef, fittedBarsKeyRef, fullscreenIndicatorRef, fullscreenMainPaneRef, hostRef, indicatorSchedulerRef, indicatorTimerRef, pendingRangeIntervalRef, selectedRangeRef, setAdapter, setFullscreenIndicator, setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
 
   useEffect(() => {
     const host = hostRef.current;

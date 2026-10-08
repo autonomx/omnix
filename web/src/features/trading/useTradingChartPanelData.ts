@@ -7,13 +7,13 @@ import type { MarketBar } from './tradingTypes';
 import { useChartReplayClock } from './useTradingChartPanelReplayClock';
 import { TRADING_COMPARISON_COLORS } from './tradingComparisons';
 import { resolveTradingTimezone } from './tradingTime';
-import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonLabel } from './tradingChartPanelModel';
+import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonBarsQueryKey, comparisonLabel } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 
 /** Indicator scheduling: recomputes indicator outputs off the render path. */
 export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState>) {
   const {
-    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorTimerRef,
+    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef,
     indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate, onActivateRef,
     setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
   } = ws;
@@ -43,7 +43,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
       const scheduler = indicatorSchedulerRef.current;
       const targetAdapter = adapterRef.current;
       if (!scheduler || !targetAdapter) return;
-      void scheduler.calculate(barsRef.current, indicatorsRef.current)
+      void scheduler.calculate(barsRef.current, indicatorsRef.current, { session: indicatorSessionRef.current })
         .then((outputs) => {
           if (outputs && adapterRef.current === targetAdapter) {
             targetAdapter.setIndicatorOutputs(outputs);
@@ -81,7 +81,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
         })
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
-  }, [refreshIndicatorPanes, adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
+  }, [refreshIndicatorPanes, adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
 
   const historyLimit = chartHistoryLimit(instrumentId, interval, indicators);
 
@@ -109,7 +109,7 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     queries: comparisons.map((comparison) => {
       const comparisonLimit = chartHistoryLimit(comparison.instrumentId, interval, []);
       return {
-        queryKey: ['trading', 'comparison-bars-v2', comparison.instrumentId, interval, comparisonLimit, comparison.placement],
+        queryKey: comparisonBarsQueryKey(comparison.instrumentId, interval, comparisonLimit),
         queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit),
         enabled: Boolean(comparison.instrumentId),
         staleTime: 15_000,
