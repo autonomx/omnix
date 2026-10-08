@@ -488,6 +488,7 @@
     "PUT /api/trading/market-data/providers/ibkr/settings": "trading",
     "GET /api/trading/market-data/yahoo-evidence/diagnostics": "trading",
     "GET /api/trading/market-data/yahoo-evidence/diagnostics/{session_date}": "trading",
+    "GET /api/trading/market-status": "trading",
     "GET /api/trading/metrics": "trading",
     "GET /api/trading/models/bounce": "trading",
     "POST /api/trading/models/bounce/score-shadow": "trading",

@@ -24368,6 +24368,54 @@
         "title": "MarketResearchResult",
         "type": "object"
       },
+      "MarketStatusResponse": {
+        "additionalProperties": false,
+        "description": "An instrument's market session right now, for the chart legend (TVP-2.5).",
+        "properties": {
+          "always_open": {
+            "title": "Always Open",
+            "type": "boolean"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "exchange_timezone": {
+            "title": "Exchange Timezone",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "session_calendar": {
+            "title": "Session Calendar",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "pre_market",
+              "post_market",
+              "closed",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "session_calendar",
+          "exchange_timezone",
+          "status",
+          "always_open",
+          "as_of"
+        ],
+        "title": "MarketStatusResponse",
+        "type": "object"
+      },
       "MechanismRiskScores-Input": {
         "additionalProperties": false,
         "description": "Diagnostic mechanism heads; these are not calibrated probabilities.",
@@ -75237,6 +75285,50 @@
         "summary": "Yahoo Evidence Session Diagnostics",
         "tags": [
           "trading-market-data"
+        ]
+      }
+    },
+    "/api/trading/market-status": {
+      "get": {
+        "operationId": "market_status_api_trading_market_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Market Status",
+        "tags": [
+          "trading"
         ]
       }
     },

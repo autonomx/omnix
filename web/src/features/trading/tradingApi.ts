@@ -20,6 +20,7 @@ export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'watchlist-flags
 
 export type TradingCurrencyRate = components['schemas']['CurrencyRateResponse'];
 export type TradingQuote = components['schemas']['QuoteResponse'];
+export type TradingMarketStatus = components['schemas']['MarketStatusResponse'];
 
 const trading = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading');
 
@@ -202,6 +203,8 @@ export const tradingApi = {
     })),
   currencyRate: (baseCurrency: string, quoteCurrency: string): Promise<TradingCurrencyRate> =>
     trading(api.GET('/api/trading/currency-rates', { params: { query: { base_currency: baseCurrency, quote_currency: quoteCurrency } } })),
+  marketStatus: (instrumentId: string): Promise<TradingMarketStatus> =>
+    trading(api.GET('/api/trading/market-status', { params: { query: { instrument_id: instrumentId } } })),
   diagnostics: () => trading(api.GET('/api/trading/diagnostics')),
   documents: async (kind: TradingDocumentKind): Promise<TradingDocument[]> =>
     (await trading(api.GET(DOCUMENT_PATHS[kind].list))).records,
