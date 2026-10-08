@@ -1110,22 +1110,31 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this table with the ledger report.
+Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parity.json), checked against the code in TVP-0.1 (the running app was not available, so rows that need a visual check are `partial` with a note). Every drawing tool, indicator and shortcut is its own entry. Regenerate with `python scripts/tradingview_parity_report.py`, which also fails when a `have` or `partial` entry lacks evidence.
 
-| Area | Have | Partial | Missing (daily / weekly / rare) | Done WPs |
-|---|---|---|---|---|
-| Charts and layouts | 14 | 4 | 3 / 5 / 0 (+2 *verify*) | — |
-| Drawing tools | 14 tools | — | ~22 / ~25 / ~48 tools | — |
-| Indicators | 125 | — | 0 / 28 / 55 | — |
-| User scripts | 0 | 1 | 3 / 3 / 1 | — |
-| Alerts | 9 | 3 | 4 / 5 / 0 (+1 *verify*) | — |
-| Shortcuts | 1 | — | ~65 / 0 / 0 | — |
-| Watchlists | 4 | 1 | 4 / 1 / 0 | — |
-| Screener | 1 | 1 | 2 / 2 / 0 | — |
-| Replay | 6 | 3 | 0 / 2 / 0 | — |
-| Paper and chart trading | 9 | 1 | 7 / 5 / 0 (+1 *verify*) | — |
-| Research data | 4 | 1 | 0 / 1 / 3 | — |
-| Tabs and windows | 1 | 1 | 0 / 4 / 1 | — |
+| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded |
+|---|---|---|---|---|---|
+| Charts and layouts | 19 | 7 | 3 / 3 / 1 | 0 | 0 |
+| Drawing tools | 17 | 4 | 19 / 14 / 47 | 0 | 0 |
+| Indicators | 125 | 1 | 0 / 29 / 0 | 55 | 0 |
+| User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 |
+| Alerts | 6 | 9 | 5 / 4 / 0 | 0 | 0 |
+| Shortcuts | 6 | 1 | 42 / 0 / 0 | 0 | 0 |
+| Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 |
+| Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 |
+| Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 |
+| Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 |
+| Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 |
+| Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 |
+| **Total** | 208 | 28 | 80 / 68 / 52 | 56 | 0 |
+
+| Tier | Have | Partial | Missing | Pending decision | Excluded | Total |
+|---|---|---|---|---|---|---|
+| Daily | 67 | 15 | 80 | 0 | 0 | 162 |
+| Weekly | 128 | 13 | 68 | 0 | 0 | 209 |
+| Rare | 13 | 0 | 52 | 56 | 0 | 121 |
+
+Missing daily + weekly features: **148**
 
 **How the work runs.**
 - Integration branch `tradingview-parity`, checked out in the worktree `F:/LLM/omnix-tvp`.
