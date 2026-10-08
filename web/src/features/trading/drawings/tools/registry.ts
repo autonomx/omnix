@@ -9,6 +9,10 @@ import { fibonacciTool } from './definitions/fibonacci';
 import { horizontalLineTool, horizontalRayTool } from './definitions/horizontalLines';
 import { extendedLineTool, infoLineTool, trendAngleTool } from './definitions/lineVariants';
 import { measurementTool } from './definitions/measurement';
+import { longPositionTool, shortPositionTool } from './definitions/positions';
+import { barsPatternTool, ghostFeedTool, positionForecastTool, sectorTool } from './definitions/projections';
+import { datePriceRangeTool, dateRangeTool } from './definitions/ranges';
+import { fixedRangeVolumeProfileTool } from './definitions/volumeProfile';
 import { textTool } from './definitions/text';
 import { rayTool, trendLineTool } from './definitions/trendLines';
 import { crosslineTool, verticalLineTool } from './definitions/verticalLines';
@@ -37,6 +41,15 @@ export const DRAWING_TOOL_DEFINITIONS = [
   fibonacciTool,
   textTool,
   measurementTool,
+  dateRangeTool,
+  datePriceRangeTool,
+  longPositionTool,
+  shortPositionTool,
+  positionForecastTool,
+  barsPatternTool,
+  ghostFeedTool,
+  sectorTool,
+  fixedRangeVolumeProfileTool,
 ] as const;
 
 /** Every tool that creates a drawing; the toolbar adds `cursor`, `alert` and `eraser`. */

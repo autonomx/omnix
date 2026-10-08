@@ -50,6 +50,7 @@ import './TradingChartPan.css';
 import './TradingChartChrome.css';
 import './TradingTypography.css';
 import './TradingToolFullscreen.css';
+import { usePaperTicketRequests } from './paperTicketRequests';
 import './TradingSessionTabs.css';
 import './TradingChartLayoutPicker.css';
 
@@ -351,6 +352,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setToolPanelFullscreen(false);
     setToolPanel(null);
   };
+  usePaperTicketRequests(openPaperTrading);
 
   const openResearchPanel = () => {
     setSidePanelTab('research');

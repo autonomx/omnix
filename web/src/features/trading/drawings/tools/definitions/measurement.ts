@@ -1,17 +1,6 @@
 import { chartPalette } from '../../../chartPalette';
-import { tradingIntervalMinutes } from '../../../tradingIntervals';
-import { DEFAULT_DRAWING_STYLE, defineDrawingTool, type DrawingPoint } from '../types';
-
-/** "Δprice (Δ%) bars" between two anchors, for the measurement label. */
-export function measurementLabel(first: DrawingPoint, second: DrawingPoint, interval: string): string {
-  const delta = second.price - first.price;
-  const percent = first.price === 0 ? 0 : delta / first.price * 100;
-  const intervalMinutes = tradingIntervalMinutes(interval) ?? 1;
-  const durationMinutes = Math.abs(Date.parse(second.time) - Date.parse(first.time)) / 60_000;
-  const bars = Number.isFinite(durationMinutes) ? Math.max(1, Math.round(durationMinutes / intervalMinutes)) : 1;
-  const formatValue = (value: number) => Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
-  return `${delta < 0 ? '-' : ''}${formatValue(delta)} (${percent < 0 ? '-' : ''}${Math.abs(percent).toFixed(2)}%) ${bars.toLocaleString()}`;
-}
+import { priceLine, rangeStats } from './ranges';
+import { DEFAULT_DRAWING_STYLE, defineDrawingTool } from '../types';
 
 export const measurementTool = defineDrawingTool({
   id: 'measurement',
@@ -23,7 +12,8 @@ export const measurementTool = defineDrawingTool({
   propertySchema: [],
   draftPreview: 'shapes',
   handleClassName: 'trading-measurement-handle',
-  geometry: ({ points: [first, second], rawPoints, style, interval }) => {
+  geometry: (context) => {
+    const { points: [first, second], rawPoints, style } = context;
     const color = style.color === DEFAULT_DRAWING_STYLE.color ? chartPalette.drawingBlue : style.color;
     const left = Math.min(first.x, second.x);
     const top = Math.min(first.y, second.y);
@@ -31,7 +21,8 @@ export const measurementTool = defineDrawingTool({
     const height = Math.abs(second.y - first.y);
     const bottom = top + height;
     const centerX = left + width / 2;
-    const label = measurementLabel(rawPoints[0], rawPoints[1], interval);
+    // TradingView's price range label: change, percent and ticks.
+    const label = priceLine(rangeStats(rawPoints[0], rawPoints[1], context), context.formatPrice);
     const labelWidth = Math.max(126, label.length * 7.2 + 18);
     const labelTop = Math.max(5, top - 40);
     const edge = { stroke: color, strokeWidth: 2, hit: 'none' } as const;
