@@ -139,7 +139,8 @@ export function chartAlertCreateInput(input: {
     },
     evaluation_policy: {
       interval: input.interval,
-      allow_partial_bars: false,
+      // Mirrors the server, which derives it: only "once per bar close" waits for closed bars.
+      allow_partial_bars: triggerPolicy !== 'once_per_bar_close',
       formula_version: 'omnix-indicators-v2',
     },
     frequency: triggerPolicy,
@@ -183,7 +184,7 @@ export function chartAlertUpdateInput(
         ? { trigger_policy: triggerPolicy }
         : {}),
     },
-    evaluation_policy: { ...alert.evaluation_policy },
+    evaluation_policy: { ...alert.evaluation_policy, allow_partial_bars: triggerPolicy !== 'once_per_bar_close' },
     enabled: patch.enabled ?? alert.enabled,
     frequency: triggerPolicy,
     // The server enforces the frequency; a cooldown is only an extra, legacy limit.

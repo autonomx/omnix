@@ -84,6 +84,7 @@ describe('chart-native Trading alerts', () => {
       notificationChannels: ['app', 'toast'],
     });
     expect(input.frequency).toBe('once_per_bar');
+    expect(input.evaluation_policy.allow_partial_bars).toBe(true);
     expect(input.cooldown_seconds).toBe(0);
     expect(input.parameters.trigger_policy).toBe('once_per_bar');
     expect(input.parameters.message).toBe('Watch the breakout');
@@ -97,6 +98,7 @@ describe('chart-native Trading alerts', () => {
     expect(unchanged.cooldown_seconds).toBe(7_200);
     const input = chartAlertUpdateInput(legacy, { trigger_policy: 'once_per_bar_close' });
     expect(input.frequency).toBe('once_per_bar_close');
+    expect(input.evaluation_policy.allow_partial_bars).toBe(false);
     expect(input.parameters.trigger_policy).toBe('once_per_bar_close');
     expect(input.cooldown_seconds).toBe(0);
     expect(input).not.toHaveProperty('conditions');

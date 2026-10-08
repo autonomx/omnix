@@ -23,8 +23,8 @@ export type TradingStreamMessage =
 
 export type TradingDocument = components['schemas']['TradingDocumentResponse'];
 export type TradingAlertCondition = components['schemas']['TradingAlert']['condition_type'];
-// Channels the dialog offers; the server also knows webhook, email and push but rejects them until their senders ship.
-export type TradingAlertNotificationChannel = 'app' | 'toast' | 'sound';
+// Every channel the server knows; it rejects webhook, email and push until their senders ship, and the dialog offers only the rest.
+export type TradingAlertNotificationChannel = NonNullable<components['schemas']['TradingAlertParameters-Input']['notification_channels']>[number];
 // The alert's server-enforced frequency (TVP-1.1); parameters.trigger_policy mirrors it.
 export type TradingAlertTriggerPolicy = 'once' | 'once_per_bar' | 'once_per_bar_close' | 'once_per_minute' | 'every_time';
 export type TradingAlertFrequency = TradingAlertTriggerPolicy;
