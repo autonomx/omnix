@@ -1,5 +1,11 @@
 import { TradingWatchlistLogo } from './TradingWatchlistLogo';
-import { formatWatchlistPrice } from './tradingWatchlistPresentation';
+import {
+  columnTone,
+  nextWatchlistSort,
+  type WatchlistColumnDefinition,
+  type WatchlistSort,
+  type WatchlistSortKey,
+} from './tradingWatchlistColumns';
 import {
   WATCHLIST_FLAG_COLORS,
   WATCHLIST_FLAG_LABELS,
@@ -8,9 +14,53 @@ import {
 } from './tradingWatchlistModel';
 import type { WatchlistQuoteSnapshot } from './useTradingWatchlistQuotes';
 
-function formatChange(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+function sortLabel(sort: WatchlistSort, key: WatchlistSortKey, description: string): string {
+  const next = nextWatchlistSort(sort, key);
+  return next
+    ? `Sort watchlist by ${description} ${next.direction === 'asc' ? 'ascending' : 'descending'}`
+    : `Clear watchlist ${description} sort`;
+}
+
+/** Column headers; each one sorts the list by its column. */
+export function TradingWatchlistHeader({
+  columns,
+  sort,
+  interval,
+  onSort,
+}: {
+  columns: readonly WatchlistColumnDefinition[];
+  sort: WatchlistSort;
+  interval: string;
+  onSort: (key: WatchlistSortKey) => void;
+}) {
+  const header = (key: WatchlistSortKey, label: string, description: string, title: string) => {
+    const direction = sort?.key === key ? sort.direction : null;
+    return (
+      <button
+        key={key}
+        type="button"
+        className={`trading-watchlist-sort${key === 'symbol' ? ' symbol' : ''}`}
+        aria-label={sortLabel(sort, key, description)}
+        aria-pressed={direction != null}
+        title={title}
+        onClick={() => onSort(key)}
+      >
+        <span>{label}</span>
+        <span aria-hidden="true">{direction === 'desc' ? '↓' : direction === 'asc' ? '↑' : '↕'}</span>
+      </button>
+    );
+  };
+  return (
+    <div className="trading-watchlist-columns">
+      {header('symbol', 'Symbol', 'symbol', 'Click to sort by symbol.')}
+      {columns.map((column) => header(
+        column.id,
+        column.label,
+        column.description,
+        column.signed ? `${column.label} over ${interval}. Click to sort.` : `${column.label}. Click to sort.`,
+      ))}
+    </div>
+  );
 }
 
 function TradingWatchlistFlagMenu({
@@ -103,6 +153,7 @@ export function TradingWatchlistSymbolRow({
   instrumentId,
   symbol,
   quote,
+  columns,
   flag,
   active,
   sorted,
@@ -120,6 +171,7 @@ export function TradingWatchlistSymbolRow({
   instrumentId: string;
   symbol: string;
   quote: WatchlistQuoteSnapshot | undefined;
+  columns: readonly WatchlistColumnDefinition[];
   flag: WatchlistFlagColor | undefined;
   active: boolean;
   sorted: boolean;
@@ -135,8 +187,6 @@ export function TradingWatchlistSymbolRow({
   onPickFlag: (color: WatchlistFlagColor | null) => void;
   onRemove: () => void;
 }) {
-  const changePercent = quote?.changePercent;
-  const tone = changePercent == null ? '' : changePercent > 0 ? ' positive' : changePercent < 0 ? ' negative' : ' neutral';
   return (
     <li className={active ? 'active' : undefined}>
       <button type="button" onClick={onSelect} aria-label={`Select ${symbol}`}>
@@ -146,8 +196,14 @@ export function TradingWatchlistSymbolRow({
         <TradingWatchlistLogo symbol={symbol} instrumentId={instrumentId} />
         <strong>{symbol}</strong>
       </button>
-      <span className="trading-watchlist-price">{formatWatchlistPrice(quote?.price)}</span>
-      <span className={`trading-watchlist-change${tone}`}>{formatChange(changePercent)}</span>
+      {columns.map((column) => {
+        const tone = columnTone(column, quote);
+        return (
+          <span key={column.id} className={column.signed ? `trading-watchlist-change${tone ? ` ${tone}` : ''}` : 'trading-watchlist-price'}>
+            {column.format(quote)}
+          </span>
+        );
+      })}
       <span className={`trading-watchlist-row-actions${sorted ? ' is-sorted' : ''}`}>
         {movable ? (
           <>

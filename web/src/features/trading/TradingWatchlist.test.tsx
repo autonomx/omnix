@@ -58,6 +58,7 @@ function watchlistCalls(documents: ReturnType<typeof mockDocuments>) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe('TradingWatchlist add symbol', () => {
@@ -463,5 +464,67 @@ describe('TradingWatchlist sections and flags', () => {
 
     await waitFor(() => expect(update).toHaveBeenCalledWith('watchlist-flags', flagSet, { schemaVersion: 1, flags: [] }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Select AAPL' })).not.toBeInTheDocument());
+  });
+});
+
+describe('TradingWatchlist columns', () => {
+  it('adds a chosen column, sorts by it and remembers the view', async () => {
+    const twoSymbols = { ...record, payload: { name: 'Default Watchlist', instrumentIds: [apple.instrument_id, gameStop.instrument_id] } } as unknown as TradingDocument;
+    mockDocuments([twoSymbols]);
+    vi.spyOn(tradingApi, 'quote').mockImplementation(async (instrumentId) => fixture({ price: instrumentId === apple.instrument_id ? '101' : '20' }));
+    vi.spyOn(tradingApi, 'bars').mockImplementation(async (instrumentId) => ({
+      bars: [{
+        open: '100',
+        close: '100',
+        high: instrumentId === apple.instrument_id ? '102' : '25',
+        low: '1',
+        volume: instrumentId === apple.instrument_id ? '1000' : '5000000',
+        session: 'regular',
+        start_time: '2026-01-01T00:00:00Z',
+      }],
+      binding: { supported_intervals: ['1m'] },
+    } as unknown as BarsResponse));
+
+    const view = render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    await screen.findByRole('button', { name: 'Select GME' });
+    fireEvent.click(screen.getByRole('button', { name: 'Watchlist options' }));
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /^Vol volume/ }));
+    expect(screen.getByRole('menuitemcheckbox', { name: /^Vol volume/ })).toHaveAttribute('aria-checked', 'true');
+
+    expect(await screen.findByText('5M')).toBeInTheDocument();
+    expect(screen.getByText('1K')).toBeInTheDocument();
+    await waitFor(() => expect(symbolNames()).toEqual(['AAPL', 'GME']));
+    fireEvent.click(screen.getByRole('button', { name: 'Sort watchlist by volume descending' }));
+    await waitFor(() => expect(symbolNames()).toEqual(['GME', 'AAPL']));
+    fireEvent.click(screen.getByRole('button', { name: 'Sort watchlist by volume ascending' }));
+    await waitFor(() => expect(symbolNames()).toEqual(['AAPL', 'GME']));
+
+    view.unmount();
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+    expect(await screen.findByRole('button', { name: 'Clear watchlist volume sort' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Sort watchlist by symbol ascending' }));
+    await waitFor(() => expect(symbolNames()).toEqual(['AAPL', 'GME']));
+    expect(screen.getByRole('button', { name: 'Sort watchlist by symbol descending' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('hides a column and drops its sort', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    window.localStorage.setItem('omnix.trading.watchlist-view', JSON.stringify({ columns: ['last', 'changePercent'], sort: { key: 'changePercent', direction: 'desc' } }));
+
+    render(
+      <TradingWatchlist instruments={[apple]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    await screen.findByRole('button', { name: 'Select AAPL' });
+    fireEvent.click(screen.getByRole('button', { name: 'Watchlist options' }));
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /^Chg% change percentage/ }));
+    expect(screen.queryByRole('button', { name: /change percentage/ })).not.toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem('omnix.trading.watchlist-view') ?? '{}')).toEqual({ columns: ['last'], sort: null });
   });
 });

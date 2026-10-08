@@ -1,7 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
 import { watchlistDisplaySymbol } from './tradingWatchlistPresentation';
+import {
+  WATCHLIST_COLUMNS,
+  nextWatchlistSort,
+  readWatchlistView,
+  toggleWatchlistColumn,
+  watchlistColumn,
+  watchlistComparator,
+  writeWatchlistView,
+  type WatchlistColumnDefinition,
+  type WatchlistColumnId,
+  type WatchlistSortKey,
+  type WatchlistView,
+} from './tradingWatchlistColumns';
 import {
   WATCHLIST_FLAG_COLORS,
   WATCHLIST_FLAG_LABELS,
@@ -22,11 +35,9 @@ import {
 import { useTradingWatchlistDocuments } from './useTradingWatchlistDocuments';
 import { useTradingWatchlistFlags } from './useTradingWatchlistFlags';
 import { useTradingWatchlistQuotes } from './useTradingWatchlistQuotes';
-import { TradingWatchlistSectionRow, TradingWatchlistSymbolRow } from './TradingWatchlistRows';
+import { TradingWatchlistHeader, TradingWatchlistSectionRow, TradingWatchlistSymbolRow } from './TradingWatchlistRows';
 import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
 import './TradingWatchlist.css';
-
-type ChangeSort = 'manual' | 'desc' | 'asc';
 
 function mergeInstruments(
   current: readonly CanonicalInstrument[],
@@ -37,6 +48,12 @@ function mergeInstruments(
 
 function flagListName(color: WatchlistFlagColor): string {
   return `${WATCHLIST_FLAG_LABELS[color]} flags`;
+}
+
+/** Symbol column plus one track per chosen column (see `.trading-watchlist` in the CSS). */
+function gridStyle(columns: readonly WatchlistColumnDefinition[]): CSSProperties {
+  const tracks = columns.map((column) => `var(--trading-watchlist-${column.width}-column)`);
+  return { '--trading-watchlist-grid': ['minmax(0, 1fr)', ...tracks].join(' ') } as CSSProperties;
 }
 
 export function TradingWatchlist({
@@ -56,7 +73,7 @@ export function TradingWatchlist({
     records, selectedListId, setSelectedListId, flagColor, selected, current, status, save, commit, create, archive,
   } = useTradingWatchlistDocuments(instruments);
   const { payload: flagsPayload, flags, setFlag } = useTradingWatchlistFlags();
-  const [changeSort, setChangeSort] = useState<ChangeSort>('manual');
+  const [view, setView] = useState<WatchlistView>(readWatchlistView);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
   const [flagMenuFor, setFlagMenuFor] = useState<string | null>(null);
@@ -68,7 +85,11 @@ export function TradingWatchlist({
     [current, flagColor, flagsPayload],
   );
   const instrumentIds = useMemo(() => listItems.filter(isSymbolItem).map((item) => item.instrumentId), [listItems]);
-  const quotes = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings);
+  const columns = useMemo(
+    () => view.columns.flatMap((id) => watchlistColumn(id) ?? []),
+    [view.columns],
+  );
+  const quotes = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings, view.columns.includes('relativeVolume'));
   const flagListColors = WATCHLIST_FLAG_COLORS.filter((color) => (
     color === flagColor || flagsPayload.flags.some((flag) => flag.color === color)
   ));
@@ -82,19 +103,24 @@ export function TradingWatchlist({
     [catalogInstruments],
   );
 
-  const compareSymbols = useMemo(() => {
-    if (changeSort === 'manual') return undefined;
-    return (left: string, right: string) => {
-      const leftChange = quotes[left]?.changePercent;
-      const rightChange = quotes[right]?.changePercent;
-      if (leftChange == null && rightChange == null) return 0;
-      if (leftChange == null) return 1;
-      if (rightChange == null) return -1;
-      return changeSort === 'desc' ? rightChange - leftChange : leftChange - rightChange;
-    };
-  }, [changeSort, quotes]);
-  const rows = useMemo(() => watchlistRows(listItems, compareSymbols), [compareSymbols, listItems]);
-  const sorted = changeSort !== 'manual';
+  const symbolFor = useCallback(
+    (instrumentId: string) => watchlistDisplaySymbol(instrumentById.get(instrumentId)?.display_symbol, instrumentId),
+    [instrumentById],
+  );
+  const rows = useMemo(
+    () => watchlistRows(listItems, watchlistComparator(view.sort, quotes, symbolFor)),
+    [listItems, quotes, symbolFor, view.sort],
+  );
+  const sorted = view.sort != null;
+  const updateView = (next: WatchlistView) => {
+    setView(next);
+    writeWatchlistView(next);
+  };
+  const toggleColumn = (id: WatchlistColumnId) => {
+    const nextColumns = toggleWatchlistColumn(view.columns, id);
+    // Hiding the sorted column also drops its sort.
+    updateView({ columns: nextColumns, sort: view.sort && view.sort.key !== 'symbol' && !nextColumns.includes(view.sort.key) ? null : view.sort });
+  };
   const listName = flagColor ? flagListName(flagColor).toLowerCase() : 'watchlist';
 
   const addInstrument = async (instrument: CanonicalInstrument) => {
@@ -120,7 +146,7 @@ export function TradingWatchlist({
   };
 
   return (
-    <section className="trading-watchlist" aria-label="Trading watchlists">
+    <section className="trading-watchlist" aria-label="Trading watchlists" style={gridStyle(columns)}>
       <div className="trading-watchlist-controls">
         <select
           value={flagColor ? selectedListId : selected?.record_id ?? ''}
@@ -162,25 +188,30 @@ export function TradingWatchlist({
               <button type="button" role="menuitem" onClick={() => promptName('Section name', 'New section', (name) => commit(addWatchlistSection(current, name)))} disabled={!selected}>Add section</button>
               <button type="button" role="menuitem" onClick={() => promptName('Rename watchlist', current.name, (name) => void save({ ...current, name }))} disabled={!selected}>Rename watchlist</button>
               <button type="button" role="menuitem" onClick={() => { setOptionsOpen(false); void archive(); }} disabled={!selected || records.length <= 1}>Delete watchlist</button>
+              <div className="trading-watchlist-options-group" role="group" aria-label="Columns">
+                <span aria-hidden="true">Columns</span>
+                {WATCHLIST_COLUMNS.map((column) => (
+                  <button
+                    key={column.id}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={view.columns.includes(column.id)}
+                    onClick={() => toggleColumn(column.id)}
+                  >
+                    {column.label} <small>{column.description}</small>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>
       </div>
-      <div className="trading-watchlist-columns">
-        <span>Symbol</span>
-        <span>Last</span>
-        <button
-          type="button"
-          className="trading-watchlist-change-sort"
-          aria-label={changeSort === 'manual' ? 'Sort watchlist by change percentage descending' : changeSort === 'desc' ? 'Sort watchlist by change percentage ascending' : 'Clear watchlist change percentage sort'}
-          aria-pressed={sorted}
-          title={`Change over ${interval}. Click to sort.`}
-          onClick={() => setChangeSort((value) => value === 'manual' ? 'desc' : value === 'desc' ? 'asc' : 'manual')}
-        >
-          <span>Chg%</span>
-          <span aria-hidden="true">{changeSort === 'desc' ? '↓' : changeSort === 'asc' ? '↑' : '↕'}</span>
-        </button>
-      </div>
+      <TradingWatchlistHeader
+        columns={columns}
+        sort={view.sort}
+        interval={interval}
+        onSort={(key: WatchlistSortKey) => updateView({ ...view, sort: nextWatchlistSort(view.sort, key) })}
+      />
       <ul>
         {rows.map((row) => {
           const canMoveUp = row.itemIndex > 0;
@@ -204,13 +235,14 @@ export function TradingWatchlist({
             );
           }
           const { instrumentId } = row;
-          const symbol = watchlistDisplaySymbol(instrumentById.get(instrumentId)?.display_symbol, instrumentId);
+          const symbol = symbolFor(instrumentId);
           return (
             <TradingWatchlistSymbolRow
               key={instrumentId}
               instrumentId={instrumentId}
               symbol={symbol}
               quote={quotes[instrumentId]}
+              columns={columns}
               flag={flags.get(instrumentId)}
               active={instrumentId === normalizedActiveInstrumentId}
               sorted={sorted}

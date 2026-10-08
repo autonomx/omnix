@@ -31,6 +31,10 @@
   }
 
   .trading-watchlist {
+    /* The component sets --trading-watchlist-grid from the chosen columns. */
+    --trading-watchlist-wide-column: 72px;
+    --trading-watchlist-narrow-column: 55px;
+
     display: grid;
     gap: 0;
     margin-top: 0;
@@ -100,10 +104,40 @@
     font-size: 9px;
   }
 
+  .trading-watchlist-options-group {
+    display: grid;
+    gap: 2px;
+    margin-top: 3px;
+    padding-top: 5px;
+    border-top: 1px solid color-mix(in srgb, var(--c-blue-660) 18%, transparent);
+  }
+
+  .trading-watchlist-options-group > span {
+    padding: 0 7px 2px;
+    color: var(--c-slate-630);
+    font-size: 8px;
+    text-transform: uppercase;
+  }
+
+  .trading-watchlist .trading-watchlist-options-group button[role='menuitemcheckbox']::before {
+    display: inline-block;
+    width: 12px;
+    content: '';
+  }
+
+  .trading-watchlist .trading-watchlist-options-group button[aria-checked='true']::before {
+    content: '✓';
+  }
+
+  .trading-watchlist-options-group small {
+    color: var(--c-slate-630);
+    font-size: 8px;
+  }
+
   .trading-watchlist-columns,
   .trading-watchlist li {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 72px 55px;
+    grid-template-columns: var(--trading-watchlist-grid, minmax(0, 1fr) var(--trading-watchlist-wide-column) var(--trading-watchlist-narrow-column));
     align-items: center;
   }
 
@@ -115,11 +149,7 @@
     text-transform: none;
   }
 
-  .trading-watchlist-columns span:not(:first-child) {
-    text-align: right;
-  }
-
-  .trading-watchlist-columns .trading-watchlist-change-sort {
+  .trading-watchlist-columns .trading-watchlist-sort {
     display: inline-flex;
     align-items: center;
     justify-self: end;
@@ -134,8 +164,13 @@
     cursor: pointer;
   }
 
-  .trading-watchlist-columns .trading-watchlist-change-sort:hover,
-  .trading-watchlist-columns .trading-watchlist-change-sort[aria-pressed='true'] {
+  .trading-watchlist-columns .trading-watchlist-sort.symbol {
+    justify-self: start;
+    text-align: left;
+  }
+
+  .trading-watchlist-columns .trading-watchlist-sort:hover,
+  .trading-watchlist-columns .trading-watchlist-sort[aria-pressed='true'] {
     color: var(--c-blue-770);
   }
 
@@ -470,9 +505,9 @@
   }
 
   @media (max-width: 600px) {
-    .trading-watchlist-columns,
-    .trading-watchlist li {
-      grid-template-columns: minmax(0, 1fr) 64px 50px;
+    .trading-watchlist {
+      --trading-watchlist-wide-column: 64px;
+      --trading-watchlist-narrow-column: 50px;
     }
   }
 }

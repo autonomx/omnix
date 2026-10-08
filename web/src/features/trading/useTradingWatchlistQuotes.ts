@@ -3,9 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import type { ProviderBinding } from './tradingTypes';
 import { isIntervalAvailable, tradingIntervalMinutes } from './tradingIntervals';
-import { percentChangeFromBars, percentChangeFromLookback } from './tradingWatchlistChange';
+import { intervalBarStats, percentChangeFromBars, percentChangeFromLookback, type IntervalBarStats } from './tradingWatchlistChange';
+import type { WatchlistSnapshot } from './tradingWatchlistColumns';
 
-export type WatchlistQuoteSnapshot = { price: string | null; changePercent: number | null };
+export type WatchlistQuoteSnapshot = WatchlistSnapshot;
+
+/** Bars requested per symbol when the relative volume column is shown: the latest and 20 before it. */
+const RELATIVE_VOLUME_BARS = 21;
 
 // The side-panel tabs unmount the watchlist when another tab is selected. Keep
 // the latest values at module scope so returning to the watchlist can render
@@ -29,6 +33,17 @@ function fallbackLimit(interval: string, baseInterval: string): number {
   return Math.min(5_000, Math.max(2, Math.ceil(targetMinutes / baseMinutes) + 3));
 }
 
+function absoluteChange(price: string | null, changePercent: number | null): number | null {
+  const current = Number(price);
+  if (price == null || changePercent == null || !Number.isFinite(current) || changePercent <= -100) return null;
+  // changePercent = (price - open) / open * 100, so price - open = price * changePercent / (100 + changePercent).
+  return (current * changePercent) / (100 + changePercent);
+}
+
+function snapshotOf(price: string | null, changePercent: number | null, stats?: IntervalBarStats): WatchlistQuoteSnapshot {
+  return { price, changePercent, change: absoluteChange(price, changePercent), ...stats };
+}
+
 async function intervalChange(
   instrumentId: string,
   interval: string,
@@ -39,34 +54,40 @@ async function intervalChange(
   const directHistory = directBars?.bars ?? [];
   const directPrice = quotePrice ?? directHistory.at(-1)?.close?.toString() ?? null;
   if (supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)) {
-    return { price: directPrice, changePercent: null };
+    return snapshotOf(directPrice, null);
   }
   const directIntervalIsNative = directBars?.binding.supported_intervals.includes(interval) ?? false;
   const directChange = directIntervalIsNative
     ? percentChangeFromBars(quotePrice, directHistory)
     : null;
-  if (directChange != null) return { price: directPrice, changePercent: directChange };
+  if (directChange != null) return snapshotOf(directPrice, directChange, intervalBarStats(directHistory));
 
   for (const baseInterval of fallbackIntervalCandidates(interval)) {
     const fallback = await tradingApi.bars(instrumentId, baseInterval, fallbackLimit(interval, baseInterval)).catch(() => null);
     const fallbackBars = fallback?.bars ?? [];
     const derivedChange = percentChangeFromLookback(quotePrice, fallbackBars, interval);
     if (derivedChange != null) {
-      return {
-        price: quotePrice ?? fallbackBars.at(-1)?.close?.toString() ?? directPrice,
-        changePercent: derivedChange,
-      };
+      return snapshotOf(
+        quotePrice ?? fallbackBars.at(-1)?.close?.toString() ?? directPrice,
+        derivedChange,
+        intervalBarStats(fallbackBars, interval),
+      );
     }
   }
 
-  return { price: directPrice, changePercent: null };
+  return snapshotOf(directPrice, null);
 }
 
-/** Latest price and interval change for each listed symbol. */
+/**
+ * Latest price, interval change and interval bar statistics for each listed
+ * symbol. `withRelativeVolume` requests enough bars to compare the latest
+ * volume with the bars before it.
+ */
 export function useTradingWatchlistQuotes(
   instrumentIds: readonly string[],
   interval: string,
   providerBindings: readonly ProviderBinding[],
+  withRelativeVolume = false,
 ): Record<string, WatchlistQuoteSnapshot> {
   const [quotes, setQuotes] = useState<Record<string, WatchlistQuoteSnapshot>>(() => ({ ...watchlistQuoteCache }));
   const instrumentIdsKey = instrumentIds.join('\u0000');
@@ -94,7 +115,7 @@ export function useTradingWatchlistQuotes(
           const quotePromise = tradingApi.quote(instrumentId).catch(() => null);
           const barsPromise = supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)
             ? Promise.resolve(null)
-            : tradingApi.bars(instrumentId, interval, 2).catch(() => null);
+            : tradingApi.bars(instrumentId, interval, withRelativeVolume ? RELATIVE_VOLUME_BARS : 2).catch(() => null);
           const [quote, bars] = await Promise.all([
             quotePromise,
             barsPromise,
@@ -126,7 +147,7 @@ export function useTradingWatchlistQuotes(
     })();
 
     return () => { cancelled = true; };
-  }, [instrumentIdsKey, interval]);
+  }, [instrumentIdsKey, interval, withRelativeVolume]);
 
   return quotes;
 }
