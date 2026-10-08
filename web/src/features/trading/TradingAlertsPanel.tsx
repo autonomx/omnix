@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import {
+  alertConditionsSummary,
+  alertFrequency,
   alertVisualState,
   chartAlertCreateInput,
   chartAlertUpdateInput,
@@ -32,6 +34,7 @@ const conditions: Array<{ value: TradingAlertCondition; label: string }> = [
   { value: 'indicator_cross_below', label: 'Indicator crosses below' },
   { value: 'volume_above', label: 'Volume crosses above' },
   { value: 'volume_below', label: 'Volume crosses below' },
+  { value: 'conditions', label: 'conditions met' },
 ];
 
 const indicatorLabels: Record<string, string> = {
@@ -76,6 +79,7 @@ function alertTitle(alert: TradingAlert): string {
   if (message) return message;
 
   const symbol = symbolForInstrumentId(alert.instrument_id);
+  if (alert.condition_type === 'conditions') return `${symbol} ${alertConditionsSummary(alert)}`;
   const indicatorId = alert.parameters.indicator_id;
   if (indicatorId) {
     const indicator = indicatorLabels[indicatorId] ?? indicatorId.toUpperCase();
@@ -155,13 +159,13 @@ function editorForAlert(alert: TradingAlert): TradingAlertEditorState {
     threshold: formatAlertThreshold(alert.threshold),
     expiresAt: localDateTime(alert.expires_at),
     expiration: alert.expires_at ? '1d' : 'never',
-    triggerPolicy: alert.parameters.trigger_policy
-      ?? (alert.cooldown_seconds > 0 ? 'once_per_bar' : 'every_time'),
+    triggerPolicy: alertFrequency(alert),
     message: alert.parameters.message ?? '',
     notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
     indicator: alert.parameters.indicator_id ?? 'rsi',
     period: String(alert.parameters.period ?? 14),
     lookback: String(alert.parameters.lookback_bars ?? 1),
+    conditionsSummary: alertConditionsSummary(alert),
   };
 }
 
@@ -293,12 +297,16 @@ export function TradingAlertsPanel({
       setStatus('error');
       return;
     }
-    await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
+    // The dialog cannot edit conditions yet (TVP-1.3/1.6): those alerts keep them.
+    const conditionPatch = alert.condition_type === 'conditions' ? {} : {
       threshold: formatAlertThreshold(threshold),
       condition_type: editor.condition,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
       period: Number(editor.period) || 14,
       lookback_bars: Number(editor.lookback) || 1,
+    };
+    await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
+      ...conditionPatch,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message,
@@ -440,7 +448,7 @@ export function TradingAlertsPanel({
                         <span className="trading-alert-tooltip-detail">Created: {formatAlertDateTime(alert.created_at)}</span>
                         <span className="trading-alert-tooltip-detail">Last triggered: {formatAlertDateTime(alert.last_triggered_at)}</span>
                         {alert.expires_at ? <span className="trading-alert-tooltip-detail">Expires: {formatAlertDateTime(alert.expires_at)}</span> : null}
-                        {alert.parameters.trigger_policy ? <span className="trading-alert-tooltip-detail">Trigger: {alert.parameters.trigger_policy.replaceAll('_', ' ')}</span> : null}
+                        <span className="trading-alert-tooltip-detail">Trigger: {alertFrequency(alert).replaceAll('_', ' ')}</span>
                       </>
                     );
                   })()}

@@ -23,8 +23,11 @@ export type TradingStreamMessage =
 
 export type TradingDocument = components['schemas']['TradingDocumentResponse'];
 export type TradingAlertCondition = components['schemas']['TradingAlert']['condition_type'];
+// Channels the dialog offers; the server also knows webhook, email and push but rejects them until their senders ship.
 export type TradingAlertNotificationChannel = 'app' | 'toast' | 'sound';
-export type TradingAlertTriggerPolicy = 'once' | 'once_per_bar' | 'every_time';
+// The alert's server-enforced frequency (TVP-1.1); parameters.trigger_policy mirrors it.
+export type TradingAlertTriggerPolicy = 'once' | 'once_per_bar' | 'once_per_bar_close' | 'once_per_minute' | 'every_time';
+export type TradingAlertFrequency = TradingAlertTriggerPolicy;
 // What the UI sends; alerts it reads carry every parameter (TradingAlertParameters-Output).
 export type TradingAlertParameters = Omit<components['schemas']['TradingAlertParameters-Input'], 'message' | 'trigger_policy'> & {
   message?: string;
@@ -34,6 +37,7 @@ export type TradingAlertParameters = Omit<components['schemas']['TradingAlertPar
 export type TradingAlertIndicatorId = NonNullable<TradingAlertParameters['indicator_id']>;
 export type TradingAlertEvaluationPolicy = components['schemas']['TradingAlertEvaluationPolicy'];
 export type TradingAlert = components['schemas']['TradingAlert'];
+export type TradingAlertConditionSpec = TradingAlert['conditions'][number];
 export type TradingAlertTrigger = components['schemas']['TradingAlertTrigger'];
 export type TradingAlertCreateInput = Omit<components['schemas']['TradingAlertCreate'], 'parameters' | 'evaluation_policy'> & {
   parameters: TradingAlertParameters;

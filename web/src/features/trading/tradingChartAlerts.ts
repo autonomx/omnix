@@ -1,7 +1,9 @@
 import type {
   TradingAlert,
   TradingAlertCondition,
+  TradingAlertConditionSpec,
   TradingAlertCreateInput,
+  TradingAlertFrequency,
   TradingAlertNotificationChannel,
   TradingAlertParameters,
   TradingAlertTriggerPolicy,
@@ -54,30 +56,51 @@ export function formatAlertThreshold(value: number | string): string {
   return Number.isFinite(numeric) ? numeric.toFixed(2) : String(value);
 }
 
-export function cooldownForTriggerPolicy(
-  policy: TradingAlertTriggerPolicy,
-  interval: string | undefined,
-): number {
-  if (policy === 'once') return 31_536_000;
-  if (policy === 'every_time') return 0;
-  const intervalSeconds: Record<string, number> = {
-    '1m': 60,
-    '3m': 180,
-    '5m': 300,
-    '15m': 900,
-    '30m': 1_800,
-    '1h': 3_600,
-    '2h': 7_200,
-    '4h': 14_400,
-    '6h': 21_600,
-    '8h': 28_800,
-    '12h': 43_200,
-    '1d': 86_400,
-    '3d': 259_200,
-    '1w': 604_800,
-    '1mo': 2_592_000,
-  };
-  return (interval && intervalSeconds[interval]) || 60;
+/** The alert's frequency; older responses only carried parameters.trigger_policy. */
+export function alertFrequency(alert: TradingAlert): TradingAlertFrequency {
+  return (alert.frequency ?? alert.parameters.trigger_policy ?? 'every_time') as TradingAlertFrequency;
+}
+
+const operatorLabels: Record<string, string> = {
+  crossing: 'crossing',
+  crossing_up: 'crossing up',
+  crossing_down: 'crossing down',
+  greater_than: 'greater than',
+  less_than: 'less than',
+  entering_channel: 'entering channel',
+  exiting_channel: 'exiting channel',
+  inside_channel: 'inside channel',
+  outside_channel: 'outside channel',
+  moving_up: 'moving up',
+  moving_down: 'moving down',
+  moving_up_percent: 'moving up %',
+  moving_down_percent: 'moving down %',
+};
+
+type ConditionPart = TradingAlertConditionSpec['source'] | NonNullable<TradingAlertConditionSpec['target']>;
+
+function conditionPartLabel(part: ConditionPart): string {
+  switch (part.kind) {
+    case 'price': return part.field === 'close' ? 'Price' : part.field.toUpperCase();
+    case 'change_percent': return `Change % (${part.lookback_bars})`;
+    case 'indicator': return part.output;
+    case 'trendline': return 'Trendline';
+    case 'value': return formatAlertThreshold(part.value);
+    case 'source': return conditionPartLabel(part.source);
+    case 'channel': return `${conditionPartLabel(part.lower)} – ${conditionPartLabel(part.upper)}`;
+    default: return '';
+  }
+}
+
+/** A one-line description of an alert's conditions, e.g. "Price crossing up 100.00 and rsi:14 greater than 70.00". */
+export function alertConditionsSummary(alert: Pick<TradingAlert, 'conditions'>): string {
+  return (alert.conditions ?? []).map((condition) => {
+    const operator = operatorLabels[condition.operator] ?? condition.operator;
+    const tail = condition.target
+      ? conditionPartLabel(condition.target)
+      : `${condition.amount ?? ''}${condition.operator.endsWith('_percent') ? '%' : ''} in ${condition.bars ?? 1} bars`;
+    return `${conditionPartLabel(condition.source)} ${operator} ${tail}`;
+  }).join(' and ');
 }
 
 export function chartAlertCreateInput(input: {
@@ -119,7 +142,8 @@ export function chartAlertCreateInput(input: {
       allow_partial_bars: false,
       formula_version: 'omnix-indicators-v2',
     },
-    cooldown_seconds: cooldownForTriggerPolicy(triggerPolicy, input.interval),
+    frequency: triggerPolicy,
+    cooldown_seconds: 0,
     expires_at: expirationTimestamp(input.expiration, input.now),
   };
 }
@@ -135,12 +159,15 @@ export function chartAlertUpdateInput(
     notification_channels?: TradingAlertNotificationChannel[];
   },
 ): TradingAlertUpdateInput {
-  const triggerPolicy = patch.trigger_policy ?? alert.parameters.trigger_policy ?? 'every_time';
+  const triggerPolicy = patch.trigger_policy ?? alertFrequency(alert);
+  const conditionType = patch.condition_type ?? alert.condition_type;
   return {
     instrument_id: alert.instrument_id,
     binding_id: alert.binding_id ?? null,
-    condition_type: patch.condition_type ?? alert.condition_type,
+    condition_type: conditionType,
     threshold: patch.threshold ?? alert.threshold,
+    // Alerts described by conditions keep them; legacy alerts let the server derive them.
+    ...(conditionType === 'conditions' ? { conditions: alert.conditions } : {}),
     parameters: {
       ...alert.parameters,
       ...(patch.indicator_id !== undefined ? { indicator_id: patch.indicator_id } : {}),
@@ -158,9 +185,9 @@ export function chartAlertUpdateInput(
     },
     evaluation_policy: { ...alert.evaluation_policy },
     enabled: patch.enabled ?? alert.enabled,
-    cooldown_seconds: patch.trigger_policy
-      ? cooldownForTriggerPolicy(triggerPolicy, alert.evaluation_policy.interval)
-      : alert.cooldown_seconds,
+    frequency: triggerPolicy,
+    // The server enforces the frequency; a cooldown is only an extra, legacy limit.
+    cooldown_seconds: patch.trigger_policy ? 0 : alert.cooldown_seconds,
     expires_at: patch.expires_at === undefined ? alert.expires_at ?? null : patch.expires_at,
   };
 }

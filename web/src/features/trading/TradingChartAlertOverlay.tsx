@@ -4,6 +4,7 @@ import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import {
+  alertFrequency,
   alertLastTriggeredLabel,
   alertVisualState,
   chartAlertCreateInput,
@@ -274,8 +275,7 @@ export function TradingChartAlertOverlay({
       condition: alert.condition_type,
       expiresAt: localDateTime(alert.expires_at),
       expiration: alert.expires_at ? '1d' : 'never',
-      triggerPolicy: alert.parameters.trigger_policy
-        ?? (alert.cooldown_seconds > 0 ? 'once_per_bar' : 'every_time'),
+      triggerPolicy: alertFrequency(alert),
       message: alert.parameters.message ?? '',
       notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
       indicator: alert.parameters.indicator_id ?? 'rsi',
