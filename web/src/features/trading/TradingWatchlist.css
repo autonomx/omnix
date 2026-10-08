@@ -194,6 +194,24 @@
     background: color-mix(in srgb, var(--c-blue-630) 8%, transparent);
   }
 
+  .trading-watchlist li.selected {
+    background: color-mix(in srgb, var(--c-blue-630) 18%, transparent);
+    box-shadow: inset 2px 0 0 var(--c-blue-660);
+  }
+
+  .trading-watchlist ul:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--c-blue-660) 60%, transparent);
+    outline-offset: -1px;
+  }
+
+  .trading-watchlist-notice {
+    margin: 6px 0 0;
+    padding: 0 8px;
+    color: var(--c-slate-630);
+    font-size: 9px;
+    overflow-wrap: anywhere;
+  }
+
   .trading-watchlist li > button:first-child {
     display: flex;
     align-items: center;

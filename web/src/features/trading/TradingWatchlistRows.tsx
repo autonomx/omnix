@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { TradingWatchlistLogo } from './TradingWatchlistLogo';
 import {
   columnTone,
@@ -139,7 +140,7 @@ export function TradingWatchlistSectionRow({
         <strong>{section.name}</strong>
         <small>{symbolCount}</small>
       </button>
-      <span className={`trading-watchlist-row-actions${sorted ? ' is-sorted' : ''}`}>
+      <span className={`trading-watchlist-row-actions${sorted ? ' is-sorted' : ''}`} data-watchlist-keys="own">
         <button type="button" onClick={() => onMove(-1)} disabled={!canMoveUp} aria-label={`Move section ${section.name} up`} title="Move up">↑</button>
         <button type="button" onClick={() => onMove(1)} disabled={!canMoveDown} aria-label={`Move section ${section.name} down`} title="Move down">↓</button>
         <button type="button" onClick={onRename} aria-label={`Rename section ${section.name}`} title="Rename section">✎</button>
@@ -156,6 +157,7 @@ export function TradingWatchlistSymbolRow({
   columns,
   flag,
   active,
+  selected,
   sorted,
   movable,
   canMoveUp,
@@ -174,6 +176,8 @@ export function TradingWatchlistSymbolRow({
   columns: readonly WatchlistColumnDefinition[];
   flag: WatchlistFlagColor | undefined;
   active: boolean;
+  /** Part of the keyboard or mouse selection. */
+  selected: boolean;
   sorted: boolean;
   /** False in a generated flag list, which has no manual order. */
   movable: boolean;
@@ -181,14 +185,14 @@ export function TradingWatchlistSymbolRow({
   canMoveDown: boolean;
   flagMenuOpen: boolean;
   removeTitle: string;
-  onSelect: () => void;
+  onSelect: (event: MouseEvent) => void;
   onMove: (direction: -1 | 1) => void;
   onToggleFlagMenu: (open: boolean) => void;
   onPickFlag: (color: WatchlistFlagColor | null) => void;
   onRemove: () => void;
 }) {
   return (
-    <li className={active ? 'active' : undefined}>
+    <li className={[active ? 'active' : '', selected ? 'selected' : ''].join(' ').trim() || undefined} data-instrument-id={instrumentId}>
       <button type="button" onClick={onSelect} aria-label={`Select ${symbol}`}>
         {flag ? (
           <span className={`trading-watchlist-flag ${flag}`} role="img" aria-label={`${WATCHLIST_FLAG_LABELS[flag]} flag`} title={`${WATCHLIST_FLAG_LABELS[flag]} flag`} />
@@ -204,7 +208,7 @@ export function TradingWatchlistSymbolRow({
           </span>
         );
       })}
-      <span className={`trading-watchlist-row-actions${sorted ? ' is-sorted' : ''}`}>
+      <span className={`trading-watchlist-row-actions${sorted ? ' is-sorted' : ''}`} data-watchlist-keys="own">
         {movable ? (
           <>
             <button type="button" onClick={() => onMove(-1)} disabled={!canMoveUp} aria-label={`Move ${symbol} up`} title="Move up">↑</button>

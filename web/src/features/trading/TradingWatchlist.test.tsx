@@ -528,3 +528,105 @@ describe('TradingWatchlist columns', () => {
     expect(JSON.parse(window.localStorage.getItem('omnix.trading.watchlist-view') ?? '{}')).toEqual({ columns: ['last'], sort: null });
   });
 });
+
+describe('TradingWatchlist keyboard and import', () => {
+  const tesla: CanonicalInstrument = { ...apple, instrument_id: 'equity:NASDAQ:TSLA', venue_symbol: 'TSLA', display_symbol: 'TSLA' };
+  const threeSymbols = {
+    ...record,
+    payload: { name: 'Default Watchlist', instrumentIds: [apple.instrument_id, gameStop.instrument_id, tesla.instrument_id] },
+  } as unknown as TradingDocument;
+  const selectedRows = () => [...document.querySelectorAll('li.selected')].map((row) => row.querySelector('strong')?.textContent);
+
+  it('moves through the list with the arrow keys and Space, showing each symbol on the chart', async () => {
+    mockDocuments([threeSymbols]);
+    mockMarketData();
+    const onSelect = vi.fn();
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop, tesla]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={onSelect} />,
+    );
+
+    const list = await screen.findByRole('list', { name: 'Watchlist symbols' });
+    await screen.findByRole('button', { name: 'Select TSLA' });
+    list.focus();
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(onSelect).toHaveBeenLastCalledWith(gameStop.instrument_id);
+    expect(selectedRows()).toEqual(['GME']);
+    fireEvent.keyDown(list, { key: ' ' });
+    expect(onSelect).toHaveBeenLastCalledWith(tesla.instrument_id);
+    fireEvent.keyDown(list, { key: ' ', shiftKey: true });
+    fireEvent.keyDown(list, { key: 'ArrowUp' });
+    expect(onSelect).toHaveBeenLastCalledWith(apple.instrument_id);
+    expect(onSelect).toHaveBeenCalledTimes(4);
+  });
+
+  it('extends the selection with Shift+arrows, selects all with Ctrl+A and flags the selection', async () => {
+    mockDocuments([threeSymbols]);
+    mockMarketData();
+    const create = vi.spyOn(tradingApi, 'createDocument').mockImplementation(async (kind, recordId, payload) => fixture({
+      record_id: recordId, record_type: kind, revision: 1, payload, status: 'active',
+    }));
+    const onSelect = vi.fn();
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop, tesla]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={onSelect} />,
+    );
+
+    await screen.findByRole('button', { name: 'Select TSLA' });
+    fireEvent.click(screen.getByRole('button', { name: 'Select AAPL' }));
+    expect(onSelect).toHaveBeenCalledWith(apple.instrument_id);
+    const list = screen.getByRole('list', { name: 'Watchlist symbols' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Select AAPL' }), { key: 'ArrowDown', shiftKey: true });
+    expect(selectedRows()).toEqual(['AAPL', 'GME']);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(list, { key: 'a', ctrlKey: true });
+    expect(selectedRows()).toEqual(['AAPL', 'GME', 'TSLA']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Flag TSLA' }));
+    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: 'Blue flag' }), { key: 'ArrowDown' });
+    expect(selectedRows()).toEqual(['AAPL', 'GME', 'TSLA']);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Blue flag' }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith('watchlist-flags', 'default', {
+      schemaVersion: 1,
+      flags: [
+        { instrumentId: apple.instrument_id, color: 'blue' },
+        { instrumentId: gameStop.instrument_id, color: 'blue' },
+        { instrumentId: tesla.instrument_id, color: 'blue' },
+      ],
+    }));
+  });
+
+  it('imports a text file as a new watchlist with sections', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    vi.spyOn(tradingApi, 'instruments').mockResolvedValue([]);
+    const create = vi.spyOn(tradingApi, 'createDocument').mockImplementation(async (kind, recordId, payload) => fixture({
+      record_id: recordId, record_type: kind, revision: 1, payload, status: 'active',
+    }));
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    await screen.findByRole('button', { name: 'Select AAPL' });
+    const content = 'NYSE:GME,###Later,NASDAQ:AAPL,OTC:NOPE';
+    const file = new File([content], 'Swing ideas.txt', { type: 'text/plain' });
+    // jsdom's File has no text(); browsers do.
+    Object.defineProperty(file, 'text', { value: async () => content });
+    fireEvent.change(screen.getByLabelText('Import watchlist file'), { target: { files: [file] } });
+
+    expect(await screen.findByText('Imported 2 symbols; not found: OTC:NOPE.')).toBeInTheDocument();
+    expect(create).toHaveBeenCalledWith('watchlists', expect.stringMatching(/^watchlist-/), {
+      schemaVersion: 2,
+      name: 'Swing ideas',
+      items: [
+        { type: 'symbol', instrumentId: gameStop.instrument_id },
+        { type: 'section', id: expect.any(String), name: 'Later', collapsed: false },
+        { type: 'symbol', instrumentId: apple.instrument_id },
+      ],
+    });
+    expect(screen.getByRole('combobox', { name: 'Watchlist' })).toHaveDisplayValue('Swing ideas');
+    expect(screen.getByRole('button', { name: 'Collapse section Later' })).toBeInTheDocument();
+  });
+});

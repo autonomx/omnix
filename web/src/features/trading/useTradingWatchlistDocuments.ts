@@ -128,15 +128,18 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     void save(nextPayload, selected, selected);
   };
 
-  const create = async (payload: WatchlistPayload = newWatchlistPayload(`Watchlist ${records.length + 1}`)) => {
+  /** Create and select a watchlist; false when it could not be saved. */
+  const create = async (payload: WatchlistPayload = newWatchlistPayload(`Watchlist ${records.length + 1}`)): Promise<boolean> => {
     setStatus('saving');
     try {
       const record = await tradingApi.createDocument('watchlists', `watchlist-${Date.now()}`, documentPayload(payload));
       setRecords((items) => [...items, record]);
       setSelectedListId(record.record_id);
       setStatus('saved');
+      return true;
     } catch {
       setStatus('error');
+      return false;
     }
   };
 
