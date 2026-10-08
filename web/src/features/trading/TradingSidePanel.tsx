@@ -119,8 +119,8 @@ export function TradingSidePanel({
   }
   if (activeTab === 'pine') {
     return (
-      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
-        <Suspense fallback={<p role="status">Loading Pine Editor…</p>}>
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Omnix Scripts editor">
+        <Suspense fallback={<p role="status">Loading Omnix Scripts editor…</p>}>
         <TradingPinePanel
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}
