@@ -15,6 +15,7 @@ export type PaperRiskOrderResult = components['schemas']['PaperRiskOrderResult']
 export type PaperSide = PaperOrder['side'];
 export type PaperOrderType = PaperOrder['order_type'];
 export type PaperOrderStatus = PaperOrder['status'];
+export type PaperTimeInForce = PaperOrder['time_in_force'];
 export type PaperProtectionStatus = PaperPositionProtection['status'];
 
 // What the UI sends.

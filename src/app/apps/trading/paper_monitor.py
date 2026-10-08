@@ -16,7 +16,15 @@ from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import ExecutionObservation
 from .order_gateway import OrderGateway
 from .providers.request_budget import in_provider_lane
-from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
+from .paper import (
+    PaperMarketObservation,
+    PaperOrderRequest,
+    paper_observation_moment,
+    paper_order_is_expired,
+    paper_price_tick,
+    paper_protection_trigger,
+    paper_trailing_protection_update,
+)
 from .paper_protection import PaperPositionProtection
 from .paper_protection_repository import (
     TradingPaperProtectionRepository,
@@ -132,6 +140,41 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
     def current_interval_seconds(self) -> float:
         return self.active_interval_seconds if self.active_target_count else self.interval_seconds
 
+    async def _trail_protection(
+        self,
+        protection: PaperPositionProtection,
+        *,
+        is_long: bool,
+        observation: PaperMarketObservation,
+        activated_at: datetime | None,
+        protections: TradingPaperProtectionRepository,
+    ) -> None:
+        """Move a trailing stop-loss leg behind the best price since activation."""
+        if not protection.trailing or protection.stop_loss is None:
+            return
+        update = paper_trailing_protection_update(
+            is_long=is_long,
+            stop_loss=protection.stop_loss,
+            trail_amount=protection.trail_amount,
+            trail_percent=protection.trail_percent,
+            water_mark=protection.trail_water_mark,
+            observation=observation,
+            activated_at=activated_at,
+            tick_size=paper_price_tick(protection.instrument_id),
+        )
+        if update is None:
+            return
+        water_mark, stop_loss = update
+        await asyncio.to_thread(
+            protections.trail_stop,
+            protection.account_id,
+            protection.instrument_id,
+            water_mark=water_mark,
+            stop_loss=stop_loss,
+            expected_revision=protection.revision,
+            moved_at=paper_observation_moment(observation) if stop_loss != protection.stop_loss else None,
+        )
+
     @in_provider_lane("protective")
     async def _reconcile_protection(
         self,
@@ -176,7 +219,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
                 )
                 return
             entry = history.get(protection.entry_order_id or "")
-            if entry is not None and entry.status in {"rejected", "cancelled"}:
+            if entry is not None and entry.status in {"rejected", "cancelled", "expired"}:
                 await asyncio.to_thread(
                     protections.transition,
                     account_id,
@@ -200,7 +243,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
                     trigger_reason=protection.trigger_reason or "exit_filled",
                     expected_revision=protection.revision,
                 )
-            elif exit_order is not None and exit_order.status in {"rejected", "cancelled"}:
+            elif exit_order is not None and exit_order.status in {"rejected", "cancelled", "expired"}:
                 await asyncio.to_thread(
                     protections.transition,
                     account_id,
@@ -234,8 +277,6 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             and order.side == close_side
             for order in snapshot.open_orders
         )
-        if conflicting:
-            return
 
         entry = history.get(protection.entry_order_id or "")
         activated_at = (
@@ -243,14 +284,26 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             if entry is not None and entry.updated_at is not None
             else protection.updated_at or protection.created_at
         )
+        observation = _paper_observation(execution)
+        # The trigger is checked against the stop from before this observation;
+        # a trailing leg moves only afterwards (the pessimistic order).
         trigger_kind = paper_protection_trigger(
             is_long=is_long,
             stop_price=protection.stop_loss,
             target_price=protection.take_profit,
-            observation=_paper_observation(execution),
+            observation=observation,
             activated_at=activated_at,
+            # Any stop that moved (trailed or edited) is checked from its move.
+            stop_moved_at=protection.trail_moved_at,
         )
-        if trigger_kind is None:
+        if conflicting or trigger_kind is None:
+            await self._trail_protection(
+                protection,
+                is_long=is_long,
+                observation=observation,
+                activated_at=activated_at,
+                protections=protections,
+            )
             return
         trigger = "stop_loss" if trigger_kind == "stop" else "take_profit"
 
@@ -301,6 +354,12 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             if not account.enabled:
                 continue
             snapshot = await asyncio.to_thread(repository.snapshot, account.account_id)
+            now = datetime.now(timezone.utc)
+            if any(paper_order_is_expired(order, now) for order in snapshot.open_orders):
+                # DAY/GTD orders expire on the server clock, with or without
+                # market data for their instrument.
+                await asyncio.to_thread(repository.expire_orders, account.account_id, now=now)
+                snapshot = await asyncio.to_thread(repository.snapshot, account.account_id)
             active_orders += len(snapshot.open_orders)
             for order in snapshot.open_orders:
                 targets[(order.instrument_id, order.binding_id)].add(account.account_id)

@@ -6460,6 +6460,8 @@ export interface components {
             binding_id?: string | null;
             /** Created At */
             created_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
             /**
              * Filled Quantity
              * @default 0
@@ -6477,7 +6479,7 @@ export interface components {
              * Order Type
              * @enum {string}
              */
-            order_type: "market" | "limit" | "stop";
+            order_type: "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
             /** Quantity */
             quantity: number | string;
             /** Reference Price */
@@ -6499,9 +6501,25 @@ export interface components {
              * @default open
              * @enum {string}
              */
-            status?: "open" | "filled" | "cancelled" | "rejected";
+            status?: "open" | "filled" | "cancelled" | "rejected" | "expired";
             /** Stop Price */
             stop_price?: number | string | null;
+            /** Stop Triggered At */
+            stop_triggered_at?: string | null;
+            /**
+             * Time In Force
+             * @default gtc
+             * @enum {string}
+             */
+            time_in_force?: "gtc" | "day" | "gtd";
+            /** Trail Amount */
+            trail_amount?: number | string | null;
+            /** Trail Moved At */
+            trail_moved_at?: string | null;
+            /** Trail Percent */
+            trail_percent?: number | string | null;
+            /** Trail Water Mark */
+            trail_water_mark?: number | string | null;
             /** Updated At */
             updated_at?: string | null;
         };
@@ -6515,6 +6533,8 @@ export interface components {
             binding_id: string | null;
             /** Created At */
             created_at: string | null;
+            /** Expires At */
+            expires_at: string | null;
             /**
              * Filled Quantity
              * @default 0
@@ -6532,7 +6552,7 @@ export interface components {
              * Order Type
              * @enum {string}
              */
-            order_type: "market" | "limit" | "stop";
+            order_type: "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
             /** Quantity */
             quantity: string;
             /** Reference Price */
@@ -6554,9 +6574,25 @@ export interface components {
              * @default open
              * @enum {string}
              */
-            status: "open" | "filled" | "cancelled" | "rejected";
+            status: "open" | "filled" | "cancelled" | "rejected" | "expired";
             /** Stop Price */
             stop_price: string | null;
+            /** Stop Triggered At */
+            stop_triggered_at: string | null;
+            /**
+             * Time In Force
+             * @default gtc
+             * @enum {string}
+             */
+            time_in_force: "gtc" | "day" | "gtd";
+            /** Trail Amount */
+            trail_amount: string | null;
+            /** Trail Moved At */
+            trail_moved_at: string | null;
+            /** Trail Percent */
+            trail_percent: string | null;
+            /** Trail Water Mark */
+            trail_water_mark: string | null;
             /** Updated At */
             updated_at: string | null;
         };
@@ -6573,6 +6609,8 @@ export interface components {
         PaperOrderRequest: {
             /** Binding Id */
             binding_id?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
             /** Idempotency Key */
             idempotency_key: string;
             /** Instrument Id */
@@ -6585,7 +6623,7 @@ export interface components {
              * Order Type
              * @enum {string}
              */
-            order_type: "market" | "limit" | "stop";
+            order_type: "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
             /** Quantity */
             quantity: number | string;
             /** Reference Price */
@@ -6597,6 +6635,16 @@ export interface components {
             side: "buy" | "sell";
             /** Stop Price */
             stop_price?: number | string | null;
+            /**
+             * Time In Force
+             * @default gtc
+             * @enum {string}
+             */
+            time_in_force?: "gtc" | "day" | "gtd";
+            /** Trail Amount */
+            trail_amount?: number | string | null;
+            /** Trail Percent */
+            trail_percent?: number | string | null;
         };
         /** PaperPerformanceSummary */
         PaperPerformanceSummary: {
@@ -6713,6 +6761,14 @@ export interface components {
             stop_loss: string | null;
             /** Take Profit */
             take_profit: string | null;
+            /** Trail Amount */
+            trail_amount: string | null;
+            /** Trail Moved At */
+            trail_moved_at: string | null;
+            /** Trail Percent */
+            trail_percent: string | null;
+            /** Trail Water Mark */
+            trail_water_mark: string | null;
             /** Trigger Reason */
             trigger_reason: string | null;
             /** Updated At */
@@ -6738,6 +6794,10 @@ export interface components {
             stop_loss?: number | string | null;
             /** Take Profit */
             take_profit?: number | string | null;
+            /** Trail Amount */
+            trail_amount?: number | string | null;
+            /** Trail Percent */
+            trail_percent?: number | string | null;
         };
         /** PaperRDistributionBucket */
         PaperRDistributionBucket: {
@@ -6770,10 +6830,14 @@ export interface components {
              * @default 0.35
              */
             desired_risk_pct?: number | string;
+            /** Expires At */
+            expires_at?: string | null;
             /** Idempotency Key */
             idempotency_key: string;
             /** Instrument Id */
             instrument_id: string;
+            /** Limit Price */
+            limit_price?: number | string | null;
             /** Order Id */
             order_id: string;
             /**
@@ -6781,11 +6845,22 @@ export interface components {
              * @default market
              * @enum {string}
              */
-            order_type?: "market" | "limit" | "stop";
+            order_type?: "market" | "limit" | "stop" | "stop_limit";
             /** Stop Loss */
             stop_loss: number | string;
             /** Take Profit */
             take_profit?: number | string | null;
+            /**
+             * Time In Force
+             * @default gtc
+             * @enum {string}
+             */
+            time_in_force?: "gtc" | "day" | "gtd";
+            /**
+             * Trailing Stop Loss
+             * @default false
+             */
+            trailing_stop_loss?: boolean;
             /** Trigger Price */
             trigger_price?: number | string | null;
         };

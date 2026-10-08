@@ -22,7 +22,9 @@ from .paper import (
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
+    PaperOrderStateUpdate,
     PaperPosition,
+    TIME_IN_FORCE_EXPIRED,
     paper_buy_reservation,
     paper_commission,
     paper_fill_is_fundable,
@@ -30,7 +32,10 @@ from .paper import (
     paper_fill_key,
     paper_liquidity_allocation,
     paper_observation_key,
+    paper_order_expiry,
     paper_order_request_matches,
+    paper_order_state_update,
+    paper_price_tick,
     paper_realized_pnl,
     paper_unrealized_pnl,
 )
@@ -73,6 +78,13 @@ def _order(row) -> PaperOrder:
         reserved_cash=Decimal(row[15]),
         created_at=row[16],
         updated_at=row[17],
+        time_in_force=cast(Any, str(row[18])),
+        expires_at=row[19],
+        trail_amount=Decimal(row[20]) if row[20] is not None else None,
+        trail_percent=Decimal(row[21]) if row[21] is not None else None,
+        trail_water_mark=Decimal(row[22]) if row[22] is not None else None,
+        stop_triggered_at=row[23],
+        trail_moved_at=row[24],
     )
 
 
@@ -80,7 +92,9 @@ _ORDER_COLUMNS = """
     account_id, order_id, instrument_id, binding_id, side, order_type,
     quantity, limit_price, stop_price, reference_price, status,
     filled_quantity, average_fill_price, idempotency_key, rejection_reason,
-    reserved_cash, created_at, updated_at
+    reserved_cash, created_at, updated_at, time_in_force, expires_at,
+    trail_amount, trail_percent, trail_water_mark, stop_triggered_at,
+    trail_moved_at
 """
 
 
@@ -91,9 +105,14 @@ class TradingPaperRepository:
         *,
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.context = context
         self.uow_factory = uow_factory
+        self._clock = clock
+
+    def _now(self) -> datetime:
+        return self._clock() if self._clock is not None else datetime.now(timezone.utc)
 
     def create_account(self, request: PaperAccountCreate) -> PaperAccountSnapshot:
         with self.uow_factory() as uow:
@@ -320,6 +339,11 @@ class TradingPaperRepository:
                 raise ValueError("paper_idempotency_payload_mismatch")
             return existing
 
+        placed_at = self._now()
+        expires_at = paper_order_expiry(request, placed_at)
+        if expires_at is not None and expires_at <= placed_at:
+            raise ValueError("paper_order_expiry_in_past")
+
         reserved_cash = Decimal("0")
         if request.side == "buy":
             if not self._covers_short(uow, account_id, request):
@@ -397,8 +421,9 @@ class TradingPaperRepository:
             INSERT INTO omnix_trading_paper_orders (
                 workspace_id, account_id, order_id, instrument_id, binding_id,
                 side, order_type, quantity, limit_price, stop_price,
-                reference_price, status, idempotency_key, reserved_cash
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
+                reference_price, status, idempotency_key, reserved_cash,
+                time_in_force, expires_at, trail_amount, trail_percent
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s, %s, %s, %s, %s)
             RETURNING {_ORDER_COLUMNS}
             """,
             (
@@ -415,6 +440,10 @@ class TradingPaperRepository:
                 request.reference_price,
                 request.idempotency_key,
                 reserved_cash,
+                request.time_in_force,
+                expires_at,
+                request.trail_amount,
+                request.trail_percent,
             ),
         ).fetchone()
         return _order(row)
@@ -445,6 +474,85 @@ class TradingPaperRepository:
             (self.context.workspace_id, account.account_id, order_id),
         ).fetchone()
         return _order(row)
+
+    def expire_orders(self, account_id: str, *, now: datetime | None = None) -> list[PaperOrder]:
+        """Expire the account's due DAY/GTD orders and release their holds.
+
+        Expiry runs on the server clock, so an order expires even when its
+        instrument has no market data after the close.
+        """
+        with self.uow_factory() as uow:
+            account, _ = self._lock_account(uow, account_id)
+            expired = self._expire_locked(uow, account, now or self._now())
+            uow.commit()
+            return expired
+
+    def _expire_locked(self, uow: PostgresUnitOfWork, account: PaperAccount, now: datetime) -> list[PaperOrder]:
+        rows = uow.connection.execute(
+            f"""
+            SELECT {_ORDER_COLUMNS}
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s
+               AND status = 'open' AND expires_at IS NOT NULL AND expires_at <= %s
+             ORDER BY expires_at, order_id
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account.account_id, now),
+        ).fetchall()
+        expired: list[PaperOrder] = []
+        for row in rows:
+            order = _order(row)
+            self._release_order_reservation(uow, account, order)
+            updated = uow.connection.execute(
+                f"""
+                UPDATE omnix_trading_paper_orders
+                   SET status = 'expired', rejection_reason = %s, reserved_cash = 0,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+                RETURNING {_ORDER_COLUMNS}
+                """,
+                (TIME_IN_FORCE_EXPIRED, self.context.workspace_id, account.account_id, order.order_id),
+            ).fetchone()
+            if order.filled_quantity == 0:
+                # Nothing filled, so no position will ever activate the entry's
+                # bracket; cancel it here rather than waiting for market data.
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_protections
+                       SET status = 'cancelled', trigger_reason = 'entry_expired',
+                           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s
+                       AND entry_order_id = %s AND status = 'pending_entry'
+                    """,
+                    (self.context.workspace_id, account.account_id, order.order_id),
+                )
+            expired.append(_order(updated))
+        return expired
+
+    def _save_order_state(
+        self,
+        uow: PostgresUnitOfWork,
+        account_id: str,
+        order_id: str,
+        state: PaperOrderStateUpdate,
+    ) -> None:
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_orders
+               SET stop_price = %s, trail_water_mark = %s, stop_triggered_at = %s,
+                   trail_moved_at = %s, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+            """,
+            (
+                state.stop_price,
+                state.trail_water_mark,
+                state.stop_triggered_at,
+                state.trail_moved_at,
+                self.context.workspace_id,
+                account_id,
+                order_id,
+            ),
+        )
 
     def _release_order_reservation(
         self,
@@ -508,6 +616,9 @@ class TradingPaperRepository:
             if account_row is None:
                 raise ValueError(f"paper_account_not_found: {account_id}")
             account = _account(account_row)
+            # Due DAY/GTD orders expire, releasing their holds, before the
+            # balance and position this observation works on are read.
+            self._expire_locked(uow, account, self._now())
             balance_row = uow.connection.execute(
                 """
                 SELECT available, reserved
@@ -544,6 +655,7 @@ class TradingPaperRepository:
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchall()
             observation_key = paper_observation_key(observation)
+            tick_size = paper_price_tick(observation.instrument_id)
             existing_liquidity_rows = uow.connection.execute(
                 """
                 SELECT side, COALESCE(SUM(quantity), 0)
@@ -570,7 +682,12 @@ class TradingPaperRepository:
 
             for row in order_rows:
                 order = _order(row)
-                decision = paper_fill_decision(order, observation)
+                # The decision uses the order's state from before this
+                # observation; the observation then moves that state.
+                decision = paper_fill_decision(order, observation, tick_size=tick_size)
+                state = paper_order_state_update(order, observation, tick_size=tick_size)
+                if state is not None:
+                    self._save_order_state(uow, account_id, order.order_id, state)
                 if (
                     not decision.should_fill
                     or decision.fill_price is None
