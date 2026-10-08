@@ -14,11 +14,9 @@ whether a secret is set.
 from __future__ import annotations
 
 import sys
-import threading
-from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Iterable
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from app.security.provider_secret_store import (
     delete_alert_webhooks,
@@ -42,7 +40,12 @@ def mask_webhook_url(url: str) -> str:
 
 
 def alert_webhook_prefix(workspace_id: str, alert_id: str) -> str:
-    return f"{workspace_id}/{alert_id}/"
+    """The reference prefix of one alert's webhooks.
+
+    Both parts are percent-encoded, so neither can contain the separator and
+    one alert's prefix never matches another alert's references.
+    """
+    return f"{quote(workspace_id, safe='')}/{quote(alert_id, safe='')}/"
 
 
 class AlertWebhookStore(Protocol):
@@ -67,31 +70,16 @@ class ProtectedAlertWebhookStore:
         save_alert_webhook(ref, url, secret)
 
     def delete(self, ref: str) -> None:
-        delete_alert_webhooks(ref)
+        delete_alert_webhooks([ref])
 
     def delete_alert(self, workspace_id: str, alert_id: str, *, keep: str | None = None) -> None:
-        delete_alert_webhooks(alert_webhook_prefix(workspace_id, alert_id), keep=keep)
-
-
-_ALERT_LOCKS: dict[tuple[str, str], threading.Lock] = {}
-_ALERT_LOCKS_GUARD = threading.Lock()
-
-
-@contextmanager
-def alert_mutation_lock(workspace_id: str, alert_id: str) -> Iterator[None]:
-    """One write at a time per alert in this process, so webhook references and rows change together."""
-    key = (workspace_id, alert_id)
-    with _ALERT_LOCKS_GUARD:
-        lock = _ALERT_LOCKS.setdefault(key, threading.Lock())
-    with lock:
-        yield
+        delete_alert_webhooks(prefix=alert_webhook_prefix(workspace_id, alert_id), keep=keep)
 
 
 __all__ = [
     "AVAILABLE_ALERT_CHANNELS",
     "AlertWebhookStore",
     "ProtectedAlertWebhookStore",
-    "alert_mutation_lock",
     "alert_webhook_prefix",
     "mask_webhook_url",
     "unavailable_channels",

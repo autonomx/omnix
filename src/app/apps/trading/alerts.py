@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Callable, Iterable, Mapping
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, SecretStr, Valid
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.security.url_policy import UrlPolicyError, check_outbound_url
+from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .alert_conditions import (
@@ -279,7 +280,8 @@ class _AlertWrite(_AlertContract):
 
 
 class TradingAlertCreate(_AlertWrite):
-    alert_id: str = Field(min_length=1, max_length=200)
+    # No "/" or other separators: alert ids are part of protected-store references.
+    alert_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 
 
 class TradingAlertUpdate(_AlertWrite):
@@ -538,6 +540,12 @@ class TradingAlertUnreadable(BaseModel):
 
 
 @dataclass(frozen=True)
+class AlertLockState:
+    exists: bool
+    webhook_ref: str | None
+
+
+@dataclass(frozen=True)
 class AlertListing:
     alerts: list[TradingAlert]
     unreadable: list[TradingAlertUnreadable]
@@ -692,7 +700,34 @@ class TradingAlertRepository:
     def list_alerts(self, limit: int = 200) -> list[TradingAlert]:
         return self.list_alerts_report(limit).alerts
 
-    def create(self, request: TradingAlertCreate, *, webhook_ref: str | None = None) -> TradingAlert:
+    @contextmanager
+    def alert_transaction(self, alert_id: str) -> Iterator[AlertLockState]:
+        """One transaction around an alert write and its protected-store changes.
+
+        Holds a per-(workspace, alert) PostgreSQL advisory lock across
+        processes, locks the row if it exists, and yields what it currently
+        references. Repository calls inside join this transaction; it commits
+        when the block ends without an error.
+        """
+        with self.uow_factory() as uow:
+            uow.connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"omnix-trading-alert:{self.context.workspace_id}:{alert_id}",),
+            )
+            row = uow.connection.execute(
+                """
+                SELECT notification_settings->>'webhook_ref'
+                  FROM omnix_trading_alerts
+                 WHERE workspace_id = %s AND alert_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, alert_id),
+            ).fetchone()
+            with share_transaction(uow):
+                yield AlertLockState(exists=row is not None, webhook_ref=row[0] if row else None)
+            uow.commit()
+
+    def create(self, request: TradingAlertCreate, *, webhook_ref: str | None) -> TradingAlert:
         """Create an alert. webhook_ref names its webhook in the protected store (the API sets it)."""
         condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)
         with self.uow_factory() as uow:
@@ -736,7 +771,7 @@ class TradingAlertRepository:
         request: TradingAlertUpdate,
         expected_revision: int,
         *,
-        webhook_ref: str | None = None,
+        webhook_ref: str | None,
     ) -> TradingAlert:
         """Replace an alert at expected_revision. webhook_ref as for create."""
         condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)

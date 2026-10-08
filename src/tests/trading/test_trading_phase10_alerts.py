@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +14,7 @@ from app.persistence.errors import RevisionConflict
 from app.apps.trading.alerts import (
     AlertEvaluationContext,
     AlertListing,
+    AlertLockState,
     AlertOutcomeRecord,
     TradingAlert,
     TradingAlertCreate,
@@ -50,6 +52,10 @@ class FakeAlertRepository:
 
     def list_alerts_report(self, limit: int = 200):
         return AlertListing(self.list_alerts(limit), [])
+
+    @contextmanager
+    def alert_transaction(self, alert_id: str):
+        yield AlertLockState(exists=alert_id in self.alerts, webhook_ref=None)
 
     def create(self, request: TradingAlertCreate, *, webhook_ref=None):
         alert = TradingAlert(
@@ -303,6 +309,24 @@ def test_alert_monitor_groups_targets_and_calculates_all_condition_inputs() -> N
     assert by_alert["indicator-alert"].observations[0].source == Decimal("100")  # RSI of a steady climb
     assert all(outcome.bar_is_final for outcome in by_alert.values())
     assert monitor.diagnostics()["evaluation_count"] == 1
+
+
+def test_alert_monitor_clears_its_error_after_a_clean_pass() -> None:
+    repository = FakeAlertRepository()
+    repository.alerts = {"price-alert": alert("price-alert", "price_above")}
+    market = FakeMarketService()
+    failing = SimpleNamespace(bars=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("feed down")))
+    services = iter([failing, market])
+    monitor = TradingAlertMonitor(
+        repository_factory=lambda: repository,
+        market_service_factory=lambda: next(services),
+        interval_seconds=5,
+    )
+    asyncio.run(monitor.run_once())
+    assert monitor.diagnostics()["last_error"] == "RuntimeError: feed down"
+    asyncio.run(monitor.run_once())
+    assert monitor.diagnostics()["last_error"] is None
+    assert monitor.diagnostics()["unreadable_alert_count"] == 0
 
 
 def test_alert_monitor_is_disabled_in_legacy_tests_by_default(monkeypatch) -> None:

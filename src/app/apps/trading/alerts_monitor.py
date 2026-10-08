@@ -78,17 +78,16 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.evaluation_count = 0
         self.trigger_count = 0
         self.unreadable_count = 0
+        self.unreadable_alert_ids: list[str] = []
 
     async def run_once(self) -> int:
         repository = self.repository_factory()
         listing = await asyncio.to_thread(repository.list_alerts_report, 500)
         alerts = listing.alerts
+        # Unreadable alerts are a state of the data, not an error of this pass.
         self.unreadable_count = len(listing.unreadable)
-        if listing.unreadable:
-            self.last_error = (
-                f"{len(listing.unreadable)} stored alert(s) cannot be read and are skipped: "
-                + ", ".join(item.alert_id for item in listing.unreadable[:5])
-            )
+        self.unreadable_alert_ids = [item.alert_id for item in listing.unreadable[:20]]
+        error: str | None = None
         targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
         now = datetime.now(timezone.utc)
         for alert in alerts:
@@ -135,8 +134,10 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 self.evaluation_count += 1
                 triggered += len(triggers)
             except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
+                error = f"{type(exc).__name__}: {exc}"
         self.trigger_count += triggered
+        # A clean pass clears the previous pass's error.
+        self.last_error = error
         self.last_run_at = datetime.now(timezone.utc)
         return triggered
 
@@ -150,6 +151,7 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
             "evaluation_count": self.evaluation_count,
             "trigger_count": self.trigger_count,
             "unreadable_alert_count": self.unreadable_count,
+            "unreadable_alert_ids": list(self.unreadable_alert_ids),
         }
 
 

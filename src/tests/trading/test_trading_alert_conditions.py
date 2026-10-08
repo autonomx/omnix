@@ -628,3 +628,19 @@ def test_sources_and_targets_resolve_by_kind() -> None:
     for bad in ({"kind": "price", "lookback_bars": 3}, {"kind": "volume"}):
         with pytest.raises(ValidationError):
             spec(source=bad, operator="greater_than", target=value(1))
+
+
+def test_alert_ids_cannot_contain_separators() -> None:
+    _create(condition_type="price_above", threshold="1")  # alert_id "a"
+    for alert_id in ("x/y", "../x", "x y", "", "/x"):
+        with pytest.raises(ValidationError):
+            TradingAlertCreate(alert_id=alert_id, instrument_id="crypto:BINANCE:spot:BTC-USDT", condition_type="price_above", threshold="1")
+    TradingAlertCreate(alert_id="chart-alert-0f1e:2.a_b", instrument_id="crypto:BINANCE:spot:BTC-USDT", condition_type="price_above", threshold="1")
+
+
+def test_webhook_prefixes_never_cross_alerts_or_workspaces() -> None:
+    from app.apps.trading.alerts_channels import alert_webhook_prefix
+
+    refs = [alert_webhook_prefix(ws, alert) + "r" for ws, alert in (("w", "x"), ("w", "x.y"), ("w/x", "y"), ("w", "xy"))]
+    prefix = alert_webhook_prefix("w", "x")
+    assert [ref for ref in refs if ref.startswith(prefix)] == [refs[0]]

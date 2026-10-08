@@ -24,7 +24,7 @@ from app.apps.trading.alerts import (
     TradingAlertUpdate,
 )
 from app.apps.trading.alerts_api import create_trading_alert_router
-from app.apps.trading.alerts_channels import ProtectedAlertWebhookStore
+from app.apps.trading.alerts_channels import ProtectedAlertWebhookStore, alert_webhook_prefix
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -74,7 +74,9 @@ def alerts():
 
 def _create(env, alert_id: str, **data):
     data.setdefault("conditions", [{"source": CLOSE, "operator": "crossing_up", "target": {"kind": "value", "value": "100"}}])
-    return env.repository.create(TradingAlertCreate(alert_id=f"{alert_id}-{env.suffix}", instrument_id=env.instrument, **data))
+    return env.repository.create(
+        TradingAlertCreate(alert_id=f"{alert_id}-{env.suffix}", instrument_id=env.instrument, **data), webhook_ref=None
+    )
 
 
 def _alert(env, alert_id: str):
@@ -152,6 +154,7 @@ def test_conditions_round_trip_update_and_cascade(alerts) -> None:
         created.alert_id,
         TradingAlertUpdate(instrument_id=alerts.instrument, conditions=[{"source": CLOSE, "operator": "less_than", "target": {"kind": "value", "value": "5"}}]),
         expected_revision=created.revision,
+        webhook_ref=None,
     )
     assert updated.frequency == "every_time"
     assert _alert(alerts, "round-trip").conditions == updated.conditions
@@ -207,6 +210,7 @@ def test_once_disables_the_alert_in_the_same_transaction(alerts) -> None:
         alert.alert_id,
         TradingAlertUpdate(**alert.model_dump(include=set(TradingAlertUpdate.model_fields) - {"enabled", "webhook_secret"}), enabled=True),
         expected_revision=alert.revision,
+        webhook_ref=None,
     )
     assert enabled.last_triggered_at == alert.last_triggered_at  # lifecycle edit keeps history
     market.base += timedelta(minutes=10)
@@ -371,11 +375,14 @@ class MemoryWebhooks:
     def __init__(self) -> None:
         self.entries: dict[str, dict[str, str]] = {}
         self.fail_save = False
+        self.fail_load = False
 
     def available(self) -> bool:
         return True
 
     def load(self, ref):
+        if self.fail_load:
+            raise OSError("store unreadable")
         return self.entries.get(ref)
 
     def save(self, ref, url, secret) -> None:
@@ -387,11 +394,11 @@ class MemoryWebhooks:
         self.entries.pop(ref, None)
 
     def delete_alert(self, workspace_id, alert_id, *, keep=None) -> None:
-        prefix = f"{workspace_id}/{alert_id}/"
+        prefix = alert_webhook_prefix(workspace_id, alert_id)
         self.entries = {ref: entry for ref, entry in self.entries.items() if ref == keep or not ref.startswith(prefix)}
 
     def of(self, workspace_id, alert_id):
-        prefix = f"{workspace_id}/{alert_id}/"
+        prefix = alert_webhook_prefix(workspace_id, alert_id)
         return [entry for ref, entry in self.entries.items() if ref.startswith(prefix)]
 
 
@@ -488,7 +495,7 @@ def test_api_rejects_unavailable_channels_and_keeps_webhooks_out_of_responses(al
     assert stored() == []
 
     # A new alert with an old id does not inherit anything left in the store.
-    webhooks.save(f"{alerts.context.workspace_id}/{alert_id}/leftover", "https://old.example.com/x", "old")
+    webhooks.save(alert_webhook_prefix(alerts.context.workspace_id, alert_id) + "leftover", "https://old.example.com/x", "old")
     assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": ["app"]}}).status_code == 201
     assert stored() == []
     assert client.post("/api/trading/alerts", json={**body, "alert_id": f"nohook-{alerts.suffix}", "parameters": {}, "webhook_secret": "x"}).status_code == 422
@@ -560,7 +567,7 @@ def test_editing_notification_settings_keeps_trigger_state(alerts) -> None:
             "delivery": {"sound": {"name": "bell"}},
         },
     })
-    edited = alerts.repository.update(created.alert_id, update, expected_revision=fired.revision)
+    edited = alerts.repository.update(created.alert_id, update, expected_revision=fired.revision, webhook_ref=None)
     assert edited.parameters.message == "new text"
     assert edited.definition_revision == fired.definition_revision
     assert _alert(alerts, "notify").last_triggered_at == fired.last_triggered_at
@@ -571,7 +578,7 @@ def test_editing_notification_settings_keeps_trigger_state(alerts) -> None:
         **edited.model_dump(include=fields),
         "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "101"}}],
     })
-    alerts.repository.update(created.alert_id, changed, expected_revision=edited.revision)
+    alerts.repository.update(created.alert_id, changed, expected_revision=edited.revision, webhook_ref=None)
     after = _alert(alerts, "notify")
     assert after.last_triggered_at is None and after.definition_revision == fired.definition_revision + 1
 
@@ -584,7 +591,7 @@ def test_a_notification_edit_does_not_let_a_bar_fire_twice(alerts) -> None:
     fired = _alert(alerts, "per-bar-edit")
     fields = set(TradingAlertUpdate.model_fields) - {"webhook_secret"}
     update = TradingAlertUpdate(**{**fired.model_dump(include=fields), "parameters": {**fired.parameters.model_dump(), "message": "edited"}})
-    alerts.repository.update(created.alert_id, update, expected_revision=fired.revision)
+    alerts.repository.update(created.alert_id, update, expected_revision=fired.revision, webhook_ref=None)
     market.set([99], forming=102)
     assert _run(alerts, market) == []  # same forming bar
     # A definition edit is a new alert as far as bars go.
@@ -592,7 +599,7 @@ def test_a_notification_edit_does_not_let_a_bar_fire_twice(alerts) -> None:
         **_alert(alerts, "per-bar-edit").model_dump(include=fields),
         "conditions": [{"source": CLOSE, "operator": "crossing_up", "target": {"kind": "value", "value": "101.5"}}],
     })
-    alerts.repository.update(created.alert_id, threshold, expected_revision=fired.revision + 1)
+    alerts.repository.update(created.alert_id, threshold, expected_revision=fired.revision + 1, webhook_ref=None)
     assert _run(alerts, market) == ["per-bar-edit"]
 
 
@@ -640,7 +647,8 @@ def test_unreadable_rows_are_reported_skipped_and_archivable(alerts) -> None:
     monitor = TradingAlertMonitor(repository_factory=lambda: alerts.repository, market_service_factory=lambda: service, interval_seconds=5)
     asyncio.run(monitor.run_once())
     assert monitor.diagnostics()["unreadable_alert_count"] >= 2
-    assert f"broken-{suffix}" in (monitor.last_error or "")
+    assert f"broken-{suffix}" in monitor.diagnostics()["unreadable_alert_ids"]
+    assert monitor.last_error is None  # unreadable data is not an error of the pass
     assert any(t.alert_id == f"healthy-{suffix}" for t in alerts.repository.list_triggers(500))
 
     for alert_id, item in unreadable.items():
@@ -700,3 +708,68 @@ def test_protected_webhook_store_round_trip_and_serialised_writes(tmp_path, monk
     assert store.load("w/b/3") is not None and store.load("w/b/4") is None
     store.delete("w/a/1")
     assert store.load("w/a/1") is None and store.load("w/b/3") is not None
+
+
+
+def test_an_unreadable_store_never_looks_like_a_missing_webhook(alerts) -> None:
+    webhooks = MemoryWebhooks()
+    client = _client(alerts, webhooks)
+    alert_id = f"unreadable-store-{alerts.suffix}"
+    body = {
+        "instrument_id": alerts.instrument,
+        "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "1"}}],
+        "parameters": {"delivery": {"webhook": {"url": HOOK}}},
+    }
+    assert client.post("/api/trading/alerts", json={**body, "alert_id": alert_id, "webhook_secret": "keep-me"}).status_code == 201
+    url_only = {**body, "parameters": {"delivery": {"webhook": {"url": HOOK + "/v2"}}}}
+    webhooks.fail_load = True
+    failed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=url_only)
+    assert failed.status_code == 503
+    webhooks.fail_load = False
+    assert webhooks.of(alerts.context.workspace_id, alert_id) == [{"url": HOOK, "secret": "keep-me"}]
+    assert _alert(alerts, "unreadable-store").revision == 1
+    # The secret survives a URL-only change once the store reads again.
+    assert client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=url_only).status_code == 200
+    assert webhooks.of(alerts.context.workspace_id, alert_id) == [{"url": HOOK + "/v2", "secret": "keep-me"}]
+    # A row whose stored webhook vanished does not guess: resend url and secret.
+    webhooks.entries.clear()
+    assert client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json=url_only).status_code == 409
+    resent = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json={**url_only, "webhook_secret": "again"})
+    assert resent.status_code == 200
+    assert webhooks.of(alerts.context.workspace_id, alert_id) == [{"url": HOOK + "/v2", "secret": "again"}]
+
+
+def test_alert_transactions_are_serialised_per_alert(alerts) -> None:
+    import threading
+    import time
+
+    _create(alerts, "locked")
+    alert_id = f"locked-{alerts.suffix}"
+    entered = threading.Event()
+    timeline: list[str] = []
+
+    def first() -> None:
+        with alerts.repository.alert_transaction(alert_id) as state:
+            assert state.exists
+            entered.set()
+            time.sleep(0.6)
+            timeline.append("first-done")
+
+    def second() -> None:
+        entered.wait(5)
+        with alerts.repository.alert_transaction(alert_id):
+            timeline.append("second-in")
+
+    def other_alert() -> None:
+        entered.wait(5)
+        with alerts.repository.alert_transaction(f"other-{alerts.suffix}") as state:
+            assert not state.exists
+            timeline.append("other-in")
+
+    threads = [threading.Thread(target=target) for target in (first, second, other_alert)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert timeline.index("first-done") < timeline.index("second-in")
+    assert timeline.index("other-in") < timeline.index("first-done")  # other alerts are not blocked
