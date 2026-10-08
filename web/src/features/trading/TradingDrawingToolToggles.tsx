@@ -15,13 +15,13 @@ export function TradingDrawingToolToggles() {
     { key: 'stay', label: 'Stay in drawing mode', glyph: '✎', pressed: settings.stayInDrawingMode, toggle: () => setSetting('stayInDrawingMode', !settings.stayInDrawingMode) },
     { key: 'lock', label: 'Lock all drawings', glyph: '⚿', pressed: settings.lockAll, toggle: () => setSetting('lockAll', !settings.lockAll) },
     { key: 'hide', label: 'Hide all drawings (Ctrl+Alt+H)', glyph: '◌', pressed: drawingsHidden, toggle: toggleDrawingsHidden },
-    { key: 'sync', label: 'Sync drawings between the charts of this tab', glyph: '⇄', pressed: settings.syncDrawings, toggle: () => setSetting('syncDrawings', !settings.syncDrawings) },
+    { key: 'sync', label: 'Sync drawings between the charts of this tab', title: 'Sync drawings between the charts of this tab. Off: each chart keeps its own drawings, and the shared ones show again when sync is back on.', glyph: '⇄', pressed: settings.syncDrawings, toggle: () => setSetting('syncDrawings', !settings.syncDrawings) },
     { key: 'favorites', label: 'Show favourites toolbar', glyph: '★', pressed: settings.favoritesBar, toggle: () => setSetting('favoritesBar', !settings.favoritesBar) },
   ];
   return (
     <div className="trading-drawing-tool-toggles" role="group" aria-label="Drawing behaviour">
       {toggles.map((item) => (
-        <button key={item.key} type="button" aria-label={item.label} title={item.label} aria-pressed={item.pressed} className={item.pressed ? 'active' : undefined} onClick={item.toggle}>
+        <button key={item.key} type="button" aria-label={item.label} title={'title' in item ? item.title : item.label} aria-pressed={item.pressed} className={item.pressed ? 'active' : undefined} onClick={item.toggle}>
           <span aria-hidden="true">{item.glyph}</span>
         </button>
       ))}

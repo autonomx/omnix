@@ -150,7 +150,7 @@ export function DrawingPropertiesButton({ drawing, onChange, interval, onVisibil
   onChange: (properties: DrawingProperties, mergeKey: string) => void;
   /** With it, the dialog has the Visibility section (TVP-3.8); `interval` is the chart's, for "Only this interval". */
   interval?: string;
-  onVisibilityChange?: (visibility: DrawingVisibility) => void;
+  onVisibilityChange?: (visibility: DrawingVisibility, mergeKey?: string) => void;
   /** With it, the dialog has the Template section (TVP-3.8). */
   onApplyTemplate?: (style: DrawingStyle, properties: DrawingProperties) => void;
 }) {

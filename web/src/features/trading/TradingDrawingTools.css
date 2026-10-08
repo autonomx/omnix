@@ -1,4 +1,17 @@
 @layer features {
+  /* TVP-3.8: behaviour toggles at the bottom of the toolbar, the favourites toolbar and the settings sections. */
+  .trading-drawing-tool-toggles{display:flex;flex-direction:column;gap:2px;margin-top:auto;padding-top:6px;border-top:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent)}
+  .trading-drawing-tool-toggles button{display:grid;place-items:center;width:34px;height:30px;border-color:transparent;background:transparent;padding:0;color:var(--c-slate-680)}
+  .trading-drawing-tool-toggles button.active{color:var(--c-blue-630)}
+  .trading-drawing-favorites{position:absolute;top:8px;left:calc(100% + 8px);z-index:20;display:flex;gap:2px;padding:3px;border:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent);border-radius:6px;background:color-mix(in srgb, var(--c-indigo-190) 98%, transparent);box-shadow:0 4px 14px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);color:var(--c-slate-910)}
+  .trading-drawing-favorites button{display:grid;place-items:center;min-width:28px;height:28px;border-color:transparent;background:transparent;padding:0;color:var(--c-slate-680)}
+  .trading-drawing-favorites button.active{color:var(--c-blue-630)}
+  .trading-drawing-visibility,.trading-drawing-templates{display:grid;gap:4px;margin:6px 0;padding:6px;border:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent);border-radius:6px}
+  .trading-drawing-visibility-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .trading-drawing-visibility-range{display:flex;align-items:center;gap:3px}
+  .trading-drawing-visibility-range input{width:52px}
+  .trading-drawing-visibility-actions{display:flex;gap:4px}
+  .trading-drawing-templates ul{margin:0;padding:0;list-style:none;display:grid;gap:2px}
   .trading-drawing-tools{position:relative;z-index:20;gap:2px;overflow:visible}
   .trading-drawing-tool-group{position:relative;flex:0 0 auto}
   .trading-drawing-tool-group>button{display:grid;place-items:center;width:34px;height:34px;border-color:transparent;background:transparent;padding:0;color:var(--c-slate-680);font-size:17px;line-height:1}
@@ -33,17 +46,4 @@
   .trading-drawing-tool-row .trading-drawing-tool-favorite{display:grid;width:24px;height:36px;border:0;border-radius:4px;background:transparent;padding:0;color:var(--c-slate-680);font-size:19px}
 
   .trading-drawing-tool-row .trading-drawing-tool-favorite:hover{background:color-mix(in srgb, var(--c-blue-630) 16%, transparent);color:var(--c-yellow-910-3)}
-  /* TVP-3.8: behaviour toggles at the bottom of the toolbar, the favourites toolbar and the settings sections. */
-  .trading-drawing-tool-toggles{display:flex;flex-direction:column;gap:2px;margin-top:auto;padding-top:6px;border-top:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent)}
-  .trading-drawing-tool-toggles button{display:grid;place-items:center;width:34px;height:30px;border-color:transparent;background:transparent;padding:0;color:var(--c-slate-680)}
-  .trading-drawing-tool-toggles button.active{color:var(--c-blue-630)}
-  .trading-drawing-favorites{position:absolute;top:8px;left:calc(100% + 8px);z-index:20;display:flex;gap:2px;padding:3px;border:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent);border-radius:6px;background:color-mix(in srgb, var(--c-indigo-190) 98%, transparent);box-shadow:0 4px 14px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);color:var(--c-slate-910)}
-  .trading-drawing-favorites button{display:grid;place-items:center;min-width:28px;height:28px;border-color:transparent;background:transparent;padding:0;color:var(--c-slate-680)}
-  .trading-drawing-favorites button.active{color:var(--c-blue-630)}
-  .trading-drawing-visibility,.trading-drawing-templates{display:grid;gap:4px;margin:6px 0;padding:6px;border:1px solid color-mix(in srgb, var(--c-slate-680) 25%, transparent);border-radius:6px}
-  .trading-drawing-visibility-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
-  .trading-drawing-visibility-range{display:flex;align-items:center;gap:3px}
-  .trading-drawing-visibility-range input{width:52px}
-  .trading-drawing-visibility-actions{display:flex;gap:4px}
-  .trading-drawing-templates ul{margin:0;padding:0;list-style:none;display:grid;gap:2px}
 }

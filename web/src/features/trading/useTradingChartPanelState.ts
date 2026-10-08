@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import { type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
@@ -9,6 +9,7 @@ import { UTC_SESSION, type TradingSessionSpec } from './indicators/tradingSessio
 import { type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore } from './tradingStore';
 import { drawingScopeId } from './drawings/drawingToolSettings';
+import { drawingVisibleOnInterval } from './drawings/drawingVisibility';
 import type { MarketBar } from './tradingTypes';
 import { readTradingTimezoneId } from './tradingTime';
 import { SelectedVisibleRange, TradingChartPanelProps, TradingContextMenuState, readTradingRightOffset } from './tradingChartPanelModel';
@@ -76,6 +77,11 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   const drawings = useTradingDrawings(instrumentId, drawingScopeId(sessionId, chartId, drawingToolSettings.syncDrawings));
 
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
+  // A selected drawing that this interval doesn't show is deselected, so keys and the header never act on it (TVP-3.8).
+  const selectedHiddenHere = selectedDrawing !== null && !drawingVisibleOnInterval(selectedDrawing.visibility, interval);
+  useEffect(() => {
+    if (selectedHiddenHere) drawings.select(null);
+  }, [selectedHiddenHere, drawings]);
 
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
 

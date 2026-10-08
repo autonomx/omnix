@@ -7,6 +7,7 @@
 //   any drawing of that tool) are saved with the indicator-preset documents,
 //   marked `drawing-template`, so they follow the account like chart templates.
 import type { TradingDocument } from '../tradingTypes';
+import { drawingToolDefinition } from './tools/registry';
 import { DEFAULT_DRAWING_STYLE, type DrawingProperties, type DrawingStyle, type TradingDrawing } from './drawingCommands';
 
 export const DRAWING_TEMPLATE_KIND = 'drawing-template';
@@ -27,6 +28,15 @@ export function parseStyle(value: unknown): DrawingStyle | null {
   return { color, lineWidth, lineStyle };
 }
 
+/**
+ * The properties a template or a tool default carries: only the ones the tool's settings edit. Per-drawing data
+ * such as a bars pattern's source range never moves to another drawing.
+ */
+export function styleProperties(toolType: string, properties: DrawingProperties | undefined): DrawingProperties {
+  const keys = new Set(drawingToolDefinition(toolType)?.propertySchema.map((field) => field.key) ?? []);
+  return Object.fromEntries(Object.entries(properties ?? {}).filter(([key]) => keys.has(key)));
+}
+
 function readDefaults(): Record<string, DrawingToolDefaults> {
   try {
     const stored = JSON.parse(window.localStorage.getItem(DEFAULTS_KEY) ?? '{}') as unknown;
@@ -41,7 +51,7 @@ export function toolDefaults(toolType: string): { style: DrawingStyle; propertie
   const remembered = readDefaults()[toolType];
   return {
     style: parseStyle(remembered?.style) ?? DEFAULT_DRAWING_STYLE,
-    properties: isRecord(remembered?.properties) ? (remembered.properties as DrawingProperties) : {},
+    properties: isRecord(remembered?.properties) ? styleProperties(toolType, remembered.properties as DrawingProperties) : {},
   };
 }
 
@@ -49,7 +59,7 @@ export function toolDefaults(toolType: string): { style: DrawingStyle; propertie
 export function rememberToolDefaults(drawing: Pick<TradingDrawing, 'toolType' | 'style' | 'properties'>): void {
   try {
     const all = readDefaults();
-    all[drawing.toolType] = { style: drawing.style ?? DEFAULT_DRAWING_STYLE, properties: { ...(drawing.properties ?? {}) } };
+    all[drawing.toolType] = { style: drawing.style ?? DEFAULT_DRAWING_STYLE, properties: styleProperties(drawing.toolType, drawing.properties) };
     window.localStorage.setItem(DEFAULTS_KEY, JSON.stringify(all));
   } catch {
     // Without storage, new drawings keep the built-in style.
@@ -74,7 +84,7 @@ export function drawingTemplatePayload(name: string, drawing: Pick<TradingDrawin
     templateVersion: 1,
     toolType: drawing.toolType,
     style: { ...(drawing.style ?? DEFAULT_DRAWING_STYLE) },
-    properties: { ...(drawing.properties ?? {}) },
+    properties: styleProperties(drawing.toolType, drawing.properties),
   };
 }
 
@@ -89,7 +99,7 @@ export function parseDrawingTemplate(record: Pick<TradingDocument, 'record_id' |
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : record.record_id,
     toolType: payload.toolType,
     style,
-    properties: payload.properties as DrawingProperties,
+    properties: styleProperties(payload.toolType, payload.properties as DrawingProperties),
   };
 }
 

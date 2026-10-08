@@ -21,13 +21,13 @@ function fakeAdapter() {
   } as unknown as TradingChartAdapter;
 }
 
-function mount(selected: TradingDrawing[] = []) {
+function mount(selected: TradingDrawing[] = [], lockAll = false) {
   const drawings = { selected: vi.fn(() => selected), translate: vi.fn(), paste: vi.fn() };
   const setDrawingTool = vi.fn();
   const toggleDrawingsHidden = vi.fn();
   const hook = renderHook(() => {
     useTradingCommandDispatcher();
-    useTradingDrawingCommands({ active: true, adapter: fakeAdapter(), drawings, setDrawingTool, toggleDrawingsHidden });
+    useTradingDrawingCommands({ active: true, adapter: fakeAdapter(), drawings, setDrawingTool, toggleDrawingsHidden, drawingToolSettings: { lockAll } });
   });
   return { hook, drawings, setDrawingTool, toggleDrawingsHidden };
 }
@@ -78,6 +78,13 @@ describe('drawing commands (TVP-2.2)', () => {
 
   it('leaves the arrow keys to the chart when nothing movable is selected', () => {
     const chart = mount([trend('locked', true)]);
+    press({ key: 'ArrowRight' });
+    expect(chart.drawings.translate).not.toHaveBeenCalled();
+    chart.hook.unmount();
+  });
+
+  it('lock all stops the arrow-key nudge too (TVP-3.8)', () => {
+    const chart = mount([trend('a')], true);
     press({ key: 'ArrowRight' });
     expect(chart.drawings.translate).not.toHaveBeenCalled();
     chart.hook.unmount();

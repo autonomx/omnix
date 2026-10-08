@@ -43,6 +43,16 @@ describe('duplicate layout drawings (TVP-2.5)', () => {
     expect(copies[0].payload).not.toBe(records[0].payload);
   });
 
+  it('keeps the drawings a chart kept alone while drawings did not sync (TVP-3.8)', () => {
+    // The tab scope 'tab-1' with a chart scope, as drawingScopeId builds it.
+    const chartScoped = drawingRecord('main', 'tab-1:chart:chart-2', 'equity:NASDAQ:AAPL');
+    const copies = workspaceDrawingCopies([chartScoped, drawingRecord('main', 'tab-1', 'equity:NASDAQ:AAPL')], 'main', 'main-copy', ['tab-1']);
+    expect(copies.map((copy) => copy.recordId)).toEqual([
+      tradingDrawingRecordId('equity:NASDAQ:AAPL', 'main-copy:tab-1:chart:chart-2'),
+      tradingDrawingRecordId('equity:NASDAQ:AAPL', 'main-copy:tab-1'),
+    ]);
+  });
+
   it('creates the copies through the drawing documents API and skips ones that exist', async () => {
     const source = drawingRecord('main', 'tab-1', 'crypto:BINANCE:spot:BTC-USDT');
     const existing = drawingRecord('copy', 'tab-1', 'equity:NASDAQ:AAPL');

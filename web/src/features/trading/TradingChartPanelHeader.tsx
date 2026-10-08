@@ -95,7 +95,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
                   drawing={selectedDrawing}
                   interval={interval}
                   onChange={(properties, mergeKey) => drawings.updateSelected({ properties }, mergeKey)}
-                  onVisibilityChange={(visibility) => drawings.updateSelected({ visibility }, 'visibility')}
+                  onVisibilityChange={(visibility, mergeKey) => drawings.updateSelected({ visibility }, mergeKey && `visibility:${mergeKey}`)}
                   onApplyTemplate={(style, properties) => drawings.updateSelected({ style, properties })}
                 />
                 <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawings" title="Delete selected drawings">×</button>

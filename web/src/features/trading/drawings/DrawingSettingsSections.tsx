@@ -10,11 +10,18 @@ import { VISIBILITY_UNITS, onlyOnInterval, type DrawingVisibility, type UnitVisi
 export function DrawingVisibilitySection({ visibility, interval, onChange }: {
   visibility: DrawingVisibility | undefined;
   interval: string;
-  onChange: (visibility: DrawingVisibility) => void;
+  /** `mergeKey`: edits of one range field in a row are one undo step; the buttons and checkboxes are their own. */
+  onChange: (visibility: DrawingVisibility, mergeKey?: string) => void;
 }) {
   const current = visibility ?? {};
-  const update = (unit: keyof DrawingVisibility, patch: Partial<UnitVisibility>) => {
-    onChange({ ...current, [unit]: { visible: current[unit]?.visible ?? true, ...current[unit], ...patch } });
+  const update = (unit: keyof DrawingVisibility, patch: Partial<UnitVisibility>, mergeKey?: string) => {
+    const next = { visible: current[unit]?.visible ?? true, ...current[unit], ...patch };
+    // Keep from <= to: moving one past the other moves both.
+    if (next.from !== undefined && next.to !== undefined && next.from > next.to) {
+      if (patch.from !== undefined) next.to = next.from;
+      else next.from = next.to;
+    }
+    onChange({ ...current, [unit]: next }, mergeKey);
   };
   return (
     <fieldset className="trading-drawing-visibility">
@@ -33,13 +40,13 @@ export function DrawingVisibilitySection({ visibility, interval, onChange }: {
                 <input
                   type="number" aria-label={`${label} from`} min={min} max={max} disabled={!visible}
                   value={setting?.from ?? min}
-                  onChange={(event) => update(unit, { from: Math.min(max, Math.max(min, Number(event.target.value) || min)) })}
+                  onChange={(event) => update(unit, { from: Math.min(max, Math.max(min, Number(event.target.value) || min)) }, `${unit}:from`)}
                 />
                 <span aria-hidden="true">–</span>
                 <input
                   type="number" aria-label={`${label} to`} min={min} max={max} disabled={!visible}
                   value={setting?.to ?? max}
-                  onChange={(event) => update(unit, { to: Math.min(max, Math.max(min, Number(event.target.value) || max)) })}
+                  onChange={(event) => update(unit, { to: Math.min(max, Math.max(min, Number(event.target.value) || max)) }, `${unit}:to`)}
                 />
               </span>
             ) : null}
@@ -83,6 +90,16 @@ export function DrawingTemplateSection({ drawing, onApply }: {
       setStatus('error');
     }
   };
+  const remove = async (recordId: string) => {
+    const record = records.data?.find((item) => item.record_id === recordId);
+    if (!record) return;
+    try {
+      await tradingApi.archiveDocument('indicator-presets', record);
+      void records.refetch();
+    } catch {
+      setStatus('error');
+    }
+  };
   return (
     <fieldset className="trading-drawing-templates">
       <legend>Template</legend>
@@ -91,6 +108,7 @@ export function DrawingTemplateSection({ drawing, onApply }: {
           {templates.map((template) => (
             <li key={template.recordId}>
               <button type="button" onClick={() => onApply(template.style, template.properties)}>Apply {template.name}</button>
+              <button type="button" aria-label={`Delete template ${template.name}`} title="Delete template" onClick={() => { void remove(template.recordId); }}>×</button>
             </li>
           ))}
         </ul>

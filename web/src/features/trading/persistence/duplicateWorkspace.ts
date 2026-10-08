@@ -29,7 +29,9 @@ export function workspaceDrawingCopies(
     if (record.status !== 'active') continue;
     for (const scope of scopes) {
       const sourcePrefix = drawingScopePrefix(sourceWorkspaceId, scope);
-      if (!record.record_id.startsWith(`${sourcePrefix}${INSTRUMENT_MARKER}`)) continue;
+      const rest = record.record_id.startsWith(sourcePrefix) ? record.record_id.slice(sourcePrefix.length) : '';
+      // The tab's shared drawings, or a chart's own while drawings don't sync (`chart-<id>-instrument-...`, TVP-3.8).
+      if (!rest.startsWith(INSTRUMENT_MARKER) && !/^chart-.+?-instrument-/.test(rest)) continue;
       const drawings = (record.payload as { drawings?: unknown }).drawings;
       if (!Array.isArray(drawings) || drawings.length === 0) break;
       const recordId = `${drawingScopePrefix(targetWorkspaceId, scope)}${record.record_id.slice(sourcePrefix.length)}`;

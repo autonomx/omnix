@@ -6,6 +6,7 @@ import {
   parseStyle,
   rememberToolDefaults,
   resetToolDefaults,
+  styleProperties,
   toolDefaults,
 } from './drawingTemplates';
 import { DEFAULT_DRAWING_TOOL_SETTINGS, drawingScopeId, loadDrawingToolSettings, saveDrawingToolSettings } from './drawingToolSettings';
@@ -62,6 +63,16 @@ describe('drawing templates (TVP-3.8)', () => {
     expect(parseDrawingTemplate({ record_id: 'r2', status: 'active', payload: { ...payload, templateKind: 'chart-template' } } as never)).toBeNull();
     expect(parseDrawingTemplate({ record_id: 'r3', status: 'archived', payload } as never)).toBeNull();
     expect(parseStyle({ color: '#fff', lineWidth: 'wide', lineStyle: 'solid' })).toBeNull();
+  });
+});
+
+describe('template properties (TVP-3.8 review)', () => {
+  it('carry only the settings of the tool, never per-drawing data', () => {
+    expect(styleProperties('bars-pattern', { mode: 'line', mirrored: true, sourceFrom: '2025-01-01', sourceTo: '2025-01-05' })).toEqual({ mode: 'line', mirrored: true });
+    rememberToolDefaults({ toolType: 'bars-pattern', style: DEFAULT_DRAWING_STYLE, properties: { mode: 'line', sourceFrom: '2025-01-01' } });
+    expect(toolDefaults('bars-pattern').properties).toEqual({ mode: 'line' });
+    const payload = drawingTemplatePayload('Line', { toolType: 'bars-pattern', style: DEFAULT_DRAWING_STYLE, properties: { mode: 'line', sourceTo: 'x' } });
+    expect(payload.properties).toEqual({ mode: 'line' });
   });
 });
 

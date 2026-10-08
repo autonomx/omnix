@@ -11,6 +11,8 @@ export type DrawingCommandModel = {
   active: boolean;
   /** Ctrl+Alt+H is on: keys don't act on drawings nobody can see. */
   drawingsHidden?: boolean;
+  /** "Lock all drawings" is on (TVP-3.8): nothing moves, also not by keys. */
+  drawingToolSettings?: { lockAll: boolean };
   adapter: TradingChartAdapter | null;
   drawings: Drawings;
   setDrawingTool: (tool: DrawingTool) => void;
@@ -46,10 +48,10 @@ const NUDGES = [
 ] as const;
 
 /** The active chart's drawing commands (TVP-2.2): tool keys, copy and paste, nudge and hide-all. */
-export function useTradingDrawingCommands({ active, adapter, drawings, drawingsHidden = false, setDrawingTool, toggleDrawingsHidden }: DrawingCommandModel): void {
+export function useTradingDrawingCommands({ active, adapter, drawings, drawingsHidden = false, drawingToolSettings, setDrawingTool, toggleDrawingsHidden }: DrawingCommandModel): void {
   const isActive = () => active;
   const movable = (): TradingDrawing | null => {
-    if (drawingsHidden) return null;
+    if (drawingsHidden || drawingToolSettings?.lockAll) return null;
     const selection = drawings.selected().filter((drawing) => !drawing.locked);
     return selection.at(-1) ?? null;
   };
