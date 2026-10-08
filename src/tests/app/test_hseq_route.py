@@ -36,7 +36,7 @@ def test_sequence_payload_invalid() -> None:
 
 
 def test_sequence_live_route_ok() -> None:
-    response = TestClient(create_fastapi_app(), headers={"X-Omnix-Client": "test"}).post(
+    response = TestClient(create_fastapi_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}).post(
         "/api/hermes/rpg/sequence/review",
         json={key: value for key, value in sample_payload().items() if key != "session_id"},
     )

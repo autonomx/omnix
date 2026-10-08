@@ -88,7 +88,7 @@ def test_sequence_latest_route_fetches_session_state(monkeypatch) -> None:
 
     monkeypatch.setattr(hermes_rpg_approved_routes, "latest_hermes_sequence_state", fake_latest)
 
-    response = TestClient(create_fastapi_app()).get("/api/hermes/rpg/sequence/state?session_id=session-1")
+    response = TestClient(create_fastapi_app(), base_url="http://127.0.0.1").get("/api/hermes/rpg/sequence/state?session_id=session-1")
 
     assert response.status_code == 200
     assert response.json()["state"] == {"session_id": "session-1", "sequence_id": "seq-1"}
