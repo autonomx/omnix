@@ -91,192 +91,236 @@ type TradingReplayState = {
 
 const NO_BARS: readonly MarketBar[] = [];
 
-class ReplayRestartedError extends Error {
-  constructor() {
-    super('Replay restarted before the request ran.');
-  }
-}
+/** Queued replay-account work that will not run: its session restarted or an earlier bar failed. */
+class ReplayDroppedError extends Error {}
+
+const RESTARTED = 'Replay restarted before the request ran.';
 
 /** The replay account's request queue; `generation` changes whenever queued work must be dropped. */
 const execution = {
   generation: 0,
   chain: Promise.resolve() as Promise<unknown>,
+  /** The clock up to which bars have been queued. */
   enqueuedThrough: null as number | null,
   seedKey: null as string | null,
+  dropReason: RESTARTED,
 };
 
 function restartTradingSession(): void {
   useTradingStore.getState().restartReplaySession();
 }
 
-/** Whether the replay account has anything a bar could fill or move. */
-export function replayAccountHasExposure(snapshot: PaperAccountSnapshot | null): boolean {
-  if (!snapshot) return false;
-  return snapshot.open_orders.length > 0 || snapshot.positions.some((position) => Number(position.quantity) !== 0);
+/**
+ * Whether a bar of `instrumentId` could fill or move the replay account: a
+ * working order or an open position in that instrument. Positions copied from
+ * the live account in other instruments do not count.
+ */
+export function replayAccountHasExposure(snapshot: PaperAccountSnapshot | null, instrumentId: string | undefined): boolean {
+  if (!snapshot || !instrumentId) return false;
+  return snapshot.open_orders.some((order) => order.instrument_id === instrumentId)
+    || snapshot.positions.some((position) => position.instrument_id === instrumentId && Number(position.quantity) !== 0);
 }
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function resetExecution(): void {
+function dropQueue(reason: string): void {
   execution.generation += 1;
   execution.chain = Promise.resolve();
+  execution.dropReason = reason;
+}
+
+function resetExecution(): void {
+  dropQueue(RESTARTED);
   execution.enqueuedThrough = null;
   execution.seedKey = null;
   useTradingReplayStore.setState({ snapshot: null, advancedThrough: null, pendingExecutions: 0, executionError: null });
 }
 
-export const useTradingReplayStore = create<TradingReplayState>((set, get) => {
-  /** Run `work` on the replay account after everything already queued. */
-  const enqueue = <T>(
-    work: (snapshot: PaperAccountSnapshot) => Promise<{ snapshot: PaperAccountSnapshot; value: T; through?: number }>,
-  ): Promise<T> => {
-    const generation = execution.generation;
-    set((state) => ({ pendingExecutions: state.pendingExecutions + 1 }));
-    const task = execution.chain.then(async () => {
-      if (generation !== execution.generation) throw new ReplayRestartedError();
-      const snapshot = get().snapshot;
-      if (!snapshot) throw new Error('Replay account is still loading.');
-      const result = await work(snapshot);
-      if (generation !== execution.generation) throw new ReplayRestartedError();
-      set(result.through === undefined
-        ? { snapshot: result.snapshot }
-        : { snapshot: result.snapshot, advancedThrough: result.through });
-      return result.value;
-    }).finally(() => {
-      if (generation === execution.generation) set((state) => ({ pendingExecutions: Math.max(0, state.pendingExecutions - 1) }));
-    });
-    execution.chain = task.catch(() => undefined);
-    return task;
-  };
+type ExecutionContext = {
+  snapshot: () => PaperAccountSnapshot;
+  /** Store a result; throws when the queue was dropped meanwhile. */
+  commit: (snapshot: PaperAccountSnapshot, through?: number) => void;
+};
 
-  /** Queue an advance for every active-chart bar the clock has passed since the last one. */
-  const advanceToClock = () => {
-    const { activeBars, clock, snapshot } = get();
-    const from = execution.enqueuedThrough;
-    if (!snapshot || clock === null || from === null || clock <= from) return;
-    const bars = activeBars.slice(replayVisibleCount(activeBars, from), replayVisibleCount(activeBars, clock));
-    execution.enqueuedThrough = clock;
-    for (const bar of bars) {
-      const through = barCloseTime(bar);
-      void enqueue(async (current) => ({ snapshot: await advanceReplaySnapshot(current, bar), value: undefined, through }))
-        .catch((error: unknown) => {
-          if (error instanceof ReplayRestartedError) return;
-          // Drop the rest of the queue and resume from the last advanced bar on the next step.
-          execution.generation += 1;
-          execution.chain = Promise.resolve();
-          execution.enqueuedThrough = get().advancedThrough;
-          set({ pendingExecutions: 0, playing: false, executionError: errorMessage(error, 'Replay execution failed.') });
-        });
+/** Run `work` on the replay account after everything already queued, one request at a time. */
+function enqueue<T>(work: (context: ExecutionContext) => Promise<T>): Promise<T> {
+  const store = useTradingReplayStore;
+  const generation = execution.generation;
+  const current = () => {
+    if (generation !== execution.generation) throw new ReplayDroppedError(execution.dropReason);
+    const snapshot = store.getState().snapshot;
+    if (!snapshot) throw new Error('Replay account is still loading.');
+    return snapshot;
+  };
+  const context: ExecutionContext = {
+    snapshot: current,
+    commit: (snapshot, through) => {
+      current();
+      store.setState(through === undefined ? { snapshot } : { snapshot, advancedThrough: through });
+    },
+  };
+  store.setState((state) => ({ pendingExecutions: state.pendingExecutions + 1 }));
+  const task = execution.chain.then(() => work(context)).finally(() => {
+    if (generation === execution.generation) {
+      store.setState((state) => ({ pendingExecutions: Math.max(0, state.pendingExecutions - 1) }));
     }
-  };
+  });
+  execution.chain = task.catch(() => undefined);
+  return task;
+}
 
-  return {
-    bar: null,
-    snapshot: null,
-    clock: null,
-    startTime: null,
-    selecting: true,
-    playing: false,
-    speed: DEFAULT_REPLAY_SPEED,
-    activeBars: NO_BARS,
-    activeChartKey: null,
-    advancedThrough: null,
-    pendingExecutions: 0,
-    executionError: null,
-    setBar: (bar) => set({ bar }),
-    setSnapshot: (snapshot) => set({ snapshot }),
-    seedSnapshot: (snapshot, key) => {
-      if (execution.seedKey === key && get().snapshot) return;
-      execution.generation += 1;
-      execution.chain = Promise.resolve();
-      execution.seedKey = key;
-      execution.enqueuedThrough = get().clock;
-      set({ snapshot, advancedThrough: get().clock, pendingExecutions: 0, executionError: null });
-    },
-    placeOrder: (input) => {
-      const bar = get().bar;
-      if (!bar) return Promise.reject(new Error('Select a replay bar before trading.'));
-      return enqueue(async (snapshot) => {
-        const result = await placeReplayOrder(snapshot, input, bar);
-        return { snapshot: result.snapshot, value: result };
-      });
-    },
-    setSpeed: (speed) => set({ speed }),
-    setActiveBars: (activeBars) => set({ activeBars }),
-    setActiveChartKey: (key) => {
-      const previous = get().activeChartKey;
-      if (previous === key) return;
-      set({ activeChartKey: key });
-      if (previous === null) return;
-      get().setPlaying(false);
-      restartTradingSession();
-    },
-    setPlaying: (playing) => {
-      const state = get();
-      if (!playing) {
-        if (state.playing) set({ playing: false });
-        return;
-      }
-      if (state.clock === null || state.selecting) return;
-      if (nextReplayClock(state.activeBars, state.clock) === null) return;
-      set({ playing: true });
-    },
-    togglePlaying: () => get().setPlaying(!get().playing),
-    chooseStart: (time) => {
-      set({ clock: time, startTime: time, selecting: false, playing: false });
-      restartTradingSession();
-    },
-    beginSelecting: () => set({ selecting: true, playing: false }),
-    stepForward: (steps = 1) => {
-      const { activeBars, clock, playing, selecting } = get();
-      if (clock === null || selecting) return false;
-      const next = nextReplayClock(activeBars, clock, steps);
-      if (next === null) {
-        if (playing) set({ playing: false });
-        return false;
-      }
-      // Playback stops on the active chart's last bar.
-      set({ clock: next, playing: playing && nextReplayClock(activeBars, next) !== null });
-      advanceToClock();
-      return true;
-    },
-    playbackTick: (steps) => {
-      const { pendingExecutions, snapshot } = get();
-      if (pendingExecutions > 0 && replayAccountHasExposure(snapshot)) return false;
-      return get().stepForward(steps);
-    },
-    stepBack: () => {
-      const { activeBars, clock, selecting, startTime } = get();
-      if (clock === null || startTime === null || selecting) return false;
-      const previous = previousReplayClock(activeBars, clock, startTime);
-      if (previous === null) return false;
-      set({ clock: previous, playing: false });
-      restartTradingSession();
-      return true;
-    },
-    resetToStart: () => {
-      const { startTime } = get();
-      if (startTime === null) return;
-      set({ clock: startTime, selecting: false, playing: false });
-      restartTradingSession();
-    },
-    resetExecution,
-    clear: () => {
-      resetExecution();
-      set({
-        bar: null,
-        clock: null,
-        startTime: null,
-        selecting: true,
-        playing: false,
-        activeBars: NO_BARS,
-        activeChartKey: null,
-      });
-    },
-  };
-});
+/**
+ * Queue every active-chart bar the clock has passed since the last queued
+ * one. Bars that cannot touch the account (no working order or position in
+ * the instrument) only move `advancedThrough`; the rest go to the server
+ * kernel one at a time, each on the previous result.
+ */
+function advanceToClock(): void {
+  const { activeBars, clock, snapshot } = useTradingReplayStore.getState();
+  const from = execution.enqueuedThrough;
+  if (!snapshot || clock === null || from === null || clock <= from) return;
+  const bars = activeBars.slice(replayVisibleCount(activeBars, from), replayVisibleCount(activeBars, clock));
+  execution.enqueuedThrough = clock;
+  const generation = execution.generation;
+  void enqueue(async ({ snapshot: current, commit }) => {
+    for (const bar of bars) {
+      const close = barCloseTime(bar);
+      const through = Number.isFinite(close) ? close : undefined;
+      if (replayAccountHasExposure(current(), bar.instrument_id)) commit(await advanceReplaySnapshot(current(), bar), through);
+      else commit(current(), through);
+    }
+    commit(current(), clock);
+    useTradingReplayStore.setState({ executionError: null });
+  }).catch((error: unknown) => {
+    // Ignore work dropped on purpose and failures from an earlier session.
+    if (error instanceof ReplayDroppedError || generation !== execution.generation) return;
+    const message = errorMessage(error, 'Replay execution failed.');
+    // Drop what is queued after the failed bar and resume from the last advanced bar.
+    dropQueue(`Replay execution failed; the order was not placed. ${message}`);
+    execution.enqueuedThrough = useTradingReplayStore.getState().advancedThrough;
+    useTradingReplayStore.setState({ pendingExecutions: 0, playing: false, executionError: message });
+  });
+}
+
+function seedSnapshot(snapshot: PaperAccountSnapshot, key: string): void {
+  const { clock, snapshot: existing } = useTradingReplayStore.getState();
+  if (execution.seedKey === key && existing) return;
+  dropQueue(RESTARTED);
+  execution.seedKey = key;
+  execution.enqueuedThrough = clock;
+  useTradingReplayStore.setState({ snapshot, advancedThrough: clock, pendingExecutions: 0, executionError: null });
+}
+
+function placeOrder(input: PaperOrderInput): Promise<ReplayOrderResult> {
+  const bar = useTradingReplayStore.getState().bar;
+  if (!bar) return Promise.reject(new Error('Select a replay bar before trading.'));
+  // Bring the account up to the clock first, so the order follows every earlier bar.
+  advanceToClock();
+  return enqueue(async ({ snapshot, commit }) => {
+    const close = barCloseTime(bar);
+    const advancedThrough = useTradingReplayStore.getState().advancedThrough;
+    // The queue has normally applied this bar already; it must not reach working orders twice.
+    const advanceBar = !(advancedThrough !== null && advancedThrough >= close);
+    const result = await placeReplayOrder(snapshot(), input, bar, { advanceBar });
+    commit(result.snapshot, advanceBar && Number.isFinite(close) ? close : undefined);
+    useTradingReplayStore.setState({ executionError: null });
+    return result;
+  });
+}
+
+export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
+  bar: null,
+  snapshot: null,
+  clock: null,
+  startTime: null,
+  selecting: true,
+  playing: false,
+  speed: DEFAULT_REPLAY_SPEED,
+  activeBars: NO_BARS,
+  activeChartKey: null,
+  advancedThrough: null,
+  pendingExecutions: 0,
+  executionError: null,
+  setBar: (bar) => set({ bar }),
+  setSnapshot: (snapshot) => set({ snapshot }),
+  seedSnapshot,
+  placeOrder,
+  setSpeed: (speed) => set({ speed }),
+  setActiveBars: (activeBars) => set({ activeBars }),
+  setActiveChartKey: (key) => {
+    const previous = get().activeChartKey;
+    if (previous === key) return;
+    set({ activeChartKey: key });
+    if (previous === null) return;
+    get().setPlaying(false);
+    restartTradingSession();
+  },
+  setPlaying: (playing) => {
+    const state = get();
+    if (!playing) {
+      if (state.playing) set({ playing: false });
+      return;
+    }
+    if (state.clock === null || state.selecting) return;
+    if (nextReplayClock(state.activeBars, state.clock) === null) return;
+    set({ playing: true, executionError: null });
+  },
+  togglePlaying: () => get().setPlaying(!get().playing),
+  chooseStart: (time) => {
+    set({ clock: time, startTime: time, selecting: false, playing: false });
+    restartTradingSession();
+  },
+  beginSelecting: () => set({ selecting: true, playing: false }),
+  stepForward: (steps = 1) => {
+    const { activeBars, clock, playing, selecting } = get();
+    if (clock === null || selecting) return false;
+    const next = nextReplayClock(activeBars, clock, steps);
+    if (next === null) {
+      if (playing) set({ playing: false });
+      return false;
+    }
+    // Playback stops on the active chart's last bar.
+    set({ clock: next, playing: playing && nextReplayClock(activeBars, next) !== null });
+    advanceToClock();
+    return true;
+  },
+  playbackTick: (steps) => {
+    const { activeBars, bar, pendingExecutions, snapshot } = get();
+    const instrumentId = bar?.instrument_id ?? activeBars[0]?.instrument_id;
+    if (pendingExecutions > 0 && replayAccountHasExposure(snapshot, instrumentId)) return false;
+    return get().stepForward(steps);
+  },
+  stepBack: () => {
+    const { activeBars, clock, selecting, startTime } = get();
+    if (clock === null || startTime === null || selecting) return false;
+    const previous = previousReplayClock(activeBars, clock, startTime);
+    if (previous === null) return false;
+    set({ clock: previous, playing: false });
+    restartTradingSession();
+    return true;
+  },
+  resetToStart: () => {
+    const { startTime } = get();
+    if (startTime === null) return;
+    set({ clock: startTime, selecting: false, playing: false });
+    restartTradingSession();
+  },
+  resetExecution,
+  clear: () => {
+    resetExecution();
+    set({
+      bar: null,
+      clock: null,
+      startTime: null,
+      selecting: true,
+      playing: false,
+      activeBars: NO_BARS,
+      activeChartKey: null,
+    });
+  },
+}));
 
 // A new replay trading session (restart, new start bar, tab switch, entering
 // replay) starts from a fresh account: queued work for the old one is dropped.

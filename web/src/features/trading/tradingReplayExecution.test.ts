@@ -8,7 +8,7 @@ const replayApi = vi.hoisted(() => ({
 
 vi.mock('./tradingReplayApi', () => ({ tradingReplayApi: replayApi }));
 
-import type { PaperAccountSnapshot } from './paperTypes';
+import type { PaperAccountSnapshot, PaperOrderInput } from './paperTypes';
 import { barCloseTime, replayVisibleCount } from './replayClock';
 import { replayAccountHasExposure, useTradingReplayStore } from './tradingReplayStore';
 import type { MarketBar } from './tradingTypes';
@@ -18,11 +18,13 @@ import { fixture } from '../../test/fixture';
 const MINUTE = 60_000;
 const BASE = Date.parse('2026-08-05T12:00:00Z');
 const at = (minute: number) => BASE + minute * MINUTE;
+const minuteOf = (time: number) => (time - BASE) / MINUTE;
 const ROUND_TRIP_MS = 250;
+const INSTRUMENT = 'crypto:BINANCE:spot:BTC-USDT';
 
 function bar(index: number, low = 100): MarketBar {
   return fixture({
-    instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
+    instrument_id: INSTRUMENT,
     interval: '1m',
     start_time: new Date(at(index)).toISOString(),
     end_time: new Date(at(index + 1)).toISOString(),
@@ -32,13 +34,19 @@ function bar(index: number, low = 100): MarketBar {
   });
 }
 
+const series = (count: number) => Array.from({ length: count }, (_, index) => bar(index));
+
 type TestSnapshot = PaperAccountSnapshot & { advanced: number[] };
 
-function account(openOrders: unknown[] = []): TestSnapshot {
+function workingLimit(price: string, instrumentId = INSTRUMENT) {
+  return { order_id: `limit-${price}`, instrument_id: instrumentId, side: 'buy', order_type: 'limit', quantity: '1', limit_price: price };
+}
+
+function account(openOrders: unknown[] = [], positions: unknown[] = []): TestSnapshot {
   return fixture({
     account: { account_id: 'paper-1' },
     balances: [],
-    positions: [],
+    positions,
     open_orders: openOrders,
     order_history: [],
     recent_fills: [],
@@ -47,9 +55,12 @@ function account(openOrders: unknown[] = []): TestSnapshot {
   });
 }
 
+const log: string[] = [];
+
 /** A stand-in for the server kernel: a buy limit fills when a bar trades at or below it. */
 async function slowKernel(snapshot: TestSnapshot, advanced: MarketBar): Promise<TestSnapshot> {
   await new Promise((resolve) => setTimeout(resolve, ROUND_TRIP_MS));
+  log.push(`bar ${minuteOf(barCloseTime(advanced))}`);
   const fills = snapshot.open_orders.filter((order) => Number(advanced.low) <= Number(order.limit_price));
   return {
     ...snapshot,
@@ -61,17 +72,26 @@ async function slowKernel(snapshot: TestSnapshot, advanced: MarketBar): Promise<
   };
 }
 
-const replay = () => useTradingReplayStore.getState();
+async function slowOrder(snapshot: TestSnapshot, input: PaperOrderInput, placed: MarketBar, advanceBar: boolean) {
+  await new Promise((resolve) => setTimeout(resolve, ROUND_TRIP_MS));
+  log.push(`order ${input.order_id} at ${minuteOf(barCloseTime(placed))}${advanceBar ? ' advancing' : ''}`);
+  const order = { ...workingLimit('1'), order_id: input.order_id, status: 'open' };
+  return { snapshot: { ...snapshot, open_orders: [...snapshot.open_orders, order] }, order };
+}
 
-function startPlayback(bars: MarketBar[], startIndex: number, seed: TestSnapshot) {
+const replay = () => useTradingReplayStore.getState();
+const wait = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+const order = (orderId: string) => fixture<PaperOrderInput>({ order_id: orderId, instrument_id: INSTRUMENT });
+
+/** Mount the active chart's replay hook (it runs the playback ticker) and start at `startIndex`. */
+function startReplay(bars: MarketBar[], startIndex: number, seed: TestSnapshot, speed: 1 | 30 | 100 = 30) {
   const hook = renderHook(() => useChartReplayClock({
     active: true, replayMode: true, bars, chartKey: 'BTC||1m', reloadBars: () => undefined,
   }));
   act(() => {
     replay().chooseStart(barCloseTime(bars[startIndex]));
     replay().seedSnapshot(seed, 'test-session');
-    replay().setSpeed(30);
-    replay().setPlaying(true);
+    replay().setSpeed(speed);
   });
   return hook;
 }
@@ -80,7 +100,9 @@ describe('replay account execution queue', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     replay().clear();
+    log.length = 0;
     replayApi.advanceExecution.mockImplementation(slowKernel);
+    replayApi.placeExecutionOrder.mockImplementation(slowOrder);
   });
 
   afterEach(() => {
@@ -89,48 +111,47 @@ describe('replay account execution queue', () => {
     vi.clearAllMocks();
   });
 
-  it('advances the account through every bar, in order, each on the previous result', async () => {
-    const bars = Array.from({ length: 12 }, (_, index) => bar(index));
-    const order = { order_id: 'limit-1', instrument_id: 'BTC', side: 'buy', order_type: 'limit', quantity: '1', limit_price: '50' };
-    startPlayback(bars, 0, account([order]));
+  it('advances a working account through every bar, in order, each on the previous result', async () => {
+    const bars = series(12);
+    startReplay(bars, 0, account([workingLimit('50')]));
+    act(() => { replay().setPlaying(true); });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    await wait(10_000);
 
     const calls = replayApi.advanceExecution.mock.calls as [TestSnapshot, MarketBar][];
     expect(calls.map(([, advanced]) => barCloseTime(advanced))).toEqual(bars.slice(1).map(barCloseTime));
     calls.forEach(([input], index) => {
       expect(input.advanced).toEqual(bars.slice(1, index + 1).map(barCloseTime));
     });
-    expect((replay().snapshot as TestSnapshot).advanced).toHaveLength(11);
     expect(replay().advancedThrough).toBe(replay().clock);
   });
 
   it('fills a limit touched only by the middle bar of a three-bar tick', async () => {
     const bars = [bar(0), bar(1), bar(2), bar(3, 90), bar(4), bar(5)];
-    const order = { order_id: 'limit-1', instrument_id: 'BTC', side: 'buy', order_type: 'limit', quantity: '1', limit_price: '95' };
-    startPlayback(bars, 1, account([order]));
+    startReplay(bars, 1, account([workingLimit('95')]));
+    act(() => { replay().setPlaying(true); });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await wait(5_000);
 
     const snapshot = replay().snapshot!;
     expect(snapshot.open_orders).toEqual([]);
     expect(snapshot.positions).toEqual([expect.objectContaining({ quantity: '1', average_cost: '95' })]);
   });
 
-  it('never lets the clock run more than one tick ahead of the advanced account', async () => {
-    const bars = Array.from({ length: 40 }, (_, index) => bar(index));
-    const order = { order_id: 'limit-1', instrument_id: 'BTC', side: 'buy', order_type: 'limit', quantity: '1', limit_price: '1' };
+  it('never lets the clock run more than one tick ahead of a working account', async () => {
+    const bars = series(40);
     let maxLag = 0;
     const unsubscribe = useTradingReplayStore.subscribe((state) => {
-      if (state.clock === null || state.advancedThrough === null || !replayAccountHasExposure(state.snapshot)) return;
+      if (state.clock === null || state.advancedThrough === null || !replayAccountHasExposure(state.snapshot, INSTRUMENT)) return;
       maxLag = Math.max(maxLag, replayVisibleCount(bars, state.clock) - replayVisibleCount(bars, state.advancedThrough));
     });
-    startPlayback(bars, 0, account([order]));
+    startReplay(bars, 0, account([workingLimit('1')]));
+    act(() => { replay().setPlaying(true); });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await wait(1_000);
     // 30× wants 30 bars a second, but the account takes 250 ms a bar.
     expect(replayVisibleCount(bars, replay().clock!)).toBeLessThan(10);
-    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    await wait(20_000);
     unsubscribe();
 
     expect(maxLag).toBeLessThanOrEqual(3);
@@ -138,47 +159,140 @@ describe('replay account execution queue', () => {
     expect(replayApi.advanceExecution).toHaveBeenCalledTimes(39);
   });
 
-  it('does not throttle playback when the account has nothing to fill', async () => {
-    const bars = Array.from({ length: 60 }, (_, index) => bar(index));
-    startPlayback(bars, 0, account());
+  it('plays a flat account at full speed without a request per bar, and places an order at the current bar promptly', async () => {
+    const bars = series(2_000);
+    startReplay(bars, 0, account([], [{ instrument_id: 'equity:NYSE:OTHER', quantity: '5' }]), 100);
+    act(() => { replay().setPlaying(true); });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await wait(10_000);
 
-    expect(replayVisibleCount(bars, replay().clock!)).toBe(31);
+    // 100× is 1,000 bars in ten seconds; a position in another instrument does not throttle it.
+    expect(replayVisibleCount(bars, replay().clock!)).toBe(1_001);
+    expect(replayApi.advanceExecution).not.toHaveBeenCalled();
+    expect(replay().pendingExecutions).toBe(0);
+    expect(replay().advancedThrough).toBe(replay().clock);
+
+    const current = replay().bar!;
+    let placedAfter: number | null = null;
+    const started = Date.now();
+    void replay().placeOrder(order('market-1')).then(() => { placedAfter = Date.now() - started; });
+    await wait(ROUND_TRIP_MS);
+
+    expect(placedAfter).toBe(ROUND_TRIP_MS);
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(expect.anything(), expect.anything(), current, false);
+    // From now on the working order sees every bar.
+    await wait(2_000);
+    expect(replayApi.advanceExecution.mock.calls.length).toBeGreaterThan(0);
+    expect(replay().advancedThrough).toBeLessThanOrEqual(replay().clock!);
   });
 
-  it('places replay orders after the queued bar advances', async () => {
-    const bars = Array.from({ length: 5 }, (_, index) => bar(index));
-    startPlayback(bars, 0, account());
+  it('places an order queued during playback after the bars already queued, without applying its bar twice', async () => {
+    const bars = series(20);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    act(() => { replay().setPlaying(true); });
+    await wait(150);
+    // One tick queued bars 2-4; the order waits for them.
+    act(() => { replay().setBar(bars[3]); });
+    const placed = replay().placeOrder(order('market-1'));
     act(() => { replay().setPlaying(false); });
-    replayApi.placeExecutionOrder.mockImplementation(async (snapshot: TestSnapshot) => ({
-      snapshot: { ...snapshot, order_history: [{ order_id: 'market-1' }] },
-      order: { order_id: 'market-1', status: 'filled' },
-    }));
 
-    act(() => { replay().stepForward(2); });
-    act(() => { replay().setBar(bars[2]); });
-    const placed = replay().placeOrder(fixture({ order_id: 'market-1' }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await wait(2_000);
     await placed;
 
-    const [orderSnapshot] = replayApi.placeExecutionOrder.mock.calls[0] as [TestSnapshot];
-    expect(orderSnapshot.advanced).toEqual([barCloseTime(bars[1]), barCloseTime(bars[2])]);
-    expect((replay().snapshot as TestSnapshot).advanced).toHaveLength(2);
-    expect(replay().snapshot?.order_history).toHaveLength(1);
+    expect(log).toEqual(['bar 2', 'bar 3', 'bar 4', 'order market-1 at 4']);
   });
 
-  it('drops queued work when replay trading restarts', async () => {
-    const bars = Array.from({ length: 5 }, (_, index) => bar(index));
-    startPlayback(bars, 0, account());
-    act(() => {
-      replay().setPlaying(false);
-      replay().stepForward(3);
-      replay().resetToStart();
+  it('resumes after a failed advance: a later order follows every missing bar', async () => {
+    const bars = series(40);
+    startReplay(bars, 0, account([workingLimit('1')]), 100);
+    replayApi.advanceExecution.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ROUND_TRIP_MS));
+      throw new Error('kernel unavailable');
     });
-    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    act(() => { replay().setPlaying(true); });
+    await wait(3_000);
+
+    expect(replay().playing).toBe(false);
+    expect(replay().executionError).toBe('kernel unavailable');
+    expect(replay().advancedThrough).toBe(at(1));
+    expect(minuteOf(replay().clock!)).toBe(11);
+
+    act(() => { replay().setBar(bars[10]); });
+    const placed = replay().placeOrder(order('market-1'));
+    await wait(5_000);
+    await placed;
+    act(() => { replay().stepForward(); });
+    await wait(1_000);
+
+    expect(log).toEqual([
+      ...Array.from({ length: 10 }, (_, index) => `bar ${index + 2}`),
+      'order market-1 at 11',
+      'bar 12',
+    ]);
+    expect(replay().executionError).toBeNull();
+  });
+
+  it('rejects an order queued behind a failing bar instead of applying it early', async () => {
+    const bars = series(10);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    replayApi.advanceExecution.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ROUND_TRIP_MS));
+      throw new Error('kernel unavailable');
+    });
+    act(() => { replay().stepForward(); });
+    act(() => { replay().setBar(bars[1]); });
+    const outcome = replay().placeOrder(order('market-1')).then(() => 'placed', (error: Error) => error.message);
+
+    await wait(1_000);
+
+    expect(await outcome).toMatch(/not placed/);
+    expect(replayApi.placeExecutionOrder).not.toHaveBeenCalled();
+  });
+
+  it('ignores a failure from a request of an earlier session', async () => {
+    const bars = series(10);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    replayApi.advanceExecution.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ROUND_TRIP_MS));
+      throw new Error('stale failure');
+    });
+    act(() => { replay().stepForward(); });
+    await wait(10);
+    expect(replayApi.advanceExecution).toHaveBeenCalledOnce();
+    act(() => {
+      replay().resetToStart();
+      replay().seedSnapshot(account([workingLimit('1')]), 'second-session');
+      replay().setPlaying(true);
+    });
+
+    await wait(ROUND_TRIP_MS * 2);
+
+    expect(replay().executionError).toBeNull();
+    expect(replay().playing).toBe(true);
+    expect(replayApi.advanceExecution.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('drops in-flight results when stepping back or resetting', async () => {
+    const bars = series(10);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    act(() => { replay().stepForward(3); });
+    await wait(100);
+    act(() => { replay().stepBack(); });
 
     expect(replay().snapshot).toBeNull();
     expect(replay().pendingExecutions).toBe(0);
+    act(() => { replay().seedSnapshot(account([workingLimit('1')]), 'after-step-back'); });
+    const seeded = replay().snapshot;
+    await wait(2_000);
+    expect(replay().snapshot).toBe(seeded);
+
+    act(() => { replay().stepForward(); });
+    await wait(50);
+    act(() => { replay().resetToStart(); });
+    await wait(1_000);
+
+    expect(replay().snapshot).toBeNull();
+    expect(replay().pendingExecutions).toBe(0);
+    expect(replay().clock).toBe(at(1));
   });
 });

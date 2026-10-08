@@ -78,16 +78,39 @@ export function replayClockForBar(bar: MarketBar): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-/** How many of the time-ordered `bars` have closed by `clock`. */
-export function replayVisibleCount(bars: readonly MarketBar[], clock: number): number {
+/**
+ * The close a bar is ordered by. A bar whose close cannot be known counts as
+ * closed when the next knowable bar starts (or closes), so it is never shown
+ * before a later bar; at the end of the series it never closes. These times
+ * never decrease along a time-ordered series, so they can be binary-searched.
+ */
+function orderingClose(bars: readonly MarketBar[], index: number): number {
+  const close = barCloseTime(bars[index]);
+  if (Number.isFinite(close)) return close;
+  for (let next = index + 1; next < bars.length; next += 1) {
+    const start = Date.parse(bars[next].start_time);
+    if (Number.isFinite(start)) return start;
+    const nextClose = barCloseTime(bars[next]);
+    if (Number.isFinite(nextClose)) return nextClose;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+/** How many leading bars have an ordering close that passes `accept`. */
+function countWhile(bars: readonly MarketBar[], accept: (close: number) => boolean): number {
   let left = 0;
   let right = bars.length;
   while (left < right) {
     const middle = (left + right) >>> 1;
-    if (barCloseTime(bars[middle]) <= clock) left = middle + 1;
+    if (accept(orderingClose(bars, middle))) left = middle + 1;
     else right = middle;
   }
   return left;
+}
+
+/** How many of the time-ordered `bars` have closed by `clock`. */
+export function replayVisibleCount(bars: readonly MarketBar[], clock: number): number {
+  return countWhile(bars, (close) => close <= clock);
 }
 
 /** The bars a chart shows at `clock`: those closed by then. */
@@ -101,12 +124,17 @@ export function replayBarAtClock(bars: readonly MarketBar[], clock: number): Mar
   return count > 0 ? bars[count - 1] : null;
 }
 
-/** The clock after `steps` bars forward on `bars`, or null when no bar closes after `clock`. */
+/**
+ * The clock after `steps` bars forward on `bars`, or null when no bar closes
+ * after `clock`. Bars that never close are skipped.
+ */
 export function nextReplayClock(bars: readonly MarketBar[], clock: number, steps = 1): number | null {
   const next = replayVisibleCount(bars, clock);
-  if (next >= bars.length) return null;
-  const target = Math.min(bars.length - 1, next + Math.max(1, Math.trunc(steps)) - 1);
-  return barCloseTime(bars[target]);
+  for (let target = Math.min(bars.length - 1, next + Math.max(1, Math.trunc(steps)) - 1); target >= next; target -= 1) {
+    const close = orderingClose(bars, target);
+    if (Number.isFinite(close)) return close;
+  }
+  return null;
 }
 
 /**
@@ -115,13 +143,7 @@ export function nextReplayClock(bars: readonly MarketBar[], clock: number, steps
  */
 export function previousReplayClock(bars: readonly MarketBar[], clock: number, floor: number): number | null {
   if (clock <= floor) return null;
-  let left = 0;
-  let right = bars.length;
-  while (left < right) {
-    const middle = (left + right) >>> 1;
-    if (barCloseTime(bars[middle]) < clock) left = middle + 1;
-    else right = middle;
-  }
-  const previous = left > 0 ? barCloseTime(bars[left - 1]) : null;
+  const before = countWhile(bars, (close) => close < clock);
+  const previous = before > 0 ? orderingClose(bars, before - 1) : null;
   return previous === null || previous < floor ? floor : previous;
 }

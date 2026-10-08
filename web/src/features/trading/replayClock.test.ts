@@ -93,6 +93,27 @@ describe('replay clock to bars', () => {
     expect(replayVisibleCount([fiveMinute[0], fiveMinute[1], noEnd], at(15))).toBe(3);
   });
 
+  it('never steps onto a last bar whose close cannot be known', () => {
+    const unknown = { ...fiveMinute[11], end_time: '', interval: 'tick' };
+    const series = [...fiveMinute.slice(0, 11), unknown];
+    expect(nextReplayClock(series, at(55))).toBeNull();
+    expect(nextReplayClock(series, at(50), 5)).toBe(at(55));
+    expect(replayVisibleCount(series, at(55))).toBe(11);
+  });
+
+  it('keeps searching correctly past an unknowable bar in the middle', () => {
+    const unknown = { ...fiveMinute[5], end_time: '', interval: 'tick' };
+    const series = [...fiveMinute.slice(0, 5), unknown, ...fiveMinute.slice(6)];
+    // The unknowable 12:25 bar counts as closed when the 12:30 bar starts.
+    expect(replayVisibleCount(series, at(25))).toBe(5);
+    expect(replayVisibleCount(series, at(30))).toBe(6);
+    expect(replayVisibleCount(series, at(45))).toBe(9);
+    expect(nextReplayClock(series, at(25))).toBe(at(30));
+    expect(nextReplayClock(series, at(30))).toBe(at(35));
+    expect(previousReplayClock(series, at(35), at(0))).toBe(at(30));
+    expect(replayBarAtClock(series, at(32))).toBe(unknown);
+  });
+
   it('never reveals a bar whose close cannot be known', () => {
     const unknown = { ...fiveMinute[11], end_time: '', interval: 'tick' };
     expect(barCloseTime(unknown)).toBe(Number.POSITIVE_INFINITY);

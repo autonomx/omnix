@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { barCloseTime } from './replayClock';
 import { useTradingReplayStore } from './tradingReplayStore';
@@ -24,8 +25,11 @@ const fiveMinute = bars(24, 5);
 const fifteenMinute = bars(8, 15);
 const replay = () => useTradingReplayStore.getState();
 
-function panel(initial: ChartReplayClockInput) {
-  return renderHook((props: ChartReplayClockInput) => useChartReplayClock(props), { initialProps: initial });
+function panel(initial: ChartReplayClockInput, strict = false) {
+  return renderHook((props: ChartReplayClockInput) => useChartReplayClock(props), {
+    initialProps: initial,
+    ...(strict ? { wrapper: StrictMode } : {}),
+  });
 }
 
 describe('charts on one replay clock', () => {
@@ -112,6 +116,32 @@ describe('charts on one replay clock', () => {
     expect(replay().clock).toBeNull();
     expect(active.result.current.replayVisible).toBe(false);
     expect(other.result.current.replayVisible).toBe(false);
+    expect(activeInput.reloadBars).toHaveBeenCalledOnce();
+    expect(otherInput.reloadBars).toHaveBeenCalledOnce();
+  });
+
+  it('behaves the same under StrictMode double effects', () => {
+    const activeInput = fiveMinuteChart();
+    const otherInput = fifteenMinuteChart();
+    const active = panel(activeInput, true);
+    const other = panel(otherInput, true);
+    act(() => {
+      replay().chooseStart(barCloseTime(fiveMinute[1]));
+      replay().setPlaying(true);
+    });
+    const session = useTradingStore.getState().replaySessionId;
+
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(replay().clock).toBe(at(25));
+
+    active.rerender({ ...activeInput, active: false });
+    other.rerender({ ...otherInput, active: true });
+    expect(useTradingStore.getState().replaySessionId).toBe(session + 1);
+    expect(replay().clock).toBe(at(25));
+
+    active.rerender({ ...activeInput, active: false, replayMode: false });
+    other.rerender({ ...otherInput, active: true, replayMode: false });
+    expect(replay().clock).toBeNull();
     expect(activeInput.reloadBars).toHaveBeenCalledOnce();
     expect(otherInput.reloadBars).toHaveBeenCalledOnce();
   });
