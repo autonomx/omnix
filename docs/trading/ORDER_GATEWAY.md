@@ -27,7 +27,7 @@ Under the account row lock, in the transaction that writes the order:
 
 A replacement cancels the old order and places the new one in one transaction. If the replacement is rejected, the old order stays open with its reservation.
 
-Moving a working risk entry (`replace_manual_entry`, TVP-7.3) is a replacement with `manual_risk` authority. Only an open, unfilled buy limit, stop or stop-limit entry with a pending stop moves. The server sizes the moved entry again: the risk percent is the original order's dollar risk over today's equity, capped by the policy, and the preview treats the working order as already cancelled, so its cash and stop are not counted twice. The stop and target are armed for the new order id before the replacement, as for a new entry. If the replacement fails, they go back to the working entry.
+Moving a working risk entry (`replace_manual_entry`, TVP-7.3) is a replacement with `manual_risk` authority. Only an open, unfilled buy limit, stop or stop-limit entry with a pending stop moves. The server sizes the moved entry again: the risk percent is the original order's dollar risk over today's equity, capped by the policy, and the preview treats the working order as already cancelled, so its cash and stop are not counted twice. In the same transaction, the entry's pending protection is pointed at the new order id; its stop, target and trail are unchanged. Without such a protection, or if anything fails, the transaction rolls back and the working entry and its stop stay as they were. A second move of the same order finds it cancelled and changes nothing. A DAY order's expiry is derived again by the server, and a stop-limit whose stop was reached does not move.
 
 ## Kill switches
 

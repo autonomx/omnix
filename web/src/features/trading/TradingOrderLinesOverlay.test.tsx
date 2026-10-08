@@ -86,6 +86,19 @@ describe('TradingOrderLinesOverlay', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('no longer working');
   });
 
+  it('stops dragging when the line goes away mid-drag', async () => {
+    await mount();
+    const handle = screen.getByRole('button', { name: 'BUY LMT 100 at 10: drag to move' });
+    fireEvent.pointerDown(handle, { button: 0, clientY: 100 });
+    paperApi.snapshot.mockResolvedValue({ open_orders: [] });
+    cleanup();
+    act(() => {
+      window.dispatchEvent(new MouseEvent('pointermove', { clientY: 105 }));
+      window.dispatchEvent(new MouseEvent('pointerup', { clientY: 105 }));
+    });
+    expect(paperApi.moveRiskEntry).not.toHaveBeenCalled();
+  });
+
   it('draws nothing in replay', () => {
     render(<TradingOrderLinesOverlay adapter={adapter} accountId="paper-1" instrumentId={INSTRUMENT} tickSize={0.01} disabled />);
     expect(paperApi.snapshot).not.toHaveBeenCalled();

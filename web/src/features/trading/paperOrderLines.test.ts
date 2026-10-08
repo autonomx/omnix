@@ -53,6 +53,9 @@ describe('moving an order', () => {
     expect(exitReplacement(exit, 8.7, 0.01, 36)).toMatchObject({
       order_id: 'exit-1-moved-10', side: 'sell', order_type: 'stop', quantity: '30', stop_price: '8.7', limit_price: null, time_in_force: 'gtc', reference_price: null,
     });
+    // A DAY order's stored expiry is not sent back (the server refuses an expiry outside GTD).
+    expect(exitReplacement({ ...exit, time_in_force: 'day', expires_at: '2026-10-08T20:00:00Z' } as PaperOrder, 8.7, 0.01, 36).expires_at).toBeNull();
+    expect(exitReplacement({ ...exit, time_in_force: 'gtd', expires_at: '2026-10-09T20:00:00Z' } as PaperOrder, 8.7, 0.01, 36).expires_at).toBe('2026-10-09T20:00:00Z');
     const limitExit = order({ order_id: 'tp', side: 'sell', limit_price: '12' });
     expect(exitReplacement(limitExit, 12.5, 0.01, 36)).toMatchObject({ limit_price: '12.5', stop_price: null });
   });

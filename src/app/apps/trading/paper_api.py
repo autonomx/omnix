@@ -24,7 +24,6 @@ from .paper_entry_move import (
     PaperRiskEntryMoveResult,
     movable_entry,
     moved_entry_intent,
-    restored_protection,
     snapshot_without_order,
 )
 from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
@@ -341,7 +340,8 @@ def create_trading_paper_router(
         try:
             order, protection = movable_entry(snapshot, active_protections, order_id)
             intent = moved_entry_intent(order, protection, request, equity=paper_account_equity(snapshot))
-            protection_request = risk_protection_request(intent, entry_price=intent.worst_entry_price)
+            if any(item.order_id == request.order_id for item in (*snapshot.open_orders, *snapshot.order_history)):
+                raise ValueError("paper_order_id_not_new")
         except ValueError as exc:
             detail = str(exc)
             raise HTTPException(status_code=409 if "not_" in detail or "filled" in detail else 422, detail=detail) from exc
@@ -371,13 +371,6 @@ def create_trading_paper_router(
                     "preview": preview.model_dump(mode="json"),
                 },
             )
-        protection_repository = protection_repository_factory()
-        # As for a new entry, the stop is armed for the moved order before it can fill.
-        try:
-            armed = await asyncio.to_thread(protection_repository.arm_pending_entry, account_id, protection_request)
-        except ValueError as exc:
-            detail = str(exc)
-            raise HTTPException(status_code=409 if "already_submitted" in detail else 422, detail=detail) from exc
         try:
             cancelled, moved = await asyncio.to_thread(
                 OrderGateway(repository_factory()).replace_manual_entry,
@@ -386,17 +379,12 @@ def create_trading_paper_router(
                 risk_order_request(intent, entry_price=entry_price, quantity=preview.recommended_quantity),
             )
         except ValueError as exc:
-            # Nothing was replaced: the stop goes back to the working entry.
+            # The transaction rolled back: the working entry and its stop are as they were.
             detail = str(exc)
-            try:
-                await asyncio.to_thread(
-                    protection_repository.arm_pending_entry, account_id, restored_protection(protection)
-                )
-            except ValueError as cleanup_exc:
-                detail = f"{detail}:protection_restore_failed:{cleanup_exc}"
-            conflict = "not_open" in detail or "insufficient" in detail
+            conflict = "not_open" in detail or "insufficient" in detail or "not_movable" in detail
             raise HTTPException(status_code=409 if conflict else 422, detail=detail) from exc
-        return PaperRiskEntryMoveResult(preview=preview, cancelled=cancelled, order=moved, protection=armed)
+        moved_protection = protection.model_copy(update={"entry_order_id": moved.order_id, "revision": protection.revision + 1})
+        return PaperRiskEntryMoveResult(preview=preview, cancelled=cancelled, order=moved, protection=moved_protection)
 
     @router.get(
         "/accounts/{account_id}/protections",

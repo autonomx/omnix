@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import './ChartPriceHandle.css';
 
 /**
@@ -25,10 +25,14 @@ export function ChartPriceHandle({
   children?: ReactNode;
 }) {
   const draggable = Boolean(onDrag);
+  // Ends a drag in progress; also run when the line goes away mid-drag (its order filled).
+  const stopDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopDrag.current?.(), []);
   const start = (event: React.PointerEvent<HTMLElement>) => {
     if (!onDrag || event.button > 0) return;
     event.preventDefault();
     event.stopPropagation();
+    stopDrag.current?.();
     let last: number | null = null;
     const move = (pointer: PointerEvent) => {
       const price = priceAt(pointer.clientY);
@@ -36,15 +40,23 @@ export function ChartPriceHandle({
       last = price;
       onDrag(price);
     };
-    const end = (pointer: PointerEvent) => {
+    const detach = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
+      window.removeEventListener('blur', detach);
+      stopDrag.current = null;
+    };
+    const end = (pointer: PointerEvent) => {
+      detach();
       if (pointer.type === 'pointerup' && last !== null) onDrop?.(last);
     };
+    stopDrag.current = detach;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
+    // A release outside the window may never arrive: leaving the window ends the drag without a drop.
+    window.addEventListener('blur', detach);
   };
   return (
     <div className={`chart-price-handle is-${tone}${draggable ? ' is-draggable' : ''}${dragging ? ' is-dragging' : ''}`} style={{ top: y }}>

@@ -98,8 +98,8 @@ class OrderGateway:
         order_id: str,
         replacement: PaperOrderRequest,
     ) -> tuple[PaperOrder, PaperOrder]:
-        """Cancel a manual entry and place its re-sized replacement atomically (a moved entry, TVP-7.3)."""
-        return self._repository.replace_order(account_id, order_id, replacement, authority=MANUAL_RISK)
+        """Cancel a manual entry, place its re-sized replacement and re-point its stop, atomically (TVP-7.3)."""
+        return self._repository.replace_entry(account_id, order_id, replacement, authority=MANUAL_RISK)
 
     def replace_reducing(
         self,
@@ -111,7 +111,7 @@ class OrderGateway:
         return self._repository.replace_order(account_id, order_id, replacement, authority=REDUCE_ONLY)
 
 
-_ORDER_METHODS = frozenset({"place_order", "cancel_order", "replace_order"})
+_ORDER_METHODS = frozenset({"place_order", "cancel_order", "replace_order", "replace_entry"})
 
 
 class StrategyPaperAccess:

@@ -102,7 +102,8 @@ export function exitReplacement(order: PaperOrder, price: number, tickSize: numb
     stop_price: order.order_type === 'limit' ? null : String(price),
     reference_price: null,
     time_in_force: order.time_in_force,
-    expires_at: order.expires_at ?? null,
+    // A DAY order's stored expiry is derived by the server; only a GTD order sends one.
+    expires_at: order.time_in_force === 'gtd' ? order.expires_at ?? null : null,
   };
 }
 

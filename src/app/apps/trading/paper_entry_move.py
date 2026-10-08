@@ -4,8 +4,8 @@ A manual entry is sized by the server's risk rules and carries a pending
 stop/target protection. Dragging it on the chart re-prices it the way the
 ticket would place it: the server sizes the moved entry again, aiming at the
 same dollar risk as the original (capped by the policy), and replaces the
-order in one transaction. The moved order is a new order id; the protection is
-re-armed for it, keeping its stop and target.
+order in one transaction. The moved order is a new order id; its pending
+protection is pointed at it in the same transaction, unchanged otherwise.
 
 This module decides what may move and what the replacement is; the API route
 runs it and the order gateway enforces the entry authority.
@@ -17,7 +17,7 @@ from decimal import ROUND_DOWN, Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .paper import PaperAccountSnapshot, PaperOrder
-from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
+from .paper_protection import PaperPositionProtection
 from .paper_risk import PaperRiskOrderRequest, PaperRiskPolicy, PaperRiskPreview, _entry_price
 
 MOVABLE_ORDER_TYPES = frozenset({"limit", "stop", "stop_limit"})
@@ -58,6 +58,9 @@ def movable_entry(
         raise ValueError("paper_risk_entry_not_movable")
     if order.filled_quantity > 0:
         raise ValueError("paper_risk_entry_partially_filled")
+    if order.order_type == "stop_limit" and order.stop_triggered_at is not None:
+        # Its stop was reached: it now works as a limit order and stays as it is.
+        raise ValueError("paper_risk_entry_not_movable")
     protection = next(
         (
             item
@@ -106,11 +109,13 @@ def moved_entry_intent(
         limit_price=(move.limit_price or order.limit_price) if order.order_type == "stop_limit" else None,
         stop_loss=stop,
         take_profit=protection.take_profit,
-        trailing_stop_loss=protection.trail_amount is not None,
+        # The protection is re-pointed as it is (trail included), not re-armed from this request.
+        trailing_stop_loss=False,
         desired_risk_pct=percent,
         idempotency_key=move.idempotency_key,
         time_in_force=order.time_in_force,
-        expires_at=order.expires_at,
+        # A DAY order's stored expiry is derived by the server; only a GTD order sends one.
+        expires_at=order.expires_at if order.time_in_force == "gtd" else None,
     )
 
 
@@ -133,17 +138,4 @@ def snapshot_without_order(snapshot: PaperAccountSnapshot, order: PaperOrder) ->
             "open_orders": [item for item in snapshot.open_orders if item.order_id != order.order_id],
             "balances": balances,
         }
-    )
-
-
-def restored_protection(protection: PaperPositionProtection) -> PaperProtectionUpsert:
-    """The protection as it was, for the original entry: put back when the move fails."""
-    return PaperProtectionUpsert(
-        instrument_id=protection.instrument_id,
-        binding_id=protection.binding_id,
-        entry_order_id=protection.entry_order_id,
-        take_profit=protection.take_profit,
-        stop_loss=protection.stop_loss,
-        trail_amount=protection.trail_amount,
-        trail_percent=protection.trail_percent,
     )
