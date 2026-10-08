@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
 import { watchlistDisplaySymbol } from './tradingWatchlistPresentation';
@@ -26,7 +26,13 @@ import {
 import { useTradingWatchlistDocuments } from './useTradingWatchlistDocuments';
 import { useTradingWatchlistFlags } from './useTradingWatchlistFlags';
 import { useTradingWatchlistQuotes } from './useTradingWatchlistQuotes';
-import { useTradingWatchlistSelection } from './useTradingWatchlistSelection';
+import {
+  useTradingWatchlistSelection,
+  watchlistGridRows,
+  watchlistRowTabStop,
+  watchlistSectionRowKey,
+  watchlistSymbolRowKey,
+} from './useTradingWatchlistSelection';
 import { downloadWatchlistText, exchangeSymbolFor, formatWatchlistText } from './tradingWatchlistTransfer';
 import { useTradingWatchlistImport } from './useTradingWatchlistImport';
 import { TradingWatchlistOptionsMenu } from './TradingWatchlistOptionsMenu';
@@ -114,17 +120,16 @@ export function TradingWatchlist({
     create,
     onInstrumentsFound: (found) => setDiscoveredInstruments((items) => found.reduce(mergeInstruments, items)),
   });
-  const visibleOrder = useMemo(() => rows.flatMap((row) => row.kind === 'symbol' ? [row.instrumentId] : []), [rows]);
-  const { selectedIds, cursor, listRef, onKeyDown, onRowClick } = useTradingWatchlistSelection(
-    visibleOrder,
-    normalizedActiveInstrumentId,
-    (instrumentId) => onSelect(binanceInstrumentIdFor(instrumentId)),
-  );
+  const gridRows = useMemo(() => watchlistGridRows(rows), [rows]);
+  const { selectedIds, cursor, tabStop, listRef, onKeyDown, onFocus, onRowClick } = useTradingWatchlistSelection({
+    rows: gridRows,
+    activeInstrumentId: normalizedActiveInstrumentId,
+    onShow: (instrumentId) => onSelect(binanceInstrumentIdFor(instrumentId)),
+    onToggleSection: (sectionId, collapsed) => commit((payload) => updateWatchlistSection(payload, sectionId, { collapsed })),
+  });
   const listName = flagColor ? flagListName(flagColor).toLowerCase() : 'watchlist';
   const editable = !flagColor && !readOnly;
   const sectionIds = listItems.flatMap((item) => item.type === 'section' ? [item.id] : []);
-  const rowIdPrefix = useId();
-  const rowId = (instrumentId: string) => `${rowIdPrefix}row-${instrumentId}`;
 
   const addInstrument = async (instrument: CanonicalInstrument) => {
     const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);
@@ -222,12 +227,11 @@ export function TradingWatchlist({
       <div
         ref={listRef}
         className="trading-watchlist-table"
-        role="grid"
+        role="treegrid"
         aria-label="Watchlist symbols"
         aria-multiselectable="true"
-        aria-activedescendant={cursor ? rowId(cursor) : undefined}
-        tabIndex={0}
         onKeyDown={onKeyDown}
+        onFocus={onFocus}
       >
         <TradingWatchlistHeader
           columns={columns}
@@ -243,8 +247,11 @@ export function TradingWatchlist({
               return (
                 <TradingWatchlistSectionRow
                   key={`section:${section.id}`}
+                  rowKey={watchlistSectionRowKey(section.id)}
+                  tabStop={watchlistRowTabStop(tabStop, watchlistSectionRowKey(section.id))}
                   section={section}
                   symbolCount={row.symbolCount}
+                  columnCount={columns.length}
                   sorted={sorted}
                   canMoveUp={position > 0}
                   canMoveDown={position < sectionIds.length - 1}
@@ -260,7 +267,9 @@ export function TradingWatchlist({
             return (
               <TradingWatchlistSymbolRow
                 key={instrumentId}
-                rowId={rowId(instrumentId)}
+                rowKey={watchlistSymbolRowKey(instrumentId)}
+                level={row.sectionId ? 2 : 1}
+                tabStop={watchlistRowTabStop(tabStop, watchlistSymbolRowKey(instrumentId))}
                 instrumentId={instrumentId}
                 symbol={symbol}
                 quote={quotes[instrumentId]}

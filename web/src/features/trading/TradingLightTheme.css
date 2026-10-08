@@ -142,7 +142,8 @@
     background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }
 
-  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button strong {
+  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button strong,
+  :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button strong {
     color: var(--trading-light-text);
   }
 

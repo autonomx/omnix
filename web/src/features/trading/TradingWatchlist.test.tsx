@@ -632,6 +632,63 @@ describe('TradingWatchlist columns', () => {
   });
 });
 
+describe('TradingWatchlist tree grid', () => {
+  it('lines up header and cells, and moves through rows, sections and cells with the arrow keys', async () => {
+    mockDocuments([sectionedRecord]);
+    mockMarketData();
+    const update = echoUpdates();
+    const onSelect = vi.fn();
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={onSelect} />,
+    );
+
+    const grid = await screen.findByRole('treegrid', { name: 'Watchlist symbols' });
+    await screen.findByRole('button', { name: 'Select GME' });
+    const width = (row: Element) => [...row.querySelectorAll('[role="gridcell"], [role="columnheader"]')]
+      .reduce((total, cell) => total + Number(cell.getAttribute('aria-colspan') ?? 1), 0);
+    const [header, ...rows] = screen.getAllByRole('row');
+    expect(rows.map(width)).toEqual(rows.map(() => width(header)));
+    // Row buttons are out of the Tab order; only the tab stop is tabbable.
+    expect(grid.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Remove GME' })).toHaveAttribute('tabindex', '-1');
+
+    const sectionRow = screen.getByRole('button', { name: 'Collapse section Meme stocks' }).closest('[role="row"]') as HTMLElement;
+    expect(sectionRow).toHaveAttribute('aria-level', '1');
+    expect(sectionRow).toHaveAttribute('aria-expanded', 'true');
+    const gmeRow = screen.getByRole('button', { name: 'Select GME' }).closest('[role="row"]') as HTMLElement;
+    expect(gmeRow).toHaveAttribute('aria-level', '2');
+
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(sectionRow).toHaveFocus();
+    fireEvent.keyDown(sectionRow, { key: 'ArrowDown' });
+    expect(gmeRow).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith(gameStop.instrument_id);
+
+    fireEvent.keyDown(gmeRow, { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: 'Select GME' })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Select GME' }), { key: 'End' });
+    expect(screen.getByRole('button', { name: 'Remove GME' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Remove GME' })).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Remove GME' }), { key: 'Home' });
+    expect(screen.getByRole('button', { name: 'Select GME' })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Select GME' }), { key: 'ArrowLeft' });
+    expect(gmeRow).toHaveFocus();
+    fireEvent.keyDown(gmeRow, { key: 'ArrowLeft' });
+    expect(sectionRow).toHaveFocus();
+
+    fireEvent.keyDown(sectionRow, { key: 'ArrowLeft' });
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0][2]).toMatchObject({ items: expect.arrayContaining([{ type: 'section', id: 'tech', name: 'Meme stocks', collapsed: true }]) });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Select GME' })).not.toBeInTheDocument());
+    fireEvent.keyDown(sectionRow, { key: 'ArrowRight' });
+    expect(await screen.findByRole('button', { name: 'Select GME' })).toBeInTheDocument();
+
+    fireEvent.keyDown(sectionRow, { key: 'Home', ctrlKey: true });
+    expect(screen.getByRole('button', { name: 'Select AAPL' }).closest('[role="row"]')).toHaveFocus();
+  });
+});
+
 describe('TradingWatchlist keyboard and import', () => {
   const tesla: CanonicalInstrument = { ...apple, instrument_id: 'equity:NASDAQ:TSLA', venue_symbol: 'TSLA', display_symbol: 'TSLA' };
   const threeSymbols = {
@@ -649,7 +706,7 @@ describe('TradingWatchlist keyboard and import', () => {
       <TradingWatchlist instruments={[apple, gameStop, tesla]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={onSelect} />,
     );
 
-    const list = await screen.findByRole('grid', { name: 'Watchlist symbols' });
+    const list = await screen.findByRole('treegrid', { name: 'Watchlist symbols' });
     await screen.findByRole('button', { name: 'Select TSLA' });
     list.focus();
     fireEvent.keyDown(list, { key: 'ArrowDown' });
@@ -657,7 +714,10 @@ describe('TradingWatchlist keyboard and import', () => {
     expect(selectedRows()).toEqual(['GME']);
     const gmeRow = screen.getByRole('row', { selected: true });
     expect(gmeRow).toHaveAttribute('data-instrument-id', gameStop.instrument_id);
-    expect(list).toHaveAttribute('aria-activedescendant', gmeRow.id);
+    // Roving tabindex: the focused row is the only tab stop.
+    expect(gmeRow).toHaveFocus();
+    expect(gmeRow).toHaveAttribute('tabindex', '0');
+    expect(list.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
     fireEvent.keyDown(list, { key: ' ' });
     expect(onSelect).toHaveBeenLastCalledWith(tesla.instrument_id);
     fireEvent.keyDown(list, { key: ' ', shiftKey: true });
@@ -681,7 +741,7 @@ describe('TradingWatchlist keyboard and import', () => {
     await screen.findByRole('button', { name: 'Select TSLA' });
     fireEvent.click(screen.getByRole('button', { name: 'Select AAPL' }));
     expect(onSelect).toHaveBeenCalledWith(apple.instrument_id);
-    const list = screen.getByRole('grid', { name: 'Watchlist symbols' });
+    const list = screen.getByRole('treegrid', { name: 'Watchlist symbols' });
     fireEvent.keyDown(screen.getByRole('button', { name: 'Select AAPL' }), { key: 'ArrowDown', shiftKey: true });
     expect(selectedRows()).toEqual(['AAPL', 'GME']);
     expect(onSelect).toHaveBeenCalledTimes(1);

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   applyWatchlistCommand,
   clickWatchlistRow,
+  watchlistGridRows,
+  watchlistRowTabStop,
   isWatchlistKeyTargetIgnored,
   watchlistKeyCommand,
   type WatchlistSelection,
@@ -45,12 +47,27 @@ describe('watchlist key commands', () => {
     menu.append(menuItem);
     expect(isWatchlistKeyTargetIgnored(input)).toBe(true);
     expect(isWatchlistKeyTargetIgnored(menuItem)).toBe(true);
-    const actions = document.createElement('span');
-    actions.dataset.watchlistKeys = 'own';
-    const remove = document.createElement('button');
-    actions.append(remove);
-    expect(isWatchlistKeyTargetIgnored(remove)).toBe(true);
     expect(isWatchlistKeyTargetIgnored(document.createElement('button'))).toBe(false);
+  });
+});
+
+describe('watchlist tree grid rows', () => {
+  it('makes sections parent rows of their symbols', () => {
+    expect(watchlistGridRows([
+      { kind: 'symbol', instrumentId: 'a', itemIndex: 0, sectionId: null },
+      { kind: 'section', section: { type: 'section', id: 's', name: 'S', collapsed: false }, itemIndex: 1, symbolCount: 1 },
+      { kind: 'symbol', instrumentId: 'b', itemIndex: 2, sectionId: 's' },
+    ])).toEqual([
+      { key: 'symbol:a', instrumentId: 'a', sectionId: null, collapsed: false, parentKey: null },
+      { key: 'section:s', instrumentId: null, sectionId: 's', collapsed: false, parentKey: null },
+      { key: 'symbol:b', instrumentId: 'b', sectionId: null, collapsed: false, parentKey: 'section:s' },
+    ]);
+  });
+
+  it('gives each row its share of the single tab stop', () => {
+    expect(watchlistRowTabStop({ rowKey: 'symbol:a', cell: null }, 'symbol:a')).toBeNull();
+    expect(watchlistRowTabStop({ rowKey: 'symbol:a', cell: 2 }, 'symbol:a')).toBe(2);
+    expect(watchlistRowTabStop({ rowKey: 'symbol:a', cell: 2 }, 'symbol:b')).toBe(false);
   });
 });
 

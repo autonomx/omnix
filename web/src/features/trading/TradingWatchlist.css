@@ -149,7 +149,7 @@
     text-transform: none;
   }
 
-  /* The header row and list rows are one ARIA grid; the wrapper only groups them. */
+  /* The header row and list rows are one ARIA tree grid; the wrapper only groups them. */
   .trading-watchlist-table {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -157,9 +157,21 @@
     min-height: 0;
   }
 
-  .trading-watchlist-table:focus-visible {
-    outline: 1px solid color-mix(in srgb, var(--c-blue-660) 60%, transparent);
+  /* Roving focus: a row or one of its cells holds the keyboard focus. */
+  .trading-watchlist li:focus-visible,
+  .trading-watchlist li [role='gridcell']:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--c-blue-660) 70%, transparent);
     outline-offset: -1px;
+  }
+
+  /* Names the row action cells for assistive technology; the actions show on hover or focus. */
+  .trading-watchlist-actions-header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .trading-watchlist-header-cell {
@@ -333,7 +345,8 @@
     background: color-mix(in srgb, var(--c-blue-660) 15%, transparent);
   }
 
-  .trading-watchlist-symbol-cell > button strong {
+  .trading-watchlist-symbol-cell > button strong,
+  .trading-watchlist-section-cell > button strong {
     min-width: 0;
     overflow: hidden;
     color: var(--c-slate-870);
@@ -410,7 +423,6 @@
   .trading-watchlist-section-toggle strong {
     min-width: 0;
     overflow: hidden;
-    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-overflow: ellipsis;
