@@ -28,6 +28,7 @@ export function TradingChartContextMenu({
   onRemoveDrawings,
   onRemoveIndicators,
   onSettings,
+  onDrawingAction,
 }: {
   point: ChartAlertPlacement;
   symbol: string;
@@ -48,6 +49,8 @@ export function TradingChartContextMenu({
   onRemoveDrawings: () => void;
   onRemoveIndicators: () => void;
   onSettings: () => void;
+  /** Runs a context-menu action the clicked drawing's tool offers (`point.drawingActions`). */
+  onDrawingAction?: (drawingId: string, actionId: string) => void;
 }) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
@@ -85,6 +88,16 @@ export function TradingChartContextMenu({
       <button type="button" role="menuitem" onClick={action(onReset)}>↻ <span>Reset {indicatorContext ? `${symbol} pane` : 'chart'} view</span><kbd>Alt + R</kbd></button>
       <button type="button" role="menuitem" onClick={action(onCopyPrice)}>⧉ <span>Copy {indicatorContext ? 'value' : 'price'} {displayPrice(point.price)}</span></button>
       <button type="button" role="menuitem" onClick={action(onPastePrice)}>▣ <span>Paste</span><kbd>Ctrl + V</kbd></button>
+      {onDrawingAction && point.drawingId && point.drawingActions?.length ? (
+        <>
+          <div className="trading-context-menu-separator" />
+          {point.drawingActions.map((drawingAction) => (
+            <button key={drawingAction.id} type="button" role="menuitem" onClick={action(() => onDrawingAction(point.drawingId!, drawingAction.id))}>
+              ▸ <span>{drawingAction.label}</span>
+            </button>
+          ))}
+        </>
+      ) : null}
       <div className="trading-context-menu-separator" />
       <button type="button" role="menuitem" disabled={!onAddAlert} onClick={onAddAlert ? action(onAddAlert) : undefined}>◷ <span>{onAddAlert ? `Add alert on ${symbol} at ${displayPrice(point.price)}` : `Alerts unavailable for ${symbol}`}</span>{onAddAlert ? <kbd>Alt + A</kbd> : null}</button>
       <button type="button" role="menuitemcheckbox" aria-checked={cursorLocked} onClick={action(onToggleCursor)}>⌖ <span>Lock vertical cursor line by time</span></button>

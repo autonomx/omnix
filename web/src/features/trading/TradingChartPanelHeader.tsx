@@ -2,6 +2,8 @@ import { downloadUrl } from '../../shared/download';
 import { convertedPrice, intervalLabel } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { chartPalette } from './chartPalette';
+import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
+import { drawingToolDefinition } from './drawings/tools/registry';
 
 /** The chart's header: symbol, quote, interval and chart controls. */
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
@@ -84,7 +86,8 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
                 <input aria-label="Drawing color" type="color" value={selectedDrawing.style?.color ?? chartPalette.cyan} onChange={(event) => drawings.updateSelected({ style: { ...(selectedDrawing.style ?? { lineWidth: 2, lineStyle: 'solid' }), color: event.target.value } })} />
                 <button type="button" aria-pressed={Boolean(selectedDrawing.locked)} onClick={() => drawings.updateSelected({ locked: !selectedDrawing.locked })}>{selectedDrawing.locked ? 'Unlock' : 'Lock'}</button>
                 <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
-                {selectedDrawing.toolType === 'text' ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
+                {drawingToolDefinition(selectedDrawing.toolType)?.editableText ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
+                <DrawingPropertiesButton drawing={selectedDrawing} onChange={(properties) => drawings.updateSelected({ properties })} />
                 <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawing">×</button>
               </>
             ) : null}
