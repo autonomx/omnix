@@ -11,19 +11,24 @@ from fastapi.testclient import TestClient
 
 from app.persistence.errors import RevisionConflict
 from app.apps.trading.alerts import (
+    AlertEvaluationContext,
+    AlertOutcomeRecord,
     TradingAlert,
     TradingAlertCreate,
     TradingAlertEvaluation,
     TradingAlertEvaluationPolicy,
     TradingAlertTrigger,
     TradingAlertUpdate,
-    alert_condition_value,
-    alert_trigger_key,
     cooldown_elapsed,
-    crossed_threshold,
 )
 from app.apps.trading.alerts_api import create_trading_alert_router
-from app.apps.trading.alerts_monitor import TradingAlertMonitor, trading_alert_monitor_enabled
+from app.apps.trading.alerts_evaluation import evaluate_conditions
+from app.apps.trading.alerts_monitor import (
+    TradingAlertMonitor,
+    _final_only,
+    _history_limit,
+    trading_alert_monitor_enabled,
+)
 
 
 NOW = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
@@ -35,6 +40,7 @@ class FakeAlertRepository:
         self.alerts: dict[str, TradingAlert] = {}
         self.triggers: list[TradingAlertTrigger] = []
         self.evaluations: list[TradingAlertEvaluation] = []
+        self.recorded: list[tuple[AlertEvaluationContext, list[AlertOutcomeRecord]]] = []
 
     def list_alerts(self, limit: int = 200):
         return list(self.alerts.values())[:limit]
@@ -102,6 +108,27 @@ class FakeAlertRepository:
         return [trigger]
 
 
+    def record_outcomes(self, context: AlertEvaluationContext, outcomes):
+        outcomes = list(outcomes)
+        self.recorded.append((context, outcomes))
+        first = outcomes[0].outcome
+        trigger = TradingAlertTrigger(
+            trigger_id=f"trigger-{len(self.recorded)}",
+            alert_id=outcomes[0].alert_id,
+            instrument_id=context.instrument_id,
+            binding_id=context.resolved_binding_id,
+            provider=context.provider,
+            observed_value=first.close,
+            observed_price=first.close,
+            threshold=Decimal("100"),
+            condition_type="price_above",
+            observed_at=first.bar_end,
+            evaluated_at=context.evaluated_at,
+            idempotency_key=f"recorded-{len(self.recorded)}",
+        )
+        return [trigger]
+
+
 class FakeMarketService:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, int, str | None]] = []
@@ -116,6 +143,8 @@ class FakeMarketService:
         self.calls.append((instrument_id, interval, limit, binding_id))
         bars = [
             SimpleNamespace(
+                start_time=NOW + timedelta(minutes=index - 1),
+                open=Decimal(90 + index),
                 close=Decimal(90 + index),
                 high=Decimal(91 + index),
                 low=Decimal(89 + index),
@@ -172,62 +201,33 @@ def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
     assert "trendline_below" in trendline_migration
 
 
-def test_all_alert_families_use_restart_safe_threshold_crossings() -> None:
-    for condition_type in (
-        "price_above",
-        "percent_change_above",
-        "indicator_above",
-        "indicator_cross_above",
-        "volume_above",
+def test_all_legacy_alert_families_fire_on_a_crossing() -> None:
+    for condition_type, parameters in (
+        ("price_above", {}),
+        ("percent_change_above", {}),
+        ("indicator_above", {"indicator_id": "rsi"}),
+        ("indicator_cross_above", {"indicator_id": "rsi"}),
+        ("volume_above", {}),
     ):
-        assert crossed_threshold(
-            condition_type,
-            Decimal("99"),
-            Decimal("100"),
-            Decimal("100"),
-        )
-        assert not crossed_threshold(
-            condition_type,
-            None,
-            Decimal("101"),
-            Decimal("100"),
-        )
-    for condition_type in (
-        "price_below",
-        "percent_change_below",
-        "indicator_below",
-        "indicator_cross_below",
-        "volume_below",
+        assert alert("a", condition_type, **parameters).conditions[0].operator == "crossing_up"
+    for condition_type, parameters in (
+        ("price_below", {}),
+        ("percent_change_below", {}),
+        ("indicator_below", {"indicator_id": "rsi"}),
+        ("indicator_cross_below", {"indicator_id": "rsi"}),
+        ("volume_below", {}),
     ):
-        assert crossed_threshold(
-            condition_type,
-            Decimal("101"),
-            Decimal("100"),
-            Decimal("100"),
-        )
+        assert alert("a", condition_type, **parameters).conditions[0].operator == "crossing_down"
 
 
-def test_condition_values_and_finalized_bar_policy_are_explicit() -> None:
-    evaluation = TradingAlertEvaluation(
-        instrument_id=INSTRUMENT,
-        observed_price=Decimal("101"),
-        observed_volume=Decimal("5000"),
-        percent_changes={"percent": Decimal("2.5")},
-        indicator_values={"indicator": Decimal("71")},
-        is_final=False,
-    )
-    assert alert_condition_value(alert("price", "price_above"), evaluation) == 101
-    assert alert_condition_value(alert("volume", "volume_above"), evaluation) == 5000
-    assert alert_condition_value(alert("percent", "percent_change_above"), evaluation) == Decimal("2.5")
-    assert alert_condition_value(
-        alert("indicator", "indicator_cross_above", indicator_id="rsi"),
-        evaluation,
-    ) == 71
+def test_finalized_bar_policy_is_explicit() -> None:
     assert TradingAlertEvaluationPolicy().allow_partial_bars is False
     assert TradingAlertEvaluationPolicy(allow_partial_bars=True).allow_partial_bars is True
-    source = Path("src/app/apps/trading/alerts.py").read_text()
-    assert "not evaluation.is_final" in source
-    assert "allow_partial_bars" in source
+    closed_only = alert("price", "price_above")
+    assert _final_only(closed_only)
+    partial = closed_only.model_copy(update={"evaluation_policy": TradingAlertEvaluationPolicy(allow_partial_bars=True)})
+    assert not _final_only(partial)
+    assert _final_only(partial.model_copy(update={"frequency": "once_per_bar_close"}))
 
 
 def test_trendline_alerts_compare_price_with_extrapolated_line() -> None:
@@ -241,23 +241,23 @@ def test_trendline_alerts_compare_price_with_extrapolated_line() -> None:
         ],
         trendline_mode="crossing_up",
     )
-    evaluation = TradingAlertEvaluation(
-        instrument_id=INSTRUMENT,
-        observed_price=Decimal("116"),
-        observed_at=NOW + timedelta(minutes=15),
-    )
-    assert alert_condition_value(trendline, evaluation) == Decimal("1")
-    assert crossed_threshold("trendline_crossing_up", Decimal("-1"), Decimal("1"), Decimal("0"))
-    assert not crossed_threshold("trendline_crossing_up", Decimal("1"), Decimal("2"), Decimal("0"))
-    assert crossed_threshold("trendline_crossing", Decimal("1"), Decimal("-1"), Decimal("0"))
+    bars = [
+        SimpleNamespace(
+            start_time=NOW + timedelta(minutes=minute - 1),
+            end_time=NOW + timedelta(minutes=minute),
+            open=Decimal(close), high=Decimal(close), low=Decimal(close), close=Decimal(close),
+            volume=Decimal("1"), is_final=True,
+        )
+        for minute, close in ((14, "113"), (15, "116"))
+    ]
+    outcome = evaluate_conditions(trendline.conditions, bars, final_only=True)
+    assert outcome is not None and outcome.met
+    assert outcome.observations[0].target == Decimal("115")
 
 
-def test_cooldown_and_idempotency_boundaries_are_deterministic() -> None:
+def test_cooldown_boundaries_are_deterministic() -> None:
     assert not cooldown_elapsed(NOW, NOW + timedelta(seconds=59), 60)
     assert cooldown_elapsed(NOW, NOW + timedelta(seconds=60), 60)
-    first = alert_trigger_key("alert-1", NOW, Decimal("101.25"), "price_above")
-    assert first == alert_trigger_key("alert-1", NOW, Decimal("101.25"), "price_above")
-    assert first != alert_trigger_key("alert-1", NOW, Decimal("101.25"), "volume_above")
 
 
 def test_alert_monitor_groups_targets_and_calculates_all_condition_inputs() -> None:
@@ -281,14 +281,18 @@ def test_alert_monitor_groups_targets_and_calculates_all_condition_inputs() -> N
     assert asyncio.run(monitor.run_once()) == 1
     assert len(market.calls) == 1
     assert market.calls[0][0:2] == (INSTRUMENT, "1m")
-    evaluation = repository.evaluations[0]
-    assert evaluation.binding_id == "fixture:requested"
-    assert evaluation.resolved_binding_id == "fixture:resolved"
-    assert evaluation.provider == "fixture-provider"
-    assert evaluation.is_final is True
-    assert evaluation.observed_volume == Decimal("1039")
-    assert "percent-alert" in evaluation.percent_changes
-    assert "indicator-alert" in evaluation.indicator_values
+    assert market.calls[0][2] == _history_limit(list(repository.alerts.values()))
+    assert repository.evaluations == []
+    context, outcomes = repository.recorded[0]
+    assert context.binding_id == "fixture:requested"
+    assert context.resolved_binding_id == "fixture:resolved"
+    assert context.provider == "fixture-provider"
+    assert {record.alert_id for record in outcomes} == set(repository.alerts)
+    by_alert = {record.alert_id: record.outcome for record in outcomes}
+    assert by_alert["volume-alert"].observations[0].source == Decimal("1039")
+    assert by_alert["percent-alert"].observations[0].source == (Decimal(129) / Decimal(124) - 1) * 100
+    assert by_alert["indicator-alert"].observations[0].source == Decimal("100")  # RSI of a steady climb
+    assert all(outcome.bar_is_final for outcome in by_alert.values())
     assert monitor.diagnostics()["evaluation_count"] == 1
 
 
