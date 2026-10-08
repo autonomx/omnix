@@ -1132,6 +1132,7 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 - Each work package is built on its own `tvp/<wp>` branch in its own worktree, reviewed by a separate review agent, then merged into the integration branch.
 - Migrations for this roadmap use the reserved range **0140–0179**: 0140 is TVP-7.1; the next ones are assigned at merge.
 - PostgreSQL tests run against scratch databases in the `omnix-architecture-test` container, never the live database.
+- `api:generate` needs the locked FastAPI 0.141.1 and Starlette 1.7.0 (`requirements/gateway.lock.txt`); the local interpreters have 0.133.1. Install the locked versions into a scratch directory (`pip install --target <dir> fastapi==0.141.1 starlette==1.7.0`) and put it first on `PYTHONPATH` for that command. Don't change shared environments.
 
 | WP | Status | Branch / commit | Notes |
 |---|---|---|---|
@@ -1139,7 +1140,7 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 | TVP-0.3 | Done (lead), migration pending | `41d5410a3` | Command catalogue, dispatcher (text fields ignored, most specific scope wins, Alt matched by physical key), key overrides, conflict detection. The drawing undo/redo/delete keys move onto it after TVP-8.1 merges (same file). Finding: `TradingCommandCenter` is a strategy operations panel, not a command palette, so TVP-2.1's Ctrl+K needs a new palette |
 | TVP-0.4 | In progress (agent) | `tvp/0.4-drawing-registry` | Tool registry with renderer-agnostic geometry, generic host, 14 tools migrated, document upgrade; headless benchmark decides SVG vs canvas (lightweight-charts primitives). Finding: the "OHLC" magnet only rounds the price; a real OHLC magnet goes to TVP-3.8 |
 | TVP-1.1 + 1.2 | In progress (agent) | `tvp/1.1-1.2-alert-conditions` | Migration 0141. Findings: the server ignored `trigger_policy` (the web approximated it with cooldowns), and crossings were detected between 30 s polls rather than between bars. Design: server-side frequency (once / every time / once per bar / once per bar close / once per minute), conditions child table (≤5, 13 operators, price/change/indicator/trendline sources, value/source/channel targets), bar-based evaluation on the server indicator registry, legacy adapter, channel schema (webhook/email/push switched on later by TVP-0.5) |
-| TVP-5.1–5.3 | In progress (agent) | `tvp/5-watchlists` | Indicator columns (part of 5.2) wait for TVP-0.2 |
+| TVP-5.1–5.3 | In review | `tvp/5-watchlists` `888415d84`, `daf526660`, `129671b31` | Built:<br>• watchlist payload v2 (sections, ordered items);<br>• `watchlist_flag_set` document with 7 colour flags;<br>• column choice and sorting, stored per browser;<br>• `.txt` import/export and keyboard navigation.<br>Follow-ups: flagging from the chart and screener; indicator columns. Pending decision: v2 keeps writing `instrumentIds` for stale old-client tabs |
 | TVP-7.1 | In progress (agent) | `tvp/7.1-order-types` | Migration 0140 |
 | TVP-8.1 (wave 1 part) | Fixing review findings (agent) | `tvp/8.1-replay-clock` `6b7ac3f3f` | Speed control and shared clock built. Review: replay trading dropped bars at 10× and above (fix: a sequential advance queue per session), bars streamed during replay not backfilled, per-tick full redraws, session reset on chart switch. Sub-bar playback waits for TVP-0.6 |
 
