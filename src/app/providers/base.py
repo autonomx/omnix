@@ -249,7 +249,7 @@ class BaseProvider(ABC):
     @overload
     def chat_completion(
         self, messages: List[ChatMessage], model: Optional[str] = None, stream: bool = False, **kwargs: Any
-    ) -> Union[ChatResponse, Iterator[ChatResponse]]: ...
+    ) -> ChatResponse | Iterator[ChatResponse]: ...
 
     @abstractmethod
     def chat_completion(
