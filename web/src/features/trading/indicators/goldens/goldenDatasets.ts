@@ -84,15 +84,21 @@ function constant(length: number): GoldenBar[] {
   return Array.from({ length }, (_, index) => bar(index, 100, 100, 100, 100, 500));
 }
 
-export const GOLDEN_DATASETS: readonly GoldenDataset[] = [
-  { name: 'random-walk-300', bars: randomWalk(0x5eed1, 300) },
-  { name: 'gaps-flats-zero-volume-160', bars: gapsFlatsAndZeroVolume() },
-  { name: 'short-12', bars: randomWalk(0x5eed3, 12) },
-  { name: 'trend-up-80', bars: trendUp(80) },
-  { name: 'constant-40', bars: constant(40) },
-];
+/** Generates the datasets. Only the update run uses this; checks read the committed files, so a Node maths change can't move them. */
+export function generateGoldenDatasets(): GoldenDataset[] {
+  return [
+    { name: 'random-walk-300', bars: randomWalk(0x5eed1, 300) },
+    { name: 'gaps-flats-zero-volume-160', bars: gapsFlatsAndZeroVolume() },
+    { name: 'short-12', bars: randomWalk(0x5eed3, 12) },
+    { name: 'trend-up-80', bars: trendUp(80) },
+    { name: 'constant-40', bars: constant(40) },
+    { name: 'empty-0', bars: [] },
+    { name: 'mixed-90', bars: randomWalk(0x5eed4, 90, 20) },
+  ];
+}
 
-export const VARIANT_DATASET = 'random-walk-300';
+export const ALTERNATIVE_PERIOD_DATASET = 'random-walk-300';
+export const INPUT_VARIANT_DATASET = 'mixed-90';
 
 export function asMarketBars(dataset: GoldenDataset): MarketBar[] {
   return fixture<MarketBar[]>(dataset.bars.map((item) => ({

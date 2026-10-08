@@ -70,13 +70,28 @@ class BarSeries:
         )
 
 
+FORMULA_VERSION = "omnix-indicators-v2"
+
+
+def _whole_number(value: object) -> object:
+    # The browser's Number.isInteger(20.0) is true, so a whole float must behave exactly like the int (including in keys).
+    return int(value) if isinstance(value, float) and value.is_integer() else value
+
+
 @dataclass(frozen=True)
 class IndicatorInputs:
-    period: int
-    fast_period: int | None = None
-    slow_period: int | None = None
-    signal_period: int | None = None
+    """Indicator inputs as the chart stores them. Periods may be non-integers; each indicator falls back or rejects them like the browser."""
+
+    period: int | float
+    fast_period: int | float | None = None
+    slow_period: int | float | None = None
+    signal_period: int | float | None = None
     standard_deviations: float | None = None
+    anchor_time: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("period", "fast_period", "slow_period", "signal_period"):
+            object.__setattr__(self, name, _whole_number(getattr(self, name)))
 
 
 @dataclass(frozen=True)

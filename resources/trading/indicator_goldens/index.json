@@ -5,408 +5,510 @@
   "gaps-flats-zero-volume-160",
   "short-12",
   "trend-up-80",
-  "constant-40"
+  "constant-40",
+  "empty-0",
+  "mixed-90"
  ],
  "indicators": [
   {
    "id": "tv-accumulation-distribution-adl",
-   "name": "Accumulation Distribution (ADL)"
+   "name": "Accumulation Distribution (ADL)",
+   "default_period": 1
   },
   {
    "id": "tv-arnaud-legoux-moving-average",
-   "name": "Arnaud Legoux Moving Average"
+   "name": "Arnaud Legoux Moving Average",
+   "default_period": 9
   },
   {
    "id": "tv-aroon-indicator",
-   "name": "Aroon Indicator"
+   "name": "Aroon Indicator",
+   "default_period": 14
   },
   {
    "id": "tv-aroon-oscillator",
-   "name": "Aroon Oscillator"
+   "name": "Aroon Oscillator",
+   "default_period": 14
   },
   {
    "id": "tv-average-daily-range-adr-indicator",
-   "name": "Average Daily Range (ADR) indicator"
+   "name": "Average Daily Range (ADR) indicator",
+   "default_period": 14
   },
   {
    "id": "tv-average-directional-index-adx",
-   "name": "Average Directional Index (ADX)"
+   "name": "Average Directional Index (ADX)",
+   "default_period": 14
   },
   {
    "id": "atr",
-   "name": "Average True Range (ATR)"
+   "name": "Average True Range (ATR)",
+   "default_period": 14
   },
   {
    "id": "tv-awesome-oscillator-ao",
-   "name": "Awesome Oscillator (AO)"
+   "name": "Awesome Oscillator (AO)",
+   "default_period": 34
   },
   {
    "id": "tv-balance-of-power-bop",
-   "name": "Balance of Power (BOP)"
+   "name": "Balance of Power (BOP)",
+   "default_period": 14
   },
   {
    "id": "tv-bbtrend",
-   "name": "BBTrend"
+   "name": "BBTrend",
+   "default_period": 20
   },
   {
    "id": "bollinger",
-   "name": "Bollinger Bands (BB)"
+   "name": "Bollinger Bands (BB)",
+   "default_period": 20
   },
   {
    "id": "tv-bollinger-bands-b-b",
-   "name": "Bollinger Bands %b (%b)"
+   "name": "Bollinger Bands %b (%b)",
+   "default_period": 20
   },
   {
    "id": "tv-bollinger-bandwidth-bbw",
-   "name": "Bollinger BandWidth (BBW)"
+   "name": "Bollinger BandWidth (BBW)",
+   "default_period": 20
   },
   {
    "id": "tv-bull-bear-power",
-   "name": "Bull Bear Power"
+   "name": "Bull Bear Power",
+   "default_period": 13
   },
   {
    "id": "tv-chaikin-money-flow-cmf",
-   "name": "Chaikin Money Flow (CMF)"
+   "name": "Chaikin Money Flow (CMF)",
+   "default_period": 20
   },
   {
    "id": "tv-chaikin-oscillator",
-   "name": "Chaikin Oscillator"
+   "name": "Chaikin Oscillator",
+   "default_period": 10
   },
   {
    "id": "tv-chande-kroll-stop",
-   "name": "Chande Kroll Stop"
+   "name": "Chande Kroll Stop",
+   "default_period": 10
   },
   {
    "id": "tv-chande-momentum-oscillator-cmo",
-   "name": "Chande Momentum Oscillator (CMO)"
+   "name": "Chande Momentum Oscillator (CMO)",
+   "default_period": 14
   },
   {
    "id": "tv-chandelier-exit",
-   "name": "Chandelier Exit"
+   "name": "Chandelier Exit",
+   "default_period": 22
   },
   {
    "id": "tv-choppiness-index-chop",
-   "name": "Choppiness Index (CHOP)"
+   "name": "Choppiness Index (CHOP)",
+   "default_period": 14
   },
   {
    "id": "tv-commodity-channel-index-cci",
-   "name": "Commodity Channel Index (CCI)"
+   "name": "Commodity Channel Index (CCI)",
+   "default_period": 20
   },
   {
    "id": "tv-connors-rsi-crsi",
-   "name": "Connors RSI (CRSI)"
+   "name": "Connors RSI (CRSI)",
+   "default_period": 100
   },
   {
    "id": "tv-coppock-curve",
-   "name": "Coppock Curve"
+   "name": "Coppock Curve",
+   "default_period": 14
   },
   {
    "id": "tv-detrended-price-oscillator-dpo",
-   "name": "Detrended Price Oscillator (DPO)"
+   "name": "Detrended Price Oscillator (DPO)",
+   "default_period": 20
   },
   {
    "id": "tv-directional-movement-dmi",
-   "name": "Directional Movement (DMI)"
+   "name": "Directional Movement (DMI)",
+   "default_period": 14
   },
   {
    "id": "tv-donchian-channels-dc",
-   "name": "Donchian Channels (DC)"
+   "name": "Donchian Channels (DC)",
+   "default_period": 20
   },
   {
    "id": "tv-double-exponential-moving-average-ema",
-   "name": "Double Exponential Moving Average (EMA)"
+   "name": "Double Exponential Moving Average (EMA)",
+   "default_period": 9
   },
   {
    "id": "tv-ease-of-movement-eom",
-   "name": "Ease of Movement (EOM)"
+   "name": "Ease of Movement (EOM)",
+   "default_period": 14
   },
   {
    "id": "tv-elder-s-force-index-efi",
-   "name": "Elder's Force Index (EFI)"
+   "name": "Elder's Force Index (EFI)",
+   "default_period": 13
   },
   {
    "id": "tv-envelope-env",
-   "name": "Envelope (ENV)"
+   "name": "Envelope (ENV)",
+   "default_period": 20
   },
   {
    "id": "ema",
-   "name": "Exponential Moving Average"
+   "name": "Exponential Moving Average",
+   "default_period": 20
   },
   {
    "id": "tv-fisher-transform",
-   "name": "Fisher Transform"
+   "name": "Fisher Transform",
+   "default_period": 9
   },
   {
    "id": "tv-historical-volatility",
-   "name": "Historical Volatility"
+   "name": "Historical Volatility",
+   "default_period": 20
   },
   {
    "id": "tv-hull-moving-average",
-   "name": "Hull Moving Average"
+   "name": "Hull Moving Average",
+   "default_period": 9
   },
   {
    "id": "tv-ichimoku-cloud",
-   "name": "Ichimoku Cloud"
+   "name": "Ichimoku Cloud",
+   "default_period": 26
   },
   {
    "id": "tv-kaufman-s-adaptive-moving-average-kama",
-   "name": "Kaufman's Adaptive Moving Average (KAMA)"
+   "name": "Kaufman's Adaptive Moving Average (KAMA)",
+   "default_period": 10
   },
   {
    "id": "tv-keltner-channels-kc",
-   "name": "Keltner Channels (KC)"
+   "name": "Keltner Channels (KC)",
+   "default_period": 20
   },
   {
    "id": "tv-klinger-oscillator",
-   "name": "Klinger Oscillator"
+   "name": "Klinger Oscillator",
+   "default_period": 55
   },
   {
    "id": "tv-know-sure-thing-kst",
-   "name": "Know Sure Thing (KST)"
+   "name": "Know Sure Thing (KST)",
+   "default_period": 30
   },
   {
    "id": "tv-least-squares-moving-average",
-   "name": "Least Squares Moving Average"
+   "name": "Least Squares Moving Average",
+   "default_period": 25
   },
   {
    "id": "tv-linear-regression",
-   "name": "Linear Regression"
+   "name": "Linear Regression",
+   "default_period": 20
   },
   {
    "id": "tv-ma-cross",
-   "name": "MA Cross"
+   "name": "MA Cross",
+   "default_period": 9
   },
   {
    "id": "tv-mass-index",
-   "name": "Mass Index"
+   "name": "Mass Index",
+   "default_period": 25
   },
   {
    "id": "tv-mcginley-dynamic",
-   "name": "McGinley Dynamic"
+   "name": "McGinley Dynamic",
+   "default_period": 14
   },
   {
    "id": "tv-median",
-   "name": "Median"
+   "name": "Median",
+   "default_period": 9
   },
   {
    "id": "tv-momentum",
-   "name": "Momentum"
+   "name": "Momentum",
+   "default_period": 10
   },
   {
    "id": "tv-money-flow-mfi",
-   "name": "Money Flow (MFI)"
+   "name": "Money Flow (MFI)",
+   "default_period": 14
   },
   {
    "id": "macd",
-   "name": "Moving average convergence divergence (MACD) indicator"
+   "name": "Moving average convergence divergence (MACD) indicator",
+   "default_period": 9
   },
   {
    "id": "tv-moving-average-ribbon",
-   "name": "Moving Average Ribbon"
+   "name": "Moving Average Ribbon",
+   "default_period": 20
   },
   {
    "id": "tv-moving-averages",
-   "name": "Moving Averages"
+   "name": "Moving Averages",
+   "default_period": 20
   },
   {
    "id": "tv-movingavg-cross",
-   "name": "MovingAvg Cross"
+   "name": "MovingAvg Cross",
+   "default_period": 9
   },
   {
    "id": "tv-movingavg2line-cross",
-   "name": "MovingAvg2Line Cross"
+   "name": "MovingAvg2Line Cross",
+   "default_period": 9
   },
   {
    "id": "tv-negative-volume-index-nvi",
-   "name": "Negative Volume Index (NVI)"
+   "name": "Negative Volume Index (NVI)",
+   "default_period": 1
   },
   {
    "id": "tv-net-volume",
-   "name": "Net Volume"
+   "name": "Net Volume",
+   "default_period": 1
   },
   {
    "id": "tv-on-balance-volume-obv",
-   "name": "On Balance Volume (OBV)"
+   "name": "On Balance Volume (OBV)",
+   "default_period": 1
   },
   {
    "id": "tv-parabolic-sar-sar",
-   "name": "Parabolic SAR (SAR)"
+   "name": "Parabolic SAR (SAR)",
+   "default_period": 2
   },
   {
    "id": "tv-percentage-price-oscillator-ppo",
-   "name": "Percentage Price Oscillator (PPO)"
+   "name": "Percentage Price Oscillator (PPO)",
+   "default_period": 9
   },
   {
    "id": "tv-percentage-volume-oscillator-pvo",
-   "name": "Percentage Volume Oscillator (PVO)"
+   "name": "Percentage Volume Oscillator (PVO)",
+   "default_period": 9
   },
   {
    "id": "tv-performance",
-   "name": "Performance"
+   "name": "Performance",
+   "default_period": 1
   },
   {
    "id": "tv-pivot-points-high-low",
-   "name": "Pivot Points High Low"
+   "name": "Pivot Points High Low",
+   "default_period": 10
   },
   {
    "id": "tv-pivot-points-standard",
-   "name": "Pivot Points Standard"
+   "name": "Pivot Points Standard",
+   "default_period": 20
   },
   {
    "id": "tv-positive-volume-index-pvi",
-   "name": "Positive Volume Index (PVI)"
+   "name": "Positive Volume Index (PVI)",
+   "default_period": 1
   },
   {
    "id": "tv-price-momentum-oscillator-pmo",
-   "name": "Price Momentum Oscillator (PMO)"
+   "name": "Price Momentum Oscillator (PMO)",
+   "default_period": 35
   },
   {
    "id": "tv-price-volume-trend-pvt",
-   "name": "Price Volume Trend (PVT)"
+   "name": "Price Volume Trend (PVT)",
+   "default_period": 1
   },
   {
    "id": "tv-pring-s-special-k",
-   "name": "Pring's Special K"
+   "name": "Pring's Special K",
+   "default_period": 30
   },
   {
    "id": "tv-rank-correlation-index-rci",
-   "name": "Rank Correlation Index (RCI)"
+   "name": "Rank Correlation Index (RCI)",
+   "default_period": 9
   },
   {
    "id": "tv-rate-of-change-roc",
-   "name": "Rate of Change (ROC)"
+   "name": "Rate of Change (ROC)",
+   "default_period": 9
   },
   {
    "id": "tv-rci-ribbon",
-   "name": "RCI Ribbon"
+   "name": "RCI Ribbon",
+   "default_period": 9
   },
   {
    "id": "rsi",
-   "name": "Relative Strength Index (RSI)"
+   "name": "Relative Strength Index (RSI)",
+   "default_period": 14
   },
   {
    "id": "tv-relative-vigor-index",
-   "name": "Relative Vigor Index"
+   "name": "Relative Vigor Index",
+   "default_period": 10
   },
   {
    "id": "tv-relative-volatility-index",
-   "name": "Relative Volatility Index"
+   "name": "Relative Volatility Index",
+   "default_period": 14
   },
   {
    "id": "rsi-divergence",
-   "name": "RSI divergence indicator"
+   "name": "RSI divergence indicator",
+   "default_period": 14
   },
   {
    "id": "sma",
-   "name": "Simple Moving Average"
+   "name": "Simple Moving Average",
+   "default_period": 20
   },
   {
    "id": "tv-smi-ergodic-indicator",
-   "name": "SMI Ergodic Indicator"
+   "name": "SMI Ergodic Indicator",
+   "default_period": 20
   },
   {
    "id": "tv-smi-ergodic-oscillator",
-   "name": "SMI Ergodic Oscillator"
+   "name": "SMI Ergodic Oscillator",
+   "default_period": 20
   },
   {
    "id": "tv-smoothed-moving-average",
-   "name": "Smoothed Moving Average"
+   "name": "Smoothed Moving Average",
+   "default_period": 20
   },
   {
    "id": "tv-stochastic-stoch",
-   "name": "Stochastic (STOCH)"
+   "name": "Stochastic (STOCH)",
+   "default_period": 14
   },
   {
    "id": "tv-stochastic-momentum-index-smi",
-   "name": "Stochastic Momentum Index (SMI)"
+   "name": "Stochastic Momentum Index (SMI)",
+   "default_period": 14
   },
   {
    "id": "stochastic-rsi",
-   "name": "Stochastic RSI (STOCH RSI)"
+   "name": "Stochastic RSI (STOCH RSI)",
+   "default_period": 14
   },
   {
    "id": "tv-supertrend",
-   "name": "Supertrend"
+   "name": "Supertrend",
+   "default_period": 10
   },
   {
    "id": "tv-technical-ratings",
-   "name": "Technical Ratings"
+   "name": "Technical Ratings",
+   "default_period": 14
   },
   {
    "id": "tv-time-weighted-average-price",
-   "name": "Time Weighted Average Price"
+   "name": "Time Weighted Average Price",
+   "default_period": 1
   },
   {
    "id": "tv-trend-strength-index",
-   "name": "Trend Strength Index"
+   "name": "Trend Strength Index",
+   "default_period": 20
   },
   {
    "id": "tv-triple-ema",
-   "name": "Triple EMA"
+   "name": "Triple EMA",
+   "default_period": 9
   },
   {
    "id": "tv-trix",
-   "name": "TRIX"
+   "name": "TRIX",
+   "default_period": 18
   },
   {
    "id": "tv-true-strength-index",
-   "name": "True Strength Index"
+   "name": "True Strength Index",
+   "default_period": 25
   },
   {
    "id": "tv-ulcer-index",
-   "name": "Ulcer Index"
+   "name": "Ulcer Index",
+   "default_period": 14
   },
   {
    "id": "tv-ultimate-oscillator-uo",
-   "name": "Ultimate Oscillator (UO)"
+   "name": "Ultimate Oscillator (UO)",
+   "default_period": 28
   },
   {
    "id": "tv-up-down-volume",
-   "name": "Up/Down Volume"
+   "name": "Up/Down Volume",
+   "default_period": 1
   },
   {
    "id": "tv-volatility-stop",
-   "name": "Volatility Stop"
+   "name": "Volatility Stop",
+   "default_period": 20
   },
   {
    "id": "tv-volume",
-   "name": "Volume"
+   "name": "Volume",
+   "default_period": 1
   },
   {
    "id": "vwap",
-   "name": "Volume Weighted Average Price (VWAP)"
+   "name": "Volume Weighted Average Price (VWAP)",
+   "default_period": 1
   },
   {
    "id": "tv-volume-weighted-moving-average-vwma",
-   "name": "Volume-Weighted Moving Average (VWMA)"
+   "name": "Volume-Weighted Moving Average (VWMA)",
+   "default_period": 20
   },
   {
    "id": "tv-vortex-indicator",
-   "name": "Vortex Indicator"
+   "name": "Vortex Indicator",
+   "default_period": 14
   },
   {
    "id": "tv-weighted-moving-average",
-   "name": "Weighted Moving Average"
+   "name": "Weighted Moving Average",
+   "default_period": 9
   },
   {
    "id": "tv-williams-r-r",
-   "name": "Williams %R (%R)"
+   "name": "Williams %R (%R)",
+   "default_period": 14
   },
   {
    "id": "tv-williams-alligator",
-   "name": "Williams Alligator"
+   "name": "Williams Alligator",
+   "default_period": 13
   },
   {
    "id": "tv-williams-fractal",
-   "name": "Williams Fractal"
+   "name": "Williams Fractal",
+   "default_period": 2
   },
   {
    "id": "tv-woodies-cci",
-   "name": "Woodies CCI"
+   "name": "Woodies CCI",
+   "default_period": 14
   },
   {
    "id": "tv-zig-zag",
-   "name": "Zig Zag"
+   "name": "Zig Zag",
+   "default_period": 5
   }
  ]
 }

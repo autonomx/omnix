@@ -25,7 +25,14 @@ def full(length: int) -> list[MaybeNumber]:
 
 
 def safe_period(period: object, fallback: int = 14) -> int:
+    if isinstance(period, float) and period.is_integer():
+        period = int(period)
     return period if isinstance(period, int) and not isinstance(period, bool) and period > 0 else fallback
+
+
+def js_round(value: float) -> float:
+    """JavaScript ``Math.round``: halves round up (towards +infinity). Python's ``round`` rounds halves to even."""
+    return float(math.floor(value + 0.5))
 
 
 def js_sum(values: Values) -> float:
