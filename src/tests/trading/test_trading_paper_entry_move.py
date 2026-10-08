@@ -26,6 +26,7 @@ class MoveRepo(Repo):
     def __init__(self, events: list[str]) -> None:
         super().__init__(events)
         self.fail_replace: str | None = None
+        self.protections: Protections | None = None
         self.replaced = []
         entry = PaperOrder(
             account_id="paper-1",
@@ -51,12 +52,22 @@ class MoveRepo(Repo):
         if self.fail_replace:
             raise ValueError(self.fail_replace)
         self.replaced.append((order_id, replacement))
+        # As the repository does in the replacement's transaction: the pending stop follows the entry.
+        if self.protections is not None:
+            self.protections.values = [item.model_copy(update={"entry_order_id": replacement.order_id, "revision": item.revision + 1}) for item in self.protections.values]
         cancelled = self.current.open_orders[0].model_copy(update={"status": "cancelled"})
         return cancelled, PaperOrder(account_id=account_id, **replacement.model_dump())
 
 
-def _protections(events: list[str], *, entry_order_id: str = "entry-1") -> Protections:
-    protections = Protections(events)
+class MoveProtections(Protections):
+    def get(self, account_id, instrument_id, *, include_inactive=True):
+        return self.values[0]
+
+
+def _protections(events: list[str], *, entry_order_id: str = "entry-1", repo: MoveRepo | None = None) -> Protections:
+    protections = MoveProtections(events)
+    if repo is not None:
+        repo.protections = protections
     protections.values = [
         PaperPositionProtection(
             account_id="paper-1",
@@ -79,7 +90,7 @@ def _move(**overrides) -> dict[str, object]:
 def test_a_moved_entry_is_resized_to_the_same_risk_and_replaced_atomically() -> None:
     events: list[str] = []
     repo = MoveRepo(events)
-    protections = _protections(events)
+    protections = _protections(events, repo=repo)
     response = _client(repo, protections, DailyPnl()).post(URL, json=_move(), headers=HEADERS)
     assert response.status_code == 200, response.text
     body = response.json()
@@ -102,7 +113,7 @@ def test_a_failed_replacement_leaves_the_entry_and_its_stop_alone() -> None:
     events: list[str] = []
     repo = MoveRepo(events)
     repo.fail_replace = "paper_order_not_open: entry-1"
-    protections = _protections(events)
+    protections = _protections(events, repo=repo)
     response = _client(repo, protections).post(URL, json=_move(), headers=HEADERS)
     assert response.status_code == 409, response.text
     assert events == ["replace-entry:manual_risk"]
@@ -112,7 +123,7 @@ def test_a_failed_replacement_leaves_the_entry_and_its_stop_alone() -> None:
 def test_a_trailing_stop_moves_with_its_trail_and_a_triggered_stop_limit_stays() -> None:
     events: list[str] = []
     repo = MoveRepo(events)
-    protections = _protections(events)
+    protections = _protections(events, repo=repo)
     protections.values = [protections.values[0].model_copy(update={"trail_percent": Decimal("2")})]
     response = _client(repo, protections).post(URL, json=_move(), headers=HEADERS)
     assert response.status_code == 200, response.text

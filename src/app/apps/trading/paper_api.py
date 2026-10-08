@@ -383,7 +383,13 @@ def create_trading_paper_router(
             detail = str(exc)
             conflict = "not_open" in detail or "insufficient" in detail or "not_movable" in detail
             raise HTTPException(status_code=409 if conflict else 422, detail=detail) from exc
-        moved_protection = protection.model_copy(update={"entry_order_id": moved.order_id, "revision": protection.revision + 1})
+        # The protection as committed (the user may have edited its levels since the snapshot).
+        try:
+            moved_protection = await asyncio.to_thread(protection_repository_factory().get, account_id, order.instrument_id)
+        except ValueError:
+            moved_protection = None
+        if moved_protection is None:
+            moved_protection = protection.model_copy(update={"entry_order_id": moved.order_id, "revision": protection.revision + 1})
         return PaperRiskEntryMoveResult(preview=preview, cancelled=cancelled, order=moved, protection=moved_protection)
 
     @router.get(
