@@ -59,6 +59,7 @@
   @keyframes trading-paper-confirmation-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
   .trading-paper-notice{margin-top:-4px;border:1px solid;border-radius:6px;padding:7px 8px;font-size:9px;line-height:1.35;box-shadow:0 5px 18px color-mix(in srgb, var(--c-neutral-0) 18%, transparent)}
   .trading-paper-notice.success{border-color:color-mix(in srgb, var(--c-green-790-2) 25%, transparent);background:color-mix(in srgb, var(--c-teal-740) 10%, transparent);color:var(--c-teal-860)}
+  .trading-paper-notice.warning{border-color:color-mix(in srgb, var(--c-amber-620) 40%, transparent);background:color-mix(in srgb, var(--c-amber-620) 10%, transparent);color:var(--c-amber-770)}
   .trading-paper-notice.error{border-color:color-mix(in srgb, var(--c-red-720) 35%, transparent);background:color-mix(in srgb, var(--c-red-720) 10%, transparent);color:var(--c-red-810)}
   .trading-paper-create{display:grid;gap:9px;padding:14px;border:1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);border-radius:8px;background:color-mix(in srgb, var(--c-blue-660) 6%, transparent)}
   .trading-paper-create strong{color:var(--c-neutral-960);font-size:13px}.trading-paper-create>span{color:var(--c-slate-680);font-size:10px;line-height:1.45}

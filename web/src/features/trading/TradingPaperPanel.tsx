@@ -129,6 +129,14 @@ export function TradingPaperPanel({
   const timeInForceEnabled = !replayMode && orderType !== 'market';
   const effectiveTimeInForce: PaperTimeInForce = timeInForceEnabled ? timeInForce : 'gtc';
   const usesTriggerPrice = orderType === 'limit' || orderType === 'stop' || orderType === 'stop_limit';
+  // A stop already through the market is accepted, as plain stops always
+  // were: it triggers on the next price. The ticket says so before placing.
+  const stopTrigger = orderType === 'stop' || orderType === 'stop_limit' ? parsePositive(triggerPrice) : null;
+  const stopThroughMarket = stopTrigger !== null && (
+    side === 'buy'
+      ? askPrice !== null && stopTrigger <= askPrice
+      : bidPrice !== null && stopTrigger >= bidPrice
+  );
   const displayedQuantity = riskManagedEntry ? riskPreview?.recommended_quantity ?? '' : quantity;
   const tradeValue = riskManagedEntry
     ? (riskPreview ? Number(riskPreview.estimated_notional) : null)
@@ -315,7 +323,8 @@ export function TradingPaperPanel({
     const pricesMissing = (usesTriggerPrice && numericTrigger === null)
       || (orderType === 'stop_limit' && numericLimit === null)
       || (orderType === 'trailing_stop' && (numericTrail === null || (trailUnit === 'percent' && numericTrail >= 100)));
-    const expiryMissing = effectiveTimeInForce === 'gtd' && expiresIso === null;
+    const expiryMissing = effectiveTimeInForce === 'gtd'
+      && (expiresIso === null || new Date(expiresIso).getTime() <= Date.now());
     if (riskManagedEntry) {
       if (
         !stopLossEnabled
@@ -330,7 +339,7 @@ export function TradingPaperPanel({
       }
       if (expiryMissing) {
         setStatus('error');
-        setNotice({ kind: 'error', message: 'Choose when a good-till-date order expires.' });
+        setNotice({ kind: 'error', message: 'Choose a future time for a good-till-date order to expire.' });
         return;
       }
       if (!riskPreview?.allowed) {
@@ -605,6 +614,12 @@ export function TradingPaperPanel({
               </label>
             ) : null}
           </details>
+
+          {stopThroughMarket ? (
+            <div className="trading-paper-notice warning" role="note">
+              The stop is already {side === 'buy' ? 'at or below the ask' : 'at or above the bid'}: the order triggers at the next price.
+            </div>
+          ) : null}
 
           {riskManagedEntry && riskPreview && !riskPreview.allowed ? (
             <div className="trading-paper-notice error" role="alert">Risk blocked: {riskPreview.reason_codes.join(' · ')}</div>

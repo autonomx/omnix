@@ -249,6 +249,34 @@ describe('TradingPaperPanel', () => {
     })));
   });
 
+  it('warns when a stop or stop-limit is already through the market', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Stop' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Stop price' }), { target: { value: '76' } });
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Stop price' }), { target: { value: '75' } });
+    expect(screen.getByRole('note')).toHaveTextContent('The stop is already at or below the ask');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Stop limit' }));
+    expect(screen.getByRole('note')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Sell/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Stop price' }), { target: { value: '76' } });
+    expect(screen.getByRole('note')).toHaveTextContent('The stop is already at or above the bid');
+  });
+
+  it('refuses a good-till-date expiry in the past', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Sell/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Limit' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Limit price' }), { target: { value: '80' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Time in force' }), { target: { value: 'gtd' } });
+    fireEvent.change(screen.getByLabelText('Order expiry'), { target: { value: '2020-01-02T15:30' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sell 1 SOL\/USDT LIMIT/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('expiry');
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
+  });
+
   it('keeps replay tickets to market, limit and stop orders', async () => {
     useTradingStore.setState({ replayMode: true, replaySessionId: 3 });
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
