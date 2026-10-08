@@ -76,12 +76,13 @@ export function patternBars(bars: DrawingBarSeries, from: string, to: string): D
   const [start, end] = Date.parse(from) <= Date.parse(to) ? [from, to] : [to, from];
   const result: DrawingBar[] = [];
   const last = bars.indexAtOrBefore(end);
+  const startTime = Date.parse(start);
   for (let index = last; index >= 0; index -= 1) {
     const bar = bars.at(index);
-    if (!bar || Date.parse(bar.time) < Date.parse(start)) break;
-    result.unshift(bar);
+    if (!bar || Date.parse(bar.time) < startTime) break;
+    result.push(bar);
   }
-  return result;
+  return result.reverse();
 }
 
 /** Pixels per bar near `time`, from the chart's bar spacing (at least 1). */
@@ -152,12 +153,15 @@ export const barsPatternTool = defineDrawingTool({
 });
 
 /** Ghost candles along a sketched path: one bar per chart bar between anchors, each closing on the path. */
+export const MAX_GHOST_CANDLES = 300;
+
 export function ghostCandles(points: readonly DrawingPoint[], barsBetween: (from: DrawingPoint, to: DrawingPoint) => number): { time: number; open: number; high: number; low: number; close: number }[] {
   const candles: { time: number; open: number; high: number; low: number; close: number }[] = [];
   for (let segment = 1; segment < points.length; segment += 1) {
     const from = points[segment - 1];
     const to = points[segment];
-    const count = Math.max(1, barsBetween(from, to));
+    // Bounded: a path drawn far ahead on a higher interval must not become thousands of candles on a lower one.
+    const count = Math.min(MAX_GHOST_CANDLES, Math.max(1, barsBetween(from, to)));
     for (let step = 1; step <= count; step += 1) {
       const open = from.price + (to.price - from.price) * (step - 1) / count;
       const close = from.price + (to.price - from.price) * step / count;

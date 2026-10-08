@@ -1,18 +1,6 @@
 import { chartPalette } from '../../../chartPalette';
-import { tradingIntervalMinutes } from '../../../tradingIntervals';
 import { priceLine, rangeStats } from './ranges';
-import { DEFAULT_DRAWING_STYLE, defineDrawingTool, type DrawingPoint } from '../types';
-
-/** "Δprice (Δ%) bars" between two anchors, for the measurement label. */
-export function measurementLabel(first: DrawingPoint, second: DrawingPoint, interval: string): string {
-  const delta = second.price - first.price;
-  const percent = first.price === 0 ? 0 : delta / first.price * 100;
-  const intervalMinutes = tradingIntervalMinutes(interval) ?? 1;
-  const durationMinutes = Math.abs(Date.parse(second.time) - Date.parse(first.time)) / 60_000;
-  const bars = Number.isFinite(durationMinutes) ? Math.max(1, Math.round(durationMinutes / intervalMinutes)) : 1;
-  const formatValue = (value: number) => Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
-  return `${delta < 0 ? '-' : ''}${formatValue(delta)} (${percent < 0 ? '-' : ''}${Math.abs(percent).toFixed(2)}%) ${bars.toLocaleString()}`;
-}
+import { DEFAULT_DRAWING_STYLE, defineDrawingTool } from '../types';
 
 export const measurementTool = defineDrawingTool({
   id: 'measurement',

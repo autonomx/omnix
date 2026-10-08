@@ -44,15 +44,17 @@ export function riskReward(levels: Pick<PositionLevels, 'entry' | 'stop' | 'targ
 export type PositionOutcome =
   | { state: 'waiting' }
   | { state: 'open'; price: number; pnl: number }
+  | { state: 'ended'; price: number; pnl: number }
   | { state: 'closed'; at: 'target' | 'stop'; price: number; pnl: number };
 
 /**
- * What happened to the position on the loaded bars: it opens on the first bar from the entry time, then closes at
- * the target or the stop, whichever a bar reaches first (the stop when one bar reaches both, as the cautious
- * reading), or stays open at the last close. Bars after the right edge don't count.
+ * What happened to the position on the loaded bars, as its limit order would: it opens on the first bar from the
+ * entry time whose range reaches the entry price, then closes at the target or the stop, whichever a bar reaches
+ * first (the stop when one bar reaches both, as the cautious reading). Without either it is open at the last close,
+ * or `ended` once bars pass the right edge. `pointValue` turns price into money (1 when unknown).
  */
-export function positionOutcome(side: PositionSide, levels: PositionLevels, quantity: number, bars: DrawingBarSeries): PositionOutcome {
-  const direction = side === 'long' ? 1 : -1;
+export function positionOutcome(side: PositionSide, levels: PositionLevels, quantity: number, bars: DrawingBarSeries, pointValue: number | null = 1): PositionOutcome {
+  const direction = (side === 'long' ? 1 : -1) * (pointValue ?? 1);
   const start = Date.parse(levels.start);
   const end = Date.parse(levels.end);
   const first = bars.indexAtOrBefore(levels.start);
@@ -60,9 +62,15 @@ export function positionOutcome(side: PositionSide, levels: PositionLevels, quan
   const firstBar = bars.at(index);
   if (firstBar && Date.parse(firstBar.time) < start) index += 1;
   let last: number | null = null;
+  let opened = false;
   for (; index < bars.length; index += 1) {
     const bar = bars.at(index);
-    if (!bar || Date.parse(bar.time) > end) break;
+    if (!bar) break;
+    if (Date.parse(bar.time) > end) return opened && last !== null ? { state: 'ended', price: last, pnl: (last - levels.entry) * direction * quantity } : { state: 'waiting' };
+    if (!opened) {
+      if (bar.low > levels.entry || bar.high < levels.entry) continue;
+      opened = true;
+    }
     const stopped = side === 'long' ? bar.low <= levels.stop : bar.high >= levels.stop;
     const reached = side === 'long' ? bar.high >= levels.target : bar.low <= levels.target;
     if (stopped) return { state: 'closed', at: 'stop', price: levels.stop, pnl: (levels.stop - levels.entry) * direction * quantity };
@@ -127,16 +135,18 @@ function positionGeometry(side: PositionSide, context: DrawingGeometryContext): 
     ];
   };
   const targetAbove = targetPoint.y < entryPoint.y;
-  const outcome = positionOutcome(side, levels, quantity, context.bars);
+  const pointValue = context.instrument.pointValue ?? 1;
+  const outcome = positionOutcome(side, levels, quantity, context.bars, pointValue);
   const shapes: DrawingShape[] = [
     box(entryPoint.y, targetPoint.y, PROFIT),
     box(entryPoint.y, stopPoint.y, LOSS),
     { kind: 'segment', x1: left, y1: entryPoint.y, x2: right, y2: entryPoint.y, stroke: '#787b86', strokeWidth: 1, hit: 'none' },
-    ...label(targetPoint.y, `Target: ${context.formatPrice(levels.target)} (${percentOf(levels.target - levels.entry, levels.entry)})${ticks(levels.entry, levels.target)}, Amount: ${money((levels.target - levels.entry) * (side === 'long' ? 1 : -1) * quantity, context.formatPrice)}`, PROFIT, targetAbove),
-    ...label(stopPoint.y, `Stop: ${context.formatPrice(levels.stop)} (${percentOf(levels.stop - levels.entry, levels.entry)})${ticks(levels.entry, levels.stop)}, Amount: ${money((levels.stop - levels.entry) * (side === 'long' ? 1 : -1) * quantity, context.formatPrice)}`, LOSS, !targetAbove),
+    ...label(targetPoint.y, `Target: ${context.formatPrice(levels.target)} (${percentOf(levels.target - levels.entry, levels.entry)})${ticks(levels.entry, levels.target)}, Amount: ${money((levels.target - levels.entry) * (side === 'long' ? 1 : -1) * quantity * pointValue, context.formatPrice)}`, PROFIT, targetAbove),
+    ...label(stopPoint.y, `Stop: ${context.formatPrice(levels.stop)} (${percentOf(levels.stop - levels.entry, levels.entry)})${ticks(levels.entry, levels.stop)}, Amount: ${money((levels.stop - levels.entry) * (side === 'long' ? 1 : -1) * quantity * pointValue, context.formatPrice)}`, LOSS, !targetAbove),
   ];
   const result = outcome.state === 'waiting' ? null
     : outcome.state === 'open' ? `Open P&L: ${money(outcome.pnl, context.formatPrice)}`
+      : outcome.state === 'ended' ? `P&L at end: ${money(outcome.pnl, context.formatPrice)}`
       : `Closed P&L: ${money(outcome.pnl, context.formatPrice)} (${outcome.at})`;
   const summary = [
     result,
@@ -153,15 +163,37 @@ function positionGeometry(side: PositionSide, context: DrawingGeometryContext): 
   return shapes;
 }
 
-/** Handles: the entry (moves it in price and time), the stop and the target (price only), the right edge (time only). */
-function positionHandles(context: DrawingGeometryContext): DrawingHandle[] {
+/** `price` kept strictly on `side` of `entry` (`above` for a long's target and a short's stop). */
+export function keepSide(price: number, entry: number, above: boolean, tick: number | null): number {
+  const gap = tick ?? Math.max(Math.abs(entry) * 1e-6, 1e-9);
+  return above ? Math.max(price, entry + gap) : Math.min(price, entry - gap);
+}
+
+/**
+ * Handles: the entry (moves it in price and time), the stop and the target (price only, each kept on its side of
+ * the entry), the right edge (time only).
+ */
+function positionHandles(side: PositionSide, context: DrawingGeometryContext): DrawingHandle[] {
   const [entry, stop, target] = context.points;
   if (!entry || !stop || !target) return [];
   const left = Math.min(entry.x, stop.x);
+  const long = side === 'long';
+  const tick = context.instrument.tickSize;
   return [
-    { id: 'entry', x: left, y: entry.y, drag: ({ points, point }) => ({ points: [{ ...points[0], time: point.time, price: point.price }, points[1], points[2]] }) },
-    { id: 'stop', x: left, y: stop.y, drag: ({ points, point }) => ({ points: [points[0], { ...points[1], price: point.price }, points[2]] }) },
-    { id: 'target', x: left, y: target.y, drag: ({ points, point }) => ({ points: [points[0], points[1], { ...points[2], price: point.price }] }) },
+    {
+      id: 'entry',
+      x: left,
+      y: entry.y,
+      drag: ({ points, point }) => {
+        // Between the stop and the target.
+        const low = Math.min(points[1].price, points[2].price);
+        const high = Math.max(points[1].price, points[2].price);
+        const price = Math.min(keepSide(point.price, low, true, tick), keepSide(point.price, high, false, tick));
+        return { points: [{ ...points[0], time: point.time, price }, points[1], points[2]] };
+      },
+    },
+    { id: 'stop', x: left, y: stop.y, drag: ({ points, point }) => ({ points: [points[0], { ...points[1], price: keepSide(point.price, points[0].price, !long, tick) }, points[2]] }) },
+    { id: 'target', x: left, y: target.y, drag: ({ points, point }) => ({ points: [points[0], points[1], { ...points[2], price: keepSide(point.price, points[0].price, long, tick) }] }) },
     {
       id: 'width',
       x: Math.max(entry.x, stop.x),
@@ -182,7 +214,7 @@ function positionTool<const Id extends string>(id: Id, side: PositionSide, label
       { key: 'accountSize', label: 'Account size', type: 'number', min: 0, step: 100 },
       { key: 'riskPercent', label: 'Risk %', type: 'number', min: 0, max: 100, step: 0.25 },
     ],
-    handles: positionHandles,
+    handles: (context) => positionHandles(side, context),
     onCreate: ([entry], services) => {
       const { stop, target } = defaultLevels(side, entry, services);
       const end = services.timeAfterBars(entry.time, 30) ?? new Date(Date.parse(entry.time) + 30 * 60_000).toISOString();

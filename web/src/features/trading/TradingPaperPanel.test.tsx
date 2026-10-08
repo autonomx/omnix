@@ -26,6 +26,8 @@ vi.mock('./tradingReplayApi', () => ({ tradingReplayApi: replayApi }));
 vi.mock('./tradingApi', () => ({ tradingApi }));
 
 import { TradingPaperPanel } from './TradingPaperPanel';
+import { requestPaperTicket } from './paperTicketRequests';
+import { act } from '@testing-library/react';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 
@@ -119,6 +121,27 @@ describe('TradingPaperPanel', () => {
     useTradingStore.setState({ replayMode: false });
     useTradingReplayStore.getState().clear();
     vi.clearAllMocks();
+  });
+
+  it('fills the real ticket from a long position drawing: limit price, stop, target (TVP-3.6)', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await screen.findByRole('switch', { name: 'Enable stop loss' });
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'buy', entry: 75, stop: 74, target: 78, quantity: 40 }));
+    expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('75');
+    expect(screen.getByRole('textbox', { name: 'Stop loss price' })).toHaveValue('74');
+    await waitFor(() => expect(paperApi.riskPreview).toHaveBeenCalledWith('paper-1', expect.objectContaining({ entry_price: '75', stop_price: '74' })));
+    expect(paperApi.placeRiskOrder).not.toHaveBeenCalled();
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('fills a short position as a plain limit sell with its quantity and no protection (TVP-3.6)', async () => {
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await screen.findByRole('switch', { name: 'Enable stop loss' });
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'sell', entry: 80, stop: 85, target: 70, quantity: 2 }));
+    expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('80');
+    expect(screen.getByRole('textbox', { name: 'Order quantity' })).toHaveValue('2');
+    expect(screen.queryByRole('textbox', { name: 'Stop loss price' })).toBeNull();
+    expect(screen.getByText(/add them after it fills/)).toBeInTheDocument();
   });
 
   it('shows the server rejection when a risk-sized order cannot be funded', async () => {

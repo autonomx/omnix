@@ -3,8 +3,8 @@ import { parsePaperTicketRequest } from '../../../paperTicketRequests';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from '../registry';
 import { pointAt, runTool, testServices } from '../testing';
 import type { DrawingBarSeries, DrawingProperties, DrawingShape, DrawingToolServices } from '../types';
-import { positionLevels, positionOutcome, positionQuantity, riskReward } from './positions';
-import { forecastState, ghostCandles, patternBars, sectorPoints } from './projections';
+import { keepSide, positionLevels, positionOutcome, positionQuantity, riskReward } from './positions';
+import { MAX_GHOST_CANDLES, forecastState, ghostCandles, patternBars, sectorPoints } from './projections';
 import { formatSpan, formatVolume, rangeStats, volumeBetween } from './ranges';
 import { rangeVolumeProfile } from './volumeProfile';
 
@@ -46,6 +46,23 @@ describe('long and short position (TVP-3.6)', () => {
     expect(positionOutcome('short', { ...levels, stop: 105, target: 90 }, 2, series([...flat(2), { open: 100, high: 101, low: 89, close: 90 }]))).toEqual({ state: 'closed', at: 'target', price: 90, pnl: 20 });
     // Before the entry time there is nothing yet.
     expect(positionOutcome('long', { ...levels, start: pointAt(50, 0).time, end: pointAt(60, 0).time }, 4, rising)).toEqual({ state: 'waiting' });
+  });
+
+  it('opens only once a bar reaches the entry, and ends at the right edge', () => {
+    const levels = { entry: 90, stop: 85, target: 110, start: pointAt(1, 0).time, end: pointAt(3, 0).time };
+    // Price stays around 100: the limit at 90 never fills.
+    expect(positionOutcome('long', levels, 4, series(flat(10)))).toEqual({ state: 'waiting' });
+    const dip = series([...flat(2), { open: 95, high: 96, low: 89, close: 92 }, { open: 92, high: 95, low: 91, close: 94 }, ...flat(5)]);
+    expect(positionOutcome('long', levels, 4, dip)).toEqual({ state: 'ended', price: 94, pnl: 16 });
+    // The point value turns price into money.
+    // Still inside its window at the last loaded bar: open, at the last close.
+    expect(positionOutcome('long', { ...levels, end: pointAt(100, 0).time }, 4, dip, 10)).toEqual({ state: 'open', price: 100, pnl: 400 });
+  });
+
+  it('keeps the stop and target on their side of the entry while dragged', () => {
+    expect(keepSide(105, 100, false, 0.5)).toBe(99.5);
+    expect(keepSide(95, 100, false, 0.5)).toBe(95);
+    expect(keepSide(99, 100, true, null)).toBeGreaterThan(100);
   });
 
   it('one click creates entry, stop and target from the recent bar ranges', () => {
@@ -136,6 +153,8 @@ describe('forecasting (TVP-3.6)', () => {
     expect(many[0].open).toBe(100);
     expect(many.every((candle) => candle.high >= Math.max(candle.open, candle.close) && candle.low <= Math.min(candle.open, candle.close))).toBe(true);
     expect(only(runTool('ghost-feed', [[0, 900], [4, 880]]).shapes, 'rect')).toHaveLength(4);
+    // A path far ahead on a lower interval stays bounded.
+    expect(ghostCandles([pointAt(0, 900), pointAt(100_000, 880)], () => 100_000)).toHaveLength(MAX_GHOST_CANDLES);
   });
 
   it('sector spans from the first radius to the second direction', () => {

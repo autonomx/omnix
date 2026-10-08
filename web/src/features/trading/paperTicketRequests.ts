@@ -26,19 +26,22 @@ export function parsePaperTicketRequest(payload: unknown): PaperTicketPrefill | 
   return { instrumentId: value.instrumentId, side: value.side, entry, stop: positive(value.stop), target: positive(value.target), quantity: positive(value.quantity) };
 }
 
-let pending: PaperTicketPrefill | null = null;
+/** A pre-fill the panel doesn't take within this long is dropped: it never fills a ticket much later. */
+export const PREFILL_LIFETIME_MS = 10_000;
+
+let pending: { prefill: PaperTicketPrefill; at: number } | null = null;
 const listeners = new Set<() => void>();
 
-export function requestPaperTicket(prefill: PaperTicketPrefill): void {
-  pending = prefill;
+export function requestPaperTicket(prefill: PaperTicketPrefill, now = Date.now()): void {
+  pending = { prefill, at: now };
   for (const listener of listeners) listener();
 }
 
-/** Takes the pending pre-fill (once). */
-export function takePaperTicketPrefill(): PaperTicketPrefill | null {
+/** Takes the pending pre-fill (once), unless it is older than `PREFILL_LIFETIME_MS`. */
+export function takePaperTicketPrefill(now = Date.now()): PaperTicketPrefill | null {
   const taken = pending;
   pending = null;
-  return taken;
+  return taken && now - taken.at <= PREFILL_LIFETIME_MS ? taken.prefill : null;
 }
 
 export function onPaperTicketRequest(listener: () => void): () => void {
@@ -65,6 +68,9 @@ export type PaperTicketForm = {
   setTicketTab: (tab: 'order') => void;
   setSide: (side: 'buy' | 'sell') => void;
   setOrderType: (type: 'limit') => void;
+  /** A limit order's price (the panel's "Limit price" field). */
+  setTriggerPrice: (value: string) => void;
+  /** Only a stop-limit's second price; cleared. */
   setLimitPrice: (value: string) => void;
   setStopLossEnabled: (enabled: boolean) => void;
   setStopLoss: (value: string) => void;
@@ -73,14 +79,20 @@ export type PaperTicketForm = {
   setQuantity: (value: string) => void;
 };
 
+/** How the panel will place this order: a risk-managed entry carries stop and target and sizes the quantity itself. */
+export type PaperTicketMode = { riskManaged: boolean; riskPercent: string };
+
 /**
- * Fills the ticket from a pre-fill: a limit order at the entry with its stop and target as protection, and the
- * drawing's quantity. Returns the notice to show; a drawing on another symbol fills nothing.
+ * Fills the ticket from a pre-fill: a limit order at the entry. A risk-managed entry (a buy outside replay) also
+ * gets the stop and target, and the account's risk rule sizes it; any other order gets the drawing's quantity and
+ * no protection, since the panel can't send it, and the notice says so. Returns the notice to show; a drawing on
+ * another symbol fills nothing.
  */
 export function applyPaperTicketPrefill(
   prefill: PaperTicketPrefill,
   instrumentId: string,
   form: PaperTicketForm,
+  mode: PaperTicketMode,
   symbolOf: (instrumentId: string) => string = (id) => id,
 ): { kind: 'success' | 'error'; message: string } {
   if (prefill.instrumentId !== instrumentId) {
@@ -89,13 +101,18 @@ export function applyPaperTicketPrefill(
   form.setTicketTab('order');
   form.setSide(prefill.side);
   form.setOrderType('limit');
-  form.setLimitPrice(String(prefill.entry));
-  form.setStopLossEnabled(prefill.stop !== null);
-  form.setStopLoss(prefill.stop === null ? '' : String(prefill.stop));
-  form.setTakeProfitEnabled(prefill.target !== null);
-  form.setTakeProfit(prefill.target === null ? '' : String(prefill.target));
-  if (prefill.quantity !== null) form.setQuantity(String(Number(prefill.quantity.toPrecision(6))));
-  return { kind: 'success', message: 'Ticket filled from the position drawing. Check it, then place the order.' };
+  form.setTriggerPrice(String(prefill.entry));
+  form.setLimitPrice('');
+  const protect = mode.riskManaged;
+  form.setStopLossEnabled(protect && prefill.stop !== null);
+  form.setStopLoss(protect && prefill.stop !== null ? String(prefill.stop) : '');
+  form.setTakeProfitEnabled(protect && prefill.target !== null);
+  form.setTakeProfit(protect && prefill.target !== null ? String(prefill.target) : '');
+  if (!protect && prefill.quantity !== null) form.setQuantity(String(Number(prefill.quantity.toPrecision(6))));
+  const detail = protect
+    ? `The account's ${mode.riskPercent}% risk rule sizes the quantity.`
+    : 'This order can\'t carry a stop and target: add them after it fills.';
+  return { kind: 'success', message: `Ticket filled from the position drawing. ${detail} Check it, then place the order.` };
 }
 
 /** Panel side: calls `apply` with each pre-fill, also one left before the panel mounted. */

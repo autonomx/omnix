@@ -102,8 +102,8 @@ export function TradingPaperPanel({
 
   // A long or short position drawing's "Create order" fills the ticket (TVP-3.6); the user still confirms it.
   usePaperTicketPrefill((prefill) => setNotice(applyPaperTicketPrefill(prefill, instrumentId, {
-    setTicketTab, setSide, setOrderType, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
-  }, displaySymbol)));
+    setTicketTab, setSide, setOrderType, setTriggerPrice, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
+  }, { riskManaged: !replayMode && prefill.side === 'buy', riskPercent: riskPct }, displaySymbol)));
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);
@@ -608,7 +608,7 @@ export function TradingPaperPanel({
             <strong>{side === 'buy' ? 'Buy' : 'Sell'}</strong>
             <span>{displayedQuantity || '0'} {symbol} {paperOrderTypeLabel(orderType).toUpperCase()}</span>
           </button>
-          {notice?.kind === 'error' ? <div className="trading-paper-notice error" role="alert" aria-live="polite">{notice.message}</div> : null}
+          {notice ? <div className={`trading-paper-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live="polite">{notice.message}</div> : null}
           <small className="trading-paper-disclaimer">Paper only · server-authoritative risk · no live brokerage execution</small>
         </div>
       ) : (

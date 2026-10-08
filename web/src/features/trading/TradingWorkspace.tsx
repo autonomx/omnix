@@ -101,7 +101,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
-  usePaperTicketRequests(() => setSidePanelTab('paper'));
   const [pineIndicatorId, setPineIndicatorId] = useState<CoreIndicatorId | null>(null);
   const [paperAccountId, setPaperAccountId] = useState<string | null>(null);
   const persistence = useTradingWorkspacePersistence();
@@ -353,6 +352,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setToolPanelFullscreen(false);
     setToolPanel(null);
   };
+  usePaperTicketRequests(openPaperTrading);
 
   const openResearchPanel = () => {
     setSidePanelTab('research');
