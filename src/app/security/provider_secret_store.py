@@ -15,7 +15,8 @@ import json
 import os
 import sys
 import threading
-from collections.abc import Callable, Iterator
+import time
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from ctypes import wintypes
 from pathlib import Path
@@ -181,19 +182,52 @@ def _unprotect(value: bytes) -> bytes:
         kernel32.LocalFree(result.pbData)
 
 
-def _stored_payload() -> dict[str, Any]:
+class ProviderSecretStoreUnavailable(RuntimeError):
+    """The protected store exists but cannot be read now.
+
+    A write must never start from an unreadable store (it would replace every
+    stored credential), and a reader must not mistake it for an empty store.
+    """
+
+
+def _read_payload(*, strict: bool) -> dict[str, Any]:
     path = provider_secret_path()
+    if not path.exists():
+        return {}
     try:
-        raw = path.read_bytes()
-    except OSError:
+        # Writers replace the file under this lock; reading under it too means a
+        # reader never holds the file open while a writer swaps it (Windows).
+        with payload_lock():
+            raw = path.read_bytes()
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        if strict:
+            raise ProviderSecretStoreUnavailable("the protected credential store cannot be read") from exc
         return {}
     if raw == _ENVIRONMENT_OWNED_MARKER:
         return {}
     try:
         payload = json.loads(_unprotect(raw).decode("utf-8"))
-    except (OSError, UnicodeError, ValueError, LegacyPersistenceRetired):
+    except (OSError, UnicodeError, ValueError, LegacyPersistenceRetired) as exc:
+        if strict:
+            raise ProviderSecretStoreUnavailable("the protected credential store cannot be decrypted") from exc
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        if strict:
+            raise ProviderSecretStoreUnavailable("the protected credential store is not a JSON object")
+        return {}
+    return payload
+
+
+def _stored_payload() -> dict[str, Any]:
+    """Lenient read for credential lookups: an unreadable store reads as empty."""
+    return _read_payload(strict=False)
+
+
+def _stored_payload_strict() -> dict[str, Any]:
+    """Read before a write, or where absent and unreadable must differ: failures raise."""
+    return _read_payload(strict=True)
 
 
 def _stored_payload_for_import() -> dict[str, Any]:
@@ -224,7 +258,18 @@ def _write_payload(payload: dict[str, Any]) -> None:
     protected = _protect(json.dumps(payload, sort_keys=True).encode("utf-8"))
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_bytes(protected)
-    os.replace(temporary, path)
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            # Another process (an older reader, an indexer or antivirus) has the file open.
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(0.01 * 2**attempt)
+
+
+_REPLACE_ATTEMPTS = 8
 
 
 def _stored_api_keys() -> dict[str, str]:
@@ -382,7 +427,7 @@ def save_provider_secrets(payload: dict[str, Any]) -> None:
         _save_environment_owned_marker(incoming)
         return
 
-    stored_payload = _stored_payload()
+    stored_payload = _stored_payload_strict()
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
         if environment().get(environment_key, "").strip():
@@ -420,7 +465,7 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
             )
         return
 
-    stored_payload = _stored_payload()
+    stored_payload = _stored_payload_strict()
     api_keys = _stored_research_api_keys()
     if requested:
         api_keys[provider] = requested
@@ -430,8 +475,8 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
     _write_payload(stored_payload)
 
 
-def _stored_alert_webhooks() -> dict[str, dict[str, str]]:
-    entries = _stored_payload().get("alert_webhooks")
+def _alert_webhooks(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    entries = payload.get("alert_webhooks")
     if not isinstance(entries, dict):
         return {}
     return {
@@ -442,8 +487,12 @@ def _stored_alert_webhooks() -> dict[str, dict[str, str]]:
 
 
 def load_alert_webhook(ref: str) -> dict[str, str] | None:
-    """One alert webhook's destination and signing secret (TVP-1.2), by its reference."""
-    return _stored_alert_webhooks().get(ref)
+    """One alert webhook's destination and signing secret (TVP-1.2), by its reference.
+
+    Raises ProviderSecretStoreUnavailable when the store cannot be read: a
+    webhook must never look absent because a read failed.
+    """
+    return _alert_webhooks(_stored_payload_strict()).get(ref)
 
 
 @_serialized
@@ -455,21 +504,26 @@ def save_alert_webhook(ref: str, url: str, secret: str) -> None:
     """
     if sys.platform != "win32":
         raise LegacyPersistenceRetired("alert webhooks require an operating-system credential store")
-    stored_payload = _stored_payload()
-    entries = _stored_alert_webhooks()
+    stored_payload = _stored_payload_strict()
+    entries = _alert_webhooks(stored_payload)
     entries[ref] = {"url": url, "secret": secret}
     stored_payload["alert_webhooks"] = entries
     _write_payload(stored_payload)
 
 
 @_serialized
-def delete_alert_webhooks(prefix: str, *, keep: str | None = None) -> None:
-    """Remove the webhooks stored under ``prefix`` (one alert's), except ``keep``."""
+def delete_alert_webhooks(refs: Iterable[str] = (), *, prefix: str | None = None, keep: str | None = None) -> None:
+    """Remove the given references, and with ``prefix`` every reference under it except ``keep``."""
     if sys.platform != "win32":
         return
-    stored_payload = _stored_payload()
-    entries = _stored_alert_webhooks()
-    remaining = {ref: entry for ref, entry in entries.items() if ref == keep or not ref.startswith(prefix)}
+    stored_payload = _stored_payload_strict()
+    entries = _alert_webhooks(stored_payload)
+    doomed = set(refs)
+    remaining = {
+        ref: entry
+        for ref, entry in entries.items()
+        if ref == keep or (ref not in doomed and not (prefix is not None and ref.startswith(prefix)))
+    }
     if len(remaining) == len(entries):
         return
     stored_payload["alert_webhooks"] = remaining
@@ -506,7 +560,7 @@ def save_trading_provider_secrets(
                 )
         return
 
-    stored_payload = _stored_payload()
+    stored_payload = _stored_payload_strict()
     all_credentials = stored_payload.get("trading_credentials")
     all_credentials = dict(all_credentials) if isinstance(all_credentials, dict) else {}
     current = dict(all_credentials.get(provider) or {})
