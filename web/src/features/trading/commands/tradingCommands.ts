@@ -85,7 +85,8 @@ export const TRADING_COMMANDS = [
   { id: 'drawing.rectangle', label: 'Rectangle tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+shift+r'] },
   { id: 'drawing.copy', label: 'Copy selected drawings', group: 'Drawings', scope: 'drawing', defaultKeys: ['mod+c'], keyContext: 'chart' },
   { id: 'drawing.paste', label: 'Paste drawings', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+v'], keyContext: 'chart' },
-  { id: 'drawing.hideAll', label: 'Hide or show all drawings', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+alt+h'] },
+  // TradingView's Ctrl+Alt+H (Ctrl on macOS too, where ⌘⌥H hides other apps); see decision TVP-2.2 (keys).
+  { id: 'drawing.hideAll', label: 'Hide or show all drawings', group: 'Drawings', scope: 'chart', defaultKeys: ['ctrl+alt+h'] },
   { id: 'drawing.nudgeLeft', label: 'Move selected drawings one bar left', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowleft'], keyContext: 'chart', repeatable: true, shadows: ['chart.moveLeft'] },
   { id: 'drawing.nudgeRight', label: 'Move selected drawings one bar right', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowright'], keyContext: 'chart', repeatable: true, shadows: ['chart.moveRight'] },
   { id: 'drawing.nudgeUp', label: 'Move selected drawings up', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowup'], keyContext: 'chart', repeatable: true },
@@ -239,6 +240,9 @@ export function rebindProblem(
   const parsed = parseHotkey(hotkey);
   const { key } = parsed;
   if (!key) return 'Press a key.';
+  // A command's own default (reviewed with the catalogue: Tab between charts, TradingView's Ctrl+Alt+H) can always be restored.
+  const isDefault = definition.defaultKeys.some((key) => normalizeHotkey(key) === normalizeHotkey(hotkey));
+  if (isDefault) return null;
   if (plain && FOCUS_KEYS.has(key)) return 'Enter, Space, Tab and Escape need Ctrl, Alt or ⌘: on their own they work buttons, focus and dialogs.';
   if (plain && !definition.keyContext) return 'Keys without Ctrl, Alt or ⌘ are only for commands that act on the chart. Add a modifier.';
   if ((parsed.mod || parsed.ctrl) && parsed.alt) return 'Ctrl+Alt is AltGr on many keyboards, which types characters such as @ or {. Use Ctrl or Alt, not both.';

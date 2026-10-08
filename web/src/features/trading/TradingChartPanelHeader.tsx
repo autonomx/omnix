@@ -91,7 +91,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
                 <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
                 {drawingToolDefinition(selectedDrawing.toolType)?.editableText ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
                 <DrawingPropertiesButton key={selectedDrawing.drawingId} drawing={selectedDrawing} onChange={(properties, mergeKey) => drawings.updateSelected({ properties }, mergeKey)} />
-                <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawing">×</button>
+                <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawings" title="Delete selected drawings">×</button>
               </>
             ) : null}
           </div>

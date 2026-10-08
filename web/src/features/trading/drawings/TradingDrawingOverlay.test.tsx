@@ -430,6 +430,28 @@ describe('selection gestures (TVP-2.2)', () => {
     expect(handlers.onSelect).toHaveBeenCalledWith('trend-line-1');
   });
 
+  it('a press that moves less than the drag threshold is still a click', () => {
+    const onToggleSelect = vi.fn();
+    const onCloneDrawings = vi.fn();
+    const { svg } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], onToggleSelect, onCloneDrawings });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, ctrlKey: true, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 202, clientY: 201, ctrlKey: true });
+    expect(svg.querySelector('g[data-drawing-id="trend-line-1#clone"]')).toBeNull();
+    fireEvent.pointerUp(window, { clientX: 202, clientY: 201, ctrlKey: true });
+    expect(onToggleSelect).toHaveBeenCalledWith('trend-line-1');
+    expect(onCloneDrawings).not.toHaveBeenCalled();
+  });
+
+  it('a locked drawing in the selection stays put in the drag preview', () => {
+    const first = { ...drawing('trend-line', [[100, 300], [300, 100]]), selected: true };
+    const locked = { ...drawing('trend-line', [[100, 500], [300, 400]], { drawingId: 'locked', locked: true }), selected: true };
+    const { svg } = renderOverlay({ drawings: [first, locked], selectedId: 'trend-line-1' });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 230, clientY: 200 });
+    expect(lineOf(svg, 'locked')).toHaveAttribute('x1', '100');
+    fireEvent.pointerUp(window, { clientX: 230, clientY: 200 });
+  });
+
   it('hides every drawing while all drawings are hidden', () => {
     const { svg } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], allHidden: true });
     expect(svg.querySelector('[data-drawing-id]')).toBeNull();

@@ -67,8 +67,9 @@ export function normalizeDrawing(drawing: TradingDrawing): TradingDrawing {
   };
 }
 
+/** Copies for the undo history: selection is not part of a drawing's history, so copies are unselected. */
 function copyAll(drawings: TradingDrawing[]): TradingDrawing[] {
-  return drawings.map(normalizeDrawing);
+  return drawings.map((drawing) => ({ ...normalizeDrawing(drawing), selected: false }));
 }
 
 function snapshot(state: DrawingState, mergeKey?: string): DrawingState {
@@ -150,7 +151,7 @@ export function moveDrawingPoint(state: DrawingState, drawingId: string, pointIn
 
 /**
  * Moves a drawing by `from` -> `to`, as one undo step. When the drawing is part of a multi-selection the whole
- * selection moves (locked drawings stay); `mergeKey` joins repeated moves (arrow-key nudges) into one undo step.
+ * selection moves (locked drawings stay). Moves with the same `mergeKey` in a row share one undo step.
  */
 export function translateDrawing(
   state: DrawingState,
@@ -188,7 +189,7 @@ export function cloneDrawings(
 ): DrawingState {
   const sources = state.drawings.filter((drawing) => drawingIds.includes(drawing.drawingId));
   if (sources.length === 0) return state;
-  const copies = sources.map((drawing) => ({ ...normalizeDrawing(drawing), drawingId: makeId(), revision: 1, locked: false, points: shiftPoints(drawing.points, from, to) }));
+  const copies = sources.map((drawing) => ({ ...normalizeDrawing(drawing), drawingId: makeId(), revision: 1, locked: false, hidden: false, points: shiftPoints(drawing.points, from, to) }));
   const next = snapshot(state);
   return withSelection({ ...next, drawings: [...next.drawings, ...copies] }, copies.map((copy) => copy.drawingId), copies.at(-1)?.drawingId ?? null);
 }
@@ -201,7 +202,7 @@ export function pasteDrawings(
   makeId: () => string = () => crypto.randomUUID(),
 ): DrawingState {
   if (drawings.length === 0) return state;
-  const copies = drawings.map((drawing) => ({ ...normalizeDrawing(drawing), drawingId: makeId(), instrumentId, revision: 1 }));
+  const copies = drawings.map((drawing) => ({ ...normalizeDrawing(drawing), drawingId: makeId(), instrumentId, revision: 1, locked: false, hidden: false }));
   const next = snapshot(state);
   return withSelection({ ...next, drawings: [...next.drawings, ...copies] }, copies.map((copy) => copy.drawingId), copies.at(-1)?.drawingId ?? null);
 }

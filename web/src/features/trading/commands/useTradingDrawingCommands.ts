@@ -9,6 +9,8 @@ type Drawings = Pick<ReturnType<typeof useTradingDrawings>, 'selected' | 'transl
 
 export type DrawingCommandModel = {
   active: boolean;
+  /** Ctrl+Alt+H is on: keys don't act on drawings nobody can see. */
+  drawingsHidden?: boolean;
   adapter: TradingChartAdapter | null;
   drawings: Drawings;
   setDrawingTool: (tool: DrawingTool) => void;
@@ -44,9 +46,10 @@ const NUDGES = [
 ] as const;
 
 /** The active chart's drawing commands (TVP-2.2): tool keys, copy and paste, nudge and hide-all. */
-export function useTradingDrawingCommands({ active, adapter, drawings, setDrawingTool, toggleDrawingsHidden }: DrawingCommandModel): void {
+export function useTradingDrawingCommands({ active, adapter, drawings, drawingsHidden = false, setDrawingTool, toggleDrawingsHidden }: DrawingCommandModel): void {
   const isActive = () => active;
   const movable = (): TradingDrawing | null => {
+    if (drawingsHidden) return null;
     const selection = drawings.selected().filter((drawing) => !drawing.locked);
     return selection.at(-1) ?? null;
   };
@@ -59,7 +62,7 @@ export function useTradingDrawingCommands({ active, adapter, drawings, setDrawin
   useTradingCommand(TOOL_COMMANDS[4][0], () => setDrawingTool(TOOL_COMMANDS[4][1]), isActive);
   useTradingCommand(TOOL_COMMANDS[5][0], () => setDrawingTool(TOOL_COMMANDS[5][1]), isActive);
 
-  useTradingCommand('drawing.copy', () => copyDrawingsToClipboard(drawings.selected()), () => active && drawings.selected().length > 0);
+  useTradingCommand('drawing.copy', () => copyDrawingsToClipboard(drawings.selected()), () => active && !drawingsHidden && drawings.selected().length > 0);
   useTradingCommand('drawing.paste', () => drawings.paste(drawingClipboard()), () => active && hasCopiedDrawings());
   useTradingCommand('drawing.hideAll', toggleDrawingsHidden, isActive);
 

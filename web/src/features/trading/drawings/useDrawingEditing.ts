@@ -11,11 +11,11 @@ export type HandlePreview = { drawingId: string; patch: DrawingEditPatch };
  */
 export type TranslationPreview = { drawingIds: readonly string[]; from: DrawingPoint; to: DrawingPoint; clone?: boolean };
 
-const CLONE_SUFFIX = '#clone';
+export const CLONE_GHOST_SUFFIX = '#clone';
 
 /** The id of the ghost copy shown while `drawingId` is Ctrl+dragged. */
 export function cloneGhostId(drawingId: string): string {
-  return `${drawingId}${CLONE_SUFFIX}`;
+  return `${drawingId}${CLONE_GHOST_SUFFIX}`;
 }
 
 /** The ghost copies of a Ctrl+drag in progress, to render beside the originals. */
@@ -77,8 +77,14 @@ export function patchChanges(drawing: TradingDrawing, patch: DrawingEditPatch): 
   return Object.entries(patch.properties).some(([key, value]) => !same(value, current[key]));
 }
 
-export function modifiersOf(event: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): DrawingModifiers {
-  return { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey || event.metaKey };
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/** Pointer travel (CSS pixels) below which a press is a click, not a drag: trackpad and pen jitter. */
+export const DRAG_THRESHOLD = 4;
+
+/** The modifiers of a pointer event; `ctrl` is Cmd on macOS, where Ctrl+click opens the context menu. */
+export function modifiersOf(event: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }, mac = MAC): DrawingModifiers {
+  return { shift: event.shiftKey, alt: event.altKey, ctrl: mac ? event.metaKey : event.ctrlKey || event.metaKey };
 }
 
 /** The chart point under the pointer for one of a drawing's anchors (`anchorIndex`, Shift-constrained), or for the drawing as a whole. */
@@ -187,9 +193,10 @@ export function useDrawingEditing({
     const group = drawing.selected ? groupOf(drawing.drawingId) : [drawing.drawingId];
     if (!toggling && !drawing.selected) onSelect(drawing.drawingId);
     const start = enabled ? pointFor(drawing, clientX, clientY, modifiers) : null;
-    const startScreen = { x: clientX, y: clientY };
+    let dragging = false;
+    const travelled = (pointer: PointerEvent) => (dragging ||= Math.hypot(pointer.clientX - clientX, pointer.clientY - clientY) >= DRAG_THRESHOLD);
     const released = (pointer: PointerEvent) => {
-      if (pointer.clientX !== startScreen.x || pointer.clientY !== startScreen.y) return false;
+      if (travelled(pointer)) return false;
       // A click: Ctrl toggles; a plain click on a multi-selection keeps only this drawing.
       if (toggling) onToggleSelect?.(drawing.drawingId);
       else if (group.length > 1) onSelect(drawing.drawingId);
@@ -201,6 +208,7 @@ export function useDrawingEditing({
     }
     const ids = cloning ? group.map(cloneGhostId) : group;
     trackPointer((pointer) => {
+      if (!travelled(pointer)) return;
       const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiersOf(pointer));
       if (point) setTranslationPreview({ drawingIds: ids, from: start, to: point, clone: cloning });
     }, (pointer) => {

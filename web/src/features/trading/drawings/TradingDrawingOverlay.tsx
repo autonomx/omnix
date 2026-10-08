@@ -43,7 +43,7 @@ import {
 } from './tools/types';
 import { useCanvasDrawingHost } from './useCanvasDrawingHost';
 import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
-import { cloneGhosts, useDrawingEditing, type TranslationPreview } from './useDrawingEditing';
+import { CLONE_GHOST_SUFFIX, cloneGhosts, useDrawingEditing, type TranslationPreview } from './useDrawingEditing';
 import { useProjectionSync } from './useProjectionSync';
 import './TradingDrawingMeasurement.css';
 
@@ -256,7 +256,8 @@ export type TradingDrawingOverlayProps = {
 
 /** The drawings a drag of `id` moves: the whole selection when `id` is part of a multi-selection. */
 function selectionGroup(drawings: readonly TradingDrawing[], id: string): readonly string[] {
-  const selection = drawings.filter((drawing) => drawing.selected).map((drawing) => drawing.drawingId);
+  // Locked drawings stay put, also in the preview.
+  const selection = drawings.filter((drawing) => drawing.selected && (!drawing.locked || drawing.drawingId === id)).map((drawing) => drawing.drawingId);
   return selection.length > 1 && selection.includes(id) ? selection : [id];
 }
 
@@ -337,7 +338,7 @@ export function TradingDrawingOverlay({
   ));
 
   const frame: DrawingFrame = {
-    drawings,
+    drawings: allHidden ? [] : drawings,
     selectedId,
     interval,
     handlePreview: editing.handlePreview,
@@ -431,7 +432,7 @@ export function TradingDrawingOverlay({
         <DrawingGroup
           key={item.drawing.drawingId}
           item={item}
-          withShapes={!canvas}
+          withShapes={!canvas || item.drawing.drawingId.endsWith(CLONE_GHOST_SUFFIX)}
           onPressDrawing={editing.dragDrawing(item.drawing)}
           onPressHandle={(handle) => editing.dragHandle(item.drawing, handle)}
         />

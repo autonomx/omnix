@@ -5,6 +5,7 @@ import {
   commandKeys,
   findKeyClashes,
   findKeyConflicts,
+  isRebindable,
   matchesHotkey,
   matchesKeyPattern,
   normalizeHotkey,
@@ -529,5 +530,19 @@ describe('key clashes across scopes and with typing', () => {
       { hotkey: 'h', ids: ['chart.moveLeft', 'chart.symbolSearch'], kind: 'typing' },
       { hotkey: '5', ids: ['chart.moveRight', 'chart.intervalInput'], kind: 'typing' },
     ]);
+  });
+});
+
+
+describe('defaults and rebinding (TVP-2.2 review)', () => {
+  it('every rebindable default passes the rebind rules, so a user can always restore it', () => {
+    for (const definition of TRADING_COMMANDS as readonly TradingCommandDefinition[]) {
+      if (!isRebindable(definition)) continue;
+      for (const key of definition.defaultKeys) expect([definition.id, rebindProblem(definition, key, 'installed')]).toEqual([definition.id, null]);
+    }
+  });
+
+  it('still refuses Ctrl+Alt for keys other than the default', () => {
+    expect(rebindProblem(tradingCommandDefinition('drawing.hideAll')!, 'ctrl+alt+j')).toMatch(/AltGr/);
   });
 });

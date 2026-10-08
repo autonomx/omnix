@@ -10,6 +10,7 @@ import {
   selectedDrawingIds,
   toggleDrawingSelection,
   translateDrawing,
+  redoDrawing,
   undoDrawing,
   type DrawingState,
   type TradingDrawing,
@@ -70,6 +71,16 @@ describe('multi-select (TVP-2.2)', () => {
   });
 });
 
+describe('undo and selection (TVP-2.2 review)', () => {
+  it('leaves no selected flags after undo or redo', () => {
+    let state = toggleDrawingSelection(selectDrawing(stateWith(line('a', 0), line('b', 10)), 'a'), 'b');
+    state = translateDrawing(state, 'a', at(0, 100), at(1, 100));
+    const undone = undoDrawing(state);
+    expect(undone.drawings.some((drawing) => drawing.selected)).toBe(false);
+    expect(redoDrawing(undone).drawings.some((drawing) => drawing.selected)).toBe(false);
+  });
+});
+
 describe('clone, copy and paste (TVP-2.2)', () => {
   it('Ctrl+drag adds moved copies, selected, and keeps the originals', () => {
     const state = toggleDrawingSelection(selectDrawing(stateWith(line('a', 0), line('b', 10, true)), 'a'), 'b');
@@ -91,6 +102,9 @@ describe('clone, copy and paste (TVP-2.2)', () => {
     // Pasting twice gives two independent copies; the clipboard is unchanged.
     expect(pasteDrawings(pasted, drawingClipboard(), 'equity:NASDAQ:AAPL', nextId).drawings).toHaveLength(3);
     expect(drawingClipboard()[0].drawingId).toBe('a');
+    // Copies of hidden or locked drawings come back visible and movable.
+    copyDrawingsToClipboard([{ ...line('h', 0), hidden: true, locked: true }]);
+    expect(pasteDrawings(target, drawingClipboard(), 'crypto:BTC', nextId).drawings[1]).toMatchObject({ hidden: false, locked: false });
   });
 });
 
@@ -100,5 +114,15 @@ describe('Shift constrain (TVP-2.2)', () => {
     expect(constrainToSquare({ x: 160, y: 120 }, [origin], { shift: true, alt: false, ctrl: false })).toEqual({ x: 160, y: 160 });
     expect(constrainToSquare({ x: 70, y: 20 }, [origin], { shift: true, alt: false, ctrl: false })).toEqual({ x: 20, y: 20 });
     expect(constrainToSquare({ x: 160, y: 120 }, [origin], { shift: false, alt: false, ctrl: false })).toEqual({ x: 160, y: 120 });
+  });
+});
+
+describe('pointer modifiers (TVP-2.2 review)', () => {
+  it('Ctrl means Cmd on macOS, where Ctrl+click is the context menu', async () => {
+    const { modifiersOf } = await import('./useDrawingEditing');
+    const event = { shiftKey: false, altKey: false, ctrlKey: true, metaKey: false };
+    expect(modifiersOf(event, true).ctrl).toBe(false);
+    expect(modifiersOf({ ...event, ctrlKey: false, metaKey: true }, true).ctrl).toBe(true);
+    expect(modifiersOf(event, false).ctrl).toBe(true);
   });
 });
