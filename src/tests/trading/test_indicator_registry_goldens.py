@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -71,6 +71,8 @@ def _inputs(raw: dict[str, Any]) -> IndicatorInputs:
 def _same(expected: float | None, actual: float, transcendental: bool) -> bool:
     if expected is None:
         return not math.isfinite(actual)
+    # JSON integers (JS prints values below 1e21 without an exponent) must compare as the double they denote.
+    expected = float(expected)
     if transcendental:
         return math.isclose(expected, actual, rel_tol=TRANSCENDENTAL_TOLERANCE, abs_tol=TRANSCENDENTAL_TOLERANCE)
     return actual == expected
@@ -91,6 +93,28 @@ def test_whole_number_float_periods_behave_like_integers() -> None:
     as_float = compute_indicator("sma", bars, IndicatorInputs(period=20.0))
     assert as_float == as_int
     assert as_float[0].key == "sma:20"
+
+
+PATHOLOGICAL_SERIES = {
+    "zero-crossing": [0.0, 5.0, -5.0] * 10,
+    "extreme-magnitudes": [1e300, 1e-300] * 15,
+    "subnormal": [5e-324, 1e-320, 0.0] * 10,
+    "single-bar": [1.0],
+}
+
+
+@pytest.mark.parametrize("series_name", sorted(PATHOLOGICAL_SERIES))
+def test_indicators_return_non_finite_values_instead_of_raising(series_name: str) -> None:
+    values = PATHOLOGICAL_SERIES[series_name]
+    times = tuple(datetime(2026, 1, 5, tzinfo=timezone.utc) + timedelta(hours=index) for index in range(len(values)))
+    volume = tuple(-1.0 if index % 3 == 2 else 1.0 for index in range(len(values)))
+    bars = BarSeries(times, tuple(values), tuple(values), tuple(values), tuple(values), volume)
+    for indicator_id in server_indicator_ids():
+        for inputs in (IndicatorInputs(period=2), IndicatorInputs(period=14, fast_period=3, slow_period=5, signal_period=2)):
+            try:
+                compute_indicator(indicator_id, bars, inputs)
+            except ValueError as error:
+                assert "must be" in str(error), f"{indicator_id} {series_name}: {error}"
 
 
 def test_market_bars_convert_like_the_golden_datasets() -> None:

@@ -4,6 +4,9 @@ Results must match the browser bit for bit where possible, so these follow the
 TypeScript order of operations exactly: sums are plain left-to-right loops,
 ``x ** 2`` is written ``x * x`` (V8's pow returns ``x * x`` for an exponent of
 2), and ``js_max``/``js_min`` keep JavaScript's NaN and signed-zero rules.
+
+``builtin`` registers a built-in indicator behind the preamble of
+``calculateTradingViewBuiltInOutputs``; the ``builtins_*`` modules hold the branches.
 """
 
 from __future__ import annotations
@@ -11,11 +14,14 @@ from __future__ import annotations
 import math
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Literal, TypeGuard
 
-from ..registry import BarSeries, IndicatorOutputSeries
+from ..registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, NumericClass, register
 
 MaybeNumber = float | None
 Values = Sequence[float]
+Outputs = list[IndicatorOutputSeries]
 
 EPSILON = sys.float_info.epsilon
 
@@ -35,9 +41,32 @@ def js_sqrt(value: float) -> float:
     return math.sqrt(value) if value >= 0 else math.nan
 
 
-def js_round(value: float) -> float:
+def js_div(numerator: float, denominator: float) -> float:
+    """JavaScript division: dividing by zero gives ±Infinity (NaN for 0 / 0) instead of raising."""
+    if denominator != 0:
+        return numerator / denominator
+    if numerator == 0 or math.isnan(numerator):
+        return math.nan
+    return math.copysign(math.inf, numerator) * math.copysign(1.0, denominator)
+
+
+def js_log(value: float) -> float:
+    """JavaScript ``Math.log``: -Infinity at 0 and NaN below it, instead of raising."""
+    if value > 0:
+        return math.log(value)
+    return -math.inf if value == 0 else math.nan
+
+
+def js_round(value: float) -> int:
     """JavaScript ``Math.round``: halves round up (towards +infinity). Python's ``round`` rounds halves to even."""
-    return float(math.floor(value + 0.5))
+    # Not floor(value + 0.5): that addition rounds 0.49999999999999994 up to 1.
+    floor = math.floor(value)
+    return floor + 1 if value - floor >= 0.5 else floor
+
+
+def js_sign(value: float) -> float:
+    """JavaScript ``Math.sign``: keeps NaN and signed zero."""
+    return 1.0 if value > 0 else -1.0 if value < 0 else value
 
 
 def js_sum(values: Values) -> float:
@@ -52,8 +81,16 @@ def mean(values: Values) -> float:
     return js_sum(values) / len(values) if values else 0.0
 
 
-def finite(value: MaybeNumber) -> bool:
+def finite(value: MaybeNumber) -> TypeGuard[float]:
     return value is not None and math.isfinite(value)
+
+
+def or_zero(values: Sequence[MaybeNumber]) -> list[float]:
+    return [value if finite(value) else 0.0 for value in values]
+
+
+def difference(first: Sequence[MaybeNumber], second: Sequence[MaybeNumber]) -> list[MaybeNumber]:
+    return [a - b if finite(a) and finite(b) else None for a, b in zip(first, second, strict=True)]
 
 
 def js_max(*values: float) -> float:
@@ -184,11 +221,9 @@ def rsi(values: Values, period: int) -> list[MaybeNumber]:
     p = safe_period(period)
     gains = [0.0 if i == 0 else js_max(0.0, value - values[i - 1]) for i, value in enumerate(values)]
     losses = [0.0 if i == 0 else js_max(0.0, values[i - 1] - value) for i, value in enumerate(values)]
-    average_gain = rma(gains, p)
-    average_loss = rma(losses, p)
     result: list[MaybeNumber] = []
-    for gain, loss in zip(average_gain, average_loss, strict=True):
-        if gain is None or loss is None or not finite(gain) or not finite(loss):
+    for gain, loss in zip(rma(gains, p), rma(losses, p), strict=True):
+        if not finite(gain) or not finite(loss):
             result.append(None)
         elif loss == 0:
             result.append(100.0)
@@ -208,9 +243,8 @@ def bollinger(values: Values, period: int, deviations: float = 2) -> tuple[list[
     upper: list[MaybeNumber] = []
     lower: list[MaybeNumber] = []
     for m, d in zip(middle, deviation, strict=True):
-        ok = m is not None and d is not None and finite(m) and finite(d)
-        upper.append(m + d * deviations if ok and m is not None and d is not None else None)
-        lower.append(m - d * deviations if ok and m is not None and d is not None else None)
+        upper.append(m + d * deviations if finite(m) and finite(d) else None)
+        lower.append(m - d * deviations if finite(m) and finite(d) else None)
     return middle, upper, lower
 
 
@@ -226,29 +260,27 @@ def dmi(high: Values, low: Values, close: Values, period: int) -> tuple[list[May
         for i, value in enumerate(low)
     ]
     tr_smoothed = rma(tr, p)
-    plus_smoothed = rma(plus_dm, p)
-    minus_smoothed = rma(minus_dm, p)
 
     def directional(smoothed: list[MaybeNumber]) -> list[MaybeNumber]:
-        values: list[MaybeNumber] = []
-        for t, s in zip(tr_smoothed, smoothed, strict=True):
-            values.append(100 * s / t if t is not None and s is not None and finite(t) and t != 0 and finite(s) else None)
-        return values
+        return [
+            100 * s / t if finite(t) and t != 0 and finite(s) else None
+            for t, s in zip(tr_smoothed, smoothed, strict=True)
+        ]
 
-    plus = directional(plus_smoothed)
-    minus = directional(minus_smoothed)
-    dx: list[float] = []
-    for pv, mv in zip(plus, minus, strict=True):
-        if pv is not None and mv is not None and finite(pv) and finite(mv) and pv + mv != 0:
-            dx.append(100 * abs(pv - mv) / (pv + mv))
-        else:
-            dx.append(0.0)
+    plus = directional(rma(plus_dm, p))
+    minus = directional(rma(minus_dm, p))
+    dx = [
+        100 * abs(pv - mv) / (pv + mv) if finite(pv) and finite(mv) and pv + mv != 0 else 0.0
+        for pv, mv in zip(plus, minus, strict=True)
+    ]
     return plus, minus, rma(dx, p)
 
 
 def linear_regression(values: Values, period: int) -> list[MaybeNumber]:
     p = safe_period(period)
     result = full(len(values))
+    if p > len(values):
+        return result
     x_mean = (p - 1) / 2
     x_variance = 0.0
     for i in range(p):
@@ -268,6 +300,8 @@ def linear_regression(values: Values, period: int) -> list[MaybeNumber]:
 def correlation_with_index(values: Values, period: int) -> list[MaybeNumber]:
     p = safe_period(period)
     result = full(len(values))
+    if p > len(values):
+        return result
     x = [float(i) for i in range(p)]
     mx = mean(x)
     vx = js_sum([(value - mx) * (value - mx) for value in x])
@@ -300,8 +334,81 @@ def output(indicator_id: str, suffix: str, values: Sequence[MaybeNumber]) -> Ind
     """Like the browser's ``output()``: keeps only finite values."""
     return IndicatorOutputSeries(
         key=f"{indicator_id}:{suffix}",
-        points=tuple((index, value) for index, value in enumerate(values) if value is not None and math.isfinite(value)),
+        points=tuple((index, value) for index, value in enumerate(values) if finite(value)),
     )
+
+
+def stochastic(high: Values, low: Values, close: Values, period: int) -> list[MaybeNumber]:
+    hh = highest(high, period)
+    ll = lowest(low, period)
+    return [
+        100 * (value - lo) / (h - lo) if finite(h) and finite(lo) and h != lo else None
+        for value, h, lo in zip(close, hh, ll, strict=True)
+    ]
+
+
+def cci(high: Values, low: Values, close: Values, period: int) -> list[MaybeNumber]:
+    typical = [(high[i] + low[i] + value) / 3 for i, value in enumerate(close)]
+    basis = sma(typical, period)
+    p = safe_period(period)
+    result: list[MaybeNumber] = []
+    for i, b in enumerate(basis):
+        if not finite(b):
+            result.append(None)
+            continue
+        deviation = mean([abs(value - b) for value in typical[i - p + 1 : i + 1]])
+        result.append(0.0 if deviation == 0 else js_div(typical[i] - b, 0.015 * deviation))
+    return result
+
+
+def true_strength(close: Values, long_period: int = 25, short_period: int = 13) -> list[MaybeNumber]:
+    momentum = [0.0 if i == 0 else value - close[i - 1] for i, value in enumerate(close)]
+    absolute = [abs(value) for value in momentum]
+    second = ema(or_zero(ema(momentum, long_period)), short_period)
+    absolute_second = ema(or_zero(ema(absolute, long_period)), short_period)
+    return [
+        100 * s / a if finite(s) and finite(a) and a != 0 else None
+        for s, a in zip(second, absolute_second, strict=True)
+    ]
+
+
+@dataclass(frozen=True)
+class PatternPivot:
+    index: int
+    price: float
+    type: Literal["high", "low"]
+
+
+def find_pattern_pivots(bars: BarSeries, strength: int = 3) -> list[PatternPivot]:
+    """Port of ``findPatternPivots`` in ``autoPatterns.ts``."""
+    r = min(8, max(2, math.trunc(strength) or 3))
+    candidates: list[PatternPivot] = []
+    for index in range(r, len(bars) - r):
+        maximum = js_max(*bars.high[index - r : index + r + 1])
+        minimum = js_min(*bars.low[index - r : index + r + 1])
+        if bars.high[index] >= maximum:
+            candidates.append(PatternPivot(index, bars.high[index], "high"))
+        if bars.low[index] <= minimum:
+            candidates.append(PatternPivot(index, bars.low[index], "low"))
+    alternating: list[PatternPivot] = []
+    # Candidates are generated in (index, high before low) order, which is the browser's sort order.
+    for candidate in candidates:
+        if not alternating:
+            alternating.append(candidate)
+            continue
+        previous = alternating[-1]
+        if candidate.index == previous.index:
+            previous_close = bars.close[previous.index]
+            if abs(candidate.price - previous_close) > abs(previous.price - previous_close):
+                alternating[-1] = candidate
+            continue
+        if candidate.type == previous.type:
+            more_extreme = candidate.price >= previous.price if candidate.type == "high" else candidate.price <= previous.price
+            if more_extreme:
+                alternating[-1] = candidate
+            continue
+        alternating.append(candidate)
+    return alternating
 
 
 def hl2(bars: BarSeries) -> list[float]:
@@ -310,3 +417,54 @@ def hl2(bars: BarSeries) -> list[float]:
 
 def typical_price(bars: BarSeries) -> list[float]:
     return [(high + low + close) / 3 for high, low, close in zip(bars.high, bars.low, bars.close, strict=True)]
+
+
+@dataclass(frozen=True)
+class Chart:
+    """One built-in's inputs after the browser's preamble: ``period`` is already ``safePeriod(period, default)``."""
+
+    id: str
+    period: int
+    inputs: IndicatorInputs
+    bars: BarSeries
+
+    @property
+    def open(self) -> Values:
+        return self.bars.open
+
+    @property
+    def high(self) -> Values:
+        return self.bars.high
+
+    @property
+    def low(self) -> Values:
+        return self.bars.low
+
+    @property
+    def close(self) -> Values:
+        return self.bars.close
+
+    @property
+    def volume(self) -> Values:
+        return self.bars.volume
+
+    def out(self, suffix: str, values: Sequence[MaybeNumber]) -> IndicatorOutputSeries:
+        return output(self.id, suffix, values)
+
+
+Builder = Callable[[Chart], Outputs]
+
+
+def builtin(indicator_id: str, name: str, numeric_class: NumericClass, default_period: int) -> Callable[[Builder], Builder]:
+    """Registers a branch with the browser's preamble: no bars gives no outputs, and the period falls back to the default."""
+
+    def decorate(build: Builder) -> Builder:
+        def compute(bars: BarSeries, inputs: IndicatorInputs) -> Outputs:
+            if len(bars) == 0:
+                return []
+            return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars))
+
+        register(indicator_id, name, numeric_class)(compute)
+        return build
+
+    return decorate
