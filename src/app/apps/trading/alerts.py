@@ -463,6 +463,7 @@ def pushed_price_outcome(
         close=evaluation.observed_price,
         volume=evaluation.observed_volume or Decimal("0"),
         observations=tuple(observations),
+        volume_known=evaluation.observed_volume is not None,
     )
 
 

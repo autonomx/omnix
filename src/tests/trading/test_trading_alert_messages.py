@@ -76,4 +76,15 @@ def test_a_json_template_stays_json_and_the_message_is_capped() -> None:
 
 def test_instrument_parts() -> None:
     assert instrument_parts("equity:NASDAQ:AAPL") == ("AAPL", "NASDAQ")
+    assert instrument_parts("equity:NYSE:BRK-B") == ("BRK-B", "NYSE")
+    assert instrument_parts("equity:GOOD") == ("GOOD", "")
     assert instrument_parts("plain") == ("plain", "")
+
+
+def test_a_legacy_quote_leaves_the_bar_placeholders_it_does_not_have() -> None:
+    legacy = AlertConditionOutcome(
+        met=True, bar_start=START, bar_end=START, bar_is_final=True, close=D("101"), volume=D("0"),
+        observations=(ConditionObservation(0, "greater_than", True, D("101")),), volume_known=False,
+    )
+    names, plots = message_values(_alert(), legacy, interval="1m", evaluated_at=START)
+    assert render_alert_message("{{open}} {{high}} {{low}} {{close}} {{volume}}", names, plots) == "{{open}} {{high}} {{low}} 101 {{volume}}"

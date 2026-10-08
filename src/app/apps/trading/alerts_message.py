@@ -42,10 +42,16 @@ def _time(value: datetime) -> str:
 
 
 def instrument_parts(instrument_id: str) -> tuple[str, str]:
-    """``(ticker, exchange)`` of a canonical instrument id such as ``crypto:BINANCE:spot:BTC-USDT``."""
+    """``(ticker, exchange)`` of a canonical instrument id such as ``crypto:BINANCE:spot:BTC-USDT``.
+
+    A crypto pair loses its dash (``BTCUSDT``, as TradingView writes it); a share class keeps it (``BRK-B``).
+    An id without a venue part has no exchange.
+    """
     parts = instrument_id.split(":")
-    ticker = parts[-1].replace("-", "") if parts else instrument_id
-    exchange = parts[1] if len(parts) > 1 else ""
+    ticker = parts[-1]
+    if parts[0] == "crypto":
+        ticker = ticker.replace("-", "")
+    exchange = parts[1] if len(parts) >= 3 else ""
     return ticker, exchange
 
 
@@ -66,7 +72,7 @@ def message_values(
         "high": _number(outcome.high),
         "low": _number(outcome.low),
         "close": _number(outcome.close),
-        "volume": _number(outcome.volume),
+        "volume": _number(outcome.volume) if outcome.volume_known else None,
         "time": _time(outcome.bar_start),
         "timenow": _time(evaluated_at),
         "alert_name": alert.parameters.name.strip() or None,

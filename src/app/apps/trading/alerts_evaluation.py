@@ -114,6 +114,8 @@ class AlertConditionOutcome:
     open: Decimal | None = None
     high: Decimal | None = None
     low: Decimal | None = None
+    # False when the observation had no volume (a legacy quote): ``volume`` is then a stand-in 0.
+    volume_known: bool = True
 
     @property
     def primary_value(self) -> Decimal | None:

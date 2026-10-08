@@ -36,11 +36,13 @@ export function deliveryEditorOf(alert: TradingAlert): AlertDeliveryEditor {
 
 /** The update fields for `chartAlertUpdateInput`. */
 export function deliveryUpdatePatch(editor: AlertDeliveryEditor & { notifications: readonly string[] }) {
+  // A URL or secret typed and then unticked is not saved: it would be delivered to once the channel is ticked again.
+  const webhook = editor.notifications.includes('webhook');
   return {
     name: editor.name?.trim() ?? undefined,
     sound_name: soundChange(editor),
-    webhook_url: editor.webhookUrl?.trim() || undefined,
-    webhook_secret: editor.webhookSecret?.trim() || undefined,
+    webhook_url: webhook ? editor.webhookUrl?.trim() || undefined : undefined,
+    webhook_secret: webhook ? editor.webhookSecret?.trim() || undefined : undefined,
   };
 }
 

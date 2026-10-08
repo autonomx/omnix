@@ -18,5 +18,8 @@ describe('alert delivery editing (TVP-1.5)', () => {
     expect(deliveryUpdatePatch(editing)).toEqual({ name: 'Breakout', sound_name: undefined, webhook_url: undefined, webhook_secret: undefined });
     expect(deliveryUpdatePatch({ ...editing, webhookUrl: ' https://x.example/h ', webhookSecret: ' s ' })).toMatchObject({ webhook_url: 'https://x.example/h', webhook_secret: 's' });
     expect(deliveryCreateFields({ name: ' ', webhookUrl: '' })).toEqual({ name: undefined, soundName: 'chime', webhookUrl: undefined, webhookSecret: undefined });
+    // Unticked: a typed URL or secret is dropped; an emptied name clears it.
+    expect(deliveryUpdatePatch({ ...editing, notifications: ['app'], name: '', webhookUrl: 'https://x.example/h', webhookSecret: 's' }))
+      .toEqual({ name: '', sound_name: undefined, webhook_url: undefined, webhook_secret: undefined });
   });
 });

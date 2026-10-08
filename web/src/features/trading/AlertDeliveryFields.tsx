@@ -42,7 +42,7 @@ export function AlertDeliveryFields({
             autoComplete="off"
             required={!stored}
             maxLength={2000}
-            placeholder={stored ? `${stored}… (saved; type to replace)` : 'https://…'}
+            placeholder={stored ? `${stored} (saved; type to replace)` : 'https://…'}
             value={editor.webhookUrl ?? ''}
             onChange={(event) => onChange({ webhookUrl: event.target.value })}
           />
