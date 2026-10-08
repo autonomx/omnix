@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTradingInstrumentLink } from './useTradingInstrumentLink';
+import { useTradingCommandDispatcher } from './commands/useTradingCommands';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
@@ -94,6 +95,7 @@ function preferredInstrument(
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  useTradingCommandDispatcher();
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
