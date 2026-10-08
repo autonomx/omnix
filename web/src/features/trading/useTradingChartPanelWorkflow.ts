@@ -11,12 +11,15 @@ import {
   dataDelayLabel,
   extendedSessionPriceLine,
   hasExtendedHoursBars,
+  hasSessionTaggedBars,
   marketStatusLabel,
   paneDoubleClickAction,
   parseChartTemplate,
+  MAX_CHART_HISTORY_LIMIT,
   parseGoToDate,
   planGoToDate,
   type ChartTemplate,
+  type GoToDateTargetTime,
 } from './tradingChartWorkflow';
 import { isTradingFormulaInstrumentId } from './tradingFormula';
 import { tradingIntervalDurationMs } from './tradingIntervals';
@@ -47,17 +50,30 @@ export type GoToDateTarget = string | number | Date;
 export type GoToDateResult = 'scrolled' | 'loading' | 'invalid' | 'unavailable';
 export type ChartImageCopyStatus = 'idle' | 'copying' | 'copied' | 'error';
 
-type PendingGoToDate = { targetMs: number; key: string; firstBarMs: number | null };
+type PendingGoToDate = { target: GoToDateTargetTime; key: string; firstBarMs: number | null };
 
 const firstBarTime = (bars: readonly MarketBar[]) => {
   const value = Date.parse(bars[0]?.start_time ?? '');
   return Number.isFinite(value) ? value : null;
 };
 
+/** Why going further back is impossible, worded so the user can tell the causes apart. */
+export function goToDateUnavailableMessage(
+  cause: 'no-data' | 'max-limit' | 'history-complete' | 'feed-limit',
+  earliest: string | null,
+  timeZone: string,
+): string {
+  if (cause === 'no-data' || !earliest) return 'No chart history is loaded.';
+  const start = dateInputValue(earliest, timeZone);
+  if (cause === 'history-complete') return `No earlier history exists: this market's data starts ${start}.`;
+  if (cause === 'feed-limit') return `The feed serves history back to ${start} only.`;
+  return `The chart loads at most ${MAX_CHART_HISTORY_LIMIT.toLocaleString('en-US')} bars, back to ${start}. A longer interval reaches further back.`;
+}
+
 /** Go to date: scroll to the bar holding a time, loading older history on the existing bars request first. */
 function useChartGoToDate(ws: WorkflowInput) {
   const {
-    adapterRef, allBarsRef, chartQuery, historyLimit, instrumentId, interval, loadedBars, replayMode,
+    adapterRef, allBarsRef, chartQuery, historyLimit, instrumentId, interval, loadedBars, provenance, replayMode,
     selectedRangeRef, selectedTimezone, setHistoryLimitOverride, setSelectedRangeLabel,
   } = ws;
   const [goToDateOpen, setGoToDateOpen] = useState(false);
@@ -65,6 +81,7 @@ function useChartGoToDate(ws: WorkflowInput) {
   const [goToDateLoading, setGoToDateLoading] = useState(false);
   const pendingGoToRef = useRef<PendingGoToDate | null>(null);
   const historyKey = `${instrumentId}|${interval}`;
+  const historyComplete = Boolean(provenance?.history_complete);
 
   const finish = useCallback((error: string | null) => {
     pendingGoToRef.current = null;
@@ -74,7 +91,10 @@ function useChartGoToDate(ws: WorkflowInput) {
 
   const runGoToDate = useCallback((pending: PendingGoToDate): GoToDateResult => {
     const bars = allBarsRef.current;
-    const plan = planGoToDate(bars, pending.targetMs, historyLimit);
+    const firstBarMs = firstBarTime(bars);
+    // A larger request that brought nothing older means the feed's history ends there.
+    const noProgress = pending.firstBarMs !== null && firstBarMs !== null && firstBarMs >= pending.firstBarMs;
+    const plan = planGoToDate(bars, pending.target, historyLimit, MAX_CHART_HISTORY_LIMIT, historyComplete || noProgress);
     if (plan.kind === 'scroll') {
       finish(null);
       const targetAdapter = adapterRef.current;
@@ -87,13 +107,9 @@ function useChartGoToDate(ws: WorkflowInput) {
       setGoToDateOpen(false);
       return 'scrolled';
     }
-    const firstBarMs = firstBarTime(bars);
-    const noProgress = pending.firstBarMs !== null && firstBarMs !== null && firstBarMs >= pending.firstBarMs;
-    if (plan.kind === 'unavailable' || noProgress) {
-      const earliest = bars[0]?.start_time;
-      finish(earliest
-        ? `No earlier history is available; the chart starts ${dateInputValue(earliest, selectedTimezone)}.`
-        : 'No chart history is loaded.');
+    if (plan.kind === 'unavailable') {
+      const cause = plan.reason === 'no-earlier' ? (historyComplete ? 'history-complete' : 'feed-limit') : plan.reason;
+      finish(goToDateUnavailableMessage(cause, plan.earliest, selectedTimezone));
       return 'unavailable';
     }
     pendingGoToRef.current = { ...pending, firstBarMs };
@@ -101,22 +117,26 @@ function useChartGoToDate(ws: WorkflowInput) {
     setGoToDateError(null);
     setHistoryLimitOverride({ key: pending.key, limit: plan.limit });
     return 'loading';
-  }, [adapterRef, allBarsRef, finish, historyLimit, selectedRangeRef, selectedTimezone, setHistoryLimitOverride, setSelectedRangeLabel]);
+  }, [adapterRef, allBarsRef, finish, historyComplete, historyLimit, selectedRangeRef, selectedTimezone, setHistoryLimitOverride, setSelectedRangeLabel]);
 
-  /** Scrolls the chart to the bar holding a time, loading older history first when needed. Strings are dates in the chart timezone. */
+  /**
+   * Scrolls the chart to a date, loading older history first when needed. A `YYYY-MM-DD` string goes
+   * to the first bar of that local day in the chart timezone; `YYYY-MM-DDTHH:mm`, a timestamp or a
+   * Date goes to the bar holding that instant.
+   */
   const goToDate = useCallback((target: GoToDateTarget): GoToDateResult => {
     if (replayMode) {
       setGoToDateError('Leave replay to go to a date.');
       return 'invalid';
     }
-    const targetMs = typeof target === 'string'
+    const parsed: GoToDateTargetTime | null = typeof target === 'string'
       ? parseGoToDate(target, selectedTimezone)
-      : target instanceof Date ? target.getTime() : target;
-    if (targetMs === null || !Number.isFinite(targetMs)) {
+      : { kind: 'instant', time: target instanceof Date ? target.getTime() : target };
+    if (parsed === null || (parsed.kind === 'instant' && !Number.isFinite(parsed.time))) {
       setGoToDateError('Choose a date.');
       return 'invalid';
     }
-    return runGoToDate({ targetMs, key: historyKey, firstBarMs: null });
+    return runGoToDate({ target: parsed, key: historyKey, firstBarMs: null });
   }, [historyKey, replayMode, runGoToDate, selectedTimezone]);
 
   // Each history load re-runs a pending request: scroll if the bar arrived, or ask for more.
@@ -127,8 +147,13 @@ function useChartGoToDate(ws: WorkflowInput) {
       finish(null);
       return;
     }
+    if (chartQuery.isError) {
+      const reason = chartQuery.error instanceof Error ? chartQuery.error.message : 'the request failed';
+      finish(`Could not load older history: ${reason}`);
+      return;
+    }
     runGoToDate(pending);
-  }, [chartQuery.isFetching, finish, historyKey, loadedBars, runGoToDate]);
+  }, [chartQuery.error, chartQuery.isError, chartQuery.isFetching, finish, historyKey, loadedBars, runGoToDate]);
 
   /** The default date for the go-to-date box: the bar in the middle of the view. */
   const goToDateDefault = () => {
@@ -268,8 +293,12 @@ export function useChartWorkflow(ws: WorkflowInput) {
   const rawBars = (chartQuery.data?.bars ?? []) as MarketBar[];
   const barCountdownOn = barCountdownEnabled(settings, interval);
 
-  // The pre/post-market price line follows the newest bar, whether or not extended bars are shown.
-  const extendedPriceLineEnabled = settings.extendedPriceLine !== false && !replayMode;
+  const marketStatus = useChartMarketStatus(ws);
+
+  // The pre/post-market price line follows the newest bar, whether or not extended bars are shown,
+  // and never during the regular session.
+  const extendedPriceLineEnabled = settings.extendedPriceLine !== false && !replayMode
+    && marketStatus.marketStatusValue !== 'open';
   const extendedLine = extendedPriceLineEnabled ? extendedSessionPriceLine(rawBars) : null;
   const extendedLinePrice = extendedLine?.price ?? null;
   const extendedLineSession = extendedLine?.session ?? null;
@@ -305,6 +334,7 @@ export function useChartWorkflow(ws: WorkflowInput) {
   return {
     updateChartSettings,
     extendedHoursAvailable: hasExtendedHoursBars(rawBars),
+    sessionTaggedBars: hasSessionTaggedBars(rawBars),
     showExtendedHours,
     barCountdownOn,
     barCountdownVisible: barCountdownOn && !replayMode,
@@ -314,6 +344,6 @@ export function useChartWorkflow(ws: WorkflowInput) {
     ...useChartGoToDate(ws),
     ...useChartImageCopy(adapterRef),
     ...useChartTemplates(ws),
-    ...useChartMarketStatus(ws),
+    ...marketStatus,
   };
 }

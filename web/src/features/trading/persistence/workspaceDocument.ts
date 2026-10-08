@@ -104,15 +104,24 @@ function serializeChart(chart: PersistableChart): TradingChartState {
 
 const CHART_SETTING_KEYS = ['barCountdown', 'extendedHours', 'extendedPriceLine'] as const;
 
-/** The chart settings a document may carry; unknown keys are dropped and wrong types reject it. */
-export function parseChartSettings(value: unknown): TradingChartSettings | null {
+/**
+ * The chart settings a document may carry. A malformed setting falls back to its default
+ * (and is logged) rather than failing the whole workspace; unknown keys are dropped.
+ */
+export function parseChartSettings(value: unknown): TradingChartSettings {
   if (value === undefined || value === null) return {};
-  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    console.warn('Trading chart settings are malformed; using defaults.', value);
+    return {};
+  }
   const raw = value as Record<string, unknown>;
   const settings: TradingChartSettings = {};
   for (const key of CHART_SETTING_KEYS) {
     if (raw[key] === undefined) continue;
-    if (typeof raw[key] !== 'boolean') return null;
+    if (typeof raw[key] !== 'boolean') {
+      console.warn(`Trading chart setting ${key} is malformed; using its default.`, raw[key]);
+      continue;
+    }
     settings[key] = raw[key] as boolean;
   }
   return settings;
@@ -192,7 +201,6 @@ function parseCharts(value: unknown): TradingChartState[] | null {
     const comparisons = Array.isArray(chart.comparisons) ? chart.comparisons.filter(comparison) : [];
     if (Array.isArray(chart.comparisons) && comparisons.length !== chart.comparisons.length) return null;
     const settings = parseChartSettings(chart.settings);
-    if (settings === null) return null;
     charts.push({
       chartId: chart.chartId,
       instrumentId: chart.instrumentId,

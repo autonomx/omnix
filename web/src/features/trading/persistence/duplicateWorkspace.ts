@@ -1,4 +1,4 @@
-import { tradingDrawingRecordId } from '../drawings/useTradingDrawings';
+import { flushTradingDrawingSaves, tradingDrawingRecordId } from '../drawings/useTradingDrawings';
 import { tradingApi } from '../tradingApi';
 import { useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
@@ -46,7 +46,9 @@ export async function copyWorkspaceDrawings(
   targetWorkspaceId: string,
   tabIds: readonly string[],
 ): Promise<number> {
-  const records = await tradingApi.documents('drawings');
+  // Pending debounced edits belong in the copy; then read every drawing document, not one page.
+  await flushTradingDrawingSaves();
+  const records = await tradingApi.allDocuments('drawings');
   const existing = new Set(records.map((record) => record.record_id));
   const copies = workspaceDrawingCopies(records, sourceWorkspaceId, targetWorkspaceId, tabIds)
     .filter((copy) => !existing.has(copy.recordId));

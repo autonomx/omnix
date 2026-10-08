@@ -104,9 +104,12 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     selectedIndicator, setPriceScaleCurrency, setSelectedIndicator, timezoneId,
   } = ws;
 
+  const showExtendedHours = chartSettings?.extendedHours !== false;
+
+  // The chart asks for clock-aligned derived intervals (TVP-2.5); strategies keep count mode.
   const chartQuery = useQuery({
-    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit],
-    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId),
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit, 'clock', showExtendedHours],
+    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId, { alignment: 'clock', extendedHours: showExtendedHours }),
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });
@@ -204,8 +207,6 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     document.addEventListener('pointerdown', handleOutsidePointerDown, true);
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
   }, [selectedIndicator, setSelectedIndicator]);
-
-  const showExtendedHours = chartSettings?.extendedHours !== false;
 
   // Normalized once per load; replay and the chart's data effect share it. Hidden
   // extended hours (TVP-2.5) drop pre- and post-market bars before either sees them.

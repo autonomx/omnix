@@ -158,7 +158,28 @@ describe('chart workflow hook (TVP-2.5)', () => {
     current = workflowInput({ ...setup.raw, loadedBars: [...setup.raw.loadedBars as MarketBar[]], historyLimit: 500 }).input;
     rerender();
     expect(result.current.goToDateLoading).toBe(false);
-    expect(result.current.goToDateError).toBe('No earlier history is available; the chart starts 2026-10-01.');
+    expect(result.current.goToDateError).toBe('The feed serves history back to 2026-10-01 only.');
+  });
+
+  it('distinguishes complete history, the bar cap and a failed fetch', () => {
+    const complete = workflowInput({ provenance: { delay_seconds: 0, freshness_mode: 'live', history_complete: true } });
+    const { result: completeResult } = renderHook(() => useChartWorkflow(complete.input), { wrapper });
+    act(() => { expect(completeResult.current.goToDate('2026-09-25T00:00')).toBe('unavailable'); });
+    expect(completeResult.current.goToDateError).toBe("No earlier history exists: this market's data starts 2026-10-01.");
+
+    const capped = workflowInput({ historyLimit: 5_000 });
+    const { result: cappedResult } = renderHook(() => useChartWorkflow(capped.input), { wrapper });
+    act(() => { cappedResult.current.goToDate('2026-09-25T00:00'); });
+    expect(cappedResult.current.goToDateError).toBe('The chart loads at most 5,000 bars, back to 2026-10-01. A longer interval reaches further back.');
+
+    const setup = workflowInput();
+    let current = setup.input;
+    const { result, rerender } = renderHook(() => useChartWorkflow(current), { wrapper });
+    act(() => { result.current.goToDate('2026-09-25'); });
+    current = workflowInput({ ...setup.raw, chartQuery: { data: setup.raw.chartQuery.data, isFetching: false, isError: true, error: new Error('Trading request failed (502)') } }).input;
+    rerender();
+    expect(result.current.goToDateError).toBe('Could not load older history: Trading request failed (502)');
+    expect(result.current.goToDateLoading).toBe(false);
   });
 
   it('rejects go to date during replay and for unparseable input', () => {
@@ -214,6 +235,10 @@ describe('chart workflow hook (TVP-2.5)', () => {
   });
 
   it('draws the post-market price line and reports market status and delay', async () => {
+    vi.mocked(tradingApi.marketStatus).mockResolvedValue({
+      instrument_id: 'equity:NASDAQ:AAPL', session_calendar: 'XNYS', exchange_timezone: 'America/New_York',
+      status: 'post_market', always_open: false, as_of: '2026-10-07T21:00:00Z',
+    });
     const bars = hourlyBars('2026-10-07T18:00:00Z', 3, { session: 'regular' });
     bars[2] = { ...bars[2], session: 'extended_post', close: '187.5' };
     const { input, adapter } = workflowInput({ chartQuery: { data: { bars }, isFetching: false } });
@@ -221,6 +246,25 @@ describe('chart workflow hook (TVP-2.5)', () => {
     expect(adapter.setSessionPriceLine).toHaveBeenLastCalledWith(expect.objectContaining({ price: 187.5, title: 'Post-market' }));
     expect(result.current.extendedHoursAvailable).toBe(true);
     expect(result.current.dataDelay).toBe('Delayed 15 min');
+    await vi.waitFor(() => expect(result.current.marketStatus).toBe('Post-market'));
+    expect(adapter.setSessionPriceLine).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Post-market' }));
+  });
+
+  it('never shows a pre/post-market line while the regular session is open', async () => {
+    vi.mocked(tradingApi.marketStatus).mockResolvedValue({
+      instrument_id: 'equity:NASDAQ:AAPL', session_calendar: 'XNYS', exchange_timezone: 'America/New_York',
+      status: 'open', always_open: false, as_of: '2026-10-07T15:00:00Z',
+    });
+    const bars = hourlyBars('2026-10-07T12:00:00Z', 2, { session: 'extended_pre' });
+    const { input, adapter } = workflowInput({ chartQuery: { data: { bars }, isFetching: false } });
+    const { result } = renderHook(() => useChartWorkflow(input), { wrapper });
+    await vi.waitFor(() => expect(result.current.marketStatus).toBe('Market open'));
+    expect(adapter.setSessionPriceLine).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports a 24/7 market', async () => {
+    const { input } = workflowInput();
+    const { result } = renderHook(() => useChartWorkflow(input), { wrapper });
     await vi.waitFor(() => expect(result.current.marketStatus).toBe('Market open 24/7'));
   });
 

@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { tradingDrawingRecordId } from '../drawings/useTradingDrawings';
+import { flushTradingDrawingSaves, tradingDrawingRecordId } from '../drawings/useTradingDrawings';
+import { api } from '../api/gateway';
 import { tradingApi } from '../tradingApi';
 import type { TradingDocument } from '../tradingTypes';
 import { copyWorkspaceDrawings, workspaceDrawingCopies } from './duplicateWorkspace';
+
+vi.mock('../drawings/useTradingDrawings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../drawings/useTradingDrawings')>()),
+  flushTradingDrawingSaves: vi.fn().mockResolvedValue(undefined),
+}));
 
 function drawingRecord(workspaceId: string, tabId: string, instrumentId: string, status = 'active', drawings: unknown[] = [{ drawingId: 'd1', instrumentId }]): TradingDocument {
   return {
@@ -41,10 +47,29 @@ describe('duplicate layout drawings (TVP-2.5)', () => {
     const source = drawingRecord('main', 'tab-1', 'crypto:BINANCE:spot:BTC-USDT');
     const existing = drawingRecord('copy', 'tab-1', 'equity:NASDAQ:AAPL');
     const alsoSource = drawingRecord('main', 'tab-1', 'equity:NASDAQ:AAPL');
-    vi.spyOn(tradingApi, 'documents').mockResolvedValue([source, existing, alsoSource]);
+    vi.spyOn(tradingApi, 'allDocuments').mockResolvedValue([source, existing, alsoSource]);
     const create = vi.spyOn(tradingApi, 'createDocument').mockImplementation(async (_kind, recordId, payload) => ({ ...source, record_id: recordId, payload }));
     await expect(copyWorkspaceDrawings('main', 'copy', ['tab-1'])).resolves.toBe(1);
+    expect(flushTradingDrawingSaves).toHaveBeenCalled();
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith('drawings', tradingDrawingRecordId('crypto:BINANCE:spot:BTC-USDT', 'copy:tab-1'), source.payload);
+  });
+
+  it('reads every drawing document, page by page', async () => {
+    const page = (count: number, offset: number) => Array.from({ length: count }, (_, index) => ({
+      ...drawingRecord('main', 'tab-1', `crypto:BINANCE:spot:C${offset + index}-USDT`),
+      updated_at: `2026-10-08T00:00:${String(59 - Math.floor((offset + index) / 20)).padStart(2, '0')}Z`,
+    }));
+    const pages = [page(500, 0), page(3, 500)];
+    const get = vi.spyOn(api, 'GET').mockImplementation((async (_path: string, init: { params: { query: Record<string, unknown> } }) => ({
+      data: { records: pages[get.mock.calls.length - 1] },
+      response: new Response(null, { status: 200 }),
+      query: init.params.query,
+    })) as never);
+    const records = await tradingApi.allDocuments('drawings');
+    expect(records).toHaveLength(503);
+    expect(get).toHaveBeenCalledTimes(2);
+    const secondQuery = (get.mock.calls[1][1] as { params: { query: Record<string, unknown> } }).params.query;
+    expect(secondQuery).toEqual({ limit: 500, after_updated_at: pages[0][499].updated_at, after_record_id: pages[0][499].record_id });
   });
 });

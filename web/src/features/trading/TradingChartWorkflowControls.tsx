@@ -122,12 +122,13 @@ export function ChartCopyImageButton({ ws }: { ws: TradingChartPanelModel }) {
 
 /** Market session and delayed-data badges beside the symbol. */
 export function ChartMarketStatusBadges({ ws }: { ws: TradingChartPanelModel }) {
-  const { dataDelay, marketStatus, marketStatusValue } = ws;
+  const { active, dataDelay, marketStatus, marketStatusValue } = ws;
   if (!marketStatus && !dataDelay) return null;
+  // Only the active chart's badge is a live region, so the workspace has one, not one per chart.
   return (
     <span className="trading-market-badges">
       {marketStatus ? (
-        <span className="trading-market-status" data-status={marketStatusValue ?? undefined} role="status" aria-label={marketStatus} title={marketStatus}>
+        <span className="trading-market-status" data-status={marketStatusValue ?? undefined} role={active ? 'status' : undefined} title={marketStatus}>
           <i aria-hidden="true" />{marketStatus}
         </span>
       ) : null}
@@ -140,9 +141,12 @@ export function ChartMarketStatusBadges({ ws }: { ws: TradingChartPanelModel }) 
 export function ChartWorkflowSettings({ ws }: { ws: TradingChartPanelModel }) {
   const {
     applyChartTemplateRecord, barCountdownAvailable, barCountdownOn, chartSettings, chartTemplateStatus, chartTemplates,
-    deleteChartTemplate, extendedHoursAvailable, loadChartTemplates, saveChartTemplate, showExtendedHours,
-    updateChartSettings,
+    deleteChartTemplate, extendedHoursAvailable, loadChartTemplates, saveChartTemplate, sessionTaggedBars,
+    showExtendedHours, updateChartSettings,
   } = ws;
+  const extendedReason = !sessionTaggedBars
+    ? 'This feed sends bars without exchange sessions, so there are no pre/post-market bars to hide.'
+    : showExtendedHours && !extendedHoursAvailable ? 'This feed sent no pre/post-market bars.' : null;
   const [templateName, setTemplateName] = useState('');
   useEffect(() => { loadChartTemplates(); }, [loadChartTemplates]);
   const save = async (event: FormEvent<HTMLFormElement>) => {
@@ -160,14 +164,17 @@ export function ChartWorkflowSettings({ ws }: { ws: TradingChartPanelModel }) {
         />
         Countdown to bar close
       </label>
-      <label className="trading-chart-setting-toggle" title={extendedHoursAvailable ? undefined : 'This feed sends regular-session bars only'}>
+      <label className="trading-chart-setting-toggle" title={extendedReason ?? undefined}>
         <input
           type="checkbox"
           checked={showExtendedHours}
+          disabled={!sessionTaggedBars}
+          aria-describedby={extendedReason ? `${ws.chartId}-extended-hours-reason` : undefined}
           onChange={(event) => updateChartSettings({ extendedHours: event.target.checked })}
         />
         Extended hours (pre/post-market)
       </label>
+      {extendedReason ? <small id={`${ws.chartId}-extended-hours-reason`} className="trading-chart-setting-reason">{extendedReason}</small> : null}
       <label className="trading-chart-setting-toggle">
         <input
           type="checkbox"

@@ -70,8 +70,8 @@ export function TradingIntervalMenu({
       <div key={value} className="trading-interval-row">
         <button
           type="button"
-          role="option"
-          aria-selected={interval === value}
+          className="trading-interval-option"
+          aria-pressed={interval === value}
           disabled={!availability.available}
           title={availability.available
             ? derived ? `${label} · calculated from ${intervalCompactLabel(availability.baseInterval ?? value)}` : label
@@ -112,15 +112,16 @@ export function TradingIntervalMenu({
       ))}
       <details className="trading-interval-manager" onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary
-          role="combobox"
+          role="button"
           aria-label="All supported Trading intervals"
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
         >
           <span>{intervalCompactLabel(interval)}</span>
           <span className="trading-menu-caret" aria-hidden="true">⌄</span>
         </summary>
-        <div className="trading-interval-menu" role="listbox" aria-label="TradingView intervals">
+        {/* A dialog, not a listbox: it holds a form and favourite buttons beside the intervals. */}
+        <div className="trading-interval-menu" role="dialog" aria-label="TradingView intervals">
           <form className="trading-interval-custom" aria-label="Custom interval" onSubmit={applyCustom}>
             <input
               aria-label="Custom interval"

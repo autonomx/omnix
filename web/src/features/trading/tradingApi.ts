@@ -59,9 +59,20 @@ export function subscribeTradingStream(
   return () => socket.close(1000, 'chart disposed');
 }
 
-function barsQuery(instrumentId: string, interval: string, limit: number, bindingId?: string | null) {
-  return { instrument_id: instrumentId, interval, limit, ...(bindingId ? { binding_id: bindingId } : {}) };
+/** Chart-only bar options (TVP-2.5): clock-aligned derived intervals, with or without extended hours. */
+export type TradingBarsOptions = { alignment?: 'clock'; extendedHours?: boolean };
+
+function barsQuery(instrumentId: string, interval: string, limit: number, bindingId?: string | null, options?: TradingBarsOptions) {
+  return {
+    instrument_id: instrumentId,
+    interval,
+    limit,
+    ...(bindingId ? { binding_id: bindingId } : {}),
+    ...(options?.alignment ? { alignment: options.alignment, extended_hours: options.extendedHours ?? true } : {}),
+  };
 }
+
+const DOCUMENT_PAGE_SIZE = 500;
 
 function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument {
   return {
@@ -193,9 +204,9 @@ export const tradingApi = {
     (await trading(api.GET('/api/trading/providers/status'))).providers,
   instruments: async (query = ''): Promise<CanonicalInstrument[]> =>
     (await trading(api.GET('/api/trading/instruments/search', { params: { query: { query } } }))).instruments,
-  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null): Promise<BarsResponse> => {
+  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null, options?: TradingBarsOptions): Promise<BarsResponse> => {
     if (decodeTradingFormula(instrumentId)) return formulaBars(instrumentId, interval, limit);
-    return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId) } }));
+    return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId, options) } }));
   },
   quote: (instrumentId: string, bindingId?: string | null): Promise<TradingQuote> =>
     trading(api.GET('/api/trading/quotes', {
@@ -208,6 +219,19 @@ export const tradingApi = {
   diagnostics: () => trading(api.GET('/api/trading/diagnostics')),
   documents: async (kind: TradingDocumentKind): Promise<TradingDocument[]> =>
     (await trading(api.GET(DOCUMENT_PATHS[kind].list))).records,
+  /** Every document of a kind, page by page (newest first). */
+  allDocuments: async (kind: TradingDocumentKind): Promise<TradingDocument[]> => {
+    const records: TradingDocument[] = [];
+    let cursor: { after_updated_at: string; after_record_id: string } | null = null;
+    for (;;) {
+      const query = { limit: DOCUMENT_PAGE_SIZE, ...(cursor ?? {}) };
+      const page: TradingDocument[] = (await trading(api.GET(DOCUMENT_PATHS[kind].list, { params: { query } }))).records;
+      records.push(...page);
+      const last = page.at(-1);
+      if (page.length < DOCUMENT_PAGE_SIZE || !last?.updated_at) return records;
+      cursor = { after_updated_at: last.updated_at, after_record_id: last.record_id };
+    }
+  },
   createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>): Promise<TradingDocument> =>
     trading(api.POST(DOCUMENT_PATHS[kind].list, { body: { record_id: recordId, payload } })),
   updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>): Promise<TradingDocument> =>

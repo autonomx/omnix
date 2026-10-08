@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseTradingWorkspace, serializeTradingWorkspace } from './workspaceDocument';
 
 const state = {
@@ -122,14 +122,20 @@ describe('Trading workspace document', () => {
     expect(parseTradingWorkspace(serialized)).toEqual(serialized);
   });
 
-  it('drops malformed favourites, keeps documents without them, and rejects malformed chart settings', () => {
+  it('drops malformed favourites and chart settings without failing the workspace', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const legacy = serializeTradingWorkspace(state);
     expect(parseTradingWorkspace(legacy)?.favoriteIntervals).toBeUndefined();
     expect(parseTradingWorkspace({ ...legacy, favoriteIntervals: ['7m', 'nonsense', 3] })?.favoriteIntervals).toEqual(['7m']);
-    expect(parseTradingWorkspace({
+    const parsed = parseTradingWorkspace({
       ...legacy,
-      charts: [{ ...legacy.charts[0], settings: { extendedHours: 'no' } }],
-    })).toBeNull();
+      charts: [{ ...legacy.charts[0], settings: { extendedHours: 'no', barCountdown: false } }, legacy.charts[1]],
+    });
+    expect(parsed?.charts[0].settings).toEqual({ barCountdown: false });
+    expect(parsed?.charts).toHaveLength(2);
+    expect(parseTradingWorkspace({ ...legacy, charts: [{ ...legacy.charts[0], settings: 'broken' }] })?.charts[0].settings).toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
     expect(parseTradingWorkspace({
       ...legacy,
       charts: [{ ...legacy.charts[0], settings: { extendedHours: true, unknown: 1 } }],

@@ -79,9 +79,14 @@ describe('chart workflow controls (TVP-2.5)', () => {
   });
 
   it('shows market status and a delayed-data badge', () => {
-    render(<ChartMarketStatusBadges ws={model({ marketStatus: 'Post-market', marketStatusValue: 'post_market', dataDelay: 'Delayed 15 min' })} />);
-    expect(screen.getByRole('status', { name: 'Post-market' })).toHaveAttribute('data-status', 'post_market');
+    const { rerender } = render(<ChartMarketStatusBadges ws={model({ active: true, marketStatus: 'Post-market', marketStatusValue: 'post_market', dataDelay: 'Delayed 15 min' })} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Post-market');
+    expect(screen.getByRole('status')).toHaveAttribute('data-status', 'post_market');
     expect(screen.getByText('Delayed 15 min')).toBeInTheDocument();
+    // Inactive charts show the badge without their own live region.
+    rerender(<ChartMarketStatusBadges ws={model({ active: false, marketStatus: 'Post-market', marketStatusValue: 'post_market', dataDelay: null })} />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('Post-market')).toBeInTheDocument();
   });
 
   it('toggles chart settings and saves and applies templates', async () => {
@@ -91,8 +96,8 @@ describe('chart workflow controls (TVP-2.5)', () => {
     const template = { recordId: 't1', name: 'Momentum', chartType: 'line', settings: {}, indicators: [] };
     render(<ChartWorkflowSettings ws={model({
       applyChartTemplateRecord, barCountdownAvailable: true, barCountdownOn: true, chartSettings: undefined,
-      chartTemplateStatus: 'idle', chartTemplates: [template], deleteChartTemplate: vi.fn(), extendedHoursAvailable: true,
-      loadChartTemplates: vi.fn(), saveChartTemplate, showExtendedHours: true, updateChartSettings,
+      chartId: 'chart-1', chartTemplateStatus: 'idle', chartTemplates: [template], deleteChartTemplate: vi.fn(), extendedHoursAvailable: true,
+      loadChartTemplates: vi.fn(), saveChartTemplate, sessionTaggedBars: true, showExtendedHours: true, updateChartSettings,
     })} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Countdown to bar close' }));
     expect(updateChartSettings).toHaveBeenLastCalledWith({ barCountdown: false });
@@ -105,5 +110,16 @@ describe('chart workflow controls (TVP-2.5)', () => {
     expect(saveChartTemplate).toHaveBeenCalledWith('Swing');
     fireEvent.click(screen.getByRole('button', { name: 'Momentum' }));
     expect(applyChartTemplateRecord).toHaveBeenCalledWith(template);
+  });
+
+  it('disables the extended-hours toggle, with the reason, when the feed has no sessions', () => {
+    render(<ChartWorkflowSettings ws={model({
+      applyChartTemplateRecord: vi.fn(), barCountdownAvailable: true, barCountdownOn: true, chartId: 'chart-1', chartSettings: undefined,
+      chartTemplateStatus: 'idle', chartTemplates: [], deleteChartTemplate: vi.fn(), extendedHoursAvailable: false,
+      loadChartTemplates: vi.fn(), saveChartTemplate: vi.fn(), sessionTaggedBars: false, showExtendedHours: true, updateChartSettings: vi.fn(),
+    })} />);
+    const toggle = screen.getByRole('checkbox', { name: 'Extended hours (pre/post-market)' });
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAccessibleDescription(/without exchange sessions/);
   });
 });

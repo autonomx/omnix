@@ -13,6 +13,7 @@ import {
   filterExtendedHours,
   formatBarCountdown,
   hasExtendedHoursBars,
+  hasSessionTaggedBars,
   marketStatusLabel,
   paneDoubleClickAction,
   parseChartTemplate,
@@ -100,6 +101,8 @@ describe('extended hours', () => {
     expect(filterExtendedHours(bars, false).map((item) => item.session)).toEqual(['regular']);
     expect(hasExtendedHoursBars(bars)).toBe(true);
     expect(hasExtendedHoursBars([bar('2026-10-08T00:00:00Z', '2026-10-08T01:00:00Z', { session: '24x7' })])).toBe(false);
+    expect(hasSessionTaggedBars(bars.slice(1, 2))).toBe(true);
+    expect(hasSessionTaggedBars([bar('2026-10-08T00:00:00Z', '2026-10-08T01:00:00Z', { session: '24x7' })])).toBe(false);
   });
 
   it('draws a price line at the latest pre/post-market price', () => {
@@ -116,9 +119,23 @@ describe('go to date', () => {
     return bar(new Date(start).toISOString(), new Date(start + 3_600_000).toISOString());
   });
 
-  it('parses dates in the chart timezone', () => {
-    expect(parseGoToDate('2026-10-03', 'UTC')).toBe(Date.parse('2026-10-03T00:00:00Z'));
-    expect(parseGoToDate('2026-10-03T09:30', 'America/New_York')).toBe(Date.parse('2026-10-03T13:30:00Z'));
+  const at = (iso: string) => ({ kind: 'instant' as const, time: Date.parse(iso) });
+  const day = (value: string, timeZone: string) => {
+    const parsed = parseGoToDate(value, timeZone);
+    if (parsed?.kind !== 'day') throw new Error('expected a day');
+    return parsed;
+  };
+  const daily = (firstIso: string, count: number, stepDays = 1) => Array.from({ length: count }, (_, index) => {
+    const start = Date.parse(firstIso) + index * stepDays * 86_400_000;
+    return bar(new Date(start).toISOString(), new Date(start + 3_600_000).toISOString());
+  });
+
+  it('parses a date as a local day and a date-time as an instant, in the chart timezone', () => {
+    expect(parseGoToDate('2026-10-03', 'UTC')).toEqual({
+      kind: 'day', dayStart: Date.parse('2026-10-03T00:00:00Z'), dayEnd: Date.parse('2026-10-03T23:59:59.999Z'),
+    });
+    expect(parseGoToDate('2026-10-03', 'Asia/Tokyo')).toMatchObject({ kind: 'day', dayStart: Date.parse('2026-10-02T15:00:00Z') });
+    expect(parseGoToDate('2026-10-03T09:30', 'America/New_York')).toEqual(at('2026-10-03T13:30:00Z'));
     expect(parseGoToDate('03/10/2026', 'UTC')).toBeNull();
   });
 
@@ -129,18 +146,59 @@ describe('go to date', () => {
     expect(barIndexAtTime(hourly, Date.parse('2027-01-01T00:00:00Z'))).toBe(99);
   });
 
+  it('goes to the first bar of an equity day, not the bar before it', () => {
+    // Weekday daily bars open at 09:30 New York (13:30 UTC); 2026-10-02 is a Friday.
+    const equityDaily = ['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06']
+      .map((date) => bar(`${date}T13:30:00Z`, `${date}T20:00:00Z`, { interval: '1d' }));
+    expect(planGoToDate(equityDaily, day('2026-10-05', 'America/New_York'), 1_000)).toEqual({ kind: 'scroll', index: 2 });
+    // A weekend day goes to the next session.
+    expect(planGoToDate(equityDaily, day('2026-10-04', 'America/New_York'), 1_000)).toEqual({ kind: 'scroll', index: 2 });
+    // A date and time keeps the bar at or before it.
+    expect(planGoToDate(equityDaily, at('2026-10-05T12:00:00Z'), 1_000)).toEqual({ kind: 'scroll', index: 1 });
+  });
+
+  it('goes to the first intraday bar of the local day', () => {
+    // 5-minute bars from 2026-10-05 09:30 to 2026-10-06 16:00 New York, regular hours only.
+    const sessions = ['2026-10-05', '2026-10-06'].flatMap((date) => Array.from({ length: 78 }, (_, index) => {
+      const start = Date.parse(`${date}T13:30:00Z`) + index * 300_000;
+      return bar(new Date(start).toISOString(), new Date(start + 300_000).toISOString(), { interval: '5m' });
+    }));
+    expect(planGoToDate(sessions, day('2026-10-06', 'America/New_York'), 1_000)).toEqual({ kind: 'scroll', index: 78 });
+    expect(sessions[78].start_time).toBe('2026-10-06T13:30:00.000Z');
+  });
+
+  it('goes to the crypto daily bar that opens in the local day, east and west of UTC', () => {
+    const cryptoDaily = daily('2026-10-01T00:00:00Z', 6);
+    // Tokyo: the 2026-10-03 00:00 UTC bar opens at 09:00 on the 3rd.
+    expect(planGoToDate(cryptoDaily, day('2026-10-03', 'Asia/Tokyo'), 1_000)).toEqual({ kind: 'scroll', index: 2 });
+    // Los Angeles: the bar opening on local 2026-10-03 is 2026-10-04 00:00 UTC (17:00 on the 3rd).
+    expect(planGoToDate(cryptoDaily, day('2026-10-03', 'America/Los_Angeles'), 1_000)).toEqual({ kind: 'scroll', index: 3 });
+    expect(planGoToDate(cryptoDaily, day('2026-10-03', 'UTC'), 1_000)).toEqual({ kind: 'scroll', index: 2 });
+  });
+
+  it('asks for more history when the day may start before the loaded bars', () => {
+    const cryptoDaily = daily('2026-10-01T00:00:00Z', 6);
+    expect(planGoToDate(cryptoDaily, day('2026-10-01', 'Asia/Tokyo'), 1_000)).toMatchObject({ kind: 'load-history' });
+    // With nothing older to load, the first loaded bar of that day is the answer.
+    expect(planGoToDate(cryptoDaily, day('2026-10-01', 'Asia/Tokyo'), 1_000, 5_000, true)).toEqual({ kind: 'scroll', index: 0 });
+  });
+
   it('scrolls when the bar is loaded and asks for more history when it is not', () => {
-    expect(planGoToDate(hourly, Date.parse('2026-10-02T10:00:00Z'), 1_000)).toEqual({ kind: 'scroll', index: 34 });
+    expect(planGoToDate(hourly, at('2026-10-02T10:00:00Z'), 1_000)).toEqual({ kind: 'scroll', index: 34 });
     // 10 days before the first bar at one bar an hour: ~339 bars back, with margin.
-    const plan = planGoToDate(hourly, Date.parse('2026-09-21T00:00:00Z'), 100);
+    const plan = planGoToDate(hourly, at('2026-09-21T00:00:00Z'), 100);
     expect(plan.kind).toBe('load-history');
     if (plan.kind === 'load-history') {
       expect(plan.limit).toBeGreaterThan(100 + 240);
       expect(plan.limit).toBeLessThanOrEqual(5_000);
     }
-    expect(planGoToDate(hourly, Date.parse('2020-01-01T00:00:00Z'), 1_000)).toEqual({ kind: 'load-history', limit: 5_000 });
-    expect(planGoToDate(hourly, Date.parse('2020-01-01T00:00:00Z'), 5_000)).toEqual({ kind: 'unavailable', earliest: hourly[0].start_time });
-    expect(planGoToDate([], 0, 1_000)).toEqual({ kind: 'unavailable', earliest: null });
+    expect(planGoToDate(hourly, at('2020-01-01T00:00:00Z'), 1_000)).toEqual({ kind: 'load-history', limit: 5_000 });
+  });
+
+  it('says why it cannot go further back', () => {
+    expect(planGoToDate(hourly, at('2020-01-01T00:00:00Z'), 5_000)).toEqual({ kind: 'unavailable', reason: 'max-limit', earliest: hourly[0].start_time });
+    expect(planGoToDate(hourly, at('2020-01-01T00:00:00Z'), 1_000, 5_000, true)).toEqual({ kind: 'unavailable', reason: 'no-earlier', earliest: hourly[0].start_time });
+    expect(planGoToDate([], at('2020-01-01T00:00:00Z'), 1_000)).toEqual({ kind: 'unavailable', reason: 'no-data', earliest: null });
   });
 
   it('keeps the zoom and centres the target bar', () => {
@@ -240,6 +298,8 @@ describe('chart templates', () => {
     expect(parseChartTemplate({ record_id: 'old', status: 'archived', payload })).toBeNull();
     expect(parseChartTemplate({ record_id: 'bad-type', status: 'active', payload: { ...payload, chartType: 'nope' } })).toBeNull();
     expect(parseChartTemplate({ record_id: 'bad-indicator', status: 'active', payload: { ...payload, indicators: [{ id: 'rsi', period: 0, enabled: true }] } })).toBeNull();
-    expect(parseChartTemplate({ record_id: 'bad-settings', status: 'active', payload: { ...payload, settings: { extendedHours: 'yes' } } })).toBeNull();
+    expect(parseChartTemplate({ record_id: 'bad-settings', status: 'active', payload: { ...payload, settings: 'yes' } })).toBeNull();
+    // A malformed setting inside a template falls back to its default.
+    expect(parseChartTemplate({ record_id: 'odd-setting', status: 'active', payload: { ...payload, settings: { extendedHours: 'yes', barCountdown: false } } })?.settings).toEqual({ barCountdown: false });
   });
 });

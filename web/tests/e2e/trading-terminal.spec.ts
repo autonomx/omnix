@@ -349,9 +349,9 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await smaOption.click();
   await expect(page.locator('.trading-timeframe-buttons > button')).toHaveCount(3);
   await expect(page.getByRole('button', { name: '1H' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'All supported Trading intervals' })).toContainText('1H');
+  await expect(page.getByRole('button', { name: 'All supported Trading intervals' })).toContainText('1H');
   const rangeNav = page.getByRole('navigation', { name: 'chart-1 visible range' });
-  const timeframe = page.getByRole('combobox', { name: 'All supported Trading intervals' });
+  const timeframe = page.getByRole('button', { name: 'All supported Trading intervals' });
   for (const [range, interval] of [['1D', '1m'], ['5D', '5m'], ['1M', '30m'], ['3M', '1h'], ['6M', '2h'], ['YTD', '1d'], ['1Y', '1d'], ['5Y', '1w'], ['All', '1mo']] as const) {
     const rangeButton = rangeNav.getByRole('button', { name: new RegExp(`^${range}:`) });
     await rangeButton.click();
@@ -360,12 +360,12 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
     await expect(rangeButton).toHaveAttribute('aria-pressed', 'true');
   }
   await timeframe.click();
-  const intervalMenu = page.getByRole('listbox', { name: 'TradingView intervals' });
+  const intervalMenu = page.getByRole('dialog', { name: 'TradingView intervals' });
   await expect(intervalMenu).toBeVisible();
   await expect(intervalMenu.getByRole('group', { name: 'Ticks' })).toContainText('1 tick');
   await expect(intervalMenu.getByRole('group', { name: 'Ranges' })).toContainText('1000 ranges');
-  await expect(intervalMenu.getByRole('option', { name: '2 minutes' })).toBeEnabled();
-  await intervalMenu.getByRole('option', { name: '5 minutes', exact: true }).click();
+  await expect(intervalMenu.getByRole('button', { name: '2 minutes', exact: true })).toBeEnabled();
+  await intervalMenu.getByRole('button', { name: '5 minutes', exact: true }).click();
   await expect(timeframe).toContainText('5m');
   await expect.poll(() => state.barLimits).toContain(5_000);
 
