@@ -118,3 +118,30 @@ def test_watchlist_flag_set_is_a_supported_document_type() -> None:
 
     assert "watchlist_flag_set" in SUPPORTED_DOCUMENT_TYPES
     assert ("trading", "watchlist_flag_set") in registered_document_kinds()
+
+
+def test_rehydration_finds_symbols_inside_v2_watchlist_items_and_flags(monkeypatch) -> None:
+    from app.apps.trading import api as trading_api
+
+    repository = RevisionedRepository()
+    repository.records[("watchlist", "default")]["payload"] = {
+        "schemaVersion": 2,
+        "name": "Sectioned",
+        # No instrumentIds mirror: the items alone must be enough.
+        "items": [
+            {"type": "symbol", "instrumentId": "equity:NASDAQ:AAPL"},
+            {"type": "section", "id": "s1", "name": "Crypto", "collapsed": True},
+            {"type": "symbol", "instrumentId": "crypto:BINANCE:spot:BTC-USDT"},
+        ],
+    }
+    repository.create(
+        "watchlist_flag_set",
+        "default",
+        {"schemaVersion": 1, "flags": [{"instrumentId": "equity:NYSE:GME", "color": "red"}]},
+    )
+    rehydrated: list[str] = []
+    monkeypatch.setattr(trading_api, "bindings_for_instrument", rehydrated.append)
+
+    trading_api._rehydrate_persisted_bindings(lambda: repository)
+
+    assert sorted(rehydrated) == ["crypto:BINANCE:spot:BTC-USDT", "equity:NASDAQ:AAPL", "equity:NYSE:GME"]
