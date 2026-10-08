@@ -1124,17 +1124,20 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 **Completion.**
 
-| Measure | Done | How it is counted |
-|---|---|---|
-| TradingView parity, all features in scope | **61%** | Ledger features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out. Includes what Omnix had before this roadmap |
-| TradingView parity, daily + weekly features | **68%** | The same, for the features traders use daily or weekly |
-| Roadmap work packages | **21%** (14 of 67) | Work packages merged in full: TVP-0.1, 0.2, 0.3, 1.1, 1.2, 2.1, 2.3, 2.4, 2.5, 5.1, 5.2, 5.3, 6.1, 7.1. Two more are merged in part (TVP-0.4, TVP-8.1) and not counted. The 67 include the deferred TVP-4.6 |
-| Daily + weekly gap closed | **27%** (41 of 150) | Missing daily + weekly features: 150 at the first ledger count, 109 now |
+<!-- parity-completion:start -->
+| Measure | Done |
+|---|---|
+| TradingView parity, all features in scope | 61% |
+| TradingView parity, daily + weekly features | 68% |
+| Roadmap work packages merged in full | 21% (14 of 67) |
+| Daily + weekly gap closed since the first count | 27% (41 of 150) |
 
-The per-area and per-tier **Done** columns below use the same rule as the first row.
+Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
+<!-- parity-completion:end -->
 
 Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parity.json) (`python scripts/tradingview_parity_report.py`). The ledger was checked against the code in TVP-0.1 and updated after each merge; the running app was not available for a visual check.
 
+<!-- parity-report:start -->
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
 | Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 | 86% |
@@ -1160,6 +1163,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 Missing daily + weekly features: **109**
 
 Done (have counts 1, partial 0.5, of the features in scope): **61%** overall, **68%** of daily + weekly.
+<!-- parity-report:end -->
 
 **How the work runs.**
 - Integration branch `tradingview-parity`, checked out in the worktree `F:/LLM/omnix-tvp`.
@@ -1181,7 +1185,7 @@ Done (have counts 1, partial 0.5, of the features in scope): **61%** overall, **
 | TVP-1.1 + 1.2 | **Done** | merged `0331302776` | Server-side frequency (once / every time / once per bar / once per bar close / once per minute; intrabar derived from frequency); conditions child table (≤5, 13 operators, price/change/indicator/trendline sources, value/source/channel targets, RLS, `definition_revision`); bar-based evaluation on the server indicator registry; legacy adapter for all 15 types; channel schema with webhook URL and secret stored together in the protected store (write-only, masked URL, atomic with the row, advisory lock per alert); unreadable alerts reported, not fatal; migration `0141_trading_alert_conditions.sql`. Fixed pre-existing: server alerts never fired (0027 trigger); a decrypt failure made credential saves wipe all stored credentials; saves dropped other providers' keys after a failed read. Five review rounds. Follow-ups: monitor indicator cache and per-workspace limits; message placeholders and delivery senders (TVP-1.5/0.5); backfilling bars missed while the monitor is down |
 | TVP-5.1–5.3 | **Done** | merged `cf37311dbc` | Payload v2 with sections (v2 keeps writing `instrumentIds` for stale old-client tabs; unknown versions read-only), colour flags (`watchlist_flag_set`), column choice and sorting, `.txt` import/export (1 MB / 2,000 symbols, exact-spelling preference, class-share symbols), keyboard navigation as an ARIA tree grid. Edits are saved one at a time per list as operations on the last server revision. Three review rounds. Follow-ups: flag from chart and screener; indicator columns (registry now available); incremental quote refresh for large lists; the TradingView-listed watchlist shortcuts join the command catalogue in TVP-2.3 (grid navigation keys stay local) |
 | TVP-7.1 | **Done** | merged `8ea2f9bcf9` | Stop-limit, trailing stop (amount or %), DAY/GTC/GTD, `expired` status, trailing bracket stop-loss; migration `0140_trading_paper_order_types.sql`; live gateway untouched (empty diff, tested). Three review rounds:<br>• trailing stops trust only bars that start after their last move (`trail_moved_at` = later of quote time and bar start, `clock_timestamp()`), for orders and bracket legs, plain legs included;<br>• chart edits keep the trail;<br>• expired DAY entries cancel their bracket without market data;<br>• tick rounding against the trader;<br>• stop-through-market warning.<br>Follow-ups: DAY for futures/forex at venue close; new order types in replay; keep the bar low at move time to catch a real dip later in the same bar |
-| TVP-8.1 (wave 1 part) | **Done** | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
+| TVP-8.1 (wave 1 part) | **Merged** (wave 1 part) | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
 | TVP-0.5a | In progress | `tvp/0.5a-webhooks` | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor with leases, fencing, exponential backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, 5 s timeout, no redirects or proxies, HMAC-SHA256 signature, JSON or text body; `GET /api/trading/alerts/deliveries` (status only). Tests pass locally; review next |
 
 
