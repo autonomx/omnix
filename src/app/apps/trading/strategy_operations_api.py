@@ -44,6 +44,7 @@ from .strategy_interday_learning_monitor import (
     InterdayLearningMonitor,
     interday_learning_monitor_enabled,
 )
+from .strategies.runner import RUNTIME_STATE_KEY as RUNNER_STATE_KEY, StrategyRunner
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
 from .strategy_operations_health import (
     TradingOperationalHealth,
@@ -98,6 +99,12 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
+    # The gap pullback configurations it owns or shadows (strategy runner WP).
+    strategy_runner: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
     execution_observation_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
         configured_enabled=False,
         registered=False,
@@ -313,6 +320,12 @@ def create_trading_strategy_operations_router(
                     "auto_paper_archive_not_ready_strategy_count",
                     "auto_paper_qualification_blocked_strategy_count",
                 ),
+            ),
+            strategy_runner=_monitor_status(
+                getattr(state, RUNNER_STATE_KEY, None),
+                expected_type=StrategyRunner,
+                configured_enabled=trading_strategy_monitor_enabled(),
+                counter_names=("paper_order_count", "owned_config_count", "shadowed_config_count"),
             ),
             execution_observation_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_execution_observation_monitor", None),

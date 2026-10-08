@@ -1784,6 +1784,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/{strategy_id}/runner-parity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Strategy Runner Parity
+         * @description The monitor's and the strategy runner's proposals compared, while the runner shadows it.
+         */
+        get: operations["strategy_runner_parity_api_trading_strategies__strategy_id__runner_parity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies/{strategy_id}/v2/qualification": {
         parameters: {
             query?: never;
@@ -8436,6 +8456,44 @@ export interface components {
         /** RevokeSessionsResponse */
         RevokeSessionsResponse: core["schemas"]["RevokeSessionsResponse"];
         /**
+         * RunnerParityReport
+         * @description Proposals compared by trade attempt during a runner shadow period (strategy runner WP).
+         */
+        RunnerParityReport: {
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /**
+             * Execution Authority
+             * @default false
+             * @constant
+             */
+            execution_authority: false;
+            /** Matched */
+            matched: number;
+            /** Monitor Only */
+            monitor_only: string[];
+            /** Monitor Proposals */
+            monitor_proposals: number;
+            /** Parity */
+            parity: boolean;
+            /** Runner Only */
+            runner_only: string[];
+            /** Runner Proposals */
+            runner_proposals: number;
+            /** Signal Mismatch */
+            signal_mismatch: string[];
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** Strategy Id */
+            strategy_id: string;
+        };
+        /**
          * RuntimeDiagnostics
          * @description One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.
          */
@@ -9308,6 +9366,16 @@ export interface components {
             session_reconciliation_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             solana_ai_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            strategy_runner: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             v2_qualification_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
         };
@@ -15523,6 +15591,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyResearchReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_runner_parity_api_trading_strategies__strategy_id__runner_parity_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerParityReport"];
                 };
             };
             /** @description Validation Error */

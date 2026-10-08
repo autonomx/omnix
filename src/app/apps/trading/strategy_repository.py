@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, ClassVar, Literal, TYPE_CHECKING, Union, cast
@@ -283,6 +285,30 @@ class TradingStrategyRepository:
     ) -> None:
         self.context = context
         self.uow_factory = uow_factory
+
+    @contextmanager
+    def exclusive_pass(self, strategy_id: str) -> Iterator[bool]:
+        """Hold the strategy's pass lock for one configuration pass; yields whether it was acquired.
+
+        The strategy monitor and the strategy runner can run in different
+        processes. A session advisory lock on a dedicated connection, held
+        while a pass runs, keeps two passes of one configuration from ever
+        overlapping (for instance while its execution owner is switched).
+        Closing the connection releases it.
+        """
+        unit = self.uow_factory()
+        database = getattr(unit, "database", None)
+        if database is None:
+            from app.persistence.database import default_database
+
+            database = default_database()
+        key = f"omnix:trading:strategy-pass:{self.context.workspace_id}:{strategy_id}"
+        with database.dedicated_connection() as connection:
+            acquired = bool(
+                connection.execute("SELECT pg_try_advisory_lock(hashtextextended(%s, 0))", (key,)).fetchone()[0]
+            )
+            connection.commit()
+            yield acquired
 
     def create_config(self, document: TradingStrategyConfigDocument) -> TradingStrategyConfigDocument:
         with self.uow_factory() as uow:

@@ -38895,6 +38895,83 @@
         "title": "RunLimits",
         "type": "object"
       },
+      "RunnerParityReport": {
+        "description": "Proposals compared by trade attempt during a runner shadow period (strategy runner WP).",
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "execution_authority": {
+            "const": false,
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "integer"
+          },
+          "monitor_only": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Monitor Only",
+            "type": "array"
+          },
+          "monitor_proposals": {
+            "title": "Monitor Proposals",
+            "type": "integer"
+          },
+          "parity": {
+            "title": "Parity",
+            "type": "boolean"
+          },
+          "runner_only": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Runner Only",
+            "type": "array"
+          },
+          "runner_proposals": {
+            "title": "Runner Proposals",
+            "type": "integer"
+          },
+          "signal_mismatch": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signal Mismatch",
+            "type": "array"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "start",
+          "end",
+          "monitor_proposals",
+          "runner_proposals",
+          "matched",
+          "signal_mismatch",
+          "monitor_only",
+          "runner_only",
+          "parity",
+          "execution_authority"
+        ],
+        "title": "RunnerParityReport",
+        "type": "object"
+      },
       "RuntimeDiagnostics": {
         "description": "One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.",
         "properties": {
@@ -42480,6 +42557,16 @@
           "strategy_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
+          "strategy_runner": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
+          },
           "universe_archive_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -42497,6 +42584,7 @@
           "universe_archive_monitor",
           "v2_qualification_monitor",
           "alpaca_status_monitor",
+          "strategy_runner",
           "execution_observation_monitor",
           "ai_shadow_v3_monitor",
           "session_reconciliation_monitor",
@@ -78571,6 +78659,61 @@
           }
         },
         "summary": "Run Llm Research",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/runner-parity": {
+      "get": {
+        "description": "The monitor's and the strategy runner's proposals compared, while the runner shadows it.",
+        "operationId": "strategy_runner_parity_api_trading_strategies__strategy_id__runner_parity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 720,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerParityReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Strategy Runner Parity",
         "tags": [
           "trading-strategies"
         ]

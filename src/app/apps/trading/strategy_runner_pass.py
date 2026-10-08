@@ -39,6 +39,9 @@ class _DiscardingStrategyRepository:
         "list_protections",
     })
 
+    # A parity pass writes nothing, so it takes no pass lock.
+    exclusive_pass = None
+
     def __init__(self, repository: Any) -> None:
         self._repository = repository
 
@@ -105,8 +108,13 @@ class RunnerOwnedConfigs:
         self.enabled = enabled
         self.clock = clock
         self.host = StrategyRunHost()
+        self.host.execution_role = "runner"
         # One parity host per shadowed strategy, so it keeps its evaluated-bar state.
         self.parity_hosts: dict[str, RunnerParityHost] = {}
+        # The last cycle's configurations, for the operations status.
+        self.owned_strategy_ids: list[str] = []
+        self.shadowed_strategy_ids: list[str] = []
+        self.last_run_at: datetime | None = None
 
     async def run_once(self) -> int:
         """Run every runner-owned and runner-shadowed configuration; return new paper orders."""
@@ -118,6 +126,11 @@ class RunnerOwnedConfigs:
             for config in await asyncio.to_thread(strategy_repository.list_configs, active_only=True)
             if config.strategy_kind == "gap_pullback_v1" and (runner_owned(config) or runner_shadowed(config))
         ]
+        self.owned_strategy_ids = [config.strategy_id for config in configs if runner_owned(config)]
+        self.shadowed_strategy_ids = [config.strategy_id for config in configs if runner_shadowed(config)]
+        # Readiness describes this cycle's configurations only.
+        self.host.auto_paper_readiness_by_strategy = {}
+        self.last_run_at = self.clock()
         if not configs:
             return 0
         paper_repository = self.paper_repository_factory()
@@ -133,7 +146,8 @@ class RunnerOwnedConfigs:
                     else:
                         parity = self.parity_hosts.setdefault(config.strategy_id, RunnerParityHost())
                         parity.parity_repository = strategy_repository
-                        parity.current_run_id = host.current_run_id
+                        # Its trade log lines say they come from the parity pass.
+                        parity.current_run_id = _run_id("runner-parity", self.clock())
                         await parity._run_config(
                             config,
                             # Stand-ins for the repositories: same reads, no writes.

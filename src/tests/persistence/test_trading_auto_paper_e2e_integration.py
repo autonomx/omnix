@@ -512,3 +512,21 @@ async def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and
         )
     finally:
         database.close()
+
+
+def test_one_pass_of_a_strategy_runs_at_a_time() -> None:
+    """The monitor and the strategy runner never overlap on one configuration (strategy runner WP)."""
+    database = _database()
+    try:
+        context = ensure_local_identity(database)
+        repository = TradingStrategyRepository(context=context, uow_factory=lambda: unit_of_work(database))
+        with repository.exclusive_pass("pass-lock-a") as first:
+            with repository.exclusive_pass("pass-lock-a") as second, repository.exclusive_pass("pass-lock-b") as other:
+                assert first is True
+                assert second is False
+                assert other is True
+        # Closing the pass releases the lock.
+        with repository.exclusive_pass("pass-lock-a") as again:
+            assert again is True
+    finally:
+        database.close()

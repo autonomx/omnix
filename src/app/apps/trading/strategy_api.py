@@ -479,6 +479,24 @@ async def _execute_range_backtest(
     return result
 
 
+
+class RunnerParityReport(BaseModel):
+    """Proposals compared by trade attempt during a runner shadow period (strategy runner WP)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    strategy_id: str
+    start: datetime
+    end: datetime
+    monitor_proposals: int
+    runner_proposals: int
+    matched: int
+    signal_mismatch: list[str]
+    monitor_only: list[str]
+    runner_only: list[str]
+    parity: bool
+    execution_authority: Literal[False] = False
+
 def create_trading_strategy_router(
     repository_factory: RepositoryFactory = default_strategy_repository,
     catalyst_repository_factory: CatalystRepositoryFactory = default_catalyst_repository,
@@ -786,6 +804,19 @@ def create_trading_strategy_router(
         except ValueError as exc:
             status = 404 if str(exc) == "strategy_config_not_found" else 422
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.get("/{strategy_id}/runner-parity", response_model=RunnerParityReport)
+    async def strategy_runner_parity(
+        strategy_id: str,
+        hours: int = Query(default=24, ge=1, le=24 * 30),
+    ) -> RunnerParityReport:
+        """The monitor's and the strategy runner's proposals compared, while the runner shadows it."""
+        from .strategy_runner_parity import runner_parity_report
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        report = await runner_parity_report(repository_factory(), strategy_id, start=start, end=end)
+        return RunnerParityReport(start=start, end=end, **report)
 
     @router.get("/{strategy_id}", response_model=TradingStrategyConfigDocument)
     async def get_strategy(strategy_id: str):

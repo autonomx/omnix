@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 TASK_ID = "trading.strategy_runner"
+RUNTIME_STATE_KEY = "_omnix_trading_strategy_runner"
 
 
 def _now() -> datetime:
@@ -56,6 +57,9 @@ class StrategyRunner:
         # Built on the first cycle, so booting the runner imports none of the
         # monitor's pass.
         self.owned_configs: RunnerOwnedConfigs | None = None
+        self.interval_seconds: float | None = None
+        self.last_run_at: datetime | None = None
+        self.strategies_error: str | None = None
 
     def _owned_configs(self) -> RunnerOwnedConfigs | None:
         if self.owned_configs is None and self.paper_repository_factory is not None:
@@ -77,11 +81,52 @@ class StrategyRunner:
         """One scheduled cycle: the registered strategies, then the gap pullback
         configurations the runner owns or shadows. Returns the proposals recorded
         plus the paper orders placed."""
-        recorded = await asyncio.to_thread(self.run_once)
+        recorded = 0
+        # Runner-owned configurations first: they may hold open positions whose
+        # protections their pass reconciles.
         owned_configs = self._owned_configs()
         if owned_configs is not None:
             recorded += await owned_configs.run_once()
+        try:
+            recorded += await asyncio.to_thread(self.run_once)
+            self.strategies_error = None
+        except Exception as exc:
+            # A registered strategy's failure must not stop the owned configurations.
+            self.strategies_error = f"{type(exc).__name__}: {exc}"
+            logger.warning("strategy runner: registered strategies failed: %s", exc)
+        self.last_run_at = self.clock()
         return recorded
+
+    @property
+    def last_error(self) -> str | None:
+        owned_error = self.owned_configs.host.last_error if self.owned_configs is not None else None
+        return owned_error or self.strategies_error
+
+    @property
+    def paper_order_count(self) -> int:
+        return self.owned_configs.host.paper_order_count if self.owned_configs is not None else 0
+
+    @property
+    def owned_config_count(self) -> int:
+        return len(self.owned_configs.owned_strategy_ids) if self.owned_configs is not None else 0
+
+    @property
+    def shadowed_config_count(self) -> int:
+        return len(self.owned_configs.shadowed_strategy_ids) if self.owned_configs is not None else 0
+
+    def diagnostics(self) -> dict[str, Any]:
+        owned = self.owned_configs
+        return {
+            "owned_configs_enabled": owned.enabled() if owned is not None else None,
+            "owned_strategy_ids": list(owned.owned_strategy_ids) if owned is not None else [],
+            "shadowed_strategy_ids": list(owned.shadowed_strategy_ids) if owned is not None else [],
+            "auto_paper_readiness_by_strategy": dict(owned.host.auto_paper_readiness_by_strategy)
+            if owned is not None else {},
+            "registered_strategy_kinds": [strategy.kind for strategy in self.registry.runner_strategies()],
+            "strategies_error": self.strategies_error,
+            "live_broker_enabled": False,
+            "ai_order_placement_enabled": False,
+        }
 
     async def close(self) -> None:
         """Stop the intraday LLM annotations a runner-owned pass started."""
@@ -182,6 +227,11 @@ def strategy_runner_task(context) -> Any:
         paper_repository_factory=default_runtime_paper_repository,
     )
     interval_seconds = _interval_seconds()
+    runner.interval_seconds = interval_seconds
+    # The operations status reads it from the runtime state, as it reads the monitor.
+    state = getattr(context, "runtime_state", None)
+    if state is not None:
+        setattr(state, RUNTIME_STATE_KEY, runner)
 
     async def run(_task_context) -> int:
         return await runner.run_cycle()

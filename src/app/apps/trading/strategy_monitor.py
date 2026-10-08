@@ -325,6 +325,9 @@ class StrategyRunHost:
 
     # Strategy diagnostics count their evaluations here.
     diagnostic_evaluation_count: int = 0
+    # Which owner this host runs passes for (strategy runner WP): the monitor
+    # runs every configuration the strategy runner does not own.
+    execution_role: str = "monitor"
 
     def __init__(
         self,
@@ -589,7 +592,42 @@ class StrategyRunHost:
     ) -> None:
         from .strategy_monitor_config_run import run_config
 
-        return await run_config(self, config, strategy_repository, paper_repository, market_service)
+        exclusive = getattr(strategy_repository, "exclusive_pass", None)
+        if exclusive is None:
+            return await run_config(self, config, strategy_repository, paper_repository, market_service)
+        # One pass of a configuration at a time, across processes; then re-read
+        # it, because its execution owner may have changed since the cycle
+        # listed it.
+        lock = exclusive(config.strategy_id)
+        acquired = await asyncio.to_thread(lock.__enter__)
+        try:
+            if not acquired:
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason="pass_in_progress",
+                )
+                return None
+            current = await asyncio.to_thread(strategy_repository.get_config, config.strategy_id)
+            if not self._owns(current):
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason="execution_owner_changed",
+                    execution_role=self.execution_role,
+                )
+                return None
+            return await run_config(self, current, strategy_repository, paper_repository, market_service)
+        finally:
+            await asyncio.to_thread(lock.__exit__, None, None, None)
+
+    def _owns(self, config: TradingStrategyConfigDocument) -> bool:
+        owner = getattr(config.config, "execution_owner", "monitor")
+        return owner == "runner" if self.execution_role == "runner" else owner != "runner"
 
 
 

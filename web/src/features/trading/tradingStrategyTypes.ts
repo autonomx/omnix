@@ -62,6 +62,8 @@ export type GapPullbackConfig = {
   intraday_llm_enabled?: boolean;
   intraday_llm_top_n?: number;
   intraday_llm_interval_minutes?: number;
+  /** Which task runs the configuration; never what it may trade. */
+  execution_owner?: 'monitor' | 'runner_shadow' | 'runner';
 };
 
 export type StochRsi5mConfig = {

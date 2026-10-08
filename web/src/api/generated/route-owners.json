@@ -565,6 +565,7 @@
     "GET /api/trading/strategies/{strategy_id}/protections": "trading",
     "POST /api/trading/strategies/{strategy_id}/research/capture-yahoo": "trading",
     "POST /api/trading/strategies/{strategy_id}/research/llm-review": "trading",
+    "GET /api/trading/strategies/{strategy_id}/runner-parity": "trading",
     "GET /api/trading/strategies/{strategy_id}/v2/qualification": "trading",
     "POST /api/trading/strategies/{strategy_id}/v2/qualification/review": "trading",
     "GET /api/trading/strategy-operations/health": "trading",

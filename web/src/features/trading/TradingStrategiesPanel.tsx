@@ -695,20 +695,21 @@ export function TradingStrategiesPanel() {
 
   const upgradeToStrictV11 = () => {
     if (!draft) return;
-    setDraft({ ...draft, strategy_version: '1.1.0', config: strictV11Config() });
+    setDraft({ ...draft, strategy_version: '1.1.0', config: { ...strictV11Config(), execution_owner: draft.config.execution_owner } });
     setNotice('Loaded the strict v1.1 failed-selloff baseline with 5-minute structure and 1-minute execution. Review every value, then save to persist it.');
   };
 
   const loadReviewedV12 = () => {
     if (!draft || !htrPromotionAllowed) return;
-    const config = { ...strictV11Config(), strategy_version: '1.2.0' as const };
+    const config = { ...strictV11Config(), strategy_version: '1.2.0' as const, execution_owner: draft.config.execution_owner };
     setDraft({ ...draft, strategy_version: '1.2.0', config });
     setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
   };
 
   const loadFrozenV2 = () => {
     if (!draft) return;
-    const config = frozenV2Config();
+    // A preset changes the strategy, not which task runs it.
+    const config = { ...frozenV2Config(), execution_owner: draft.config.execution_owner };
     setDraft({
       ...draft,
       strategy_version: '2.0.0',
@@ -722,7 +723,7 @@ export function TradingStrategiesPanel() {
 
   const loadFinvizLearningV2 = () => {
     if (!draft) return;
-    const config = finvizLearningV2Config();
+    const config = { ...finvizLearningV2Config(), execution_owner: draft.config.execution_owner };
     setDraft({
       ...draft,
       strategy_version: '2.0.0',
@@ -1258,6 +1259,7 @@ export function TradingStrategiesPanel() {
                         },
                       } : current);
                     }}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
+                    <label><span>Execution owner<small>which task runs it; the order gateway and its checks are the same</small></span><select value={draft.config.execution_owner ?? 'monitor'} onChange={(event) => setConfig('execution_owner', event.target.value as GapPullbackConfig['execution_owner'])}><option value="monitor">Strategy monitor</option><option value="runner_shadow">Monitor, runner shadows (parity)</option><option value="runner">Strategy runner</option></select></label>
                     <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setDraft({ ...draft, config: { ...draft.config, intraday_learning_enabled: event.target.checked, stoch_trend_capture_enabled: event.target.checked ? draft.config.stoch_trend_capture_enabled : false, intraday_llm_enabled: event.target.checked ? draft.config.intraday_llm_enabled : false } })} /></label>
                     <label className="toggle-field"><span>3m Stoch trend capture<small>first oversold entry; range exit or 25% + trend runner; SHADOW only</small></span><input type="checkbox" checked={draft.config.stoch_trend_capture_enabled ?? false} disabled={!draft.config.intraday_learning_enabled} onChange={(event) => setConfig('stoch_trend_capture_enabled', event.target.checked)} /></label>
                     <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>

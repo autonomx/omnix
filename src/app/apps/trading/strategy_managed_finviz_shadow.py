@@ -139,7 +139,7 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
     return snapshot.account.account_id
 
 
-def _desired_for_current(
+def _desired_profile_for_current(
     current: TradingStrategyConfigDocument,
     desired_shadow: TradingStrategyConfigDocument,
 ) -> TradingStrategyConfigDocument:
@@ -164,6 +164,24 @@ def _desired_for_current(
             }
         )
     return desired_shadow
+
+
+def _desired_for_current(
+    current: TradingStrategyConfigDocument,
+    desired_shadow: TradingStrategyConfigDocument,
+) -> TradingStrategyConfigDocument:
+    """The restored profile, keeping which task runs it.
+
+    ``execution_owner`` is the operator's choice (strategy runner WP): startup
+    restores the research profile but must not move the strategy back to the
+    monitor, or end a runner shadow period, behind the operator's back.
+    """
+
+    desired = _desired_profile_for_current(current, desired_shadow)
+    owner = getattr(current.config, "execution_owner", "monitor")
+    return desired.model_copy(
+        update={"config": desired.config.model_copy(update={"execution_owner": owner})}
+    )
 
 
 def _managed_fields_match(
