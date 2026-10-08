@@ -513,6 +513,7 @@
     "GET /api/trading/paper/accounts/{account_id}/protections/{instrument_id}": "trading",
     "POST /api/trading/paper/accounts/{account_id}/reset": "trading",
     "POST /api/trading/paper/accounts/{account_id}/risk-orders": "trading",
+    "POST /api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move": "trading",
     "POST /api/trading/paper/accounts/{account_id}/risk-preview": "trading",
     "POST /api/trading/prospective-gap/confirmation/run": "trading",
     "POST /api/trading/prospective-gap/postclose/finalize": "trading",

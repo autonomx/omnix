@@ -48,7 +48,8 @@ describe('TradingPositionOverlay', () => {
 
     await waitFor(() => expect(screen.getByLabelText('crypto:BINANCE:spot:SOL-USDT paper position')).toBeInTheDocument());
     expect(screen.getByText('Working')).toBeInTheDocument();
-    expect(screen.getByText('74.57')).toBeInTheDocument();
+    // The working order's own line (TradingOrderLinesOverlay) shows its price.
+    expect(screen.queryByText('74.57')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Drag to add Take profit' })).toBeInTheDocument();
   });
 

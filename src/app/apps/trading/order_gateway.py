@@ -92,6 +92,15 @@ class OrderGateway:
     def cancel(self, account_id: str, order_id: str) -> PaperOrder:
         return self._repository.cancel_order(account_id, order_id)
 
+    def replace_manual_entry(
+        self,
+        account_id: str,
+        order_id: str,
+        replacement: PaperOrderRequest,
+    ) -> tuple[PaperOrder, PaperOrder]:
+        """Cancel a manual entry and place its re-sized replacement atomically (a moved entry, TVP-7.3)."""
+        return self._repository.replace_order(account_id, order_id, replacement, authority=MANUAL_RISK)
+
     def replace_reducing(
         self,
         account_id: str,

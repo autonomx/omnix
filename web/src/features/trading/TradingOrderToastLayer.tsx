@@ -3,7 +3,7 @@ import { usePaperNotifications, type PaperNotification } from './paperNotificati
 import './TradingAlertToastLayer.css';
 
 const TITLES: Record<PaperNotification['kind'], string> = {
-  fill: 'Order filled', partial: 'Order partly filled', reject: 'Order rejected', cancel: 'Order cancelled', expire: 'Order expired', closed: 'Order closed',
+  fill: 'Order filled', partial: 'Order partly filled', reject: 'Order rejected', cancel: 'Order cancelled', modify: 'Order modified', expire: 'Order expired', closed: 'Order closed',
 };
 
 /** The newest paper trading notification over the chart for a few seconds (TVP-7.4); the dock keeps the log. */

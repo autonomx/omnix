@@ -11,6 +11,7 @@ export type PaperAccountSnapshot = components['schemas']['PaperAccountSnapshot-O
 export type PaperPositionProtection = components['schemas']['PaperPositionProtection'];
 export type PaperRiskPreview = components['schemas']['PaperRiskPreview'];
 export type PaperRiskOrderResult = components['schemas']['PaperRiskOrderResult'];
+export type PaperRiskEntryMoveResult = components['schemas']['PaperRiskEntryMoveResult'];
 
 export type PaperSide = PaperOrder['side'];
 export type PaperOrderType = PaperOrder['order_type'];
@@ -24,3 +25,4 @@ export type PaperOrderInput = components['schemas']['PaperOrderRequest'];
 export type PaperProtectionInput = components['schemas']['PaperProtectionUpsert'];
 export type PaperRiskPreviewInput = components['schemas']['PaperRiskPreviewRequest'];
 export type PaperRiskOrderInput = components['schemas']['PaperRiskOrderRequest'];
+export type PaperRiskEntryMoveInput = components['schemas']['PaperRiskEntryMoveRequest'];

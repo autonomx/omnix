@@ -19,6 +19,14 @@ from .paper import (
     PaperOrderRequest,
 )
 from .order_gateway import OrderGateway
+from .paper_entry_move import (
+    PaperRiskEntryMoveRequest,
+    PaperRiskEntryMoveResult,
+    movable_entry,
+    moved_entry_intent,
+    restored_protection,
+    snapshot_without_order,
+)
 from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .paper_protection_repository import (
@@ -37,6 +45,7 @@ from .paper_risk import (
 )
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
+from .strategy_risk import paper_account_equity
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 
 
@@ -302,6 +311,92 @@ def create_trading_paper_router(
             raise HTTPException(status_code=status, detail=detail) from exc
 
         return PaperRiskOrderResult(preview=preview, order=order, protection=protection)
+
+    @router.post(
+        "/accounts/{account_id}/risk-orders/{order_id}/move",
+        response_model=PaperRiskEntryMoveResult,
+    )
+    async def move_risk_entry(
+        account_id: str,
+        order_id: str,
+        request: PaperRiskEntryMoveRequest,
+        order_management: str | None = Header(default=None, alias=_ORDER_MANAGEMENT_HEADER),
+    ):
+        """Re-price a working risk entry (dragged on the chart): re-sized by the server, replaced atomically."""
+        _require_order_management(order_management)
+        try:
+            current = await asyncio.to_thread(repository_factory().snapshot, account_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        located = next((item for item in current.open_orders if item.order_id == order_id), None)
+        if located is None:
+            raise HTTPException(status_code=409, detail="paper_order_not_open")
+        probe = PaperRiskPreviewRequest(
+            instrument_id=located.instrument_id,
+            binding_id=located.binding_id,
+            entry_price=request.limit_price or request.trigger_price,
+            stop_price=Decimal("0.0001"),
+        )
+        snapshot, active_protections, execution, daily_realized = await risk_context(account_id, probe)
+        try:
+            order, protection = movable_entry(snapshot, active_protections, order_id)
+            intent = moved_entry_intent(order, protection, request, equity=paper_account_equity(snapshot))
+            protection_request = risk_protection_request(intent, entry_price=intent.worst_entry_price)
+        except ValueError as exc:
+            detail = str(exc)
+            raise HTTPException(status_code=409 if "not_" in detail or "filled" in detail else 422, detail=detail) from exc
+        entry_price = intent.worst_entry_price
+        if entry_price is None:
+            raise HTTPException(status_code=422, detail="paper_risk_entry_price_unavailable")
+        # Sized as if the working entry were already cancelled: its cash and its pending stop don't count twice.
+        preview = preview_paper_risk(
+            snapshot=snapshot_without_order(snapshot, order),
+            protections=[item for item in active_protections if item is not protection],
+            observation=execution,
+            request=PaperRiskPreviewRequest(
+                instrument_id=order.instrument_id,
+                binding_id=order.binding_id,
+                entry_price=entry_price,
+                stop_price=intent.stop_loss,
+                desired_risk_pct=intent.desired_risk_pct,
+            ),
+            daily_realized_pnl=daily_realized,
+        )
+        if not preview.allowed or preview.recommended_quantity <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "paper_risk_rejected",
+                    "reason_codes": list(preview.reason_codes),
+                    "preview": preview.model_dump(mode="json"),
+                },
+            )
+        protection_repository = protection_repository_factory()
+        # As for a new entry, the stop is armed for the moved order before it can fill.
+        try:
+            armed = await asyncio.to_thread(protection_repository.arm_pending_entry, account_id, protection_request)
+        except ValueError as exc:
+            detail = str(exc)
+            raise HTTPException(status_code=409 if "already_submitted" in detail else 422, detail=detail) from exc
+        try:
+            cancelled, moved = await asyncio.to_thread(
+                OrderGateway(repository_factory()).replace_manual_entry,
+                account_id,
+                order_id,
+                risk_order_request(intent, entry_price=entry_price, quantity=preview.recommended_quantity),
+            )
+        except ValueError as exc:
+            # Nothing was replaced: the stop goes back to the working entry.
+            detail = str(exc)
+            try:
+                await asyncio.to_thread(
+                    protection_repository.arm_pending_entry, account_id, restored_protection(protection)
+                )
+            except ValueError as cleanup_exc:
+                detail = f"{detail}:protection_restore_failed:{cleanup_exc}"
+            conflict = "not_open" in detail or "insufficient" in detail
+            raise HTTPException(status_code=409 if conflict else 422, detail=detail) from exc
+        return PaperRiskEntryMoveResult(preview=preview, cancelled=cancelled, order=moved, protection=armed)
 
     @router.get(
         "/accounts/{account_id}/protections",

@@ -348,9 +348,11 @@ export function TradingPositionOverlay({
       {draft ? zone(stopLossY, chartPalette.amberWash) : null}
       {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, chartPalette.teal, 'TP')}
       {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, chartPalette.amber, 'SL')}
-      <div className="trading-position-entry-line" style={{ top: entryY }}>
-        <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
-      </div>
+      {position.pending && !replayMode ? null /* a working order's own line marks its price (TVP-7.3) */ : (
+        <div className="trading-position-entry-line" style={{ top: entryY }}>
+          <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
+        </div>
+      )}
       <div className="trading-position-controls" style={{ top: entryY }} onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" className="trading-position-direction" aria-label="Reverse paper position" title="Reverse requires short-position support" disabled={position.pending || actionStatus === 'saving' || !isShort} onClick={() => openAction('reverse')}>↕</button>
         {position.pending ? <span className="trading-position-working">Working</span> : null}

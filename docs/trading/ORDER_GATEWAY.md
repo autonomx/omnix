@@ -9,7 +9,7 @@ Each order carries the reason it may exist:
 | Authority | Used by | May open or add exposure |
 |---|---|---|
 | `reduce_only` | protective exits (strategy monitor, paper protection monitor), the raw `POST .../orders` route, replacements | no |
-| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry | yes |
+| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry; `POST .../risk-orders/{order_id}/move` (an entry dragged on the chart), sized again the same way | yes |
 | `strategy_entry` | strategy entries, after `StrategyEntryAuthorizer` proved the entry for its own trade attempt | yes |
 
 A strategy entry is authorized from its own trade attempt's events: risk decision, universe and profile fingerprint. A later or earlier attempt for the same instrument never authorizes it. The assessment is persisted as a `trade_authorization` strategy event, and a denial raises `trade_authorization_denied:<reason codes>`.
@@ -26,6 +26,8 @@ Under the account row lock, in the transaction that writes the order:
 6. Cash for a buy is reserved (`insufficient_paper_cash`).
 
 A replacement cancels the old order and places the new one in one transaction. If the replacement is rejected, the old order stays open with its reservation.
+
+Moving a working risk entry (`replace_manual_entry`, TVP-7.3) is a replacement with `manual_risk` authority. Only an open, unfilled buy limit, stop or stop-limit entry with a pending stop moves. The server sizes the moved entry again: the risk percent is the original order's dollar risk over today's equity, capped by the policy, and the preview treats the working order as already cancelled, so its cash and stop are not counted twice. The stop and target are armed for the new order id before the replacement, as for a new entry. If the replacement fails, they go back to the working entry.
 
 ## Kill switches
 

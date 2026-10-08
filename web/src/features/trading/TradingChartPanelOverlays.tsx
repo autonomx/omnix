@@ -1,5 +1,7 @@
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
+import { TradingOrderLinesOverlay } from './TradingOrderLinesOverlay';
+import { TradingPriceScalePlus } from './TradingPriceScalePlus';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chartAdapter';
 import { drawingInstrumentOf } from './drawings/drawingInstrument';
@@ -12,11 +14,12 @@ import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
-    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicators, instrumentId, interval, latestClose, objectTreeVisible,
+    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
-    provenance, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
+    provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
   } = ws;
+  const tickSize = drawingInstrumentOf(chartQuery.data?.instrument).tickSize;
   return (
     <>
       <TradingDrawingOverlay
@@ -65,6 +68,16 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onPlacementConsumed={clearAlertPlacement}
       />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
+      <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
+      {active ? (
+        <TradingPriceScalePlus
+          adapter={adapter}
+          instrumentId={instrumentId}
+          lastPrice={latestClose > 0 ? latestClose : null}
+          tickSize={tickSize}
+          onAddAlert={(price, y) => { if (latest) setAlertPlacement({ time: latest.start_time, price, x: 0, y, source: 'context-menu' }); }}
+        />
+      ) : null}
       {tableVisible ? (
         <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
           <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>

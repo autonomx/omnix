@@ -30431,6 +30431,85 @@
         "title": "PaperResetRequest",
         "type": "object"
       },
+      "PaperRiskEntryMoveRequest": {
+        "additionalProperties": false,
+        "description": "The moved entry's price and its new order id; everything else comes from the working order.",
+        "properties": {
+          "idempotency_key": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "order_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Order Id",
+            "type": "string"
+          },
+          "trigger_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Trigger Price"
+          }
+        },
+        "required": [
+          "order_id",
+          "idempotency_key",
+          "trigger_price"
+        ],
+        "title": "PaperRiskEntryMoveRequest",
+        "type": "object"
+      },
+      "PaperRiskEntryMoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelled": {
+            "$ref": "#/components/schemas/PaperOrder-Output"
+          },
+          "order": {
+            "$ref": "#/components/schemas/PaperOrder-Output"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/PaperRiskPreview"
+          },
+          "protection": {
+            "$ref": "#/components/schemas/PaperPositionProtection"
+          }
+        },
+        "required": [
+          "preview",
+          "cancelled",
+          "order",
+          "protection"
+        ],
+        "title": "PaperRiskEntryMoveResult",
+        "type": "object"
+      },
       "PaperRiskOrderRequest": {
         "additionalProperties": false,
         "description": "Risk intent for a new long paper entry; quantity is deliberately absent.",
@@ -78163,6 +78242,84 @@
           }
         },
         "summary": "Place Risk Order",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move": {
+      "post": {
+        "description": "Re-price a working risk entry (dragged on the chart): re-sized by the server, replaced atomically.",
+        "operationId": "move_risk_entry_api_trading_paper_accounts__account_id__risk_orders__order_id__move_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omnix-Paper-Order-Management",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omnix-Paper-Order-Management"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperRiskEntryMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperRiskEntryMoveResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Risk Entry",
         "tags": [
           "trading-paper"
         ]

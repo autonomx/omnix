@@ -1,6 +1,6 @@
 import { clearPaperNotifications, usePaperNotifications } from './paperNotifications';
 
-const KIND_LABELS = { fill: 'Filled', partial: 'Partly filled', reject: 'Rejected', cancel: 'Cancelled', expire: 'Expired', closed: 'Closed' } as const;
+const KIND_LABELS = { fill: 'Filled', partial: 'Partly filled', reject: 'Rejected', cancel: 'Cancelled', modify: 'Modified', expire: 'Expired', closed: 'Closed' } as const;
 
 /** The terminal dock's Notifications tab (TVP-7.4): paper order fills, rejections, cancellations and expiries. */
 export function TradingNotificationsLog() {
