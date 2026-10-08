@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from app.apps.trading.paper import (
     PaperAccount,
     PaperAccountSnapshot,
@@ -13,6 +16,7 @@ from app.apps.trading.paper import (
     PaperOrderRequest,
     paper_fill_decision,
 )
+from app.apps.trading.replay_api import create_trading_replay_router
 from app.apps.trading.replay_execution import (
     ReplayExecutionBar,
     advance_replay_snapshot,
@@ -161,3 +165,81 @@ def test_detached_replay_state_does_not_inherit_live_reservations() -> None:
     assert detached.balances[0].reserved == Decimal("0")
     assert detached.open_orders == []
     assert detached.order_history == []
+
+
+def _market_request(order_id: str, quantity: str) -> PaperOrderRequest:
+    return PaperOrderRequest(
+        order_id=order_id,
+        instrument_id="equity:NYSE:TEST",
+        binding_id=None,
+        side="buy",
+        order_type="market",
+        quantity=Decimal(quantity),
+        reference_price=Decimal("101"),
+        idempotency_key=order_id,
+    )
+
+
+def _funded_replay_snapshot() -> PaperAccountSnapshot:
+    funded = _snapshot().model_copy(
+        update={"balances": [PaperBalance(currency="USD", available=Decimal("10000"), reserved=Decimal("0"))]}
+    )
+    return detached_replay_snapshot(funded)
+
+
+def test_replay_order_on_an_advanced_bar_does_not_apply_the_bar_again() -> None:
+    placed = place_replay_order(_funded_replay_snapshot(), _market_request("market-1", "20"), _bar("101"))
+    advanced = advance_replay_snapshot(placed.snapshot, _bar("101", start_hour=11))
+    first = next(order for order in advanced.order_history if order.order_id == "market-1")
+    assert first.filled_quantity == Decimal("10")
+
+    second = place_replay_order(
+        advanced,
+        _market_request("market-2", "1"),
+        _bar("101", start_hour=11),
+        advance_bar=False,
+    )
+
+    working = next(order for order in second.snapshot.order_history if order.order_id == "market-1")
+    assert working.filled_quantity == Decimal("10")
+    assert second.order.order_id == "market-2"
+    assert second.snapshot.positions[0].last_price == Decimal("101")
+
+
+def test_replay_order_advances_the_bar_by_default() -> None:
+    placed = place_replay_order(_funded_replay_snapshot(), _market_request("market-1", "20"), _bar("101"))
+    advanced = advance_replay_snapshot(placed.snapshot, _bar("101", start_hour=11))
+
+    # The default keeps the existing contract: the bar is applied before placing.
+    second = place_replay_order(advanced, _market_request("market-2", "1"), _bar("101", start_hour=11))
+
+    working = next(order for order in second.snapshot.order_history if order.order_id == "market-1")
+    assert working.filled_quantity == Decimal("20")
+
+
+def test_replay_order_endpoint_honours_advance_bar() -> None:
+    placed = place_replay_order(_funded_replay_snapshot(), _market_request("market-1", "20"), _bar("101"))
+    advanced = advance_replay_snapshot(placed.snapshot, _bar("101", start_hour=11))
+    app = FastAPI()
+    app.include_router(
+        create_trading_replay_router(repository_factory=lambda: None, market_service_factory=lambda: None)
+    )
+    client = TestClient(app)
+    body = {
+        "snapshot": advanced.model_dump(mode="json"),
+        "order": _market_request("market-2", "1").model_dump(mode="json"),
+        "bar": _bar("101", start_hour=11).model_dump(mode="json"),
+    }
+
+    once = client.post("/api/trading/replay/execution/orders", json={**body, "advance_bar": False})
+    again = client.post("/api/trading/replay/execution/orders", json=body)
+
+    assert once.status_code == 200, once.text
+    assert again.status_code == 200, again.text
+
+    def filled(response) -> str:
+        orders = response.json()["snapshot"]["order_history"]
+        return next(order for order in orders if order["order_id"] == "market-1")["filled_quantity"]
+
+    assert Decimal(filled(once)) == Decimal("10")
+    assert Decimal(filled(again)) == Decimal("20")

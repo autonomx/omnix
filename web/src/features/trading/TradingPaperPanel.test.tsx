@@ -222,6 +222,8 @@ describe('TradingPaperPanel', () => {
       expect.objectContaining({ account: expect.objectContaining({ account_id: 'paper-1' }) }),
       expect.objectContaining({ quantity: '1', reference_price: '101.25' }),
       expect.objectContaining({ close: '101.25' }),
+      // No bar has been advanced yet (no start bar chosen), so the order's bar is applied once here.
+      true,
     );
     await waitFor(() => expect(useTradingReplayStore.getState().snapshot?.order_history).toHaveLength(1));
     expect(useTradingReplayStore.getState().snapshot?.order_history?.[0]).toMatchObject({

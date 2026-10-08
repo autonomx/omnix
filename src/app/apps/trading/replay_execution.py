@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -57,6 +57,9 @@ class ReplayOrderRequest(BaseModel):
     snapshot: PaperAccountSnapshot
     bar: ReplayExecutionBar
     order: PaperOrderRequest
+    # False when the snapshot has already been advanced through ``bar``: the
+    # bar is then not applied to working orders a second time.
+    advance_bar: bool = True
 
 
 class ReplayOrderResult(BaseModel):
@@ -392,9 +395,16 @@ def place_replay_order(
     bar: ReplayExecutionBar,
     *,
     policy: PaperExecutionPolicy | None = None,
+    advance_bar: bool = True,
 ) -> ReplayOrderResult:
+    """Place a replay order at ``bar``.
+
+    By default the snapshot is first advanced through ``bar``. Pass
+    ``advance_bar=False`` when the caller has already advanced it, so working
+    orders see each bar exactly once.
+    """
     active = policy or PaperExecutionPolicy()
-    prepared = advance_replay_snapshot(source, bar, policy=active)
+    prepared = advance_replay_snapshot(source, bar, policy=active) if advance_bar else _mark(source, bar)
     # Place the order just before the immutable bar close so the same execution
     # policy latency check remains meaningful without using wall-clock time.
     created_at = bar.end_time - timedelta(milliseconds=active.latency_ms)

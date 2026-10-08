@@ -48,11 +48,16 @@ export async function advanceReplaySnapshot(
   return tradingReplayApi.advanceExecution(source, bar);
 }
 
-/** Place a detached replay order through the shared server execution kernel. */
+/**
+ * Place a detached replay order through the shared server execution kernel.
+ * Pass `advanceBar: false` when `source` has already been advanced through
+ * `bar`, so working orders are not filled against it twice.
+ */
 export async function placeReplayOrder(
   source: PaperAccountSnapshot,
   input: PaperOrderInput,
   bar: MarketBar,
+  { advanceBar = true }: { advanceBar?: boolean } = {},
 ): Promise<ReplayResult> {
-  return tradingReplayApi.placeExecutionOrder(source, input, bar);
+  return tradingReplayApi.placeExecutionOrder(source, input, bar, advanceBar);
 }

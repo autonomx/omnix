@@ -65,6 +65,7 @@ export const tradingReplayApi = {
     replay(api.GET('/api/trading/replay/backtests/{run_id}', { params: { path: { run_id: runId } } })),
   advanceExecution: (snapshot: PaperAccountSnapshot, bar: MarketBar): Promise<PaperAccountSnapshot> =>
     replay(api.POST('/api/trading/replay/execution/advance', { body: { snapshot, bar: replayBar(bar) } })),
-  placeExecutionOrder: (snapshot: PaperAccountSnapshot, order: PaperOrderInput, bar: MarketBar): Promise<{ snapshot: PaperAccountSnapshot; order: PaperOrder }> =>
-    replay(api.POST('/api/trading/replay/execution/orders', { body: { snapshot, order, bar: replayBar(bar) } })),
+  /** `advanceBar: false` when the snapshot has already been advanced through `bar`. */
+  placeExecutionOrder: (snapshot: PaperAccountSnapshot, order: PaperOrderInput, bar: MarketBar, advanceBar = true): Promise<{ snapshot: PaperAccountSnapshot; order: PaperOrder }> =>
+    replay(api.POST('/api/trading/replay/execution/orders', { body: { snapshot, order, bar: replayBar(bar), advance_bar: advanceBar } })),
 };

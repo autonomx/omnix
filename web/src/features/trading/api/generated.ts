@@ -8165,6 +8165,11 @@ export interface components {
         };
         /** ReplayOrderRequest */
         ReplayOrderRequest: {
+            /**
+             * Advance Bar
+             * @default true
+             */
+            advance_bar?: boolean;
             bar: components["schemas"]["ReplayExecutionBar"];
             order: components["schemas"]["PaperOrderRequest"];
             snapshot: components["schemas"]["PaperAccountSnapshot-Input"];
