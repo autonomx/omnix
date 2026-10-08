@@ -1,4 +1,4 @@
-import { arrowHead, lineStroke } from '../shapes';
+import { arrowHead, constrainTo45Degrees, lineStroke } from '../shapes';
 import { defineDrawingTool } from '../types';
 
 export const arrowTool = defineDrawingTool({
@@ -6,6 +6,7 @@ export const arrowTool = defineDrawingTool({
   label: 'Arrow',
   group: 'arrows',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {

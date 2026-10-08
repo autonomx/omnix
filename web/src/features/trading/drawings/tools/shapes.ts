@@ -93,6 +93,16 @@ export function constrainTo45Degrees(candidate: ScreenPoint, others: readonly Sc
   return { x: origin.x + Math.cos(angle) * length, y: origin.y + Math.sin(angle) * length };
 }
 
+/** With Shift, makes the box from the previous anchor to `candidate` a square (rectangle), or a circle (ellipse). */
+export function constrainToSquare(candidate: ScreenPoint, others: readonly ScreenPoint[], modifiers: DrawingModifiers): ScreenPoint {
+  const origin = others[others.length - 1];
+  if (!modifiers.shift || !origin) return candidate;
+  const dx = candidate.x - origin.x;
+  const dy = candidate.y - origin.y;
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return { x: origin.x + (dx < 0 ? -side : side), y: origin.y + (dy < 0 ? -side : side) };
+}
+
 /**
  * Ramer-Douglas-Peucker simplification, for freehand strokes. Keeps the first
  * and last point and every point further than `tolerance` from the chord.

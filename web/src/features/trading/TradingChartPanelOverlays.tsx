@@ -12,7 +12,7 @@ import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
-    drawingSnapMode, drawingTool, drawings, indicators, instrumentId, interval, latestClose, objectTreeVisible,
+    drawingSnapMode, drawingTool, drawings, drawingsHidden, indicators, instrumentId, interval, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
     provenance, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
@@ -29,6 +29,9 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         selectedId={drawings.state.selectedId}
         onAdd={drawings.add}
         onSelect={(id) => { onActivate(); drawings.select(id); }}
+        onToggleSelect={(id) => { onActivate(); drawings.toggleSelect(id); }}
+        onCloneDrawings={drawings.clone}
+        allHidden={drawingsHidden}
         onMovePoint={drawings.movePoint}
         onEditDrawing={drawings.edit}
         instrument={drawingInstrumentOf(chartQuery.data?.instrument)}

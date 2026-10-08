@@ -78,7 +78,7 @@ export function renderDrawing(drawing: TradingDrawing, frame: DrawingFrame, acce
   if (!definition) return null;
   const preview = previewDrawing(drawing, frame.translationPreview, frame.handlePreview);
   const rawPoints = preview.points;
-  const selected = drawing.drawingId === frame.selectedId;
+  const selected = drawing.selected || drawing.drawingId === frame.selectedId;
   const { shapes, context } = drawingGeometry({
     definition,
     ...access,

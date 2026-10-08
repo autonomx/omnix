@@ -1,5 +1,5 @@
 import { lineAlertLevel } from '../alertLevels';
-import { extendedSegment, lineStroke, rayEnd } from '../shapes';
+import { constrainTo45Degrees, extendedSegment, lineStroke, rayEnd } from '../shapes';
 import { booleanProperty } from '../properties';
 import { defineDrawingTool, type DrawingAlertLevel } from '../types';
 
@@ -9,6 +9,7 @@ export const trendLineTool = defineDrawingTool({
   displayName: 'Trendline',
   group: 'lines',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: { extendLeft: false, extendRight: false },
   propertySchema: [
     { key: 'extendLeft', label: 'Extend left', type: 'boolean' },
@@ -39,6 +40,7 @@ export const rayTool = defineDrawingTool({
   label: 'Ray',
   group: 'lines',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {

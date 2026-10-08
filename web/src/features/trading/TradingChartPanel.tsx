@@ -13,11 +13,13 @@ import { ChartPanelLegend, ChartPanelPaneControls } from './TradingChartPanelLeg
 import { ChartPanelOverlays, ChartPanelContextMenu } from './TradingChartPanelOverlays';
 import { ChartPanelFooter } from './TradingChartPanelFooter';
 import { useTradingChartPanelCommands } from './commands/useTradingChartPanelCommands';
+import { useTradingDrawingCommands } from './commands/useTradingDrawingCommands';
 import { TradingBarCountdown } from './TradingChartWorkflowControls';
 
 export function TradingChartPanel(props: TradingChartPanelProps) {
   const ws = useTradingChartPanel(props);
   useTradingChartPanelCommands(ws);
+  useTradingDrawingCommands(ws);
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
     barCountdownVisible, drawingTool, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,

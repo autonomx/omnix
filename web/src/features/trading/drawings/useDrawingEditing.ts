@@ -5,7 +5,25 @@ import { drawingPropertiesWithDefaults } from './tools/registry';
 import type { DrawingEditPatch, DrawingHandle, DrawingModifiers, DrawingToolServices, ScreenPoint } from './tools/types';
 
 export type HandlePreview = { drawingId: string; patch: DrawingEditPatch };
-export type TranslationPreview = { drawingId: string; from: DrawingPoint; to: DrawingPoint };
+/**
+ * A whole-drawing drag in progress: the drawings it moves (the selection when the pressed drawing is part of one),
+ * or with `clone` the ghost copies (`cloneGhostId`) a Ctrl+drag will add, while the originals stay.
+ */
+export type TranslationPreview = { drawingIds: readonly string[]; from: DrawingPoint; to: DrawingPoint; clone?: boolean };
+
+const CLONE_SUFFIX = '#clone';
+
+/** The id of the ghost copy shown while `drawingId` is Ctrl+dragged. */
+export function cloneGhostId(drawingId: string): string {
+  return `${drawingId}${CLONE_SUFFIX}`;
+}
+
+/** The ghost copies of a Ctrl+drag in progress, to render beside the originals. */
+export function cloneGhosts(drawings: readonly TradingDrawing[], translation: TranslationPreview | null): TradingDrawing[] {
+  if (!translation?.clone) return [];
+  const wanted = new Set(translation.drawingIds);
+  return drawings.flatMap((drawing) => (wanted.has(cloneGhostId(drawing.drawingId)) ? [{ ...drawing, drawingId: cloneGhostId(drawing.drawingId), selected: false }] : []));
+}
 
 /** A drawing's anchors and properties with an in-progress translation or handle drag applied. */
 export function previewDrawing(
@@ -15,7 +33,7 @@ export function previewDrawing(
 ): { points: DrawingPoint[]; properties: DrawingProperties | undefined } {
   let points = drawing.points;
   let properties = drawing.properties;
-  if (translation?.drawingId === drawing.drawingId) {
+  if (translation?.drawingIds.includes(drawing.drawingId)) {
     const { from, to } = translation;
     const timeDelta = Date.parse(to.time) - Date.parse(from.time);
     const priceDelta = to.price - from.price;
@@ -83,7 +101,10 @@ export function useDrawingEditing({
   pointFor,
   screenFor,
   services,
+  groupOf = (id) => [id],
   onSelect,
+  onToggleSelect,
+  onCloneDrawings,
   onEdit,
   onTranslateDrawing,
   onRemove,
@@ -95,7 +116,13 @@ export function useDrawingEditing({
   /** The pointer in pane pixels. */
   screenFor: (clientX: number, clientY: number) => ScreenPoint | null;
   services: () => DrawingToolServices;
+  /** The drawings a drag of `id` moves: the selection when `id` is part of a multi-selection. */
+  groupOf?: (id: string) => readonly string[];
   onSelect: (id: string | null) => void;
+  /** Ctrl+click: add to or remove from the selection (TVP-2.2). Without it Ctrl+click selects like a click. */
+  onToggleSelect?: (id: string) => void;
+  /** Ctrl+drag: copies of the drawings, moved. Without it Ctrl+drag moves like a drag. */
+  onCloneDrawings?: (ids: readonly string[], from: DrawingPoint, to: DrawingPoint) => void;
   onEdit: (id: string, patch: DrawingEditPatch) => void;
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onRemove: (id: string) => void;
@@ -144,26 +171,47 @@ export function useDrawingEditing({
     });
   };
 
-  /** Pointer down on a drawing with the eraser or cursor: erase it, or select it and start moving it. */
+  /**
+   * Pointer down on a drawing with the eraser or cursor: erase it, or select it and start moving it. With Ctrl (or
+   * Cmd), a click adds it to the selection or removes it, and a drag clones it (the selection, when it is part of
+   * one). A press on a drawing of a multi-selection moves the whole selection; a click without moving selects it alone.
+   */
   const pressDrawing = (drawing: TradingDrawing, clientX: number, clientY: number, modifiers: DrawingModifiers) => {
     if (tool === 'eraser') {
       onRemove(drawing.drawingId);
       onToolComplete?.();
       return;
     }
-    onSelect(drawing.drawingId);
-    if (drawing.locked || !enabled) return;
-    const start = pointFor(drawing, clientX, clientY, modifiers);
-    if (!start) return;
+    const cloning = modifiers.ctrl && Boolean(onCloneDrawings);
+    const toggling = modifiers.ctrl && Boolean(onToggleSelect);
+    const group = drawing.selected ? groupOf(drawing.drawingId) : [drawing.drawingId];
+    if (!toggling && !drawing.selected) onSelect(drawing.drawingId);
+    const start = enabled ? pointFor(drawing, clientX, clientY, modifiers) : null;
+    const startScreen = { x: clientX, y: clientY };
+    const released = (pointer: PointerEvent) => {
+      if (pointer.clientX !== startScreen.x || pointer.clientY !== startScreen.y) return false;
+      // A click: Ctrl toggles; a plain click on a multi-selection keeps only this drawing.
+      if (toggling) onToggleSelect?.(drawing.drawingId);
+      else if (group.length > 1) onSelect(drawing.drawingId);
+      return true;
+    };
+    if (!start || (drawing.locked && !cloning)) {
+      trackPointer(() => undefined, (pointer) => { released(pointer); });
+      return;
+    }
+    const ids = cloning ? group.map(cloneGhostId) : group;
     trackPointer((pointer) => {
       const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiersOf(pointer));
-      if (point) setTranslationPreview({ drawingId: drawing.drawingId, from: start, to: point });
+      if (point) setTranslationPreview({ drawingIds: ids, from: start, to: point, clone: cloning });
     }, (pointer) => {
       const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiersOf(pointer));
       setTranslationPreview(null);
+      if (released(pointer)) return;
       const moved = point && (point.time !== start.time || point.price !== start.price
         || point.screen?.x !== start.screen?.x || point.screen?.y !== start.screen?.y);
-      if (point && moved) onTranslateDrawing(drawing.drawingId, start, point);
+      if (!point || !moved) return;
+      if (cloning) onCloneDrawings?.(group, start, point);
+      else onTranslateDrawing(drawing.drawingId, start, point);
     });
   };
 
