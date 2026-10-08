@@ -1,22 +1,29 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { tradingApi } from '../tradingApi';
 import { isIntervalAvailable, TRADING_VIEW_INTERVAL_GROUPS } from '../tradingIntervals';
 import { useTradingStore, type TradingTabState } from '../tradingStore';
 import type { TradingWorkspacePersistence } from '../persistence/useTradingWorkspacePersistence';
 import { formatCommandKeys } from './hotkeyLabels';
-import { TRADING_COMMANDS, commandKeys } from './tradingCommands';
+import { loadStoredKeyOverrides } from './keyOverridesStorage';
+import { TRADING_COMMANDS, commandKeys, tradingCommandDefinition } from './tradingCommands';
 import { TradingCommandPalette, type TradingPaletteItem } from './TradingCommandPalette';
 import { TradingIntervalInputBox } from './TradingIntervalInputBox';
+import { TradingShortcutDialog } from './TradingShortcutDialog';
 import { useTradingTabCommands } from './useTradingTabCommands';
 import {
   canRunTradingCommand,
   runTradingCommand,
+  setTradingCommandKeyOverrides,
+  tradingCommandAvailability,
   tradingCommandKeyOverrides,
   useTradingCommand,
+  useTradingCommandKeyOverrides,
 } from './useTradingCommands';
 
 type PaletteMode = 'all' | 'layouts';
+
+const SHORTCUTS_COMMAND = tradingCommandDefinition('workspace.shortcuts')!;
 
 function restoreFocus(element: Element | null): void {
   if (element instanceof HTMLElement && element.isConnected) element.focus();
@@ -41,6 +48,8 @@ export function TradingKeyboardLayer({
 }) {
   const [paletteMode, setPaletteMode] = useState<PaletteMode | null>(null);
   const [intervalText, setIntervalText] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const overrides = useTradingCommandKeyOverrides();
   const focusBeforeRef = useRef<Element | null>(null);
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const updateChart = useTradingStore((state) => state.updateChart);
@@ -55,6 +64,15 @@ export function TradingKeyboardLayer({
     setPaletteMode(null);
     restoreFocus(focusBeforeRef.current);
   };
+  const openShortcuts = () => {
+    focusBeforeRef.current = document.activeElement;
+    setShortcutsOpen(true);
+  };
+
+  // Rebound keys from earlier visits (TVP-2.4).
+  useEffect(() => {
+    setTradingCommandKeyOverrides(loadStoredKeyOverrides());
+  }, []);
 
   useTradingCommand('chart.symbolSearch', (event) => onOpenSymbolSearch(event?.key));
   useTradingCommand('chart.intervalInput', (event) => {
@@ -62,6 +80,7 @@ export function TradingKeyboardLayer({
     setIntervalText(event && event.key !== ',' ? event.key : '');
   });
   useTradingCommand('workspace.commandPalette', () => openPalette('all'));
+  useTradingCommand('workspace.shortcuts', openShortcuts);
   useTradingCommand('layout.load', () => openPalette('layouts'), () => workspaceReady);
   useTradingCommand('layout.save', () => void persistence.saveNow(), () => workspaceReady);
   useTradingTabCommands(onCloseTab);
@@ -75,14 +94,15 @@ export function TradingKeyboardLayer({
 
   const paletteItems = useMemo<TradingPaletteItem[]>(() => {
     if (paletteMode !== 'all') return [];
-    const overrides = tradingCommandKeyOverrides();
+    const currentOverrides = tradingCommandKeyOverrides();
+    const availability = tradingCommandAvailability();
     const commands = TRADING_COMMANDS
       .filter((definition) => definition.id !== 'workspace.commandPalette')
       .map((definition) => ({
         id: `command:${definition.id}`,
         label: definition.label,
         group: definition.group,
-        keys: formatCommandKeys(definition, commandKeys(definition, overrides)),
+        keys: formatCommandKeys(definition, commandKeys(definition, currentOverrides, availability)),
         disabled: !canRunTradingCommand(definition.id),
         run: () => { runTradingCommand(definition.id); },
       }));
@@ -105,8 +125,14 @@ export function TradingKeyboardLayer({
     return [...commands, ...layoutItems.map((item) => ({ ...item, label: `Load layout ${item.label}` })), ...intervals, ...symbols];
   }, [activeChartId, instruments.data, layoutItems, paletteMode, supportedIntervals, updateChart]);
 
+  const shortcutKeys = formatCommandKeys(SHORTCUTS_COMMAND, commandKeys(SHORTCUTS_COMMAND, overrides));
+
   return (
     <>
+      <button type="button" aria-haspopup="dialog" aria-expanded={shortcutsOpen} title={shortcutKeys.length ? `Keyboard shortcuts (${shortcutKeys.join(', ')})` : 'Keyboard shortcuts'} onClick={openShortcuts}>
+        Shortcuts
+      </button>
+      <TradingShortcutDialog open={shortcutsOpen} onClose={() => { setShortcutsOpen(false); restoreFocus(focusBeforeRef.current); }} />
       <TradingCommandPalette
         open={paletteMode !== null}
         title={paletteMode === 'layouts' ? 'Load layout' : 'Command palette'}

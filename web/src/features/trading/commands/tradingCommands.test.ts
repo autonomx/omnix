@@ -255,9 +255,10 @@ describe('browser and installed-app keys (TVP-2.3)', () => {
     dispatcher.unmount();
   });
 
-  it('matches Alt+digit by physical key', () => {
+  it('matches Alt+digit and Shift+digit by physical key', () => {
     expect(matchesHotkey('alt+1', key({ key: '¡', code: 'Digit1', altKey: true }))).toBe(true);
     expect(matchesHotkey('alt+1', key({ key: '2', code: 'Digit2', altKey: true }))).toBe(false);
+    expect(matchesHotkey('shift+1', key({ key: '!', code: 'Digit1', shiftKey: true }))).toBe(true);
   });
 });
 

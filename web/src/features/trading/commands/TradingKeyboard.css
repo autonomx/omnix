@@ -18,4 +18,25 @@
   .trading-interval-box input:focus{border-color:var(--c-blue-650);outline:0;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-blue-650) 13%, transparent)}
   .trading-interval-box p{margin:0;color:var(--c-slate-630);font-size:12px}
   .trading-interval-box p.trading-interval-box-error{color:var(--c-red-560)}
+  .trading-shortcut-dialog-backdrop{position:fixed;z-index:1250;inset:0;display:grid;place-items:start center;padding:6vh 16px 16px;background:color-mix(in srgb, var(--c-slate-130) 55%, transparent)}
+  .trading-shortcut-dialog{display:grid;width:min(760px,100%);max-height:min(820px,88vh);grid-template-rows:auto auto auto auto minmax(0,1fr);overflow:hidden;border:1px solid color-mix(in srgb, var(--c-slate-790) 38%, transparent);border-radius:8px;background:var(--c-neutral-1000);color:var(--c-slate-240);box-shadow:0 24px 70px color-mix(in srgb, var(--c-neutral-0) 45%, transparent)}
+  .trading-shortcut-dialog>header{display:flex;align-items:center;gap:10px;padding:16px 18px 10px}
+  .trading-shortcut-dialog>header h2{flex:1;margin:0;font-size:19px}
+  .trading-shortcut-dialog>input{margin:0 18px;padding:8px 10px;border:1px solid var(--c-slate-890);border-radius:6px;background:transparent;color:var(--c-slate-240)}
+  .trading-shortcut-dialog>input:focus{border-color:var(--c-blue-650);outline:0;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-blue-650) 13%, transparent)}
+  .trading-shortcut-conflicts{margin:8px 18px 0;color:var(--c-red-560);font-size:12px}
+  .trading-shortcut-notice{min-height:16px;margin:6px 18px 4px;color:var(--c-slate-630);font-size:12px}
+  .trading-shortcut-groups{min-height:0;overflow:auto;padding:0 18px 16px}
+  .trading-shortcut-groups h3{margin:14px 0 4px;color:var(--c-slate-630);font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+  .trading-shortcut-groups table{width:100%;border-collapse:collapse}
+  .trading-shortcut-groups tr{border-bottom:1px solid var(--c-slate-930)}
+  .trading-shortcut-groups th{padding:7px 8px 7px 0;font-weight:400;text-align:left}
+  .trading-shortcut-groups td{padding:7px 0 7px 8px;vertical-align:middle}
+  .trading-shortcut-conflict{display:block;color:var(--c-red-560);font-size:11px}
+  .trading-shortcut-keys kbd.is-app-only{opacity:.6}
+  .trading-shortcut-keys em{color:var(--c-slate-630);font-size:12px}
+  .trading-shortcut-groups td.trading-shortcut-actions{text-align:right;white-space:nowrap}
+  .trading-shortcut-actions button+button{margin-left:6px}
+  .trading-shortcut-fixed{color:var(--c-slate-630);font-size:12px}
+  @media(max-width:640px){.trading-shortcut-dialog-backdrop{padding:0}.trading-shortcut-dialog{max-height:100vh;height:100vh;border:0;border-radius:0}.trading-shortcut-groups tr{display:grid;grid-template-columns:1fr auto}.trading-shortcut-groups th{grid-column:1/-1}}
 }

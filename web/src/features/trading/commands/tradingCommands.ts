@@ -67,6 +67,7 @@ export const TRADING_COMMANDS = [
   { id: 'drawing.delete', label: 'Delete selected drawing', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'] },
   // General and layouts. Omnix calls a saved TradingView layout a workspace.
   { id: 'workspace.commandPalette', label: 'Open command palette', group: 'General', scope: 'workspace', defaultKeys: ['mod+k'] },
+  { id: 'workspace.shortcuts', label: 'Keyboard shortcuts', group: 'General', scope: 'workspace', defaultKeys: ['mod+/'] },
   { id: 'layout.save', label: 'Save layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['mod+s'] },
   { id: 'layout.load', label: 'Load layout (workspace)', group: 'Layout', scope: 'workspace', defaultKeys: ['.'] },
   // Layout and watchlist (TVP-2.3)
@@ -134,10 +135,14 @@ const PHYSICAL_KEY_NAMES: Record<string, string> = {
   '.': 'period', ',': 'comma', ';': 'semicolon', "'": 'quote', '[': 'bracketleft', ']': 'bracketright',
 };
 
-/** True when the event is exactly this hotkey. Alt combinations match the physical key, because macOS Option changes `event.key` (Option+T types "†"). */
+/**
+ * True when the event is exactly this hotkey. Alt combinations match the
+ * physical key, because macOS Option changes `event.key` (Option+T types
+ * "†"); so do Shift+digit combinations, because Shift+1 types "!".
+ */
 export function matchesHotkey(hotkey: string, event: KeyboardEvent): boolean {
   const parts = hotkeyParts(hotkey);
-  const physical = parts.includes('alt');
+  const physical = parts.includes('alt') || (parts.includes('shift') && parts.some((part) => /^\d$/.test(part)));
   const target = physical ? parts.map((part) => PHYSICAL_KEY_NAMES[part] ?? part).join('+') : hotkey;
   let matched = false;
   getHotkeyHandler([[target, () => { matched = true; }, { preventDefault: false, usePhysicalKeys: physical }]])(event);

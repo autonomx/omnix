@@ -6,7 +6,8 @@ import { useTradingStore, type TradingTabState } from '../tradingStore';
 import type { CanonicalInstrument } from '../tradingTypes';
 import { TradingKeyboardLayer } from './TradingKeyboardLayer';
 import { noteTradingPointerDown } from './chartKeyContext';
-import { setTradingCommandAvailability, useTradingCommandDispatcher } from './useTradingCommands';
+import { KEY_OVERRIDES_STORAGE_KEY } from './keyOverridesStorage';
+import { setTradingCommandAvailability, setTradingCommandKeyOverrides, useTradingCommandDispatcher } from './useTradingCommands';
 
 const initialStore = useTradingStore.getState();
 
@@ -51,6 +52,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
+  act(() => setTradingCommandKeyOverrides({}));
   act(() => useTradingStore.setState(initialStore, true));
 });
 
@@ -190,5 +193,28 @@ describe('tab and layout shortcuts (TVP-2.3)', () => {
     press({ key: 'Tab', shiftKey: true });
     expect(store().activeChartId).toBe(chartThree);
     shell.remove();
+  });
+});
+
+describe('shortcut dialog entry points (TVP-2.4)', () => {
+  it('opens with Ctrl+/ and from the toolbar button', () => {
+    setup();
+    press({ key: '/', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close keyboard shortcuts' }));
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: 'Shortcuts' });
+    expect(trigger).toHaveAttribute('title', 'Keyboard shortcuts (Ctrl+/)');
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+
+  it('applies keys rebound on an earlier visit', () => {
+    window.localStorage.setItem(KEY_OVERRIDES_STORAGE_KEY, JSON.stringify({ 'layout.save': ['mod+e'] }));
+    const { persistence } = setup();
+    press({ key: 's', ctrlKey: true });
+    expect(persistence.saveNow).not.toHaveBeenCalled();
+    press({ key: 'e', ctrlKey: true });
+    expect(persistence.saveNow).toHaveBeenCalledTimes(1);
   });
 });

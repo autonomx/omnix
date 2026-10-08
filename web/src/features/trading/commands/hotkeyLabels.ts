@@ -38,3 +38,39 @@ export function formatCommandKeys(definition: TradingCommandDefinition, keys: re
   if (definition.keyPattern === 'interval') return ['0–9', ','];
   return keys.map((hotkey) => formatHotkey(hotkey, mac));
 }
+
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'OS']);
+
+const EVENT_KEY_NAMES: Record<string, string> = {
+  ' ': 'space',
+  '+': '[plus]',
+  Esc: 'escape',
+};
+
+/**
+ * The hotkey string for a key press, for rebinding. Ctrl and ⌘ both become
+ * `mod`. Letters and digits come from the physical key, so Shift+1 is
+ * `shift+1` and macOS Option+T is `alt+t`. Returns null for a lone modifier.
+ */
+export function hotkeyFromEvent(event: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>): string | null {
+  if (MODIFIER_KEYS.has(event.key)) return null;
+  const physical = /^Key([A-Z])$/.exec(event.code ?? '')?.[1] ?? /^Digit(\d)$/.exec(event.code ?? '')?.[1];
+  const key = physical?.toLowerCase() ?? EVENT_KEY_NAMES[event.key] ?? event.key.toLowerCase();
+  if (!key || key === 'unidentified' || key === 'dead') return null;
+  const modifiers = [
+    event.ctrlKey || event.metaKey ? 'mod' : null,
+    event.altKey ? 'alt' : null,
+    event.shiftKey ? 'shift' : null,
+  ].filter((modifier): modifier is string => modifier !== null);
+  return [...modifiers, key].join('+');
+}
+
+/** Keys browsers keep for themselves: a page never receives them, so they only work in the installed app. */
+const BROWSER_RESERVED = new Set([
+  'mod+t', 'mod+w', 'mod+n', 'mod+shift+t', 'mod+shift+w', 'mod+shift+n', 'mod+tab', 'mod+shift+tab', 'mod+pageup', 'mod+pagedown',
+  'mod+1', 'mod+2', 'mod+3', 'mod+4', 'mod+5', 'mod+6', 'mod+7', 'mod+8', 'mod+9',
+]);
+
+export function isBrowserReservedHotkey(normalizedHotkey: string): boolean {
+  return BROWSER_RESERVED.has(normalizedHotkey);
+}
