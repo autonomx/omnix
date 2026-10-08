@@ -84,7 +84,7 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/indicators/indicatorWorkerProtocol.ts` | `IndicatorWorker*` | Messages to and from the indicator Web Worker |
 | `web/src/features/trading/indicators/indicatorScheduler.ts` | `PendingRequest` | The scheduler's record of a worker request |
 | `web/src/features/trading/persistence/workspaceDocument.ts` | `*` | Trading workspace document content, stored in `TradingDocument.payload` and owned by the web client |
-| `web/src/features/trading/TradingWatchlist.tsx` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
+| `web/src/features/trading/tradingWatchlistModel.ts` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
 | `web/src/features/trading/tradingFormula.ts` | `TradingFormulaPayload` | Formula document content in `TradingDocument.payload` |
 | `web/src/features/rpg/*` | `*` | The RPG web surface, which is being retired and keeps its handwritten clients until then (DECISIONS 2026-10-03) |
 
