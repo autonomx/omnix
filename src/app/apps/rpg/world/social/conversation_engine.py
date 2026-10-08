@@ -51,6 +51,7 @@ from .npc_conversations import (
     upsert_conversation,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.world.contracts import NO_CONVERSATION_HOOKS, ConversationHooks, ConversationLineWriter
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,13 @@ def _resolve_speaker_name(simulation_state: dict[str, Any], speaker_id: str) -> 
     return _safe_str(row.get("name")) or _safe_str(speaker_id)
 
 
-def build_next_conversation_line(conversation: dict[str, Any], simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
+def build_next_conversation_line(
+    conversation: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    tick: int,
+    write_line: ConversationLineWriter | None = None,
+) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     speaker_id = select_next_speaker(conversation, simulation_state)
     recent_lines = get_conversation_lines(simulation_state, cast(Any, conversation.get("conversation_id")))
@@ -117,19 +124,15 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
 
     if settings.get("llm_expand_npc_conversations"):
         try:
-            from app.apps.rpg.narration.ai.conversation_gateway import (
-                generate_recorded_conversation_line,
-            )
-            from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
-            llm_gateway = build_app_llm_gateway()
             mode = _safe_str(_safe_dict(runtime_state).get("mode")).strip().lower() or "live"
             conv_id = _safe_str(conversation.get("conversation_id"))
             turn_num = int(conversation.get("turn_count", 0) or 0) + 1
             record_key = f"conversation_line:{conv_id}:{turn_num}"
 
-            if mode == "live":
-                record = generate_recorded_conversation_line(
-                    llm_gateway,
+            # A live line is written by the caller's narration (``write_line``);
+            # without it the tick uses a template line. Replay reads the records.
+            if mode == "live" and write_line is not None:
+                record = write_line(
                     conversation,
                     speaker_id,
                     simulation_state,
@@ -155,7 +158,7 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
                         created_tick=tick,
                         source="llm",
                     )
-            else:
+            elif mode != "live":
                 # Replay mode: read back from recorded data
                 llm_records = runtime_state.get("llm_records", []) if isinstance(runtime_state, dict) else []
                 llm_records_index = _safe_dict(runtime_state.get("llm_records_index")) if isinstance(runtime_state, dict) else {}
@@ -256,7 +259,12 @@ def try_start_party_reaction_conversation(simulation_state: dict[str, Any], runt
     return simulation_state
 
 
-def advance_active_conversations(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
+def advance_active_conversations(
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    tick: int,
+    hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+) -> dict[str, Any]:
     ensure_beats_state(simulation_state)
     ensure_signal_state(runtime_state)
 
@@ -284,7 +292,7 @@ def advance_active_conversations(simulation_state: dict[str, Any], runtime_state
             continue
 
         # Generate next line
-        line = build_next_conversation_line(conv, simulation_state, runtime_state, tick)
+        line = build_next_conversation_line(conv, simulation_state, runtime_state, tick, hooks.write_line)
         append_conversation_line(simulation_state, cid, line)
 
         # Build beat
@@ -375,7 +383,12 @@ def _trim_ambient_overflow(simulation_state: dict[str, Any], settings: dict[str,
     return simulation_state
 
 
-def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
+def run_conversation_tick(
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    tick: int,
+    hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+) -> dict[str, Any]:
     """Sole authoritative conversation lifecycle entrypoint.
 
     Pipeline:
@@ -408,7 +421,7 @@ def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[
     _trim_ambient_overflow(simulation_state, settings)
 
     # 4. Advance active conversations (beats + signals built inside)
-    advance_active_conversations(simulation_state, runtime_state, tick)
+    advance_active_conversations(simulation_state, runtime_state, tick, hooks)
 
     # 5. Evaluate pivots after advancing
     evaluate_pivots(simulation_state, runtime_state, tick)
@@ -426,12 +439,9 @@ def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[
     trim_beats_state(simulation_state)
 
     session_id = _safe_str(runtime_state.get("session_id")).strip()
-    if session_id:
+    if session_id and hooks.after_tick is not None:
         try:
-            from app.apps.rpg.session.companion_turn_runtime import (
-                _maybe_enqueue_latest_ambient_conversation_narration as _maybe_enqueue_latest_ambient_conversation_narration,
-            )
-            ambient_result = _maybe_enqueue_latest_ambient_conversation_narration(
+            ambient_result = hooks.after_tick(
                 session_id,
                 simulation_state,
                 runtime_state,

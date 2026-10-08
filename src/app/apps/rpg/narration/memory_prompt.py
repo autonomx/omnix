@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from .memory_actor import get_actor_memory, get_relevant_actor_memory
-from .memory_retrieval import get_relevant_recent_memory
-from .memory_world import get_relevant_world_memory, get_world_memory
+from app.apps.rpg.narration.memory_actor import get_actor_memory, get_relevant_actor_memory
+from app.apps.rpg.narration.memory_retrieval import get_relevant_recent_memory
+from app.apps.rpg.narration.memory_world import get_relevant_world_memory, get_world_memory
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 

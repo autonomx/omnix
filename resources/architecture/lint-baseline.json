@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "fd6fa0d780d0c5de2616f42ee7dcdf43616e7ccae86386d071241c5ad2bc5aca",
+  "policy_digest": "81698248e5c0b048594f26555baacc35e8044976f984bbde20c5e1f987ca60c6",
   "rules": [
     "AL001",
     "AL002",
@@ -51,42 +51,6 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "foundation->narration:narration.presentation",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/foundation/performance_trace.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "foundation->rules:rules.party",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/foundation/persistence/migrations/v5_to_v6.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "foundation->narration:narration.narrative",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/foundation/persistence/rpg_feature_compat.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "foundation->world:world.npc_evolution",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/foundation/persistence/rpg_feature_compat.py",
-      "rule": "AL017"
     },
     {
       "count": 1,
@@ -149,69 +113,6 @@
         1
       ],
       "path": "src/app/apps/rpg/genesis/worlds/published_launch.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "narration->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/narration/ai/memory_narration_grounding.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "narration->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_prompts.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "narration->session:session.runtime",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/narration/presentation/runtime_bridge.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "rules->narration:narration.presentation",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/rules/player/player_party.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "rules->world:world.simulation",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/rules/validation/simulation_parity.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "world->narration:narration.ai",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "world->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
       "rule": "AL017"
     }
   ]

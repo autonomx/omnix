@@ -61,6 +61,7 @@ from app.apps.rpg.rules.ambient_intent import (
 from app.apps.rpg.rules.items.world_items import (
     list_scene_items as list_scene_items,
 )
+from app.apps.rpg.session.conversation_hooks import SESSION_CONVERSATION_HOOKS
 from app.apps.rpg.genesis.creator.world_simulation import (
     step_simulation_state as step_simulation_state,
 )
@@ -284,7 +285,7 @@ def _advance_turn_contract_and_simulation(ctx) -> bool:
     ctx.metadata = _safe_dict(ctx.setup.get("metadata"))
     ctx.metadata["simulation_state"] = ctx.after_progression_state
     ctx.setup["metadata"] = ctx.metadata
-    ctx.step_result = step_simulation_state(ctx.setup)
+    ctx.step_result = step_simulation_state(ctx.setup, conversation_hooks=SESSION_CONVERSATION_HOOKS)
     ctx.next_setup = _safe_dict(ctx.step_result.get("next_setup")) or ctx.setup
     # step_simulation_state rebuilds a world-sim slice from scratch. Merge it
     # back over the authoritative per-turn state so player/service/social roots

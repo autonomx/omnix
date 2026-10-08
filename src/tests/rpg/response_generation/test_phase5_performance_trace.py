@@ -4,8 +4,8 @@ import json
 from typing import Any
 
 from app.apps.rpg.foundation import performance_trace
+from app.apps.rpg.edge.api.traced_response import build_traced_json_response
 from app.apps.rpg.foundation.performance_trace import (
-    build_traced_json_response,
     current_rpg_pipeline_trace,
     rpg_pipeline_span,
     rpg_pipeline_trace,

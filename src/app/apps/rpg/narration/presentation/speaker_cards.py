@@ -7,6 +7,8 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.apps.rpg.rules.party import build_companion_presence_summary
+from app.apps.rpg.rules.party import build_party_summary
+from app.apps.rpg.rules.player.player_party import ensure_player_party
 
 from .personality import build_personality_style_tags
 from .personality_state import get_actor_personality_profile
@@ -155,3 +157,21 @@ def build_nearby_npc_cards(simulation_state: dict, scene: dict) -> list:
         cards.append(card)
 
     return cards
+
+
+def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the full party view for UI display, including narrative presence and speaker cards."""
+    simulation_state = ensure_player_party(simulation_state)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    party_state = _safe_dict(player_state.get("party_state"))
+    companions = [
+        comp
+        for comp in _safe_list(party_state.get("companions") or [])
+        if isinstance(comp, dict) and str(comp.get("status") or "active") == "active"
+    ]
+    return {
+        "party_state": party_state,
+        "party_summary": build_party_summary(player_state),
+        "presence_summary": build_companion_presence_summary(player_state),
+        "speaker_cards": build_party_speaker_cards(simulation_state, companions),
+    }

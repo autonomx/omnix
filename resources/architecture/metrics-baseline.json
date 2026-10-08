@@ -4600,7 +4600,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 1968
+      "value": 1965
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -4915,5 +4915,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "f4d366fbbf7bd3cd23eac3be8a128242d68e1f8f9e10f7513e9fbb1d8153858c"
+  "source_digest": "e7fb7da216dccad72de10604c9a95035febfec3385020f590eba92aee08c94e1"
 }

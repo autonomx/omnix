@@ -31,7 +31,6 @@ from .player_journal import update_journal_from_state
 
 # Phase 9.2 — Party system
 from .player_party import (
-    build_player_party_view,
     ensure_player_party,
 )
 
@@ -81,7 +80,6 @@ __all__ = [
     "build_player_inventory_view",
     # Phase 9.2
     "ensure_player_party",
-    "build_player_party_view",
     # Phase 18.3A
     "ensure_player_progression_state",
     "allocate_starting_stats",

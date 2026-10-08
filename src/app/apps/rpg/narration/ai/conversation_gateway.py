@@ -38,3 +38,23 @@ def generate_recorded_conversation_line(
         "parsed": parsed,
         "source": "llm",
     }
+
+
+def write_conversation_line(
+    conversation: dict[str, Any],
+    speaker_id: str,
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    recent_lines: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The world conversation tick's line writer (``world.contracts.ConversationHooks.write_line``)."""
+    from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
+
+    return generate_recorded_conversation_line(
+        build_app_llm_gateway(),
+        conversation,
+        speaker_id,
+        simulation_state,
+        runtime_state,
+        recent_lines,
+    )

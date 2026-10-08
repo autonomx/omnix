@@ -42,6 +42,7 @@ from app.apps.rpg.world.social import (
     ReputationGraph,
     RumorSystem,
 )
+from app.apps.rpg.world.contracts import NO_CONVERSATION_HOOKS, ConversationHooks
 from app.apps.rpg.world.social.conversation_engine import (
     run_conversation_tick,
     try_start_party_reaction_conversation,
@@ -460,7 +461,11 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
     return after_state
 
 
-def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+def step_simulation_state(
+    setup_payload: dict[str, Any],
+    *,
+    conversation_hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+) -> dict[str, Any]:
     """Advance the simulation by one tick.
 
     Returns ``{"next_setup": ..., "before_state": ..., "after_state": ...}``.
@@ -915,7 +920,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
             current_tick,
         )
 
-    run_conversation_tick(history_state, runtime_state, current_tick)
+    run_conversation_tick(history_state, runtime_state, current_tick, conversation_hooks)
 
     if history_state.get("debug_meta") is None or not isinstance(history_state.get("debug_meta"), dict):
         history_state["debug_meta"] = {}

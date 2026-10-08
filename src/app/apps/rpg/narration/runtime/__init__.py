@@ -3,7 +3,7 @@
 Owns deterministic runtime dialogue state used between simulation/narrative
 systems and read-only presentation builders.
 """
-from .dialogue_runtime import (
+from app.apps.rpg.narration.runtime.dialogue_runtime import (
     append_runtime_stream_chunk,
     apply_runtime_interruptions,
     begin_runtime_turn,

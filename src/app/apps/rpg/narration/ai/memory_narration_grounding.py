@@ -6,7 +6,7 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set
 
-from app.apps.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
+from app.apps.rpg.narration.memory_prompt import build_relevant_memory_context_from_runtime
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple, cast
 
-from app.apps.rpg.session.runtime.dialogue_runtime_state import (
+from app.apps.rpg.narration.runtime.dialogue_runtime_state import (
     _EMOTION_ORDER,
     _MAX_EMOTION_ACTORS,
     _MAX_INTERRUPTION_LOG,
@@ -54,7 +54,7 @@ from app.apps.rpg.foundation.safe_values import (
     list_copy as _safe_list,
     safe_str as _safe_str,
 )
-from app.apps.rpg.session.runtime.dialogue_runtime_state import (
+from app.apps.rpg.narration.runtime.dialogue_runtime_state import (
     _role_precedence as _role_precedence  # noqa: F401,
 )
 

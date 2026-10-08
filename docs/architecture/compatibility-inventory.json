@@ -68,7 +68,7 @@
       "replacement_or_deletion_prerequisite": "Move callers to an explicit session repository; preserve payload normalization and atomic writes."
     },
     {
-      "path": "src/app/apps/rpg/foundation/persistence/rpg_feature_compat.py",
+      "path": "src/app/apps/rpg/world/persistence/rpg_feature_compat.py",
       "category": "B",
       "purpose": "Legacy NPC projection and narrative event contracts",
       "production_call_sites": [

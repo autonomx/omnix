@@ -27,7 +27,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List
 
-from .narrative_event import NarrativeEvent
+from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 
 # Event type importance modifiers
 IMPORTANCE_MODIFIERS: Dict[str, float] = {

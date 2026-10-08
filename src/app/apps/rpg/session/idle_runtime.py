@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict
 
 from app.apps.rpg.genesis.creator.defaults import apply_adventure_defaults
 from app.apps.rpg.genesis.creator.world_simulation import step_simulation_state
+from app.apps.rpg.session.conversation_hooks import SESSION_CONVERSATION_HOOKS
 from app.apps.rpg.session.state_normalization import _copy_dict, _ensure_simulation_state, _safe_str
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
@@ -16,7 +17,7 @@ def advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heart
     metadata["simulation_state"] = simulation_state
     setup["metadata"] = metadata
 
-    step_result = step_simulation_state(setup)
+    step_result = step_simulation_state(setup, conversation_hooks=SESSION_CONVERSATION_HOOKS)
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state["active_interactions"] = _safe_list(simulation_state.get("active_interactions"))

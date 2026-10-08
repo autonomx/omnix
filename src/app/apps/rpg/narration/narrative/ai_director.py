@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .narrative_event import NarrativeEvent
+from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 
 # Tension thresholds
 HIGH_TENSION_THRESHOLD = 0.7

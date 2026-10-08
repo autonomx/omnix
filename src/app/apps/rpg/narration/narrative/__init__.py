@@ -26,7 +26,7 @@ Architecture:
 from .ai_director import AIDirector
 from .dialogue_engine import DialogueEngine
 from .narrative_director import NarrativeDirector
-from .narrative_event import NarrativeEvent
+from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 from .narrative_generator import NarrativeGenerator
 from .pacing_controller import NarrativeBeat, PacingController
 from .scene_manager import Scene, SceneManager

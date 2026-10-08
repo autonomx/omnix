@@ -8,9 +8,9 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
+from app.apps.rpg.edge.api.traced_response import build_traced_json_response
 from app.apps.rpg.foundation.performance_trace import (
     attach_rpg_result_timing,
-    build_traced_json_response,
     rpg_pipeline_span,
     rpg_pipeline_trace,
 )

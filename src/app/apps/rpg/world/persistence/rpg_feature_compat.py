@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from app.apps.rpg.narration.narrative.narrative_event import NarrativeEvent
+from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 from app.apps.rpg.world.npc_evolution.profile_store import (
     PROFILE_VERSION,
     _bounded_extend_unique,

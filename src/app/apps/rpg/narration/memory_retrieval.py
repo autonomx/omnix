@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from .memory_writer import (
+from app.apps.rpg.narration.memory_writer import (
     MAX_MEMORY_TEXT,
     MEMORY_SCHEMA_VERSION,
     memory_state_from_session,

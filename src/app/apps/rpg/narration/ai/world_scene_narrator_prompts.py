@@ -54,7 +54,7 @@ from app.apps.rpg.narration.ai.world_scene_narrator_structured import (
 )
 
 
-from app.apps.rpg.session.memory_prompt import (
+from app.apps.rpg.narration.memory_prompt import (
     build_relevant_memory_context_from_runtime,
     build_relevant_memory_prompt_block,
 )
@@ -289,7 +289,7 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         Prompt string for the LLM.
     """
     # ✅ Apply scene grounding FIRST before any prompt construction
-    from app.apps.rpg.session.combat_intent import (
+    from app.apps.rpg.narration.scene_grounding import (
         _apply_grounded_scene_overlay as _apply_grounded_scene_overlay,
         _derive_grounded_scene_context as _derive_grounded_scene_context,
         _normalize_prompt_location_name as _normalize_prompt_location_name,

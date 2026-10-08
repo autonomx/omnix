@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.apps.rpg.session.runtime.dialogue_runtime import (
+from app.apps.rpg.narration.runtime.dialogue_runtime import (
     build_runtime_style_tags,
     get_runtime_dialogue_state,
 )

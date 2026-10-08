@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, cast
 
 from app.apps.rpg.foundation.core.determinism import rng_for_current_turn
-from .narrative_event import NarrativeEvent
+from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 from app.prompts import prompt_template
 
 _PROMPT_1 = prompt_template('rpg.narrative_narrative_generator.prompt', "1", "You are a cinematic RPG narrator.\n\nScene:\n- Location: {v0}\n- Participants: {v1}\n- Mood: {v2}\n\nEvents that occur:\n{v3}\n\nDialogue:\n{v4}\n\n{v5}\n\nRules:\n- Write a vivid, immersive narration of what happens\n- Include the dialogue naturally within the narrative\n- Focus on clarity, flow, and emotional impact\n- Do not contradict the events\n- Do not add events that aren't listed\n- Keep it under {v6} words\n- Use present tense\n- Second person ('you') if the player is involved\n\nNarrative:")

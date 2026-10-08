@@ -124,7 +124,7 @@ def apply_turn(
 
     record_turn_perf_trace_stack(
         "runtime_apply_turn_enter",
-        function="app.apps.rpg.session.runtime.apply_turn",
+        function="app.apps.rpg.narration.runtime.apply_turn",
     )
     _apply_turn_started = __import__("time").perf_counter()
     session = load_runtime_session(session_id)

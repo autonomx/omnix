@@ -76,9 +76,10 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.genesis.creator.world_graph import inspect_world as _inspect
     from app.apps.rpg.genesis.creator.world_scene_generator import generate_scenes_from_simulation
     from app.apps.rpg.genesis.creator.world_simulation import step_simulation_state
+    from app.apps.rpg.session.conversation_hooks import SESSION_CONVERSATION_HOOKS
 
     data = apply_adventure_defaults(dict(payload or {}))
-    step = step_simulation_state(data)
+    step = step_simulation_state(data, conversation_hooks=SESSION_CONVERSATION_HOOKS)
     next_setup = step["next_setup"]
     after_state = step["after_state"]
     inspection = _inspect(next_setup)
@@ -113,6 +114,7 @@ def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
         build_initial_simulation_state,
         step_simulation_state,
     )
+    from app.apps.rpg.session.conversation_hooks import SESSION_CONVERSATION_HOOKS
 
     setup = _safe_dict(payload.get("setup"))
     action = _safe_dict(payload.get("action"))
@@ -124,7 +126,7 @@ def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
         )
     metadata["simulation_state"] = apply_player_action(state, action)
     setup["metadata"] = metadata
-    step = step_simulation_state(setup)
+    step = step_simulation_state(setup, conversation_hooks=SESSION_CONVERSATION_HOOKS)
     next_setup = step["next_setup"]
     after_state = step["after_state"]
     inspection = _inspect(next_setup)
