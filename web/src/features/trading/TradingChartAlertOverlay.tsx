@@ -14,6 +14,7 @@ import {
   notifyTradingAlertsChanged,
   type TradingChartAlertState,
 } from './tradingChartAlerts';
+import { alertSoundName, soundChange } from './alertSounds';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
@@ -218,8 +219,8 @@ export function TradingChartAlertOverlay({
       lookback_bars: Number(editor.lookback) || 1,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
-      message: editor.message,
-      notification_channels: editor.notifications,
+      message: editor.message, notification_channels: editor.notifications,
+      sound_name: soundChange(editor),
     });
     if (isTrendline) {
       input.parameters = {
@@ -250,7 +251,7 @@ export function TradingChartAlertOverlay({
       expiration: editor.expiration,
       triggerPolicy: editor.triggerPolicy,
       message: editor.message,
-      notificationChannels: editor.notifications,
+      notificationChannels: editor.notifications, soundName: editor.sound ?? 'chime',
     });
     input.condition_type = editor.condition;
     input.threshold = isTrendline ? '0' : formatAlertThreshold(threshold);
@@ -279,6 +280,7 @@ export function TradingChartAlertOverlay({
       triggerPolicy: alertFrequency(alert),
       message: alert.parameters.message ?? '',
       notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
+      sound: alertSoundName(alert.parameters.delivery?.sound?.name), storedSound: alert.parameters.delivery?.sound?.name,
       indicator: alert.parameters.indicator_id ?? 'rsi',
       period: String(alert.parameters.period ?? 14),
       lookback: String(alert.parameters.lookback_bars ?? 1),

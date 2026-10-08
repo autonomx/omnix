@@ -35,13 +35,14 @@ const MODE_VALUES: Record<TradingPriceScaleMode, PriceScaleMode> = {
 type ChartCommandModel = Pick<
   TradingChartPanelModel,
   | 'active' | 'adapter' | 'chartId' | 'priceScaleSettings' | 'setPriceScaleSettings' | 'selectedRangeRef' | 'setSelectedRangeLabel'
-  | 'openGoToDate' | 'replayMode'
+  | 'openGoToDate' | 'replayMode' | 'setAlertPlacement' | 'latest'
 >;
 
 /** The active chart's keyboard commands (TVP-2.1): move, zoom, reset, price scale, snapshot and go to date (TVP-2.5). */
 export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
   const {
     active, adapter, chartId, openGoToDate, priceScaleSettings, replayMode, setPriceScaleSettings, selectedRangeRef, setSelectedRangeLabel,
+    setAlertPlacement, latest,
   } = ws;
   const ready = () => active && adapter !== null;
   const withAdapter = (action: (target: TradingChartAdapter) => void) => () => {
@@ -76,4 +77,11 @@ export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
   useTradingCommand('chart.snapshot', withAdapter((target) => downloadUrl(target.snapshotDataUrl(), `${chartId}.png`)), ready);
   // Like the toolbar button, go to date is off during replay.
   useTradingCommand('chart.goToDate', openGoToDate, () => ready() && !replayMode);
+  // Alt+A: the alert dialog at the last price, as TradingView's "Add alert".
+  useTradingCommand('chart.addAlert', withAdapter((target) => {
+    const price = Number(latest?.close);
+    if (!latest || !Number.isFinite(price)) return;
+    const at = target.projectDrawingPoint({ time: latest.start_time, price });
+    setAlertPlacement({ time: latest.start_time, price, x: at?.x ?? 0, y: at?.y ?? 0, source: 'context-menu' });
+  }), () => ready() && latest !== undefined && !replayMode);
 }

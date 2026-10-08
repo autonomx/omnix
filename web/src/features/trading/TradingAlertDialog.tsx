@@ -6,6 +6,7 @@ import type {
   TradingAlertTriggerPolicy,
 } from './tradingTypes';
 import { formatAlertThreshold } from './tradingChartAlerts';
+import { ALERT_SOUNDS, playAlertSound, type AlertSoundName } from './alertSounds';
 import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = {
@@ -20,6 +21,10 @@ export type TradingAlertEditorState = {
   triggerPolicy: TradingAlertTriggerPolicy;
   message: string;
   notifications: TradingAlertNotificationChannel[];
+  /** The Sound channel's sound (chime when unset). */
+  sound?: AlertSoundName;
+  /** The sound name the alert has stored, which may be one this client doesn't know. */
+  storedSound?: string;
   indicator: TradingAlertIndicatorId;
   period: string;
   lookback: string;
@@ -218,6 +223,11 @@ export function TradingAlertDialog({
             <dt>Notifications</dt>
             <dd className="trading-alert-notifications">
               {notificationOptions.map((option) => <label key={option.value}><input type="checkbox" checked={editor.notifications.includes(option.value)} onChange={() => toggleNotification(option.value)} />{option.label}</label>)}
+              {editor.notifications.includes('sound') ? (
+                <select aria-label="Alert sound" value={editor.sound ?? 'chime'} onChange={(event) => { const sound = event.target.value as AlertSoundName; playAlertSound(sound); onChange({ sound }); }}>
+                  {ALERT_SOUNDS.map((sound) => <option key={sound} value={sound}>{sound[0].toUpperCase() + sound.slice(1)}</option>)}
+                </select>
+              ) : null}
             </dd>
           </div>
         </dl>

@@ -132,6 +132,33 @@ describe('chart-native Trading alerts', () => {
     expect(input.enabled).toBe(true);
   });
 
+  it('sends the Sound channel sound and keeps the other delivery settings', () => {
+    const create = chartAlertCreateInput({
+      alertId: 'chart-alert-3',
+      instrumentId: baseAlert.instrument_id,
+      bindingId: null,
+      interval: '1m',
+      threshold: 1,
+      latestPrice: 2,
+      expiration: 'never',
+      notificationChannels: ['app', 'sound'],
+      soundName: 'alarm',
+    });
+    expect(create.parameters.delivery).toEqual({ sound: { name: 'alarm' } });
+    const silent = chartAlertCreateInput({
+      alertId: 'chart-alert-4', instrumentId: baseAlert.instrument_id, bindingId: null, interval: '1m',
+      threshold: 1, latestPrice: 2, expiration: 'never', notificationChannels: ['app'], soundName: 'alarm',
+    });
+    expect(silent.parameters.delivery).toBeUndefined();
+    const hooked = fixture<TradingAlert>({
+      ...baseAlert,
+      parameters: { ...baseAlert.parameters, delivery: { webhook: { display_url: 'https://hooks.example', has_secret: true } } },
+    });
+    const update = chartAlertUpdateInput(hooked, { sound_name: 'beep' });
+    expect(update.parameters.delivery).toEqual({ webhook: { display_url: 'https://hooks.example', has_secret: true }, sound: { name: 'beep' } });
+    expect(chartAlertUpdateInput(hooked, { enabled: false }).parameters.delivery).toEqual(hooked.parameters.delivery);
+  });
+
   it('formats alert values to two decimal places', () => {
     expect(formatAlertThreshold(73.16472733528584)).toBe('73.16');
     expect(formatAlertThreshold('73')).toBe('73.00');

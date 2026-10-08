@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { playAlertSound } from './alertSounds';
 import { useTradingAlerts, useTradingAlertTriggers } from './useTradingAlerts';
 import './TradingAlertToastLayer.css';
 
@@ -21,11 +22,17 @@ export function TradingAlertToastLayer() {
       seen.current = current;
       return;
     }
-    const trigger = triggersQuery.data.find((item) => !seen.current?.has(item.trigger_id));
+    const fresh = triggersQuery.data.filter((item) => !seen.current?.has(item.trigger_id));
     seen.current = current;
+    const alertOf = (alertId: string) => alertsQuery.data?.find((item) => item.alert_id === alertId);
+    const channelsOf = (alertId: string) => alertOf(alertId)?.parameters.notification_channels ?? ['app', 'toast'];
+    // The Sound channel plays the alert's sound (chime unless it chose another): once per poll, for the first
+    // new trigger that asks for one, so alerts firing together don't stack.
+    const sounding = fresh.find((item) => channelsOf(item.alert_id).includes('sound'));
+    if (sounding) playAlertSound(alertOf(sounding.alert_id)?.parameters.delivery?.sound?.name);
+    const trigger = fresh.find((item) => !alertOf(item.alert_id) || channelsOf(item.alert_id).includes('toast'));
     if (!trigger) return;
-    const alert = alertsQuery.data?.find((item) => item.alert_id === trigger.alert_id);
-    if (alert && !(alert.parameters.notification_channels ?? ['app', 'toast']).includes('toast')) return;
+    const alert = alertOf(trigger.alert_id);
     const message = alert?.parameters.message || `${symbol(trigger.instrument_id)} crossed ${trigger.threshold}`;
     setToast({ triggerId: trigger.trigger_id, title: 'Alert triggered', message });
     const timer = window.setTimeout(() => setToast((currentToast) => currentToast?.triggerId === trigger.trigger_id ? null : currentToast), 6_000);
