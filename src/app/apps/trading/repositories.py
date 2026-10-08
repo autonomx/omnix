@@ -12,7 +12,9 @@ from app.runtime.pagination import MAX_PAGE_SIZE
 
 
 TRADING_MODULE = "trading"
-SUPPORTED_DOCUMENT_TYPES = frozenset({"workspace", "watchlist", "drawing", "indicator_preset"})
+SUPPORTED_DOCUMENT_TYPES = frozenset(
+    {"workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset"}
+)
 
 
 class UnitOfWorkFactory(Protocol):
@@ -155,6 +157,7 @@ def default_trading_repository() -> TradingDocumentRepository:
 
 
 # Document shapes (WP-5.9): the terminal's documents are client-owned JSON
-# objects (layouts, watchlists, drawings, indicator presets).
+# objects (layouts, watchlists, watchlist colour flags, drawings, indicator
+# presets).
 for _record_type in SUPPORTED_DOCUMENT_TYPES:
     register_document_schema(TRADING_MODULE, _record_type, dict[str, Any])

@@ -1886,6 +1886,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/watchlist-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Trading Watchlist Flag Sets */
+        get: operations["list_trading_watchlist_flag_sets_api_trading_watchlist_flags_get"];
+        put?: never;
+        /** Create Trading Watchlist Flag Set */
+        post: operations["create_trading_watchlist_flag_set_api_trading_watchlist_flags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/watchlist-flags/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Trading Watchlist Flag Set */
+        get: operations["get_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__get"];
+        /** Update Trading Watchlist Flag Set */
+        put: operations["update_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__put"];
+        post?: never;
+        /** Archive Trading Watchlist Flag Set */
+        delete: operations["archive_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/watchlists": {
         parameters: {
             query?: never;
@@ -15691,6 +15728,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyRuntimeMonitorStatus"];
+                };
+            };
+        };
+    };
+    list_trading_watchlist_flag_sets_api_trading_watchlist_flags_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_trading_watchlist_flag_set_api_trading_watchlist_flags_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__put: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_trading_watchlist_flag_set_api_trading_watchlist_flags__record_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

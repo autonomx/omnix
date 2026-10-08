@@ -80,3 +80,41 @@ def test_watchlist_archive_requires_current_revision() -> None:
     assert archived.json()["status"] == "archived"
     assert archived.json()["revision"] == 3
     assert client.get("/api/trading/watchlists").json()["records"] == []
+
+
+def test_watchlist_flags_are_a_separate_revisioned_document() -> None:
+    repository = RevisionedRepository()
+    app = FastAPI()
+    app.include_router(create_trading_router(lambda: repository, lambda: EmptyMarketService()))
+    client = TestClient(app)
+    payload = {"schemaVersion": 1, "flags": [{"instrumentId": "equity:NASDAQ:AAPL", "color": "red"}]}
+
+    created = client.post("/api/trading/watchlist-flags", json={"record_id": "default", "payload": payload})
+    assert created.status_code == 201
+    assert created.json()["record_type"] == "watchlist_flag_set"
+
+    stale = client.put(
+        "/api/trading/watchlist-flags/default",
+        json={"record_id": "default", "payload": {"schemaVersion": 1, "flags": []}},
+        headers={"If-Match": "2"},
+    )
+    assert stale.status_code == 409
+
+    updated = client.put(
+        "/api/trading/watchlist-flags/default",
+        json={"record_id": "default", "payload": {"schemaVersion": 1, "flags": []}},
+        headers={"If-Match": "1"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["revision"] == 2
+    # Flags never show up as a watchlist.
+    assert [record["record_id"] for record in client.get("/api/trading/watchlists").json()["records"]] == ["default"]
+    assert client.get("/api/trading/watchlist-flags").json()["records"][0]["payload"]["flags"] == []
+
+
+def test_watchlist_flag_set_is_a_supported_document_type() -> None:
+    from app.apps.trading.repositories import SUPPORTED_DOCUMENT_TYPES
+    from app.persistence.document_schemas import registered_document_kinds
+
+    assert "watchlist_flag_set" in SUPPORTED_DOCUMENT_TYPES
+    assert ("trading", "watchlist_flag_set") in registered_document_kinds()

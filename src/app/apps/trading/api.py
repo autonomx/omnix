@@ -168,7 +168,7 @@ def _rehydrate_persisted_bindings(
     path in sync on a fresh process.
     """
     instrument_ids: set[str] = set()
-    for record_type in ("workspace", "watchlist", "drawing", "indicator_preset"):
+    for record_type in ("workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset"):
         try:
             records = list(repository_factory().iter(record_type))
         except Exception:
@@ -383,6 +383,8 @@ def create_trading_router(
 
     register_documents("/workspaces", "workspace")
     register_documents("/watchlists", "watchlist")
+    # One user-level document holds the colour flags shared by every watchlist (TVP-5.1).
+    register_documents("/watchlist-flags", "watchlist_flag_set")
     register_documents("/drawings", "drawing")
     register_documents("/indicator-presets", "indicator_preset")
     return router

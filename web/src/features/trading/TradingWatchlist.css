@@ -319,6 +319,132 @@
     display: none;
   }
 
+  .trading-watchlist li.trading-watchlist-section {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 28px;
+    background: color-mix(in srgb, var(--c-blue-660) 6%, transparent);
+  }
+
+  .trading-watchlist li.trading-watchlist-section > button:first-child {
+    gap: 6px;
+    padding: 5px 8px;
+    color: var(--c-slate-630);
+  }
+
+  .trading-watchlist-section-toggle strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .trading-watchlist-section-toggle small {
+    color: var(--c-slate-630);
+    font-size: 8px;
+  }
+
+  .trading-watchlist-section-chevron {
+    width: 8px;
+    font-size: 9px;
+  }
+
+  /* Colour flags: one custom property per colour feeds the row marker and the menu swatch. */
+  .trading-watchlist-flag.red,
+  .trading-watchlist-flag-swatch.red {
+    --trading-watchlist-flag-color: var(--c-red-720);
+  }
+
+  .trading-watchlist-flag.orange,
+  .trading-watchlist-flag-swatch.orange {
+    --trading-watchlist-flag-color: var(--c-orange-580);
+  }
+
+  .trading-watchlist-flag.yellow,
+  .trading-watchlist-flag-swatch.yellow {
+    --trading-watchlist-flag-color: var(--c-yellow-880);
+  }
+
+  .trading-watchlist-flag.green,
+  .trading-watchlist-flag-swatch.green {
+    --trading-watchlist-flag-color: var(--c-green-790);
+  }
+
+  .trading-watchlist-flag.cyan,
+  .trading-watchlist-flag-swatch.cyan {
+    --trading-watchlist-flag-color: var(--c-cyan-810);
+  }
+
+  .trading-watchlist-flag.blue,
+  .trading-watchlist-flag-swatch.blue {
+    --trading-watchlist-flag-color: var(--c-blue-660);
+  }
+
+  .trading-watchlist-flag.purple,
+  .trading-watchlist-flag-swatch.purple {
+    --trading-watchlist-flag-color: var(--c-violet-660);
+  }
+
+  .trading-watchlist-flag {
+    position: absolute;
+    top: 5px;
+    bottom: 5px;
+    left: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--trading-watchlist-flag-color);
+  }
+
+  .trading-watchlist-flag-swatch {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--trading-watchlist-flag-color);
+  }
+
+  .trading-watchlist-flag-menu {
+    position: absolute;
+    z-index: 9;
+    top: calc(100% - 4px);
+    right: 4px;
+    display: grid;
+    grid-template-columns: repeat(7, 22px);
+    gap: 3px;
+    padding: 5px;
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 25%, transparent);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
+  }
+
+  .trading-watchlist .trading-watchlist-flag-menu button {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+  }
+
+  .trading-watchlist .trading-watchlist-flag-menu button[aria-checked='true'] {
+    outline: 1px solid var(--c-blue-770);
+    outline-offset: 1px;
+  }
+
+  .trading-watchlist .trading-watchlist-flag-menu .trading-watchlist-flag-clear {
+    grid-column: 1 / -1;
+    width: auto;
+    font-size: 9px;
+  }
+
+  .trading-watchlist-flag-menu .trading-watchlist-flag-clear:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   .trading-watchlist-status {
     position: absolute;
     width: 1px;
