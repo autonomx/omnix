@@ -187,6 +187,36 @@ export function alignSeriesToTimes(
   return aligned;
 }
 
+/**
+ * An indicator's points on the chart's bars, so data on its own clock (Binance funding every 8 h, open interest
+ * periods) adds no time points: each bar shows the latest value during it (before the next bar starts; the last bar
+ * runs one interval, `stepSeconds`), from the first bar with data to the bar of the last point. Points beyond the
+ * last bar's interval (indicators that plot ahead) are kept. Outputs already on bar times are unchanged.
+ */
+export function alignIndicatorPoints(
+  points: readonly { time: UTCTimestamp; value: number }[],
+  times: readonly UTCTimestamp[],
+  stepSeconds: number | null,
+): { time: UTCTimestamp; value: number }[] {
+  const last = times.at(-1);
+  if (last === undefined || points.length === 0) return [...points];
+  const end = stepSeconds === null ? Number.POSITIVE_INFINITY : last + stepSeconds;
+  const inBars = points.filter((point) => point.time < end);
+  const ahead = points.filter((point) => point.time >= end);
+  const known = new Set<number>(times);
+  if (inBars.every((point) => known.has(point.time))) return [...points];
+  const latest = inBars.at(-1)?.time ?? Number.NEGATIVE_INFINITY;
+  const aligned: { time: UTCTimestamp; value: number }[] = [];
+  let next = 0;
+  let value: number | null = null;
+  for (const [index, time] of times.entries()) {
+    const windowEnd = times[index + 1] ?? end;
+    while (next < inBars.length && inBars[next].time < windowEnd) value = inBars[next++].value;
+    if (value !== null && latest >= time) aligned.push({ time, value });
+  }
+  return [...aligned, ...ahead];
+}
+
 function visiblePrimaryPriceRange(
   bars: readonly MarketBar[],
   logicalRange: LogicalRange | null,
@@ -894,10 +924,10 @@ export class TradingChartAdapter {
           ...indicatorPriceFormat(output.precision),
         });
       }
-      const data = output.points.map((point) => ({
+      const data = alignIndicatorPoints(output.points.map((point) => ({
         time: timestamp(point.time),
         value: output.pane === 0 ? point.value * this.priceScaleMultiplier : point.value,
-      }));
+      })), this.priceTimes, this.intervalStepSeconds());
       if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
       else (series as ISeriesApi<'Line'>).setData(data);
       this.noteSeriesTimes(`indicator:${output.key}`, data);
@@ -1233,7 +1263,11 @@ export class TradingChartAdapter {
    * charts (Renko, range, line break, Kagi, P&F) plot synthetic bars, so a sloped line's bar index differs there.
    */
   drawingBarIndexMatchesBars(): boolean {
-    return !SYNTHETIC_BAR_CHART_TYPES.has(this.chartType);
+    if (SYNTHETIC_BAR_CHART_TYPES.has(this.chartType) || this.bars.length === 0) return false;
+    // Checked, not assumed: up to the last bar the chart plots exactly the bars' times, so any future source of extra
+    // time points falls back to flat levels instead of a sloped alert that crosses other prices on the server.
+    const lastBar = this.bars[this.bars.length - 1].start_time;
+    return this.timeIndex().indexAtOrBefore(lastBar) === this.bars.length - 1;
   }
 
   /** The chart bar index of a time (fractional between bars), on the chart's own time scale. */
@@ -1663,6 +1697,10 @@ export class TradingChartAdapter {
       this.chartTimeIndex = DrawingTimeIndex.fromTimes(times, this.intervalStep());
     }
     return this.chartTimeIndex;
+  }
+  private intervalStepSeconds(): number | null {
+    const step = this.intervalStep();
+    return step === null ? null : step / 1_000;
   }
   private intervalStep(): number | null {
     const interval = this.bars[0]?.interval;

@@ -169,10 +169,34 @@ function chartPlacement(
   };
 }
 
+/** A well-formed alert level: two anchors with parseable times and finite prices. Tool output is not trusted. */
+function isAlertLevel(value: unknown): value is DrawingAlertLevel {
+  const level = value as Partial<DrawingAlertLevel> | null;
+  return Boolean(level)
+    && Array.isArray(level?.anchors)
+    && level.anchors.length === 2
+    && level.anchors.every((anchor) => Number.isFinite(anchor?.price) && Number.isFinite(Date.parse(anchor?.time)));
+}
+
 /**
- * What a drawing's tool offers from the context menu: its alert levels and actions. When the chart's bar index
- * isn't the loaded bars' (brick-type charts), only flat levels are offered: the server evaluates alerts on time
- * bars, where a sloped line would cross different prices than the one drawn.
+ * The levels the menu may offer. A flat level crosses the same price whatever the bar index. A sloped one is offered
+ * only when the server's bar index will match the drawn line: the chart plots the bars' own times
+ * (`barIndexMatchesBars`) and the line starts within the loaded bars (before them the chart steps by the calendar,
+ * the server by the bars it loads).
+ */
+export function offeredAlertLevels(levels: unknown, services: DrawingToolServices, barIndexMatchesBars: boolean): DrawingAlertLevel[] {
+  if (!Array.isArray(levels)) return [];
+  const firstBar = services.bars.length > 0 ? Date.parse(services.bars.at(0)?.time ?? '') : Number.NaN;
+  return levels.filter(isAlertLevel).filter((level) => {
+    const [first, second] = level.anchors;
+    if (first.price === second.price) return true;
+    const earliest = Math.min(Date.parse(first.time), Date.parse(second.time));
+    return barIndexMatchesBars && Number.isFinite(firstBar) && earliest >= firstBar;
+  });
+}
+
+/**
+ * What a drawing's tool offers from the context menu: its alert levels (see `offeredAlertLevels`) and actions.
  */
 export function drawingMenuEntries(
   drawing: TradingDrawing | undefined,
@@ -183,8 +207,9 @@ export function drawingMenuEntries(
   const definition = drawingToolDefinition(drawing.toolType);
   const properties = drawingPropertiesWithDefaults(drawing.toolType, drawing.properties);
   const alertLevels = definition?.alertLevels;
-  const levels = (alertLevels ? guardToolCall(drawing.toolType, 'alertLevels', () => alertLevels(drawing.points, properties, services), []) : [])
-    .filter((level) => barIndexMatchesBars || level.anchors[0].price === level.anchors[1].price);
+  const levels = alertLevels
+    ? guardToolCall(drawing.toolType, 'alertLevels', () => offeredAlertLevels(alertLevels(drawing.points, properties, services), services, barIndexMatchesBars), [])
+    : [];
   const legacyLine = levels[0] && (levels[0].extend === 'none' || levels[0].extend === 'both') ? levels[0] : undefined;
   const snapshot = { drawingId: drawing.drawingId, instrumentId: drawing.instrumentId, points: drawing.points, properties, text: drawing.text ?? '' };
   return {

@@ -2,7 +2,7 @@
 // geometry runner, so tool tests read in pixels.
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from './registry';
 import { drawingGeometry, hitTestDrawing, staticChartAccess } from './scene';
-import { DEFAULT_DRAWING_STYLE, type DrawingChartAccess, type DrawingToolServices, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from './types';
+import { DEFAULT_DRAWING_STYLE, type DrawingBarSeries, type DrawingChartAccess, type DrawingToolServices, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from './types';
 
 const BASE_TIME = Date.parse('2026-08-05T00:00:00.000Z');
 
@@ -21,6 +21,21 @@ export const testServices: DrawingToolServices = staticChartAccess(testProjector
   timeForBarIndex: (index) => new Date(BASE_TIME + index * 60_000).toISOString(),
   timeAfterBars: (time, count) => new Date(Date.parse(time) + count * 60_000).toISOString(),
 });
+
+/** `count` one-minute bars from the projector's base time (bar i at x = i), for code that reads loaded bars. */
+export function testBarSeries(count = 1_000): DrawingBarSeries {
+  const at = (index: number) => (index >= 0 && index < count && Number.isInteger(index)
+    ? { time: new Date(BASE_TIME + index * 60_000).toISOString(), open: 100, high: 101, low: 99, close: 100, volume: 1 }
+    : undefined);
+  return {
+    length: count,
+    at,
+    indexAtOrBefore: (time) => {
+      const index = Math.floor((Date.parse(time) - BASE_TIME) / 60_000);
+      return Number.isFinite(index) ? Math.min(count - 1, Math.max(-1, index)) : -1;
+    },
+  };
+}
 
 /** The time/price point that `testProjector` puts at (x, y). */
 export function pointAt(x: number, y: number): DrawingPoint {

@@ -13,9 +13,12 @@
 // gaps (gaps 1, 2, 3, 7 give 2). With fewer than two bars there is no step.
 //
 // - On the chart the sequence is every time point the chart plots. Comparison
-//   series are plotted on the main series' times, so on time-based chart types
-//   this is the loaded bars' own times; brick-type charts (Renko, range, line
-//   break, Kagi, P&F) plot their own times and offer only flat alert levels.
+//   series and indicator data on its own clock are plotted on the main series'
+//   bars, so on time-based chart types this is the loaded bars' own times (the
+//   chart checks this before offering a sloped alert level); brick-type charts
+//   (Renko, range, line break, Kagi, P&F) plot their own times and offer only
+//   flat alert levels. A sloped level is offered only when it starts within
+//   the loaded bars.
 //   For an alert it is the alert's own interval's bars, including the forming
 //   (not yet closed) bar as the last index. Those bars must start at or before
 //   the earliest anchor time (load enough history): an anchor before the first

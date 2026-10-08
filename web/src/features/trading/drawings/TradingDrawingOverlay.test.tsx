@@ -3,8 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { DrawingTool, TradingDrawing } from './drawingCommands';
 import { TradingDrawingOverlay, type TradingDrawingOverlayProps } from './TradingDrawingOverlay';
-import { pointAt, testProjector } from './tools/testing';
-import { EMPTY_DRAWING_BARS, type DrawingGeometryContext, type DrawingToolDefinition } from './tools/types';
+import { pointAt, testBarSeries, testProjector } from './tools/testing';
+import { type DrawingGeometryContext, type DrawingToolDefinition } from './tools/types';
 import type { DrawingCanvasPrimitive } from './DrawingCanvasPrimitive';
 
 // Test-only tools for the gestures no shipped tool uses yet (TVP-3 adds the real ones).
@@ -91,7 +91,7 @@ function fakeAdapter() {
     drawingPointFromCoordinate: (x: number, y: number, options: { exactTime?: boolean } = {}) => (
       pointAt(options.exactTime ? x - offset : Math.round((x - offset) / 10) * 10, y)
     ),
-    drawingBars: () => EMPTY_DRAWING_BARS,
+    drawingBars: () => testBarSeries(),
     drawingTimeAfterBars: (time: string, count: number) => new Date(Date.parse(time) + count * 60_000).toISOString(),
     drawingBarIndexForTime: (time: string) => (Date.parse(time) - Date.parse(pointAt(0, 0).time)) / 60_000,
     drawingTimeForBarIndex: (index: number) => pointAt(index, 0).time,

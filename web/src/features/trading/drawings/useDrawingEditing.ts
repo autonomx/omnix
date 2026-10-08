@@ -50,6 +50,15 @@ export function toolEditsDrawings(tool: DrawingTool): boolean {
   return tool === 'cursor' || tool === 'eraser';
 }
 
+/** Whether a handle's edit changes the drawing; a pixel of jitter that snaps back to the same anchor does not. */
+export function patchChanges(drawing: TradingDrawing, patch: DrawingEditPatch): boolean {
+  const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+  if (patch.points && !same(patch.points, drawing.points)) return true;
+  if (!patch.properties) return false;
+  const current = drawingPropertiesWithDefaults(drawing.toolType, drawing.properties);
+  return Object.entries(patch.properties).some(([key, value]) => !same(value, current[key]));
+}
+
 export function modifiersOf(event: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): DrawingModifiers {
   return { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey || event.metaKey };
 }
@@ -131,7 +140,7 @@ export function useDrawingEditing({
       setHandlePreview(null);
       if (!moved && !movedFrom(pointer)) return;
       const patch = handlePatch(drawing, handle, pointer);
-      if (patch) onEdit(drawing.drawingId, patch);
+      if (patch && patchChanges(drawing, patch)) onEdit(drawing.drawingId, patch);
     });
   };
 
