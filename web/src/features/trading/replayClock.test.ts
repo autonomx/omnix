@@ -84,7 +84,20 @@ describe('replay clock to bars', () => {
 
   it('uses the bar close as the clock for a chosen start bar', () => {
     expect(replayClockForBar(fiveMinute[2])).toBe(at(15));
-    expect(barCloseTime({ ...fiveMinute[2], end_time: 'not a time' })).toBe(at(10));
+  });
+
+  it('derives an unreadable close from the start and interval, never from the start alone', () => {
+    const noEnd = { ...fiveMinute[2], end_time: 'not a time' };
+    expect(barCloseTime(noEnd)).toBe(at(15));
+    expect(replayVisibleCount([fiveMinute[0], fiveMinute[1], noEnd], at(10))).toBe(2);
+    expect(replayVisibleCount([fiveMinute[0], fiveMinute[1], noEnd], at(15))).toBe(3);
+  });
+
+  it('never reveals a bar whose close cannot be known', () => {
+    const unknown = { ...fiveMinute[11], end_time: '', interval: 'tick' };
+    expect(barCloseTime(unknown)).toBe(Number.POSITIVE_INFINITY);
+    expect(replayClockForBar(unknown)).toBeNull();
+    expect(replayVisibleCount([...fiveMinute.slice(0, 11), unknown], at(10_000))).toBe(11);
   });
 });
 

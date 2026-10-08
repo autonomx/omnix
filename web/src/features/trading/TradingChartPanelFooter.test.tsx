@@ -79,13 +79,20 @@ describe('chart footer replay controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Play replay' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose replay start' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset replay' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Jump to real time' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Exit replay and return to real time' }));
     expect(ws.nextReplayBar).toHaveBeenCalledOnce();
     expect(ws.previousReplayBar).toHaveBeenCalledOnce();
     expect(ws.toggleReplayPlaying).toHaveBeenCalledOnce();
     expect(ws.selectReplayStart).toHaveBeenCalledOnce();
     expect(ws.resetReplay).toHaveBeenCalledOnce();
     expect(ws.exitReplay).toHaveBeenCalledOnce();
+  });
+
+  it('has one control that leaves replay', () => {
+    render(<ChartPanelFooter ws={footerModel()} />);
+    const toolbar = screen.getByRole('group', { name: 'Chart replay controls' });
+    expect(within(toolbar).getAllByRole('button', { name: /exit replay/i })).toHaveLength(1);
+    expect(within(toolbar).getByRole('button', { name: /exit replay/i })).toHaveTextContent('Real time');
   });
 
   it('keeps Select bar available during playback so the user can jump to a new start', () => {

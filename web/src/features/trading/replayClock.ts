@@ -1,3 +1,4 @@
+import { tradingIntervalMinutes } from './tradingIntervals';
 import type { MarketBar } from './tradingTypes';
 
 /**
@@ -58,10 +59,17 @@ export function replayTickPlan(speed: ReplaySpeed): ReplayTickPlan {
   return { intervalMs, barsPerTick };
 }
 
-/** When a bar closes, in epoch milliseconds (its start when the end is unreadable). */
+/**
+ * When a bar closes, in epoch milliseconds. An unreadable end time is
+ * derived from the start plus the bar's interval; a bar with neither never
+ * closes, so replay never reveals it early.
+ */
 export function barCloseTime(bar: MarketBar): number {
   const end = Date.parse(bar.end_time);
-  return Number.isFinite(end) ? end : Date.parse(bar.start_time);
+  if (Number.isFinite(end)) return end;
+  const start = Date.parse(bar.start_time);
+  const minutes = tradingIntervalMinutes(bar.interval ?? '');
+  return Number.isFinite(start) && minutes !== null && minutes > 0 ? start + minutes * 60_000 : Number.POSITIVE_INFINITY;
 }
 
 /** The clock value that shows `bar` as the latest closed bar. */

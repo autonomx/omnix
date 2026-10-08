@@ -1,10 +1,10 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { tradingApi } from './tradingApi';
-import { TradingChartAdapter, type TradingComparisonData } from './chart/chartAdapter';
+import { TradingChartAdapter, normalizeChartBars, type TradingComparisonData } from './chart/chartAdapter';
 import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
 import type { MarketBar } from './tradingTypes';
-import { nextReplayClock, replayBarAtClock, replayVisibleCount } from './replayClock';
+import { useChartReplayClock } from './useTradingChartPanelReplayClock';
 import { TRADING_COMPARISON_COLORS } from './tradingComparisons';
 import { resolveTradingTimezone } from './tradingTime';
 import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonLabel } from './tradingChartPanelModel';
@@ -93,8 +93,8 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
 /** Bars, comparisons and currency rates for the chart, and the replay window. */
 export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling>) {
   const {
-    active, adapter, allBarsRef, bindingId, comparisons, historyLimit, indicators, instrumentId, interval,
-    onActivateRef, priceScaleCurrency, replayClock, replayMode, replaySelecting, replayStartTime, rightOffset,
+    active, adapter, bindingId, comparisons, historyLimit, indicators, instrumentId, interval,
+    onActivateRef, priceScaleCurrency, replayMode, rightOffset,
     selectedIndicator, setPriceScaleCurrency, setSelectedIndicator, timezoneId,
   } = ws;
 
@@ -199,25 +199,23 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
   }, [selectedIndicator, setSelectedIndicator]);
 
-  // Every chart follows the shared replay clock; only the active chart drops
-  // back to the full history while it waits for a new start bar.
-  const replayChoosingStart = replayMode && active && replaySelecting;
+  // Normalized once per load; replay and the chart's data effect share it.
+  const loadedBars = useMemo(() => normalizeChartBars((chartQuery.data?.bars ?? []) as MarketBar[]), [chartQuery.data]);
 
-  const replayVisible = replayMode && replayClock !== null && !replayChoosingStart;
+  const { refetch: refetchBars } = chartQuery;
 
-  const replayStartBar = replayMode && replayStartTime !== null ? replayBarAtClock(allBarsRef.current, replayStartTime) : null;
+  const reloadBars = useCallback(() => { void refetchBars(); }, [refetchBars]);
 
-  const replayCurrentBar = replayMode && replayClock !== null ? replayBarAtClock(allBarsRef.current, replayClock) : null;
-
-  const replayVisibleBarCount = replayMode && replayClock !== null ? replayVisibleCount(allBarsRef.current, replayClock) : 0;
-
-  const replayHasNextBar = replayVisible && replayClock !== null && nextReplayClock(allBarsRef.current, replayClock) !== null;
-
-  const replayHasPreviousBar = replayVisible && replayClock !== null && replayStartTime !== null && replayClock > replayStartTime;
+  const replay = useChartReplayClock({
+    active,
+    replayMode,
+    bars: loadedBars,
+    chartKey: `${instrumentId}|${bindingId ?? ''}|${interval}`,
+    reloadBars,
+  });
 
   return {
     chartQuery, comparisonQueries, comparisonRenderData, sourceCurrency, supportsCurrencyConversion,
-    currencyRateQuery, priceScaleMultiplier, selectedTimezone, replayChoosingStart, replayVisible, replayStartBar,
-    replayCurrentBar, replayVisibleBarCount, replayHasNextBar, replayHasPreviousBar,
+    currencyRateQuery, priceScaleMultiplier, selectedTimezone, loadedBars, ...replay,
   };
 }

@@ -21,7 +21,6 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
       <footer>
         {replayMode && active ? (
           <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
-            <button type="button" onClick={exitReplay} aria-label="Exit replay mode" title="Exit replay mode">×</button>
             <button type="button" onClick={selectReplayStart} disabled={replayChoosingStart} aria-label="Choose replay start" title="Jump to a new start bar">Select bar</button>
             <button type="button" onClick={resetReplay} disabled={replayStartTime === null} aria-label="Reset replay" title="Reset replay">↤</button>
             <button type="button" onClick={previousReplayBar} disabled={!replayHasPreviousBar} aria-label="Replay previous bar" title="Previous bar">|‹</button>
@@ -29,7 +28,7 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
             <button type="button" onClick={nextReplayBar} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
             <TradingReplaySpeedSelect />
             <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayVisibleBarCount}/{allBarsRef.current.length}</span>
-            <button type="button" onClick={exitReplay} aria-label="Jump to real time" title="Leave replay and show live data">Real time</button>
+            <button type="button" className="trading-replay-exit" onClick={exitReplay} aria-label="Exit replay and return to real time" title="Exit replay and return to real time">Real time</button>
           </div>
         ) : null}
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>

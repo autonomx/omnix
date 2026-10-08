@@ -14,7 +14,7 @@ import type { useChartRangeActions } from './useTradingChartPanelActions';
 /** Bar replay on one chart: choosing the start, stepping the shared clock, and leaving replay. */
 export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView> & ReturnType<typeof useChartIndicatorActions> & ReturnType<typeof useChartRangeActions>) {
   const {
-    active, adapter, adapterRef, allBarsRef, chartQuery, hostRef, replayChoosingStart, replayClock, replayMode,
+    active, adapter, adapterRef, allBarsRef, chartQuery, hostRef, replayChoosingStart, replayMode,
     replaySelectionIndex, replayStartTime, setReplayMarkerX, setReplayMode, setReplaySelectionIndex,
     setReplaySelectionX,
   } = ws;
@@ -114,7 +114,9 @@ export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<ty
       observer?.disconnect();
       unsubscribeViewport();
     };
-  }, [active, adapter, chartQuery.data, replayClock, replayMode, replayStartTime, allBarsRef, hostRef, setReplayMarkerX]);
+    // Not keyed by the clock: replay steps keep the start bar's logical position,
+    // and viewport changes are observed above, so playback never rebuilds the observer.
+  }, [active, adapter, chartQuery.data, replayMode, replayStartTime, allBarsRef, hostRef, setReplayMarkerX]);
 
   useEffect(() => {
     if (!replayChoosingStart || !adapter || allBarsRef.current.length === 0) {
@@ -124,6 +126,7 @@ export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<ty
     }
     if (replaySelectionIndex === null || replaySelectionIndex >= allBarsRef.current.length) {
       // Jumping during a replay starts from the clock's bar, then the start bar.
+      const replayClock = useTradingReplayStore.getState().clock;
       const clockIndex = replayClock === null ? -1 : replayVisibleCount(allBarsRef.current, replayClock) - 1;
       const startIndex = replayStartTime === null ? -1 : replayVisibleCount(allBarsRef.current, replayStartTime) - 1;
       const initialIndex = clockIndex >= 0 ? clockIndex : startIndex >= 0 ? startIndex : adapter.barIndexAtCoordinate(
@@ -150,7 +153,7 @@ export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<ty
       observer?.disconnect();
       unsubscribeViewport();
     };
-  }, [active, adapter, chartQuery.data, replayChoosingStart, replayClock, replaySelectionIndex, replayStartTime, allBarsRef, hostRef, setReplaySelectionIndex, setReplaySelectionX]);
+  }, [active, adapter, chartQuery.data, replayChoosingStart, replaySelectionIndex, replayStartTime, allBarsRef, hostRef, setReplaySelectionIndex, setReplaySelectionX]);
 
   return {
     handleReplayStageClick, selectReplayStart, resetReplay, previousReplayBar, nextReplayBar, toggleReplayPlaying,
