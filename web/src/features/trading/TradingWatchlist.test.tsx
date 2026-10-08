@@ -382,6 +382,81 @@ const sectionedRecord = {
 
 const symbolNames = () => screen.getAllByRole('button', { name: /^Select / }).map((button) => button.querySelector('strong')?.textContent);
 
+describe('TradingWatchlist save queue', () => {
+  const teslaId = 'equity:NASDAQ:TSLA';
+  const threeRecord = {
+    ...record,
+    payload: { name: 'Default Watchlist', instrumentIds: [apple.instrument_id, gameStop.instrument_id, teslaId] },
+  } as unknown as TradingDocument;
+  const itemsOf = (...ids: string[]) => ids.map((instrumentId) => ({ type: 'symbol', instrumentId }));
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => undefined;
+    let reject: (error: unknown) => void = () => undefined;
+    const promise = new Promise<T>((onResolve, onReject) => {
+      resolve = onResolve;
+      reject = onReject;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it('saves overlapping edits one at a time, each applied once to the last server revision', async () => {
+    mockDocuments([threeRecord]);
+    mockMarketData();
+    const first = deferred<TradingDocument>();
+    const update = vi.spyOn(tradingApi, 'updateDocument')
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(async (_kind, currentRecord, nextPayload) => ({ ...currentRecord, revision: currentRecord.revision + 1, payload: nextPayload }));
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Move TSLA up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move TSLA up' }));
+    expect(symbolNames()).toEqual(['TSLA', 'AAPL', 'GME']);
+    // The second save waits for the first instead of racing it.
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][2]).toMatchObject({ items: itemsOf(apple.instrument_id, teslaId, gameStop.instrument_id) });
+
+    const firstSaved = { ...threeRecord, revision: 2, payload: update.mock.calls[0][2] } as TradingDocument;
+    first.resolve(firstSaved);
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls[1][1]).toBe(firstSaved);
+    expect(update.mock.calls[1][2]).toMatchObject({ items: itemsOf(teslaId, apple.instrument_id, gameStop.instrument_id) });
+    await waitFor(() => expect(screen.getByText('saved')).toBeInTheDocument());
+    expect(symbolNames()).toEqual(['TSLA', 'AAPL', 'GME']);
+  });
+
+  it('drops a failed edit so a later save does not persist it', async () => {
+    mockDocuments([threeRecord]);
+    mockMarketData();
+    const first = deferred<TradingDocument>();
+    const update = vi.spyOn(tradingApi, 'updateDocument')
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(async (_kind, currentRecord, nextPayload) => ({ ...currentRecord, revision: currentRecord.revision + 1, payload: nextPayload }));
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove AAPL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move TSLA up' }));
+    expect(symbolNames()).toEqual(['TSLA', 'GME']);
+
+    first.reject(new Error('Trading request failed (500): unavailable'));
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls[1][1]).toBe(threeRecord);
+    expect(update.mock.calls[1][2]).toMatchObject({ items: itemsOf(apple.instrument_id, teslaId, gameStop.instrument_id) });
+    await waitFor(() => expect(symbolNames()).toEqual(['AAPL', 'TSLA', 'GME']));
+    expect(screen.getByText('error')).toBeInTheDocument();
+  });
+});
+
 describe('TradingWatchlist sections and flags', () => {
   it('collapses a section, hides its symbols and keeps the state after a reload', async () => {
     mockDocuments([sectionedRecord]);

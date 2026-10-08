@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
 import {
@@ -17,6 +17,16 @@ export type WatchlistSaveStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 
 export type WatchlistOperation = (payload: WatchlistPayload) => WatchlistPayload;
 
 const MAX_CONFLICT_RETRIES = 3;
+
+type PendingOperation = { id: number; operation: WatchlistOperation };
+type SaveResult = 'saved' | 'conflict' | 'error';
+
+/** What the list shows: the last server revision with the unsaved operations applied in order. */
+function withPending(record: TradingDocument, pending: readonly PendingOperation[] | undefined): TradingDocument {
+  if (!pending?.length || isNewerWatchlistPayload(record.payload)) return record;
+  const payload = pending.reduce((current, entry) => entry.operation(current), upgradeWatchlistPayload(record.payload));
+  return { ...record, payload: serializeWatchlist(payload) };
+}
 
 function isConflictError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('(409)');
@@ -38,9 +48,21 @@ function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): stri
  * is null while a flag list is shown.
  */
 export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[]) {
-  const [records, setRecords] = useState<TradingDocument[]>([]);
+  // Server state and unsaved operations are kept apart: a save always applies
+  // its own operation to the last revision the server returned, never to the
+  // optimistic copy, so an operation is persisted at most once.
+  const [serverRecords, setServerRecords] = useState<TradingDocument[]>([]);
+  const [pending, setPending] = useState<Record<string, PendingOperation[]>>({});
   const [selectedListId, setSelectedListId] = useState('');
   const [status, setStatus] = useState<WatchlistSaveStatus>('loading');
+  const serverById = useRef(new Map<string, TradingDocument>());
+  const queues = useRef(new Map<string, Promise<void>>());
+  const nextOperationId = useRef(0);
+  const batchFailure = useRef<SaveResult | null>(null);
+  const records = useMemo(
+    () => serverRecords.map((record) => withPending(record, pending[record.record_id])),
+    [pending, serverRecords],
+  );
   const flagColor = flagListColor(selectedListId);
   const selected = flagColor ? null : records.find((record) => record.record_id === selectedListId) ?? records[0] ?? null;
   const current = useMemo(() => upgradeWatchlistPayload(selected?.payload), [selected]);
@@ -78,7 +100,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
         }
       }
       if (cancelled) return;
-      setRecords(next);
+      setAllServerRecords(next);
       setSelectedListId((currentListId) => (
         flagListColor(currentListId) || next.some((record) => record.record_id === currentListId)
           ? currentListId
@@ -89,51 +111,63 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     return () => { cancelled = true; };
   }, [instruments]);
 
-  const replace = (record: TradingDocument) => {
-    setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
+  function setAllServerRecords(next: TradingDocument[]) {
+    serverById.current = new Map(next.map((record) => [record.record_id, record]));
+    setServerRecords(next);
+  }
+
+  const setServerRecord = (record: TradingDocument) => {
+    serverById.current.set(record.record_id, record);
+    setServerRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
   };
 
   /**
-   * Save `operation` applied to `base`. On a revision conflict the latest
-   * revision is loaded and the operation applied to it again, so a change
-   * made elsewhere (another tab, another device) is kept rather than
-   * overwritten. A failed save shows the last known server revision.
+   * Save one operation on the last server revision. On a revision conflict
+   * the latest revision is loaded and the operation applied to it, so a
+   * change made elsewhere (another tab, another device) is kept.
    */
-  const persist = async (base: TradingDocument, operation: WatchlistOperation) => {
-    setStatus('saving');
-    let record = base;
+  const saveOperation = async (recordId: string, operation: WatchlistOperation): Promise<SaveResult> => {
     for (let attempt = 0; ; attempt += 1) {
-      if (isNewerWatchlistPayload(record.payload)) {
-        replace(record);
-        setStatus('conflict');
-        return;
-      }
+      const record = serverById.current.get(recordId);
+      if (!record || isNewerWatchlistPayload(record.payload)) return 'conflict';
       try {
         const saved = await tradingApi.updateDocument('watchlists', record, serializeWatchlist(operation(upgradeWatchlistPayload(record.payload))));
-        replace(saved);
-        setStatus('saved');
-        return;
+        setServerRecord(saved);
+        return 'saved';
       } catch (error) {
-        const latest = isConflictError(error) && attempt < MAX_CONFLICT_RETRIES
-          ? (await tradingApi.documents('watchlists').catch(() => []))
-            .find((item) => item.record_id === record.record_id)
+        if (!isConflictError(error)) return 'error';
+        const latest = attempt < MAX_CONFLICT_RETRIES
+          ? (await tradingApi.documents('watchlists').catch(() => [])).find((item) => item.record_id === recordId)
           : undefined;
-        if (!latest) {
-          replace(record);
-          setStatus(isConflictError(error) ? 'conflict' : 'error');
-          return;
-        }
-        record = latest;
-        replace({ ...latest, payload: serializeWatchlist(operation(upgradeWatchlistPayload(latest.payload))) });
+        if (!latest) return 'conflict';
+        setServerRecord(latest);
       }
     }
   };
 
-  /** Show a change at once and persist it as an operation. Read-only lists ignore changes. */
+  /**
+   * Show a change at once and queue its save. Saves of one list run one at a
+   * time in order; a failed operation is dropped, so the list falls back to
+   * the server state plus the operations still queued. Read-only lists
+   * ignore changes.
+   */
   const commit = (operation: WatchlistOperation) => {
     if (!selected || readOnly) return;
-    replace({ ...selected, payload: serializeWatchlist(operation(current)) });
-    void persist(selected, operation);
+    const recordId = selected.record_id;
+    const entry: PendingOperation = { id: nextOperationId.current, operation };
+    nextOperationId.current += 1;
+    setPending((current) => ({ ...current, [recordId]: [...(current[recordId] ?? []), entry] }));
+    setStatus('saving');
+    const run: Promise<void> = (queues.current.get(recordId) ?? Promise.resolve()).then(async () => {
+      const result = await saveOperation(recordId, operation);
+      setPending((current) => ({ ...current, [recordId]: (current[recordId] ?? []).filter((item) => item.id !== entry.id) }));
+      if (result !== 'saved') batchFailure.current = result;
+      if (queues.current.get(recordId) === run) {
+        setStatus(batchFailure.current ?? 'saved');
+        batchFailure.current = null;
+      }
+    });
+    queues.current.set(recordId, run);
   };
 
   /** Create and select a watchlist; false when it could not be saved. */
@@ -141,7 +175,8 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     setStatus('saving');
     try {
       const record = await tradingApi.createDocument('watchlists', `watchlist-${Date.now()}`, serializeWatchlist(payload));
-      setRecords((items) => [...items, record]);
+      serverById.current.set(record.record_id, record);
+      setServerRecords((items) => [...items, record]);
       setSelectedListId(record.record_id);
       setStatus('saved');
       return true;
@@ -156,8 +191,8 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     setStatus('saving');
     try {
       await tradingApi.archiveDocument('watchlists', selected);
-      const next = records.filter((item) => item.record_id !== selected.record_id);
-      setRecords(next);
+      const next = serverRecords.filter((item) => item.record_id !== selected.record_id);
+      setAllServerRecords(next);
       setSelectedListId(next[0]?.record_id ?? '');
       setStatus('saved');
     } catch (error) {
