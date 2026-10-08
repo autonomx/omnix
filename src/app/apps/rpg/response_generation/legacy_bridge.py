@@ -191,7 +191,7 @@ def narrate_scene_canonical(
 class SceneNarrator(_LegacySceneNarrator):
     """Public scene narrator whose visible narrative is canonically validated."""
 
-    def narrate_scene(
+    def narrate_scene(  # type: ignore[override]  # adds generation controls
         self,
         scene: dict[str, Any],
         state: dict[str, Any],

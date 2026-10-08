@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from app.jobs import default_job_store
 from app.security.tenant_context import current_tenant
@@ -608,9 +608,9 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         },
     ]
     blueprints_by_location = {
-        _text(blueprint["document"].get("location_id")): blueprint
+        _text(cast(Any, blueprint["document"]).get("location_id")): blueprint
         for blueprint in map_blueprints
-        if _text(blueprint["document"].get("location_id"))
+        if _text(cast(Any, blueprint["document"]).get("location_id"))
     }
     for location in map_locations:
         location_id = _text(location.get("id") or location.get("entity_id"))

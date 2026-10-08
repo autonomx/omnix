@@ -284,7 +284,7 @@ def derive_state_delta(simulation_state: Dict[str, Any], interpreted_action: Dic
     intent = safe_str(interpreted_action.get("intent"))
     target_id = safe_str(interpreted_action.get("target_id"))
     target_name = safe_str(interpreted_action.get("target_name") or target_id)
-    delta: Dict[str, Any] = {"npc_updates": [], "scene_updates": {}, "flags": [], "memories": []}
+    delta: dict[str, Any] = {"npc_updates": [], "scene_updates": {}, "flags": [], "memories": []}
     if intent == "attack" and target_id:
         delta["npc_updates"].append({"id": target_id, "mood": "angry", "activity": "recovering from the player's attack", "relationship_to_player_delta": -35, "trust_delta": -25, "fear_delta": 10, "health_delta": -4, "memory": f"The player attacked {target_name}."})
         delta["scene_updates"]["tension_delta"] = 25

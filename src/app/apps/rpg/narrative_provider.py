@@ -27,6 +27,7 @@ from app.apps.rpg.narrative_engine.writer import (
     writer_payload,
 )
 from app.prompts import prompt_template
+from .narrative_engine.contracts import NarrativeBlock
 
 _PROMPT_1 = prompt_template('rpg.narrative_provider.system_prompt', "2", (
     "You are the Omnix RPG Narrative Writer. Return strict JSON only. "

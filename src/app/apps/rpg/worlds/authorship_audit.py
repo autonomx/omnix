@@ -15,6 +15,7 @@ from .generation_authorship_policy_signing import (
 )
 from .generation_authorship_runtime import generation_artifact
 from .generation_authorship_signing import strict_lore_string_leaves
+from collections.abc import Sequence
 
 _BLOCKED_DETERMINISTIC_CODES = {
     "deterministic_fallback",
@@ -71,7 +72,7 @@ def _artifact_status(
 
 def _entity_rows(
     content: Mapping[str, Any],
-    blocked_paths: list[Mapping[str, Any]],
+    blocked_paths: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     entities = [
         dict(row)

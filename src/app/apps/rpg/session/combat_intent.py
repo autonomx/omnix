@@ -36,6 +36,7 @@ from app.apps.rpg.combat.state import (
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -709,7 +710,7 @@ def _resolve_location_name(
     ] + [
         _safe_dict(entry)
         for entry in _safe_list(simulation_state.get("locations"))
-        if _location_key(_safe_dict(entry).get("location_id") or _safe_dict(entry).get("id")) == normalized_id
+        if _location_key(cast(Any, _safe_dict(entry).get("location_id") or _safe_dict(entry).get("id"))) == normalized_id
     ]
     for entry in entries:
         name = _safe_str(entry.get("name") or entry.get("title")).strip()

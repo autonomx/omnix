@@ -253,7 +253,7 @@ def apply_turn(
             "source": "deterministic_session_runtime",
         }
 
-        result = {
+        result: dict[str, Any] = {
             "ok": True,
             "result": {
                 "ok": True,

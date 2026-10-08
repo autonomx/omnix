@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Final, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import canonical_content_hash
 
-_RUNTIME_SEED_VERSION = "rpg_world_runtime_seed_v1"
-_MATERIALIZATION_VERSION = "rpg_vertical_slice_materialization_v1"
-_PLAYTEST_VERSION = "rpg_player_absent_playtest_v1"
+_RUNTIME_SEED_VERSION: Final = "rpg_world_runtime_seed_v1"
+_MATERIALIZATION_VERSION: Final = "rpg_vertical_slice_materialization_v1"
+_PLAYTEST_VERSION: Final = "rpg_player_absent_playtest_v1"
 
 
 class _FrozenModel(BaseModel):

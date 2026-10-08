@@ -599,7 +599,7 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
     """
     logger.debug("[RPG PARSE] Starting to parse response, length: %d", len(text))
 
-    result = {
+    result: dict[str, Any] = {
         "narrator": "",
         "action": "",
         "npc": {

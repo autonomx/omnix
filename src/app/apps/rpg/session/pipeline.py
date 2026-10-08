@@ -26,8 +26,10 @@ class TurnContext:
 
 
 class TurnStage(Protocol):
-    name: str
-    optional: bool
+    @property
+    def name(self) -> str: ...
+    @property
+    def optional(self) -> bool: ...
 
     def run(self, ctx: TurnContext) -> TurnContext: ...
 

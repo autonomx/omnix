@@ -150,10 +150,10 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
             return {"ok": False, "error": "missing_session_id"}
-        request = RpgLoadoutActionRequest.model_validate(payload.get("loadout") or payload)
+        loadout_request = RpgLoadoutActionRequest.model_validate(payload.get("loadout") or payload)
         return apply_loadout_action_with_item_hooks(
             session_id,
-            request,
+            loadout_request,
             diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),
             maintenance_interval=_safe_int(payload.get("maintenance_interval"), default=25),
             report_interval=_safe_int(payload.get("report_interval"), default=20),
@@ -173,10 +173,10 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         if not session:
             return {"ok": False, "error": "session_not_found", "session_id": session_id}
 
-        request = _item_action_request_from_payload(payload)
+        item_request = _item_action_request_from_payload(payload)
         result = apply_item_session_action_with_hooks(
             state,
-            request,
+            item_request,
             station=_safe_str(payload.get("station")).strip() or None,
             genre=_safe_str(payload.get("genre")).strip() or "classic_fantasy",
             diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),

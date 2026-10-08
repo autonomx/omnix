@@ -24,7 +24,7 @@ class StructuredRecoveryReviewMixin:
         batch_size: int | None = None,
         entity_registry: tuple[Mapping[str, Any], ...] = (),
     ) -> GeneratedTopic:
-        topic = super()._to_generated_topic(
+        topic = super()._to_generated_topic(  # type: ignore[misc]  # mixin over the generator
             node,
             values=values,
             diagnostics=diagnostics,

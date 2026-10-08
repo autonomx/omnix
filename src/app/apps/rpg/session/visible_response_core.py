@@ -399,9 +399,10 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
     except Exception:
         # Only use dict fallback if your active-provider gateway supports it.
         # Most app providers expect ChatMessage.
+        # Dict messages for gateways that accept them.
         messages = [
-            {"role": "system", "content": system_text},
-            {"role": "user", "content": prompt},
+            {"role": "system", "content": system_text},  # type: ignore[list-item]
+            {"role": "user", "content": prompt},  # type: ignore[list-item]
         ]
 
     try:

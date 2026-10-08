@@ -733,7 +733,7 @@ def build_runtime_narration_payload(
     max_tokens: int = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS,
     max_provider_attempts: int = 2,
 ) -> Dict[str, Any]:
-    diagnostics: Dict[str, Any] = {
+    diagnostics: dict[str, Any] = {
         "provider_requested": bool(prefer_provider),
         "provider_present": provider is not None,
         "provider_shape": _provider_shape(provider),

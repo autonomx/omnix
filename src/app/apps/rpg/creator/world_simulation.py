@@ -23,7 +23,7 @@ rather than being recomputed from scratch each tick.
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.ai.llm_mind import NPCMind
 from app.apps.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
@@ -794,16 +794,16 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
                 reputation.update(target_id, source_id, "fear", 0.10)
 
     # 6.5.2 alliances
-    faction_ids = sorted({
+    sorted_faction_ids = sorted({
         str(npc.get("faction_id") or "")
         for npc in (history_state.get("npc_index") or {}).values()
         if str(npc.get("faction_id") or "")
     })
-    for any in faction_ids:
+    for any in sorted_faction_ids:
         faction_view = reputation.get(any, "player")
         if faction_view.get("hostility", 0.0) >= 0.30:
             opposing = [
-                other for other in faction_ids
+                other for other in sorted_faction_ids
                 if other != any and reputation.get(other, "player").get("hostility", 0.0) >= 0.30
             ]
             if opposing:
@@ -951,7 +951,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
             social_state["emitted_rumor_sources"] = emitted_sources_list
         emitted_sources = {str(x) for x in emitted_sources_list if str(x)}
         for rumor in rumors:
-            source_id = rumor.get("source_conversation_id")
+            source_id = cast(Any, rumor.get("source_conversation_id"))
             if source_id and source_id not in emitted_sources:
                 rumor_rows.append(rumor)
                 emitted_sources.add(source_id)

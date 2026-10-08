@@ -36,7 +36,6 @@ from typing import (
 
 import re as re
 from app.prompts import prompt_template
-from typing import Any
 
 _PROMPT_1 = prompt_template('rpg.session_semantic_state_changes.build_semantic_state_change_prompt_contract', "1", (
     "You are a deterministic state-change generator for an RPG simulation.\n\n"
@@ -414,7 +413,7 @@ def _build_semantic_state_change_prompt_contract(
         for x in _safe_list(simulation_state.get("locations"))
         if isinstance(x, dict)
     ]
-    interaction_rows = [
+    interaction_rows: list[dict[str, Any]] = [
         {
             "id": _safe_str(x.get("id")),
             "type": _safe_str(x.get("type")),
@@ -491,7 +490,7 @@ def _build_semantic_state_change_prompt_contract(
         runtime_state,
     )
 
-    prompt_payload = {
+    prompt_payload: dict[str, Any] = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
         "allowed_semantic_actions": sorted(list(_allowed_semantic_actions().keys())),

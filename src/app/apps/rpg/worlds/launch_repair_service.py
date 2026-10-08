@@ -88,10 +88,10 @@ def _compile_imported_topics_publication(
             + ",".join(compilation.missing_requirements)
         )
     canon = dict(compilation.document)
-    entities = dict(canon.get("entities") or {})
+    entity_map = dict(canon.get("entities") or {})
     locations = {
         entity_id
-        for entity_id, entity in entities.items()
+        for entity_id, entity in entity_map.items()
         if isinstance(entity, Mapping) and entity.get("kind") == "location"
     }
     revision_document = compile_world_revision(
@@ -99,7 +99,7 @@ def _compile_imported_topics_publication(
         revision=revision,
         title=str(world.get("title") or world["id"]),
         canon=canon,
-        entity_manifest={"schema_version": "rpg_world_entity_manifest_v1", "entities": entities},
+        entity_manifest={"schema_version": "rpg_world_entity_manifest_v1", "entities": entity_map},
         topology={
             "schema_version": "rpg_world_topology_v1",
             "locations": sorted(locations),

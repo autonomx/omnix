@@ -93,9 +93,7 @@ module = [
   "app.apps.desktop_companion", "app.apps.desktop_companion.*",
   "app.platform.live_voice", "app.platform.live_voice.*",
   "app.providers", "app.providers.*",
-  "app.apps.rpg.replay", "app.apps.rpg.replay.*",
   "app.platform.research", "app.platform.research.*",
-  "app.apps.rpg", "app.apps.rpg.*",
   "app.settings", "app.settings.*",
 ]
 ignore_errors = true

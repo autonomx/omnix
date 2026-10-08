@@ -5,7 +5,7 @@ import json
 import re
 from contextlib import nullcontext
 from dataclasses import replace
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import (
     BaseModel,
@@ -166,7 +166,7 @@ def _entity_model(
     fields.setdefault("registry_role", (StrictStr | None, None))
     fields.setdefault("registry_distinction", (StrictStr | None, None))
     safe = _SAFE_MODEL.sub("_", node.topic_id).strip("_") or "topic"
-    return create_model(
+    return cast(Any, create_model)(
         f"WorldForgeProfileEntity_{safe}",
         __config__=ConfigDict(extra="forbid"),
         **fields,

@@ -159,9 +159,9 @@ def build_next_conversation_line(conversation: dict[str, Any], simulation_state:
                 # Replay mode: read back from recorded data
                 llm_records = runtime_state.get("llm_records", []) if isinstance(runtime_state, dict) else []
                 llm_records_index = _safe_dict(runtime_state.get("llm_records_index")) if isinstance(runtime_state, dict) else {}
-                record_index = llm_records_index.get(record_key)
-                if isinstance(record_index, int) and record_index < len(llm_records):
-                    replay_record = _safe_dict(llm_records[record_index])
+                recorded_index = llm_records_index.get(record_key)
+                if isinstance(recorded_index, int) and recorded_index < len(llm_records):
+                    replay_record = _safe_dict(llm_records[recorded_index])
                     parsed = _safe_dict(replay_record.get("parsed"))
                     if parsed.get("text"):
                         return build_conversation_line(

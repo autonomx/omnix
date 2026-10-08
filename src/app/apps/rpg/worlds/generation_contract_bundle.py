@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence, cast
 
 from pydantic import (
     BaseModel,
@@ -271,7 +271,7 @@ def _sections_model(topic_id: str, template: tuple[tuple[str, str], ...]) -> typ
         section_id: (ProviderSectionDraft, ...)
         for section_id, _title in template
     }
-    return create_model(
+    return cast(Any, create_model)(
         f"WorldForgeAuthoredSections_{topic_id}",
         __config__=ConfigDict(extra="forbid"),
         **fields,
@@ -284,7 +284,7 @@ def _dossier_model(
     reference_type: Any,
 ) -> type[BaseModel]:
     sections_model = _sections_model(topic_id, template)
-    return create_model(
+    return cast(Any, create_model)(
         f"WorldForgeAuthoredDossier_{topic_id}",
         __config__=ConfigDict(extra="forbid"),
         subtitle=(StrictStr, ""),
@@ -328,7 +328,7 @@ def _entity_model(
     fields["dossier"] = (dossier_model, ...)
     if not definitions:
         fields["attributes"] = (dict[str, Any], Field(default_factory=dict))
-    return create_model(
+    return cast(Any, create_model)(
         f"WorldForgeAuthoredEntity_{node.topic_id}",
         __config__=ConfigDict(extra="forbid"),
         **fields,
@@ -343,7 +343,7 @@ def _draft_model(
     policy: CollectionPolicy,
     relationships_allowed: bool,
 ) -> type[BaseModel]:
-    return create_model(
+    return cast(Any, create_model)(
         f"WorldForgeAuthoredTopicDraft_{node.topic_id}",
         __config__=ConfigDict(extra="forbid"),
         topic_id=(_literal((node.topic_id,)), ...),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 # RPG session runtime responsibility module.
 # Phase 8.38: use the current semantic direct-response packet as the visible
@@ -244,7 +244,7 @@ def _phase8_part38_iter_candidate_sources(payload: dict[str, Any]) -> Iterable[d
             "semantic_action", "semantic_action_record", "semantic_advisory", "action",
             "current_action_response", "resolved_result", "presentation_intent",
         ):
-            nested = root.get(key)
+            nested = cast(Any, root.get(key))
             if isinstance(nested, dict):
                 nested_id = id(nested)
                 if nested_id not in seen:

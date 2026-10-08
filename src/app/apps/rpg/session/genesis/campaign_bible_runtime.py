@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.apps.rpg.narrative_engine import CampaignBibleSnapshot
 
@@ -45,7 +45,7 @@ def _portable_snapshot(
     }
     return CampaignBibleSnapshot(
         campaign_id=campaign_id,
-        revision=int(document["canon_revision"]),
+        revision=int(cast(Any, document["canon_revision"])),
         content_hash=str(
             projection.get("content_hash")
             or summary.get("content_hash")

@@ -500,45 +500,45 @@ def apply_loadout_action(
                 effects=_safe_list(world_result.get("effects")),
             )
         else:
-            result = apply_ability_to_state(
+            ability_use = apply_ability_to_state(
                 state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation"
             )
-            if not result.ok:
+            if not ability_use.ok:
                 return {
                     "ok": False,
-                    "error": result.error or "ability_failed",
+                    "error": ability_use.error or "ability_failed",
                     "session_id": session_id,
-                    "detail": result.detail,
-                    "ability_id": result.ability_id,
+                    "detail": ability_use.detail,
+                    "ability_id": ability_use.ability_id,
                 }
             _advance_turn(state)
-            event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
+            event = _append_event(state, title=f"Used {ability_use.name}", detail=ability_use.detail, kind="ability", effects=ability_use.effects)
     elif action in {"unlock_ability", "upgrade_ability", "assign_hotbar", "remove_hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
         ability_id = _requested_ability_id(request)
         if action == "unlock_ability":
-            result = unlock_ability_in_state(state, str(ability_id or ""))
+            progression_result = unlock_ability_in_state(state, str(ability_id or ""))
         elif action == "upgrade_ability":
-            result = upgrade_ability_rank_in_state(state, str(ability_id or ""))
+            progression_result = upgrade_ability_rank_in_state(state, str(ability_id or ""))
         elif action == "assign_hotbar":
-            result = assign_ability_to_hotbar(state, str(ability_id or ""), request.hotbar_slot or "1")
+            progression_result = assign_ability_to_hotbar(state, str(ability_id or ""), request.hotbar_slot or "1")
         else:
-            result = remove_hotbar_slot(state, request.hotbar_slot or "1")
-        if not result.ok:
+            progression_result = remove_hotbar_slot(state, request.hotbar_slot or "1")
+        if not progression_result.ok:
             return {
                 "ok": False,
-                "error": result.error or "ability_progression_failed",
+                "error": progression_result.error or "ability_progression_failed",
                 "session_id": session_id,
-                "detail": result.detail,
-                "ability_id": result.ability_id,
-                "slot": result.slot,
+                "detail": progression_result.detail,
+                "ability_id": progression_result.ability_id,
+                "slot": progression_result.slot,
             }
         event = _append_event(
             state,
             title="Updated ability progression",
-            detail=result.detail,
+            detail=progression_result.detail,
             kind="ability_progression",
-            effects=[{"action": action, "ability_id": result.ability_id, "slot": result.slot}],
+            effects=[{"action": action, "ability_id": progression_result.ability_id, "slot": progression_result.slot}],
         )
     else:
         return {"ok": False, "error": "unsupported_loadout_action", "session_id": session_id, "action": action}

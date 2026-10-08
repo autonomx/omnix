@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, cast
 
 from app.assets.content import asset_available, asset_checksum
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
@@ -358,8 +358,8 @@ def _insert_scenarios_and_blueprints(
         for documents in scenario_documents.values()
     ]
     for row in transformed.payload.map_blueprints:
-        document = MapBlueprintDocument.model_validate(row["document"])
-        findings = reconcile_blueprint_scenarios(document, latest_scenarios)
+        blueprint_document = MapBlueprintDocument.model_validate(row["document"])
+        findings = reconcile_blueprint_scenarios(blueprint_document, latest_scenarios)
         work.connection.execute(
             "INSERT INTO omnix_rpg_map_blueprint_revisions (workspace_id, world_id, "
             "map_id, blueprint_revision, document_jsonb, content_hash, "
@@ -369,9 +369,9 @@ def _insert_scenarios_and_blueprints(
             (
                 context.workspace_id,
                 world_id,
-                document.map_id,
+                blueprint_document.map_id,
                 int(row["blueprint_revision"]),
-                canonical_json(document.model_dump(mode="json")),
+                canonical_json(blueprint_document.model_dump(mode="json")),
                 row["content_hash"],
                 row["semantic_interface_hash"],
                 "invalid" if findings else "ready",
@@ -452,8 +452,8 @@ def import_world_bundle(
         existing_asset_ids={asset.id for asset in iter_assets(store)},
         existing_run_ids=existing["run"],
     )
-    created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, store)
-    installed_assets = _register_assets(store, created_assets)
+    created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, cast(Any, store))
+    installed_assets = _register_assets(cast(Any, store), created_assets)
     try:
         with unit_of_work(database) as work:
             if work.world_scenarios.get_world(context, target) is not None:
@@ -465,7 +465,7 @@ def import_world_bundle(
             _insert_generation_runs(work, context, target, transformed)
             work.commit()
     except Exception:
-        _cleanup_assets(store, installed_assets)
+        _cleanup_assets(cast(Any, store), installed_assets)
         raise
 
     launch_preparation: dict[str, Any] = {"status": "not_required"}

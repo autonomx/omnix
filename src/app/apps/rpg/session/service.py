@@ -1,7 +1,7 @@
 """Phase 15.3 — Canonical session service."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.core.determinism import rng_seed_from_session_id
 from app.apps.rpg.map_persistence import ensure_session_map_state
@@ -136,7 +136,8 @@ def load_session(session_id: str) -> dict[str, Any]:
     ) as span:
         session = _load_session(session_id)
         if not isinstance(session, dict):
-            return session
+            # A missing session is returned as None (callers check for it).
+            return cast(Any, session)
         from .interaction_event_store import load_and_replay_interaction_events
 
         session = load_and_replay_interaction_events(session_id, session)
@@ -176,7 +177,7 @@ def load_session(session_id: str) -> dict[str, Any]:
         return session
 
 
-def _load_session(session_id: str) -> dict[str, Any]:
+def _load_session(session_id: str) -> dict[str, Any] | None:
     session = load_session_from_disk(session_id)
     if session is None:
         return None

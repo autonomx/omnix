@@ -631,7 +631,7 @@ def load_campaign_lore(
             "generated_document_id": generated_document_id,
         }
     except Exception as exc:
-        generated_document_id: str | None = None
+        generated_document_id = None
         generated = False
         bible = portable
         if ensure_current_location:

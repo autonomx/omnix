@@ -658,7 +658,7 @@ def _choose_activity_kind_for_actor(actor: dict[str, Any], tick: int, runtime_st
 
     if local_pressure >= 3:
         # High pressure: bias heavily toward security activities
-        options = ("patrol", "watch_crowd", "question_patron", "patrol", "watch_crowd", "serve", "clean")
+        options: tuple[str, ...] = ("patrol", "watch_crowd", "question_patron", "patrol", "watch_crowd", "serve", "clean")
     elif local_pressure >= 2:
         # Medium pressure: bias toward security but allow variety
         options = ("patrol", "watch_crowd", "trade", "serve", "clean", "gossip", "question_patron")

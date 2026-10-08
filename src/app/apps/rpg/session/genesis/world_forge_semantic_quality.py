@@ -432,10 +432,10 @@ def audit_topic_semantic_quality(
                             regeneration_scope="topic",
                         )
                     )
-        for reference_tuple, referencing_ids in reference_tuples.items():
+        for shared_references, referencing_ids in reference_tuples.items():
             non_exempt_tuple = tuple(
                 (field_id, referenced_ids)
-                for field_id, referenced_ids in reference_tuple
+                for field_id, referenced_ids in shared_references
                 if str(definition_map[field_id].get("semantic_role") or "").strip()
                 not in _REFERENCE_CONCENTRATION_EXEMPT_ROLES
             )

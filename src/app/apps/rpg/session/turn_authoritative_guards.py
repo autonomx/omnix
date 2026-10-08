@@ -512,7 +512,7 @@ def _grounded_service_visible_response(resolved: dict[str, Any]) -> dict[str, An
     else:
         return {}
 
-    response = {
+    response: dict[str, Any] = {
         "format_version": "rpg_visible_response_v1",
         "narration": narration,
         "messages": messages,

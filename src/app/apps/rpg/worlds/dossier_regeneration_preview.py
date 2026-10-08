@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -130,7 +130,7 @@ def preview_world_entity_dossier_regeneration(
             "world_entity_dossier_requires_llm_authored_prose:"
             + ",".join(issues or ("short_summary_required",))
         )
-    dossier = dict(dossier)
+    dossier = dict(cast(Any, dossier))
     dossier["generated_from_legacy"] = False
     return {
         "ok": True,

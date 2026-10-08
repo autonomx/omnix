@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.persistence.database import DatabaseUnavailableError
 from app.apps.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
@@ -243,7 +243,7 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
             if _release_interrupted_job(
                 work,
                 context,
-                job_id=str(row[0]),
+                job_id=str(cast(Any, row)[0]),
                 job_type=str(row["job_type"]),
                 attempt_count=int(row["attempt_count"]),
                 max_attempts=int(row["max_attempts"]),
@@ -279,7 +279,7 @@ def _recover_worker_database_interruption(
             if _release_interrupted_job(
                 work,
                 context,
-                job_id=str(row[0]),
+                job_id=str(cast(Any, row)[0]),
                 job_type=str(row["job_type"]),
                 attempt_count=int(row["attempt_count"]),
                 max_attempts=int(row["max_attempts"]),
@@ -408,7 +408,7 @@ def run_world_generation_worker_once(
             discard_reason = "missing_run_id"
         elif job_type == WORLD_TOPIC_JOB_TYPE and run is None:
             discard_reason = "world_generation_run_not_found"
-        elif job_type == WORLD_TOPIC_JOB_TYPE and str(run["world_id"]) != world_id:
+        elif job_type == WORLD_TOPIC_JOB_TYPE and str(cast(Any, run)["world_id"]) != world_id:
             discard_reason = "world_generation_run_world_mismatch"
         else:
             discard_reason = ""

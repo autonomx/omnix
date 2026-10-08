@@ -72,6 +72,7 @@ from typing import (
 
 from .idle_time import recorded_idle_tick_time
 from app.runtime.clock import utc_now as _runtime_utc_now
+from typing import cast
 
 def _apply_idle_tick_to_session(
     session: dict[str, Any],
@@ -286,7 +287,7 @@ def _apply_idle_tick_to_session(
             })
 
         # When continuing a scene, suppress same-speaker standalone initiative.
-        continuing_participants = set(_safe_list(continuing_scene.get("participants")))
+        continuing_participants = set(_safe_list(cast(dict[str, Any], continuing_scene).get("participants")))
         if selected_initiative and _safe_str(selected_initiative.get("speaker_id")) in continuing_participants:
             selected_initiative = None
     else:

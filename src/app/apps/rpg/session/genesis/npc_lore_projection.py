@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from app.apps.rpg.profiles.dynamic_npc_profiles import load_npc_profile
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
@@ -56,7 +56,7 @@ def _tick(session: Mapping[str, Any]) -> int:
         state.get("turn"),
     ):
         try:
-            return int(value)
+            return int(cast(Any, value))
         except (TypeError, ValueError):
             continue
     return 0
@@ -84,14 +84,14 @@ def encountered_npc_ids(
     location_id = _text((current_location_identity(session) or {}).get("id"))
 
     for row in _mapping(simulation.get("scene_population_state")).get("present_npcs") or ():
-        value = row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row
+        value = cast(Any, row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row)
         _add(output, value)
     present = _mapping(simulation.get("present_npc_state"))
     for value in present.get(location_id) or ():
         _add(output, value)
     for row in _mapping(present.get("by_location")).values():
         for npc in _mapping(row).get("present_npcs") or ():
-            value = npc.get("npc_id") or npc.get("id") if isinstance(npc, Mapping) else npc
+            value = cast(Any, npc.get("npc_id") or npc.get("id") if isinstance(npc, Mapping) else npc)
             _add(output, value)
 
     for scene in (
@@ -105,7 +105,7 @@ def encountered_npc_ids(
                 _add(output, value)
         for key in ("present_npcs", "nearby_npcs", "npcs"):
             for row in scene.get(key) or ():
-                value = row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row
+                value = cast(Any, row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row)
                 _add(output, value)
     for value in _mapping(simulation.get("player_state")).get("nearby_npc_ids") or ():
         _add(output, value)

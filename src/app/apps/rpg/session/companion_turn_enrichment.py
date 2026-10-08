@@ -91,8 +91,8 @@ def _apply_post_action_companion_enrichment(
         "source": "deterministic_companion_quest_runtime",
     }
     _party_composition: dict[str, Any] = {}
-    _nps: list[dict[str, Any]] = []
-    _ccs: list[dict[str, Any]] = []
+    _nps: Any = []
+    _ccs: Any = []
 
     # AO-AP-AQ Patch 4.2 + 6: post-action companion presence projection
     _post_action_sim = _safe_dict(

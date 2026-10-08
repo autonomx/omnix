@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, TYPE_CHECKING
 
 from app.providers.base import ChatMessage
 from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
@@ -22,6 +22,10 @@ from app.apps.rpg.worlds.providers.world_forge import (
 
 class StructuredRegistryRecoveryMixin:
     """Generate a registry and use the configured model to restructure it once."""
+
+    if TYPE_CHECKING:
+        # Provided by the generator class this mixes into.
+        def __getattr__(self, name: str) -> Any: ...
 
     def _generate_entity_registry(
         self,

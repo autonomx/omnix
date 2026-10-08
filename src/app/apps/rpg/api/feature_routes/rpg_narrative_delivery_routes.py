@@ -135,7 +135,7 @@ def _stream(
                     record.status,
                 )
                 return
-            projected, event = coordinator.publish_next(
+            projected, published = coordinator.publish_next(
                 response,
                 repository,
                 expected_semantic_hash=response.semantic_hash,

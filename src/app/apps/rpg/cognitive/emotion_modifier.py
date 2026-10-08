@@ -306,7 +306,7 @@ class EmotionModifier:
         if thresholds:
             self.thresholds.update(thresholds)
         
-        self._stats: Dict[str, Any] = {
+        self._stats: dict[str, Any] = {
             "modifications_applied": 0,
             "actions_blocked": 0,
             "emotions_influencing": 0,

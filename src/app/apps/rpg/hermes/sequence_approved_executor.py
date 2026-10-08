@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from app.apps.rpg.hermes.approved_config import hermes_rpg_approved_flow_config_payload
 from app.apps.rpg.hermes.approved_flow import hermes_rpg_approved_flow
@@ -79,9 +79,9 @@ def _approved_flow_payload(
         },
     }
     flow = hermes_rpg_approved_flow(
-        payload["user_step"],
-        payload["replay_entry"],
-        payload["context"],
+        cast(Any, payload["user_step"]),
+        cast(Any, payload["replay_entry"]),
+        cast(Any, payload["context"]),
         submitter or hermes_rpg_canonical_submitter,
     )
     readout = hermes_rpg_flow_readout(flow)

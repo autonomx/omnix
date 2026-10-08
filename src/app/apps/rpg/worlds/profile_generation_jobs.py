@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, NoReturn
 
 from app.jobs.models import ResourceClass
 from app.persistence.database import DatabaseUnavailableError
@@ -279,7 +279,7 @@ def profile_resolution_from_world(
     )
 
 
-def _raise_not_ready(status: str) -> None:
+def _raise_not_ready(status: str) -> NoReturn:
     raise ValueError(f"world_profile_not_ready:{status}")
 
 
@@ -294,7 +294,7 @@ def profile_manifest_run(world: Mapping[str, Any]) -> dict[str, Any] | None:
     if status in {"ready", "approved"}:
         resolution = profile_resolution_from_world(world, allow_legacy_missing=False)
         assert resolution is not None
-        graph = build_profile_topic_graph(
+        graph: Any = build_profile_topic_graph(
             resolution.profile,
             campaign_template=str(
                 metadata.get("campaign_template") or resolution.profile.profile_id

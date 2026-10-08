@@ -57,12 +57,13 @@ from app.apps.rpg.session.semantic_interaction_runtime import (
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
 
 def derive_action_candidates(simulation_state, player_input, runtime_state=None):
-    candidates = []
+    candidates: list[dict[str, Any]] = []
     text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
     target_id = _find_npc_target_by_name(simulation_state, text)
 
@@ -247,7 +248,7 @@ def _build_turn_payload(session: dict[str, Any], narration_result: dict[str, Any
         session,
         narration_result,
         summary,
-        build_transaction_menus_for_state=_build_transaction_menus_for_state,
+        build_transaction_menus_for_state=cast(Any, _build_transaction_menus_for_state),
     )
 
 

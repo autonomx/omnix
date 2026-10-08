@@ -584,14 +584,14 @@ class RecoveringFirstPassWorldForgeTopicGenerator(
             value = bundle.materializer(recovered.value)
         except Exception as exc:
             diagnostics = {**bundle.descriptor(), **recovered_diagnostics}
-            artifact = build_failure_artifact(
+            failure_artifact = build_failure_artifact(
                 topic_id=node.topic_id,
                 stage="materialization",
                 error=exc,
                 raw_text=raw_text,
                 diagnostics=diagnostics,
             )
-            diagnostics["failure_artifact"] = artifact.model_dump(mode="json")
+            diagnostics["failure_artifact"] = failure_artifact.model_dump(mode="json")
             raise SinglePassWorldForgeProviderError(
                 node.topic_id,
                 exc,

@@ -1,7 +1,7 @@
 """Atomic certified publication for durable World Forge runs."""
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -107,7 +107,7 @@ def _required_starter_certificate(
                     "severity": "error",
                     "blocking": True,
                     "evidence": {
-                        "contract": dict(contract),
+                        "contract": dict(cast(Any, contract)),
                         "certificate_present": certificate is not None,
                     },
                 },

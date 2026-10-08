@@ -43,6 +43,7 @@ from typing import (
 logger = logging.getLogger(__name__)
 
 from .state_normalization import _merge_stepped_simulation_state  # noqa: F401
+from typing import cast
 
 
 def _ambient_conversation_artifact_line(artifact: dict[str, Any]) -> str:
@@ -471,6 +472,7 @@ def _process_next_narration_job(session_id: str) -> dict[str, Any]:
                 status="failed",
                 error=f"grounding_soft_audit_failed: {exc!r}",
             )
+            session = cast(dict[str, Any], session)
             session["runtime_state"] = runtime_state
             session = save_runtime_session(session)
             return {

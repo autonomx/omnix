@@ -138,7 +138,7 @@ def _strict_registry_contract(
         __config__=ConfigDict(extra="forbid"),
         topic_id=(_literal((expected_topic_id,)), ...),
         entities=(
-            list[item_model],
+            list[item_model],  # type: ignore[valid-type]
             Field(
                 min_length=len(expected_entity_ids),
                 max_length=len(expected_entity_ids),

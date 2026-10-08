@@ -703,7 +703,7 @@ def build_session_from_start_result(setup_payload: dict[str, Any], start_result:
     opening = _build_opening_text(generated)
     current_scene = _initial_scene_state(generated)
 
-    session = {
+    session: dict[str, Any] = {
         "manifest": {
             "session_id": setup_id,
             "schema_version": _SCHEMA_VERSION,

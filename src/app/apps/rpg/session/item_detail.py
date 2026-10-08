@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
@@ -420,7 +420,7 @@ def generate_item_detail(
         description_key=description_key,
         context_hash=context_hash,
         item_key=item_key,
-        item_name=facts["name"],
+        item_name=cast(str, facts["name"]),
         genre=resolved_genre,
         summary=summary,
         metadata={

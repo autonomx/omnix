@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from app.apps.rpg.map_grid_contracts import GridMapDefinition
 
@@ -94,9 +94,9 @@ def _map_bindings(
             definition_hash=definition.definition_hash,
             semantic_interface_hash=definition.semantic_interface_hash,
             simulation_readiness="navigable",
-            presentation_readiness=str(
+            presentation_readiness=cast(Any, str(
                 definition.metadata.get("presentation_readiness") or "placeholder"
-            ),
+            )),
         )
     return tuple(by_map[key] for key in sorted(by_map))
 
