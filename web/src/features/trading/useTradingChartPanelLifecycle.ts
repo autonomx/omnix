@@ -4,7 +4,7 @@ import { defaultTradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS } from './tradingTime';
-import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY } from './tradingChartPanelModel';
+import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY, compareSymbolBars } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
@@ -25,7 +25,7 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
   useEffect(() => {
     if (!hostRef.current) return;
     const next = new TradingChartAdapter(hostRef.current, chartType);
-    const scheduler = new TradingIndicatorScheduler();
+    const scheduler = new TradingIndicatorScheduler(undefined, compareSymbolBars);
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     fittedBarsKeyRef.current = null;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MarketBar } from '../tradingTypes';
+import type { CoreIndicatorId, CoreIndicatorInstance } from './coreIndicators';
 import { TradingIndicatorScheduler } from './indicatorScheduler';
 import { fixture } from '../../../test/fixture';
 
@@ -38,6 +39,30 @@ describe('TradingIndicatorScheduler', () => {
     const second = scheduler.calculate(bars(30), [{ id: 'ema', period: 10, enabled: true }]);
     expect(await first).toBeNull();
     expect((await second)?.[0].key).toBe('ema:10');
+    scheduler.destroy();
+  });
+
+  it('loads the compare symbol of a Correlation Coefficient on the chart interval', async () => {
+    const calls: Array<[string, string, number]> = [];
+    const scheduler = new TradingIndicatorScheduler(null, async (instrumentId, interval, limit) => {
+      calls.push([instrumentId, interval, limit]);
+      return bars(30);
+    });
+    const correlation: CoreIndicatorInstance = { id: 'tv-correlation-coefficient-cc' as CoreIndicatorId, period: 20, enabled: true, compareSymbol: 'equity:NASDAQ:QQQ' };
+    const outputs = await scheduler.calculate(bars(30), [correlation, { id: 'sma', period: 20, enabled: true }]);
+    expect(calls).toEqual([['equity:NASDAQ:QQQ', '1m', 100]]);
+    expect(outputs?.map((output) => [output.key, output.points.length])).toEqual([['tv-correlation-coefficient-cc:cc', 11], ['sma:20', 11]]);
+    // Cached for the next recalculation.
+    await scheduler.calculate(bars(30), [correlation]);
+    expect(calls).toHaveLength(1);
+    scheduler.destroy();
+  });
+
+  it('plots nothing for a compare symbol whose bars fail to load', async () => {
+    const scheduler = new TradingIndicatorScheduler(null, () => Promise.reject(new Error('offline')));
+    const correlation: CoreIndicatorInstance = { id: 'tv-correlation-coefficient-cc' as CoreIndicatorId, period: 20, enabled: true, compareSymbol: 'equity:NASDAQ:QQQ' };
+    const outputs = await scheduler.calculate(bars(30), [correlation]);
+    expect(outputs?.[0].points).toEqual([]);
     scheduler.destroy();
   });
 

@@ -70,6 +70,8 @@ export type CoreIndicatorInstance = {
   signalPeriod?: number;
   standardDeviations?: number;
   anchorTime?: string | null;
+  /** Instrument id of the second series, for indicators that read one (Correlation Coefficient). */
+  compareSymbol?: string | null;
   style?: CoreIndicatorStyle;
 };
 

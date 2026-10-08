@@ -272,6 +272,11 @@ export async function comparisonBars(
   return selected;
 }
 
+/** Bars of an indicator's compare symbol (Correlation Coefficient), loaded like a compare symbol. */
+export async function compareSymbolBars(instrumentId: string, interval: string, limit: number): Promise<MarketBar[]> {
+  return (await comparisonBars(instrumentId, interval, limit)).bars as MarketBar[];
+}
+
 export type TradingChartPanelProps = {
   sessionId?: string;
   chartId: string;

@@ -13,6 +13,7 @@ import {
   tradingViewBuiltInDefaultPeriod,
   tradingViewBuiltInDefinition,
   tradingViewBuiltInPlotDefinitions,
+  tradingViewBuiltInUsesCompareSeries,
   tradingViewBuiltInUsesSeparatePane,
 } from './indicators/tradingViewBuiltIns';
 import './TradingIndicatorSettings.css';
@@ -250,6 +251,20 @@ export function TradingIndicatorSettings({
           <>
             <Field label="Fast period" value={draft.fastPeriod ?? 50} onChange={(value) => setNumber('fastPeriod', value)} />
             <Field label="Slow period" value={draft.slowPeriod ?? 200} onChange={(value) => setNumber('slowPeriod', value)} />
+          </>
+        ) : null}
+        {tradingViewBuiltInUsesCompareSeries(draftId) ? (
+          <>
+            <label className="trading-indicator-settings-field">
+              <span>Symbol</span>
+              <input
+                type="text"
+                placeholder="equity:NASDAQ:QQQ"
+                value={draft.compareSymbol ?? ''}
+                onChange={(event) => setDraft((current) => ({ ...current, compareSymbol: event.target.value.trim() || null }))}
+              />
+            </label>
+            <p className="trading-indicator-settings-help">The instrument to correlate with, loaded on the chart's interval like a compare symbol.</p>
           </>
         ) : null}
         {draft.id === 'vwap' ? (
