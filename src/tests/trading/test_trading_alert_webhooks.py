@@ -58,7 +58,7 @@ def sender(handler, *, entries=None, resolver=public, broken=False) -> tuple[Web
 
     store = Store(entries if entries is not None else {"ref": {"url": HOOK, "secret": "s3cret"}}, broken=broken)
     transport = httpx.MockTransport(record)
-    return WebhookSender(store, transport_factory=lambda: transport, resolver=resolver, clock=lambda: NOW), seen
+    return WebhookSender(store, exchange=lambda request, seconds: transport.handle_request(request), resolver=resolver, clock=lambda: NOW), seen
 
 
 @pytest.fixture(autouse=True)
@@ -258,12 +258,11 @@ def test_one_deadline_bounds_a_peer_that_drips_its_headers() -> None:
                 time.sleep(0.05)
 
     threading.Thread(target=drip, daemon=True).start()
-    transport = httpx.HTTPTransport(retries=0)
     request = httpx.Request("POST", f"http://127.0.0.1:{port}/", content=b"x", extensions={"timeout": httpx.Timeout(0.2).as_dict()})
     started = time.monotonic()
     try:
         with pytest.raises(httpx.TimeoutException):
-            post_within(transport, request, 1.0)
+            post_within(request, 1.0)
     finally:
         stop.set()
         server.close()
@@ -289,3 +288,49 @@ def test_a_pass_sends_a_bounded_number_of_deliveries() -> None:
     monitor = NotificationDeliveryMonitor(repository_factory=Repository, senders={"webhook": Sender()}, max_sends=3, clock=lambda: NOW)
     assert asyncio.run(monitor.run_once()) == 3
     assert claims == [1, 1, 1]
+
+
+def test_a_response_is_returned_without_reading_its_body() -> None:
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def answer() -> None:
+        connection, _ = server.accept()
+        with connection:
+            connection.recv(65536)
+            # Headers, then a body far bigger than anything the sender should read.
+            connection.sendall(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+            time.sleep(0.2)
+
+    threading.Thread(target=answer, daemon=True).start()
+    request = httpx.Request("POST", f"http://127.0.0.1:{port}/hook", content=b"{}", extensions={"timeout": httpx.Timeout(2).as_dict()})
+    try:
+        response = post_within(request, 2.0)
+    finally:
+        server.close()
+    assert response.status_code == 204
+
+
+def test_lookups_never_queue_behind_a_stuck_resolver() -> None:
+    from app.apps.trading import alerts_delivery
+
+    release = threading.Event()
+
+    def stuck(host: str, port: int) -> list[str]:
+        release.wait(5)
+        return ["93.184.216.34"]
+
+    resolve = alerts_delivery.bounded(stuck, 0.05)
+    try:
+        for _ in range(alerts_delivery._RESOLVER_THREADS):
+            with pytest.raises(alerts_delivery._Deadline):
+                resolve("hooks.example.com", 443)
+        started = time.monotonic()
+        with pytest.raises(alerts_delivery._Deadline):
+            resolve("hooks.example.com", 443)
+        # Every lookup thread is busy: gives up at once instead of queueing.
+        assert time.monotonic() - started < 0.04
+    finally:
+        release.set()

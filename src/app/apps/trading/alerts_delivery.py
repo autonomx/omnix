@@ -25,8 +25,12 @@ Webhook rules:
   fallback to the next one, with the hostname for TLS (SNI and certificate
   verification) and ``Host``, so DNS cannot rebind it;
 - one deadline bounds the whole send (resolution, connection, response
-  headers); the response body is never read; no redirects, no proxies; nothing
-  logs the URL (the HTTP client's own request log is not used);
+  headers): a watchdog shuts the socket down (never closes it from another
+  thread); the response body is never read; no redirects, no proxies; nothing
+  logs the URL (the HTTP client's request log is not used);
+- throughput: at most ``MAX_SENDS_PER_PASS`` sends per pass of the monitor
+  (every 10 s), about 24 a minute: enough for one trader's alerts, not for
+  fan-out to many receivers;
 - the body is the trigger's message, ``application/json`` when it parses as
   JSON, else ``text/plain``;
 - with a secret, ``X-Omnix-Signature: sha256=<hex>`` is the HMAC-SHA256 of
@@ -44,6 +48,8 @@ import hmac
 import ipaddress
 import json
 import logging
+import socket
+import ssl
 import threading
 import time
 import uuid
@@ -54,6 +60,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
+import httpcore
 import httpx
 from pydantic import BaseModel
 
@@ -429,7 +436,9 @@ def _host_header(url: str) -> str:
     return parts.netloc
 
 
-_RESOLVERS = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="omnix-webhook-dns")
+_RESOLVER_THREADS = 4
+_RESOLVERS = concurrent.futures.ThreadPoolExecutor(max_workers=_RESOLVER_THREADS, thread_name_prefix="omnix-webhook-dns")
+_RESOLVER_SLOTS = threading.BoundedSemaphore(_RESOLVER_THREADS)
 
 
 class _Deadline(Exception):
@@ -437,45 +446,137 @@ class _Deadline(Exception):
 
 
 def bounded(resolver: Resolver, seconds: float) -> Resolver:
-    """A resolver that gives up after ``seconds`` (the lookup itself finishes in the background)."""
+    """A resolver that gives up after ``seconds``.
+
+    A lookup that times out keeps its thread until the system resolver returns, so lookups never queue: when every
+    lookup thread is busy (a DNS outage), this gives up at once instead of adding to a backlog.
+    """
 
     def resolve(hostname: str, port: int) -> list[str]:
-        future = _RESOLVERS.submit(lambda: list(resolver(hostname, port)))
+        if not _RESOLVER_SLOTS.acquire(blocking=False):
+            raise _Deadline
+
+        def lookup() -> list[str]:
+            try:
+                return list(resolver(hostname, port))
+            finally:
+                _RESOLVER_SLOTS.release()
+
+        future = _RESOLVERS.submit(lookup)
         try:
             return future.result(timeout=max(0.1, seconds))
         except concurrent.futures.TimeoutError as exc:
+            future.cancel()
             raise _Deadline from exc
 
     return resolve
 
 
-def post_within(transport: httpx.BaseTransport, request: httpx.Request, seconds: float) -> httpx.Response:
-    """Sends ``request`` and returns once the response headers arrive, never reading the body.
+class _RecordedStream(httpcore.NetworkStream):
+    """A network stream that records its socket, so a watchdog can shut it down."""
 
-    The whole exchange is bounded: when ``seconds`` pass, the transport is closed under the request, which
-    ends a peer that sends its headers one byte at a time. Raises ``httpx.TimeoutException`` then.
+    def __init__(self, stream: httpcore.NetworkStream, sockets: list[socket.socket]) -> None:
+        self._stream = stream
+        sock = stream.get_extra_info("socket")
+        if isinstance(sock, socket.socket):
+            sockets.append(sock)
+        self._sockets = sockets
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        return self._stream.read(max_bytes, timeout)
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        self._stream.write(buffer, timeout)
+
+    def close(self) -> None:
+        self._stream.close()
+
+    def start_tls(
+        self, ssl_context: ssl.SSLContext, server_hostname: str | None = None, timeout: float | None = None
+    ) -> httpcore.NetworkStream:
+        return _RecordedStream(self._stream.start_tls(ssl_context, server_hostname, timeout), self._sockets)
+
+    def get_extra_info(self, info: str) -> Any:
+        return self._stream.get_extra_info(info)
+
+
+class _RecordingBackend(httpcore.SyncBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sockets: list[socket.socket] = []
+
+    def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Any = None,
+    ) -> httpcore.NetworkStream:
+        return _RecordedStream(super().connect_tcp(host, port, timeout, local_address, socket_options), self.sockets)
+
+
+def _shut_down(sockets: list[socket.socket]) -> None:
+    for sock in list(sockets):
+        try:
+            # shutdown, never close: it wakes a read blocked in another thread on every platform and leaves the
+            # handle to its owner, so no other connection can take the handle over while that read still runs.
+            socket.socket.shutdown(sock, socket.SHUT_RDWR)
+        except OSError:
+            pass  # not connected, or the plain socket a TLS socket took over
+
+
+def post_within(request: httpx.Request, seconds: float) -> httpx.Response:
+    """POSTs ``request`` and returns once the response headers arrive, never reading the body.
+
+    The whole exchange is bounded: when ``seconds`` pass, a watchdog shuts the connection down under the request,
+    which also ends a peer that sends its headers one byte at a time; that raises ``httpx.ReadTimeout``. A response
+    that arrived is returned even if the deadline passes just after. TLS is verified against the request's
+    ``sni_hostname`` extension (the connection itself goes to the address in the URL).
     """
+    backend = _RecordingBackend()
     expired = threading.Event()
 
     def expire() -> None:
         expired.set()
-        transport.close()
+        _shut_down(backend.sockets)
 
+    pool = httpcore.ConnectionPool(ssl_context=ssl.create_default_context(), network_backend=backend, retries=0)
     timer = threading.Timer(max(0.01, seconds), expire)
     timer.daemon = True
     timer.start()
     try:
-        response = transport.handle_request(request)
-        response.close()
-    except Exception as exc:
+        response = pool.handle_request(
+            httpcore.Request(
+                method=request.method.encode("ascii"),
+                url=str(request.url),
+                headers=request.headers.raw,
+                content=request.content,
+                extensions=dict(request.extensions),
+            )
+        )
+        try:
+            return httpx.Response(response.status, headers=response.headers, request=request)
+        finally:
+            response.close()
+    except httpcore.ConnectTimeout as exc:
+        raise httpx.ConnectTimeout(str(exc), request=request) from exc
+    except httpcore.ConnectError as exc:
         if expired.is_set():
             raise httpx.ReadTimeout("send deadline", request=request) from exc
-        raise
+        raise httpx.ConnectError(str(exc), request=request) from exc
+    except httpcore.TimeoutException as exc:
+        raise httpx.ReadTimeout(str(exc), request=request) from exc
+    except (httpcore.NetworkError, httpcore.ProtocolError, OSError) as exc:
+        if expired.is_set():
+            raise httpx.ReadTimeout("send deadline", request=request) from exc
+        raise httpx.ReadError(str(exc), request=request) from exc
     finally:
         timer.cancel()
-    if expired.is_set():
-        raise httpx.ReadTimeout("send deadline", request=request)
-    return response
+        pool.close()
+
+
+Exchange = Callable[[httpx.Request, float], httpx.Response]
 
 
 class WebhookSender:
@@ -485,13 +586,13 @@ class WebhookSender:
         self,
         store: AlertWebhookStore | None = None,
         *,
-        transport_factory: Callable[[], httpx.BaseTransport] | None = None,
+        exchange: Exchange = post_within,
         resolver: Resolver = resolve_hostname,
         deadline: float = SEND_DEADLINE_SECONDS,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.store = store or ProtectedAlertWebhookStore()
-        self.transport_factory = transport_factory or (lambda: httpx.HTTPTransport(verify=True, retries=0))
+        self.exchange = exchange
         self.resolver = resolver
         self.deadline = deadline
         self.clock = clock
@@ -548,9 +649,8 @@ class WebhookSender:
                 headers=headers,
                 extensions={"timeout": httpx.Timeout(remaining).as_dict(), "sni_hostname": hostname},
             )
-            transport = self.transport_factory()
             try:
-                response = post_within(transport, request, remaining)
+                response = self.exchange(request, remaining)
             except httpx.ConnectError:
                 error = "connection_failed"
                 continue  # the next checked address
@@ -561,8 +661,6 @@ class WebhookSender:
                 return DeliveryResult("retry", "timeout")
             except httpx.HTTPError:
                 return DeliveryResult("retry", "connection_failed")
-            finally:
-                transport.close()
             return self._result(response)
         return DeliveryResult("retry", error)
 
