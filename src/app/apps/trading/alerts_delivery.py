@@ -2,26 +2,35 @@
 
 A trigger that selects a delivery channel gets one outbox row per channel, in
 the transaction that records the trigger (``enqueue_alert_deliveries``). The
-delivery monitor claims due rows with a lease, sends them outside any
+delivery monitor claims due rows one at a time with a lease, sends outside any
 transaction through a ``NotificationSender`` and records the result: delivered,
 another attempt after an exponential backoff, or failed. Triggers stay
 authoritative and delivery is at-least-once: a pass that dies between sending
 and recording sends again when its lease expires, with the same delivery id
-(``X-Omnix-Delivery``), so receivers can drop the duplicate.
+(``X-Omnix-Delivery``), so receivers can drop the duplicate. A lease that
+expires after the last attempt fails the delivery instead.
+
+One monitor serves every workspace: it claims and records in the
+``notifications.delivery`` system scope. The API lists a workspace's own rows.
 
 Webhook rules:
 
 - HTTPS only; the URL and signing secret come from the protected store by the
-  alert's current reference, read when sending (never stored in PostgreSQL);
-- the host is resolved once and every address checked with the strict outbound
-  URL policy (no loopback, private or link-local address unless
-  ``OMNIX_ALLOWED_PRIVATE_NETWORKS`` names it); the request goes to a checked
-  address, with the hostname for TLS and ``Host``, so DNS cannot rebind it;
-- 5 s timeout, no redirects, no proxies from the environment;
+  alert's current reference (never stored in PostgreSQL). If the alert's
+  reference changed between claim and send, the delivery is retried, not failed;
+- the hostname (IDNA form) is resolved once, within a bounded time, and every
+  address checked with the strict outbound URL policy (nothing that is not
+  globally routable unless ``OMNIX_ALLOWED_PRIVATE_NETWORKS`` names it); the
+  request goes to a checked address, in the system's preference order with
+  fallback to the next one, with the hostname for TLS (SNI and certificate
+  verification) and ``Host``, so DNS cannot rebind it;
+- one deadline bounds the whole send (resolution, connection, response
+  headers); the response body is never read; no redirects, no proxies; nothing
+  logs the URL (the HTTP client's own request log is not used);
 - the body is the trigger's message, ``application/json`` when it parses as
   JSON, else ``text/plain``;
 - with a secret, ``X-Omnix-Signature: sha256=<hex>`` is the HMAC-SHA256 of
-  ``<X-Omnix-Timestamp>.<body>``.
+  ``<X-Omnix-Timestamp>.<X-Omnix-Delivery>.<body>``.
 
 ``last_error`` holds a reason code, never a URL, secret or response body.
 """
@@ -29,14 +38,18 @@ Webhook rules:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import hmac
 import ipaddress
 import json
 import logging
+import threading
+import time
 import uuid
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
@@ -45,10 +58,11 @@ import httpx
 from pydantic import BaseModel
 
 from app.config.env import environment
+from app.persistence.tenant_scope import system_scope
+from app.persistence.unit_of_work import unit_of_work
 from app.runtime.features import FeatureContext
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.security.url_policy import Resolver, UrlPolicyError, check_outbound_url, outbound_addresses, resolve_hostname
-from app.persistence.unit_of_work import unit_of_work
 
 from .alerts_channels import AlertWebhookStore, ProtectedAlertWebhookStore
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
@@ -68,8 +82,13 @@ MAX_WEBHOOK_ATTEMPTS = 8
 FIRST_RETRY_SECONDS = 30.0
 MAX_RETRY_SECONDS = 3_600.0
 LEASE_SECONDS = 120.0
-CLAIM_BATCH = 10
-WEBHOOK_TIMEOUT_SECONDS = 5.0
+# One send, from resolution to response headers; a pass sends at most MAX_SENDS_PER_PASS, well inside the
+# scheduler's 60 s pass timeout and the lease.
+SEND_DEADLINE_SECONDS = 12.0
+DNS_TIMEOUT_SECONDS = 3.0
+MAX_SENDS_PER_PASS = 4
+MAX_ADDRESSES_TRIED = 3
+SYSTEM_OPERATION = "notifications.delivery"
 USER_AGENT = "Omnix-Alerts/1"
 
 
@@ -152,6 +171,7 @@ class ClaimedDelivery:
     attempt: int
     max_attempts: int
     webhook_ref: str | None
+    workspace_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -195,24 +215,57 @@ def _delivery(row: Any) -> NotificationDelivery:
 
 
 class NotificationDeliveryRepository:
+    """The outbox. ``all_workspaces`` (the monitor) claims and records in every workspace; otherwise one tenant's rows."""
+
     context = RequestTenant()
 
-    def __init__(self, *, context: TenantContext | None = None, uow_factory: UnitOfWorkFactory = unit_of_work) -> None:
+    def __init__(
+        self,
+        *,
+        context: TenantContext | None = None,
+        uow_factory: UnitOfWorkFactory = unit_of_work,
+        all_workspaces: bool = False,
+    ) -> None:
         self.context = context
         self.uow_factory = uow_factory
+        self.all_workspaces = all_workspaces
 
-    def claim_due(self, now: datetime, *, limit: int = CLAIM_BATCH, lease_seconds: float = LEASE_SECONDS) -> list[ClaimedDelivery]:
-        """Leases due deliveries: pending ones whose time has come and sends whose lease ran out."""
-        with self.uow_factory() as uow:
+    @contextmanager
+    def _work(self) -> Iterator[Any]:
+        with system_scope(SYSTEM_OPERATION) if self.all_workspaces else nullcontext(), self.uow_factory() as uow:
+            yield uow
+
+    def _workspace_filter(self) -> str | None:
+        return None if self.all_workspaces else self.context.workspace_id
+
+    def claim_due(self, now: datetime, *, limit: int = 1, lease_seconds: float = LEASE_SECONDS) -> list[ClaimedDelivery]:
+        """Leases due deliveries: pending ones whose time has come and sends whose lease ran out.
+
+        A lease that ran out after the last attempt fails its delivery here instead of sending again.
+        Claimed rows move their ``next_attempt_at`` to the lease's end, so a reclaimed row queues behind older work.
+        """
+        workspace = self._workspace_filter()
+        lease_end = now + timedelta(seconds=lease_seconds)
+        with self._work() as uow:
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_notification_deliveries
+                   SET status = 'failed', lease_expires_at = NULL,
+                       last_error = 'lease_expired:attempts_exhausted', updated_at = %s
+                 WHERE (%s::TEXT IS NULL OR workspace_id = %s)
+                   AND status = 'sending' AND lease_expires_at <= %s AND attempts >= max_attempts
+                """,
+                (now, workspace, workspace, now),
+            )
             rows = uow.connection.execute(
                 """
                 WITH due AS (
                     SELECT workspace_id, delivery_id
                       FROM omnix_trading_notification_deliveries
-                     WHERE workspace_id = %s
+                     WHERE (%s::TEXT IS NULL OR workspace_id = %s)
                        AND ((status = 'pending' AND next_attempt_at <= %s)
                             OR (status = 'sending' AND lease_expires_at <= %s))
-                     ORDER BY next_attempt_at, delivery_id
+                     ORDER BY CASE WHEN status = 'sending' THEN lease_expires_at ELSE next_attempt_at END, delivery_id
                      LIMIT %s
                      FOR UPDATE SKIP LOCKED
                 )
@@ -220,6 +273,7 @@ class NotificationDeliveryRepository:
                    SET status = 'sending',
                        attempts = delivery.attempts + 1,
                        lease_expires_at = %s,
+                       next_attempt_at = %s,
                        last_attempt_at = %s,
                        updated_at = %s
                   FROM due
@@ -228,17 +282,10 @@ class NotificationDeliveryRepository:
                           delivery.message, delivery.attempts, delivery.max_attempts,
                           (SELECT alert.notification_settings->>'webhook_ref'
                              FROM omnix_trading_alerts AS alert
-                            WHERE alert.workspace_id = delivery.workspace_id AND alert.alert_id = delivery.alert_id)
+                            WHERE alert.workspace_id = delivery.workspace_id AND alert.alert_id = delivery.alert_id),
+                          delivery.workspace_id
                 """,
-                (
-                    self.context.workspace_id,
-                    now,
-                    now,
-                    limit,
-                    now + timedelta(seconds=lease_seconds),
-                    now,
-                    now,
-                ),
+                (workspace, workspace, now, now, limit, lease_end, lease_end, now, now),
             ).fetchall()
             uow.commit()
         claimed = [
@@ -251,6 +298,7 @@ class NotificationDeliveryRepository:
                 attempt=int(row[5]),
                 max_attempts=int(row[6]),
                 webhook_ref=str(row[7]) if row[7] else None,
+                workspace_id=str(row[8]),
             )
             for row in rows
         ]
@@ -258,19 +306,34 @@ class NotificationDeliveryRepository:
 
     def record(self, delivery: ClaimedDelivery, result: DeliveryResult, now: datetime) -> DeliveryStatus | None:
         """Records one send. Returns the new status, or None when the lease was lost (another pass owns the row)."""
-        if result.outcome == "delivered":
-            status: DeliveryStatus = "delivered"
-        elif result.outcome == "retry" and delivery.attempt < delivery.max_attempts:
-            status = "pending"
-        else:
-            status = "failed"
-        delay = retry_delay_seconds(delivery.attempt)
-        if result.retry_after is not None:
-            delay = min(MAX_RETRY_SECONDS, max(delay, result.retry_after))
-        error = result.error if status != "delivered" else None
-        if status == "failed" and result.outcome == "retry":
-            error = f"{result.error or 'retry'}:attempts_exhausted"
-        with self.uow_factory() as uow:
+        workspace = delivery.workspace_id or self.context.workspace_id
+        with self._work() as uow:
+            if result.outcome == "failed" and result.error == "webhook_missing" and delivery.webhook_ref:
+                current = uow.connection.execute(
+                    """
+                    SELECT notification_settings->>'webhook_ref' FROM omnix_trading_alerts
+                     WHERE workspace_id = %s AND alert_id = %s
+                    """,
+                    (workspace, delivery.alert_id),
+                ).fetchone()
+                if current is not None and current[0] and current[0] != delivery.webhook_ref:
+                    # The webhook was replaced between claim and send: the new one is tried, not given up.
+                    result = replace(result, outcome="retry", error="webhook_changed", retry_after=0.0)
+            if result.outcome == "delivered":
+                status: DeliveryStatus = "delivered"
+            elif result.outcome == "retry" and delivery.attempt < delivery.max_attempts:
+                status = "pending"
+            else:
+                status = "failed"
+            if result.error == "webhook_changed":
+                delay = 0.0
+            else:
+                delay = retry_delay_seconds(delivery.attempt)
+                if result.retry_after is not None:
+                    delay = min(MAX_RETRY_SECONDS, max(delay, result.retry_after))
+            error = result.error if status != "delivered" else None
+            if status == "failed" and result.outcome == "retry":
+                error = f"{result.error or 'retry'}:attempts_exhausted"
             row = uow.connection.execute(
                 """
                 UPDATE omnix_trading_notification_deliveries
@@ -294,7 +357,7 @@ class NotificationDeliveryRepository:
                     status,
                     now,
                     now,
-                    self.context.workspace_id,
+                    workspace,
                     delivery.delivery_id,
                     delivery.attempt,
                 ),
@@ -321,9 +384,14 @@ def default_delivery_repository() -> NotificationDeliveryRepository:
     return NotificationDeliveryRepository()
 
 
-def _signature(secret: str, timestamp: str, body: bytes) -> str:
-    digest = hmac.new(secret.encode("utf-8"), timestamp.encode("ascii") + b"." + body, hashlib.sha256).hexdigest()
-    return f"sha256={digest}"
+def monitor_delivery_repository() -> NotificationDeliveryRepository:
+    return NotificationDeliveryRepository(all_workspaces=True)
+
+
+def signature(secret: str, timestamp: str, delivery_id: str, body: bytes) -> str:
+    """``sha256=<hex>`` of HMAC-SHA256 over ``<timestamp>.<delivery id>.<body>``."""
+    signed = timestamp.encode("ascii") + b"." + delivery_id.encode("ascii") + b"." + body
+    return "sha256=" + hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
 
 
 def _content_type(message: str) -> str:
@@ -336,9 +404,17 @@ def _content_type(message: str) -> str:
 
 def _retry_after(response: httpx.Response) -> float | None:
     value = response.headers.get("retry-after", "").strip()
-    if value.isdigit():
-        return float(value)
-    return None
+    return float(value) if value.isdigit() else None
+
+
+def _ascii_url(url: str) -> tuple[str, str]:
+    """The URL with its hostname in IDNA (ASCII) form, and that hostname."""
+    parts = urlsplit(url)
+    hostname = (parts.hostname or "").rstrip(".")
+    ascii_host = hostname.encode("idna").decode("ascii").lower()
+    host = f"[{ascii_host}]" if ":" in ascii_host else ascii_host
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return urlunsplit((parts.scheme, netloc, parts.path or "/", parts.query, "")), ascii_host
 
 
 def _pinned_url(url: str, address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str:
@@ -350,9 +426,56 @@ def _pinned_url(url: str, address: ipaddress.IPv4Address | ipaddress.IPv6Address
 
 def _host_header(url: str) -> str:
     parts = urlsplit(url)
-    hostname = parts.hostname or ""
-    host = f"[{hostname}]" if ":" in hostname else hostname
-    return f"{host}:{parts.port}" if parts.port else host
+    return parts.netloc
+
+
+_RESOLVERS = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="omnix-webhook-dns")
+
+
+class _Deadline(Exception):
+    pass
+
+
+def bounded(resolver: Resolver, seconds: float) -> Resolver:
+    """A resolver that gives up after ``seconds`` (the lookup itself finishes in the background)."""
+
+    def resolve(hostname: str, port: int) -> list[str]:
+        future = _RESOLVERS.submit(lambda: list(resolver(hostname, port)))
+        try:
+            return future.result(timeout=max(0.1, seconds))
+        except concurrent.futures.TimeoutError as exc:
+            raise _Deadline from exc
+
+    return resolve
+
+
+def post_within(transport: httpx.BaseTransport, request: httpx.Request, seconds: float) -> httpx.Response:
+    """Sends ``request`` and returns once the response headers arrive, never reading the body.
+
+    The whole exchange is bounded: when ``seconds`` pass, the transport is closed under the request, which
+    ends a peer that sends its headers one byte at a time. Raises ``httpx.TimeoutException`` then.
+    """
+    expired = threading.Event()
+
+    def expire() -> None:
+        expired.set()
+        transport.close()
+
+    timer = threading.Timer(max(0.01, seconds), expire)
+    timer.daemon = True
+    timer.start()
+    try:
+        response = transport.handle_request(request)
+        response.close()
+    except Exception as exc:
+        if expired.is_set():
+            raise httpx.ReadTimeout("send deadline", request=request) from exc
+        raise
+    finally:
+        timer.cancel()
+    if expired.is_set():
+        raise httpx.ReadTimeout("send deadline", request=request)
+    return response
 
 
 class WebhookSender:
@@ -362,18 +485,19 @@ class WebhookSender:
         self,
         store: AlertWebhookStore | None = None,
         *,
-        transport: httpx.BaseTransport | None = None,
+        transport_factory: Callable[[], httpx.BaseTransport] | None = None,
         resolver: Resolver = resolve_hostname,
-        timeout: float = WEBHOOK_TIMEOUT_SECONDS,
+        deadline: float = SEND_DEADLINE_SECONDS,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.store = store or ProtectedAlertWebhookStore()
-        self.transport = transport
+        self.transport_factory = transport_factory or (lambda: httpx.HTTPTransport(verify=True, retries=0))
         self.resolver = resolver
-        self.timeout = timeout
+        self.deadline = deadline
         self.clock = clock
 
     def send(self, delivery: ClaimedDelivery) -> DeliveryResult:
+        started = time.monotonic()
         if not delivery.webhook_ref:
             return DeliveryResult("failed", "webhook_missing")
         try:
@@ -384,10 +508,16 @@ class WebhookSender:
             return DeliveryResult("retry", "webhook_store_unavailable")
         if not stored or not stored.get("url"):
             return DeliveryResult("failed", "webhook_missing")
-        url = stored["url"]
+        try:
+            url, hostname = _ascii_url(stored["url"])
+        except (UnicodeError, ValueError):
+            return DeliveryResult("failed", "url_policy:invalid_hostname")
         try:
             check_outbound_url(url, strict=True, https_only=True)
-            addresses = outbound_addresses(url, strict=True, resolver=self.resolver)
+            resolver = bounded(self.resolver, min(DNS_TIMEOUT_SECONDS, self.deadline))
+            addresses = outbound_addresses(url, strict=True, resolver=resolver)
+        except _Deadline:
+            return DeliveryResult("retry", "dns_timeout")
         except UrlPolicyError as exc:
             reason = str(exc)
             if reason == "hostname_resolution_failed":
@@ -405,25 +535,39 @@ class WebhookSender:
         }
         secret = stored.get("secret", "")
         if secret:
-            headers["X-Omnix-Signature"] = _signature(secret, timestamp, body)
-        hostname = urlsplit(url).hostname or ""
-        try:
-            with httpx.Client(
-                transport=self.transport,
-                timeout=self.timeout,
-                follow_redirects=False,
-                trust_env=False,
-            ) as client:
-                response = client.post(
-                    _pinned_url(url, addresses[0]),
-                    content=body,
-                    headers=headers,
-                    extensions={"sni_hostname": hostname},
-                )
-        except httpx.TimeoutException:
-            return DeliveryResult("retry", "timeout")
-        except httpx.HTTPError:
-            return DeliveryResult("retry", "connection_failed")
+            headers["X-Omnix-Signature"] = signature(secret, timestamp, delivery.delivery_id, body)
+        error = "connection_failed"
+        for address in addresses[:MAX_ADDRESSES_TRIED]:
+            remaining = self.deadline - (time.monotonic() - started)
+            if remaining <= 0:
+                return DeliveryResult("retry", "timeout")
+            request = httpx.Request(
+                "POST",
+                _pinned_url(url, address),
+                content=body,
+                headers=headers,
+                extensions={"timeout": httpx.Timeout(remaining).as_dict(), "sni_hostname": hostname},
+            )
+            transport = self.transport_factory()
+            try:
+                response = post_within(transport, request, remaining)
+            except httpx.ConnectError:
+                error = "connection_failed"
+                continue  # the next checked address
+            except httpx.ConnectTimeout:
+                error = "timeout"
+                continue
+            except httpx.TimeoutException:
+                return DeliveryResult("retry", "timeout")
+            except httpx.HTTPError:
+                return DeliveryResult("retry", "connection_failed")
+            finally:
+                transport.close()
+            return self._result(response)
+        return DeliveryResult("retry", error)
+
+    @staticmethod
+    def _result(response: httpx.Response) -> DeliveryResult:
         code = response.status_code
         if 200 <= code < 300:
             return DeliveryResult("delivered", status_code=code)
@@ -445,17 +589,21 @@ def notification_delivery_monitor_enabled() -> bool:
 
 
 class NotificationDeliveryMonitor(ScheduledTradingMonitor):
+    """Sends due deliveries of every workspace, one claim at a time, at most ``MAX_SENDS_PER_PASS`` per pass."""
+
     def __init__(
         self,
         *,
-        repository_factory: Callable[[], NotificationDeliveryRepository] = default_delivery_repository,
+        repository_factory: Callable[[], NotificationDeliveryRepository] = monitor_delivery_repository,
         senders: Mapping[str, NotificationSender] | None = None,
         interval_seconds: float = 10.0,
+        max_sends: int = MAX_SENDS_PER_PASS,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.repository_factory = repository_factory
         self.senders: Mapping[str, NotificationSender] = senders if senders is not None else {"webhook": WebhookSender()}
         self.interval_seconds = interval_seconds
+        self.max_sends = max_sends
         self.clock = clock
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
@@ -465,12 +613,16 @@ class NotificationDeliveryMonitor(ScheduledTradingMonitor):
         repository = self.repository_factory()
         error: str | None = None
         delivered = 0
-        try:
-            claimed = await asyncio.to_thread(repository.claim_due, self.clock())
-        except Exception as exc:
-            claimed = []
-            error = f"{type(exc).__name__}: {exc}"
-        for delivery in claimed:
+        for _ in range(self.max_sends):
+            # One row per claim: a cancelled pass leaves at most the row in flight to its lease.
+            try:
+                claimed = await asyncio.to_thread(repository.claim_due, self.clock(), limit=1)
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                break
+            if not claimed:
+                break
+            delivery = claimed[0]
             sender = self.senders.get(delivery.channel)
             try:
                 if sender is None:
@@ -528,5 +680,7 @@ __all__ = [
     "create_notification_delivery_monitor_task",
     "delivery_idempotency_key",
     "enqueue_alert_deliveries",
+    "post_within",
     "retry_delay_seconds",
+    "signature",
 ]

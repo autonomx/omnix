@@ -214,3 +214,68 @@ def test_the_outbox_enforces_row_level_security(outbox) -> None:
             """
         ).fetchone()
     assert row == (True, True, True)
+
+
+def test_a_lease_that_runs_out_after_the_last_attempt_fails_the_delivery(outbox) -> None:
+    hooked = _alert(outbox, "last-lease", channels=["webhook"], webhook_ref="ref-8")
+    _trigger(outbox)
+    with outbox.uow() as work:
+        work.connection.execute(
+            "UPDATE omnix_trading_notification_deliveries SET attempts = max_attempts - 1 WHERE workspace_id = %s AND alert_id = %s",
+            (outbox.context.workspace_id, hooked.alert_id),
+        )
+        work.commit()
+    [last] = _claim(outbox, BASE)
+    assert last.attempt == MAX_WEBHOOK_ATTEMPTS
+    # The sender dies; the lease runs out. No ninth attempt: the delivery fails.
+    assert _claim(outbox, BASE + timedelta(minutes=5)) == []
+    [row] = _rows(outbox, hooked.alert_id)
+    assert (row[3], row[4], row[6]) == ("failed", MAX_WEBHOOK_ATTEMPTS, "lease_expired:attempts_exhausted")
+
+
+def test_a_webhook_replaced_between_claim_and_send_is_retried_at_once(outbox) -> None:
+    hooked = _alert(outbox, "rotated", channels=["webhook"], webhook_ref="ref-old")
+    _trigger(outbox)
+    [claimed] = _claim(outbox, BASE)
+    with outbox.uow() as work:
+        work.connection.execute(
+            """
+            UPDATE omnix_trading_alerts SET notification_settings = jsonb_set(notification_settings, '{webhook_ref}', '"ref-new"')
+             WHERE workspace_id = %s AND alert_id = %s
+            """,
+            (outbox.context.workspace_id, hooked.alert_id),
+        )
+        work.commit()
+    assert outbox.deliveries.record(claimed, DeliveryResult("failed", "webhook_missing"), BASE) == "pending"
+    [again] = _claim(outbox, BASE)
+    assert (again.webhook_ref, again.attempt) == ("ref-new", 2)
+    # Gone for good (no newer webhook): failed.
+    assert outbox.deliveries.record(again, DeliveryResult("failed", "webhook_missing"), BASE) == "failed"
+
+
+def test_the_monitor_repository_claims_every_workspace(outbox) -> None:
+    hooked = _alert(outbox, "system", channels=["webhook"], webhook_ref="ref-9")
+    _trigger(outbox)
+    system = NotificationDeliveryRepository(uow_factory=outbox.uow, all_workspaces=True)
+    claimed = [item for item in system.claim_due(BASE, limit=50) if item.alert_id == hooked.alert_id]
+    assert [item.workspace_id for item in claimed] == [outbox.context.workspace_id]
+    assert system.record(claimed[0], DeliveryResult("delivered", status_code=200), BASE) == "delivered"
+
+
+def test_a_failing_enqueue_rolls_the_trigger_back(outbox, monkeypatch) -> None:
+    from app.apps.trading import alerts as alerts_module
+
+    hooked = _alert(outbox, "atomic", channels=["webhook"], webhook_ref="ref-10")
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("outbox unavailable")
+
+    monkeypatch.setattr(alerts_module, "enqueue_alert_deliveries", broken)
+    with pytest.raises(RuntimeError):
+        _trigger(outbox)
+    with outbox.uow() as work:
+        triggers = work.connection.execute(
+            "SELECT COUNT(*) FROM omnix_trading_alert_triggers WHERE workspace_id = %s AND alert_id = %s",
+            (outbox.context.workspace_id, hooked.alert_id),
+        ).fetchone()
+    assert triggers == (0,)

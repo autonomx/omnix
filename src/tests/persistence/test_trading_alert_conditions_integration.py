@@ -865,3 +865,24 @@ def test_webhook_channel_writes_need_an_https_public_destination(alerts) -> None
     deliveries = client.get("/api/trading/alerts/deliveries", params={"alert_id": body["alert_id"]})
     assert deliveries.status_code == 200
     assert deliveries.json() == {"deliveries": []}
+
+    # A trigger queues a delivery; the listing shows its status, never the destination.
+    observed = datetime(2090, 1, 1, tzinfo=timezone.utc)
+    for minute, price in enumerate(("0.5", "2")):
+        client.post(
+            "/api/trading/alerts/evaluate",
+            json={"instrument_id": alerts.instrument, "observed_price": price, "observed_at": (observed + timedelta(minutes=minute)).isoformat()},
+        )
+    listed = client.get("/api/trading/alerts/deliveries", params={"alert_id": body["alert_id"]})
+    [queued] = listed.json()["deliveries"]
+    assert (queued["channel"], queued["status"], queued["attempts"]) == ("webhook", "pending", 0)
+    assert "tokenvalue" not in listed.text and "hooks.example.com" not in listed.text
+
+    # Updates follow the same rule: the webhook channel needs a webhook.
+    revision = created.json()["revision"]
+    no_hook = client.put(
+        f"/api/trading/alerts/{body['alert_id']}",
+        json={**body, "parameters": {"notification_channels": ["webhook"]}},
+        headers={"If-Match": str(revision)},
+    )
+    assert no_hook.status_code == 422

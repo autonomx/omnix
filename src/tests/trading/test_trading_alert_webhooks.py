@@ -4,6 +4,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import logging
+import socket
+import threading
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -14,6 +18,7 @@ from app.apps.trading.alerts_delivery import (
     DeliveryResult,
     NotificationDeliveryMonitor,
     WebhookSender,
+    post_within,
     retry_delay_seconds,
 )
 from app.security.url_policy import UrlPolicyError, check_outbound_url, outbound_addresses
@@ -52,7 +57,8 @@ def sender(handler, *, entries=None, resolver=public, broken=False) -> tuple[Web
         return handler(request)
 
     store = Store(entries if entries is not None else {"ref": {"url": HOOK, "secret": "s3cret"}}, broken=broken)
-    return WebhookSender(store, transport=httpx.MockTransport(record), resolver=resolver, clock=lambda: NOW), seen
+    transport = httpx.MockTransport(record)
+    return WebhookSender(store, transport_factory=lambda: transport, resolver=resolver, clock=lambda: NOW), seen
 
 
 @pytest.fixture(autouse=True)
@@ -70,6 +76,10 @@ def test_strict_policy_refuses_loopback_and_private_hosts_unless_configured(monk
     assert check_outbound_url("https://10.1.2.3/x", strict=True) == "https://10.1.2.3/x"
     with pytest.raises(UrlPolicyError, match="loopback_address_not_allowed"):
         check_outbound_url("https://127.0.0.1/x", strict=True)
+    # Shared address space (carrier NAT, Tailscale, cloud metadata at 100.100.100.200) is not global either.
+    for url in ("https://100.100.100.200/latest/meta-data/", "https://100.64.0.1/"):
+        with pytest.raises(UrlPolicyError, match="non_global_address_not_allowed"):
+            check_outbound_url(url, strict=True)
     # Non-strict callers (local model servers) keep loopback.
     assert check_outbound_url("http://127.0.0.1:1234/v1") == "http://127.0.0.1:1234/v1"
 
@@ -99,7 +109,8 @@ def test_a_delivery_goes_to_the_checked_address_signed_and_typed() -> None:
     assert request.headers["x-omnix-delivery"] == "d1"
     timestamp = request.headers["x-omnix-timestamp"]
     assert timestamp == str(int(NOW.timestamp()))
-    expected = hmac.new(b"s3cret", f"{timestamp}.".encode() + request.content, hashlib.sha256).hexdigest()
+    # The delivery id is signed too, so receivers can trust it for de-duplication.
+    expected = hmac.new(b"s3cret", f"{timestamp}.d1.".encode() + request.content, hashlib.sha256).hexdigest()
     assert request.headers["x-omnix-signature"] == f"sha256={expected}"
     assert request.content == b'{"text": "BTC up"}'
 
@@ -166,8 +177,9 @@ def test_the_monitor_records_every_claimed_delivery() -> None:
     recorded: list[tuple[str, DeliveryResult]] = []
 
     class Repository:
-        def claim_due(self, now):
-            return claimed
+        def claim_due(self, now, limit=1):
+            # One row per claim, as the monitor asks.
+            return [claimed.pop(0)] if claimed else []
 
         def record(self, item, result, now):
             recorded.append((item.delivery_id, result))
@@ -181,8 +193,99 @@ def test_the_monitor_records_every_claimed_delivery() -> None:
 
     monitor = NotificationDeliveryMonitor(repository_factory=Repository, senders={"webhook": Sender()}, clock=lambda: NOW)
     assert asyncio.run(monitor.run_once()) == 1
+    assert claimed == []
     assert recorded == [
         ("d1", DeliveryResult("delivered", status_code=200)),
         ("d2", DeliveryResult("failed", "channel_unavailable")),
         ("d3", DeliveryResult("retry", "sender_error:RuntimeError")),
     ]
+
+
+def test_the_next_checked_address_is_tried_when_one_cannot_connect() -> None:
+    # The first address (IPv6, say, on a host without an IPv6 route) cannot connect; the second answers.
+    def first_fails(request):
+        if request.url.host == "2606:4700::1111":
+            raise httpx.ConnectError("no route", request=request)
+        return httpx.Response(200)
+
+    webhook, seen = sender(first_fails, resolver=lambda host, port: ["2606:4700::1111", "93.184.216.34"])
+    assert webhook.send(delivery()) == DeliveryResult("delivered", status_code=200)
+    assert [request.url.host for request in seen] == ["2606:4700::1111", "93.184.216.34"]
+
+
+def test_nothing_logs_the_webhook_url(caplog) -> None:
+    caplog.set_level(logging.DEBUG)
+    webhook, _ = sender(lambda request: httpx.Response(200))
+    assert webhook.send(delivery()).outcome == "delivered"
+    assert "token" not in caplog.text and "/services/" not in caplog.text
+
+
+def test_internationalised_hostnames_are_sent_in_idna_form() -> None:
+    webhook, seen = sender(lambda request: httpx.Response(200), entries={"ref": {"url": "https://bücher.example/hook", "secret": ""}})
+    assert webhook.send(delivery()).outcome == "delivered"
+    assert seen[0].headers["host"] == "xn--bcher-kva.example"
+    assert seen[0].extensions["sni_hostname"] == "xn--bcher-kva.example"
+
+
+def test_a_slow_lookup_is_retried_later() -> None:
+    def slow(host: str, port: int) -> list[str]:
+        time.sleep(0.5)
+        return ["93.184.216.34"]
+
+    webhook, _ = sender(lambda request: httpx.Response(200), resolver=slow)
+    webhook.deadline = 0.2
+    assert webhook.send(delivery()) == DeliveryResult("retry", "dns_timeout")
+
+
+def test_one_deadline_bounds_a_peer_that_drips_its_headers() -> None:
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    stop = threading.Event()
+
+    def drip() -> None:
+        connection, _ = server.accept()
+        with connection:
+            connection.recv(65536)
+            for byte in b"HTTP/1.1 200 OK\r\nX-Slow: " + b"a" * 1000:
+                if stop.is_set():
+                    return
+                try:
+                    connection.sendall(bytes([byte]))
+                except OSError:
+                    return
+                time.sleep(0.05)
+
+    threading.Thread(target=drip, daemon=True).start()
+    transport = httpx.HTTPTransport(retries=0)
+    request = httpx.Request("POST", f"http://127.0.0.1:{port}/", content=b"x", extensions={"timeout": httpx.Timeout(0.2).as_dict()})
+    started = time.monotonic()
+    try:
+        with pytest.raises(httpx.TimeoutException):
+            post_within(transport, request, 1.0)
+    finally:
+        stop.set()
+        server.close()
+    # Each byte arrives inside the per-read timeout; only the overall deadline ends it.
+    assert time.monotonic() - started < 3.0
+
+
+def test_a_pass_sends_a_bounded_number_of_deliveries() -> None:
+    claims = []
+
+    class Repository:
+        def claim_due(self, now, limit=1):
+            claims.append(limit)
+            return [delivery()]
+
+        def record(self, item, result, now):
+            return "delivered"
+
+    class Sender:
+        def send(self, item):
+            return DeliveryResult("delivered", status_code=200)
+
+    monitor = NotificationDeliveryMonitor(repository_factory=Repository, senders={"webhook": Sender()}, max_sends=3, clock=lambda: NOW)
+    assert asyncio.run(monitor.run_once()) == 3
+    assert claims == [1, 1, 1]

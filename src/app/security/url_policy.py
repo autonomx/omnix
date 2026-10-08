@@ -18,9 +18,9 @@ policy keeps them from reaching what a request should never reach:
 a blocked address is refused.
 
 Destinations users type for the server to call on their behalf (alert
-webhooks, TVP-0.5a) use ``strict``: loopback and private addresses are refused
-unless ``OMNIX_ALLOWED_PRIVATE_NETWORKS`` names them, whether sign-in is on or
-off. ``outbound_addresses`` resolves and checks a host once and returns the
+webhooks, TVP-0.5a) use ``strict``: every address that is not globally
+routable (loopback, private, shared 100.64.0.0/10, ...) is refused unless
+``OMNIX_ALLOWED_PRIVATE_NETWORKS`` names it, whether sign-in is on or off. ``outbound_addresses`` resolves and checks a host once and returns the
 addresses, so the caller connects to one of them instead of resolving again (a
 hostname cannot rebind to a blocked address between the check and the
 connection).
@@ -52,12 +52,12 @@ class UrlPolicyError(ValueError):
 
 
 def resolve_hostname(hostname: str, port: int) -> list[str]:
-    """Every address ``hostname`` resolves to (the default ``Resolver``)."""
+    """Every address ``hostname`` resolves to, in the system's preference order (the default ``Resolver``)."""
     try:
         rows = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise UrlPolicyError("hostname_resolution_failed") from exc
-    return sorted({str(row[4][0]) for row in rows})
+    return list(dict.fromkeys(str(row[4][0]) for row in rows))
 
 
 Network = ipaddress.IPv4Network | ipaddress.IPv6Network
@@ -89,15 +89,19 @@ def check_address(address: IPAddress, *, strict: bool = False) -> None:
         address = address.ipv4_mapped
     if address.is_link_local:
         raise UrlPolicyError("link_local_address_blocked")
-    if address.is_loopback or address.is_private:
-        if strict:
-            # Only networks the operator named; never everything because sign-in is off.
-            configured = _configured_private_networks() or []
-            if any(address in network for network in configured):
-                return
-            raise UrlPolicyError("loopback_address_not_allowed" if address.is_loopback else "private_address_not_allowed")
-        if address.is_loopback:
+    if strict and not address.is_global:
+        # Only networks the operator named; never everything because sign-in is off. Not-global also covers
+        # shared address space (100.64.0.0/10: carrier NAT, Tailscale, some cloud metadata services).
+        configured = _configured_private_networks() or []
+        if any(address in network for network in configured):
             return
+        if address.is_loopback:
+            raise UrlPolicyError("loopback_address_not_allowed")
+        if address.is_private:
+            raise UrlPolicyError("private_address_not_allowed")
+        raise UrlPolicyError("non_global_address_not_allowed")
+    if address.is_loopback:
+        return
     if address.is_unspecified or address.is_multicast or address.is_reserved:
         raise UrlPolicyError("reserved_address_blocked")
     if address.is_private:
