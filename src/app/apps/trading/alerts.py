@@ -710,9 +710,11 @@ class TradingAlertRepository:
         when the block ends without an error.
         """
         with self.uow_factory() as uow:
+            # Two keys hashed separately, so no workspace/alert pair can alias another
+            # through its separators; a hash collision only serialises two writes.
             uow.connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                (f"omnix-trading-alert:{self.context.workspace_id}:{alert_id}",),
+                "SELECT pg_advisory_xact_lock(hashtext(%s), hashtext(%s))",
+                (f"omnix-trading-alert-workspace:{self.context.workspace_id}", alert_id),
             )
             row = uow.connection.execute(
                 """

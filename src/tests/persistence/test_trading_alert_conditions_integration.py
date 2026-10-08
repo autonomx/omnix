@@ -376,6 +376,7 @@ class MemoryWebhooks:
         self.entries: dict[str, dict[str, str]] = {}
         self.fail_save = False
         self.fail_load = False
+        self.fail_cleanup = False
 
     def available(self) -> bool:
         return True
@@ -394,6 +395,8 @@ class MemoryWebhooks:
         self.entries.pop(ref, None)
 
     def delete_alert(self, workspace_id, alert_id, *, keep=None) -> None:
+        if self.fail_cleanup:
+            raise OSError("store locked")
         prefix = alert_webhook_prefix(workspace_id, alert_id)
         self.entries = {ref: entry for ref, entry in self.entries.items() if ref == keep or not ref.startswith(prefix)}
 
@@ -494,10 +497,10 @@ def test_api_rejects_unavailable_channels_and_keeps_webhooks_out_of_responses(al
     assert client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "7"}).status_code == 200
     assert stored() == []
 
-    # A new alert with an old id does not inherit anything left in the store.
+    # A new alert with an old id and a webhook does not inherit what an earlier one left.
     webhooks.save(alert_webhook_prefix(alerts.context.workspace_id, alert_id) + "leftover", "https://old.example.com/x", "old")
-    assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": ["app"]}}).status_code == 201
-    assert stored() == []
+    assert client.post("/api/trading/alerts", json={**body, "webhook_secret": "fresh"}).status_code == 201
+    assert stored() == [{"url": HOOK, "secret": "fresh"}]
     assert client.post("/api/trading/alerts", json={**body, "alert_id": f"nohook-{alerts.suffix}", "parameters": {}, "webhook_secret": "x"}).status_code == 422
 
 
@@ -773,3 +776,60 @@ def test_alert_transactions_are_serialised_per_alert(alerts) -> None:
         thread.join(10)
     assert timeline.index("first-done") < timeline.index("second-in")
     assert timeline.index("other-in") < timeline.index("first-done")  # other alerts are not blocked
+
+
+
+class BrokenWebhooks(MemoryWebhooks):
+    """A store that fails every call: corrupt, or locked by a stalled process."""
+
+    def available(self) -> bool:
+        return True
+
+    def load(self, ref):
+        raise OSError("store unreadable")
+
+    def save(self, ref, url, secret) -> None:
+        raise OSError("store unreadable")
+
+    def delete(self, ref) -> None:
+        raise OSError("store unreadable")
+
+    def delete_alert(self, workspace_id, alert_id, *, keep=None) -> None:
+        raise OSError("store unreadable")
+
+
+def test_alerts_without_webhooks_never_wait_for_the_store(alerts) -> None:
+    client = _client(alerts, BrokenWebhooks())
+    alert_id = f"app-only-{alerts.suffix}"
+    body = {
+        "alert_id": alert_id,
+        "instrument_id": alerts.instrument,
+        "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "1"}}],
+        "parameters": {"notification_channels": ["app"]},
+    }
+    assert client.post("/api/trading/alerts", json=body).status_code == 201
+    update = {name: value for name, value in body.items() if name != "alert_id"}
+    assert client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=update).status_code == 200
+    assert client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}).status_code == 200
+    # With a webhook the store is needed, and its failure is a 503 that changes nothing.
+    hooked = client.post("/api/trading/alerts", json={**body, "parameters": {"delivery": {"webhook": {"url": HOOK}}}})
+    assert hooked.status_code == 503
+    assert all(alert.alert_id != alert_id for alert in alerts.repository.list_alerts(500))
+
+
+def test_leftover_cleanup_is_best_effort(alerts) -> None:
+    webhooks = MemoryWebhooks()
+    webhooks.fail_cleanup = True
+    client = _client(alerts, webhooks)
+    alert_id = f"cleanup-{alerts.suffix}"
+    created = client.post(
+        "/api/trading/alerts",
+        json={
+            "alert_id": alert_id,
+            "instrument_id": alerts.instrument,
+            "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "1"}}],
+            "parameters": {"delivery": {"webhook": {"url": HOOK}}},
+        },
+    )
+    assert created.status_code == 201
+    assert webhooks.of(alerts.context.workspace_id, alert_id) == [{"url": HOOK, "secret": ""}]

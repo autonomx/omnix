@@ -156,12 +156,10 @@ def create_trading_alert_router(
             with repository.alert_transaction(alert_id) as state:
                 if state.exists:
                     raise HTTPException(status_code=409, detail=f"Trading alert already exists: {alert_id}")
-                # Nothing references webhooks left by an earlier alert with this id.
-                try:
-                    store.delete_alert(workspace_id, alert_id)
-                except Exception as exc:
-                    raise store_failure(alert_id, exc) from exc
                 plan = plan_webhook(request, None, workspace_id, alert_id)
+                if plan.written:
+                    # Nothing references webhooks left by an earlier alert with this id.
+                    best_effort("cleanup", alert_id, lambda: store.delete_alert(workspace_id, alert_id, keep=plan.written))
                 created = repository.create(request, webhook_ref=plan.ref)
         except Exception as exc:
             if plan is not None and plan.written:
