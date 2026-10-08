@@ -6,6 +6,7 @@ import type { CanonicalInstrument, MarketBar } from './tradingTypes';
 import { intervalCompactLabel } from './tradingIntervals';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
+import { drawingDisplayName, drawingToolDefinition } from './drawings/tools/registry';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingObjectPanel.css';
 import { chartPalette } from './chartPalette';
@@ -42,26 +43,6 @@ function displaySymbol(instrument: CanonicalInstrument | undefined, instrumentId
 
 function displayIndicatorName(indicator: CoreIndicatorInstance): string {
   return indicatorNames[indicator.id] ?? indicator.id.toUpperCase();
-}
-
-function displayDrawingName(drawing: TradingDrawing): string {
-  const names: Partial<Record<TradingDrawing['toolType'], string>> = {
-    'trend-line': 'Trendline',
-    'horizontal-line': 'Horizontal line',
-    'horizontal-ray': 'Horizontal ray',
-    'vertical-line': 'Vertical line',
-    'crossline': 'Cross line',
-    ray: 'Ray',
-    rectangle: 'Rectangle',
-    circle: 'Circle',
-    ellipse: 'Ellipse',
-    fibonacci: 'Fib Retracement',
-    text: drawing.text || 'Text note',
-    measurement: 'Measure',
-    arrow: 'Arrow',
-    dot: 'Dot',
-  };
-  return names[drawing.toolType] ?? drawing.toolType;
 }
 
 function formatNumber(value: unknown, maximumFractionDigits = 2): string {
@@ -108,12 +89,8 @@ function CandleIcon() {
 }
 
 function DrawingIcon({ drawing }: { drawing: TradingDrawing }) {
-  if (drawing.toolType === 'horizontal-line' || drawing.toolType === 'horizontal-ray') {
-    return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18" /></svg>;
-  }
-  if (drawing.toolType === 'vertical-line') {
-    return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18" /></svg>;
-  }
+  const icon = drawingToolDefinition(drawing.toolType)?.icon;
+  if (icon) return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>;
   return (
     <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 19 19 4" />
@@ -169,7 +146,7 @@ function TradingObjectTree({
       <div role="group" className="trading-object-toolbar" aria-label="Object tree actions">
         <button type="button" aria-label="Delete all drawings" title="Delete all drawings" onClick={() => drawings.removeAll()}><TrashIcon /></button>
         <span>{drawings.state.drawings.length + enabledIndicators.length} objects</span>
-        <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : ''}</span>
+        <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : drawings.status === 'read-only' ? 'Read-only (newer version)' : ''}</span>
       </div>
       <div className="trading-object-scroll">
         <section className="trading-object-group">
@@ -182,7 +159,7 @@ function TradingObjectTree({
             <ul className="trading-object-list">
               {drawings.state.drawings.map((drawing) => {
                 const selected = drawings.state.selectedId === drawing.drawingId;
-                const name = displayDrawingName(drawing);
+                const name = drawingDisplayName(drawing);
                 return (
                   <li key={drawing.drawingId} className={`${selected ? 'is-selected ' : ''}${drawing.hidden ? 'is-hidden' : ''}`}>
                     <button type="button" className="trading-object-row-main" onClick={() => drawings.select(drawing.drawingId)}>
@@ -197,6 +174,9 @@ function TradingObjectTree({
                 );
               })}
               {drawings.state.drawings.length === 0 ? <li className="trading-object-empty">No drawings on this chart</li> : null}
+              {drawings.preservedCount > 0 ? (
+                <li className="trading-object-empty">{drawings.preservedCount} unsupported {drawings.preservedCount === 1 ? 'drawing is' : 'drawings are'} kept but not shown</li>
+              ) : null}
             </ul>
           ) : null}
         </section>

@@ -1,30 +1,44 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { CoreIndicatorId } from '../indicators/coreIndicators';
-import { tradingIntervalMinutes } from '../tradingIntervals';
+import type { TradingAlertIndicatorId } from '../tradingTypes';
 import {
   DEFAULT_DRAWING_STYLE,
-  snapDrawingPoint,
   type DrawingPoint,
   type DrawingSnapMode,
   type DrawingTool,
   type TradingDrawing,
 } from './drawingCommands';
-import type { TradingAlertIndicatorId } from '../tradingTypes';
+import {
+  canvasScene,
+  chartAccessFor,
+  draftShapes,
+  handlePositions,
+  patchDraft,
+  patchDrawings,
+  renderDrawing,
+  svgViewport,
+  type DrawingFrame,
+  type RenderedDrawing,
+} from './drawingFrame';
+import { storedDrawingRendererMode, type DrawingRendererMode } from './drawingRenderer';
+import { ShapeElement } from './svgShapes';
+import { drawingPropertiesWithDefaults, drawingToolDefinition, isDrawingToolId } from './tools/registry';
+import { type DrawingProjector } from './tools/scene';
+import { shapeSignature } from './tools/shapes';
+import {
+  handleIndices,
+  type DrawingAlertLevel,
+  type DrawingContextAction,
+  type DrawingShape,
+  type DrawingToolDefinition,
+} from './tools/types';
+import { useCanvasDrawingHost } from './useCanvasDrawingHost';
+import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
+import { useDrawingEditing } from './useDrawingEditing';
+import { creationPointLocator, drawingPointLocator, locatePoint } from './drawingPointer';
+import { useProjectionSync } from './useProjectionSync';
 import './TradingDrawingMeasurement.css';
-import { chartPalette } from '../chartPalette';
-
-const twoPointTools = new Set<DrawingTool>([
-  'trend-line',
-  'ray',
-  'arrow',
-  'rectangle',
-  'circle',
-  'ellipse',
-  'fibonacci',
-  'measurement',
-]);
-const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 export type ChartAlertPlacement = DrawingPoint & {
   x: number;
@@ -34,70 +48,125 @@ export type ChartAlertPlacement = DrawingPoint & {
   indicatorPeriod?: number;
   drawingId?: string;
   drawingTool?: DrawingTool;
+  /** Anchors of the drawing's first two-anchor alert level, for the chart's line alert. */
   trendlinePoints?: DrawingPoint[];
+  /** All alert levels the drawing's tool defines (TVP-1.4). */
+  drawingAlertLevels?: DrawingAlertLevel[];
+  /** Context-menu actions the drawing's tool offers. */
+  drawingActions?: readonly DrawingContextAction[];
 };
 
-type HandlePreview = { drawingId: string; index: number; point: DrawingPoint };
-type TranslationPreview = { drawingId: string; from: DrawingPoint; to: DrawingPoint };
-type ProjectedPoint = { x: number; y: number };
-type MeasurementVisual = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  centerX: number;
-  labelTop: number;
-  labelWidth: number;
-  label: string;
-};
 
-function measurementVisual(
-  first: ProjectedPoint,
-  second: ProjectedPoint,
-  firstPoint: DrawingPoint,
-  secondPoint: DrawingPoint,
-  interval: string,
-): MeasurementVisual {
-  const left = Math.min(first.x, second.x);
-  const top = Math.min(first.y, second.y);
-  const width = Math.abs(second.x - first.x);
-  const height = Math.abs(second.y - first.y);
-  const centerX = left + width / 2;
-  const delta = secondPoint.price - firstPoint.price;
-  const percent = firstPoint.price === 0 ? 0 : delta / firstPoint.price * 100;
-  const intervalMinutes = tradingIntervalMinutes(interval) ?? 1;
-  const durationMinutes = Math.abs(Date.parse(secondPoint.time) - Date.parse(firstPoint.time)) / 60_000;
-  const bars = Number.isFinite(durationMinutes) ? Math.max(1, Math.round(durationMinutes / intervalMinutes)) : 1;
-  const formatValue = (value: number) => Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
-  const label = `${delta < 0 ? '-' : ''}${formatValue(delta)} (${percent < 0 ? '-' : ''}${Math.abs(percent).toFixed(2)}%) ${bars.toLocaleString()}`;
-  const labelWidth = Math.max(126, label.length * 7.2 + 18);
+function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[]): TradingDrawing {
   return {
-    left,
-    top,
-    width,
-    height,
-    centerX,
-    labelTop: Math.max(5, top - 40),
-    labelWidth,
-    label,
+    drawingId: crypto.randomUUID(),
+    instrumentId,
+    toolType,
+    points,
+    selected: true,
+    revision: 1,
+    style: DEFAULT_DRAWING_STYLE,
+    locked: false,
+    hidden: false,
+    text: definition.defaultText ?? '',
+    properties: drawingPropertiesWithDefaults(definition.id, undefined),
   };
 }
 
-function translatedPoints(points: DrawingPoint[], preview: TranslationPreview | null, drawingId: string): DrawingPoint[] {
-  if (!preview || preview.drawingId !== drawingId) return points;
-  const fromTime = Date.parse(preview.from.time);
-  const toTime = Date.parse(preview.to.time);
-  const timeDelta = toTime - fromTime;
-  const priceDelta = preview.to.price - preview.from.price;
-  return points.map((point) => ({
-    time: new Date(Date.parse(point.time) + timeDelta).toISOString(),
-    price: point.price + priceDelta,
-  }));
+function ShapeGroup({ shapes, signature }: { shapes: readonly DrawingShape[]; signature: boolean }) {
+  return (
+    <g data-drawing-draft="" data-shape-signature={signature ? shapeSignature(shapes) : undefined}>
+      {shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />)}
+    </g>
+  );
 }
 
-function setSvgAttribute(element: SVGElement | null, name: string, value: number | string): void {
-  element?.setAttribute(name, String(value));
+function DrawingGroup({ item, project, viewport, withShapes, onPressDrawing, onPressHandle }: {
+  item: RenderedDrawing;
+  project: DrawingProjector;
+  viewport: { width: number; height: number };
+  withShapes: boolean;
+  onPressDrawing: (event: ReactPointerEvent<SVGElement>) => void;
+  onPressHandle: (index: number) => (event: ReactPointerEvent<SVGElement>) => void;
+}) {
+  const { drawing, definition, shapes, selected } = item;
+  const positions = selected && !drawing.locked ? handlePositions(item, project, viewport) : [];
+  return (
+    <g
+      data-drawing-id={drawing.drawingId}
+      data-locked={drawing.locked}
+      data-selected={selected}
+      data-shape-signature={withShapes ? shapeSignature(shapes) : undefined}
+      onPointerDown={onPressDrawing}
+    >
+      {withShapes ? shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />) : null}
+      {positions.length > 0 ? handleIndices(definition, positions.length).map((index) => {
+        const point = positions[index];
+        return point ? (
+          <circle
+            key={`handle-${index}`}
+            data-drawing-point-index={index}
+            className={definition.handleClassName}
+            cx={point.x}
+            cy={point.y}
+            r="6"
+            onPointerDown={onPressHandle(index)}
+          />
+        ) : null;
+      }) : null}
+    </g>
+  );
 }
+
+/** A chart placement at the pointer; over an indicator pane, its price is the indicator value. */
+function chartPlacement(
+  adapter: TradingChartAdapter | null,
+  point: PointerPoint,
+  clientY: number,
+  source: ChartAlertPlacement['source'],
+): { placement: ChartAlertPlacement; indicatorId: CoreIndicatorId | undefined } {
+  const indicatorId = adapter?.indicatorPaneIdAtClientY(clientY) ?? undefined;
+  const indicatorValue = indicatorId === undefined ? null : adapter?.indicatorValueFromClientY(indicatorId, clientY);
+  return {
+    placement: { x: point.x, y: point.y, time: point.time, price: indicatorValue ?? point.price, source },
+    indicatorId,
+  };
+}
+
+/** What a drawing's tool offers from the context menu: its alert levels and actions. */
+function drawingMenuEntries(drawing: TradingDrawing | undefined): Partial<ChartAlertPlacement> {
+  if (!drawing) return {};
+  const definition = drawingToolDefinition(drawing.toolType);
+  const levels = definition?.alertLevels?.(drawing.points, drawingPropertiesWithDefaults(drawing.toolType, drawing.properties)) ?? [];
+  const line = levels.find((level) => level.anchors.length === 2);
+  return {
+    drawingId: drawing.drawingId,
+    drawingTool: drawing.toolType,
+    trendlinePoints: line?.anchors.map((point) => ({ time: point.time, price: point.price })),
+    drawingAlertLevels: levels.length > 0 ? levels : undefined,
+    drawingActions: definition?.contextActions,
+  };
+}
+
+export type TradingDrawingOverlayProps = {
+  adapter: TradingChartAdapter | null;
+  instrumentId: string;
+  interval: string;
+  tool: DrawingTool;
+  snapMode: DrawingSnapMode;
+  drawings: TradingDrawing[];
+  selectedId: string | null;
+  onAdd: (drawing: TradingDrawing) => void;
+  onSelect: (id: string | null) => void;
+  onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
+  onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
+  onRemove: (id: string) => void;
+  onToolComplete?: () => void;
+  onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  /** Overrides the stored renderer switch (`drawingRenderer.ts`). */
+  renderer?: DrawingRendererMode;
+};
 
 export function TradingDrawingOverlay({
   adapter,
@@ -115,329 +184,102 @@ export function TradingDrawingOverlay({
   onToolComplete,
   onAlertAtPoint,
   onContextMenu: onChartContextMenu,
-}: {
-  adapter: TradingChartAdapter | null;
-  instrumentId: string;
-  interval: string;
-  tool: DrawingTool;
-  snapMode: DrawingSnapMode;
-  drawings: TradingDrawing[];
-  selectedId: string | null;
-  onAdd: (drawing: TradingDrawing) => void;
-  onSelect: (id: string | null) => void;
-  onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
-  onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
-  onRemove: (id: string) => void;
-  onToolComplete?: () => void;
-  onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
-  onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
-}) {
+  renderer,
+}: TradingDrawingOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
-  const [draftEnd, setDraftEnd] = useState<DrawingPoint | null>(null);
-  const [handlePreview, setHandlePreview] = useState<HandlePreview | null>(null);
-  const [translationPreview, setTranslationPreview] = useState<TranslationPreview | null>(null);
+  const [storedRenderer] = useState(storedDrawingRendererMode);
+  const canvas = (renderer ?? storedRenderer) === 'canvas';
   const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });
+  const rerender = useCallback(() => setViewport((value) => ({ ...value, revision: value.revision + 1 })), []);
+  const drawingTool = isDrawingToolId(tool) ? tool : null;
+  const definition = drawingTool ? drawingToolDefinition(drawingTool) : undefined;
+  const plainPoint = (clientX: number, clientY: number) => locatePoint(svgRef.current, adapter, clientX, clientY, { snapMode, snap: true, screen: false });
+  const pointFor = drawingPointLocator(svgRef, adapter, snapMode);
+
+
+  const editing = useDrawingEditing({
+    tool, enabled: adapter !== null, pointFor, onSelect, onMovePoint, onTranslateDrawing, onRemove, onToolComplete,
+  });
+  const frameRef = useRef<DrawingFrame | null>(null);
+  const creation = useDrawingCreation(definition, (points) => {
+    if (!definition || !drawingTool) return;
+    onAdd(newDrawing(drawingTool, definition, instrumentId, points));
+    onToolComplete?.();
+  }, () => {
+    const svg = svgRef.current;
+    if (svg && frameRef.current && !patchDraft(svg, frameRef.current, chartAccessFor(adapter))) rerender();
+  });
+  const creationPoint = creationPointLocator(svgRef, adapter, snapMode, definition, () => (creation.draftRef.current ?? []).slice(0, -1));
+
+  const frame: DrawingFrame = {
+    drawings,
+    selectedId,
+    interval,
+    handlePreview: editing.handlePreview,
+    translationPreview: editing.translationPreview,
+    draft: creation.draftRef.current && definition ? { definition, points: creation.draftRef.current } : null,
+  };
+  frameRef.current = frame;
   const drawingsRef = useRef(drawings);
-  const handlePreviewRef = useRef(handlePreview);
-  const translationPreviewRef = useRef(translationPreview);
   drawingsRef.current = drawings;
-  handlePreviewRef.current = handlePreview;
-  translationPreviewRef.current = translationPreview;
+  const canvasHost = useCanvasDrawingHost({
+    enabled: canvas,
+    adapter,
+    svgRef,
+    drawingsRef,
+    scene: (size) => canvasScene(frameRef.current ?? frame, adapter, size),
+  });
 
   const refreshProjection = useCallback(() => {
     const svg = svgRef.current;
-    if (!svg || !adapter) return;
-    const bounds = svg.getBoundingClientRect();
-    const width = bounds.width || svg.clientWidth;
-    const height = bounds.height || svg.clientHeight;
-    const currentHandlePreview = handlePreviewRef.current;
-    const currentTranslationPreview = translationPreviewRef.current;
+    if (svg && adapter && frameRef.current && !patchDrawings(svg, frameRef.current, chartAccessFor(adapter), !canvas)) rerender();
+  }, [adapter, canvas, rerender]);
 
-    for (const group of svg.querySelectorAll<SVGGElement>('[data-drawing-id]')) {
-      const drawing = drawingsRef.current.find((item) => item.drawingId === group.dataset.drawingId);
-      if (!drawing) continue;
-      const rawPoints = translatedPoints(drawing.points, currentTranslationPreview, drawing.drawingId).map((point, index) => (
-        currentHandlePreview?.drawingId === drawing.drawingId && currentHandlePreview.index === index
-          ? currentHandlePreview.point
-          : point
-      ));
-      const points = rawPoints.map((point) => adapter.projectDrawingPoint(point));
-      const first = points[0];
-      const second = points[1];
-      if (!first) continue;
+  useProjectionSync(adapter, svgRef, refreshProjection, (width, height) => {
+    setViewport((value) => ({ width, height, revision: value.revision + 1 }));
+  });
 
-      for (const pointElement of group.querySelectorAll<SVGElement>('[data-drawing-point-index]')) {
-        const index = Number(pointElement.dataset.drawingPointIndex);
-        const point = points[index];
-        if (!point) continue;
-        setSvgAttribute(pointElement, 'cx', point.x);
-        setSvgAttribute(pointElement, 'cy', point.y);
-      }
-
-      for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-geometry="horizontal"]')) {
-        setSvgAttribute(line, 'y1', first.y);
-        setSvgAttribute(line, 'y2', first.y);
-      }
-      for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-geometry="vertical"]')) {
-        setSvgAttribute(line, 'x1', first.x);
-        setSvgAttribute(line, 'x2', first.x);
-      }
-      if (second) {
-        const segment = group.querySelector<SVGLineElement>('[data-drawing-geometry="segment"]');
-        if (segment) {
-          setSvgAttribute(segment, 'x1', first.x);
-          setSvgAttribute(segment, 'y1', first.y);
-          setSvgAttribute(segment, 'x2', second.x);
-          setSvgAttribute(segment, 'y2', second.y);
-        }
-
-        const ray = group.querySelector<SVGLineElement>('[data-drawing-geometry="ray"]');
-        if (ray) {
-          const dx = second.x - first.x;
-          const targetX = dx >= 0 ? width : 0;
-          const target = Math.abs(dx) < 0.0001
-            ? { x: first.x, y: second.y >= first.y ? height : 0 }
-            : { x: targetX, y: first.y + (second.y - first.y) / dx * (targetX - first.x) };
-          setSvgAttribute(ray, 'x1', first.x);
-          setSvgAttribute(ray, 'y1', first.y);
-          setSvgAttribute(ray, 'x2', target.x);
-          setSvgAttribute(ray, 'y2', target.y);
-        }
-
-        const rectangle = group.querySelector<SVGRectElement>('[data-drawing-geometry="rectangle"]');
-        if (rectangle) {
-          setSvgAttribute(rectangle, 'x', Math.min(first.x, second.x));
-          setSvgAttribute(rectangle, 'y', Math.min(first.y, second.y));
-          setSvgAttribute(rectangle, 'width', Math.abs(second.x - first.x));
-          setSvgAttribute(rectangle, 'height', Math.abs(second.y - first.y));
-        }
-
-        const circle = group.querySelector<SVGEllipseElement>('[data-drawing-geometry="circle"]');
-        if (circle) {
-          const radius = Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2;
-          setSvgAttribute(circle, 'cx', (first.x + second.x) / 2);
-          setSvgAttribute(circle, 'cy', (first.y + second.y) / 2);
-          setSvgAttribute(circle, 'rx', radius);
-          setSvgAttribute(circle, 'ry', radius);
-        }
-
-        const ellipse = group.querySelector<SVGEllipseElement>('[data-drawing-geometry="ellipse"]');
-        if (ellipse) {
-          setSvgAttribute(ellipse, 'cx', (first.x + second.x) / 2);
-          setSvgAttribute(ellipse, 'cy', (first.y + second.y) / 2);
-          setSvgAttribute(ellipse, 'rx', Math.abs(second.x - first.x) / 2);
-          setSvgAttribute(ellipse, 'ry', Math.abs(second.y - first.y) / 2);
-        }
-
-        for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-fibonacci-line]')) {
-          const level = Number(line.dataset.drawingFibonacciLine);
-          const y = first.y + (second.y - first.y) * level;
-          setSvgAttribute(line, 'x1', Math.min(first.x, second.x));
-          setSvgAttribute(line, 'x2', Math.max(first.x, second.x));
-          setSvgAttribute(line, 'y1', y);
-          setSvgAttribute(line, 'y2', y);
-        }
-        for (const label of group.querySelectorAll<SVGTextElement>('[data-drawing-fibonacci-label]')) {
-          const level = Number(label.dataset.drawingFibonacciLabel);
-          const y = first.y + (second.y - first.y) * level;
-          setSvgAttribute(label, 'x', Math.max(first.x, second.x) + 4);
-          setSvgAttribute(label, 'y', y - 2);
-        }
-      }
-
-      const text = group.querySelector<SVGTextElement>('[data-drawing-geometry="text"]');
-      if (text) {
-        setSvgAttribute(text, 'x', first.x);
-        setSvgAttribute(text, 'y', first.y);
-      }
-
-      if (drawing.toolType === 'measurement' && second && rawPoints[0] && rawPoints[1]) {
-        const visual = measurementVisual(first, second, rawPoints[0], rawPoints[1], interval);
-        const area = group.querySelector<SVGRectElement>('[data-drawing-measurement="area"]');
-        setSvgAttribute(area, 'x', visual.left);
-        setSvgAttribute(area, 'y', visual.top);
-        setSvgAttribute(area, 'width', visual.width);
-        setSvgAttribute(area, 'height', visual.height);
-        const top = group.querySelector<SVGLineElement>('[data-drawing-measurement="top"]');
-        const bottom = group.querySelector<SVGLineElement>('[data-drawing-measurement="bottom"]');
-        const axis = group.querySelector<SVGLineElement>('[data-drawing-measurement="axis"]');
-        for (const line of [top, bottom]) {
-          setSvgAttribute(line, 'x1', visual.left);
-          setSvgAttribute(line, 'x2', visual.left + visual.width);
-        }
-        setSvgAttribute(top, 'y1', visual.top);
-        setSvgAttribute(top, 'y2', visual.top);
-        setSvgAttribute(bottom, 'y1', visual.top + visual.height);
-        setSvgAttribute(bottom, 'y2', visual.top + visual.height);
-        setSvgAttribute(axis, 'x1', visual.centerX);
-        setSvgAttribute(axis, 'x2', visual.centerX);
-        setSvgAttribute(axis, 'y1', visual.top);
-        setSvgAttribute(axis, 'y2', visual.top + visual.height);
-        const arrow = group.querySelector<SVGPathElement>('[data-drawing-measurement="arrow"]');
-        setSvgAttribute(arrow, 'd', `M ${visual.centerX - 7} ${visual.top + 8} L ${visual.centerX} ${visual.top} L ${visual.centerX + 7} ${visual.top + 8}`);
-        const labelRect = group.querySelector<SVGRectElement>('[data-drawing-measurement="label-rect"]');
-        setSvgAttribute(labelRect, 'x', visual.centerX - visual.labelWidth / 2);
-        setSvgAttribute(labelRect, 'y', visual.labelTop);
-        setSvgAttribute(labelRect, 'width', visual.labelWidth);
-        const label = group.querySelector<SVGTextElement>('[data-drawing-measurement="label"]');
-        setSvgAttribute(label, 'x', visual.centerX);
-        setSvgAttribute(label, 'y', visual.labelTop + 19);
-        if (label) label.textContent = visual.label;
-      }
+  const onPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    // Canvas renderer: presses on painted drawings edit them (SVG drawings handle their own).
+    const painted = canvas && editing.edits ? canvasHost.drawingAt(event.clientX, event.clientY) : null;
+    if (painted) {
+      editing.dragDrawing(painted)(event);
+      return;
     }
-  }, [adapter, interval]);
-
-  useLayoutEffect(() => {
-    if (!adapter) return;
-    let frame: number | null = null;
-    let pointerActive = false;
-    const invalidate = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = null;
-        setViewport((value) => ({ ...value, revision: value.revision + 1 }));
-      });
-    };
-    // Project directly into the already-mounted SVG during the chart viewport
-    // callback. Waiting for React to reconcile a revision leaves the overlay one
-    // or more frames behind Lightweight Charts while the user is dragging.
-    const viewportChange = adapter.onViewportChange(refreshProjection);
-    const crosshair = adapter.onCrosshair(() => invalidate());
-    const stage = svgRef.current?.parentElement;
-    const insideStage = (target: EventTarget | null) => target instanceof Node && Boolean(stage?.contains(target));
-    const pointerDown = (event: PointerEvent) => {
-      if (!insideStage(event.target)) return;
-      pointerActive = true;
-      invalidate();
-    };
-    const pointerMove = (event: PointerEvent) => {
-      if (pointerActive && insideStage(event.target)) invalidate();
-    };
-    const pointerUp = () => {
-      if (!pointerActive) return;
-      pointerActive = false;
-      invalidate();
-    };
-    window.addEventListener('pointerdown', pointerDown);
-    window.addEventListener('pointermove', pointerMove);
-    window.addEventListener('pointerup', pointerUp);
-    const resize = new ResizeObserver((entries) => {
-      const bounds = entries[0]?.contentRect;
-      if (!bounds) return;
-      setViewport((value) => ({
-        width: bounds.width,
-        height: bounds.height,
-        revision: value.revision + 1,
-      }));
-    });
-    if (svgRef.current) resize.observe(svgRef.current);
-    refreshProjection();
-    return () => {
-      viewportChange();
-      crosshair();
-      window.removeEventListener('pointerdown', pointerDown);
-      window.removeEventListener('pointermove', pointerMove);
-      window.removeEventListener('pointerup', pointerUp);
-      if (frame !== null) window.cancelAnimationFrame(frame);
-      resize.disconnect();
-    };
-  }, [adapter, refreshProjection]);
-
-  const pointFromClient = (clientX: number, clientY: number): (DrawingPoint & { x: number; y: number }) | null => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const bounds = svg.getBoundingClientRect();
-    const x = clientX - bounds.left;
-    const y = clientY - bounds.top;
-    const point = adapter?.drawingPointFromCoordinate(x, y) ?? null;
-    return point ? { ...snapDrawingPoint(point, snapMode), x, y } : null;
-  };
-
-  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): (DrawingPoint & { x: number; y: number }) | null => (
-    pointFromClient(event.clientX, event.clientY)
-  );
-
-  const createDrawing = (points: DrawingPoint[]) => {
-    if (tool === 'cursor' || tool === 'alert' || tool === 'eraser') return;
-    onAdd({
-      drawingId: crypto.randomUUID(),
-      instrumentId,
-      toolType: tool,
-      points,
-      selected: true,
-      revision: 1,
-      style: DEFAULT_DRAWING_STYLE,
-      locked: false,
-      hidden: false,
-      text: tool === 'text' ? 'Market note' : '',
-    });
-    onToolComplete?.();
-  };
-
-  const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
     if (tool === 'cursor') {
       if (event.target === event.currentTarget) onSelect(null);
       return;
     }
-    const point = pointFromEvent(event);
-    if (!point) return;
     if (tool === 'alert') {
-      const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
-      const indicatorValue = indicatorId === undefined
-        ? null
-        : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
-      onAlertAtPoint?.({
-        ...point,
-        ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
-        source: 'tool',
-      }, indicatorId);
+      const point = plainPoint(event.clientX, event.clientY);
+      if (!point) return;
+      const { placement, indicatorId } = chartPlacement(adapter, point, event.clientY, 'tool');
+      onAlertAtPoint?.(placement, indicatorId);
       onToolComplete?.();
       return;
     }
+    const point = creationPoint(event);
+    if (!point) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    if (!twoPointTools.has(tool)) {
-      createDrawing([point]);
-      return;
-    }
-    setDraftStart(point);
-    setDraftEnd(point);
+    creation.pointerDown(point);
   };
 
-  const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!draftStart || !twoPointTools.has(tool)) return;
-    const point = pointFromEvent(event);
-    if (point) setDraftEnd(point);
-  };
-
-  const onPointerUp = () => {
-    if (draftStart && draftEnd && twoPointTools.has(tool)) createDrawing([draftStart, draftEnd]);
-    setDraftStart(null);
-    setDraftEnd(null);
+  const onPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!creation.draftRef.current) return;
+    const point = creationPoint(event);
+    if (point) creation.pointerMove(point);
   };
 
   const onContextMenu = (event: React.MouseEvent<SVGSVGElement>) => {
-    const point = pointFromEvent(event);
+    const point = plainPoint(event.clientX, event.clientY);
     event.preventDefault();
     event.stopPropagation();
     if (!point) return;
-    const target = event.target instanceof Element
-      ? event.target.closest<SVGGElement>('[data-drawing-id]')
-      : null;
-    const drawingId = target?.dataset.drawingId;
+    const target = event.target instanceof Element ? event.target.closest<SVGElement>('[data-drawing-id]') : null;
+    const drawingId = target?.dataset.drawingId ?? (canvas ? canvasHost.drawingAt(event.clientX, event.clientY)?.drawingId : undefined);
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
-    const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
-    const indicatorValue = indicatorId === undefined
-      ? null
-      : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
-    onChartContextMenu?.({
-      ...point,
-      ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
-      source: 'context-menu',
-      drawingId: drawing?.drawingId,
-      drawingTool: drawing?.toolType,
-      trendlinePoints: drawing?.toolType === 'trend-line' ? drawing.points.slice(0, 2) : undefined,
-    }, indicatorId);
+    const { placement, indicatorId } = chartPlacement(adapter, point, event.clientY, 'context-menu');
+    onChartContextMenu?.({ ...placement, ...drawingMenuEntries(drawing) }, indicatorId);
   };
 
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
@@ -448,113 +290,14 @@ export function TradingDrawingOverlay({
     adapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
   };
 
-  const dragHandle = (drawing: TradingDrawing, index: number) => (event: React.PointerEvent<SVGCircleElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (drawing.locked || !adapter) return;
-    const move = (pointer: PointerEvent) => {
-      const point = pointFromClient(pointer.clientX, pointer.clientY);
-      if (point) setHandlePreview({ drawingId: drawing.drawingId, index, point });
-    };
-    const up = (pointer: PointerEvent) => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      const point = pointFromClient(pointer.clientX, pointer.clientY);
-      setHandlePreview(null);
-      if (point) onMovePoint(drawing.drawingId, index, point);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-
-  const dragDrawing = (drawing: TradingDrawing) => (event: React.PointerEvent<SVGGElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (tool === 'eraser') {
-      onRemove(drawing.drawingId);
-      onToolComplete?.();
-      return;
-    }
-    onSelect(drawing.drawingId);
-    if (tool !== 'cursor' || drawing.locked || !adapter) return;
-    const start = pointFromClient(event.clientX, event.clientY);
-    if (!start) return;
-    const move = (pointer: PointerEvent) => {
-      const point = pointFromClient(pointer.clientX, pointer.clientY);
-      if (point) setTranslationPreview({ drawingId: drawing.drawingId, from: start, to: point });
-    };
-    const up = (pointer: PointerEvent) => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      const point = pointFromClient(pointer.clientX, pointer.clientY);
-      setTranslationPreview(null);
-      if (point && (point.time !== start.time || point.price !== start.price)) {
-        onTranslateDrawing(drawing.drawingId, start, point);
-      }
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-
-  const projected = drawings
-    .filter((drawing) => !drawing.hidden)
-    .map((drawing) => {
-      let points = translatedPoints(drawing.points, translationPreview, drawing.drawingId);
-      if (handlePreview?.drawingId === drawing.drawingId) {
-        points = points.map((point, index) => index === handlePreview.index ? handlePreview.point : point);
-      }
-      return {
-        drawing,
-        rawPoints: points,
-        points: points.map((point) => adapter?.projectDrawingPoint(point) ?? null),
-      };
-    });
   void viewport.revision;
-
-  const draftCoordinates = draftStart && draftEnd
-    ? [adapter?.projectDrawingPoint(draftStart), adapter?.projectDrawingPoint(draftEnd)]
-    : null;
-  const draftFirst = draftCoordinates?.[0] ?? null;
-  const draftSecond = draftCoordinates?.[1] ?? null;
-
-  const renderMeasurement = (
-    visual: MeasurementVisual,
-    color: string,
-    first: ProjectedPoint,
-    second: ProjectedPoint,
-    drawing?: TradingDrawing,
-  ) => {
-    const selected = drawing?.drawingId === selectedId;
-    const editable = selected && !drawing?.locked;
-    return (
-      <g className="trading-measurement" data-selected={selected}>
-        <rect
-          className="trading-measurement-area"
-          data-drawing-measurement="area"
-          x={visual.left}
-          y={visual.top}
-          width={visual.width}
-          height={visual.height}
-          fill={color}
-          fillOpacity=".14"
-        />
-        <line data-drawing-measurement="top" className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top} y2={visual.top} />
-        <line data-drawing-measurement="bottom" className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top + visual.height} y2={visual.top + visual.height} />
-        <line data-drawing-measurement="axis" className="trading-measurement-axis" stroke={color} x1={visual.centerX} x2={visual.centerX} y1={visual.top} y2={visual.top + visual.height} />
-        <path data-drawing-measurement="arrow" className="trading-measurement-arrow" stroke={color} d={`M ${visual.centerX - 7} ${visual.top + 8} L ${visual.centerX} ${visual.top} L ${visual.centerX + 7} ${visual.top + 8}`} />
-        <g className="trading-measurement-label">
-          <rect data-drawing-measurement="label-rect" x={visual.centerX - visual.labelWidth / 2} y={visual.labelTop} width={visual.labelWidth} height="30" rx="5" />
-          <text data-drawing-measurement="label" x={visual.centerX} y={visual.labelTop + 19} textAnchor="middle">{visual.label}</text>
-        </g>
-        {editable ? (
-          <>
-            <circle data-drawing-point-index="0" className="trading-measurement-handle" cx={first.x} cy={first.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 0) : undefined} />
-            <circle data-drawing-point-index="1" className="trading-measurement-handle" cx={second.x} cy={second.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 1) : undefined} />
-          </>
-        ) : null}
-      </g>
-    );
-  };
+  const access = chartAccessFor(adapter);
+  // Measure like the imperative refresh does, so both always agree on shape structure.
+  const size = svgRef.current ? svgViewport(svgRef.current) : { width: viewport.width, height: viewport.height };
+  const rendered = drawings
+    .filter((drawing) => !drawing.hidden && (!canvas || drawing.drawingId === selectedId))
+    .map((drawing) => renderDrawing(drawing, frame, access, size))
+    .filter((item): item is RenderedDrawing => item !== null);
 
   return (
     <svg
@@ -563,87 +306,23 @@ export function TradingDrawingOverlay({
       aria-label="Interactive chart drawings and alert placement"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={creation.pointerUp}
+      onDoubleClick={creation.doubleClick}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
-      {projected.map(({ drawing, rawPoints, points }) => {
-        const first = points[0];
-        const second = points[1];
-        const rawFirst = rawPoints[0];
-        const rawSecond = rawPoints[1];
-        if (!first) return null;
-        const selected = drawing.drawingId === selectedId;
-        const style = drawing.style ?? DEFAULT_DRAWING_STYLE;
-        const lineProps = {
-          className: selected ? 'selected' : undefined,
-          stroke: style.color,
-          strokeWidth: style.lineWidth,
-          strokeDasharray: style.lineStyle === 'dashed' ? '6 4' : undefined,
-        };
-        const arrowMarkerId = `trading-drawing-arrow-${drawing.drawingId}`;
-        const measurement = drawing.toolType === 'measurement' && second && rawFirst && rawSecond
-          ? measurementVisual(first, second, rawFirst, rawSecond, interval)
-          : null;
-        const measurementColor = drawing.toolType === 'measurement' && style.color === DEFAULT_DRAWING_STYLE.color ? chartPalette.drawingBlue : style.color;
-        const ray = (() => {
-          if (drawing.toolType !== 'ray' || !second) return null;
-          const dx = second.x - first.x;
-          const targetX = dx >= 0 ? viewport.width : 0;
-          if (Math.abs(dx) < 0.0001) {
-            return { x: first.x, y: second.y >= first.y ? viewport.height : 0 };
-          }
-          const slope = (second.y - first.y) / dx;
-          return { x: targetX, y: first.y + slope * (targetX - first.x) };
-        })();
-        return (
-          <g
-            key={drawing.drawingId}
-            data-drawing-id={drawing.drawingId}
-            data-locked={drawing.locked}
-            data-selected={selected}
-            onPointerDown={dragDrawing(drawing)}
-          >
-            {drawing.toolType === 'arrow' ? (
-              <defs>
-                <marker id={arrowMarkerId} markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3" markerUnits="strokeWidth">
-                  <path d="M 0 0 L 6 3 L 0 6 z" fill={style.color} />
-                </marker>
-              </defs>
-            ) : null}
-            {drawing.toolType === 'dot' ? <circle data-drawing-point-index="0" className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? chartPalette.yellow : style.color} strokeWidth={style.lineWidth} /> : null}
-            {drawing.toolType === 'horizontal-line' ? <line data-drawing-geometry="horizontal" {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
-            {drawing.toolType === 'horizontal-ray' ? <line data-drawing-geometry="horizontal" {...lineProps} x1={first.x} x2="100%" y1={first.y} y2={first.y} /> : null}
-            {drawing.toolType === 'vertical-line' ? <line data-drawing-geometry="vertical" {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
-            {drawing.toolType === 'crossline' ? <><line data-drawing-geometry="horizontal" {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /><line data-drawing-geometry="vertical" {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /></> : null}
-            {drawing.toolType === 'trend-line' || drawing.toolType === 'arrow' ? (
-              second ? <line data-drawing-geometry="segment" {...lineProps} markerEnd={drawing.toolType === 'arrow' ? `url(#${arrowMarkerId})` : undefined} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null
-            ) : null}
-            {measurement ? renderMeasurement(measurement, measurementColor, first, second!, drawing) : null}
-            {ray ? <line data-drawing-geometry="ray" {...lineProps} x1={first.x} y1={first.y} x2={ray.x} y2={ray.y} /> : null}
-            {drawing.toolType === 'rectangle' && second ? <rect data-drawing-geometry="rectangle" {...lineProps} x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={`${style.color}20`} /> : null}
-            {drawing.toolType === 'circle' && second ? <ellipse data-drawing-geometry="circle" {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} ry={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} fill={`${style.color}20`} /> : null}
-            {drawing.toolType === 'ellipse' && second ? <ellipse data-drawing-geometry="ellipse" {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.abs(second.x - first.x) / 2} ry={Math.abs(second.y - first.y) / 2} fill={`${style.color}20`} /> : null}
-            {drawing.toolType === 'fibonacci' && second ? fibonacciLevels.map((level) => {
-              const y = first.y + (second.y - first.y) * level;
-              return <g key={level}><line data-drawing-fibonacci-line={level} {...lineProps} x1={Math.min(first.x, second.x)} x2={Math.max(first.x, second.x)} y1={y} y2={y} /><text data-drawing-fibonacci-label={level} x={Math.max(first.x, second.x) + 4} y={y - 2}>{level}</text></g>;
-            }) : null}
-            {drawing.toolType === 'text' ? <text data-drawing-geometry="text" className={selected ? 'selected' : undefined} x={first.x} y={first.y} fill={style.color}>{drawing.text || 'Market note'}</text> : null}
-            {drawing.toolType === 'arrow' && second ? <circle data-drawing-point-index="1" className="drawing-hit-target" cx={second.x} cy={second.y} r="11" /> : null}
-            {selected && !drawing.locked && drawing.toolType !== 'measurement' ? points.map((point, index) => point ? <circle data-drawing-point-index={index} key={index} cx={point.x} cy={point.y} r="6" onPointerDown={dragHandle(drawing, index)} /> : null) : null}
-          </g>
-        );
-      })}
-      {draftFirst && draftSecond && draftStart && draftEnd && tool === 'measurement' ? (
-        renderMeasurement(
-          measurementVisual(draftFirst, draftSecond, draftStart, draftEnd, interval),
-          chartPalette.drawingBlue,
-          draftFirst,
-          draftSecond,
-        )
-      ) : draftFirst && draftSecond ? (
-        <line x1={draftFirst.x} y1={draftFirst.y} x2={draftSecond.x} y2={draftSecond.y} className="draft" />
-      ) : null}
+      {rendered.map((item) => (
+        <DrawingGroup
+          key={item.drawing.drawingId}
+          item={item}
+          project={access.project}
+          viewport={size}
+          withShapes={!canvas}
+          onPressDrawing={editing.dragDrawing(item.drawing)}
+          onPressHandle={(index) => editing.dragHandle(item.drawing, index)}
+        />
+      ))}
+      {frame.draft ? <ShapeGroup shapes={draftShapes(frame.draft, access, size, interval)} signature /> : null}
     </svg>
   );
 }

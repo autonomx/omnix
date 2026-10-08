@@ -59,7 +59,8 @@ function formattedPrice(value: number): string {
 }
 
 export function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
-  const isTrendline = placement.drawingTool === 'trend-line' && placement.trendlinePoints?.length === 2;
+  // A drawing whose tool defines a two-anchor alert level offers the line alert.
+  const isTrendline = placement.trendlinePoints?.length === 2;
   const isIndicator = placement.indicatorId !== undefined;
   return {
     mode: 'create',

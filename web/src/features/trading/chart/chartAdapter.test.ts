@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, DrawingTimeIndex, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 import { fixture } from '../../../test/fixture';
 
@@ -126,5 +126,60 @@ describe('Trading chart adapter normalization', () => {
     const bars = [bar, secondBar];
     expect(drawingTimeForLogicalIndex(2, bars)).toBe('2026-08-05T12:02:00.000Z');
     expect(drawingLogicalIndexForTime('2026-08-05T12:03:00.000Z', bars)).toBe(3);
+  });
+
+  it('indexes bar times once for repeated drawing projections', () => {
+    const thirdBar = { ...bar, start_time: '2026-08-05T12:02:00+00:00' };
+    const index = new DrawingTimeIndex([bar, secondBar, thirdBar]);
+    expect(index.logicalIndexForTime('2026-08-05T12:01:00.000Z')).toBe(1);
+    expect(index.logicalIndexForTime('2026-08-05T12:02:00.000Z')).toBe(2);
+    // Between bars a time interpolates; past the last bar it extrapolates at the bar interval.
+    expect(index.logicalIndexForTime('2026-08-05T12:00:30.000Z')).toBe(0.5);
+    expect(index.logicalIndexForTime('2026-08-05T12:05:00.000Z')).toBe(5);
+    expect(index.logicalIndexForTime('2026-08-05T11:58:00.000Z')).toBe(-2);
+    expect(index.logicalIndexForTime('not-a-date')).toBeNull();
+    expect(index.timeForLogicalIndex(1)).toBe(secondBar.start_time);
+    expect(index.timeForLogicalIndex(1.2)).toBe('2026-08-05T12:01:12.000Z');
+    expect(index.timeForLogicalIndex(6)).toBe('2026-08-05T12:06:00.000Z');
+    expect(index.timeAfterBars('2026-08-05T12:01:00.000Z', 3)).toBe('2026-08-05T12:04:00.000Z');
+    expect(new DrawingTimeIndex([]).logicalIndexForTime('2026-08-05T12:00:00.000Z')).toBeNull();
+  });
+
+  describe('drawing times on gapped data', () => {
+    // Two 5m sessions, 13:30-19:55 UTC, with an overnight gap between them.
+    const sessions = ['2026-10-05', '2026-10-06'].flatMap((day) => Array.from({ length: 78 }, (_, minute) => ({
+      ...bar,
+      start_time: new Date(Date.parse(`${day}T13:30:00.000Z`) + minute * 300_000).toISOString(),
+    })));
+    const index = new DrawingTimeIndex(sessions);
+
+    it('maps a time inside a later session to its own bars, not by the first bar and the interval', () => {
+      expect(index.logicalIndexForTime('2026-10-06T13:32:00.000Z')).toBeCloseTo(78.4, 9);
+      expect(index.logicalIndexForTime('2026-10-06T19:55:00.000Z')).toBe(155);
+    });
+
+    it('extrapolates past the last bar from that bar', () => {
+      expect(index.logicalIndexForTime('2026-10-06T20:05:00.000Z')).toBe(157);
+      expect(index.timeForLogicalIndex(157)).toBe('2026-10-06T20:05:00.000Z');
+      expect(index.timeForLogicalIndex(-1)).toBe('2026-10-05T13:25:00.000Z');
+    });
+
+    it('is the exact inverse of timeForLogicalIndex', () => {
+      for (let logical = -20; logical <= 180; logical += 0.37) {
+        const time = index.timeForLogicalIndex(logical)!;
+        expect(index.logicalIndexForTime(time)).toBeCloseTo(logical, 5);
+        expect(index.timeForLogicalIndex(index.logicalIndexForTime(time)!)).toBe(time);
+      }
+    });
+
+    it('places drawings made on another interval between the bars they fall in', () => {
+      // A 1m anchor on a 5m chart.
+      expect(index.logicalIndexForTime('2026-10-05T13:41:00.000Z')).toBeCloseTo(2.2, 9);
+      // A 1h anchor on a 1D chart, over a weekend.
+      const daily = ['2026-10-02', '2026-10-05', '2026-10-06'].map((day) => ({ ...bar, start_time: `${day}T00:00:00.000Z` }));
+      const days = new DrawingTimeIndex(daily);
+      expect(days.logicalIndexForTime('2026-10-05T15:00:00.000Z')).toBeCloseTo(1 + 15 / 24, 9);
+      expect(days.logicalIndexForTime('2026-10-07T12:00:00.000Z')).toBeCloseTo(2.5, 9);
+    });
   });
 });
