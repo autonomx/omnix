@@ -16,6 +16,7 @@ from app.apps.rpg.genesis.forge.async_coordinator import (
     _preserve_live_progress_during_expansion,
 )
 from app.apps.rpg.genesis.forge.contract import CampaignGenesisContract
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -180,7 +181,8 @@ def test_default_async_enqueue_failure_falls_back_to_portable_generation(monkeyp
     )
 
     result = pipeline.create_new_game_from_genesis_payload(
-        {"genesis": contract.model_dump(mode="json")}
+        {"genesis": contract.model_dump(mode="json")},
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert len(prepared_calls) == 2
@@ -231,6 +233,7 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
         legacy={"campaign_template": "classic_fantasy"},
         database=object(),
         kick_worker=False,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     job_id = campaign_genesis_job_id("campaign:phase39")
@@ -282,6 +285,7 @@ def test_enqueue_normalizes_database_bootstrap_failure(monkeypatch) -> None:
         bootstrap={},
         legacy={},
         kick_worker=False,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert result["ok"] is False

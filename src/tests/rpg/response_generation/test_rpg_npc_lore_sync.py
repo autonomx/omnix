@@ -9,6 +9,7 @@ from app.apps.rpg.genesis.forge import turn_grounding
 from app.apps.rpg.genesis.forge import npc_lore_projection
 from app.apps.rpg.genesis.forge.npc_lore_projection import ensure_encountered_npc_lore
 from app.apps.rpg.world import npc_biography_registry
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def _session() -> dict:
@@ -108,7 +109,7 @@ def test_encountered_npc_bio_is_searchable_gameplay_evidence(monkeypatch) -> Non
 def test_turn_grounding_syncs_speaking_npc_before_research(monkeypatch) -> None:
     calls: list[tuple[str, tuple[str, ...]]] = []
 
-    def fake_sync(campaign_id, session, *, explicit_npc_ids=(), database=None):
+    def fake_sync(campaign_id, session, *, sessions, explicit_npc_ids=(), database=None):
         calls.append((campaign_id, tuple(explicit_npc_ids)))
         return dict(session), {
             "mode": "postgresql_authority",
@@ -129,6 +130,7 @@ def test_turn_grounding_syncs_speaking_npc_before_research(monkeypatch) -> None:
             "resolved_result": {"response_mode": "dialogue"},
             "turn_id": "turn:7",
         },
+        sessions=SESSION_CAMPAIGN_SESSIONS,
         campaign_id="campaign:bran-bio",
         player_input="How are you?",
         speaker_id="npc:Bran",

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.apps.rpg.narration.narrative_engine import (
     CampaignBibleSnapshot,
@@ -16,6 +16,9 @@ from .hermes_campaign_research import CampaignResearchPacket, research_campaign_
 from .npc_lore_sync import sync_encountered_npc_lore
 from .runtime_lore_store import ensure_turn_scene_lore
 from .turn_canon_snapshot import select_complete_turn_snapshot
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 _LORE_QUERY_PREFIXES = (
@@ -92,14 +95,12 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _session(result: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
+def _session(result: Mapping[str, Any], campaign_id: str, *, sessions: CampaignSessions) -> Mapping[str, Any]:
     existing = result.get("session")
     if isinstance(existing, Mapping):
         return existing
     try:
-        from app.apps.rpg.session.service import load_session
-
-        loaded = load_session(campaign_id)
+        loaded = sessions.load(campaign_id)
         return loaded if isinstance(loaded, Mapping) else {}
     except Exception:
         return {}
@@ -194,6 +195,7 @@ def campaign_lore_research_required(
 def build_turn_grounding_packet(
     result: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     campaign_id: str,
     player_input: str,
     speaker_id: str | None = None,
@@ -207,7 +209,7 @@ def build_turn_grounding_packet(
     requested_runtime_only = runtime_only
     runtime_only = runtime_only and not lore_required
     runtime = tuple(runtime_evidence(result))
-    session = _session(result, campaign_id)
+    session = _session(result, campaign_id, sessions=sessions)
     explicit_npc_ids = tuple(
         value
         for value in (*actor_ids, speaker_id or "")
@@ -218,6 +220,7 @@ def build_turn_grounding_packet(
             campaign_id,
             session,
             explicit_npc_ids=explicit_npc_ids,
+            sessions=sessions,
         )
     except Exception as exc:
         npc_lore_sync = {
@@ -241,6 +244,7 @@ def build_turn_grounding_packet(
         session,
         result,
         explicit_entity_ids=explicit_entity_ids,
+        sessions=sessions,
     )
     target_entity_ids = tuple(scene_lore.get("target_entity_ids") or ())
     portable_snapshot = _portable_materialized_snapshot(session, campaign_id)
@@ -251,6 +255,7 @@ def build_turn_grounding_packet(
             campaign_id,
             session=session,
             prefer_postgresql=prefer_postgresql,
+            sessions=sessions,
         )
     snapshot, complete_bible_evidence, missing_materialized = (
         select_complete_turn_snapshot(
@@ -304,6 +309,7 @@ def build_turn_grounding_packet(
             ),
             max_topics=max_topics,
             snapshot=snapshot,
+            sessions=sessions,
         )
     )
     hermes_evidence = research.result.evidence() if research else ()

@@ -12,7 +12,7 @@ import threading
 from contextlib import nullcontext
 from contextvars import copy_context
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from app.jobs.models import ResourceClass
 
@@ -25,6 +25,9 @@ from .materialization import (
 from .world_forge_commit import require_world_forge_commit_ready
 from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
 from .world_forge_pipeline import run_campaign_world_forge
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 CAMPAIGN_GENESIS_JOB_TYPE = "rpg.campaign_genesis.generate"
 CAMPAIGN_EXPANSION_JOB_TYPE = "rpg.campaign_world.expand"
@@ -126,11 +129,10 @@ def _write_session_progress(
     stage: str,
     percent: int,
     job_id: str,
+    sessions: CampaignSessions,
     error: str = "",
 ) -> dict[str, Any] | None:
-    from app.apps.rpg.session.service import load_session, save_session
-
-    session = load_session(campaign_id)
+    session = sessions.load(campaign_id)
     if not session:
         return None
     runtime = _mapping(session.get("runtime_state"))
@@ -156,7 +158,7 @@ def _write_session_progress(
     manifest["creation_status"] = "completed" if status == "ready" else status
     session["runtime_state"] = runtime
     session["manifest"] = manifest
-    return save_session(session, compact=True)
+    return sessions.save(session, compact=True)
 
 
 def _database(value: Any | None) -> Any:
@@ -174,6 +176,7 @@ def enqueue_campaign_genesis(
     compiled: Mapping[str, Any],
     bootstrap: Mapping[str, Any],
     legacy: Mapping[str, Any],
+    sessions: CampaignSessions,
     database: Any | None = None,
     kick_worker: bool = True,
 ) -> dict[str, Any]:
@@ -223,9 +226,7 @@ def enqueue_campaign_genesis(
     session["setup_payload"] = setup
     session["manifest"] = manifest
 
-    from app.apps.rpg.session.service import save_session
-
-    saved = save_session(session, compact=True)
+    saved = sessions.save(session, compact=True)
     try:
         db = _database(database)
         from app.security.tenant_context import current_tenant
@@ -290,6 +291,7 @@ def enqueue_campaign_genesis(
             stage="enqueue_failed",
             percent=0,
             job_id=job_id,
+            sessions=sessions,
             error=str(exc),
         )
         failed_progress = _mapping(_mapping(failed or saved).get("runtime_state")).get(
@@ -324,7 +326,7 @@ def enqueue_campaign_genesis(
         "creation_progress": queued,
     }
     if kick_worker:
-        kick_campaign_genesis_worker(database=db)
+        kick_campaign_genesis_worker(sessions=sessions, database=db)
     return response
 
 
@@ -369,11 +371,10 @@ def _write_expansion_progress(
     *,
     status: str,
     job_id: str,
+    sessions: CampaignSessions,
     error: str = "",
 ) -> dict[str, Any] | None:
-    from app.apps.rpg.session.service import load_session, save_session
-
-    session = load_session(campaign_id)
+    session = sessions.load(campaign_id)
     if not session:
         return None
     runtime = _mapping(session.get("runtime_state"))
@@ -385,7 +386,7 @@ def _write_expansion_progress(
         "error": error,
     }
     session["runtime_state"] = runtime
-    return save_session(session, compact=True)
+    return sessions.save(session, compact=True)
 
 
 def _preserve_live_progress_during_expansion(
@@ -450,6 +451,7 @@ def _run_campaign_expansion_job(
     payload: Mapping[str, Any],
     generator: WorldForgeTopicGenerator | None,
     worker_id: str,
+    sessions: CampaignSessions,
 ) -> dict[str, Any]:
     campaign_id = str(payload.get("campaign_id") or "")
     job_id = str(job.get("id") or "")
@@ -457,6 +459,7 @@ def _run_campaign_expansion_job(
         campaign_id,
         status="running",
         job_id=job_id,
+        sessions=sessions,
     )
     try:
         contract = CampaignGenesisContract.model_validate(payload.get("contract") or {})
@@ -484,10 +487,9 @@ def _run_campaign_expansion_job(
         )
         certification = require_world_forge_commit_ready(world_forge)
         from app.apps.rpg.foundation.llm_priority import background_rpg_llm_priority
-        from app.apps.rpg.session.service import load_session, save_session
 
         with background_rpg_llm_priority():
-            session = load_session(campaign_id)
+            session = sessions.load(campaign_id)
             if not session:
                 raise RuntimeError(f"campaign is missing during expansion: {campaign_id}")
             live_session = deepcopy(session)
@@ -514,7 +516,7 @@ def _run_campaign_expansion_job(
                 world_forge,
                 database=db,
             )
-            saved = save_session(materialized, compact=True)
+            saved = sessions.save(materialized, compact=True)
         from app.persistence.unit_of_work import unit_of_work
 
         with unit_of_work(db) as work:
@@ -562,6 +564,7 @@ def _run_campaign_expansion_job(
             campaign_id,
             status=str(failed["status"]),
             job_id=job_id,
+            sessions=sessions,
             error=str(exc),
         )
         return {
@@ -576,6 +579,7 @@ def _run_campaign_expansion_job(
 
 def run_campaign_genesis_worker_once(
     *,
+    sessions: CampaignSessions,
     worker_id: str = "rpg-genesis:local",
     database: Any | None = None,
     generator: WorldForgeTopicGenerator | None = None,
@@ -632,6 +636,7 @@ def run_campaign_genesis_worker_once(
             payload=payload,
             generator=generator,
             worker_id=worker_id,
+            sessions=sessions,
         )
     _write_session_progress(
         campaign_id,
@@ -639,6 +644,7 @@ def run_campaign_genesis_worker_once(
         stage="world_forge",
         percent=10,
         job_id=job["id"],
+        sessions=sessions,
     )
     try:
         contract = CampaignGenesisContract.model_validate(payload.get("contract") or {})
@@ -650,9 +656,7 @@ def run_campaign_genesis_worker_once(
             launch_only=True,
         )
         certification = require_world_forge_commit_ready(world_forge)
-        from app.apps.rpg.session.service import load_session, save_session
-
-        session = load_session(campaign_id)
+        session = sessions.load(campaign_id)
         if not session:
             raise RuntimeError(f"campaign shell is missing: {campaign_id}")
         materialized = materialize_world_forge_into_session(session, contract, world_forge)
@@ -674,7 +678,7 @@ def run_campaign_genesis_worker_once(
             "error": "",
         }
         materialized["runtime_state"] = runtime
-        saved = save_session(materialized, compact=True)
+        saved = sessions.save(materialized, compact=True)
         with unit_of_work(db) as work:
             completed = work.jobs.complete(
                 context,
@@ -716,6 +720,7 @@ def run_campaign_genesis_worker_once(
                 campaign_id,
                 status="failed",
                 job_id=expansion_id,
+                sessions=sessions,
                 error=str(expansion_error),
             ) or saved
         return {
@@ -759,6 +764,7 @@ def run_campaign_genesis_worker_once(
             stage="retry_wait" if retrying else "failed",
             percent=10,
             job_id=job["id"],
+            sessions=sessions,
             error=str(exc),
         )
         return {
@@ -771,13 +777,13 @@ def run_campaign_genesis_worker_once(
         }
 
 
-def _worker_loop(database: Any | None) -> None:
+def _worker_loop(database: Any | None, sessions: CampaignSessions) -> None:
     global _worker_active
     try:
         while not _worker_stop.is_set():
             if _background_owner is not None:
                 _background_owner.require_live()
-            result = run_campaign_genesis_worker_once(database=database)
+            result = run_campaign_genesis_worker_once(sessions=sessions, database=database)
             if result is None:
                 break
             if result.get("status") == "retrying":
@@ -790,7 +796,7 @@ def _worker_loop(database: Any | None) -> None:
             _worker_active = False
 
 
-def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
+def kick_campaign_genesis_worker(*, sessions: CampaignSessions, database: Any | None = None) -> bool:
     """Start one process-local recovery worker without creating duplicate consumers."""
 
     global _worker_active, _worker_thread
@@ -813,7 +819,7 @@ def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
         from app.runtime.background import BackgroundOwnershipUnavailable
         try:
             with background_execution(owner) if owner is not None else nullcontext():
-                _worker_loop(database)
+                _worker_loop(database, sessions)
         except BackgroundOwnershipUnavailable:
             return
         finally:

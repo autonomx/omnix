@@ -45,6 +45,7 @@ from app.apps.rpg.genesis.worlds.starter_bubble_service import promote_starter_b
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -548,6 +549,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
                 features=(
                     raw_features if isinstance(raw_features := payload.get("features"), Mapping) else {}
                 ),
+                    sessions=SESSION_CAMPAIGN_SESSIONS,
             )
         except Exception as exc:
             _raise_domain_error(exc)

@@ -16,6 +16,7 @@ from app.apps.rpg.narration.narrative_engine import (
     campaign_bible_evidence,
 )
 from app.apps.rpg.genesis.forge import turn_grounding
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def _snapshot() -> CampaignBibleSnapshot:
@@ -130,6 +131,7 @@ def test_fast_dialogue_lore_question_overrides_runtime_only(monkeypatch) -> None
             "resolved_result": {"response_mode": "dialogue"},
             "session": {"state": {}},
         },
+        sessions=SESSION_CAMPAIGN_SESSIONS,
         campaign_id=snapshot.campaign_id,
         player_input="Bran, what is the history of this tavern?",
         speaker_id="npc:bran",

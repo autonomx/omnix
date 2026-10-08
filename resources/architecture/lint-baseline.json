@@ -51,69 +51,6 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/async_coordinator.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/campaign_bible_runtime.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/legacy_adapter.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/pipeline_adapter.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/forge/turn_grounding.py",
-      "rule": "AL017"
-    },
-    {
-      "count": 1,
-      "fingerprint": "genesis->session:session",
-      "lines": [
-        1
-      ],
-      "path": "src/app/apps/rpg/genesis/worlds/published_launch.py",
-      "rule": "AL017"
     }
   ]
 }

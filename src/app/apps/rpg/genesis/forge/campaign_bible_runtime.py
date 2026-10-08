@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Mapping, cast
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
 from app.apps.rpg.narration.narrative_engine import CampaignBibleSnapshot
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,7 @@ def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
 def load_campaign_bible_snapshot(
     campaign_id: str,
     *,
+    sessions: CampaignSessions,
     session: Mapping[str, Any] | None = None,
     prefer_postgresql: bool = True,
 ) -> CampaignBibleSnapshot | None:
@@ -100,9 +104,7 @@ def load_campaign_bible_snapshot(
             return stored
     if session is None:
         try:
-            from app.apps.rpg.session.service import load_session
-
-            session = load_session(campaign_id)
+            session = sessions.load(campaign_id)
         except Exception:
             session = None
     portable = _portable_snapshot(session or {}, campaign_id)

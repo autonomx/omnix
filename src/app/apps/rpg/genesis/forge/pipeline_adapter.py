@@ -1,7 +1,7 @@
 """Genesis compiler/bootstrap and World Forge launch pipeline adapter."""
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from .bootstrap import bootstrap_session_from_compiled_genesis
 from .compiler import compile_campaign_genesis
@@ -17,6 +17,9 @@ from .materialization import (
 from .world_forge_commit import certify_world_forge_commit
 from .world_forge_pipeline import CampaignWorldForgeResult, run_campaign_world_forge
 from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 class _TruthyZero(int):
@@ -40,6 +43,7 @@ def attach_compiled_genesis_to_session(
     compiled: dict[str, Any],
     bootstrap: dict[str, Any],
     *,
+    sessions: CampaignSessions,
     compact_save: bool = False,
     persist: bool = True,
 ) -> dict[str, Any]:
@@ -50,9 +54,7 @@ def attach_compiled_genesis_to_session(
         return result
     session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
-        from app.apps.rpg.session.service import load_session
-
-        session = load_session(session_id)
+        session = sessions.load(session_id)
     if not session:
         return result
     state = _safe_dict(session.get("state"))
@@ -81,9 +83,7 @@ def attach_compiled_genesis_to_session(
         }
     )
     if persist:
-        from app.apps.rpg.session.service import save_session
-
-        saved = save_session(session, compact=compact_save)
+        saved = sessions.save(session, compact=compact_save)
     else:
         saved = session
     return {
@@ -105,13 +105,11 @@ def _result_from_unsaved_session(session: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _save_prepared_result(result: dict[str, Any]) -> dict[str, Any]:
+def _save_prepared_result(result: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
     session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
         return result
-    from app.apps.rpg.session.new_game import _save_created_session
-
-    saved_result = _save_created_session(session)
+    saved_result = sessions.save_created(session)
     return {**result, **saved_result}
 
 
@@ -122,7 +120,7 @@ def _attach_world_forge_progress(
     error: str = "",
 ) -> dict[str, Any]:
     session_id = str(result.get("session_id") or "")
-    from app.apps.rpg.session.new_game_creation_progress import (
+    from app.apps.rpg.genesis.creation_progress import (
         attach_creation_metadata,
         build_creation_job,
         build_creation_progress_snapshot,
@@ -174,6 +172,7 @@ def _attach_world_forge_progress(
 
 def prepare_new_game_session_from_compiled_genesis(
     *,
+    sessions: CampaignSessions,
     bootstrap: dict[str, Any],
     compiled: dict[str, Any],
     contract: CampaignGenesisContract,
@@ -181,21 +180,21 @@ def prepare_new_game_session_from_compiled_genesis(
 ) -> dict[str, Any]:
     """Build the deterministic blocked shell shared by sync and async launch paths."""
 
-    from app.apps.rpg.session.new_game import RpgNewGameRequest, _build_new_game_session
-
-    legacy_request = _preserve_seed_zero(RpgNewGameRequest.model_validate(legacy))
-    result = _result_from_unsaved_session(_build_new_game_session(legacy_request))
-    result = attach_genesis_to_created_session(result, contract, persist=False)
+    legacy_request = _preserve_seed_zero(sessions.new_game_request(legacy))
+    result = _result_from_unsaved_session(sessions.build_new_game(legacy_request))
+    result = attach_genesis_to_created_session(result, contract, persist=False, sessions=sessions)
     return attach_compiled_genesis_to_session(
         result,
         compiled,
         bootstrap,
         persist=False,
+        sessions=sessions,
     )
 
 
 def create_new_game_session_from_compiled_genesis(
     *,
+    sessions: CampaignSessions,
     bootstrap: dict[str, Any],
     compiled: dict[str, Any],
     contract: CampaignGenesisContract,
@@ -207,11 +206,12 @@ def create_new_game_session_from_compiled_genesis(
         compiled=compiled,
         contract=contract,
         legacy=legacy,
+        sessions=sessions,
     )
     session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None or not contract.world_forge.enabled:
         result["status"] = "ready"
-        return _save_prepared_result(_attach_world_forge_progress(result, None))
+        return _save_prepared_result(_attach_world_forge_progress(result, None), sessions=sessions)
     session_id = str(result.get("session_id") or "")
     try:
         world_forge = run_campaign_world_forge(
@@ -264,7 +264,7 @@ def create_new_game_session_from_compiled_genesis(
         persistence = persist_campaign_genesis(session, contract, world_forge)
         result["campaign_genesis_persistence"] = persistence
         result = _attach_world_forge_progress(result, world_forge)
-        return _save_prepared_result(result)
+        return _save_prepared_result(result, sessions=sessions)
     except Exception as exc:
         result.update(
             {
@@ -277,7 +277,7 @@ def create_new_game_session_from_compiled_genesis(
         return _attach_world_forge_progress(result, None, error=result["error"])
 
 
-def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
     raw = _safe_dict(payload.get("request") or payload)
     contract_payload = _safe_dict(raw.get("genesis") or raw)
     if "world_forge" not in contract_payload:
@@ -295,6 +295,7 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
         compiled=compiled,
         contract=contract,
         legacy=legacy,
+        sessions=sessions,
     )
     if contract.world_forge.enabled:
         from .async_coordinator import (
@@ -310,6 +311,7 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
                 compiled=compiled,
                 bootstrap=bootstrap,
                 legacy=legacy,
+                sessions=sessions,
             )
             if (
                 enqueued.get("error") != "campaign_genesis_enqueue_failed"
@@ -325,6 +327,7 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
                 compiled=compiled,
                 contract=contract,
                 legacy=legacy,
+                sessions=sessions,
             )
             prepared["campaign_genesis_async_fallback"] = {
                 "used": True,
@@ -336,4 +339,5 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, A
         contract=contract,
         legacy=legacy,
         prepared_result=prepared,
+        sessions=sessions,
     )

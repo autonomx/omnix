@@ -28,6 +28,7 @@ from app.apps.rpg.genesis.forge.runtime_materialization import (
     materialize_runtime_lore,
 )
 from app.apps.rpg.session.service import load_session
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 class LoreDiscoveryRequest(BaseModel):
@@ -69,7 +70,7 @@ def _kick_genesis_recovery() -> None:
     )
 
     if campaign_genesis_async_enabled():
-        kick_campaign_genesis_worker()
+        kick_campaign_genesis_worker(sessions=SESSION_CAMPAIGN_SESSIONS)
 
 
 def _lore_error(exc: Exception, session_id: str) -> HTTPException:
@@ -114,6 +115,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
             session_id,
             session,
             ensure_current_location=False,
+            sessions=SESSION_CAMPAIGN_SESSIONS,
         )
         return {
             "ok": True,
@@ -132,6 +134,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
             session_id,
             session,
             ensure_current_location=True,
+            sessions=SESSION_CAMPAIGN_SESSIONS,
         )
         return {
             **campaign_lore_payload(session),
@@ -152,6 +155,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
             session_id,
             session,
             ensure_current_location=True,
+            sessions=SESSION_CAMPAIGN_SESSIONS,
         )
         try:
             return {
@@ -180,6 +184,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
                 session,
                 document_id=request.document_id,
                 direction=request.direction,
+                sessions=SESSION_CAMPAIGN_SESSIONS,
             )
             return {
                 "ok": True,
@@ -221,6 +226,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
             session_id,
             session,
             ensure_current_location=True,
+            sessions=SESSION_CAMPAIGN_SESSIONS,
         )
         try:
             updated = transition_lore_discovery(
@@ -229,7 +235,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
                 status=request.status,
                 source=request.source,
             )
-            saved, storage = persist_campaign_lore(session_id, updated)
+            saved, storage = persist_campaign_lore(session_id, updated, sessions=SESSION_CAMPAIGN_SESSIONS)
             return {
                 "ok": True,
                 "session_id": session_id,
@@ -258,6 +264,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
                 name=request.name,
                 direction=request.direction,
                 document_id=request.document_id,
+                sessions=SESSION_CAMPAIGN_SESSIONS,
             )
             document_id = str(storage["document_id"])
             return {

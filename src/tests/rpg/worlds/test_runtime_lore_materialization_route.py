@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.apps.rpg.edge.api.feature_routes import rpg_campaign_lore_routes as routes
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def test_runtime_materialization_route_returns_document_and_definition(
@@ -88,6 +89,8 @@ def test_runtime_materialization_route_returns_document_and_definition(
         "name": "Echo Wolf",
         "direction": "Bells disrupt its form.",
         "document_id": "",
+        # The forge reads and saves the campaign through the session's store.
+        "sessions": SESSION_CAMPAIGN_SESSIONS,
     }
     payload = response.json()
     assert payload["document"]["document_id"] == document_id

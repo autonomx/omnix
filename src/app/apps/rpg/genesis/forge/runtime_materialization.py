@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from typing import Any, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,6 +28,9 @@ from .campaign_lore_store import (
     load_campaign_lore,
 )
 from app.prompts import prompt_template
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 _PROMPT_1 = prompt_template('rpg.session_genesis_runtime_materialization.common', "1", 'Materialize the campaign-local {v0} named "{v1}". Return strict JSON only. Generate structured executable truth first and lore_text from that same truth. lore_text must be 350-650 words in 4-7 natural paragraphs, player-safe, vivid, and internally consistent. Preserve compatible existing canon and definition fields. Do not emit code, formulas, headings, markdown, or unsupported mechanics. ')
 _PROMPT_2 = prompt_template('rpg.session_genesis_runtime_materialization.prompt', "1", (
@@ -500,6 +503,7 @@ def materialize_runtime_lore(
     session_id: str,
     session: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     kind: Literal["creature", "location"],
     name: str,
     direction: str = "",
@@ -517,6 +521,7 @@ def materialize_runtime_lore(
         session,
         ensure_current_location=False,
         database=database,
+        sessions=sessions,
     )
     campaign_id = _campaign_id(session_id, hydrated)
     db = database or default_database()
@@ -639,7 +644,7 @@ def materialize_runtime_lore(
         revision=int(stored["revision"]),
         content_hash=str(stored["content_hash"]),
     )
-    updated = _save_portable_projection(updated)
+    updated = _save_portable_projection(updated, sessions=sessions)
     diagnostics = getattr(gateway, "last_structured_diagnostics", None)
     return updated, {
         "mode": "postgresql_authority",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .bootstrap import bootstrap_session_from_compiled_genesis
 from .compiler import compile_campaign_genesis
@@ -14,6 +14,9 @@ from .legacy_adapter import (
 from .pipeline_adapter import create_new_game_session_from_compiled_genesis
 from .request_promoter import promote_new_game_request_to_genesis
 from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 _logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ def _record_trace_event(events: list[dict[str, Any]], stage: str, status: str, s
     _logger.info("[RPG][new-game] %s %s %sms", stage, status, event["elapsed_ms"])
 
 
-def create_promoted_new_game(payload: dict[str, Any]) -> dict[str, Any]:
+def create_promoted_new_game(payload: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
     trace_events: list[dict[str, Any]] = []
     overall_started_at = time.perf_counter()
 
@@ -61,6 +64,7 @@ def create_promoted_new_game(payload: dict[str, Any]) -> dict[str, Any]:
         compiled=compiled,
         contract=contract,
         legacy=legacy,
+        sessions=sessions,
     )
     _record_trace_event(trace_events, "create_and_save_session", "completed", stage_started_at)
 

@@ -11,8 +11,6 @@ from app.runtime.clock import utc_now
 
 from typing import Any, Literal
 
-from app.apps.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
-
 CreationJobStatus = Literal["queued", "running", "completed", "failed"]
 
 NEW_GAME_CREATION_JOB_CONTRACT = "rpg_new_game_creation_job_v1"
@@ -183,32 +181,3 @@ def attach_creation_metadata(session: dict[str, Any], job: dict[str, Any], progr
     """Attach creation job/progress metadata to an unsaved or returned session."""
 
     return _attach_creation_metadata(session, job, progress)
-
-
-def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[str, Any]:
-    """Create a new game and attach backend-authored progress/job status.
-
-    Session creation must remain a fast launch path.  The creation job/progress
-    envelope is returned to the browser and attached to the returned session
-    payload, but the already-saved campaign is not immediately reloaded and
-    saved a second time just to persist completed progress metadata.  The
-    persisted creation-job lookup can synthesize a completed job later.
-    """
-    timestamp = _utc_now()
-    result = _create_new_game_session_base(request)
-    session_id = str(result.get("session_id") or "")
-    if result.get("ok") is not True:
-        error = str(result.get("error") or "new_game_creation_failed")
-        job = build_creation_job(session_id=session_id, status="failed", error=error, timestamp=timestamp)
-        progress = build_creation_progress_snapshot(session_id=session_id, status="failed", error=error)
-        return {**result, "creation_job": job, "creation_progress": progress}
-
-    job = build_creation_job(session_id=session_id, status="completed", timestamp=timestamp)
-    progress = build_creation_progress_snapshot(session_id=session_id, status="completed")
-    session = result.get("session")
-    if isinstance(session, dict):
-        session = _attach_creation_metadata(session, job, progress)
-        result = {**result, "session": session, "game": session.get("state", result.get("game", {}))}
-    return {**result, "creation_job": job, "creation_progress": progress}
-
-

@@ -35,6 +35,7 @@ from app.apps.rpg.session.world_ability_integration import ensure_world_scale_ab
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -106,7 +107,7 @@ def _create_new_game_from_payload(
 ) -> dict[str, Any]:
     try:
         if _has_genesis_contract(payload):
-            return create_new_game_from_genesis_payload(payload)
+            return create_new_game_from_genesis_payload(payload, sessions=SESSION_CAMPAIGN_SESSIONS)
         request = legacy_request or RpgNewGameRequest.model_validate(payload)
         return create_new_game_session(_preserve_seed_zero(request))
     except ValidationError as exc:

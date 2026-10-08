@@ -1,7 +1,7 @@
 """Phase 15.3 — Canonical session service."""
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id
 from app.apps.rpg.world.map_persistence import ensure_session_map_state
@@ -28,6 +28,9 @@ from app.apps.rpg.rules.validation.integrity import (
 )
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -225,3 +228,39 @@ def archive_session(session_id: str) -> dict[str, Any]:
     return archive_session_on_disk(session_id)
 
 
+# The campaign session store the World Forge uses (genesis.contracts.CampaignSessions,
+# R-3): genesis does not import the session pipeline, so the edge and the
+# session pass this to the forge functions that load, save, archive or
+# create campaign sessions. New-game helpers load lazily, as before.
+class SessionCampaignSessions:
+    def load(self, session_id: str) -> dict[str, Any] | None:
+        return load_session(session_id)
+
+    def save(self, session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
+        return save_session(session, compact=compact)
+
+    def archive(self, session_id: str) -> dict[str, Any]:
+        return archive_session(session_id)
+
+    def new_game_request(self, payload: dict[str, Any]) -> Any:
+        from app.apps.rpg.session.new_game import RpgNewGameRequest
+
+        return RpgNewGameRequest.model_validate(payload)
+
+    def create_new_game(self, request: Any) -> dict[str, Any]:
+        from app.apps.rpg.session.new_game import create_new_game_session
+
+        return create_new_game_session(request)
+
+    def build_new_game(self, request: Any) -> dict[str, Any]:
+        from app.apps.rpg.session.new_game import _build_new_game_session
+
+        return _build_new_game_session(request)
+
+    def save_created(self, session: dict[str, Any]) -> dict[str, Any]:
+        from app.apps.rpg.session.new_game import _save_created_session
+
+        return _save_created_session(session)
+
+
+SESSION_CAMPAIGN_SESSIONS: CampaignSessions = SessionCampaignSessions()

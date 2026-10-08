@@ -9,6 +9,7 @@ from app.apps.rpg.genesis.forge.runtime_lore_materialization import (
     scene_lore_entity_is_rich,
 )
 from app.apps.rpg.genesis.forge.runtime_lore_store import ensure_turn_scene_lore
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def _new_town_session() -> dict:
@@ -239,6 +240,7 @@ def test_runtime_only_dialogue_still_includes_the_speakers_dossier(monkeypatch) 
             "session": session,
             "resolved_result": {"response_mode": "dialogue"},
         },
+        sessions=SESSION_CAMPAIGN_SESSIONS,
         campaign_id="campaign:new-town",
         player_input="What are you doing here?",
         speaker_id="npc:helix",
@@ -262,7 +264,7 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
     )
     monkeypatch.setattr(
         "app.apps.rpg.genesis.forge.runtime_lore_store._save_portable_projection",
-        lambda value: value,
+        lambda value, **_kwargs: value,
     )
 
     hydrated, report = ensure_turn_scene_lore(
@@ -270,6 +272,7 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
         session,
         result,
         llm_gateway=False,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert report["mode"] == "portable_projection_authority"
@@ -332,6 +335,7 @@ def test_turn_grounding_fails_closed_when_materialized_canon_cannot_be_loaded(mo
                 "session": {"state": {}},
                 "resolved_result": {"response_mode": "observation"},
             },
+            sessions=SESSION_CAMPAIGN_SESSIONS,
             campaign_id="campaign:lost-town",
             player_input="What is this place?",
         )
@@ -393,7 +397,7 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
             return "{}"
 
     monkeypatch.setattr(runtime_lore_store, "unit_of_work", counted_unit_of_work)
-    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value: value)
+    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value, **_kwargs: value)
     import uuid
 
     campaign_id = f"campaign:lock-{uuid.uuid4().hex[:12]}"
@@ -402,6 +406,7 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
     gateway = Gateway()
     _, report = ensure_turn_scene_lore(
         campaign_id, session, {"scene": {"location_id": "location:grayhaven"}}, llm_gateway=gateway,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert report["mode"] == "postgresql_authority"

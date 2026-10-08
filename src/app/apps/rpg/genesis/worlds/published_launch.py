@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
-from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
-from app.apps.rpg.session.service import archive_session, save_session
 
 from .lifecycle_service import require_scenario_writable
 from .postgres_service import load_published_resources, load_release_definitions
@@ -21,6 +19,9 @@ from .semantic_validation import (
     validate_scenario_against_release,
 )
 from .service import resolve_campaign_binding
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -226,6 +227,7 @@ def _apply_published_opening_state(
 
 def launch_published_scenario(
     *,
+    sessions: CampaignSessions,
     world_id: str,
     world_revision: int,
     world_release: int,
@@ -276,7 +278,7 @@ def launch_published_scenario(
     player_payload.setdefault("pronouns", "they/them")
     player_payload.setdefault("background", "World Traveler")
     player_payload.setdefault("build", "balanced_adventurer")
-    request = RpgNewGameRequest.model_validate(
+    request = sessions.new_game_request(
         {
             "campaign_template": str(
                 canon.get("campaign_template") or "classic_fantasy"
@@ -304,7 +306,7 @@ def launch_published_scenario(
             "features": dict(features or {}),
         }
     )
-    created = create_new_game_session(request)
+    created = sessions.create_new_game(request)
     session_id = str(created.get("session_id") or "")
     session = raw_session if isinstance(raw_session := created.get("session"), dict) else None
     if not session_id or session is None:
@@ -378,7 +380,7 @@ def launch_published_scenario(
     )
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
-    saved = save_session(session, compact=True)
+    saved = sessions.save(session, compact=True)
 
     try:
         with unit_of_work(database) as work:
@@ -451,7 +453,7 @@ def launch_published_scenario(
             )
             work.commit()
     except Exception:
-        archive_session(session_id)
+        sessions.archive(session_id)
         raise
 
     try:

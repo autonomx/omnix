@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
@@ -20,11 +20,15 @@ from .campaign_lore_store import (
 )
 from .npc_lore_projection import encountered_npc_ids, ensure_encountered_npc_lore
 
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
+
 
 def sync_encountered_npc_lore(
     session_id: str,
     session: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     explicit_npc_ids: Sequence[str] = (),
     database: Any | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -122,7 +126,7 @@ def sync_encountered_npc_lore(
             content_hash=str(stored["content_hash"]),
         )
         if changed:
-            hydrated = _save_portable_projection(hydrated)
+            hydrated = _save_portable_projection(hydrated, sessions=sessions)
         return hydrated, {
             "mode": "postgresql_authority",
             "persisted": True,
@@ -147,7 +151,7 @@ def sync_encountered_npc_lore(
             content_hash=digest,
         )
         if changed:
-            fallback = _save_portable_projection(fallback)
+            fallback = _save_portable_projection(fallback, sessions=sessions)
         return fallback, {
             "mode": "portable_projection_fallback",
             "persisted": False,

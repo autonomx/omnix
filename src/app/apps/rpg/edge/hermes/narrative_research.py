@@ -9,6 +9,7 @@ from app.apps.rpg.narration.narrative_engine import (
     normalize_hermes_research,
     run_bounded_hermes_research,
 )
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 ResearchCallable = Callable[
@@ -96,6 +97,7 @@ def _campaign_bible_result(
         entity_ids=request.entity_ids,
         research_id=request.research_id,
         max_topics=min(5, policy.max_sources),
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
     if packet is None:
         return None

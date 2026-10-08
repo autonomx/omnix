@@ -16,6 +16,7 @@ from app.apps.rpg.genesis.worlds.service import (
     compile_world_release,
     compile_world_revision,
 )
+from app.apps.rpg.session.service import SessionCampaignSessions
 
 
 def _published_resources() -> tuple[Any, Any, Any, Any]:
@@ -183,28 +184,28 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         "app.apps.rpg.genesis.worlds.published_launch.require_scenario_writable",
         lambda *_args, **_kwargs: {"status": "published"},
     )
-    monkeypatch.setattr(
-        "app.apps.rpg.genesis.worlds.published_launch.create_new_game_session",
-        lambda _request: {
-            "ok": True,
-            "session_id": "campaign:published",
-            "session": {
-                "manifest": {
-                    "id": "campaign:published",
-                    "session_id": "campaign:published",
-                    "schema_version": "rpg-session-v1",
-                },
-                "state": {"title": "Published Campaign"},
-                "runtime_state": {},
-                "setup_payload": {},
-            },
-        },
-    )
-    monkeypatch.setattr(
-        "app.apps.rpg.genesis.worlds.published_launch.save_session",
-        lambda session, **_kwargs: session,
-    )
 
+    class _Sessions(SessionCampaignSessions):
+        """The real request validation; creation and saves stay in memory."""
+
+        def create_new_game(self, request):
+            return {
+                "ok": True,
+                "session_id": "campaign:published",
+                "session": {
+                    "manifest": {
+                        "id": "campaign:published",
+                        "session_id": "campaign:published",
+                        "schema_version": "rpg-session-v1",
+                    },
+                    "state": {"title": "Published Campaign"},
+                    "runtime_state": {},
+                    "setup_payload": {},
+                },
+            }
+
+        def save(self, session, *, compact=False):
+            return session
 
     def fake_schedule(campaign_id: str, **kwargs):
         captured["materialization_signal"] = {
@@ -234,6 +235,7 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         scenario_id="scenario:opening",
         scenario_revision=1,
         player={"name": "Alyndra"},
+        sessions=_Sessions(),
     )
 
     assert result["ok"] is True

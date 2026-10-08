@@ -10,6 +10,7 @@ from app.apps.rpg.genesis.forge.campaign_lore_store import (
 )
 from app.apps.rpg.genesis.forge.campaign_lore_api import campaign_lore_payload
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 class _Gateway:
@@ -322,7 +323,7 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
     )
     monkeypatch.setattr(
         "app.apps.rpg.genesis.forge.campaign_lore_store._save_portable_projection",
-        lambda value: value,
+        lambda value, **_kwargs: value,
     )
 
     updated, storage = regenerate_campaign_lore_document(
@@ -331,6 +332,7 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
         document_id="lore:cosmology",
         direction="Focus on everyday rituals under both moons.",
         llm_gateway=gateway,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     regenerated = updated["campaign_bible_projection"]["documents"][0]

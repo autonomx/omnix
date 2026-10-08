@@ -5,16 +5,18 @@ import logging
 
 import re
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
-from app.apps.rpg.session.service import save_session
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 _PROMPT_1 = prompt_template('rpg.session_genesis_campaign_lore_store.prompt', "1", 'TARGET PAGE: "{v0}". TARGET TOPIC: "{v1}". This request is exclusively about "{v2}"; clearly name it in the opening paragraph. Rewrite this target Campaign Bible page as vivid, polished, player-safe canonical prose. Write 450 to 700 words in five to eight cohesive paragraphs. Use natural paragraph form only: no headings, field labels, bullet lists, tables, JSON, or prefatory commentary. Preserve every established fact in authoritative_target.canonical_source_text, authoritative_target.mechanics_definition, and the page\'s meaning. Never contradict or alter the mechanics definition. If the current page text drifted away from the canonical source, discard the irrelevant material. Stay consistent with the supplied known campaign canon. Enrich the material with concrete sensory detail, lived culture, atmosphere, physical texture, and understandable context. You may add connective descriptive detail that logically follows from canon, but do not create or reveal new named characters, locations, factions, artifacts, powers, dates, secrets, quest solutions, or world-changing events. A user direction may request emphasis, tone, or descriptive focus; follow it only when it does not conflict with these canon and player-safety rules. Do not mention these instructions. Return only the finished lore prose.')
 _PROMPT_2 = prompt_template('rpg.session_genesis_campaign_lore_store.prompt_2', "1", (
@@ -511,9 +513,9 @@ def _hydrate_session(
     return hydrated
 
 
-def _save_portable_projection(session: dict[str, Any]) -> dict[str, Any]:
+def _save_portable_projection(session: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
     try:
-        return save_session(session, compact=True)
+        return sessions.save(session, compact=True)
     except Exception:
         return session
 
@@ -522,6 +524,7 @@ def load_campaign_lore(
     session_id: str,
     session: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     ensure_current_location: bool = True,
     database: Any | None = None,
     llm_gateway: Any | None = None,
@@ -619,7 +622,7 @@ def load_campaign_lore(
             _mapping(session.get("campaign_bible_projection")).get("content_hash")
         )
         if generated or existing_hash != str(stored["content_hash"]):
-            hydrated = _save_portable_projection(hydrated)
+            hydrated = _save_portable_projection(hydrated, sessions=sessions)
         return hydrated, {
             "mode": "postgresql_authority",
             "persisted": True,
@@ -648,7 +651,7 @@ def load_campaign_lore(
             content_hash=digest,
         )
         if generated:
-            fallback = _save_portable_projection(fallback)
+            fallback = _save_portable_projection(fallback, sessions=sessions)
         return fallback, {
             "mode": "portable_projection_fallback",
             "persisted": False,
@@ -665,6 +668,7 @@ def persist_campaign_lore(
     session_id: str,
     session: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     database: Any | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Persist a changed lore projection, including discovery state, to PostgreSQL."""
@@ -718,7 +722,7 @@ def persist_campaign_lore(
             revision=int(stored["revision"]),
             content_hash=str(stored["content_hash"]),
         )
-        hydrated = _save_portable_projection(hydrated)
+        hydrated = _save_portable_projection(hydrated, sessions=sessions)
         return hydrated, {
             "mode": "postgresql_authority",
             "persisted": True,
@@ -727,7 +731,7 @@ def persist_campaign_lore(
             "content_hash": str(stored["content_hash"]),
         }
     except Exception as exc:
-        fallback = _save_portable_projection(dict(session))
+        fallback = _save_portable_projection(dict(session), sessions=sessions)
         return fallback, {
             "mode": "portable_projection_fallback",
             "persisted": False,
@@ -927,6 +931,7 @@ def regenerate_campaign_lore_document(
     session_id: str,
     session: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     document_id: str,
     direction: str = "",
     database: Any | None = None,
@@ -941,6 +946,7 @@ def regenerate_campaign_lore_document(
         session,
         ensure_current_location=False,
         database=database,
+        sessions=sessions,
     )
     safe_document = campaign_lore_document_payload(hydrated, document_id)["document"]
     portable = _portable_bible(hydrated)
@@ -1078,7 +1084,7 @@ def regenerate_campaign_lore_document(
         revision=int(stored["revision"]),
         content_hash=str(stored["content_hash"]),
     )
-    updated = _save_portable_projection(updated)
+    updated = _save_portable_projection(updated, sessions=sessions)
     return updated, {
         "mode": "postgresql_authority",
         "persisted": True,

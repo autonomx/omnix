@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .contract import (
     CAMPAIGN_GENESIS_CONTRACT_VERSION,
@@ -12,6 +12,9 @@ from .contract import (
 )
 from .source_info import wizard_source_payload
 from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 _ARCHETYPE_TO_BUILD = {
     "balanced_adventurer": "balanced_adventurer",
@@ -252,6 +255,7 @@ def attach_genesis_to_created_session(
     result: dict[str, Any],
     contract: CampaignGenesisContract,
     *,
+    sessions: CampaignSessions,
     persist: bool = True,
     compact_save: bool = False,
 ) -> dict[str, Any]:
@@ -260,11 +264,9 @@ def attach_genesis_to_created_session(
     session_id = str(result.get("session_id") or "")
     if not session_id:
         return result
-    from app.apps.rpg.session.service import load_session, save_session
-
     session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
     if session is None:
-        session = load_session(session_id)
+        session = sessions.load(session_id)
     if not session:
         return result
     genesis = canonical_genesis_payload(contract)
@@ -321,7 +323,7 @@ def attach_genesis_to_created_session(
             "manifest": manifest,
         }
     )
-    saved = save_session(session, compact=compact_save) if persist else session
+    saved = sessions.save(session, compact=compact_save) if persist else session
     return {
         **result,
         "session": saved,
@@ -329,13 +331,11 @@ def attach_genesis_to_created_session(
     }
 
 
-def create_new_game_from_genesis_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: CampaignSessions) -> dict[str, Any]:
     raw = _safe_dict(payload.get("request") or payload)
     contract = CampaignGenesisContract.model_validate(raw.get("genesis") or raw)
     legacy = adapt_genesis_payload_to_new_game_payload(
         {"request": {"genesis": contract.model_dump(mode="json")}}
     )
-    from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
-
-    result = create_new_game_session(RpgNewGameRequest.model_validate(legacy))
-    return attach_genesis_to_created_session(result, contract)
+    result = sessions.create_new_game(sessions.new_game_request(legacy))
+    return attach_genesis_to_created_session(result, contract, sessions=sessions)

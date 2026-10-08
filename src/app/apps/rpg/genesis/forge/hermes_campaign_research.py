@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from app.apps.rpg.narration.narrative_engine import (
     AuthorityClass,
@@ -18,6 +18,9 @@ from app.apps.rpg.narration.narrative_engine import (
 )
 
 from .campaign_bible_runtime import load_campaign_bible_snapshot
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 @dataclass(frozen=True)
@@ -172,6 +175,7 @@ class CampaignBibleHermesResearcher:
 
 def research_campaign_turn(
     *,
+    sessions: CampaignSessions,
     campaign_id: str,
     query: str,
     session: Mapping[str, Any] | None = None,
@@ -188,6 +192,7 @@ def research_campaign_turn(
     resolved_snapshot = snapshot or load_campaign_bible_snapshot(
         campaign_id,
         session=session,
+        sessions=sessions,
     )
     if resolved_snapshot is None:
         return None

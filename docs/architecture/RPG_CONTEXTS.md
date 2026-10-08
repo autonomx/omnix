@@ -1,8 +1,8 @@
 # RPG bounded contexts (Track R)
 
-Status: **R-1 and R-2 done (lint rule AL017 with a recorded baseline). R-3 moves
-done (2026-10-08): each context is a package under `app/apps/rpg`; the upward
-imports are not yet inverted (AL017 baseline still 60).** Date: 2026-10-08.
+Status: **R-1, R-2 and R-3 done (2026-10-08). Each context is a package under
+`app/apps/rpg` and no context imports a context above it: the AL017 baseline is
+0.** See "R-3: inverting the upward imports" below. Date: 2026-10-08.
 
 RPG is about 285,000 lines in 1,208 files under `src/app/apps/rpg`, with 129
 top-level entries. Measured at any import scope, 32 of those entries form a
@@ -46,11 +46,9 @@ those imports are within one context.
   (`rpg_entry_without_context:<entry>`), so a new top-level entry must be
   placed on the map.
 
-Imports within a context are not checked. Contract-only imports between
-contexts arrive in R-3, when each context becomes a package with a `contracts`
-module.
+Imports within a context are not checked.
 
-## Baseline: 60 upward imports
+## The original baseline: 60 upward imports (now 0)
 
 | From → to | Imports |
 |---|---:|
@@ -65,8 +63,8 @@ module.
 | world → session | 2 |
 | rules → session, rules → genesis, rules → narration, world → narration, world → genesis | 1 each |
 
-Most of them come from two foundation modules, `core` and `persistence`, that
-still reach up into the contexts they serve. The baseline only shrinks: a new
+Most of them came from two foundation modules, `core` and `persistence`, that
+reached up into the contexts they serve. The baseline only shrinks: a new
 upward import fails the lint.
 
 ## R-3: moving RPG into its contexts
@@ -82,8 +80,43 @@ an old entry and a context root; every other entry moved inside its context
 first. Five top-level modules that were shadowed by same-named packages (never
 importable) were deleted. AL013 keeps its scope through `[rpg_core].exclude`.
 
-**Still to do:** invert the 60 upward imports (the baseline below, now under the
-new paths) and add each context's `contracts` module.
+**Done: inverting the upward imports (2026-10-08, AL017 60 -> 0).** Three kinds
+of change, each checked against a simulation of AL017 before it was made:
+
+- **Moves to the owning context** (pure `git mv` plus the rewrite). Repositories
+  live with the types they store: `narration/persistence`, `world/persistence`,
+  `genesis/persistence` and `session/persistence` (which also composes every
+  context's repositories). Modules that served a higher context moved up (the
+  foreground turn record, the narrative provider, the action intelligence
+  prompts); dependency-light modules that lower contexts needed moved down (the
+  location registry, ambient intent and pending interactions to `rules`; the
+  LLM gateway adapter, the semantic packet contract, dynamic NPC profiles and
+  `NarrativeEvent` to `foundation`; the memory prompt chain, the dialogue
+  runtime and the LLM orchestration state to `narration`).
+- **Ports**, in a context's `contracts` module, where a lower context has to
+  call a higher one. `world.contracts.ConversationHooks`: the world
+  conversation tick asks for model-written lines and ambient narration, and
+  the session supplies them (`session/conversation_hooks.py`).
+  `genesis.contracts.CampaignSessions`: the World Forge loads, saves, archives
+  and creates campaign sessions through the store its callers pass
+  (`SessionCampaignSessions` in `session/service.py`), as it already received its database and
+  LLM gateway. Ports are passed explicitly, never registered in module state.
+- **Small extractions**: the narrator's scene grounding
+  (`narration.scene_grounding`), the traced JSON response (edge), the party
+  view (narration presentation), the creation progress builders
+  (`genesis.creation_progress`), and a frozen copy of the v6 companion
+  normalization inside the v5 -> v6 save migration.
+
+Moving the legacy game loop out of `foundation.core` showed that it and 116
+modules reachable only through it (19,700 lines), and later the simulation
+sandbox (`world.simulation`), were never reached by a production entry point;
+they were deleted with the tests that only exercised them (owner decision).
+Production boot imports fell from 2,073 to 1,965 modules.
+
+**Not done:** contract-only imports. Only `world` and `genesis` have a
+`contracts` module, holding the ports above; other cross-context imports still
+name the module they need. Routing every cross-context import through a
+contracts module is a separate, much larger change and is not enforced.
 
 The original plan:
 

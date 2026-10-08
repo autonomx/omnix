@@ -16,6 +16,7 @@ from app.composition.gateway.feature_registry import FeatureLifecycle, register_
 from app.composition.gateway.lifecycle import gateway_lifespan
 from app.runtime.config import RuntimeConfig, GatewayRole
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def application(config):
@@ -196,7 +197,7 @@ def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
     monkeypatch.setattr(genesis.threading, 'Thread', lambda *args, **kwargs: pytest.fail('API started genesis thread'))
-    assert genesis.kick_campaign_genesis_worker() is False
+    assert genesis.kick_campaign_genesis_worker(sessions=SESSION_CAMPAIGN_SESSIONS) is False
 
 
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
@@ -223,7 +224,7 @@ def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monk
         return {'status': 'completed'}
     monkeypatch.setattr(genesis, 'run_campaign_genesis_worker_once', once)
     try:
-        assert genesis.kick_campaign_genesis_worker()
+        assert genesis.kick_campaign_genesis_worker(sessions=SESSION_CAMPAIGN_SESSIONS)
         genesis._worker_thread.join(5)
         assert not genesis._worker_thread.is_alive()
         assert work and not genesis._worker_active

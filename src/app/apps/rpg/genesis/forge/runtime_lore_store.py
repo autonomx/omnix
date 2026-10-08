@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
@@ -25,6 +25,9 @@ from .runtime_lore_materialization import (
     scene_lore_entity_is_rich,
     scene_lore_targets,
 )
+
+if TYPE_CHECKING:
+    from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
 def _campaign_exists(
@@ -121,6 +124,8 @@ def _assert_materialized(
 
 def _persist_portable_without_replacing(
     hydrated: dict[str, Any],
+    *,
+    sessions: CampaignSessions,
 ) -> dict[str, Any]:
     """Save as a side effect while preserving the exact current-turn projection.
 
@@ -129,7 +134,7 @@ def _persist_portable_without_replacing(
     hydrated Campaign Bible that was just validated, not that lossy return value.
     """
 
-    _save_portable_projection(hydrated)
+    _save_portable_projection(hydrated, sessions=sessions)
     return hydrated
 
 
@@ -171,6 +176,7 @@ def ensure_turn_scene_lore(
     session: Mapping[str, Any],
     result: Mapping[str, Any],
     *,
+    sessions: CampaignSessions,
     explicit_entity_ids: Sequence[str] = (),
     database: Any | None = None,
     llm_gateway: Any | None = None,
@@ -298,7 +304,7 @@ def ensure_turn_scene_lore(
             report.get("changed") is True
             or previous_hash != str(stored["content_hash"])
         ):
-            hydrated = _persist_portable_without_replacing(hydrated)
+            hydrated = _persist_portable_without_replacing(hydrated, sessions=sessions)
         return hydrated, {
             **report,
             "mode": "postgresql_authority",
@@ -331,7 +337,7 @@ def ensure_turn_scene_lore(
             revision=int(bible.get("canon_revision") or 0),
             content_hash=digest,
         )
-        fallback = _persist_portable_without_replacing(fallback)
+        fallback = _persist_portable_without_replacing(fallback, sessions=sessions)
         return fallback, {
             **report,
             "mode": "portable_projection_authority",
