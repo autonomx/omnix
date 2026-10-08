@@ -28254,6 +28254,18 @@
             ],
             "title": "Trail Amount"
           },
+          "trail_moved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Moved At"
+          },
           "trail_percent": {
             "anyOf": [
               {
@@ -28504,6 +28516,18 @@
             ],
             "title": "Trail Amount"
           },
+          "trail_moved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Moved At"
+          },
           "trail_percent": {
             "anyOf": [
               {
@@ -28565,7 +28589,8 @@
           "trail_amount",
           "trail_percent",
           "trail_water_mark",
-          "stop_triggered_at"
+          "stop_triggered_at",
+          "trail_moved_at"
         ],
         "title": "PaperOrder",
         "type": "object"
@@ -29165,6 +29190,18 @@
             ],
             "title": "Trail Amount"
           },
+          "trail_moved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Moved At"
+          },
           "trail_percent": {
             "anyOf": [
               {
@@ -29229,7 +29266,8 @@
           "updated_at",
           "trail_amount",
           "trail_percent",
-          "trail_water_mark"
+          "trail_water_mark",
+          "trail_moved_at"
         ],
         "title": "PaperPositionProtection",
         "type": "object"

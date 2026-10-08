@@ -20,6 +20,7 @@ from .paper import (
     PaperMarketObservation,
     PaperOrderRequest,
     paper_order_is_expired,
+    paper_price_tick,
     paper_protection_trigger,
     paper_trailing_protection_update,
 )
@@ -158,6 +159,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             water_mark=protection.trail_water_mark,
             observation=observation,
             activated_at=activated_at,
+            tick_size=paper_price_tick(protection.instrument_id),
         )
         if update is None:
             return
@@ -169,6 +171,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             water_mark=water_mark,
             stop_loss=stop_loss,
             expected_revision=protection.revision,
+            moved_at=observation.source_time if stop_loss != protection.stop_loss else None,
         )
 
     @in_provider_lane("protective")
@@ -289,6 +292,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             target_price=protection.take_profit,
             observation=observation,
             activated_at=activated_at,
+            stop_moved_at=protection.trail_moved_at if protection.trailing else None,
         )
         if conflicting or trigger_kind is None:
             await self._trail_protection(

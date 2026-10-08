@@ -28,6 +28,7 @@ from app.apps.trading.paper import (
     paper_order_expiry,
     paper_order_request_matches,
     paper_order_state_update,
+    paper_protection_trigger,
     paper_trailing_protection_update,
 )
 from app.apps.trading.paper_monitor import TradingPaperMonitor
@@ -462,14 +463,18 @@ class _Protections:
 
 
 class _Market:
-    def __init__(self, last: str) -> None:
+    def __init__(self, last: str, *, high: str | None = None, low: str | None = None, bar_start: datetime | None = None) -> None:
         self.last = Decimal(last)
+        self.high = Decimal(high) if high else None
+        self.low = Decimal(low) if low else None
+        self.bar_start = bar_start
 
     def execution_observation(self, instrument_id, binding_id=None):
         now = datetime.now(timezone.utc)
         return ExecutionObservation(
             instrument_id=instrument_id, binding_id=binding_id or BINDING, provider="fixture",
-            bid=self.last, ask=self.last, last=self.last, source_time=now, received_at=now,
+            bid=self.last, ask=self.last, last=self.last, high=self.high, low=self.low,
+            bar_start_time=self.bar_start, source_time=now, received_at=now,
             session="regular", freshness_mode="polled", execution_eligible=True,
         )
 
@@ -521,7 +526,10 @@ def test_monitor_trails_a_stop_loss_leg_then_exits_at_the_trailed_stop() -> None
     protections = _Protections(trailing)
     repository = _MonitorRepository([], [position])
     asyncio.run(_monitor(repository, protections, _Market("108")).run_once())
-    assert protections.trails == [{"water_mark": Decimal("108"), "stop_loss": Decimal("103"), "expected_revision": 3}]
+    assert len(protections.trails) == 1
+    moved = protections.trails[0]
+    assert (moved["water_mark"], moved["stop_loss"], moved["expected_revision"]) == (Decimal("108"), Decimal("103"), 3)
+    assert moved["moved_at"] is not None
     assert repository.placed == []
 
     protections.protection = trailing.model_copy(update={"stop_loss": Decimal("103"), "trail_water_mark": Decimal("108")})
@@ -559,3 +567,106 @@ def test_the_order_gateway_and_execution_modules_do_not_branch_on_paper_order_ty
         } | {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
         for term in ("stop_limit", "trailing_stop", "time_in_force", "expires_at", "trail_amount", "trail_percent"):
             assert term not in names, f"{path.name} mentions {term}"
+
+
+# The trail moves only forward in time ------------------------------------------
+
+
+def test_a_forming_bar_delivered_again_cannot_fill_below_the_ratcheted_stop() -> None:
+    """The reviewer's case: a bar's low from before its high must not hit the stop the high moved."""
+    created = NOW - timedelta(minutes=5)
+    trailing = order("trailing_stop", "sell", trail_amount=Decimal("2"), created_at=created)
+    armed_at = created + timedelta(seconds=5)
+    arm = observation("100", source_time=armed_at, evaluated_at=armed_at)
+    state = paper_order_state_update(trailing, arm, POLICY)
+    assert state is not None and state.trail_moved_at == armed_at
+    armed = trailing.model_copy(update=state.model_dump())
+
+    bar = created + timedelta(minutes=1)
+    tick1 = observation("104", high="105", low="99", bar_start_time=bar,
+                        source_time=bar + timedelta(seconds=20), evaluated_at=bar + timedelta(seconds=20))
+    assert not paper_fill_decision(armed, tick1, POLICY).should_fill
+    state = paper_order_state_update(armed, tick1, POLICY)
+    assert state is not None and (state.stop_price, state.trail_moved_at) == (Decimal("103"), tick1.source_time)
+    raised = armed.model_copy(update=state.model_dump())
+
+    tick2 = tick1.model_copy(update={"source_time": bar + timedelta(seconds=22), "evaluated_at": bar + timedelta(seconds=22)})
+    again = paper_fill_decision(raised, tick2, POLICY)
+    assert not again.should_fill and again.reason == "trailing_stop_range_not_triggered"
+    assert paper_order_state_update(raised, tick2, POLICY) is None
+
+    # A bar that starts after the move and trades through the stop does fill.
+    later_bar = bar + timedelta(minutes=1)
+    later = observation("104", high="104.5", low="102.5", bar_start_time=later_bar,
+                        source_time=later_bar + timedelta(seconds=30), evaluated_at=later_bar + timedelta(seconds=30))
+    filled = paper_fill_decision(raised, later, POLICY)
+    assert filled.should_fill and filled.reason == "trailing_stop_range_triggered_gap_aware"
+    # The current price within the old bar still counts.
+    drop = tick2.model_copy(update={"price": Decimal("102.9")})
+    assert paper_fill_decision(raised, drop, POLICY).should_fill
+
+
+def test_a_bracket_leg_ignores_a_bar_that_began_before_its_stop_moved() -> None:
+    bar = NOW
+    tick = observation("104", high="105", low="99", bar_start_time=bar,
+                       source_time=bar + timedelta(seconds=22), evaluated_at=bar + timedelta(seconds=22))
+    moved_at = bar + timedelta(seconds=20)
+    activated = bar - timedelta(minutes=5)
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=None, observation=tick, activated_at=activated,
+    ) == "stop"
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=None, observation=tick,
+        activated_at=activated, stop_moved_at=moved_at,
+    ) is None
+    # The take-profit still reads the bar from activation.
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=Decimal("104.5"), observation=tick,
+        activated_at=activated, stop_moved_at=moved_at,
+    ) == "target"
+    later = tick.model_copy(update={"bar_start_time": moved_at + timedelta(seconds=40)})
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=None, observation=later,
+        activated_at=activated, stop_moved_at=moved_at,
+    ) == "stop"
+
+
+def test_monitor_checks_a_moved_trailing_leg_against_bars_after_the_move() -> None:
+    position = PaperPosition(instrument_id=CRYPTO, quantity=Decimal("2"), average_cost=Decimal("100"), realized_pnl=Decimal("0"))
+    bar = datetime.now(timezone.utc) - timedelta(seconds=30)
+    leg = PaperPositionProtection(
+        account_id="paper-1", instrument_id=CRYPTO, stop_loss=Decimal("103"), trail_amount=Decimal("2"),
+        trail_water_mark=Decimal("105"), trail_moved_at=bar + timedelta(seconds=20), status="active", revision=4,
+        created_at=bar - timedelta(minutes=10), updated_at=bar - timedelta(minutes=10),
+    )
+    protections = _Protections(leg)
+    repository = _MonitorRepository([], [position])
+    asyncio.run(_monitor(repository, protections, _Market("104", high="105", low="99", bar_start=bar)).run_once())
+    assert repository.placed == [] and protections.transitions == []
+
+
+# Tick size ----------------------------------------------------------------------
+
+
+def test_trailing_stops_and_fills_round_to_the_tick_against_the_trader() -> None:
+    tick = Decimal("0.01")
+    percent = order("trailing_stop", "sell", trail_percent=Decimal("2.5"))
+    state = paper_order_state_update(percent, observation("104.37", bid="104.37"), POLICY, tick_size=tick)
+    assert state is not None and state.stop_price == Decimal("101.76")  # 101.76075 rounded down
+    buy = order("trailing_stop", "buy", trail_percent=Decimal("2.5"), reference_price=Decimal("100"))
+    state = paper_order_state_update(buy, observation("100.37", ask="100.37"), POLICY, tick_size=tick)
+    assert state is not None and state.stop_price == Decimal("102.88")  # 102.87925 rounded up
+
+    armed = percent.model_copy(update={"trail_water_mark": Decimal("104.37"), "stop_price": Decimal("101.76")})
+    fill = paper_fill_decision(armed, observation("101.5", bid="101.5"), POLICY, tick_size=tick)
+    assert fill.should_fill and fill.fill_price == Decimal("101.24")  # 101.24625 rounded down
+    assert paper_fill_decision(armed, observation("101.5", bid="101.5"), POLICY).fill_price == Decimal("101.24625")
+    # Other order types are priced as before.
+    stop = order("stop", "sell", stop_price=Decimal("100"))
+    assert paper_fill_decision(stop, observation("90", bid="90"), POLICY, tick_size=tick).fill_price == Decimal("89.775")
+
+    leg = paper_trailing_protection_update(
+        is_long=True, stop_loss=Decimal("95"), trail_amount=None, trail_percent=Decimal("2.5"),
+        water_mark=None, observation=observation("104.37"), tick_size=tick,
+    )
+    assert leg == (Decimal("104.37"), Decimal("101.76"))

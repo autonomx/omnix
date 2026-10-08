@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -191,6 +191,10 @@ class PaperOrder(BaseModel):
     trail_water_mark: Decimal | None = None
     # When a stop-limit order's stop was reached; from then on it is a limit order.
     stop_triggered_at: datetime | None = None
+    # When the trailing stop last moved. A bar's range can trigger the stop
+    # only when the whole bar started at or after this moment: an earlier bar
+    # may hold a low from before the high that moved the stop.
+    trail_moved_at: datetime | None = None
 
 
 class PaperOrderStateUpdate(BaseModel):
@@ -201,6 +205,7 @@ class PaperOrderStateUpdate(BaseModel):
     stop_price: Decimal | None
     trail_water_mark: Decimal | None
     stop_triggered_at: datetime | None
+    trail_moved_at: datetime | None = None
 
 
 class PaperMarketObservation(BaseModel):
@@ -356,20 +361,43 @@ def paper_order_is_expired(order: PaperOrder, moment: datetime) -> bool:
     return order.expires_at is not None and moment >= order.expires_at
 
 
+def paper_price_tick(instrument_id: str) -> Decimal | None:
+    """The instrument's minimum price increment from the catalog, or None if unknown."""
+    from .catalog import instrument_by_id
+
+    instrument = instrument_by_id(instrument_id)
+    return instrument.minimum_tick if instrument is not None else None
+
+
+def paper_round_to_tick(price: Decimal, tick_size: Decimal | None, *, up: bool) -> Decimal:
+    """Round a price onto the tick grid, up or down; unchanged without a tick size."""
+    if tick_size is None or tick_size <= 0:
+        return price
+    steps = (price / tick_size).to_integral_value(rounding=ROUND_CEILING if up else ROUND_FLOOR)
+    return steps * tick_size
+
+
 def paper_trailing_stop_price(
     *,
     side: PaperSide,
     water_mark: Decimal,
     trail_amount: Decimal | None,
     trail_percent: Decimal | None,
+    tick_size: Decimal | None = None,
 ) -> Decimal:
-    """The stop a trail implies: below the high for a sell, above the low for a buy."""
+    """The stop a trail implies: below the high for a sell, above the low for a buy.
+
+    With a tick size the stop is rounded away from the market (down for a
+    sell, up for a buy), so the trail is never tighter than requested.
+    """
     distance = (
         trail_amount
         if trail_amount is not None
         else water_mark * (trail_percent or Decimal("0")) / Decimal("100")
     )
-    return water_mark - distance if side == "sell" else water_mark + distance
+    if side == "sell":
+        return paper_round_to_tick(water_mark - distance, tick_size, up=False)
+    return paper_round_to_tick(water_mark + distance, tick_size, up=True)
 
 
 def _worse_price(price: Decimal, side: PaperSide, bps: Decimal) -> Decimal:
@@ -468,31 +496,37 @@ def paper_protection_trigger(
     target_price: Decimal | None,
     observation: PaperMarketObservation,
     activated_at: datetime | None = None,
+    stop_moved_at: datetime | None = None,
 ) -> ProtectionTrigger | None:
     """Apply the same pessimistic stop-before-target trigger semantics everywhere.
 
     A live minute bar may contain trades that happened before an entry filled in
     that same minute. In that case only the current executable price is used; a
     whole-bar high/low is trusted only when the bar started at or after activation.
+    A trailing stop's range check also needs the bar to start at or after the
+    stop last moved (``stop_moved_at``): an earlier bar's low may predate the
+    high that moved it.
     """
-    use_range = observation.high is not None and observation.low is not None
-    if activated_at is not None:
-        if observation.bar_start_time is None:
-            use_range = False
-        else:
-            use_range = use_range and (
-                observation.bar_start_time.astimezone(timezone.utc)
-                >= activated_at.astimezone(timezone.utc)
-            )
-    high = observation.high if use_range and observation.high is not None else observation.price
-    low = observation.low if use_range and observation.low is not None else observation.price
+
+    def window(since: datetime | None) -> tuple[Decimal, Decimal]:
+        use_range = observation.high is not None and observation.low is not None
+        if since is not None:
+            use_range = use_range and _bar_evidence_is_after(observation, since)
+        high = observation.high if use_range and observation.high is not None else observation.price
+        low = observation.low if use_range and observation.low is not None else observation.price
+        return high, low
+
+    high, low = window(activated_at)
+    stop_high, stop_low = high, low
+    if stop_moved_at is not None and (activated_at is None or stop_moved_at > activated_at):
+        stop_high, stop_low = window(stop_moved_at)
     if is_long:
-        if stop_price is not None and low <= stop_price:
+        if stop_price is not None and stop_low <= stop_price:
             return "stop"
         if target_price is not None and high >= target_price:
             return "target"
     else:
-        if stop_price is not None and high >= stop_price:
+        if stop_price is not None and stop_high >= stop_price:
             return "stop"
         if target_price is not None and low <= target_price:
             return "target"
@@ -620,6 +654,8 @@ def paper_order_state_update(
     order: PaperOrder,
     observation: PaperMarketObservation,
     policy: PaperExecutionPolicy | None = None,
+    *,
+    tick_size: Decimal | None = None,
 ) -> PaperOrderStateUpdate | None:
     """The persisted trigger/trailing state after this observation, or None if unchanged.
 
@@ -632,7 +668,9 @@ def paper_order_state_update(
     - A trailing stop is armed by its first usable observation (water mark =
       current executable price), then follows the best price: a causal bar's
       high for a sell, its low for a buy, otherwise the current price. The stop
-      only ever moves toward the market.
+      only ever moves toward the market, rounded to ``tick_size`` when known,
+      and the moment it moves is kept (``trail_moved_at``) so a bar that began
+      before the move cannot trigger it by its range.
     """
     active = policy or PaperExecutionPolicy()
     if order.order_type not in {"stop_limit", "trailing_stop"}:
@@ -665,8 +703,14 @@ def paper_order_state_update(
         water_mark=water_mark,
         trail_amount=order.trail_amount,
         trail_percent=order.trail_percent,
+        tick_size=tick_size,
     )
-    return PaperOrderStateUpdate(stop_price=stop_price, trail_water_mark=water_mark, stop_triggered_at=None)
+    return PaperOrderStateUpdate(
+        stop_price=stop_price,
+        trail_water_mark=water_mark,
+        stop_triggered_at=None,
+        trail_moved_at=observation.source_time,
+    )
 
 
 def paper_trailing_protection_update(
@@ -678,6 +722,7 @@ def paper_trailing_protection_update(
     water_mark: Decimal | None,
     observation: PaperMarketObservation,
     activated_at: datetime | None = None,
+    tick_size: Decimal | None = None,
 ) -> tuple[Decimal, Decimal] | None:
     """Move a trailing stop-loss bracket leg; return (water mark, stop) or None if unchanged.
 
@@ -702,6 +747,7 @@ def paper_trailing_protection_update(
         water_mark=next_mark,
         trail_amount=trail_amount,
         trail_percent=trail_percent,
+        tick_size=tick_size,
     )
     next_stop = max(stop_loss, trailed) if is_long else min(stop_loss, trailed)
     if next_mark == water_mark and next_stop == stop_loss:
@@ -713,7 +759,14 @@ def paper_fill_decision(
     order: PaperOrder,
     observation: PaperMarketObservation,
     policy: PaperExecutionPolicy | None = None,
+    *,
+    tick_size: Decimal | None = None,
 ) -> PaperFillDecision:
+    """Whether and at what price the observation fills the order.
+
+    ``tick_size`` rounds trailing stop fills to the instrument's tick, against
+    the trader; other order types are priced as before.
+    """
     active = policy or PaperExecutionPolicy()
     gate = _observation_gate(order, observation, active)
     if gate is not None:
@@ -749,7 +802,9 @@ def paper_fill_decision(
     if order.order_type == "stop_limit":
         return _stop_limit_decision(order, observation, active, fill_quantity)
 
-    market_side, current_price, high, low, use_range = _price_window(order, observation, active)
+    # A trailing stop trusts a bar's range only from when its stop last moved.
+    since = order.trail_moved_at if order.order_type == "trailing_stop" else None
+    market_side, current_price, high, low, use_range = _price_window(order, observation, active, since=since)
     if order.order_type == "limit":
         assert order.limit_price is not None
         triggered = low <= order.limit_price if order.side == "buy" else high >= order.limit_price
@@ -770,9 +825,12 @@ def paper_fill_decision(
         return PaperFillDecision(should_fill=False, reason=f"{prefix}stop_range_not_triggered")
     observed = current_price
     gap_through = max(order.stop_price, observed) if order.side == "buy" else min(order.stop_price, observed)
+    fill_price = _worse_price(gap_through, order.side, active.stop_slippage_bps)
+    if order.order_type == "trailing_stop":
+        fill_price = paper_round_to_tick(fill_price, tick_size, up=order.side == "buy")
     return PaperFillDecision(
         should_fill=True,
-        fill_price=_worse_price(gap_through, order.side, active.stop_slippage_bps),
+        fill_price=fill_price,
         fill_quantity=fill_quantity,
         reason=(
             f"{prefix}stop_range_triggered_gap_aware"

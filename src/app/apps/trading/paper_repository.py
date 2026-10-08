@@ -35,6 +35,7 @@ from .paper import (
     paper_order_expiry,
     paper_order_request_matches,
     paper_order_state_update,
+    paper_price_tick,
     paper_realized_pnl,
     paper_unrealized_pnl,
 )
@@ -83,6 +84,7 @@ def _order(row) -> PaperOrder:
         trail_percent=Decimal(row[21]) if row[21] is not None else None,
         trail_water_mark=Decimal(row[22]) if row[22] is not None else None,
         stop_triggered_at=row[23],
+        trail_moved_at=row[24],
     )
 
 
@@ -91,7 +93,8 @@ _ORDER_COLUMNS = """
     quantity, limit_price, stop_price, reference_price, status,
     filled_quantity, average_fill_price, idempotency_key, rejection_reason,
     reserved_cash, created_at, updated_at, time_in_force, expires_at,
-    trail_amount, trail_percent, trail_water_mark, stop_triggered_at
+    trail_amount, trail_percent, trail_water_mark, stop_triggered_at,
+    trail_moved_at
 """
 
 
@@ -510,6 +513,19 @@ class TradingPaperRepository:
                 """,
                 (TIME_IN_FORCE_EXPIRED, self.context.workspace_id, account.account_id, order.order_id),
             ).fetchone()
+            if order.filled_quantity == 0:
+                # Nothing filled, so no position will ever activate the entry's
+                # bracket; cancel it here rather than waiting for market data.
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_protections
+                       SET status = 'cancelled', trigger_reason = 'entry_expired',
+                           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s
+                       AND entry_order_id = %s AND status = 'pending_entry'
+                    """,
+                    (self.context.workspace_id, account.account_id, order.order_id),
+                )
             expired.append(_order(updated))
         return expired
 
@@ -524,13 +540,14 @@ class TradingPaperRepository:
             """
             UPDATE omnix_trading_paper_orders
                SET stop_price = %s, trail_water_mark = %s, stop_triggered_at = %s,
-                   updated_at = CURRENT_TIMESTAMP
+                   trail_moved_at = %s, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND account_id = %s AND order_id = %s
             """,
             (
                 state.stop_price,
                 state.trail_water_mark,
                 state.stop_triggered_at,
+                state.trail_moved_at,
                 self.context.workspace_id,
                 account_id,
                 order_id,
@@ -638,6 +655,7 @@ class TradingPaperRepository:
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchall()
             observation_key = paper_observation_key(observation)
+            tick_size = paper_price_tick(observation.instrument_id)
             existing_liquidity_rows = uow.connection.execute(
                 """
                 SELECT side, COALESCE(SUM(quantity), 0)
@@ -666,8 +684,8 @@ class TradingPaperRepository:
                 order = _order(row)
                 # The decision uses the order's state from before this
                 # observation; the observation then moves that state.
-                decision = paper_fill_decision(order, observation)
-                state = paper_order_state_update(order, observation)
+                decision = paper_fill_decision(order, observation, tick_size=tick_size)
+                state = paper_order_state_update(order, observation, tick_size=tick_size)
                 if state is not None:
                     self._save_order_state(uow, account_id, order.order_id, state)
                 if (

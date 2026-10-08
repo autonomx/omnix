@@ -78,6 +78,8 @@ class PaperPositionProtection(BaseModel):
     # The best price since the leg became active; the monitor keeps stop_loss
     # trailing behind it. Persisted, so a restart resumes the same trail.
     trail_water_mark: Decimal | None = None
+    # When the trailed stop last moved; see ``paper_protection_trigger``.
+    trail_moved_at: datetime | None = None
 
     @property
     def trailing(self) -> bool:

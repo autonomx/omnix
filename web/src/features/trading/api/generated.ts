@@ -6514,6 +6514,8 @@ export interface components {
             time_in_force?: "gtc" | "day" | "gtd";
             /** Trail Amount */
             trail_amount?: number | string | null;
+            /** Trail Moved At */
+            trail_moved_at?: string | null;
             /** Trail Percent */
             trail_percent?: number | string | null;
             /** Trail Water Mark */
@@ -6585,6 +6587,8 @@ export interface components {
             time_in_force: "gtc" | "day" | "gtd";
             /** Trail Amount */
             trail_amount: string | null;
+            /** Trail Moved At */
+            trail_moved_at: string | null;
             /** Trail Percent */
             trail_percent: string | null;
             /** Trail Water Mark */
@@ -6759,6 +6763,8 @@ export interface components {
             take_profit: string | null;
             /** Trail Amount */
             trail_amount: string | null;
+            /** Trail Moved At */
+            trail_moved_at: string | null;
             /** Trail Percent */
             trail_percent: string | null;
             /** Trail Water Mark */

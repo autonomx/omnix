@@ -12,7 +12,12 @@ import pytest
 
 from app.apps.trading.execution import ExecutionObservation
 from app.apps.trading.order_gateway import OrderGateway
-from app.apps.trading.paper import PaperAccountCreate, PaperMarketObservation, PaperOrderRequest
+from app.apps.trading.paper import (
+    PaperAccountCreate,
+    PaperMarketObservation,
+    PaperOrderRequest,
+    paper_trailing_protection_update,
+)
 from app.apps.trading.paper_monitor import TradingPaperMonitor
 from app.apps.trading.paper_protection import PaperProtectionUpsert
 from app.apps.trading.paper_protection_repository import TradingPaperProtectionRepository
@@ -206,6 +211,7 @@ def test_trailing_stop_state_survives_a_restart(paper) -> None:
     paper.repository_factory().process_observation(paper.account_id, _observation(paper.instrument_id, "10"))
     armed = _order(paper, placed.order_id)
     assert (armed.trail_water_mark, armed.stop_price) == (Decimal("10"), Decimal("9"))
+    assert armed.trail_moved_at is not None
     paper.repository_factory().process_observation(paper.account_id, _observation(paper.instrument_id, "12", seconds=2))
     paper.repository_factory().process_observation(paper.account_id, _observation(paper.instrument_id, "11.5", seconds=3))
 
@@ -216,7 +222,9 @@ def test_trailing_stop_state_survives_a_restart(paper) -> None:
     assert OrderGateway(restarted).place_reducing(paper.account_id, request).order_id == placed.order_id
 
     fills = restarted.process_observation(paper.account_id, _observation(paper.instrument_id, "10.9", seconds=4))
-    assert [fill.price for fill in fills] == [Decimal("10.9") * STOP_SLIPPAGE]
+    # 10.9 less stop slippage is 10.87275, rounded down to the 0.01 equity tick.
+    assert [fill.price for fill in fills] == [Decimal("10.87")]
+    assert Decimal("10.9") * STOP_SLIPPAGE == Decimal("10.87275")
     assert _order(paper, placed.order_id).status == "filled"
 
 
@@ -361,26 +369,60 @@ def test_a_pending_bracket_is_cancelled_when_its_day_entry_expires(paper) -> Non
             quantity=Decimal("1"), limit_price=Decimal("5"), idempotency_key=order_id, time_in_force="day",
         ),
     )
+    # No market data at all: the expiry itself cancels the entry's bracket.
     repository.expire_orders(paper.account_id, now=datetime(2026, 10, 7, 20, 0, tzinfo=timezone.utc))
-    pending = protections.get(paper.account_id, paper.instrument_id)
-    assert pending.status == "pending_entry" and pending.trail_amount == Decimal("1")
-
-    now = datetime.now(timezone.utc)
-    execution = ExecutionObservation(
-        instrument_id=paper.instrument_id, binding_id="alpaca-paper:test", provider="integration",
-        bid=Decimal("5"), ask=Decimal("5"), last=Decimal("5"), source_time=now, received_at=now,
-        session="regular", freshness_mode="live", execution_eligible=True,
-    )
-    monitor = TradingPaperMonitor(
-        repository_factory=lambda: repository,
-        protection_repository_factory=lambda: protections,
-        interval_seconds=5,
-    )
-    asyncio.run(
-        monitor._reconcile_protection(
-            account_id=paper.account_id, instrument_id=paper.instrument_id, execution=execution,
-            repository=repository, protections=protections,
-        )
-    )
     cancelled = protections.get(paper.account_id, paper.instrument_id)
     assert (cancelled.status, cancelled.trigger_reason) == ("cancelled", "entry_expired")
+
+
+def test_keeping_the_stop_and_trail_keeps_the_water_mark(paper) -> None:
+    _open_long(paper)
+    protections = paper.protections
+    leg = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9"), trail_amount=Decimal("1")),
+    )
+    moved_at = datetime.now(timezone.utc)
+    protections.trail_stop(
+        paper.account_id, paper.instrument_id,
+        water_mark=Decimal("12"), stop_loss=Decimal("11"), expected_revision=leg.revision, moved_at=moved_at,
+    )
+    moved = protections.get(paper.account_id, paper.instrument_id)
+    assert moved.trail_moved_at == moved_at
+
+    # A take-profit move that sends the current stop and trail back keeps the trail.
+    tp_move = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(
+            instrument_id=paper.instrument_id, take_profit=Decimal("15"),
+            stop_loss=Decimal("11"), trail_amount=Decimal("1"),
+        ),
+    )
+    assert (tp_move.take_profit, tp_move.trail_water_mark, tp_move.trail_moved_at) == (Decimal("15"), Decimal("12"), moved_at)
+
+    # Moving the stop keeps the trail and records the move; the monitor's next
+    # update tightens a looser stop back to the trail.
+    stop_move = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(
+            instrument_id=paper.instrument_id, take_profit=Decimal("15"),
+            stop_loss=Decimal("10"), trail_amount=Decimal("1"),
+        ),
+    )
+    assert (stop_move.stop_loss, stop_move.trail_water_mark) == (Decimal("10"), Decimal("12"))
+    assert stop_move.trail_moved_at is not None and stop_move.trail_moved_at > moved_at
+    observation = PaperMarketObservation(
+        instrument_id=paper.instrument_id, provider="integration", price=Decimal("11.5"),
+        source_time=datetime.now(timezone.utc), evaluated_at=datetime.now(timezone.utc),
+    )
+    assert paper_trailing_protection_update(
+        is_long=True, stop_loss=stop_move.stop_loss, trail_amount=stop_move.trail_amount, trail_percent=None,
+        water_mark=stop_move.trail_water_mark, observation=observation,
+    ) == (Decimal("12"), Decimal("11"))
+
+    # A different trail starts afresh.
+    retrailed = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("10"), trail_percent=Decimal("5")),
+    )
+    assert (retrailed.trail_water_mark, retrailed.trail_moved_at) == (None, None)

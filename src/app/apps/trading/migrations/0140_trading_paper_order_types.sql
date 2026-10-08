@@ -34,6 +34,10 @@ ALTER TABLE omnix_trading_paper_orders
 -- When a stop-limit order's stop was reached; it is a limit order from then on.
 ALTER TABLE omnix_trading_paper_orders
     ADD COLUMN IF NOT EXISTS stop_triggered_at TIMESTAMPTZ;
+-- When a trailing stop last moved: a bar that started earlier cannot trigger
+-- it by its range, since its low may predate the high that moved the stop.
+ALTER TABLE omnix_trading_paper_orders
+    ADD COLUMN IF NOT EXISTS trail_moved_at TIMESTAMPTZ;
 
 ALTER TABLE omnix_trading_paper_orders
     DROP CONSTRAINT IF EXISTS omnix_trading_paper_orders_time_in_force_check;
@@ -51,6 +55,7 @@ ALTER TABLE omnix_trading_paper_orders
         AND (trail_amount IS NULL OR trail_amount > 0)
         AND (trail_percent IS NULL OR (trail_percent > 0 AND trail_percent < 100))
         AND (trail_water_mark IS NULL OR order_type = 'trailing_stop')
+        AND (trail_moved_at IS NULL OR order_type = 'trailing_stop')
     );
 
 ALTER TABLE omnix_trading_paper_orders
@@ -72,6 +77,8 @@ ALTER TABLE omnix_trading_paper_protections
     ADD COLUMN IF NOT EXISTS trail_percent NUMERIC;
 ALTER TABLE omnix_trading_paper_protections
     ADD COLUMN IF NOT EXISTS trail_water_mark NUMERIC;
+ALTER TABLE omnix_trading_paper_protections
+    ADD COLUMN IF NOT EXISTS trail_moved_at TIMESTAMPTZ;
 
 ALTER TABLE omnix_trading_paper_protections
     DROP CONSTRAINT IF EXISTS omnix_trading_paper_protections_trailing_check;

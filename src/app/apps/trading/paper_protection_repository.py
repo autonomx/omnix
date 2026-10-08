@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from app.security.tenant_context import RequestTenant, TenantContext
@@ -13,7 +14,20 @@ from typing import Any, cast
 _COLUMNS = """
     account_id, instrument_id, binding_id, binding_purpose, entry_order_id, exit_order_id,
     take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at,
-    trail_amount, trail_percent, trail_water_mark
+    trail_amount, trail_percent, trail_water_mark, trail_moved_at
+"""
+
+
+# An edit of an active trailing leg that keeps its trail (a take-profit move,
+# or the chart sending the levels back) keeps its water mark. A changed stop
+# counts as a move of the trailed stop now; a stop looser than the trail
+# implies is tightened back to it by the monitor's next update. Changing the
+# trail itself, or re-arming, starts a fresh trail.
+_KEEP_TRAIL = """
+    omnix_trading_paper_protections.status = 'active' AND EXCLUDED.status = 'active'
+    AND num_nonnulls(EXCLUDED.trail_amount, EXCLUDED.trail_percent) = 1
+    AND omnix_trading_paper_protections.trail_amount IS NOT DISTINCT FROM EXCLUDED.trail_amount
+    AND omnix_trading_paper_protections.trail_percent IS NOT DISTINCT FROM EXCLUDED.trail_percent
 """
 
 
@@ -35,6 +49,7 @@ def _protection(row) -> PaperPositionProtection:
         trail_amount=Decimal(row[13]) if row[13] is not None else None,
         trail_percent=Decimal(row[14]) if row[14] is not None else None,
         trail_water_mark=Decimal(row[15]) if row[15] is not None else None,
+        trail_moved_at=row[16],
     )
 
 
@@ -148,6 +163,7 @@ class TradingPaperProtectionRepository:
                        trail_amount = EXCLUDED.trail_amount,
                        trail_percent = EXCLUDED.trail_percent,
                        trail_water_mark = NULL,
+                       trail_moved_at = NULL,
                        status = 'pending_entry',
                        exit_order_id = NULL,
                        trigger_reason = 'entry_armed',
@@ -276,7 +292,13 @@ class TradingPaperProtectionRepository:
                        stop_loss = EXCLUDED.stop_loss,
                        trail_amount = EXCLUDED.trail_amount,
                        trail_percent = EXCLUDED.trail_percent,
-                       trail_water_mark = NULL,
+                       trail_water_mark = CASE WHEN {_KEEP_TRAIL}
+                           THEN omnix_trading_paper_protections.trail_water_mark END,
+                       trail_moved_at = CASE WHEN {_KEEP_TRAIL} THEN
+                           CASE WHEN omnix_trading_paper_protections.stop_loss IS DISTINCT FROM EXCLUDED.stop_loss
+                                THEN CURRENT_TIMESTAMP
+                                ELSE omnix_trading_paper_protections.trail_moved_at END
+                           END,
                        status = EXCLUDED.status,
                        exit_order_id = NULL,
                        trigger_reason = NULL,
@@ -309,19 +331,23 @@ class TradingPaperProtectionRepository:
         water_mark: Decimal,
         stop_loss: Decimal,
         expected_revision: int,
+        moved_at: datetime | None = None,
     ) -> PaperPositionProtection | None:
         """Persist a trailing stop-loss leg's new water mark and stop.
 
         Only an active trailing leg at ``expected_revision`` moves, so a user's
         edit or a trigger in between wins. The water mark is monitor state: the
         revision and ``updated_at`` (the leg's activation evidence) are left as
-        they are. Returns None when the leg changed underneath.
+        they are. ``moved_at`` records when the stop moved, so a bar that began
+        earlier cannot trigger it by its range. Returns None when the leg
+        changed underneath.
         """
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_paper_protections
-                   SET trail_water_mark = %s, stop_loss = %s
+                   SET trail_water_mark = %s, stop_loss = %s,
+                       trail_moved_at = COALESCE(%s, trail_moved_at)
                  WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                    AND status = 'active' AND revision = %s
                    AND (trail_amount IS NOT NULL OR trail_percent IS NOT NULL)
@@ -330,6 +356,7 @@ class TradingPaperProtectionRepository:
                 (
                     water_mark,
                     stop_loss,
+                    moved_at,
                     self.context.workspace_id,
                     account_id,
                     instrument_id,
