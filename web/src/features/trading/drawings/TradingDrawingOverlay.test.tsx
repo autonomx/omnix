@@ -25,6 +25,28 @@ vi.mock('./tools/registry', async (importOriginal) => {
     { ...base, id: 'path', label: 'Path', creation: { gesture: 'click-click' }, constrain: constrainTo45Degrees, geometry: testTools.polyline },
     { ...base, id: 'brush', label: 'Brush', creation: { gesture: 'freehand', simplifyTolerance: 0 }, handles: 'ends', geometry: testTools.brushGeometry },
     { ...base, id: 'note', label: 'Anchored note', creation: { gesture: 'click' }, anchoring: 'screen', geometry: (context) => [{ kind: 'marker', x: context.points[0].x, y: context.points[0].y, radius: 3, fill: '#fff' }] },
+    // A position-like tool: one click, a default stop from onCreate, a stop handle that edits a property, an order action.
+    {
+      ...base,
+      id: 'position',
+      label: 'Long position',
+      creation: { gesture: 'click' },
+      defaultProperties: { stopDistance: 0 },
+      onCreate: (anchors, services) => ({ points: [...anchors], properties: { stopDistance: services.instrument.tickSize === null ? 5 : services.instrument.tickSize * 100 } }),
+      geometry: (context) => {
+        const [entry] = context.points;
+        const stop = context.project({ time: context.rawPoints[0].time, price: context.rawPoints[0].price - Number(context.properties.stopDistance) })!;
+        return [{ kind: 'segment', x1: entry.x, y1: entry.y, x2: entry.x + 50, y2: entry.y, stroke: '#0f0' }, { kind: 'segment', x1: entry.x, y1: stop.y, x2: entry.x + 50, y2: stop.y, stroke: '#f00' }];
+      },
+      handles: (context) => {
+        const [entry] = context.points;
+        const stopY = context.project({ time: context.rawPoints[0].time, price: context.rawPoints[0].price - Number(context.properties.stopDistance) })!.y;
+        return [
+          { id: 'stop', x: entry.x + 25, y: stopY, drag: ({ points, point }) => ({ properties: { stopDistance: points[0].price - point.price } }) },
+        ];
+      },
+      contextActions: [{ id: 'ticket', label: 'Order ticket', request: (drawing) => ({ type: 'order-ticket', payload: { entry: drawing.points[0].price, stop: drawing.points[0].price - Number(drawing.properties.stopDistance) } }) }],
+    },
   ];
   const byId = new Map(extra.map((definition) => [definition.id, definition]));
   return {
@@ -70,7 +92,10 @@ function fakeAdapter() {
       pointAt(options.exactTime ? x - offset : Math.round((x - offset) / 10) * 10, y)
     ),
     drawingBars: () => EMPTY_DRAWING_BARS,
-    drawingTimeAfterBars: () => null,
+    drawingTimeAfterBars: (time: string, count: number) => new Date(Date.parse(time) + count * 60_000).toISOString(),
+    drawingBarIndexForTime: (time: string) => (Date.parse(time) - Date.parse(pointAt(0, 0).time)) / 60_000,
+    drawingTimeForBarIndex: (index: number) => pointAt(index, 0).time,
+    drawingVisibleBars: () => null,
     formatDrawingPrice: (price: number) => price.toFixed(2),
     onViewportChange: (listener: () => void) => {
       listeners.add(listener);
@@ -306,8 +331,54 @@ describe('TradingDrawingOverlay', () => {
     expect(view.svg.querySelector('circle')).toHaveAttribute('cx', '400');
     void pan;
   });
-});
 
+  it('lets a tool define handles that edit properties, defaults via onCreate and actions with requests', () => {
+    const created = renderOverlay({ tool: 'position' as DrawingTool, instrument: { tickSize: 0.01, pointValue: 1 } });
+    click(created.svg, 100, 200);
+    const position = created.handlers.onAdd.mock.calls[0][0] as TradingDrawing;
+    expect(position.properties).toEqual({ stopDistance: 1 });
+    cleanup();
+
+    const onEditDrawing = vi.fn();
+    const view = renderOverlay({ drawings: [{ ...position, drawingId: 'p' }], selectedId: 'p', onEditDrawing });
+    const handle = view.svg.querySelector('[data-handle-id="stop"]')!;
+    expect(handle).toHaveAttribute('cy', '201');
+    fireEvent.pointerDown(handle, { clientX: 125, clientY: 201, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 125, clientY: 210 });
+    // The preview applies the handle's property edit before it is committed.
+    expect(view.svg.querySelectorAll('g[data-drawing-id="p"] line')[1]).toHaveAttribute('y1', '210');
+    fireEvent.pointerUp(window, { clientX: 125, clientY: 210 });
+    expect(onEditDrawing).toHaveBeenCalledWith('p', { properties: { stopDistance: 10 } });
+
+    fireEvent.contextMenu(view.svg.querySelector('g[data-drawing-id="p"] line')!, { clientX: 110, clientY: 200 });
+    expect(view.handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
+      drawingActions: [{ id: 'ticket', label: 'Order ticket', request: { type: 'order-ticket', payload: { entry: 800, stop: 799 } } }],
+    }), undefined);
+  });
+
+  it('offers the legacy line alert for segments and full lines, never for rays', () => {
+    const ray = drawing('ray', [[200, 300], [100, 200]], { drawingId: 'ray' });
+    const { svg, handlers } = renderOverlay({ drawings: [ray] });
+    fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="ray"] line')!, { clientX: 150, clientY: 250 });
+    expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
+      trendlinePoints: undefined,
+      drawingAlertLevels: [expect.objectContaining({ extend: 'left' })],
+    }), undefined);
+  });
+
+  it('constrains with Shift against where the placed anchor is after a pan', () => {
+    const { svg, handlers, pan } = renderOverlay({ tool: 'path' as DrawingTool });
+    click(svg, 100, 100);
+    pan(30);
+    // The first anchor is now at (130, 100), so (230, 200) is exactly 45 degrees from it and stays put.
+    // Against the anchor's old position (100, 100) Shift would have moved it to about (215, 215).
+    fireEvent.pointerMove(svg, { clientX: 230, clientY: 200, shiftKey: true });
+    const line = svg.querySelector('line.draft')!;
+    expect(Number(line.getAttribute('x2'))).toBeCloseTo(230, 6);
+    expect(Number(line.getAttribute('y2'))).toBeCloseTo(200, 6);
+    void handlers;
+  });
+});
 function click(element: Element, x: number, y: number) {
   fireEvent.pointerDown(element, { clientX: x, clientY: y, pointerId: 1 });
   fireEvent.pointerUp(element, { clientX: x, clientY: y, pointerId: 1 });

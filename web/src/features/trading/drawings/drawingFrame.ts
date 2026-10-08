@@ -6,18 +6,22 @@ import { DEFAULT_DRAWING_STYLE, type DrawingPoint, type TradingDrawing } from '.
 import type { CanvasDrawingEntry } from './DrawingCanvasPrimitive';
 import { patchShapeElement } from './svgShapes';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from './tools/registry';
-import { anchorProjector, drawingGeometry, staticChartAccess, type DrawingProjector } from './tools/scene';
+import { anchorProjector, drawingGeometry, staticChartAccess } from './tools/scene';
 import { shapeSignature } from './tools/shapes';
 import {
   anchorCount,
+  drawingHandles,
+  UNKNOWN_DRAWING_INSTRUMENT,
   type DrawingBarSeries,
   type DrawingChartAccess,
   type DrawingGeometryContext,
+  type DrawingHandle,
+  type DrawingInstrument,
   type DrawingShape,
   type DrawingToolDefinition,
   type ScreenPoint,
 } from './tools/types';
-import { previewPoints, type HandlePreview, type TranslationPreview } from './useDrawingEditing';
+import { previewDrawing, type HandlePreview, type TranslationPreview } from './useDrawingEditing';
 
 export type Viewport = { width: number; height: number };
 
@@ -53,14 +57,18 @@ function lazyBars(load: () => DrawingBarSeries): DrawingBarSeries {
   };
 }
 
-/** The chart services geometry may use. */
-export function chartAccessFor(adapter: TradingChartAdapter | null): DrawingChartAccess {
-  if (!adapter) return staticChartAccess(() => null);
+/** The chart services tool code may use. */
+export function chartAccessFor(adapter: TradingChartAdapter | null, instrument: DrawingInstrument = UNKNOWN_DRAWING_INSTRUMENT): DrawingChartAccess {
+  if (!adapter) return staticChartAccess(() => null, { instrument });
   return {
     project: (point) => adapter.projectDrawingPoint(point),
-    bars: lazyBars(() => adapter.drawingBars()),
+    barIndexForTime: (time) => adapter.drawingBarIndexForTime(time),
+    timeForBarIndex: (index) => adapter.drawingTimeForBarIndex(index),
     timeAfterBars: (time, count) => adapter.drawingTimeAfterBars(time, count),
+    bars: lazyBars(() => adapter.drawingBars()),
+    visibleBars: () => adapter.drawingVisibleBars(),
     formatPrice: (price) => adapter.formatDrawingPrice(price),
+    instrument,
   };
 }
 
@@ -68,7 +76,8 @@ export function chartAccessFor(adapter: TradingChartAdapter | null): DrawingChar
 export function renderDrawing(drawing: TradingDrawing, frame: DrawingFrame, access: DrawingChartAccess, viewport: Viewport): RenderedDrawing | null {
   const definition = drawingToolDefinition(drawing.toolType);
   if (!definition) return null;
-  const rawPoints = previewPoints(drawing, frame.translationPreview, frame.handlePreview);
+  const preview = previewDrawing(drawing, frame.translationPreview, frame.handlePreview);
+  const rawPoints = preview.points;
   const selected = drawing.drawingId === frame.selectedId;
   const { shapes, context } = drawingGeometry({
     definition,
@@ -76,7 +85,7 @@ export function renderDrawing(drawing: TradingDrawing, frame: DrawingFrame, acce
     rawPoints,
     viewport,
     style: drawing.style ?? DEFAULT_DRAWING_STYLE,
-    properties: drawingPropertiesWithDefaults(drawing.toolType, drawing.properties),
+    properties: drawingPropertiesWithDefaults(drawing.toolType, preview.properties),
     text: drawing.text ?? '',
     interval: frame.interval,
     selected,
@@ -86,8 +95,13 @@ export function renderDrawing(drawing: TradingDrawing, frame: DrawingFrame, acce
   return { drawing, definition, rawPoints, shapes, context, selected };
 }
 
-export function handlePositions(item: RenderedDrawing, project: DrawingProjector, viewport: Viewport): (ScreenPoint | null)[] {
-  return item.context ? [...item.context.points] : item.rawPoints.map(anchorProjector(item.definition, project, viewport));
+/** The edit handles of a rendered drawing (none until all its anchors project). */
+export function renderedHandles(item: RenderedDrawing): readonly DrawingHandle[] {
+  return item.context ? drawingHandles(item.definition, item.context) : [];
+}
+
+export function handleSignature(handles: readonly DrawingHandle[]): string {
+  return handles.map((handle) => `${handle.id}|${handle.className ?? ''}`).join(';');
 }
 
 /**
@@ -128,8 +142,7 @@ export function draftShapes(draft: NonNullable<DrawingFrame['draft']>, access: D
 }
 
 /** Every visible drawing's shapes for the canvas renderer, at paint time. */
-export function canvasScene(frame: DrawingFrame, adapter: TradingChartAdapter | null, viewport: Viewport): CanvasDrawingEntry[] {
-  const access = chartAccessFor(adapter);
+export function canvasScene(frame: DrawingFrame, access: DrawingChartAccess, viewport: Viewport): CanvasDrawingEntry[] {
   return frame.drawings
     .filter((drawing) => !drawing.hidden)
     .map((drawing) => renderDrawing(drawing, frame, access, viewport))
@@ -142,22 +155,22 @@ export function svgViewport(svg: SVGSVGElement): Viewport {
   return { width: bounds.width || svg.clientWidth, height: bounds.height || svg.clientHeight };
 }
 
-/** Patches a mounted group's shapes; false when the structure changed and React must render it. */
-function patchGroup(group: SVGGElement, shapes: readonly DrawingShape[], checkStructure: boolean, handles: () => (ScreenPoint | null)[]): boolean {
+/** Patches a mounted group's shapes and handles; false when the structure changed and React must render it. */
+function patchGroup(group: SVGGElement, shapes: readonly DrawingShape[], checkStructure: boolean, handles: readonly DrawingHandle[]): boolean {
   if (checkStructure && shapeSignature(shapes) !== group.dataset.shapeSignature) return false;
-  let handlePoints: (ScreenPoint | null)[] | null = null;
+  if ((group.dataset.handleSignature ?? '') !== handleSignature(handles)) return false;
+  const byId = new Map(handles.map((handle) => [handle.id, handle]));
   for (const child of group.children) {
     const element = child as SVGElement;
-    const { shapeIndex, drawingPointIndex } = element.dataset;
+    const { shapeIndex, handleId } = element.dataset;
     if (shapeIndex !== undefined) {
       const shape = shapes[Number(shapeIndex)];
       if (shape) patchShapeElement(element, shape);
-    } else if (drawingPointIndex !== undefined) {
-      handlePoints ??= handles();
-      const point = handlePoints[Number(drawingPointIndex)];
-      if (point) {
-        element.setAttribute('cx', String(point.x));
-        element.setAttribute('cy', String(point.y));
+    } else if (handleId !== undefined) {
+      const handle = byId.get(handleId);
+      if (handle) {
+        element.setAttribute('cx', String(handle.x));
+        element.setAttribute('cy', String(handle.y));
       }
     }
   }
@@ -169,7 +182,7 @@ export function patchDraft(svg: SVGSVGElement, frame: DrawingFrame, access: Draw
   const group = svg.querySelector<SVGGElement>(':scope > g[data-drawing-draft]');
   if (!frame.draft) return group === null;
   if (!group) return false;
-  return patchGroup(group, draftShapes(frame.draft, access, svgViewport(svg), frame.interval), true, () => []);
+  return patchGroup(group, draftShapes(frame.draft, access, svgViewport(svg), frame.interval), true, []);
 }
 
 /**
@@ -186,7 +199,8 @@ export function patchDrawings(svg: SVGSVGElement, frame: DrawingFrame, access: D
     const drawing = byId.get(group.dataset.drawingId ?? '');
     const item = drawing ? renderDrawing(drawing, frame, access, viewport) : null;
     if (!item) continue;
-    if (!patchGroup(group, item.shapes, shapesInDom, () => handlePositions(item, access.project, viewport))) inSync = false;
+    const handles = item.selected && !item.drawing.locked ? renderedHandles(item) : [];
+    if (!patchGroup(group, item.shapes, shapesInDom, handles)) inSync = false;
   }
   return patchDraft(svg, frame, access) && inSync;
 }

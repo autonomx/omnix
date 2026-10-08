@@ -5,4 +5,5 @@
   .trading-drawing-properties-records{display:grid;gap:4px}
   .trading-drawing-properties-record{display:flex;align-items:center;gap:4px}
   .trading-drawing-properties-record input[type=number]{width:64px}
+  .trading-drawing-properties-unreadable{color:var(--c-slate-680);font-style:italic}
 }

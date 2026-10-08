@@ -145,15 +145,40 @@ export type DrawingBarSeries = {
 export const EMPTY_DRAWING_BARS: DrawingBarSeries = { length: 0, at: () => undefined, indexAtOrBefore: () => -1 };
 
 /** Chart services geometry may use besides the anchors. */
-export type DrawingChartAccess = {
-  /** Projects any time/price point, e.g. for levels between anchors. */
-  project: (point: DrawingPoint) => ScreenPoint | null;
-  /** Loaded bars (regression, anchored VWAP, volume profile, bars pattern, P&L). */
-  bars: DrawingBarSeries;
-  /** The time `count` bars after `time` (fib time zones, cycles); across gaps, and past the data at the bar interval. */
+/** The instrument a drawing is on. */
+export type DrawingInstrument = {
+  /** Minimum price increment; null when unknown. */
+  tickSize: number | null;
+  /** Account currency per 1.0 price move per unit (1 for shares and spot crypto); null when unknown. */
+  pointValue: number | null;
+};
+
+export const UNKNOWN_DRAWING_INSTRUMENT: DrawingInstrument = { tickSize: null, pointValue: null };
+
+/**
+ * Chart services for tool code (geometry, alert levels, handles, creation,
+ * actions). Bar indices are the chart's own (`barTimeline.ts` spec): times
+ * between bars interpolate, past the data they step by the interval.
+ */
+export type DrawingToolServices = {
+  /** The chart bar index of a time (fractional between bars); null without bars. */
+  barIndexForTime: (time: string) => number | null;
+  /** The time of a chart bar index (inverse of barIndexForTime). */
+  timeForBarIndex: (index: number) => string | null;
+  /** The time `count` bars after `time` (fib time zones, cycles, position width). */
   timeAfterBars: (time: string, count: number) => string | null;
+  /** Loaded bars (regression, anchored VWAP, volume profile, bars pattern, P&L). Its indices are positions in this list. */
+  bars: DrawingBarSeries;
+  /** The `bars` positions currently visible (first and last, inclusive), for tools that compute only what is visible; null when unknown. */
+  visibleBars: () => { from: number; to: number } | null;
   /** A price as the price scale shows it. */
   formatPrice: (price: number) => string;
+  instrument: DrawingInstrument;
+};
+
+export type DrawingChartAccess = DrawingToolServices & {
+  /** Projects any time/price point, e.g. for levels between anchors. */
+  project: (point: DrawingPoint) => ScreenPoint | null;
 };
 
 /** Everything a tool's geometry may depend on. Points are already projected. */
@@ -176,23 +201,73 @@ export type DrawingGeometryContext = DrawingChartAccess & {
 
 export type DrawingHit = { distance: number };
 
+/** Which way an alert line continues past its anchors. */
+export type DrawingAlertExtend = 'none' | 'left' | 'right' | 'both';
+
 /**
- * A level a drawing can alert on (TVP-1.4). Alert lines are straight in
- * bar-index space, as the chart draws them: one anchor is a horizontal level
- * at its price; two anchors are the line through them, interpolated by bar
- * index over the alert's own interval. Without `extend`, a level spans its
- * anchors' times (one anchor: from its time onward when not extended left).
+ * A line a drawing can alert on (TVP-1.4): two anchors, ordered by time, and
+ * straight in bar-index space of the ALERT's interval (`barTimeline.ts` spec);
+ * no clock-time slopes. A horizontal level is two anchors at one price.
+ * Derived lines (a channel's parallel, a pitchfork's median) are expressed by
+ * their own two anchors (`lineThroughPoint`). Shared fixtures:
+ * resources/trading/drawing_alert_levels/.
  */
 export type DrawingAlertLevel = {
   key: string;
   label: string;
-  anchors: readonly DrawingPoint[];
-  extend: { left: boolean; right: boolean };
+  anchors: readonly [DrawingPoint, DrawingPoint];
+  extend: DrawingAlertExtend;
   interpolation: 'bars';
 };
 
-/** An action a tool offers in the chart context menu for one of its drawings. */
-export type DrawingContextAction = { id: string; label: string };
+/** A request a context action hands to the app (e.g. `{ type: 'order-ticket', payload: { entry, stop, target } }`). */
+export type DrawingActionRequest = { type: string; payload: unknown };
+
+/** What a tool's code sees of one drawing. */
+export type DrawingSnapshot = {
+  drawingId: string;
+  instrumentId: string;
+  points: readonly DrawingPoint[];
+  properties: DrawingProperties;
+  text: string;
+};
+
+/**
+ * An action a tool offers in the chart context menu for one of its drawings.
+ * Its request goes through the drawing action bus (`drawingActions.ts`) to
+ * whichever feature handles that request type; no menu or panel code changes.
+ */
+export type DrawingContextAction = {
+  id: string;
+  label: string;
+  request: (drawing: DrawingSnapshot, services: DrawingToolServices) => DrawingActionRequest;
+};
+
+/** A change to a drawing's anchors and/or properties (one undo step). */
+export type DrawingEditPatch = { points?: readonly DrawingPoint[]; properties?: DrawingProperties };
+
+/** What a handle's `drag` receives while it is dragged. */
+export type DrawingHandleDrag = {
+  points: readonly DrawingPoint[];
+  properties: DrawingProperties;
+  /** The pointer in chart space (snapped as the tool's creation snaps). */
+  point: DrawingPoint;
+  /** The pointer in pane pixels. */
+  screen: ScreenPoint;
+  modifiers: DrawingModifiers;
+  services: DrawingToolServices;
+};
+
+/** An edit handle of a selected drawing, placed by geometry. */
+export type DrawingHandle = {
+  id: string;
+  x: number;
+  y: number;
+  className?: string;
+  /** Set for handles that move one anchor: the host applies the tool's Shift `constrain` against the other anchors. */
+  anchorIndex?: number;
+  drag: (input: DrawingHandleDrag) => DrawingEditPatch;
+};
 
 export type DrawingToolDefinition<Id extends string = string> = {
   id: Id;
@@ -216,8 +291,12 @@ export type DrawingToolDefinition<Id extends string = string> = {
   draftPreview?: 'outline' | 'shapes';
   /** With `draftPreview: 'shapes'`, the anchor count (placed + pointer) from which geometry previews; default the tool's minimum. */
   previewAnchors?: number;
-  /** Which anchors get edit handles when selected (default `all`; freehand strokes want `ends`). */
-  handles?: 'all' | 'ends' | 'none';
+  /**
+   * Edit handles of a selected drawing: one per anchor (`all`, the default),
+   * the first and last anchor (`ends`, freehand), none, or the tool's own
+   * (position tool stop/target/width, 8-handle rectangle, channel width).
+   */
+  handles?: 'all' | 'ends' | 'none' | ((context: DrawingGeometryContext) => readonly DrawingHandle[]);
   /** Extra class for the edit handles of a selected drawing. */
   handleClassName?: string;
   /** Adjusts a candidate anchor while placing or dragging it (e.g. Shift constrains to 45 degrees). */
@@ -226,7 +305,9 @@ export type DrawingToolDefinition<Id extends string = string> = {
   /** Overrides the default shape-derived hit test. */
   hitTest?: (shapes: readonly DrawingShape[], point: ScreenPoint, tolerance: number, context: DrawingGeometryContext) => DrawingHit | null;
   /** Levels for drawing alerts; a tool with alert levels offers alerts from its context menu. */
-  alertLevels?: (points: readonly DrawingPoint[], properties: DrawingProperties) => DrawingAlertLevel[];
+  alertLevels?: (points: readonly DrawingPoint[], properties: DrawingProperties, services: DrawingToolServices) => DrawingAlertLevel[];
+  /** Fills in what clicks don't give a new drawing: extra anchors or properties (e.g. a position's default stop and target). */
+  onCreate?: (anchors: readonly DrawingPoint[], services: DrawingToolServices) => { points: DrawingPoint[]; properties?: DrawingProperties };
   /** Extra context-menu actions (e.g. a position tool opens the order ticket). */
   contextActions?: readonly DrawingContextAction[];
 };
@@ -236,11 +317,29 @@ export function defineDrawingTool<const Id extends string>(definition: DrawingTo
   return definition;
 }
 
-/** Indices of the anchors that get edit handles. */
+/** A handle that moves one anchor (the default handles). */
+export function anchorHandle(index: number, position: ScreenPoint, className?: string): DrawingHandle {
+  return {
+    id: `anchor-${index}`,
+    x: position.x,
+    y: position.y,
+    className,
+    anchorIndex: index,
+    drag: ({ points, point }) => ({ points: points.map((existing, position) => position === index ? { ...existing, ...point } : existing) }),
+  };
+}
+
+/** Indices of the anchors that get edit handles with `all`/`ends`/`none`. */
 export function handleIndices(definition: Pick<DrawingToolDefinition, 'handles'>, anchors: number): number[] {
-  if (definition.handles === 'none' || anchors === 0) return [];
+  if (definition.handles === 'none' || typeof definition.handles === 'function' || anchors === 0) return [];
   if (definition.handles === 'ends') return anchors === 1 ? [0] : [0, anchors - 1];
   return Array.from({ length: anchors }, (_, index) => index);
+}
+
+/** The handles of a drawing whose anchors projected (`context`). */
+export function drawingHandles(definition: DrawingToolDefinition, context: DrawingGeometryContext): readonly DrawingHandle[] {
+  if (typeof definition.handles === 'function') return definition.handles(context);
+  return handleIndices(definition, context.points.length).map((index) => anchorHandle(index, context.points[index], definition.handleClassName));
 }
 
 export function anchorCount(creation: DrawingCreation): { min: number; max: number | null } {

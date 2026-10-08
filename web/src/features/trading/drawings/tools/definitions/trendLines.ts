@@ -27,14 +27,9 @@ export const trendLineTool = defineDrawingTool({
   },
   alertLevels: ([first, second], properties) => {
     if (!first || !second) return [];
-    const level = lineAlertLevel(
-      'line',
-      'Trend line',
-      first,
-      second,
-      booleanProperty(properties, 'extendLeft', false),
-      booleanProperty(properties, 'extendRight', false),
-    );
+    const left = booleanProperty(properties, 'extendLeft', false);
+    const right = booleanProperty(properties, 'extendRight', false);
+    const level = lineAlertLevel('line', 'Trend line', first, second, left && right ? 'both' : left ? 'left' : right ? 'right' : 'none');
     return level ? [level] : [];
   },
 });
@@ -53,8 +48,9 @@ export const rayTool = defineDrawingTool({
   },
   alertLevels: ([first, second]): DrawingAlertLevel[] => {
     if (!first || !second) return [];
+    // A ray starts at its first anchor and runs through the second, never back.
     const rightward = Date.parse(second.time) > Date.parse(first.time);
-    const level = lineAlertLevel('ray', 'Ray', first, second, !rightward, rightward);
+    const level = lineAlertLevel('ray', 'Ray', first, second, rightward ? 'right' : 'left');
     return level ? [level] : [];
   },
 });

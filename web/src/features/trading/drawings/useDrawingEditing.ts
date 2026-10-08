@@ -1,17 +1,19 @@
 import { useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { DrawingPoint, DrawingTool, TradingDrawing } from './drawingCommands';
-import type { DrawingModifiers } from './tools/types';
+import type { DrawingPoint, DrawingProperties, DrawingTool, TradingDrawing } from './drawingCommands';
+import { drawingPropertiesWithDefaults } from './tools/registry';
+import type { DrawingEditPatch, DrawingHandle, DrawingModifiers, DrawingToolServices, ScreenPoint } from './tools/types';
 
-export type HandlePreview = { drawingId: string; index: number; point: DrawingPoint };
+export type HandlePreview = { drawingId: string; patch: DrawingEditPatch };
 export type TranslationPreview = { drawingId: string; from: DrawingPoint; to: DrawingPoint };
 
-/** A drawing's anchors with an in-progress translation or handle drag applied. */
-export function previewPoints(
+/** A drawing's anchors and properties with an in-progress translation or handle drag applied. */
+export function previewDrawing(
   drawing: TradingDrawing,
   translation: TranslationPreview | null,
   handle: HandlePreview | null,
-): DrawingPoint[] {
+): { points: DrawingPoint[]; properties: DrawingProperties | undefined } {
   let points = drawing.points;
+  let properties = drawing.properties;
   if (translation?.drawingId === drawing.drawingId) {
     const { from, to } = translation;
     const timeDelta = Date.parse(to.time) - Date.parse(from.time);
@@ -26,9 +28,10 @@ export function previewPoints(
     }));
   }
   if (handle?.drawingId === drawing.drawingId) {
-    points = points.map((point, index) => index === handle.index ? { ...point, ...handle.point } : point);
+    if (handle.patch.points) points = [...handle.patch.points];
+    if (handle.patch.properties) properties = { ...properties, ...handle.patch.properties };
   }
-  return points;
+  return { points, properties };
 }
 
 function trackPointer(move: (event: PointerEvent) => void, up: (event: PointerEvent) => void): void {
@@ -50,7 +53,7 @@ export function modifiersOf(event: { shiftKey: boolean; altKey: boolean; ctrlKey
   return { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey || event.metaKey };
 }
 
-/** The chart point under the pointer for one of a drawing's anchors (`anchorIndex`), or for the drawing as a whole. */
+/** The chart point under the pointer for one of a drawing's anchors (`anchorIndex`, Shift-constrained), or for the drawing as a whole. */
 export type DrawingPointLocator = (
   drawing: TradingDrawing,
   clientX: number,
@@ -68,8 +71,10 @@ export function useDrawingEditing({
   tool,
   enabled,
   pointFor,
+  screenFor,
+  services,
   onSelect,
-  onMovePoint,
+  onEdit,
   onTranslateDrawing,
   onRemove,
   onToolComplete,
@@ -77,8 +82,11 @@ export function useDrawingEditing({
   tool: DrawingTool;
   enabled: boolean;
   pointFor: DrawingPointLocator;
+  /** The pointer in pane pixels. */
+  screenFor: (clientX: number, clientY: number) => ScreenPoint | null;
+  services: () => DrawingToolServices;
   onSelect: (id: string | null) => void;
-  onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
+  onEdit: (id: string, patch: DrawingEditPatch) => void;
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onRemove: (id: string) => void;
   onToolComplete?: () => void;
@@ -87,18 +95,34 @@ export function useDrawingEditing({
   const [translationPreview, setTranslationPreview] = useState<TranslationPreview | null>(null);
   const edits = toolEditsDrawings(tool);
 
-  const dragHandle = (drawing: TradingDrawing, index: number) => (event: ReactPointerEvent<SVGElement>) => {
+  /** The edit a handle makes with the pointer at (clientX, clientY). */
+  const handlePatch = (drawing: TradingDrawing, handle: DrawingHandle, pointer: PointerEvent): DrawingEditPatch | null => {
+    const modifiers = modifiersOf(pointer);
+    const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiers, handle.anchorIndex);
+    const screen = screenFor(pointer.clientX, pointer.clientY);
+    if (!point || !screen) return null;
+    return handle.drag({
+      points: drawing.points,
+      properties: drawingPropertiesWithDefaults(drawing.toolType, drawing.properties),
+      point,
+      screen,
+      modifiers,
+      services: services(),
+    });
+  };
+
+  const dragHandle = (drawing: TradingDrawing, handle: DrawingHandle) => (event: ReactPointerEvent<SVGElement>) => {
     if (!edits) return;
     event.preventDefault();
     event.stopPropagation();
     if (drawing.locked || !enabled) return;
     trackPointer((pointer) => {
-      const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiersOf(pointer), index);
-      if (point) setHandlePreview({ drawingId: drawing.drawingId, index, point });
+      const patch = handlePatch(drawing, handle, pointer);
+      if (patch) setHandlePreview({ drawingId: drawing.drawingId, patch });
     }, (pointer) => {
-      const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiersOf(pointer), index);
+      const patch = handlePatch(drawing, handle, pointer);
       setHandlePreview(null);
-      if (point) onMovePoint(drawing.drawingId, index, { ...drawing.points[index], ...point });
+      if (patch) onEdit(drawing.drawingId, patch);
     });
   };
 

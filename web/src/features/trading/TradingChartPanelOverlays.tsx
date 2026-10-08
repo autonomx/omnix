@@ -2,6 +2,7 @@ import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chartAdapter';
+import { drawingInstrumentOf } from './drawings/drawingInstrument';
 import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
 import { convertedPrice, indicatorContextLabel, isAlertIndicatorId, price, rightOffsetOptions } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
@@ -28,6 +29,8 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onAdd={drawings.add}
         onSelect={(id) => { onActivate(); drawings.select(id); }}
         onMovePoint={drawings.movePoint}
+        onEditDrawing={drawings.edit}
+        instrument={drawingInstrumentOf(chartQuery.data?.instrument)}
         onTranslateDrawing={drawings.translate}
         onRemove={drawings.remove}
         onToolComplete={() => setDrawingTool('cursor')}

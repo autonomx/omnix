@@ -13,30 +13,36 @@ import {
   canvasScene,
   chartAccessFor,
   draftShapes,
-  handlePositions,
+  handleSignature,
   patchDraft,
   patchDrawings,
   renderDrawing,
+  renderedHandles,
   svgViewport,
   type DrawingFrame,
   type RenderedDrawing,
 } from './drawingFrame';
+import { creationPointLocator, drawingPointLocator, locatePoint } from './drawingPointer';
 import { storedDrawingRendererMode, type DrawingRendererMode } from './drawingRenderer';
 import { ShapeElement } from './svgShapes';
 import { drawingPropertiesWithDefaults, drawingToolDefinition, isDrawingToolId } from './tools/registry';
-import { type DrawingProjector } from './tools/scene';
+import { anchorProjector } from './tools/scene';
 import { shapeSignature } from './tools/shapes';
 import {
-  handleIndices,
+  UNKNOWN_DRAWING_INSTRUMENT,
+  type DrawingActionRequest,
   type DrawingAlertLevel,
-  type DrawingContextAction,
+  type DrawingEditPatch,
+  type DrawingHandle,
+  type DrawingInstrument,
   type DrawingShape,
   type DrawingToolDefinition,
+  type DrawingToolServices,
+  type ScreenPoint,
 } from './tools/types';
 import { useCanvasDrawingHost } from './useCanvasDrawingHost';
 import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
 import { useDrawingEditing } from './useDrawingEditing';
-import { creationPointLocator, drawingPointLocator, locatePoint } from './drawingPointer';
 import { useProjectionSync } from './useProjectionSync';
 import './TradingDrawingMeasurement.css';
 
@@ -48,74 +54,102 @@ export type ChartAlertPlacement = DrawingPoint & {
   indicatorPeriod?: number;
   drawingId?: string;
   drawingTool?: DrawingTool;
-  /** Anchors of the drawing's first two-anchor alert level, for the chart's line alert. */
+  /**
+   * Anchors for the chart's existing line alert, which the server extends both
+   * ways: only for a drawing whose first alert level is unbounded or a segment
+   * (`none`/`both`), never for a ray.
+   */
   trendlinePoints?: DrawingPoint[];
   /** All alert levels the drawing's tool defines (TVP-1.4). */
   drawingAlertLevels?: DrawingAlertLevel[];
-  /** Context-menu actions the drawing's tool offers. */
-  drawingActions?: readonly DrawingContextAction[];
+  /** Context-menu actions the drawing's tool offers, with their requests for the drawing action bus. */
+  drawingActions?: readonly { id: string; label: string; request: DrawingActionRequest }[];
 };
 
-
-function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[]): TradingDrawing {
+function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[], services: DrawingToolServices): TradingDrawing {
+  const created = definition.onCreate ? definition.onCreate(points, services) : { points };
   return {
     drawingId: crypto.randomUUID(),
     instrumentId,
     toolType,
-    points,
+    points: created.points,
     selected: true,
     revision: 1,
     style: DEFAULT_DRAWING_STYLE,
     locked: false,
     hidden: false,
     text: definition.defaultText ?? '',
-    properties: drawingPropertiesWithDefaults(definition.id, undefined),
+    properties: drawingPropertiesWithDefaults(definition.id, created.properties),
   };
 }
 
-function ShapeGroup({ shapes, signature }: { shapes: readonly DrawingShape[]; signature: boolean }) {
+function ShapeGroup({ shapes }: { shapes: readonly DrawingShape[] }) {
   return (
-    <g data-drawing-draft="" data-shape-signature={signature ? shapeSignature(shapes) : undefined}>
+    <g data-drawing-draft="" data-shape-signature={shapeSignature(shapes)} data-handle-signature="">
       {shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />)}
     </g>
   );
 }
 
-function DrawingGroup({ item, project, viewport, withShapes, onPressDrawing, onPressHandle }: {
+function DrawingGroup({ item, withShapes, onPressDrawing, onPressHandle }: {
   item: RenderedDrawing;
-  project: DrawingProjector;
-  viewport: { width: number; height: number };
   withShapes: boolean;
   onPressDrawing: (event: ReactPointerEvent<SVGElement>) => void;
-  onPressHandle: (index: number) => (event: ReactPointerEvent<SVGElement>) => void;
+  onPressHandle: (handle: DrawingHandle) => (event: ReactPointerEvent<SVGElement>) => void;
 }) {
-  const { drawing, definition, shapes, selected } = item;
-  const positions = selected && !drawing.locked ? handlePositions(item, project, viewport) : [];
+  const { drawing, shapes, selected } = item;
+  const handles = selected && !drawing.locked ? renderedHandles(item) : [];
   return (
     <g
       data-drawing-id={drawing.drawingId}
       data-locked={drawing.locked}
       data-selected={selected}
       data-shape-signature={withShapes ? shapeSignature(shapes) : undefined}
+      data-handle-signature={handleSignature(handles)}
       onPointerDown={onPressDrawing}
     >
       {withShapes ? shapes.map((shape, index) => <ShapeElement key={index} shape={shape} index={index} />) : null}
-      {positions.length > 0 ? handleIndices(definition, positions.length).map((index) => {
-        const point = positions[index];
-        return point ? (
-          <circle
-            key={`handle-${index}`}
-            data-drawing-point-index={index}
-            className={definition.handleClassName}
-            cx={point.x}
-            cy={point.y}
-            r="6"
-            onPointerDown={onPressHandle(index)}
-          />
-        ) : null;
-      }) : null}
+      {handles.map((handle) => (
+        <circle
+          key={handle.id}
+          data-handle-id={handle.id}
+          data-drawing-point-index={handle.anchorIndex}
+          className={handle.className}
+          cx={handle.x}
+          cy={handle.y}
+          r="6"
+          onPointerDown={onPressHandle(handle)}
+        />
+      ))}
     </g>
   );
+}
+
+/** Wheel over the overlay zooms the chart at the pointer. */
+function zoomOnWheel(adapter: TradingChartAdapter | null, event: React.WheelEvent<SVGSVGElement>): void {
+  if (!adapter) return;
+  const bounds = event.currentTarget.getBoundingClientRect();
+  event.preventDefault();
+  event.stopPropagation();
+  adapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
+}
+
+/** The pointer in pane pixels. */
+function screenPoint(svg: SVGSVGElement | null, clientX: number, clientY: number): ScreenPoint | null {
+  const bounds = svg?.getBoundingClientRect();
+  return bounds ? { x: clientX - bounds.left, y: clientY - bounds.top } : null;
+}
+
+/** Where the anchors placed so far (all but the pointer's) are on screen now. */
+function placedAnchorPositions(
+  svg: SVGSVGElement | null,
+  definition: DrawingToolDefinition | undefined,
+  access: DrawingToolServices & { project: (point: DrawingPoint) => ScreenPoint | null },
+  draft: readonly DrawingPoint[] | null,
+): ScreenPoint[] {
+  if (!definition || !svg || !draft) return [];
+  const project = anchorProjector(definition, access.project, svgViewport(svg));
+  return draft.slice(0, -1).map(project).filter((point): point is ScreenPoint => point !== null);
 }
 
 /** A chart placement at the pointer; over an indicator pane, its price is the indicator value. */
@@ -134,17 +168,19 @@ function chartPlacement(
 }
 
 /** What a drawing's tool offers from the context menu: its alert levels and actions. */
-function drawingMenuEntries(drawing: TradingDrawing | undefined): Partial<ChartAlertPlacement> {
+function drawingMenuEntries(drawing: TradingDrawing | undefined, services: DrawingToolServices): Partial<ChartAlertPlacement> {
   if (!drawing) return {};
   const definition = drawingToolDefinition(drawing.toolType);
-  const levels = definition?.alertLevels?.(drawing.points, drawingPropertiesWithDefaults(drawing.toolType, drawing.properties)) ?? [];
-  const line = levels.find((level) => level.anchors.length === 2);
+  const properties = drawingPropertiesWithDefaults(drawing.toolType, drawing.properties);
+  const levels = definition?.alertLevels?.(drawing.points, properties, services) ?? [];
+  const legacyLine = levels[0] && (levels[0].extend === 'none' || levels[0].extend === 'both') ? levels[0] : undefined;
+  const snapshot = { drawingId: drawing.drawingId, instrumentId: drawing.instrumentId, points: drawing.points, properties, text: drawing.text ?? '' };
   return {
     drawingId: drawing.drawingId,
     drawingTool: drawing.toolType,
-    trendlinePoints: line?.anchors.map((point) => ({ time: point.time, price: point.price })),
+    trendlinePoints: legacyLine?.anchors.map((point) => ({ time: point.time, price: point.price })),
     drawingAlertLevels: levels.length > 0 ? levels : undefined,
-    drawingActions: definition?.contextActions,
+    drawingActions: definition?.contextActions?.map((action) => ({ id: action.id, label: action.label, request: action.request(snapshot, services) })),
   };
 }
 
@@ -159,14 +195,28 @@ export type TradingDrawingOverlayProps = {
   onAdd: (drawing: TradingDrawing) => void;
   onSelect: (id: string | null) => void;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
+  /** A handle's edit of anchors and/or properties; without it, single-anchor edits fall back to onMovePoint. */
+  onEditDrawing?: (id: string, patch: DrawingEditPatch) => void;
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onRemove: (id: string) => void;
   onToolComplete?: () => void;
   onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
   onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  /** Tick size and point value for tools that need them (position tools). */
+  instrument?: DrawingInstrument;
   /** Overrides the stored renderer switch (`drawingRenderer.ts`). */
   renderer?: DrawingRendererMode;
 };
+
+/** onEditDrawing, or onMovePoint for an edit that moves exactly one anchor. */
+function editFallback(drawings: TradingDrawing[], onMovePoint: TradingDrawingOverlayProps['onMovePoint']) {
+  return (id: string, patch: DrawingEditPatch) => {
+    const drawing = drawings.find((item) => item.drawingId === id);
+    if (!drawing || !patch.points || patch.properties) return;
+    const changed = patch.points.flatMap((point, index) => (point !== drawing.points[index] ? [index] : []));
+    if (changed.length === 1) onMovePoint(id, changed[0], patch.points[changed[0]]);
+  };
+}
 
 export function TradingDrawingOverlay({
   adapter,
@@ -179,11 +229,13 @@ export function TradingDrawingOverlay({
   onAdd,
   onSelect,
   onMovePoint,
+  onEditDrawing,
   onTranslateDrawing,
   onRemove,
   onToolComplete,
   onAlertAtPoint,
   onContextMenu: onChartContextMenu,
+  instrument = UNKNOWN_DRAWING_INSTRUMENT,
   renderer,
 }: TradingDrawingOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -193,23 +245,34 @@ export function TradingDrawingOverlay({
   const rerender = useCallback(() => setViewport((value) => ({ ...value, revision: value.revision + 1 })), []);
   const drawingTool = isDrawingToolId(tool) ? tool : null;
   const definition = drawingTool ? drawingToolDefinition(drawingTool) : undefined;
+  const access = chartAccessFor(adapter, instrument);
   const plainPoint = (clientX: number, clientY: number) => locatePoint(svgRef.current, adapter, clientX, clientY, { snapMode, snap: true, screen: false });
-  const pointFor = drawingPointLocator(svgRef, adapter, snapMode);
-
 
   const editing = useDrawingEditing({
-    tool, enabled: adapter !== null, pointFor, onSelect, onMovePoint, onTranslateDrawing, onRemove, onToolComplete,
+    tool,
+    enabled: adapter !== null,
+    pointFor: drawingPointLocator(svgRef, adapter, snapMode),
+    screenFor: (clientX, clientY) => screenPoint(svgRef.current, clientX, clientY),
+    services: () => access,
+    onSelect,
+    onEdit: onEditDrawing ?? editFallback(drawings, onMovePoint),
+    onTranslateDrawing,
+    onRemove,
+    onToolComplete,
   });
   const frameRef = useRef<DrawingFrame | null>(null);
   const creation = useDrawingCreation(definition, (points) => {
     if (!definition || !drawingTool) return;
-    onAdd(newDrawing(drawingTool, definition, instrumentId, points));
+    onAdd(newDrawing(drawingTool, definition, instrumentId, points, access));
     onToolComplete?.();
   }, () => {
     const svg = svgRef.current;
-    if (svg && frameRef.current && !patchDraft(svg, frameRef.current, chartAccessFor(adapter))) rerender();
+    if (svg && frameRef.current && !patchDraft(svg, frameRef.current, access)) rerender();
   });
-  const creationPoint = creationPointLocator(svgRef, adapter, snapMode, definition, () => (creation.draftRef.current ?? []).slice(0, -1));
+  // Shift-constrain against where the placed anchors are now (the chart may have panned since).
+  const creationPoint = creationPointLocator(svgRef, adapter, snapMode, definition, () => (
+    placedAnchorPositions(svgRef.current, definition, access, creation.draftRef.current)
+  ));
 
   const frame: DrawingFrame = {
     drawings,
@@ -222,17 +285,19 @@ export function TradingDrawingOverlay({
   frameRef.current = frame;
   const drawingsRef = useRef(drawings);
   drawingsRef.current = drawings;
+  const accessRef = useRef(access);
+  accessRef.current = access;
   const canvasHost = useCanvasDrawingHost({
     enabled: canvas,
     adapter,
     svgRef,
     drawingsRef,
-    scene: (size) => canvasScene(frameRef.current ?? frame, adapter, size),
+    scene: (size) => canvasScene(frameRef.current ?? frame, accessRef.current, size),
   });
 
   const refreshProjection = useCallback(() => {
     const svg = svgRef.current;
-    if (svg && adapter && frameRef.current && !patchDrawings(svg, frameRef.current, chartAccessFor(adapter), !canvas)) rerender();
+    if (svg && adapter && frameRef.current && !patchDrawings(svg, frameRef.current, accessRef.current, !canvas)) rerender();
   }, [adapter, canvas, rerender]);
 
   useProjectionSync(adapter, svgRef, refreshProjection, (width, height) => {
@@ -279,19 +344,10 @@ export function TradingDrawingOverlay({
     const drawingId = target?.dataset.drawingId ?? (canvas ? canvasHost.drawingAt(event.clientX, event.clientY)?.drawingId : undefined);
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
     const { placement, indicatorId } = chartPlacement(adapter, point, event.clientY, 'context-menu');
-    onChartContextMenu?.({ ...placement, ...drawingMenuEntries(drawing) }, indicatorId);
-  };
-
-  const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    if (!adapter) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    event.preventDefault();
-    event.stopPropagation();
-    adapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
+    onChartContextMenu?.({ ...placement, ...drawingMenuEntries(drawing, access) }, indicatorId);
   };
 
   void viewport.revision;
-  const access = chartAccessFor(adapter);
   // Measure like the imperative refresh does, so both always agree on shape structure.
   const size = svgRef.current ? svgViewport(svgRef.current) : { width: viewport.width, height: viewport.height };
   const rendered = drawings
@@ -308,21 +364,19 @@ export function TradingDrawingOverlay({
       onPointerMove={onPointerMove}
       onPointerUp={creation.pointerUp}
       onDoubleClick={creation.doubleClick}
-      onWheel={onWheel}
+      onWheel={(event) => zoomOnWheel(adapter, event)}
       onContextMenu={onContextMenu}
     >
       {rendered.map((item) => (
         <DrawingGroup
           key={item.drawing.drawingId}
           item={item}
-          project={access.project}
-          viewport={size}
           withShapes={!canvas}
           onPressDrawing={editing.dragDrawing(item.drawing)}
-          onPressHandle={(index) => editing.dragHandle(item.drawing, index)}
+          onPressHandle={(handle) => editing.dragHandle(item.drawing, handle)}
         />
       ))}
-      {frame.draft ? <ShapeGroup shapes={draftShapes(frame.draft, access, size, interval)} signature /> : null}
+      {frame.draft ? <ShapeGroup shapes={draftShapes(frame.draft, access, size, interval)} /> : null}
     </svg>
   );
 }

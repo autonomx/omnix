@@ -7,6 +7,7 @@ import {
   deleteDrawing,
   deleteAllDrawings,
   deleteSelectedDrawing,
+  editDrawing,
   emptyDrawingState,
   moveDrawingPoint,
   redoDrawing,
@@ -21,7 +22,8 @@ import {
   type DrawingStyle,
   type TradingDrawing,
 } from './drawingCommands';
-import { drawingDocumentPayload, upgradeDrawingDocument, type DrawingDocument } from './drawingDocument';
+import type { DrawingEditPatch } from './tools/types';
+import { drawingDocumentPayload, mergePreserved, upgradeDrawingDocument, type DrawingDocument } from './drawingDocument';
 
 /** `read-only`: the stored document is from a newer schema; edits stay local and are never saved over it. */
 export type DrawingPersistenceStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 'error' | 'read-only';
@@ -130,8 +132,32 @@ function payload(entry: DrawingEntry): Record<string, unknown> {
   return drawingDocumentPayload(entry.instrumentId, entry.state.drawings, entry.preserved);
 }
 
+/**
+ * Before the first save of a document whose load failed, fetch it: its
+ * preserved entries must be saved back, and a newer schema must not be
+ * saved over. Returns false when saving must not go ahead.
+ */
+async function ensureServerDocument(entry: DrawingEntry): Promise<boolean> {
+  if (entry.loaded) return true;
+  const records = await tradingApi.documents('drawings');
+  const latest = records.find((item) => item.record_id === tradingDrawingRecordId(entry.instrumentId, entry.scopeId)) ?? null;
+  if (latest) {
+    const document = documentFrom(latest, entry.instrumentId);
+    entry.record = latest;
+    entry.preserved = mergePreserved(entry.preserved, document.preserved);
+    entry.readOnly = document.readOnly;
+  }
+  entry.loaded = true;
+  return !entry.readOnly;
+}
+
 async function saveEntry(entry: DrawingEntry): Promise<void> {
   try {
+    if (!(await ensureServerDocument(entry))) {
+      entry.status = 'read-only';
+      emit(entry);
+      return;
+    }
     const saved = entry.record
       ? await tradingApi.updateDocument('drawings', entry.record, payload(entry))
       : await tradingApi.createDocument('drawings', tradingDrawingRecordId(entry.instrumentId, entry.scopeId), payload(entry));
@@ -189,6 +215,8 @@ async function resolveConflict(entry: DrawingEntry, resolution: 'reload' | 'over
     emit(entry);
     return;
   }
+  // Overwriting keeps what the server's copy preserved as well as ours.
+  if (entry.serverDocument) entry.preserved = mergePreserved(entry.preserved, entry.serverDocument.preserved);
   entry.status = 'saving';
   emit(entry);
   await saveEntry(entry);
@@ -222,7 +250,11 @@ export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
     },
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(entry, moveDrawingPoint(entry.state, id, index, point)),
     translate: (id: string, from: DrawingPoint, to: DrawingPoint) => persist(entry, translateDrawing(entry.state, id, from, to)),
-    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties }) => persist(entry, updateSelectedDrawing(entry.state, patch)),
+    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties }, mergeKey?: string) => (
+      persist(entry, updateSelectedDrawing(entry.state, patch, mergeKey))
+    ),
+    /** A tool handle's edit of anchors and/or properties, one undo step. */
+    edit: (id: string, patch: DrawingEditPatch) => persist(entry, editDrawing(entry.state, id, patch)),
     remove: (id: string) => persist(entry, deleteDrawing(entry.state, id)),
     removeSelected: () => persist(entry, deleteSelectedDrawing(entry.state)),
     removeAll: () => persist(entry, deleteAllDrawings(entry.state)),
