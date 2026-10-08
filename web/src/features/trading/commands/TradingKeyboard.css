@@ -1,0 +1,21 @@
+@layer features {
+  .trading-command-palette-backdrop,.trading-interval-box-backdrop{position:fixed;z-index:1250;inset:0;display:grid;place-items:start center;padding:12vh 16px 16px;background:color-mix(in srgb, var(--c-slate-130) 55%, transparent)}
+  .trading-command-palette{display:grid;width:min(640px,100%);max-height:min(560px,76vh);grid-template-rows:auto minmax(0,1fr);overflow:hidden;border:1px solid color-mix(in srgb, var(--c-slate-790) 38%, transparent);border-radius:8px;background:var(--c-neutral-1000);color:var(--c-slate-240);box-shadow:0 24px 70px color-mix(in srgb, var(--c-neutral-0) 45%, transparent)}
+  .trading-command-palette-input{width:100%;padding:14px 16px;border:0;border-bottom:1px solid var(--c-slate-930);outline:0;background:transparent;color:var(--c-slate-240);font-size:16px}
+  .trading-command-palette-input::placeholder{color:var(--c-slate-660)}
+  .trading-command-palette-list{min-height:0;margin:0;padding:4px 0;overflow:auto;list-style:none}
+  .trading-command-palette-list li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:8px 16px;cursor:pointer}
+  .trading-command-palette-list li.is-active{background:var(--c-slate-970-2);box-shadow:inset 3px 0 0 var(--c-blue-580)}
+  .trading-command-palette-list li[aria-disabled=true]{cursor:default;opacity:.55}
+  .trading-command-palette-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trading-command-palette-group{color:var(--c-slate-630);font-size:12px;white-space:nowrap}
+  .trading-command-palette-keys,.trading-shortcut-keys{display:flex;flex-wrap:wrap;gap:4px}
+  .trading-command-palette-keys kbd,.trading-shortcut-keys kbd{padding:1px 6px;border:1px solid var(--c-slate-890);border-radius:4px;background:var(--c-slate-970-2);color:var(--c-slate-330);font:inherit;font-size:11px;white-space:nowrap}
+  .trading-command-palette-list li.trading-command-palette-empty{display:block;padding:24px 16px;color:var(--c-slate-580);cursor:default;text-align:center}
+  .trading-interval-box{display:grid;gap:8px;width:min(280px,100%);padding:14px 16px;border:1px solid color-mix(in srgb, var(--c-slate-790) 38%, transparent);border-radius:8px;background:var(--c-neutral-1000);color:var(--c-slate-240);box-shadow:0 24px 70px color-mix(in srgb, var(--c-neutral-0) 45%, transparent)}
+  .trading-interval-box h2{margin:0;font-size:14px;font-weight:600}
+  .trading-interval-box input{width:100%;padding:8px 10px;border:1px solid var(--c-slate-890);border-radius:6px;background:transparent;color:var(--c-slate-240);font-size:18px}
+  .trading-interval-box input:focus{border-color:var(--c-blue-650);outline:0;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-blue-650) 13%, transparent)}
+  .trading-interval-box p{margin:0;color:var(--c-slate-630);font-size:12px}
+  .trading-interval-box p.trading-interval-box-error{color:var(--c-red-560)}
+}

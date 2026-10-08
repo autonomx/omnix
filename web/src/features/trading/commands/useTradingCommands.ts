@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   resolveCommand,
   tradingCommandDefinition,
@@ -6,13 +6,34 @@ import {
   type RegisteredCommand,
   type TradingCommandId,
 } from './tradingCommands';
+import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
 
 const registered: RegisteredCommand[] = [];
 let keyOverrides: KeyOverrides = {};
 let dispatchers = 0;
+const listeners = new Set<() => void>();
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 export function setTradingCommandKeyOverrides(overrides: KeyOverrides): void {
   keyOverrides = overrides;
+  notify();
+}
+
+export function tradingCommandKeyOverrides(): KeyOverrides {
+  return keyOverrides;
+}
+
+/** The current key overrides; re-renders when they change. */
+export function useTradingCommandKeyOverrides(): KeyOverrides {
+  return useSyncExternalStore(subscribe, tradingCommandKeyOverrides, tradingCommandKeyOverrides);
 }
 
 function dispatch(event: KeyboardEvent): void {
@@ -24,22 +45,54 @@ function dispatch(event: KeyboardEvent): void {
   match.handler.run(event);
 }
 
+function pointerDown(event: PointerEvent): void {
+  noteTradingPointerDown(event.target);
+}
+
 /** Installs the one window key listener for trading commands. Mount once, at the trading workspace. */
 export function useTradingCommandDispatcher(): void {
   useEffect(() => {
     dispatchers += 1;
-    if (dispatchers === 1) window.addEventListener('keydown', dispatch);
+    if (dispatchers === 1) {
+      window.addEventListener('keydown', dispatch);
+      window.addEventListener('pointerdown', pointerDown, true);
+    }
     return () => {
       dispatchers -= 1;
-      if (dispatchers === 0) window.removeEventListener('keydown', dispatch);
+      if (dispatchers === 0) {
+        window.removeEventListener('keydown', dispatch);
+        window.removeEventListener('pointerdown', pointerDown, true);
+        resetTradingPointerContext();
+      }
     };
   }, []);
+}
+
+function activeRegistration(id: string): RegisteredCommand | undefined {
+  for (let index = registered.length - 1; index >= 0; index -= 1) {
+    const entry = registered[index];
+    if (entry.definition.id === id && entry.handler.isActive()) return entry;
+  }
+  return undefined;
+}
+
+/** True when a mounted component can run the command now. */
+export function canRunTradingCommand(id: string): boolean {
+  return activeRegistration(id) !== undefined;
+}
+
+/** Runs a command without a key press (command palette, toolbar entries). Returns false when nothing can run it. */
+export function runTradingCommand(id: string): boolean {
+  const entry = activeRegistration(id);
+  if (!entry) return false;
+  entry.handler.run();
+  return true;
 }
 
 /** Binds a component's handler to a catalogued command while the component is mounted. */
 export function useTradingCommand(
   id: TradingCommandId,
-  run: (event: KeyboardEvent) => void,
+  run: (event?: KeyboardEvent) => void,
   isActive: () => boolean = () => true,
 ): void {
   const runRef = useRef(run);

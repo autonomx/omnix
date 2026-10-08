@@ -29,6 +29,8 @@ export type TradingWorkspacePersistence = {
   renameWorkspace: (name: string) => Promise<void>;
   deleteWorkspace: () => Promise<void>;
   resolveConflict: (resolution: 'reload' | 'overwrite') => Promise<void>;
+  /** Saves the open workspace now instead of after the edit delay. */
+  saveNow: () => Promise<void>;
 };
 
 let activeWorkspaceScopeId = 'workspace-uninitialized';
@@ -171,6 +173,13 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     await savePayload(record, currentPayload());
   }, [currentPayload, savePayload]);
 
+  /** Saves now instead of after the edit delay (Ctrl+S, switching workspaces). */
+  const saveNow = useCallback(async (): Promise<void> => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    await saveActive();
+  }, [saveActive]);
+
   useEffect(() => {
     cancelledRef.current = false;
     // React StrictMode intentionally mounts effects twice in development. The
@@ -238,11 +247,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
 
   const selectWorkspace = useCallback(async (id: string) => {
     if (id === activeIdRef.current || !recordsRef.current.has(id)) return;
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    if (!conflictRef.current) await saveActive();
+    await saveNow();
     const record = recordsRef.current.get(id);
     if (!record) return;
     setTradingWorkspaceScopeId(id);
@@ -251,13 +256,12 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     setActiveWorkspaceId(id);
     conflictRef.current = null;
     setStatus('saved');
-  }, [hydrate, saveActive]);
+  }, [hydrate, saveNow]);
 
   const createWorkspace = useCallback(async (name: string) => {
     const cleanName = name.trim();
     if (!cleanName) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (!conflictRef.current) await saveActive();
+    await saveNow();
     setStatus('saving');
     try {
       const id = workspaceId(cleanName);
@@ -276,7 +280,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     } catch {
       setStatus('error');
     }
-  }, [currentPayload, refreshSummaries, saveActive]);
+  }, [currentPayload, refreshSummaries, saveNow]);
 
   const renameWorkspace = useCallback(async (name: string) => {
     const cleanName = name.trim();
@@ -341,6 +345,6 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     createWorkspace,
     renameWorkspace,
     deleteWorkspace,
-    resolveConflict,
+    resolveConflict, saveNow,
   };
 }

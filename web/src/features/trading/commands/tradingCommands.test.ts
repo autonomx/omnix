@@ -1,16 +1,25 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import {
   TRADING_COMMANDS,
   findKeyConflicts,
   matchesHotkey,
+  matchesKeyPattern,
   normalizeHotkey,
   resolveCommand,
   tradingCommandDefinition,
   type RegisteredCommand,
   type TradingCommandDefinition,
 } from './tradingCommands';
-import { setTradingCommandKeyOverrides, useTradingCommand, useTradingCommandDispatcher } from './useTradingCommands';
+import {
+  canRunTradingCommand,
+  runTradingCommand,
+  setTradingCommandKeyOverrides,
+  useTradingCommand,
+  useTradingCommandDispatcher,
+} from './useTradingCommands';
+import { noteTradingPointerDown, resetTradingPointerContext } from './chartKeyContext';
+import { formatCommandKeys, formatHotkey } from './hotkeyLabels';
 
 function key(init: KeyboardEventInit, target?: EventTarget): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
@@ -113,5 +122,103 @@ describe('trading command dispatcher', () => {
 
     binding.unmount();
     dispatcher.unmount();
+  });
+});
+
+afterEach(() => {
+  resetTradingPointerContext();
+  document.body.replaceChildren();
+});
+
+const symbolSearch = tradingCommandDefinition('chart.symbolSearch')!;
+const intervalInput = tradingCommandDefinition('chart.intervalInput')!;
+const moveLeft = tradingCommandDefinition('chart.moveLeft')!;
+
+describe('typed-character commands (TVP-2.1)', () => {
+  it('matches letters and interval characters without Ctrl, Command or Alt', () => {
+    expect(matchesKeyPattern('letter', key({ key: 'a' }))).toBe(true);
+    expect(matchesKeyPattern('letter', key({ key: 'A', shiftKey: true }))).toBe(true);
+    expect(matchesKeyPattern('letter', key({ key: 'a', ctrlKey: true }))).toBe(false);
+    expect(matchesKeyPattern('letter', key({ key: '5' }))).toBe(false);
+    expect(matchesKeyPattern('interval', key({ key: '5' }))).toBe(true);
+    expect(matchesKeyPattern('interval', key({ key: ',' }))).toBe(true);
+    expect(matchesKeyPattern('interval', key({ key: '1', altKey: true }))).toBe(false);
+  });
+
+  it('lets a hotkey win over a typed-character pattern', () => {
+    const letter = command(symbolSearch);
+    const exact = command({ id: 'test.b', label: 'B', group: 'Test', scope: 'workspace', defaultKeys: ['b'] });
+    expect(resolveCommand([exact, letter], key({ key: 'b' }))).toBe(exact);
+    expect(resolveCommand([exact, letter], key({ key: 'c' }))).toBe(letter);
+  });
+
+  it('keeps pattern commands fixed even when an override names them', () => {
+    const letter = command(symbolSearch);
+    expect(resolveCommand([letter], key({ key: 'q' }), { 'chart.symbolSearch': ['mod+q'] })).toBe(letter);
+  });
+});
+
+describe('where plain keys fire', () => {
+  it('skips plain keys in widgets that navigate with them, but not modified keys', () => {
+    const list = document.createElement('div');
+    list.setAttribute('role', 'listbox');
+    const option = document.createElement('div');
+    list.append(option);
+    document.body.append(list);
+    expect(resolveCommand([command(intervalInput)], key({ key: '5' }, option))).toBeNull();
+    const undo = command(chartUndo);
+    expect(resolveCommand([undo], key({ key: 'z', ctrlKey: true }, option))).toBe(undo);
+  });
+
+  it('skips every command while a modal dialog is open, unless it allows inputs', () => {
+    const dialog = document.createElement('section');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    document.body.append(dialog);
+    expect(resolveCommand([command(chartUndo)], key({ key: 'z', ctrlKey: true }, document.body))).toBeNull();
+    const escape = command({ id: 'test.escape', label: 'Close', group: 'Test', scope: 'workspace', defaultKeys: ['escape'], allowInInputs: true });
+    expect(resolveCommand([escape], key({ key: 'Escape' }, document.body))).toBe(escape);
+  });
+
+  it('fires chart keys only while the chart area has the keyboard', () => {
+    const shell = document.createElement('section');
+    shell.className = 'trading-chart-shell';
+    const outside = document.createElement('aside');
+    document.body.append(shell, outside);
+    const left = command(moveLeft);
+    expect(resolveCommand([left], key({ key: 'ArrowLeft' }, document.body))).toBe(left);
+    noteTradingPointerDown(outside);
+    expect(resolveCommand([left], key({ key: 'ArrowLeft' }, document.body))).toBeNull();
+    noteTradingPointerDown(shell);
+    expect(resolveCommand([left], key({ key: 'ArrowLeft' }, document.body))).toBe(left);
+    const button = document.createElement('button');
+    outside.append(button);
+    button.focus();
+    expect(resolveCommand([left], key({ key: 'ArrowLeft' }, button))).toBeNull();
+  });
+});
+
+describe('running commands without keys', () => {
+  it('runs the latest active registration and reports when none can run', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const one = renderHook(() => useTradingCommand('chart.reset', first));
+    const two = renderHook(() => useTradingCommand('chart.reset', second, () => false));
+    expect(runTradingCommand('chart.reset')).toBe(true);
+    expect(first).toHaveBeenCalledWith(undefined);
+    expect(second).not.toHaveBeenCalled();
+    one.unmount();
+    expect(canRunTradingCommand('chart.reset')).toBe(false);
+    expect(runTradingCommand('chart.reset')).toBe(false);
+    two.unmount();
+  });
+});
+
+describe('hotkey labels', () => {
+  it('formats keys for Windows and macOS', () => {
+    expect(formatHotkey('mod+shift+z', false)).toBe('Ctrl+Shift+Z');
+    expect(formatHotkey('mod+arrowleft', false)).toBe('Ctrl+←');
+    expect(formatHotkey('alt+pagedown', true)).toBe('⌥+Page Down');
+    expect(formatCommandKeys(symbolSearch, [], false)).toEqual(['A–Z']);
   });
 });

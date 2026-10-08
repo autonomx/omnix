@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTradingInstrumentLink } from './useTradingInstrumentLink';
 import { useTradingCommandDispatcher } from './commands/useTradingCommands';
+import { TradingKeyboardLayer } from './commands/TradingKeyboardLayer';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
@@ -101,6 +102,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [symbolSearchTyped, setSymbolSearchTyped] = useState(false);
   const [intervalMenuOpen, setIntervalMenuOpen] = useState(false);
   const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
@@ -392,10 +394,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
   };
 
-  const createTab = () => {
-    addTab();
-  };
-
   const sessionTabLabel = (tab: (typeof tabs)[number]) => {
     const chart = tab.charts.find((item) => item.chartId === tab.activeChartId) ?? tab.charts[0];
     if (!chart) return tab.name;
@@ -411,12 +409,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (window.confirm(`Close ${sessionTabLabel(tab)}?`)) removeTab(tab.tabId);
   };
 
-  const openSymbolSearch = (chartId = activeChartId) => {
+  const openSymbolSearch = (chartId = activeChartId, typed?: string) => {
     const targetChart = charts.find((chart) => chart.chartId === chartId) ?? activeChart;
     const targetInstrument = (instruments.data ?? []).find((instrument) => instrument.instrument_id === targetChart.instrumentId);
     setActiveChart(targetChart.chartId);
     setSymbolSearchChartId(targetChart.chartId);
-    setSymbolQuery(targetInstrument?.display_symbol ?? tradingFormulaDisplaySymbol(targetChart.instrumentId) ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
+    setSymbolSearchTyped(typed !== undefined);
+    setSymbolQuery(typed ?? targetInstrument?.display_symbol ?? tradingFormulaDisplaySymbol(targetChart.instrumentId) ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
     setSymbolSearchResults([]);
     setFormulaResolution(null);
     setSymbolSearchOpen(true);
@@ -498,6 +497,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)} disabled={!workspaceHydrated}>Right panel</button>
           <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)} disabled={!workspaceHydrated}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
+          <TradingKeyboardLayer persistence={persistence} supportedIntervals={supportedIntervals} onOpenSymbolSearch={(typed) => openSymbolSearch(activeChartId, typed)} />
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
       </div>
       <section className="trading-command-bar" aria-label="Trading command bar">
@@ -643,7 +643,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         canAdd={tabs.length < MAX_TRADING_TABS}
         getTabLabel={sessionTabLabel}
         onSelect={setActiveTab}
-        onAdd={createTab}
+        onAdd={() => addTab()}
         onClose={closeTabSession}
       />
 
@@ -658,6 +658,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         onSelect={(match) => applySymbolMatch(match, [match])}
         onSelectFormula={() => applyFormulaResolution(formulaResolution)}
         onClose={closeSymbolSearch}
+        selectQueryOnOpen={!symbolSearchTyped}
       />
       <TradingAlertToastLayer />
 
