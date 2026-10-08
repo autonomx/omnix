@@ -1,0 +1,412 @@
+{
+ "formula_version": "omnix-indicators-v2",
+ "datasets": [
+  "random-walk-300",
+  "gaps-flats-zero-volume-160",
+  "short-12",
+  "trend-up-80",
+  "constant-40"
+ ],
+ "indicators": [
+  {
+   "id": "tv-accumulation-distribution-adl",
+   "name": "Accumulation Distribution (ADL)"
+  },
+  {
+   "id": "tv-arnaud-legoux-moving-average",
+   "name": "Arnaud Legoux Moving Average"
+  },
+  {
+   "id": "tv-aroon-indicator",
+   "name": "Aroon Indicator"
+  },
+  {
+   "id": "tv-aroon-oscillator",
+   "name": "Aroon Oscillator"
+  },
+  {
+   "id": "tv-average-daily-range-adr-indicator",
+   "name": "Average Daily Range (ADR) indicator"
+  },
+  {
+   "id": "tv-average-directional-index-adx",
+   "name": "Average Directional Index (ADX)"
+  },
+  {
+   "id": "atr",
+   "name": "Average True Range (ATR)"
+  },
+  {
+   "id": "tv-awesome-oscillator-ao",
+   "name": "Awesome Oscillator (AO)"
+  },
+  {
+   "id": "tv-balance-of-power-bop",
+   "name": "Balance of Power (BOP)"
+  },
+  {
+   "id": "tv-bbtrend",
+   "name": "BBTrend"
+  },
+  {
+   "id": "bollinger",
+   "name": "Bollinger Bands (BB)"
+  },
+  {
+   "id": "tv-bollinger-bands-b-b",
+   "name": "Bollinger Bands %b (%b)"
+  },
+  {
+   "id": "tv-bollinger-bandwidth-bbw",
+   "name": "Bollinger BandWidth (BBW)"
+  },
+  {
+   "id": "tv-bull-bear-power",
+   "name": "Bull Bear Power"
+  },
+  {
+   "id": "tv-chaikin-money-flow-cmf",
+   "name": "Chaikin Money Flow (CMF)"
+  },
+  {
+   "id": "tv-chaikin-oscillator",
+   "name": "Chaikin Oscillator"
+  },
+  {
+   "id": "tv-chande-kroll-stop",
+   "name": "Chande Kroll Stop"
+  },
+  {
+   "id": "tv-chande-momentum-oscillator-cmo",
+   "name": "Chande Momentum Oscillator (CMO)"
+  },
+  {
+   "id": "tv-chandelier-exit",
+   "name": "Chandelier Exit"
+  },
+  {
+   "id": "tv-choppiness-index-chop",
+   "name": "Choppiness Index (CHOP)"
+  },
+  {
+   "id": "tv-commodity-channel-index-cci",
+   "name": "Commodity Channel Index (CCI)"
+  },
+  {
+   "id": "tv-connors-rsi-crsi",
+   "name": "Connors RSI (CRSI)"
+  },
+  {
+   "id": "tv-coppock-curve",
+   "name": "Coppock Curve"
+  },
+  {
+   "id": "tv-detrended-price-oscillator-dpo",
+   "name": "Detrended Price Oscillator (DPO)"
+  },
+  {
+   "id": "tv-directional-movement-dmi",
+   "name": "Directional Movement (DMI)"
+  },
+  {
+   "id": "tv-donchian-channels-dc",
+   "name": "Donchian Channels (DC)"
+  },
+  {
+   "id": "tv-double-exponential-moving-average-ema",
+   "name": "Double Exponential Moving Average (EMA)"
+  },
+  {
+   "id": "tv-ease-of-movement-eom",
+   "name": "Ease of Movement (EOM)"
+  },
+  {
+   "id": "tv-elder-s-force-index-efi",
+   "name": "Elder's Force Index (EFI)"
+  },
+  {
+   "id": "tv-envelope-env",
+   "name": "Envelope (ENV)"
+  },
+  {
+   "id": "ema",
+   "name": "Exponential Moving Average"
+  },
+  {
+   "id": "tv-fisher-transform",
+   "name": "Fisher Transform"
+  },
+  {
+   "id": "tv-historical-volatility",
+   "name": "Historical Volatility"
+  },
+  {
+   "id": "tv-hull-moving-average",
+   "name": "Hull Moving Average"
+  },
+  {
+   "id": "tv-ichimoku-cloud",
+   "name": "Ichimoku Cloud"
+  },
+  {
+   "id": "tv-kaufman-s-adaptive-moving-average-kama",
+   "name": "Kaufman's Adaptive Moving Average (KAMA)"
+  },
+  {
+   "id": "tv-keltner-channels-kc",
+   "name": "Keltner Channels (KC)"
+  },
+  {
+   "id": "tv-klinger-oscillator",
+   "name": "Klinger Oscillator"
+  },
+  {
+   "id": "tv-know-sure-thing-kst",
+   "name": "Know Sure Thing (KST)"
+  },
+  {
+   "id": "tv-least-squares-moving-average",
+   "name": "Least Squares Moving Average"
+  },
+  {
+   "id": "tv-linear-regression",
+   "name": "Linear Regression"
+  },
+  {
+   "id": "tv-ma-cross",
+   "name": "MA Cross"
+  },
+  {
+   "id": "tv-mass-index",
+   "name": "Mass Index"
+  },
+  {
+   "id": "tv-mcginley-dynamic",
+   "name": "McGinley Dynamic"
+  },
+  {
+   "id": "tv-median",
+   "name": "Median"
+  },
+  {
+   "id": "tv-momentum",
+   "name": "Momentum"
+  },
+  {
+   "id": "tv-money-flow-mfi",
+   "name": "Money Flow (MFI)"
+  },
+  {
+   "id": "macd",
+   "name": "Moving average convergence divergence (MACD) indicator"
+  },
+  {
+   "id": "tv-moving-average-ribbon",
+   "name": "Moving Average Ribbon"
+  },
+  {
+   "id": "tv-moving-averages",
+   "name": "Moving Averages"
+  },
+  {
+   "id": "tv-movingavg-cross",
+   "name": "MovingAvg Cross"
+  },
+  {
+   "id": "tv-movingavg2line-cross",
+   "name": "MovingAvg2Line Cross"
+  },
+  {
+   "id": "tv-negative-volume-index-nvi",
+   "name": "Negative Volume Index (NVI)"
+  },
+  {
+   "id": "tv-net-volume",
+   "name": "Net Volume"
+  },
+  {
+   "id": "tv-on-balance-volume-obv",
+   "name": "On Balance Volume (OBV)"
+  },
+  {
+   "id": "tv-parabolic-sar-sar",
+   "name": "Parabolic SAR (SAR)"
+  },
+  {
+   "id": "tv-percentage-price-oscillator-ppo",
+   "name": "Percentage Price Oscillator (PPO)"
+  },
+  {
+   "id": "tv-percentage-volume-oscillator-pvo",
+   "name": "Percentage Volume Oscillator (PVO)"
+  },
+  {
+   "id": "tv-performance",
+   "name": "Performance"
+  },
+  {
+   "id": "tv-pivot-points-high-low",
+   "name": "Pivot Points High Low"
+  },
+  {
+   "id": "tv-pivot-points-standard",
+   "name": "Pivot Points Standard"
+  },
+  {
+   "id": "tv-positive-volume-index-pvi",
+   "name": "Positive Volume Index (PVI)"
+  },
+  {
+   "id": "tv-price-momentum-oscillator-pmo",
+   "name": "Price Momentum Oscillator (PMO)"
+  },
+  {
+   "id": "tv-price-volume-trend-pvt",
+   "name": "Price Volume Trend (PVT)"
+  },
+  {
+   "id": "tv-pring-s-special-k",
+   "name": "Pring's Special K"
+  },
+  {
+   "id": "tv-rank-correlation-index-rci",
+   "name": "Rank Correlation Index (RCI)"
+  },
+  {
+   "id": "tv-rate-of-change-roc",
+   "name": "Rate of Change (ROC)"
+  },
+  {
+   "id": "tv-rci-ribbon",
+   "name": "RCI Ribbon"
+  },
+  {
+   "id": "rsi",
+   "name": "Relative Strength Index (RSI)"
+  },
+  {
+   "id": "tv-relative-vigor-index",
+   "name": "Relative Vigor Index"
+  },
+  {
+   "id": "tv-relative-volatility-index",
+   "name": "Relative Volatility Index"
+  },
+  {
+   "id": "rsi-divergence",
+   "name": "RSI divergence indicator"
+  },
+  {
+   "id": "sma",
+   "name": "Simple Moving Average"
+  },
+  {
+   "id": "tv-smi-ergodic-indicator",
+   "name": "SMI Ergodic Indicator"
+  },
+  {
+   "id": "tv-smi-ergodic-oscillator",
+   "name": "SMI Ergodic Oscillator"
+  },
+  {
+   "id": "tv-smoothed-moving-average",
+   "name": "Smoothed Moving Average"
+  },
+  {
+   "id": "tv-stochastic-stoch",
+   "name": "Stochastic (STOCH)"
+  },
+  {
+   "id": "tv-stochastic-momentum-index-smi",
+   "name": "Stochastic Momentum Index (SMI)"
+  },
+  {
+   "id": "stochastic-rsi",
+   "name": "Stochastic RSI (STOCH RSI)"
+  },
+  {
+   "id": "tv-supertrend",
+   "name": "Supertrend"
+  },
+  {
+   "id": "tv-technical-ratings",
+   "name": "Technical Ratings"
+  },
+  {
+   "id": "tv-time-weighted-average-price",
+   "name": "Time Weighted Average Price"
+  },
+  {
+   "id": "tv-trend-strength-index",
+   "name": "Trend Strength Index"
+  },
+  {
+   "id": "tv-triple-ema",
+   "name": "Triple EMA"
+  },
+  {
+   "id": "tv-trix",
+   "name": "TRIX"
+  },
+  {
+   "id": "tv-true-strength-index",
+   "name": "True Strength Index"
+  },
+  {
+   "id": "tv-ulcer-index",
+   "name": "Ulcer Index"
+  },
+  {
+   "id": "tv-ultimate-oscillator-uo",
+   "name": "Ultimate Oscillator (UO)"
+  },
+  {
+   "id": "tv-up-down-volume",
+   "name": "Up/Down Volume"
+  },
+  {
+   "id": "tv-volatility-stop",
+   "name": "Volatility Stop"
+  },
+  {
+   "id": "tv-volume",
+   "name": "Volume"
+  },
+  {
+   "id": "vwap",
+   "name": "Volume Weighted Average Price (VWAP)"
+  },
+  {
+   "id": "tv-volume-weighted-moving-average-vwma",
+   "name": "Volume-Weighted Moving Average (VWMA)"
+  },
+  {
+   "id": "tv-vortex-indicator",
+   "name": "Vortex Indicator"
+  },
+  {
+   "id": "tv-weighted-moving-average",
+   "name": "Weighted Moving Average"
+  },
+  {
+   "id": "tv-williams-r-r",
+   "name": "Williams %R (%R)"
+  },
+  {
+   "id": "tv-williams-alligator",
+   "name": "Williams Alligator"
+  },
+  {
+   "id": "tv-williams-fractal",
+   "name": "Williams Fractal"
+  },
+  {
+   "id": "tv-woodies-cci",
+   "name": "Woodies CCI"
+  },
+  {
+   "id": "tv-zig-zag",
+   "name": "Zig Zag"
+  }
+ ]
+}
