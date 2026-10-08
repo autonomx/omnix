@@ -87,12 +87,12 @@ Status key: **Have** · **Partial** · **Missing**. The WP column says which wor
 | Screener fields | 7 metrics × 4 operators | 400+ fields, 6 screeners, heatmaps | TVP-9 |
 | Replay | Start bar, step, two disagreeing speed controls, trading | 9 speeds, sub-bar update interval, synced multi-chart | TVP-8 |
 | Paper trading | Market, limit, stop, long-side brackets, commission/slippage bps, server-side shorting (nothing can turn it on) | + stop-limit, trailing, TIF, shorting, leverage, margin calls, drag-to-modify | TVP-7 |
-| Research data | News, economic calendar | + financials, options, seasonals, macro, heatmaps | TVP-10 |
+| Research data | News (no economic calendar, see §2.12) | + economic calendar, financials, options, seasonals, macro, heatmaps | TVP-10 |
 | Windows | Tabs in one browser tab | Tabs, multiple windows, colour link groups | TVP-4 |
 
 ### 2.2 Charts and layouts
 
-**Have:** all 21 chart types (`TRADING_CHART_TYPE_OPTIONS` in `chart/chartAdapter.ts`); 16 charts per tab and 12 tabs; symbol, interval, crosshair and visible-range sync (`links` in `tradingStore.ts`); tick, second, minute, hour, day, week, month and range intervals; compare and spread/formula symbols; log, percent and inverted scales; timezone selector; PNG snapshot download; undo/redo; object tree; indicator presets; save, load, rename and delete layouts; workspace JSON export/import; command center.
+**Have:** all 21 chart types (`TRADING_CHART_TYPE_OPTIONS` in `chart/chartAdapter.ts`); 16 charts per tab and 12 tabs; symbol, interval, crosshair and visible-range sync (`links` in `tradingStore.ts`); tick, second, minute, hour, day, week, month and range intervals; compare and spread/formula symbols; log, percent and inverted scales; timezone selector; PNG snapshot download; undo/redo; object tree; indicator presets; save, load, rename and delete layouts; workspace JSON export. `TradingCommandCenter` is a strategy operations panel, not a command palette (TVP-0.3 finding).
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
@@ -104,10 +104,12 @@ Status key: **Have** · **Partial** · **Missing**. The WP column says which wor
 | Go to date (jump to a bar) | Weekly | Partial | TVP-2.5 |
 | Copy chart image; copy snapshot link | Weekly | Missing | TVP-2.5 |
 | Duplicate layout | Weekly | Missing | TVP-2.5 |
-| Maximise / collapse pane by double-click | Daily | *verify* | TVP-2.5 |
+| Maximise / collapse pane by double-click | Daily | Partial (a header button focuses one chart and panes have fullscreen/minimise buttons; no double-click gesture) | TVP-2.5 |
 | Pre/post-market toggle and price line | Daily | Partial | TVP-2.5 |
 | Chart templates | Weekly | Partial | TVP-2.5 |
-| Market status and data-delay marker in legend | Daily | *verify* | TVP-2.5 |
+| Market status and data-delay marker in legend | Daily | Partial (feed-status dot; freshness only in a tooltip; no market open/closed status) | TVP-2.5 |
+| Command palette (quick search) | Daily | Missing | TVP-2.1 |
+| Workspace JSON import (export exists) | Rare | Missing | unassigned |
 
 ### 2.3 Drawing tools
 
@@ -162,7 +164,7 @@ Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on
 
 ### 2.6 Alerts
 
-**Have:** price above/below, percent change, volume above/below; indicator above/below/cross for 8 indicators; trendline crossing/up/down/above/below; frequencies `once`, `once_per_bar`, `every_time` plus cooldown; expiration; custom message; in-app, toast and sound delivery; alert manager and log. Alerts are evaluated server-side (`alerts_monitor.py`), but nothing leaves the process.
+**Have:** price above/below, percent change, volume above/below; indicator above/below/cross for 8 indicators; trendline crossing/up/down/above/below; frequencies `once`, `once_per_bar`, `every_time` plus cooldown; expiration; custom message; in-app and toast delivery; alert manager and log. Alerts are evaluated server-side (`alerts_monitor.py`), but nothing leaves the process. On the baseline they never fire: the lifecycle trigger from `0027_trading_alert_lifecycle_history.sql` reverts the evaluator's own state update, so the condition types count as partial in the ledger until the TVP-1.2 fix merges.
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
@@ -173,7 +175,8 @@ Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on
 | Moving up/down by amount or % within N bars | Weekly | Partial | TVP-1.2 |
 | Alerts on any indicator and any output line | Daily | Partial (8) | TVP-1.3 |
 | Alerts on horizontal lines/rays, rectangles, channels, fib levels | Daily | Missing | TVP-1.4 |
-| Message placeholders (`{{ticker}}`, `{{close}}`, …) | Daily | *verify* | TVP-1.5 |
+| Message placeholders (`{{ticker}}`, `{{close}}`, …) | Daily | Missing (messages are stored and shown verbatim) | TVP-1.5 |
+| Sound delivery | Daily | Partial (the channel can be chosen, but no code plays a sound) | TVP-1.5 |
 | Email and browser/OS push delivery | Weekly | Missing | TVP-0.5b, TVP-0.5c, TVP-1.5 |
 | Multi-condition alerts (up to 5) | Weekly | Missing | TVP-1.2 (schema), TVP-1.6 |
 | Watchlist alerts (one alert over a whole list) | Weekly | Missing | TVP-1.7 |
@@ -188,6 +191,10 @@ Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialo
 - **Layout:** Tab/Shift+Tab switch chart; Alt+Enter maximise; Alt+W add to watchlist.
 - **Watchlist:** ↑/↓ or Space/Shift+Space move; Shift+↑/↓ extend selection; Ctrl+A select all.
 - **Tabs:** Ctrl+T new; Ctrl+U duplicate; Ctrl+Tab / Ctrl+PgDn next; Ctrl+1–8 go to tab; Ctrl+9 last; Ctrl+Shift+T reopen closed.
+
+Notes from the TVP-0.1 verification:
+- Alt+R, Alt+I, Alt+L, Alt+P and the drawing keys Alt+T, Alt+H, Alt+J, Alt+V, Alt+C, Alt+F, Alt+Shift+R are shown as hints in menus, but nothing binds them.
+- Ctrl+Y redo is partial: redo is bound to Ctrl+Shift+Z.
 - **Trading:** Shift+B / Shift+S market buy/sell; Shift+Alt+B/S limit.
 
 ### 2.8 Watchlists
@@ -255,14 +262,15 @@ Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialo
 | Price-scale "+" menu to place orders | Daily | Missing | TVP-7.3 |
 | Buy/sell buttons in the chart legend | Daily | Missing | TVP-7.3 |
 | Trading hotkeys | Daily | Missing | TVP-7.4 |
-| Trading notifications on chart and notifications log | Weekly | *verify* | TVP-7.4 |
+| Trading notifications on chart and notifications log | Weekly | Partial (the ticket shows a confirmation toast for its own orders; fills, rejects and protective exits are not announced on the chart; no notifications log) | TVP-7.4 |
 
 ### 2.12 Research data
 
-**Have:** news; economic calendar; analyst targets and dividend yield (Yahoo); SEC filings in research (`research/adapters/sec_edgar.py`).
+**Have:** news; analyst targets and dividend yield (Yahoo); SEC filings in research (`research/adapters/sec_edgar.py`).
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
+| Economic calendar | Weekly | Missing (none exists; the "prospective" side tab is the prospective economic-SHADOW strategy panel) | TVP-10.5 |
 | Earnings and dividends calendar, chart markers | Weekly | Partial | TVP-10.1 |
 | Financial statements and ratios panel | Weekly | Missing | TVP-10.2 |
 | Seasonals | Rare | Missing | TVP-10.3 |
