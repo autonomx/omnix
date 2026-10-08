@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal, Protocol, cast
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, SecretStr, ValidationError, model_validator
 
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
@@ -75,10 +75,13 @@ AlertNotificationChannel = Literal["app", "toast", "sound", "webhook", "email", 
 class AlertWebhookSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # The outbound URL policy is checked on writes only (_AlertWrite), so a
-    # stored URL that a later policy rejects can still be read and removed.
-    url: str = Field(min_length=1, max_length=2000)
-    # Read-only: the server sets it from the protected secret store.
+    # Write-only: a webhook URL can carry its token, so it is kept with the
+    # secret in the protected store and never returned. Omit it on an update
+    # to keep the stored one. The outbound URL policy is a write rule.
+    url: str | None = Field(default=None, min_length=1, max_length=2000, exclude=True)
+    # Read-only, set by the server: scheme and host of the stored URL.
+    display_url: str | None = None
+    # Read-only, set by the server: whether a signing secret is stored.
     has_secret: bool = False
 
 
@@ -191,8 +194,17 @@ class TradingAlert(_AlertContract):
     last_observed_value: Decimal | None = None
     last_triggered_at: datetime | None = None
     revision: int = Field(default=1, ge=1)
+    # Bumped only when what the alert watches changes (not by notification or
+    # lifecycle edits); per-bar trigger keys use it.
+    definition_revision: int = Field(default=1, ge=1)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # The protected-store reference of the alert's webhook; never serialised.
+    _webhook_ref: str | None = PrivateAttr(default=None)
+
+    @property
+    def webhook_ref(self) -> str | None:
+        return self._webhook_ref
 
     def is_expired(self, at: datetime | None = None) -> bool:
         if self.expires_at is None:
@@ -214,7 +226,7 @@ class _AlertWrite(_AlertContract):
         if self.expires_at is not None and self.expires_at.tzinfo is None:
             raise ValueError("expires_at must include a timezone")
         webhook = self.parameters.delivery.webhook
-        if webhook is not None:
+        if webhook is not None and webhook.url is not None:
             try:
                 webhook.url = check_outbound_url(webhook.url.strip())
             except UrlPolicyError as exc:
@@ -362,19 +374,23 @@ def frequency_allows(
 
 def alert_trigger_key(
     alert_id: str,
-    revision: int,
     frequency: str,
     outcome: AlertConditionOutcome,
+    *,
+    revision: int,
+    definition_revision: int,
 ) -> str:
     """The idempotency key of a trigger.
 
-    ``once`` has one key per alert revision; the per-bar frequencies one per
-    bar. ``every_time`` and ``once_per_minute`` have one per closed bar, and
+    ``once`` has one key per alert revision, so re-enabling a fired alert
+    re-arms it. The others use the definition revision, which notification
+    and lifecycle edits leave alone, so such an edit cannot let the same bar
+    trigger twice. The per-bar frequencies have one key per bar. ``every_time`` and ``once_per_minute`` have one per closed bar, and
     on a forming bar one per bar and observed values, so a revised or
     re-served closed bar (provider failover) cannot trigger twice. Keys live
     in PostgreSQL, so a restart cannot trigger the same thing twice either.
     """
-    parts = [alert_id, str(revision), frequency]
+    parts = [alert_id, frequency, str(revision if frequency == "once" else definition_revision)]
     if frequency != "once":
         parts.append(outcome.bar_start.astimezone(timezone.utc).isoformat())
     if frequency in {"every_time", "once_per_minute"}:
@@ -454,22 +470,35 @@ def _condition(row) -> AlertConditionSpec:
     )
 
 
-def _split_parameters(parameters: TradingAlertParameters) -> tuple[str, str]:
+def _split_parameters(parameters: TradingAlertParameters, webhook_ref: str | None) -> tuple[str, str]:
     """(condition_parameters, notification_settings) JSON for storage."""
     data = parameters.model_dump(mode="json")
     notification = {name: data.pop(name) for name in NOTIFICATION_PARAMETER_FIELDS}
+    if webhook_ref is not None:
+        notification["webhook_ref"] = webhook_ref
     return json.dumps(data), json.dumps(notification)
 
 
-def _alert(row, conditions: list[AlertConditionSpec] | None = None) -> TradingAlert:
+def _validation_reason(exc: ValidationError) -> str:
+    """Where and why a stored row failed to read, without the stored values."""
+    reasons = []
+    for error in exc.errors()[:3]:
+        location = ".".join(str(part) for part in error.get("loc", ()))
+        reasons.append(f"{location or 'alert'}: {error.get('type', 'invalid')}")
+    return "; ".join(reasons) or "invalid"
+
+
+def _alert(row, conditions: list[Any] | None = None) -> TradingAlert:
     # Rows are trusted on read: only normalising validators run (see _AlertContract).
-    return TradingAlert(
+    notification = dict(row[17] or {})
+    webhook_ref = notification.pop("webhook_ref", None)
+    alert = TradingAlert(
         alert_id=str(row[0]),
         instrument_id=str(row[1]),
         binding_id=str(row[2]) if row[2] is not None else None,
         condition_type=cast(Any, str(row[3])),
         threshold=Decimal(row[4]),
-        parameters=cast(Any, {**dict(row[5] or {}), **dict(row[17] or {})}),
+        parameters=cast(Any, {**dict(row[5] or {}), **notification}),
         evaluation_policy=cast(Any, dict(row[6] or {})),
         enabled=bool(row[7]),
         cooldown_seconds=int(row[8]),
@@ -481,8 +510,37 @@ def _alert(row, conditions: list[AlertConditionSpec] | None = None) -> TradingAl
         created_at=row[14],
         updated_at=row[15],
         frequency=cast(Any, str(row[16])),
+        definition_revision=int(row[18]),
         conditions=conditions or [],
     )
+    alert._webhook_ref = str(webhook_ref) if webhook_ref else None
+    return alert
+
+
+def _stub_alert(row) -> TradingAlert:
+    """The identity of a row that cannot be read, for responses about it."""
+    return TradingAlert(
+        alert_id=str(row[0]),
+        instrument_id=str(row[1]),
+        enabled=False,
+        revision=int(row[13]),
+        definition_revision=int(row[18]),
+    )
+
+
+class TradingAlertUnreadable(BaseModel):
+    """A stored alert that no longer reads; archive it with its revision."""
+
+    alert_id: str
+    instrument_id: str
+    revision: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class AlertListing:
+    alerts: list[TradingAlert]
+    unreadable: list[TradingAlertUnreadable]
 
 
 def _trigger(row) -> TradingAlertTrigger:
@@ -507,7 +565,8 @@ _ALERT_COLUMNS = """
     alert_id, instrument_id, binding_id, condition_type, threshold,
     condition_parameters, evaluation_policy, enabled, cooldown_seconds,
     expires_at, last_observed_price, last_observed_value, last_triggered_at,
-    revision, created_at, updated_at, frequency, notification_settings
+    revision, created_at, updated_at, frequency, notification_settings,
+    definition_revision
 """
 _TRIGGER_COLUMNS = """
     trigger_id, alert_id, instrument_id, binding_id, provider,
@@ -528,7 +587,7 @@ class TradingAlertRepository:
         self.context = context
         self.uow_factory = uow_factory
 
-    def _conditions(self, connection, alert_ids: Iterable[str]) -> dict[str, list[AlertConditionSpec]]:
+    def _condition_rows(self, connection, alert_ids: Iterable[str]) -> dict[str, list[Any]]:
         ids = list(alert_ids)
         if not ids:
             return {}
@@ -541,23 +600,43 @@ class TradingAlertRepository:
             """,
             (self.context.workspace_id, ids),
         ).fetchall()
-        grouped: dict[str, list[AlertConditionSpec]] = {}
+        grouped: dict[str, list[Any]] = {}
         for row in rows:
-            grouped.setdefault(str(row[0]), []).append(_condition(row))
+            grouped.setdefault(str(row[0]), []).append(row)
         return grouped
 
-    def _alerts(self, connection, rows) -> list[TradingAlert]:
-        conditions = self._conditions(connection, (str(row[0]) for row in rows))
+    def _stored_conditions(self, connection, alert_id: str) -> list[AlertConditionSpec] | None:
+        """An alert's stored conditions; None when they cannot be read."""
+        try:
+            return [_condition(row) for row in self._condition_rows(connection, [alert_id]).get(alert_id, [])]
+        except ValidationError:
+            return None
+
+    def _listing(self, connection, rows) -> AlertListing:
+        condition_rows = self._condition_rows(connection, (str(row[0]) for row in rows))
         alerts: list[TradingAlert] = []
+        unreadable: list[TradingAlertUnreadable] = []
         for row in rows:
             try:
-                alerts.append(_alert(row, conditions.get(str(row[0]))))
-            except ValidationError:
-                # One unreadable row must not hide every other alert or stop the monitor.
-                logger.warning("trading_alert_unreadable alert_id=%s", row[0])
-        return alerts
+                conditions = [_condition(item) for item in condition_rows.get(str(row[0]), [])]
+                alerts.append(_alert(row, conditions))
+            except ValidationError as exc:
+                # One unreadable row (or condition row) must not hide every other
+                # alert or stop the monitor; it is reported so it can be archived.
+                reason = _validation_reason(exc)
+                logger.warning("trading_alert_unreadable alert_id=%s reason=%s", row[0], reason)
+                unreadable.append(
+                    TradingAlertUnreadable(
+                        alert_id=str(row[0]), instrument_id=str(row[1]), revision=int(row[13]), reason=reason
+                    )
+                )
+        return AlertListing(alerts, unreadable)
+
+    def _alerts(self, connection, rows) -> list[TradingAlert]:
+        return self._listing(connection, rows).alerts
 
     def get(self, alert_id: str) -> TradingAlert | None:
+        """The alert, or None when it does not exist or cannot be read."""
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 f"""
@@ -596,7 +675,7 @@ class TradingAlertRepository:
                 ),
             )
 
-    def list_alerts(self, limit: int = 200) -> list[TradingAlert]:
+    def list_alerts_report(self, limit: int = 200) -> AlertListing:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 f"""
@@ -608,9 +687,14 @@ class TradingAlertRepository:
                 """,
                 (self.context.workspace_id, limit),
             ).fetchall()
-            return self._alerts(uow.connection, rows)
+            return self._listing(uow.connection, rows)
 
-    def create(self, request: TradingAlertCreate) -> TradingAlert:
+    def list_alerts(self, limit: int = 200) -> list[TradingAlert]:
+        return self.list_alerts_report(limit).alerts
+
+    def create(self, request: TradingAlertCreate, *, webhook_ref: str | None = None) -> TradingAlert:
+        """Create an alert. webhook_ref names its webhook in the protected store (the API sets it)."""
+        condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)
         with self.uow_factory() as uow:
             if uow.connection.execute(
                 "SELECT 1 FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
@@ -634,12 +718,12 @@ class TradingAlertRepository:
                     request.binding_id,
                     request.condition_type,
                     request.threshold,
-                    _split_parameters(request.parameters)[0],
+                    condition_parameters,
                     request.evaluation_policy.model_dump_json(),
                     request.cooldown_seconds,
                     request.expires_at,
                     request.frequency,
-                    _split_parameters(request.parameters)[1],
+                    notification_settings,
                 ),
             ).fetchone()
             self._write_conditions(uow.connection, request.alert_id, request.conditions)
@@ -651,9 +735,13 @@ class TradingAlertRepository:
         alert_id: str,
         request: TradingAlertUpdate,
         expected_revision: int,
+        *,
+        webhook_ref: str | None = None,
     ) -> TradingAlert:
+        """Replace an alert at expected_revision. webhook_ref as for create."""
+        condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)
         with self.uow_factory() as uow:
-            previous_conditions = self._conditions(uow.connection, [alert_id]).get(alert_id)
+            previous_conditions = self._stored_conditions(uow.connection, alert_id)
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_alerts
@@ -673,13 +761,13 @@ class TradingAlertRepository:
                     request.binding_id,
                     request.condition_type,
                     request.threshold,
-                    _split_parameters(request.parameters)[0],
+                    condition_parameters,
                     request.evaluation_policy.model_dump_json(),
                     request.enabled,
                     request.cooldown_seconds,
                     request.expires_at,
                     request.frequency,
-                    _split_parameters(request.parameters)[1],
+                    notification_settings,
                     self.context.workspace_id,
                     alert_id,
                     expected_revision,
@@ -690,13 +778,15 @@ class TradingAlertRepository:
                     f"Trading alert expected revision {expected_revision}: {alert_id}"
                 )
             if previous_conditions != request.conditions:
-                # The lifecycle trigger keeps observation history when the alert's own
-                # columns are unchanged; a new condition set starts a new history.
+                # The lifecycle trigger keeps observation history and the definition
+                # revision when the alert's own columns are unchanged; a new
+                # condition set is a new definition with a new history.
                 row = uow.connection.execute(
                     f"""
                     UPDATE omnix_trading_alerts
                        SET last_observed_price = NULL, last_observed_value = NULL,
-                           last_triggered_at = NULL
+                           last_triggered_at = NULL,
+                           definition_revision = definition_revision + 1
                      WHERE workspace_id = %s AND alert_id = %s
                     RETURNING {_ALERT_COLUMNS}
                     """,
@@ -708,7 +798,7 @@ class TradingAlertRepository:
 
     def archive(self, alert_id: str, expected_revision: int) -> TradingAlert:
         with self.uow_factory() as uow:
-            conditions = self._conditions(uow.connection, [alert_id]).get(alert_id)
+            conditions = self._stored_conditions(uow.connection, alert_id)
             row = uow.connection.execute(
                 f"""
                 DELETE FROM omnix_trading_alerts
@@ -722,7 +812,11 @@ class TradingAlertRepository:
                     f"Trading alert expected revision {expected_revision}: {alert_id}"
                 )
             uow.commit()
-            return _alert(row, conditions).model_copy(update={"enabled": False})
+            try:
+                archived = _alert(row, conditions)
+            except ValidationError:
+                archived = _stub_alert(row)
+            return archived.model_copy(update={"enabled": False})
 
     def list_triggers(self, limit: int = 200) -> list[TradingAlertTrigger]:
         with self.uow_factory() as uow:
@@ -825,7 +919,13 @@ class TradingAlertRepository:
         inserted_trigger: TradingAlertTrigger | None = None
         primary_value = outcome.primary_value
         if should_trigger:
-            key = alert_trigger_key(alert.alert_id, alert.revision, alert.frequency, outcome)
+            key = alert_trigger_key(
+                alert.alert_id,
+                alert.frequency,
+                outcome,
+                revision=alert.revision,
+                definition_revision=alert.definition_revision,
+            )
             resolved_binding_id = context.resolved_binding_id or context.binding_id
             payload = {
                 "instrument_id": alert.instrument_id,

@@ -547,7 +547,7 @@ def test_history_limit_rule() -> None:
     )
     assert required_bars([stoch]) == 35
     # The empirical warm-up covers indicators whose outputs need far more than the period.
-    ribbon = IndicatorSource(indicator_id="tv-moving-average-ribbon", inputs=IndicatorSourceInputs(period=20), output="tv-moving-average-ribbon:sma-200")
+    ribbon = IndicatorSource(kind="indicator", indicator_id="tv-moving-average-ribbon", inputs=IndicatorSourceInputs(period=20), output="tv-moving-average-ribbon:sma-200")
     assert required_bars([spec(source=ribbon.model_dump(), operator="greater_than", target=value(1))]) >= 201
     moving = spec(source={"kind": "change_percent", "lookback_bars": 10}, operator="moving_up", amount="1", bars=20)
     assert required_bars([moving]) == 30
@@ -568,14 +568,20 @@ def _outcome(bar_minute: int, close: str = "1", final: bool = False) -> AlertCon
 
 
 def test_trigger_keys_follow_the_frequency() -> None:
-    def key(frequency, minute, close="1", revision=1, final=False):
-        return alert_trigger_key("a", revision, frequency, _outcome(minute, close, final))
+    def key(frequency, minute, close="1", revision=1, final=False, definition=1):
+        return alert_trigger_key(
+            "a", frequency, _outcome(minute, close, final), revision=revision, definition_revision=definition
+        )
 
     assert key("once", 0) == key("once", 5, "2")
-    assert key("once", 0) != key("once", 0, revision=2)
+    assert key("once", 0) != key("once", 0, revision=2)  # re-enabling re-arms "once"
+    assert key("once", 0) == key("once", 0, definition=2)
     for per_bar in ("once_per_bar", "once_per_bar_close"):
         assert key(per_bar, 0) == key(per_bar, 0, "2")
         assert key(per_bar, 0) != key(per_bar, 1)
+        # A notification or lifecycle edit bumps the revision only: same bar, same key.
+        assert key(per_bar, 0) == key(per_bar, 0, revision=5)
+        assert key(per_bar, 0) != key(per_bar, 0, definition=2)
     for value_based in ("every_time", "once_per_minute"):
         assert key(value_based, 0) == key(value_based, 0)
         assert key(value_based, 0) != key(value_based, 0, "2")  # forming bar: one per value
@@ -599,6 +605,17 @@ def test_observation_payload_is_json() -> None:
     outcome = evaluate_conditions([spec(source=CLOSE, operator="crossing_up", target=value(100))], bars_from([99, 101]), final_only=False)
     payload = json.loads(json.dumps(outcome.observation_payload()))
     assert payload == [{"position": 0, "operator": "crossing_up", "met": True, "source": "101", "source_previous": "99", "target": "100", "target_previous": "100"}]
+
+
+def test_kind_is_required_on_sources_and_targets() -> None:
+    for data in (
+        {"source": {}, "operator": "greater_than", "target": value(1)},
+        {"source": {"field": "close"}, "operator": "greater_than", "target": value(1)},
+        {"source": CLOSE, "operator": "greater_than", "target": {"value": "1"}},
+        {"source": CLOSE, "operator": "inside_channel", "target": {"upper": value(2), "lower": value(1)}},
+    ):
+        with pytest.raises(ValidationError):
+            spec(**data)
 
 
 def test_sources_and_targets_resolve_by_kind() -> None:

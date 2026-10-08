@@ -60,7 +60,7 @@ class TrendlineAlertPoint(BaseModel):
 class PriceSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["price"] = "price"
+    kind: Literal["price"]
     field: PriceField = "close"
 
 
@@ -69,7 +69,7 @@ class ChangePercentSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["change_percent"] = "change_percent"
+    kind: Literal["change_percent"]
     lookback_bars: int = Field(default=1, ge=1, le=500)
 
 
@@ -110,7 +110,7 @@ class IndicatorSourceInputs(BaseModel):
 class IndicatorSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["indicator"] = "indicator"
+    kind: Literal["indicator"]
     indicator_id: str = Field(min_length=1, max_length=120)
     inputs: IndicatorSourceInputs = Field(default_factory=IndicatorSourceInputs)
     output: str = Field(min_length=1, max_length=240)
@@ -121,12 +121,12 @@ class TrendlineSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["trendline"] = "trendline"
+    kind: Literal["trendline"]
     points: list[TrendlineAlertPoint] = Field(min_length=2, max_length=2)
 
 
-# The unions are told apart by each member's literal ``kind`` (pydantic's smart
-# union). A ``discriminator`` would be faster, but FastAPI's split input/output
+# The unions are told apart by each member's required literal ``kind``
+# (pydantic's smart union). A ``discriminator`` would be faster, but FastAPI's split input/output
 # schemas then publish a mapping that names the wrong schemas, and the
 # generated TypeScript types become unusable.
 AlertSource = PriceSource | ChangePercentSource | IndicatorSource | TrendlineSource
@@ -135,14 +135,14 @@ AlertSource = PriceSource | ChangePercentSource | IndicatorSource | TrendlineSou
 class ValueTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["value"] = "value"
+    kind: Literal["value"]
     value: Decimal
 
 
 class SourceTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["source"] = "source"
+    kind: Literal["source"]
     source: AlertSource
 
 
@@ -152,7 +152,7 @@ ChannelBound = ValueTarget | SourceTarget
 class ChannelTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["channel"] = "channel"
+    kind: Literal["channel"]
     upper: ChannelBound
     lower: ChannelBound
 
@@ -330,10 +330,11 @@ def legacy_indicator_source(parameters: Any) -> IndicatorSource:
     period = parameters.period
     component = parameters.component
     if indicator_id in {"sma", "ema", "rsi", "atr"}:
-        return IndicatorSource(indicator_id=indicator_id, inputs=IndicatorSourceInputs(period=period), output=f"{indicator_id}:{period}")
+        return IndicatorSource(kind="indicator", indicator_id=indicator_id, inputs=IndicatorSourceInputs(period=period), output=f"{indicator_id}:{period}")
     if indicator_id == "bollinger":
         band = component if component in {"upper", "middle", "lower"} else "middle"
         return IndicatorSource(
+            kind="indicator",
             indicator_id="bollinger",
             inputs=IndicatorSourceInputs(period=period, standard_deviations=2.0),
             output=f"bollinger:{period}:{band}",
@@ -342,18 +343,21 @@ def legacy_indicator_source(parameters: Any) -> IndicatorSource:
         line = component if component in {"line", "signal", "histogram"} else "line"
         fast, slow = parameters.fast_period, parameters.slow_period
         return IndicatorSource(
+            kind="indicator",
             indicator_id="macd",
             inputs=IndicatorSourceInputs(period=period, fast_period=fast, slow_period=slow, signal_period=parameters.signal_period),
             output=f"macd:{fast}:{slow}:{line}",
         )
     if indicator_id == "stochastic-rsi":
         return IndicatorSource(
+            kind="indicator",
             indicator_id="stochastic-rsi",
             inputs=IndicatorSourceInputs(period=period, fast_period=parameters.fast_period, signal_period=parameters.signal_period),
             output="stochastic-rsi:k",
         )
     if indicator_id == "vwap":
         return IndicatorSource(
+            kind="indicator",
             indicator_id="vwap",
             inputs=IndicatorSourceInputs(period=1, anchor_bars_ago=parameters.anchor_bars_ago),
             output="vwap:dataset",
@@ -373,24 +377,24 @@ def legacy_conditions(condition_type: str, threshold: Decimal, parameters: Any) 
             raise ValueError("trendline conditions require two trendline points")
         return [
             AlertConditionSpec(
-                source=PriceSource(field="close"),
+                source=PriceSource(kind="price", field="close"),
                 operator=_TRENDLINE_OPERATORS[condition_type],
-                target=SourceTarget(source=TrendlineSource(points=list(points))),
+                target=SourceTarget(kind="source", source=TrendlineSource(kind="trendline", points=list(points))),
             )
         ]
     operator: AlertOperator = "crossing_up" if condition_type.endswith("_above") else "crossing_down"
     source: Any
     if condition_type.startswith("price_"):
-        source = PriceSource(field="close")
+        source = PriceSource(kind="price", field="close")
     elif condition_type.startswith("volume_"):
-        source = PriceSource(field="volume")
+        source = PriceSource(kind="price", field="volume")
     elif condition_type.startswith("percent_change_"):
-        source = ChangePercentSource(lookback_bars=parameters.lookback_bars)
+        source = ChangePercentSource(kind="change_percent", lookback_bars=parameters.lookback_bars)
     elif condition_type.startswith("indicator_"):
         source = legacy_indicator_source(parameters)
     else:
         raise ValueError(f"unsupported legacy condition type {condition_type!r}")
-    return [AlertConditionSpec(source=source, operator=operator, target=ValueTarget(value=threshold))]
+    return [AlertConditionSpec(source=source, operator=operator, target=ValueTarget(kind="value", value=threshold))]
 
 
 __all__ = [

@@ -20,9 +20,21 @@
 --   bar-close only.
 -- * Legacy alerts that get their condition here count as edited now, so a
 --   bar that closed before this migration cannot trigger them.
+-- * definition_revision counts changes to what an alert watches; the
+--   lifecycle trigger bumps it on a revisioned edit that changes the
+--   definition (the application bumps it when the conditions change).
+--   Per-bar trigger keys use it, so notification and lifecycle edits cannot
+--   let the same bar trigger twice.
 -- * The lifecycle-history trigger from 0027 now acts only on revisioned
 --   edits. It also matched the evaluator's own state update, so the
 --   observed value and the last trigger time were never kept.
+
+ALTER TABLE omnix_trading_alerts
+    ADD COLUMN IF NOT EXISTS definition_revision BIGINT NOT NULL DEFAULT 1
+        CHECK (definition_revision >= 1);
+
+ALTER TABLE omnix_trading_alerts
+    ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT 'every_time';
 
 CREATE OR REPLACE FUNCTION omnix_preserve_trading_alert_lifecycle_history()
 RETURNS TRIGGER
@@ -41,13 +53,13 @@ BEGIN
         NEW.last_observed_price := OLD.last_observed_price;
         NEW.last_observed_value := OLD.last_observed_value;
         NEW.last_triggered_at := OLD.last_triggered_at;
+    ELSIF NEW.revision IS DISTINCT FROM OLD.revision THEN
+        NEW.definition_revision := OLD.definition_revision + 1;
     END IF;
     RETURN NEW;
 END;
 $$;
 
-ALTER TABLE omnix_trading_alerts
-    ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT 'every_time';
 
 ALTER TABLE omnix_trading_alerts
     ADD COLUMN IF NOT EXISTS notification_settings JSONB NOT NULL DEFAULT '{}'::jsonb;

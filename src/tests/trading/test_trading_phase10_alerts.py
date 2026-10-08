@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from app.persistence.errors import RevisionConflict
 from app.apps.trading.alerts import (
     AlertEvaluationContext,
+    AlertListing,
     AlertOutcomeRecord,
     TradingAlert,
     TradingAlertCreate,
@@ -42,10 +43,15 @@ class FakeAlertRepository:
         self.evaluations: list[TradingAlertEvaluation] = []
         self.recorded: list[tuple[AlertEvaluationContext, list[AlertOutcomeRecord]]] = []
 
+    context = SimpleNamespace(workspace_id="workspace:test")
+
     def list_alerts(self, limit: int = 200):
         return list(self.alerts.values())[:limit]
 
-    def create(self, request: TradingAlertCreate):
+    def list_alerts_report(self, limit: int = 200):
+        return AlertListing(self.list_alerts(limit), [])
+
+    def create(self, request: TradingAlertCreate, *, webhook_ref=None):
         alert = TradingAlert(
             **request.model_dump(),
             enabled=True,
@@ -59,7 +65,7 @@ class FakeAlertRepository:
     def get(self, alert_id: str):
         return self.alerts.get(alert_id)
 
-    def update(self, alert_id: str, request: TradingAlertUpdate, expected_revision: int):
+    def update(self, alert_id: str, request: TradingAlertUpdate, expected_revision: int, *, webhook_ref=None):
         current = self.alerts[alert_id]
         if current.revision != expected_revision:
             raise RevisionConflict("stale alert")
@@ -308,7 +314,11 @@ def test_alert_monitor_is_disabled_in_legacy_tests_by_default(monkeypatch) -> No
 def test_alert_routes_support_revisioned_policy_and_trigger_history() -> None:
     repository = FakeAlertRepository()
     app = FastAPI()
-    app.include_router(create_trading_alert_router(repository_factory=lambda: repository))
+    webhooks = SimpleNamespace(
+        available=lambda: True, load=lambda ref: None, save=lambda *args: None,
+        delete=lambda ref: None, delete_alert=lambda *args, **kwargs: None,
+    )
+    app.include_router(create_trading_alert_router(repository_factory=lambda: repository, webhook_store=webhooks))
     client = TestClient(app)
 
     created = client.post(
