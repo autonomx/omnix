@@ -97,20 +97,16 @@ export const trendAngleTool = defineDrawingTool({
     const angle = screenAngle(first, second);
     const length = Math.hypot(second.x - first.x, second.y - first.y);
     const radius = Math.min(40, Math.max(12, length / 3));
-    // TradingView measures from the horizontal on the line's side.
-    const rightward = second.x >= first.x;
-    // Leftward lines draw the mirrored arc from the left horizontal.
-    const sweep = rightward ? angle : (angle >= 0 ? 180 - angle : -180 - angle);
-    const mirror = (point: ScreenPoint) => (rightward ? point : { x: 2 * first.x - point.x, y: point.y });
-    const baseEnd = mirror({ x: first.x + radius * 1.5, y: first.y });
-    const arc = arcPoints(first, radius, sweep).map(mirror);
-    const middle = sweep / 2 * Math.PI / 180;
-    const labelPoint = mirror({ x: first.x + (radius + 14) * Math.cos(middle), y: first.y - (radius + 14) * Math.sin(middle) });
+    // One convention for the arc and the label: the angle from the rightward horizontal, -180 to 180.
+    const baseEnd = { x: first.x + radius * 1.5, y: first.y };
+    const arc = arcPoints(first, radius, angle);
+    const middle = angle / 2 * Math.PI / 180;
+    const labelPoint = { x: first.x + (radius + 14) * Math.cos(middle), y: first.y - (radius + 14) * Math.sin(middle) };
     return [
       { kind: 'segment', x1: first.x, y1: first.y, x2: second.x, y2: second.y, ...stroke },
       { kind: 'segment', x1: first.x, y1: first.y, x2: baseEnd.x, y2: baseEnd.y, ...stroke, strokeWidth: 1, dash: [4, 3], hit: 'none' },
       { kind: 'polyline', points: arc, ...stroke, strokeWidth: 1, hit: 'none' },
-      { kind: 'text', x: labelPoint.x, y: labelPoint.y + 4, text: `${signed(angle, 1)}°`, fontSize: 11, align: rightward ? 'start' : 'end', hit: 'none' },
+      { kind: 'text', x: labelPoint.x, y: labelPoint.y + 4, text: `${signed(angle, 1)}°`, fontSize: 11, align: Math.abs(angle) > 90 ? 'end' : 'start', hit: 'none' },
     ];
   },
   alertLevels: ([first, second]) => segmentAlert('line', 'Trend angle', first, second),

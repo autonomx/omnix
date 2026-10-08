@@ -3,9 +3,11 @@ import { lineAlertLevel } from '../alertLevels';
 import { booleanProperty, numberProperty } from '../properties';
 import { areaFill, lineStroke } from '../shapes';
 import {
+  anchorHandle,
   defineDrawingTool,
   type DrawingAlertLevel,
   type DrawingBarSeries,
+  type DrawingGeometryContext,
   type DrawingPoint,
   type DrawingShape,
   type ScreenPoint,
@@ -14,12 +16,43 @@ import {
 /** A least-squares line through bar closes: price = intercept + slope * (bar position - first). */
 export type RegressionFit = { first: number; last: number; intercept: number; slope: number; deviation: number };
 
-/** The first bar at or after `time` (-1 when there is none). */
+/**
+ * The first bar at or after `time`; -1 when there is none, and also when `time` is before the first loaded bar: what
+ * these drawings show depends on bars that aren't loaded yet, so they wait for them instead of starting elsewhere.
+ */
 function firstBarFrom(bars: DrawingBarSeries, time: string): number {
   const before = bars.indexAtOrBefore(time);
-  const bar = before >= 0 ? bars.at(before) : undefined;
-  const index = bar && Date.parse(bar.time) < Date.parse(time) ? before + 1 : Math.max(0, before);
+  if (before < 0) {
+    const first = bars.at(0);
+    return first && Date.parse(first.time) === Date.parse(time) ? 0 : -1;
+  }
+  const bar = bars.at(before);
+  const index = bar && Date.parse(bar.time) < Date.parse(time) ? before + 1 : before;
   return index < bars.length ? index : -1;
+}
+
+/** A key for what a computation over `bars` read: its size and its first and last bars (updated in place by ticks). */
+function seriesKey(bars: DrawingBarSeries): string {
+  const first = bars.at(0);
+  const last = bars.at(bars.length - 1);
+  return `${bars.length}|${first?.time}|${last?.time}|${last?.open}|${last?.high}|${last?.low}|${last?.close}|${last?.volume}`;
+}
+
+/** A small most-recently-used cache: drawings recompute only when their bars or anchors change, not every frame. */
+function memo<T>(limit: number): (key: string, compute: () => T) => T {
+  const entries = new Map<string, T>();
+  return (key, compute) => {
+    const cached = entries.get(key);
+    if (cached !== undefined || entries.has(key)) {
+      entries.delete(key);
+      entries.set(key, cached as T);
+      return cached as T;
+    }
+    const value = compute();
+    entries.set(key, value);
+    if (entries.size > limit) entries.delete(entries.keys().next().value as string);
+    return value;
+  };
 }
 
 /**
@@ -27,6 +60,12 @@ function firstBarFrom(bars: DrawingBarSeries, time: string): number {
  * standard deviation of the residuals. Null with fewer than two bars in the range.
  */
 export function regressionFit(bars: DrawingBarSeries, start: string, end: string): RegressionFit | null {
+  return regressionMemo(`${start}|${end}|${seriesKey(bars)}`, () => computeRegressionFit(bars, start, end));
+}
+
+const regressionMemo = memo<RegressionFit | null>(64);
+
+function computeRegressionFit(bars: DrawingBarSeries, start: string, end: string): RegressionFit | null {
   const [from, to] = Date.parse(start) <= Date.parse(end) ? [start, end] : [end, start];
   const first = firstBarFrom(bars, from);
   const last = bars.indexAtOrBefore(to);
@@ -142,24 +181,17 @@ export function anchoredVwap(bars: DrawingBarSeries, anchor: string): { first: n
   return { first, values };
 }
 
-// The last computation per bar series, keyed by anchor and the forming bar (whose values change in place).
-const vwapCache = new WeakMap<DrawingBarSeries, Map<string, { first: number; values: number[] }>>();
+const vwapMemo = memo<{ first: number; values: number[] }>(32);
 
 function cachedVwap(bars: DrawingBarSeries, anchor: string): { first: number; values: number[] } {
-  const last = bars.at(bars.length - 1);
-  const key = `${anchor}|${bars.length}|${last?.close}|${last?.volume}|${last?.high}|${last?.low}`;
-  let byAnchor = vwapCache.get(bars);
-  if (!byAnchor) {
-    byAnchor = new Map();
-    vwapCache.set(bars, byAnchor);
-  }
-  let result = byAnchor.get(key);
-  if (!result) {
-    result = anchoredVwap(bars, anchor);
-    for (const stale of [...byAnchor.keys()]) if (stale.startsWith(`${anchor}|`)) byAnchor.delete(stale);
-    byAnchor.set(key, result);
-  }
-  return result;
+  return vwapMemo(`${anchor}|${seriesKey(bars)}`, () => anchoredVwap(bars, anchor));
+}
+
+/** Where the anchored VWAP starts on screen: its first value at the first bar from the anchor. */
+function vwapStart(context: Pick<DrawingGeometryContext, 'bars' | 'rawPoints' | 'project'>): ScreenPoint | null {
+  const { first, values } = cachedVwap(context.bars, context.rawPoints[0].time);
+  const time = first >= 0 ? context.bars.at(first)?.time : undefined;
+  return time && values.length > 0 ? context.project({ time, price: values[0] }) : null;
 }
 
 export const anchoredVwapTool = defineDrawingTool({
@@ -169,6 +201,11 @@ export const anchoredVwapTool = defineDrawingTool({
   creation: { gesture: 'click' },
   defaultProperties: {},
   propertySchema: [],
+  // The handle sits on the line at its first bar; dragging it moves the anchor in time.
+  handles: (context) => {
+    const start = vwapStart(context);
+    return start ? [anchorHandle(0, start)] : [];
+  },
   geometry: (context) => {
     const { first, values } = cachedVwap(context.bars, context.rawPoints[0].time);
     if (first < 0 || values.length === 0) return [];
@@ -182,9 +219,10 @@ export const anchoredVwapTool = defineDrawingTool({
       if (projected) points.push(projected);
     }
     const stroke = lineStroke(context);
-    const anchor = context.points[0];
-    const shapes: DrawingShape[] = [{ kind: 'marker', x: anchor.x, y: anchor.y, radius: 3, ...stroke, fill: stroke.stroke }];
-    if (points.length >= 2) shapes.unshift({ kind: 'polyline', points, ...stroke });
+    const start = vwapStart(context);
+    const shapes: DrawingShape[] = [];
+    if (points.length >= 2) shapes.push({ kind: 'polyline', points, ...stroke });
+    if (start) shapes.push({ kind: 'marker', x: start.x, y: start.y, radius: 3, ...stroke, fill: stroke.stroke });
     return shapes;
   },
 });
