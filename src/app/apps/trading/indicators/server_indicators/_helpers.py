@@ -30,6 +30,11 @@ def safe_period(period: object, fallback: int = 14) -> int:
     return period if isinstance(period, int) and not isinstance(period, bool) and period > 0 else fallback
 
 
+def js_sqrt(value: float) -> float:
+    """JavaScript ``Math.sqrt``: NaN for negative input (rounding drift can produce -1e-17) instead of raising."""
+    return math.sqrt(value) if value >= 0 else math.nan
+
+
 def js_round(value: float) -> float:
     """JavaScript ``Math.round``: halves round up (towards +infinity). Python's ``round`` rounds halves to even."""
     return float(math.floor(value + 0.5))

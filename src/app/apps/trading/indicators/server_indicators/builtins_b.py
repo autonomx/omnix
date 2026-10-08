@@ -27,6 +27,7 @@ from ._helpers import (
     hl2,
     js_max,
     js_min,
+    js_sqrt,
     js_sum,
     lowest,
     mean,
@@ -686,7 +687,7 @@ def _ulcer_index(bars: BarSeries, inputs: IndicatorInputs, period: int) -> list[
         else:
             squared.append(0.0)
     average = sma(squared, period)
-    return [output("tv-ulcer-index", "ulcer", [math.sqrt(v) if v is not None and finite(v) else None for v in average])]
+    return [output("tv-ulcer-index", "ulcer", [js_sqrt(v) if v is not None and finite(v) else None for v in average])]
 
 
 @_builtin("tv-ultimate-oscillator-uo", "Ultimate Oscillator (UO)", "exact", 28)
