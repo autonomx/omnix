@@ -24,7 +24,7 @@ from app.apps.rpg.rules.economy.service_registry import (
     SERVICE_PROVIDERS,
     get_provider_offers,
 )
-from app.apps.rpg.world.location_registry import (
+from app.apps.rpg.rules.location_registry import (
     has_explicit_location,
     location_allows_service,
     provider_present_at_location,

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.apps.rpg.foundation.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
+from app.apps.rpg.session.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
 from app.apps.rpg.session.jobs.turn_job_mirror import (
     _apply_turn_with_job_mirror,
 )

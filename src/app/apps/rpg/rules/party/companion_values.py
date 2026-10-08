@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import load_npc_profile
+from app.apps.rpg.foundation.dynamic_npc_profiles import load_npc_profile
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 

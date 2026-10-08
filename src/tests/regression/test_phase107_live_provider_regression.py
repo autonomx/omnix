@@ -3,7 +3,7 @@
 Ensures that the live provider state module maintains backward
 compatibility and does not regress on core invariants.
 """
-from app.apps.rpg.session.orchestration.live_provider import (
+from app.apps.rpg.narration.live_provider_state import (
     append_provider_execution_event,
     begin_provider_execution,
     build_provider_execution_id,

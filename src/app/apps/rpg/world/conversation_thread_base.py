@@ -12,7 +12,7 @@ from app.apps.rpg.world.companion_dialogue import (
     build_companion_presence_summary,
 )
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
-from app.apps.rpg.world.location_registry import present_npcs_for_current_location
+from app.apps.rpg.rules.location_registry import present_npcs_for_current_location
 from app.apps.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
 from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,

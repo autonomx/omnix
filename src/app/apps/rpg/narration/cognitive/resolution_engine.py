@@ -53,7 +53,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.apps.rpg.narration.ai.llm_gateway_adapter import adapt_base_provider
+from app.apps.rpg.foundation.llm_gateway_adapter import adapt_base_provider
 from app.apps.rpg.foundation.core.determinism import rng_for_current_turn, stable_sub_index
 from app.prompts import prompt_template
 

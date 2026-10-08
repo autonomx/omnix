@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ProviderConfig
-from app.apps.rpg.narration.ai.llm_gateway_adapter import LLMGatewayAdapter, adapt_base_provider
+from app.apps.rpg.foundation.llm_gateway_adapter import LLMGatewayAdapter, adapt_base_provider
 
 
 class _Provider(BaseProvider):

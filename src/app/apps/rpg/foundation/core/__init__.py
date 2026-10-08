@@ -18,17 +18,6 @@ from .clock import DeterministicClock
 from .determinism import DeterminismConfig, SeededRNG, compute_deterministic_event_id
 from .effects import EffectManager, EffectPolicy, EffectRecord
 from .event_bus import Event, EventBus
-from .game_engine import GameEngine
-from .game_loop import (
-    GameLoop,
-    IntentParser,
-    NPCSystem,
-    SceneRenderer,
-    StoryDirector,
-    TickContext,
-    TickPhase,
-    WorldSystem,
-)
 
 # PHASE 5.8 — HOST/PROCESS BOUNDARY
 from .host_runtime_boundary import (
@@ -119,15 +108,6 @@ __all__ = [
     "EffectManager",
     "Event",
     "EventBus",
-    "GameLoop",
-    "GameEngine",
-    "IntentParser",
-    "NPCSystem",
-    "SceneRenderer",
-    "StoryDirector",
-    "TickContext",
-    "TickPhase",
-    "WorldSystem",
     # PHASE 2 — REPLAY ENGINE
     "ReplayEngine",
     "ReplayConfig",

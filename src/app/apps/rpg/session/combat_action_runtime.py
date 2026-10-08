@@ -73,13 +73,13 @@ from app.apps.rpg.session.narration_queue_runtime import (
 from app.apps.rpg.session.turn_perf_trace import (
     record_elapsed_turn_stage as record_elapsed_turn_stage, record_turn_perf_trace as record_turn_perf_trace,
 )
-from app.apps.rpg.narration.ai.action_intelligence import (
+from app.apps.rpg.session.action_intelligence import (
     get_action_advisory as get_action_advisory,
 )
 from app.apps.rpg.rules.interactions.resolver import (
     resolve_general_interaction as resolve_general_interaction_v2,
 )
-from app.apps.rpg.narration.ai.semantic_action_intelligence import (
+from app.apps.rpg.session.semantic_action_intelligence import (
     get_semantic_action_advisory as get_semantic_action_advisory,
 )
 from typing import (

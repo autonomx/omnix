@@ -15,7 +15,7 @@ from app.apps.rpg.genesis.profiles.character_cards import (
 from app.apps.rpg.rules.interactions.resolver import (
     detect_interaction_intent as detect_interaction_intent,
 )
-from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.foundation.dynamic_npc_profiles import (
     load_npc_profile as load_npc_profile,
 )
 from app.apps.rpg.genesis.profiles.profile_drafts import (
@@ -41,7 +41,7 @@ from app.apps.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
-from app.apps.rpg.world.location_registry import ensure_location_state as ensure_location_state
+from app.apps.rpg.rules.location_registry import ensure_location_state as ensure_location_state
 from app.apps.rpg.world.npc_dialogue_recall import player_input_requests_recall as player_input_requests_recall
 from app.apps.rpg.world.travel_graph import (
     apply_travel_result_to_state as apply_travel_result_to_state,

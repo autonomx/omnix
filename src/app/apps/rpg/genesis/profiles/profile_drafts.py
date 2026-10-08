@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.foundation.dynamic_npc_profiles import (
     load_npc_profile,
     normalize_npc_profile,
     npc_profile_path,

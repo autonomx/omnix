@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_dialogue_profile import (
     build_npc_dialogue_profile,

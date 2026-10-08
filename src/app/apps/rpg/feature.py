@@ -10,7 +10,7 @@ from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureModule
 from app.runtime.ports import ContributionSpec
 
-from app.apps.rpg.foundation.persistence.feature_repositories import RPG_REPOSITORY_SPECS
+from app.apps.rpg.session.persistence.feature_repositories import RPG_REPOSITORY_SPECS
 from app.apps.rpg.edge.api.compat_router import create_rpg_compatibility_router
 from app.apps.rpg.edge.api.feature_routes import create_rpg_routes_router
 from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery

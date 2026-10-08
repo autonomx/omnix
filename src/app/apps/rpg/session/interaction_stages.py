@@ -75,7 +75,7 @@ def commit_interaction(ctx: Any) -> Any:
 
     if uses_postgresql_runtime():
         from app.jobs.foreground_execution import current_foreground_execution
-        from app.apps.rpg.foundation.persistence.rpg_turn_service import persist_foreground_turn
+        from app.apps.rpg.session.persistence.rpg_turn_service import persist_foreground_turn
 
         execution = current_foreground_execution()
         result["session"] = session

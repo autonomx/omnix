@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.apps.rpg.session.orchestration.live_provider import get_live_provider_state
+from app.apps.rpg.narration.live_provider_state import get_live_provider_state
 from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 

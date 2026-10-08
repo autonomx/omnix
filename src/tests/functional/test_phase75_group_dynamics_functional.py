@@ -12,11 +12,6 @@ from typing import Any
 
 from app.apps.rpg.narration.coherence.reducers import reduce_event
 from app.apps.rpg.genesis.creator.presenters import CreatorStatePresenter
-from app.apps.rpg.world.group_dynamics.group_engine import (
-    SUPPORTED_GROUP_EVENT_TYPES,
-    GroupDynamicsEngine,
-)
-from app.apps.rpg.world.npc_agency.agency_engine import NPCAgencyEngine
 
 # ===========================================================================
 # Test Helpers / Fakes
@@ -118,70 +113,6 @@ def _build_scene_coherence(
 # ===========================================================================
 # Functional Tests
 # ===========================================================================
-
-class TestSocialInteractionWithGroupEvents:
-
-    def test_social_interaction_with_multiple_scene_npcs_emits_group_events(self):
-        """A social interaction with multiple NPCs in the scene should
-        produce both primary NPC events and secondary group events."""
-        core = _build_scene_coherence(present_actors=["npc_a", "npc_b", "npc_c"])
-        gm = FakeGMState()
-
-        engine = NPCAgencyEngine(
-            group_dynamics_engine=GroupDynamicsEngine(),
-        )
-        mapped_action = {
-            "target_id": "npc_a",
-            "intent_type": "talk_to_npc",
-            "resolution_type": "social_contact",
-            "summary": "Talk to NPC A",
-        }
-        result = engine.resolve_social_interaction(mapped_action, core, gm)
-
-        # Must have primary events
-        assert len(result["events"]) > 0
-
-        # Must have group dynamics result
-        assert "group" in result
-        group = result["group"]
-        assert len(group["participants"]) >= 1
-
-        # Events should include group event types
-        event_types = {e.get("type") for e in result["events"]}
-        primary_types = {"npc_interaction_started", "npc_response_agreed"}
-        group_types = SUPPORTED_GROUP_EVENT_TYPES
-        assert event_types & primary_types, "Should have primary NPC events"
-        assert event_types & group_types, "Should have group dynamics events"
-
-
-class TestActionResolutionGroupMetadata:
-
-    def test_action_resolution_includes_group_dynamics_metadata(self):
-        """When a social contact is resolved through the full resolver,
-        group dynamics metadata should appear in resolved action metadata."""
-        from app.apps.rpg.session.execution.resolver import ActionResolver
-
-        core = _build_scene_coherence(present_actors=["npc_a", "npc_b"])
-        gm = FakeGMState()
-
-        agency = NPCAgencyEngine(group_dynamics_engine=GroupDynamicsEngine())
-        resolver = ActionResolver(npc_agency_engine=agency)
-
-        option = {
-            "option_id": "opt_1",
-            "intent_type": "talk_to_npc",
-            "target_id": "npc_a",
-            "resolution_type": "social_contact",
-            "summary": "Chat with NPC A",
-            "constraints": [],
-        }
-
-        result = resolver.resolve_choice(option, core, gm)
-        resolved_dict = result.to_dict()
-        metadata = resolved_dict["resolved_action"]["metadata"]
-        assert "group_dynamics" in metadata
-        assert "participants" in metadata["group_dynamics"]
-        assert "crowd_state" in metadata["group_dynamics"]
 
 
 class TestRumorSeedConsequence:

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 from app.providers.base import ChatResponse, ProviderConfig
-from app.apps.rpg.narration.ai.action_intelligence import get_action_advisory
-from app.apps.rpg.narration.ai.semantic_action_intelligence import get_semantic_action_advisory
+from app.apps.rpg.session.action_intelligence import get_action_advisory
+from app.apps.rpg.session.semantic_action_intelligence import get_semantic_action_advisory
 from app.apps.rpg.foundation.llm_app_gateway import AppLLMGateway
 
 

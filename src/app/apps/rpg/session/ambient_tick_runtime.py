@@ -9,7 +9,7 @@ from app.apps.rpg.world.conversation_settings import (
     should_attempt_autonomous_conversation,
 )
 from app.apps.rpg.world.conversation_threads import maybe_advance_conversation_thread
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_presence_runtime import update_present_npcs_for_location
 from app.apps.rpg.world.scene_activity_scheduler import maybe_schedule_scene_activity
 from app.apps.rpg.world.scene_population_runtime import build_scene_population_state

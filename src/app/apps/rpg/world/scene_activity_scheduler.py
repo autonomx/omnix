@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from app.apps.rpg.world.conversation_effects import build_conversation_world_signal
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
 from app.apps.rpg.world.conversation_topics import select_conversation_topic
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_goal_state import dominant_goal_for_npc, seed_default_npc_goals
 from app.apps.rpg.world.npc_presence_runtime import (

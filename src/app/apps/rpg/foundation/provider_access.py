@@ -17,6 +17,6 @@ def chat_completion(*, messages: list[dict[str, Any]], stream: bool = False, **k
 
 def get_provider() -> Any:
     from app.providers.service import get_provider as resolve_provider
-    from app.apps.rpg.narration.ai.llm_gateway_adapter import adapt_base_provider
+    from app.apps.rpg.foundation.llm_gateway_adapter import adapt_base_provider
 
     return adapt_base_provider(resolve_provider())

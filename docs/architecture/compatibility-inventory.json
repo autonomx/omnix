@@ -53,7 +53,7 @@
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/foundation/persistence/rpg_compat.py",
+      "path": "src/app/apps/rpg/session/persistence/rpg_compat.py",
       "category": "B",
       "purpose": "Legacy RPG session and interaction function contracts",
       "production_call_sites": [

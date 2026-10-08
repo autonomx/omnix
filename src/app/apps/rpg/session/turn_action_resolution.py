@@ -49,7 +49,7 @@ from app.apps.rpg.session.session_runtime_store import (
 from app.apps.rpg.session.ambient_tick_runtime import (
     is_ambient_tick_command as is_ambient_tick_command,
 )
-from app.apps.rpg.narration.ai.action_intelligence import (
+from app.apps.rpg.session.action_intelligence import (
     merge_action_advisory as merge_action_advisory,
 )
 from app.apps.rpg.rules.combat.companion_ai import (

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.foundation.foreground_turn_record import (
+from app.apps.rpg.session.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_MAX_BYTES,
     build_foreground_turn_record,
 )

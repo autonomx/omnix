@@ -29,7 +29,7 @@ from .writer import NarrativeWriter
 
 
 def _production_writer() -> NarrativeWriter:
-    from app.apps.rpg.foundation.narrative_provider import build_production_narrative_writer
+    from app.apps.rpg.narration.narrative_provider import build_production_narrative_writer
 
     return build_production_narrative_writer()
 

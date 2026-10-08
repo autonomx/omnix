@@ -717,7 +717,7 @@ def _resolve_location_name(
         if name:
             return name
 
-    from app.apps.rpg.world.location_registry import get_location
+    from app.apps.rpg.rules.location_registry import get_location
 
     registered = _safe_str(get_location(location_id).get("name")).strip()
     if registered:

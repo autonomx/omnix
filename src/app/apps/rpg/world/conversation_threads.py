@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.apps.rpg.rules.ambient_intent import is_ambient_wait_or_listen_intent
 from app.apps.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
     hydrate_companion_acceptance_from_pending_offers,
@@ -28,7 +28,7 @@ from app.apps.rpg.world.conversation_topics import (
     select_conversation_topic,
     topic_is_backed_by_state,
 )
-from app.apps.rpg.world.location_registry import (
+from app.apps.rpg.rules.location_registry import (
     current_location_id,
     get_location,
 )

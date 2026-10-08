@@ -5,7 +5,7 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping, Sequence, cast
 
-from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import load_npc_profile
+from app.apps.rpg.foundation.dynamic_npc_profiles import load_npc_profile
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 
 from .campaign_lore_store import _mapping, _text, current_location_identity

@@ -9,7 +9,7 @@ from contextlib import ExitStack
 from copy import deepcopy
 from typing import Any, Callable
 
-from app.apps.rpg.foundation.foreground_turn_record import (
+from app.apps.rpg.session.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_VERSION,
     build_foreground_turn_record,
 )

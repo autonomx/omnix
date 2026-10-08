@@ -46,7 +46,7 @@ from app.apps.rpg.narration.presentation.speaker_cards import (
 from app.apps.rpg.session.narration_runtime import (
     build_turn_narration_context as build_turn_narration_context,
 )
-from app.apps.rpg.world.location_registry import (
+from app.apps.rpg.rules.location_registry import (
     ensure_location_state as ensure_location_state,
 )
 from app.apps.rpg.narration.ai.conversation_threads import (
@@ -55,7 +55,7 @@ from app.apps.rpg.narration.ai.conversation_threads import (
 from app.apps.rpg.genesis.creator.world_scene_generator import (
     generate_scenes_from_simulation as generate_scenes_from_simulation,
 )
-from app.apps.rpg.session.ambient_intent import (
+from app.apps.rpg.rules.ambient_intent import (
     is_ambient_wait_or_listen_intent as is_ambient_wait_or_listen_intent,
 )
 from app.apps.rpg.rules.items.world_items import (

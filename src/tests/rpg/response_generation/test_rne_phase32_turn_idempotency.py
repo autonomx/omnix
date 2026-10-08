@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from app.apps.rpg.foundation.persistence.rpg_narrative_response_repository import (
+from app.apps.rpg.narration.persistence.rpg_narrative_response_repository import (
     NarrativeResponsePersistenceConflict,
 )
 from app.apps.rpg.narration.narrative_engine import (

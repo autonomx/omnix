@@ -10,7 +10,7 @@ from app.apps.rpg.narration.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
 )
-from app.apps.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
+from app.apps.rpg.rules.runtime_promotions import attach_runtime_promotion_payloads
 from app.apps.rpg.session.state_normalization import _safe_str
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from app.apps.rpg.session.survival_runtime import attach_survival_runtime_payloads

@@ -92,7 +92,7 @@ from app.apps.rpg.session.deferred_narration_guard import (
 from app.apps.rpg.session.narration_trace import (
     record_narration_trace as record_narration_trace, record_narration_trace_stack as record_narration_trace_stack,
 )
-from app.apps.rpg.narration.runtime_provider import (
+from app.apps.rpg.session.runtime_provider import (
     get_runtime_llm_provider as get_runtime_llm_provider,
 )
 from app.apps.rpg.narration.response_generation.runtime_bridge import (

@@ -58,7 +58,7 @@ def _legacy_result(line: str = "The road is muddy, but passable.") -> dict:
 
 def test_direct_dialogue_is_regenerated_as_ordered_canonical_blocks(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     result = canonicalize_direct_dialogue_result(
@@ -80,7 +80,7 @@ def test_direct_dialogue_is_regenerated_as_ordered_canonical_blocks(monkeypatch)
 
 def test_corrupted_direct_line_is_ignored_before_canonical_generation(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     result = canonicalize_direct_dialogue_result(
@@ -96,7 +96,7 @@ def test_corrupted_direct_line_is_ignored_before_canonical_generation(monkeypatc
 
 def test_committed_interaction_identity_wins_over_stale_runtime_turn_id(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     legacy = _legacy_result()
@@ -120,7 +120,7 @@ def test_committed_interaction_identity_wins_over_stale_runtime_turn_id(monkeypa
 
 def test_existing_canonical_identity_is_rebound_after_interaction_commit(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     result = canonicalize_direct_dialogue_result(

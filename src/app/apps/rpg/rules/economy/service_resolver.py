@@ -23,13 +23,13 @@ from app.apps.rpg.rules.economy.service_registry import (
     get_service_provider,
 )
 from app.apps.rpg.rules.economy.service_stock import filter_available_offers
-from app.apps.rpg.session.ambient_intent import (
+from app.apps.rpg.rules.ambient_intent import (
     is_ambient_wait_or_listen_intent,
     is_room_context_ambient_not_lodging,
 )
-from app.apps.rpg.session.semantic_interaction import semantic_interaction_from_action
-from app.apps.rpg.session.pending_interactions import select_pending_service_offer
-from app.apps.rpg.world.location_registry import (
+from app.apps.rpg.rules.semantic_interaction import semantic_interaction_from_action
+from app.apps.rpg.rules.pending_interactions import select_pending_service_offer
+from app.apps.rpg.rules.location_registry import (
     current_location_id,
     has_explicit_location,
     location_allows_service,

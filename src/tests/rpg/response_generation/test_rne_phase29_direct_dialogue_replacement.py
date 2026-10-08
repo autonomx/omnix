@@ -107,7 +107,7 @@ def test_first_call_uses_advisory_for_intent_but_never_for_visible_prose(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
@@ -135,7 +135,7 @@ def test_fast_immersive_and_cinematic_profiles_use_the_same_canonical_engine(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
@@ -165,7 +165,7 @@ def test_canonical_writer_persists_content_quality_repair_before_delivery(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
@@ -204,7 +204,7 @@ def test_canonical_writer_removes_fabricated_dialogue_for_absent_npc(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
@@ -264,7 +264,7 @@ def test_fast_visible_dialogue_uses_provider_for_canonical_prose(
         )
 
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         provider_writer,
     )
     monkeypatch.setattr(
@@ -316,7 +316,7 @@ def test_fast_visible_dialogue_uses_provider_for_canonical_prose(
 
 def test_fast_visible_dialogue_rejects_deterministic_prose(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: DeterministicNarrativeWriter(),
     )
     session = _session()
@@ -341,7 +341,7 @@ def test_provider_authored_prose_is_not_replaced_by_canned_quality_repair(
 ) -> None:
     authored = "The room has been thin all week. I would keep an eye on who no longer comes through the door."
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: _ProviderTaggedWriter(authored),
     )
     session = _session()
@@ -379,7 +379,7 @@ def test_group_dialogue_plans_one_provider_authored_block_per_speaker(
 ) -> None:
     authored = "The tracks are sparse, and the old road deserves a careful look."
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.narrative_provider.build_production_narrative_writer",
+        "app.apps.rpg.narration.narrative_provider.build_production_narrative_writer",
         lambda: _ProviderTaggedWriter(authored),
     )
     session = _session()

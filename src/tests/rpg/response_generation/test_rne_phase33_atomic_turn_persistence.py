@@ -12,7 +12,7 @@ from app.apps.rpg.narration.narrative_engine import (
 from app.apps.rpg.narration.narrative_engine.persistence_policy import (
     narrative_repository_save_policy,
 )
-from app.apps.rpg.foundation.persistence.rpg_compat import save_session_to_postgres
+from app.apps.rpg.session.persistence.rpg_compat import save_session_to_postgres
 from app.apps.rpg.foundation.persistence.rpg_session_save_policy import rpg_session_save_policy
 
 
@@ -91,7 +91,7 @@ def test_outer_transaction_policy_stages_canon_without_repository_side_effect() 
 def test_outer_transaction_policy_stages_compatibility_session_save(monkeypatch) -> None:
     session = {"manifest": {"session_id": "campaign:phase33"}}
     monkeypatch.setattr(
-        "app.apps.rpg.foundation.persistence.rpg_compat._database",
+        "app.apps.rpg.session.persistence.rpg_compat._database",
         lambda: (_ for _ in ()).throw(AssertionError("database write was not deferred")),
     )
 

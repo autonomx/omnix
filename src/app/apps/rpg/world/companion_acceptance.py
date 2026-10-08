@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from app.apps.rpg.rules.party.companion_presence import current_player_location_id
 from app.apps.rpg.rules.party.party_state import add_companion, ensure_party_state
-from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import ensure_dynamic_npc_profile
+from app.apps.rpg.foundation.dynamic_npc_profiles import ensure_dynamic_npc_profile
 from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 

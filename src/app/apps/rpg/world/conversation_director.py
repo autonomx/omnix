@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.apps.rpg.world.conversation_topics import conversation_topics_for_state
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_goal_state import active_goals_for_npc
 from app.apps.rpg.world.npc_presence_runtime import (
