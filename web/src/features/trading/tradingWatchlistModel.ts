@@ -6,8 +6,16 @@ import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
  * Version 1 stored `{ name, instrumentIds }`. Version 2 stores an ordered list
  * of items, each a symbol or a named section header. A section owns the
  * symbols that follow it until the next section; symbols before the first
- * section belong to no section. Version 1 payloads are upgraded when read and
- * are written back as version 2 on the next save.
+ * section belong to no section.
+ *
+ * Compatibility rules:
+ * - every version 2 write also writes `instrumentIds`, the item symbols in
+ *   order, so a client that only knows version 1 still shows the list;
+ * - `items` count only when `schemaVersion === 2` and `items` is an array.
+ *   A list last saved by a version 1 client has no `schemaVersion`, so its
+ *   `instrumentIds` are read and its symbols kept (its sections are lost);
+ * - a payload from a newer version (`schemaVersion > 2`) is shown from its
+ *   `instrumentIds` and is read-only: this client never saves over it.
  */
 export const WATCHLIST_SCHEMA_VERSION = 2;
 
@@ -60,6 +68,11 @@ function normalizeItems(items: readonly WatchlistItem[]): WatchlistItem[] {
   return result;
 }
 
+/** True for a payload written by a newer version of Omnix; it is read-only here. */
+export function isNewerWatchlistPayload(raw: unknown): boolean {
+  return isRecord(raw) && typeof raw.schemaVersion === 'number' && raw.schemaVersion > WATCHLIST_SCHEMA_VERSION;
+}
+
 function rawItems(raw: unknown): WatchlistItem[] {
   if (!isRecord(raw)) return [];
   if (raw.schemaVersion === WATCHLIST_SCHEMA_VERSION && Array.isArray(raw.items)) {
@@ -72,7 +85,7 @@ function rawItems(raw: unknown): WatchlistItem[] {
     : [];
 }
 
-/** Read any stored watchlist payload (version 1 or 2) as version 2. */
+/** Read any stored watchlist payload (version 1, 2 or newer) as version 2. */
 export function upgradeWatchlistPayload(raw: unknown): WatchlistPayload {
   const name = isRecord(raw) && typeof raw.name === 'string' ? raw.name : 'Watchlist';
   return { schemaVersion: WATCHLIST_SCHEMA_VERSION, name, items: normalizeItems(rawItems(raw)) };
@@ -85,12 +98,23 @@ export function watchlistSymbolsNeedRewrite(raw: unknown): boolean {
   return before.length !== after.length || before.some((instrumentId, index) => instrumentId !== after[index]);
 }
 
-export function newWatchlistPayload(name: string, instrumentIds: readonly string[] = []): WatchlistPayload {
+/** The stored form: version 2 items plus the `instrumentIds` mirror for version 1 readers. */
+export function serializeWatchlist(payload: WatchlistPayload): Record<string, unknown> {
   return {
     schemaVersion: WATCHLIST_SCHEMA_VERSION,
-    name,
-    items: normalizeItems(instrumentIds.map((instrumentId) => ({ type: 'symbol', instrumentId }))),
+    name: payload.name,
+    items: payload.items,
+    instrumentIds: watchlistSymbolIds(payload),
   };
+}
+
+export function newWatchlistPayload(name: string, instrumentIds: readonly string[] = []): WatchlistPayload {
+  return watchlistPayloadFromItems(name, instrumentIds.map((instrumentId) => ({ type: 'symbol', instrumentId })));
+}
+
+/** A list built in one pass; duplicate symbols and section ids are dropped. */
+export function watchlistPayloadFromItems(name: string, items: readonly WatchlistItem[]): WatchlistPayload {
+  return { schemaVersion: WATCHLIST_SCHEMA_VERSION, name, items: normalizeItems(items) };
 }
 
 export function isSymbolItem(item: WatchlistItem): item is WatchlistSymbolItem {
@@ -118,13 +142,82 @@ export function removeWatchlistSymbols(payload: WatchlistPayload, instrumentIds:
   };
 }
 
-/** Swap an item with its neighbour; a symbol moved across a header changes section. */
-export function moveWatchlistItem(payload: WatchlistPayload, index: number, direction: -1 | 1): WatchlistPayload {
-  const target = index + direction;
-  if (index < 0 || index >= payload.items.length || target < 0 || target >= payload.items.length) return payload;
-  const items = [...payload.items];
-  [items[index], items[target]] = [items[target], items[index]];
-  return { ...payload, items };
+export type WatchlistEntryKey = { type: 'symbol'; instrumentId: string } | { type: 'section'; id: string };
+
+function entryIndex(items: readonly WatchlistItem[], key: WatchlistEntryKey): number {
+  return items.findIndex((item) => key.type === 'symbol'
+    ? item.type === 'symbol' && item.instrumentId === key.instrumentId
+    : item.type === 'section' && item.id === key.id);
+}
+
+function nextSectionIndex(items: readonly WatchlistItem[], after: number): number {
+  for (let index = after + 1; index < items.length; index += 1) if (items[index].type === 'section') return index;
+  return items.length;
+}
+
+function previousSectionIndex(items: readonly WatchlistItem[], before: number): number {
+  for (let index = before - 1; index >= 0; index -= 1) if (items[index].type === 'section') return index;
+  return -1;
+}
+
+function isCollapsedSection(item: WatchlistItem | undefined): boolean {
+  return item?.type === 'section' && item.collapsed;
+}
+
+/** A section moves with its symbols, past the neighbouring section. */
+function moveSection(items: readonly WatchlistItem[], index: number, direction: -1 | 1): WatchlistItem[] | null {
+  const end = nextSectionIndex(items, index);
+  if (direction < 0) {
+    // Moving above the symbols before the first section would make them part of this section.
+    const previous = previousSectionIndex(items, index);
+    if (previous < 0) return null;
+    return [...items.slice(0, previous), ...items.slice(index, end), ...items.slice(previous, index), ...items.slice(end)];
+  }
+  if (end >= items.length) return null;
+  const nextEnd = nextSectionIndex(items, end);
+  return [...items.slice(0, index), ...items.slice(end, nextEnd), ...items.slice(index, end), ...items.slice(nextEnd)];
+}
+
+/**
+ * A symbol moves one visible row; across a header it changes section. It
+ * never lands inside a collapsed section, where it would disappear: it moves
+ * past the collapsed section instead, or stays put when there is no place.
+ */
+function moveSymbol(items: readonly WatchlistItem[], index: number, direction: -1 | 1): WatchlistItem[] | null {
+  const neighbour = items[index + direction];
+  if (!neighbour) return null;
+  if (neighbour.type === 'symbol') {
+    const next = [...items];
+    [next[index], next[index + direction]] = [neighbour, items[index]];
+    return next;
+  }
+  const symbol = items[index];
+  const rest = items.filter((_, position) => position !== index);
+  let insertAt: number;
+  if (direction < 0) {
+    insertAt = index - 1;
+    for (let header = previousSectionIndex(rest, insertAt); header >= 0 && isCollapsedSection(rest[header]); header = previousSectionIndex(rest, insertAt)) {
+      insertAt = header;
+    }
+  } else {
+    let header = index;
+    while (isCollapsedSection(rest[header])) {
+      header = nextSectionIndex(rest, header);
+      if (header >= rest.length) return null;
+    }
+    insertAt = header + 1;
+  }
+  return [...rest.slice(0, insertAt), symbol, ...rest.slice(insertAt)];
+}
+
+/** Move a symbol or a section one step; unchanged when it cannot move that way. */
+export function moveWatchlistEntry(payload: WatchlistPayload, key: WatchlistEntryKey, direction: -1 | 1): WatchlistPayload {
+  const index = entryIndex(payload.items, key);
+  if (index < 0) return payload;
+  const items = key.type === 'section'
+    ? moveSection(payload.items, index, direction)
+    : moveSymbol(payload.items, index, direction);
+  return items ? { ...payload, items } : payload;
 }
 
 export function newWatchlistSectionId(): string {

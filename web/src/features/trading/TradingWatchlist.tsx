@@ -1,19 +1,9 @@
-import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useId, useMemo, useState, type CSSProperties } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
 import { watchlistDisplaySymbol } from './tradingWatchlistPresentation';
-import {
-  nextWatchlistSort,
-  readWatchlistView,
-  toggleWatchlistColumn,
-  watchlistColumn,
-  watchlistComparator,
-  writeWatchlistView,
-  type WatchlistColumnDefinition,
-  type WatchlistColumnId,
-  type WatchlistSortKey,
-  type WatchlistView,
-} from './tradingWatchlistColumns';
+import { watchlistComparator, type WatchlistColumnDefinition } from './tradingWatchlistColumns';
+import { useTradingWatchlistView } from './useTradingWatchlistView';
 import {
   WATCHLIST_FLAG_COLORS,
   WATCHLIST_FLAG_LABELS,
@@ -22,12 +12,14 @@ import {
   flagListId,
   flaggedInstrumentIds,
   isSymbolItem,
-  moveWatchlistItem,
+  moveWatchlistEntry,
+  newWatchlistSectionId,
   removeWatchlistSection,
   removeWatchlistSymbols,
   updateWatchlistSection,
   upgradeWatchlistPayload,
   watchlistRows,
+  watchlistSymbolIds,
   type WatchlistFlagColor,
   type WatchlistItem,
 } from './tradingWatchlistModel';
@@ -73,10 +65,10 @@ export function TradingWatchlist({
   onSelect: (instrumentId: string) => void;
 }) {
   const {
-    records, selectedListId, setSelectedListId, flagColor, selected, current, status, save, commit, create, archive,
+    records, selectedListId, setSelectedListId, flagColor, selected, current, readOnly, status, commit, create, archive,
   } = useTradingWatchlistDocuments(instruments);
   const { payload: flagsPayload, flags, setFlag } = useTradingWatchlistFlags();
-  const [view, setView] = useState<WatchlistView>(readWatchlistView);
+  const view = useTradingWatchlistView();
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
   const [flagMenuFor, setFlagMenuFor] = useState<string | null>(null);
@@ -88,11 +80,8 @@ export function TradingWatchlist({
     [current, flagColor, flagsPayload],
   );
   const instrumentIds = useMemo(() => listItems.filter(isSymbolItem).map((item) => item.instrumentId), [listItems]);
-  const columns = useMemo(
-    () => view.columns.flatMap((id) => watchlistColumn(id) ?? []),
-    [view.columns],
-  );
-  const quotes = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings, view.columns.includes('relativeVolume'));
+  const { columns } = view;
+  const quotes = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings, view.columnIds.includes('relativeVolume'));
   const flagListColors = WATCHLIST_FLAG_COLORS.filter((color) => (
     color === flagColor || flagsPayload.flags.some((flag) => flag.color === color)
   ));
@@ -115,8 +104,13 @@ export function TradingWatchlist({
     [listItems, quotes, symbolFor, view.sort],
   );
   const sorted = view.sort != null;
+  const knownInstrumentIds = useMemo(
+    () => new Set(records.flatMap((record) => watchlistSymbolIds(upgradeWatchlistPayload(record.payload)))),
+    [records],
+  );
   const importer = useTradingWatchlistImport({
     catalog: catalogInstruments,
+    preferredInstrumentIds: knownInstrumentIds,
     create,
     onInstrumentsFound: (found) => setDiscoveredInstruments((items) => found.reduce(mergeInstruments, items)),
   });
@@ -126,16 +120,11 @@ export function TradingWatchlist({
     normalizedActiveInstrumentId,
     (instrumentId) => onSelect(binanceInstrumentIdFor(instrumentId)),
   );
-  const updateView = (next: WatchlistView) => {
-    setView(next);
-    writeWatchlistView(next);
-  };
-  const toggleColumn = (id: WatchlistColumnId) => {
-    const nextColumns = toggleWatchlistColumn(view.columns, id);
-    // Hiding the sorted column also drops its sort.
-    updateView({ columns: nextColumns, sort: view.sort && view.sort.key !== 'symbol' && !nextColumns.includes(view.sort.key) ? null : view.sort });
-  };
   const listName = flagColor ? flagListName(flagColor).toLowerCase() : 'watchlist';
+  const editable = !flagColor && !readOnly;
+  const sectionIds = listItems.flatMap((item) => item.type === 'section' ? [item.id] : []);
+  const rowIdPrefix = useId();
+  const rowId = (instrumentId: string) => `${rowIdPrefix}row-${instrumentId}`;
 
   const addInstrument = async (instrument: CanonicalInstrument) => {
     const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);
@@ -144,13 +133,13 @@ export function TradingWatchlist({
       await setFlag([instrumentId], flagColor);
       return;
     }
-    if (!selected || instrumentIds.includes(instrumentId) || status === 'saving') return;
-    await save(addWatchlistSymbols(current, [instrumentId]));
+    if (!selected || instrumentIds.includes(instrumentId)) return;
+    commit((payload) => addWatchlistSymbols(payload, [instrumentId]));
   };
 
   const removeInstrument = (instrumentId: string) => {
     if (flagColor) void setFlag([instrumentId], null);
-    else commit(removeWatchlistSymbols(current, new Set([instrumentId])));
+    else commit((payload) => removeWatchlistSymbols(payload, new Set([instrumentId])));
   };
 
   const promptName = (title: string, initial: string, apply: (name: string) => void) => {
@@ -194,7 +183,7 @@ export function TradingWatchlist({
         <button
           type="button"
           onClick={() => setSymbolPickerOpen(true)}
-          disabled={(!selected && !flagColor) || status === 'loading' || status === 'saving'}
+          disabled={(!selected && !flagColor) || readOnly || status === 'loading' || status === 'saving'}
           aria-label={`Add symbol to ${listName}`}
           title={`Add symbol to ${listName}`}
         >
@@ -212,75 +201,91 @@ export function TradingWatchlist({
           </button>
           {optionsOpen ? (
             <TradingWatchlistOptionsMenu
-              canEdit={selected != null}
+              canEdit={selected != null && !readOnly}
               canDelete={selected != null && records.length > 1}
-              columns={view.columns}
+              columns={view.columnIds}
               onCreate={() => { setOptionsOpen(false); void create(); }}
-              onAddSection={() => promptName('Section name', 'New section', (name) => commit(addWatchlistSection(current, name, cursor)))}
-              onRename={() => promptName('Rename watchlist', current.name, (name) => void save({ ...current, name }))}
+              onAddSection={() => promptName('Section name', 'New section', (name) => {
+                // The id is chosen once, so a retried save adds the same section.
+                const id = newWatchlistSectionId();
+                commit((payload) => addWatchlistSection(payload, name, cursor, id));
+              })}
+              onRename={() => promptName('Rename watchlist', current.name, (name) => commit((payload) => ({ ...payload, name })))}
               onDelete={() => { setOptionsOpen(false); void archive(); }}
               onImport={() => { setOptionsOpen(false); importer.openFilePicker(); }}
               onExport={exportList}
-              onToggleColumn={toggleColumn}
+              onToggleColumn={view.toggleColumn}
             />
           ) : null}
         </div>
       </div>
-      <TradingWatchlistHeader
-        columns={columns}
-        sort={view.sort}
-        interval={interval}
-        onSort={(key: WatchlistSortKey) => updateView({ ...view, sort: nextWatchlistSort(view.sort, key) })}
-      />
-      <ul ref={listRef} tabIndex={0} aria-label="Watchlist symbols" onKeyDown={onKeyDown}>
-        {rows.map((row) => {
-          const canMoveUp = row.itemIndex > 0;
-          const canMoveDown = row.itemIndex < listItems.length - 1;
-          const move = (direction: -1 | 1) => commit(moveWatchlistItem(current, row.itemIndex, direction));
-          if (row.kind === 'section') {
-            const { section } = row;
+      <div
+        ref={listRef}
+        className="trading-watchlist-table"
+        role="grid"
+        aria-label="Watchlist symbols"
+        aria-multiselectable="true"
+        aria-activedescendant={cursor ? rowId(cursor) : undefined}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+      >
+        <TradingWatchlistHeader
+          columns={columns}
+          sort={view.sort}
+          interval={interval}
+          onSort={view.sortBy}
+        />
+        <ul role="rowgroup">
+          {rows.map((row) => {
+            if (row.kind === 'section') {
+              const { section } = row;
+              const position = sectionIds.indexOf(section.id);
+              return (
+                <TradingWatchlistSectionRow
+                  key={`section:${section.id}`}
+                  section={section}
+                  symbolCount={row.symbolCount}
+                  sorted={sorted}
+                  canMoveUp={position > 0}
+                  canMoveDown={position < sectionIds.length - 1}
+                  onToggle={() => commit((payload) => updateWatchlistSection(payload, section.id, { collapsed: !section.collapsed }))}
+                  onMove={(direction) => commit((payload) => moveWatchlistEntry(payload, { type: 'section', id: section.id }, direction))}
+                  onRename={() => promptName('Rename section', section.name, (name) => commit((payload) => updateWatchlistSection(payload, section.id, { name })))}
+                  onRemove={() => commit((payload) => removeWatchlistSection(payload, section.id))}
+                />
+              );
+            }
+            const { instrumentId } = row;
+            const symbol = symbolFor(instrumentId);
             return (
-              <TradingWatchlistSectionRow
-                key={`section:${section.id}`}
-                section={section}
-                symbolCount={row.symbolCount}
+              <TradingWatchlistSymbolRow
+                key={instrumentId}
+                rowId={rowId(instrumentId)}
+                instrumentId={instrumentId}
+                symbol={symbol}
+                quote={quotes[instrumentId]}
+                columns={columns}
+                flag={flags.get(instrumentId)}
+                active={instrumentId === normalizedActiveInstrumentId}
+                selected={selectedIds.has(instrumentId)}
                 sorted={sorted}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onToggle={() => commit(updateWatchlistSection(current, section.id, { collapsed: !section.collapsed }))}
-                onMove={move}
-                onRename={() => promptName('Rename section', section.name, (name) => commit(updateWatchlistSection(current, section.id, { name })))}
-                onRemove={() => commit(removeWatchlistSection(current, section.id))}
+                movable={editable}
+                removable={!readOnly}
+                canMoveUp={row.itemIndex > 0}
+                canMoveDown={row.itemIndex < listItems.length - 1}
+                flagMenuOpen={flagMenuFor === instrumentId}
+                removeTitle={flagColor ? 'Remove flag' : 'Remove'}
+                onSelect={(event) => onRowClick(instrumentId, event)}
+                onMove={(direction) => commit((payload) => moveWatchlistEntry(payload, { type: 'symbol', instrumentId }, direction))}
+                onToggleFlagMenu={(open) => setFlagMenuFor(open ? instrumentId : null)}
+                onPickFlag={(color) => pickFlag(instrumentId, color)}
+                onRemove={() => removeInstrument(instrumentId)}
               />
             );
-          }
-          const { instrumentId } = row;
-          const symbol = symbolFor(instrumentId);
-          return (
-            <TradingWatchlistSymbolRow
-              key={instrumentId}
-              instrumentId={instrumentId}
-              symbol={symbol}
-              quote={quotes[instrumentId]}
-              columns={columns}
-              flag={flags.get(instrumentId)}
-              active={instrumentId === normalizedActiveInstrumentId}
-              selected={selectedIds.has(instrumentId)}
-              sorted={sorted}
-              movable={!flagColor}
-              canMoveUp={canMoveUp}
-              canMoveDown={canMoveDown}
-              flagMenuOpen={flagMenuFor === instrumentId}
-              removeTitle={flagColor ? 'Remove flag' : 'Remove'}
-              onSelect={(event) => onRowClick(instrumentId, event)}
-              onMove={move}
-              onToggleFlagMenu={(open) => setFlagMenuFor(open ? instrumentId : null)}
-              onPickFlag={(color) => pickFlag(instrumentId, color)}
-              onRemove={() => removeInstrument(instrumentId)}
-            />
-          );
-        })}
-      </ul>
+          })}
+        </ul>
+      </div>
+      {readOnly ? <p className="trading-watchlist-notice" role="status">This watchlist was saved by a newer version of Omnix and is read-only here.</p> : null}
       {importer.notice ? <p className="trading-watchlist-notice" role="status">{importer.notice}</p> : null}
       <span className="trading-watchlist-status" aria-live="polite">{status}</span>
       <input ref={importer.inputRef} type="file" accept=".txt,text/plain" hidden aria-label="Import watchlist file" onChange={importer.onInputChange} />

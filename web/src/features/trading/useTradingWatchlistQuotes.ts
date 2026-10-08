@@ -11,6 +11,31 @@ export type WatchlistQuoteSnapshot = WatchlistSnapshot;
 /** Bars requested per symbol when the relative volume column is shown: the latest and 20 before it. */
 const RELATIVE_VOLUME_BARS = 21;
 
+/**
+ * Symbols refreshed at once. Each symbol makes a quote and a bars request in
+ * parallel (plus sequential fallbacks), so at most about twice this many
+ * requests are in flight for a long list.
+ */
+export const WATCHLIST_QUOTE_CONCURRENCY = 4;
+
+/** Run `task` for every item with at most `limit` running; stops starting new ones once `stopped()` is true. */
+export async function runWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  task: (item: T) => Promise<void>,
+  stopped: () => boolean = () => false,
+): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length && !stopped()) {
+      const item = items[next];
+      next += 1;
+      await task(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 // The side-panel tabs unmount the watchlist when another tab is selected. Keep
 // the latest values at module scope so returning to the watchlist can render
 // them immediately while the next refresh is in flight.
@@ -81,7 +106,9 @@ async function intervalChange(
 /**
  * Latest price, interval change and interval bar statistics for each listed
  * symbol. `withRelativeVolume` requests enough bars to compare the latest
- * volume with the bars before it.
+ * volume with the bars before it; the latest bar is usually still forming.
+ * Fetches follow the set of symbols, so reordering or sorting the list does
+ * not refetch.
  */
 export function useTradingWatchlistQuotes(
   instrumentIds: readonly string[],
@@ -90,7 +117,7 @@ export function useTradingWatchlistQuotes(
   withRelativeVolume = false,
 ): Record<string, WatchlistQuoteSnapshot> {
   const [quotes, setQuotes] = useState<Record<string, WatchlistQuoteSnapshot>>(() => ({ ...watchlistQuoteCache }));
-  const instrumentIdsKey = instrumentIds.join('\u0000');
+  const instrumentIdsKey = [...new Set(instrumentIds)].sort().join('\u0000');
   const bindingIntervalsByInstrument = useMemo(() => {
     const bindingsByInstrument = new Map<string, readonly string[]>();
     for (const binding of providerBindings) {
@@ -109,7 +136,7 @@ export function useTradingWatchlistQuotes(
 
     void (async () => {
       const next: Record<string, WatchlistQuoteSnapshot> = {};
-      await Promise.all(ids.map(async (instrumentId) => {
+      await runWithConcurrency(ids, WATCHLIST_QUOTE_CONCURRENCY, async (instrumentId) => {
         const supportedIntervals = bindingIntervalsByInstrument.get(instrumentId);
         try {
           const quotePromise = tradingApi.quote(instrumentId).catch(() => null);
@@ -124,7 +151,7 @@ export function useTradingWatchlistQuotes(
         } catch {
           next[instrumentId] = { price: null, changePercent: null };
         }
-      }));
+      }, () => cancelled);
       if (!cancelled) {
         setQuotes((current) => {
           const merged = { ...current };

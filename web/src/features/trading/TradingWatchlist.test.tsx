@@ -233,6 +233,7 @@ describe('TradingWatchlist add symbol', () => {
           { type: 'symbol', instrumentId: gameStop.instrument_id },
           { type: 'symbol', instrumentId: apple.instrument_id },
         ],
+        instrumentIds: [gameStop.instrument_id, apple.instrument_id],
       },
     );
 
@@ -279,49 +280,74 @@ describe('TradingWatchlist add symbol', () => {
     await waitFor(() => expect(selectedSymbols()).toEqual(['GME', 'AAPL']));
   });
 
-  it('retries symbol removal after a stale watchlist revision conflict', async () => {
+  it('re-applies a removal to the latest revision after a conflict, keeping the other change', async () => {
+    const teslaId = 'equity:NASDAQ:TSLA';
     const twoSymbolRecord = {
       ...record,
-      payload: {
-        name: 'Default Watchlist',
-        instrumentIds: [apple.instrument_id, gameStop.instrument_id],
-      },
+      payload: { name: 'Default Watchlist', instrumentIds: [apple.instrument_id, gameStop.instrument_id] },
     } as TradingDocument;
-    const updatedRecord = {
+    // Meanwhile another tab added TSLA.
+    const editedElsewhere = {
       ...twoSymbolRecord,
-      revision: 3,
+      revision: 2,
       payload: {
+        schemaVersion: 2,
         name: 'Default Watchlist',
-        instrumentIds: [gameStop.instrument_id],
+        items: [apple.instrument_id, gameStop.instrument_id, teslaId].map((instrumentId) => ({ type: 'symbol', instrumentId })),
+        instrumentIds: [apple.instrument_id, gameStop.instrument_id, teslaId],
       },
-    } as TradingDocument;
-    const documents = mockDocuments([twoSymbolRecord]);
-    vi.spyOn(tradingApi, 'quote').mockResolvedValue(fixture({ price: '100' }));
-    vi.spyOn(tradingApi, 'bars').mockResolvedValue({
-      bars: [],
-      binding: { supported_intervals: ['1m'] },
-    } as unknown as BarsResponse);
+    } as unknown as TradingDocument;
+    let watchlistLoads = 0;
+    const documents = vi.spyOn(tradingApi, 'documents').mockImplementation(async (kind) => {
+      if (kind === 'watchlist-flags') return [];
+      watchlistLoads += 1;
+      return [watchlistLoads === 1 ? twoSymbolRecord : editedElsewhere];
+    });
+    mockMarketData();
     const update = vi.spyOn(tradingApi, 'updateDocument')
       .mockRejectedValueOnce(new Error('Trading request failed (409): revision conflict'))
-      .mockRejectedValueOnce(new Error('Trading request failed (409): revision conflict'))
-      .mockResolvedValueOnce(updatedRecord);
+      .mockImplementationOnce(async (_kind, currentRecord, nextPayload) => ({ ...currentRecord, revision: 3, payload: nextPayload }));
 
     render(
-      <TradingWatchlist
-        instruments={[apple, gameStop]}
-        activeInstrumentId={apple.instrument_id}
-        interval="1m"
-        onSelect={vi.fn()}
-      />,
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
     );
 
-    await screen.findByRole('button', { name: 'Remove AAPL' });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove AAPL' }));
 
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Select AAPL' })).not.toBeInTheDocument());
-    expect(watchlistCalls(documents)).toHaveLength(3);
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls[1][1]).toBe(editedElsewhere);
+    expect(update.mock.calls[1][2]).toEqual({
+      schemaVersion: 2,
+      name: 'Default Watchlist',
+      items: [{ type: 'symbol', instrumentId: gameStop.instrument_id }, { type: 'symbol', instrumentId: teslaId }],
+      instrumentIds: [gameStop.instrument_id, teslaId],
+    });
+    await waitFor(() => expect(symbolNames()).toEqual(['GME', 'TSLA']));
+    expect(watchlistCalls(documents)).toHaveLength(2);
     expect(screen.getByText('saved')).toBeInTheDocument();
+  });
+
+  it('shows a list saved by a newer Omnix from its mirror and never saves over it', async () => {
+    const newer = {
+      ...record,
+      payload: { schemaVersion: 3, name: 'Future', items: [{ type: 'board' }], instrumentIds: [gameStop.instrument_id] },
+    } as unknown as TradingDocument;
+    mockDocuments([newer]);
+    mockMarketData();
+    const update = vi.spyOn(tradingApi, 'updateDocument');
+
+    render(
+      <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Select GME' })).toBeInTheDocument();
+    expect(screen.getByText(/saved by a newer version of Omnix/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove GME' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move GME up' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add symbol to watchlist' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Watchlist options' }));
+    expect(screen.getByRole('menuitem', { name: 'Rename watchlist' })).toBeDisabled();
+    expect(update).not.toHaveBeenCalled();
   });
 });
 
@@ -407,6 +433,7 @@ describe('TradingWatchlist sections and flags', () => {
         { type: 'symbol', instrumentId: apple.instrument_id },
         { type: 'section', id: expect.any(String), name: 'Earnings', collapsed: false },
       ],
+      instrumentIds: [apple.instrument_id],
     });
   });
 
@@ -506,10 +533,11 @@ describe('TradingWatchlist columns', () => {
     render(
       <TradingWatchlist instruments={[apple, gameStop]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
     );
-    expect(await screen.findByRole('button', { name: 'Clear watchlist volume sort' })).toHaveAttribute('aria-pressed', 'true');
+    expect((await screen.findByRole('button', { name: 'Clear watchlist volume sort' })).closest('[role="columnheader"]')).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: 'Sort watchlist by symbol ascending' }));
     await waitFor(() => expect(symbolNames()).toEqual(['AAPL', 'GME']));
-    expect(screen.getByRole('button', { name: 'Sort watchlist by symbol descending' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Sort watchlist by symbol descending' }).closest('[role="columnheader"]')).toHaveAttribute('aria-sort', 'ascending');
+    expect(screen.getByRole('button', { name: 'Sort watchlist by volume descending' }).closest('[role="columnheader"]')).toHaveAttribute('aria-sort', 'none');
   });
 
   it('hides a column and drops its sort', async () => {
@@ -546,12 +574,15 @@ describe('TradingWatchlist keyboard and import', () => {
       <TradingWatchlist instruments={[apple, gameStop, tesla]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={onSelect} />,
     );
 
-    const list = await screen.findByRole('list', { name: 'Watchlist symbols' });
+    const list = await screen.findByRole('grid', { name: 'Watchlist symbols' });
     await screen.findByRole('button', { name: 'Select TSLA' });
     list.focus();
     fireEvent.keyDown(list, { key: 'ArrowDown' });
     expect(onSelect).toHaveBeenLastCalledWith(gameStop.instrument_id);
     expect(selectedRows()).toEqual(['GME']);
+    const gmeRow = screen.getByRole('row', { selected: true });
+    expect(gmeRow).toHaveAttribute('data-instrument-id', gameStop.instrument_id);
+    expect(list).toHaveAttribute('aria-activedescendant', gmeRow.id);
     fireEvent.keyDown(list, { key: ' ' });
     expect(onSelect).toHaveBeenLastCalledWith(tesla.instrument_id);
     fireEvent.keyDown(list, { key: ' ', shiftKey: true });
@@ -575,7 +606,7 @@ describe('TradingWatchlist keyboard and import', () => {
     await screen.findByRole('button', { name: 'Select TSLA' });
     fireEvent.click(screen.getByRole('button', { name: 'Select AAPL' }));
     expect(onSelect).toHaveBeenCalledWith(apple.instrument_id);
-    const list = screen.getByRole('list', { name: 'Watchlist symbols' });
+    const list = screen.getByRole('grid', { name: 'Watchlist symbols' });
     fireEvent.keyDown(screen.getByRole('button', { name: 'Select AAPL' }), { key: 'ArrowDown', shiftKey: true });
     expect(selectedRows()).toEqual(['AAPL', 'GME']);
     expect(onSelect).toHaveBeenCalledTimes(1);
@@ -625,8 +656,33 @@ describe('TradingWatchlist keyboard and import', () => {
         { type: 'section', id: expect.any(String), name: 'Later', collapsed: false },
         { type: 'symbol', instrumentId: apple.instrument_id },
       ],
+      instrumentIds: [gameStop.instrument_id, apple.instrument_id],
     });
     expect(screen.getByRole('combobox', { name: 'Watchlist' })).toHaveDisplayValue('Swing ideas');
     expect(screen.getByRole('button', { name: 'Collapse section Later' })).toBeInTheDocument();
+  });
+
+  it('creates nothing when no symbol in the file is found, and refuses a file over 1 MB', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    vi.spyOn(tradingApi, 'instruments').mockResolvedValue([]);
+    const create = vi.spyOn(tradingApi, 'createDocument');
+
+    render(
+      <TradingWatchlist instruments={[apple]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />,
+    );
+
+    await screen.findByRole('button', { name: 'Select AAPL' });
+    const content = '###Empty,LSE:NOPE';
+    const nothing = new File([content], 'nothing.txt', { type: 'text/plain' });
+    Object.defineProperty(nothing, 'text', { value: async () => content });
+    fireEvent.change(screen.getByLabelText('Import watchlist file'), { target: { files: [nothing] } });
+    expect(await screen.findByText('No symbols in nothing.txt could be found, so no watchlist was created; not found: LSE:NOPE.')).toBeInTheDocument();
+
+    const huge = new File(['x'], 'huge.txt', { type: 'text/plain' });
+    Object.defineProperty(huge, 'size', { value: 2_000_000 });
+    fireEvent.change(screen.getByLabelText('Import watchlist file'), { target: { files: [huge] } });
+    expect(await screen.findByText('huge.txt is too large to import (the limit is 1 MB).')).toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
   });
 });

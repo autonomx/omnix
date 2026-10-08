@@ -109,11 +109,13 @@ export function useTradingWatchlistSelection(
   onShow: (instrumentId: string) => void,
 ) {
   const [selection, setSelection] = useState<WatchlistSelection>(EMPTY_SELECTION);
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const visible = useMemo(() => new Set(order), [order]);
   const selectedIds = useMemo(
-    () => new Set(selection.ids.filter((id) => order.includes(id))),
-    [order, selection.ids],
+    () => new Set(selection.ids.filter((id) => visible.has(id))),
+    [selection.ids, visible],
   );
+  const cursor = selection.cursor && visible.has(selection.cursor) ? selection.cursor : null;
 
   const apply = (result: { selection: WatchlistSelection; show: string | null }) => {
     setSelection(result.selection);
@@ -136,5 +138,5 @@ export function useTradingWatchlistSelection(
     apply(clickWatchlistRow(selection, order, instrumentId, event));
   };
 
-  return { selectedIds, cursor: selection.cursor, listRef, onKeyDown, onRowClick };
+  return { selectedIds, cursor, listRef, onKeyDown, onRowClick };
 }

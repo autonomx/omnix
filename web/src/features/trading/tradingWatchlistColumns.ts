@@ -37,6 +37,8 @@ export type WatchlistColumnDefinition = {
   label: string;
   /** Used in the column chooser and in sort button labels. */
   description: string;
+  /** Header tooltip when the label needs explaining. */
+  hint?: string;
   /** Wide columns hold prices and volumes; narrow ones hold changes and ratios. */
   width: 'wide' | 'narrow';
   value: (snapshot: WatchlistSnapshot | undefined) => number | null;
@@ -103,6 +105,8 @@ export const WATCHLIST_COLUMNS: readonly WatchlistColumnDefinition[] = [
     id: 'relativeVolume',
     label: 'Rel Vol',
     description: 'relative volume',
+    // The latest bar is usually still forming, so early in a bar this reads low.
+    hint: 'Volume of the latest (still forming) bar over the average of the 20 bars before it',
     width: 'narrow',
     value: (snapshot) => snapshot?.relativeVolume ?? null,
     format: (snapshot) => snapshot?.relativeVolume == null ? EMPTY : `${snapshot.relativeVolume.toFixed(2)}×`,

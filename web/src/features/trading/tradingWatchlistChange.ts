@@ -38,7 +38,10 @@ export type IntervalBarStats = {
   high: number | null;
   low: number | null;
   volume: number | null;
-  /** Volume of the latest bar over the mean of the bars before it. */
+  /**
+   * Volume of the latest bar over the mean of the bars before it. The latest
+   * bar is usually still forming, so the ratio grows through the bar.
+   */
   relativeVolume: number | null;
   /** The latest close when the latest bar is from a pre- or post-market session. */
   extendedPrice: string | null;

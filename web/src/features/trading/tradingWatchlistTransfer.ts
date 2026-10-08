@@ -2,9 +2,9 @@ import { downloadBlob } from '../../shared/download';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument } from './tradingTypes';
 import {
-  addWatchlistSection,
-  addWatchlistSymbols,
-  newWatchlistPayload,
+  newWatchlistSectionId,
+  watchlistPayloadFromItems,
+  watchlistSymbolIds,
   type WatchlistItem,
   type WatchlistPayload,
 } from './tradingWatchlistModel';
@@ -39,11 +39,18 @@ export function parseWatchlistText(text: string): WatchlistTextEntry[] {
     });
 }
 
-/** `VENUE:SYMBOL` for a listed instrument, from the catalog or, failing that, from its id. */
+/**
+ * `VENUE:SYMBOL` for a listed instrument, from the catalog or, failing that,
+ * from its id. Share classes are written with a dot (`NYSE:BRK.B`), the
+ * common form in watchlist files; Omnix ids use a dash (`BRK-B`).
+ */
 export function exchangeSymbolFor(instrumentId: string, instrument?: CanonicalInstrument): string {
-  if (instrument) return `${instrument.venue}:${instrument.display_symbol}`;
+  const isEquity = instrument ? instrument.asset_class === 'equity' : instrumentId.startsWith('equity:');
+  if (instrument) return `${instrument.venue}:${isEquity ? instrument.display_symbol.replace(/-/g, '.') : instrument.display_symbol}`;
   const parts = instrumentId.split(':');
-  return parts.length >= 3 ? `${parts[1]}:${(parts.at(-1) ?? '').replace(/[-_/]/g, '')}` : instrumentId;
+  if (parts.length < 3) return instrumentId;
+  const symbol = parts.at(-1) ?? '';
+  return `${parts[1]}:${isEquity ? symbol.replace(/-/g, '.') : symbol.replace(/[-_/]/g, '')}`;
 }
 
 export function formatWatchlistText(items: readonly WatchlistItem[], symbolFor: (instrumentId: string) => string): string {
@@ -59,74 +66,142 @@ export function downloadWatchlistText(name: string, text: string): void {
   downloadBlob(new Blob([text], { type: 'text/plain' }), `${fileName}.txt`);
 }
 
-function symbolMatches(instrument: CanonicalInstrument, exchange: string | null, symbol: string): boolean {
-  if (exchange && instrument.venue.toUpperCase() !== exchange) return false;
-  return [instrument.display_symbol, instrument.venue_symbol, instrument.venue_symbol.replace(/[-_/]/g, '')]
-    .some((candidate) => candidate.toUpperCase() === symbol);
+/** Largest file and longest list an import accepts. */
+export const MAX_WATCHLIST_IMPORT_BYTES = 1_000_000;
+export const MAX_WATCHLIST_IMPORT_SYMBOLS = 2_000;
+
+/** A file the importer refuses; the message is shown to the user. */
+export class WatchlistImportError extends Error {}
+
+/** `BRK.B`, `BRK-B` and `BRKB` all name the same share class. */
+function symbolKey(symbol: string): string {
+  return symbol.toUpperCase().replace(/[.\-_/]/g, '');
 }
 
-function findInstrument(
-  instruments: readonly CanonicalInstrument[],
-  entry: Extract<WatchlistTextEntry, { type: 'symbol' }>,
-): CanonicalInstrument | undefined {
-  const exact = instruments.find((instrument) => instrument.instrument_id === entry.token);
-  if (exact) return exact;
-  const matches = instruments.filter((instrument) => symbolMatches(instrument, entry.exchange, entry.symbol));
+type SymbolEntry = Extract<WatchlistTextEntry, { type: 'symbol' }>;
+
+/** Instruments by id and by every symbol spelling, for constant-time lookups. */
+class InstrumentIndex {
+  private readonly byId = new Map<string, CanonicalInstrument>();
+  private readonly bySymbol = new Map<string, CanonicalInstrument[]>();
+
+  constructor(instruments: readonly CanonicalInstrument[]) {
+    this.add(instruments);
+  }
+
+  add(instruments: readonly CanonicalInstrument[]): void {
+    for (const instrument of instruments) {
+      if (this.byId.has(instrument.instrument_id)) continue;
+      this.byId.set(instrument.instrument_id, instrument);
+      for (const key of new Set([symbolKey(instrument.display_symbol), symbolKey(instrument.venue_symbol)])) {
+        this.bySymbol.set(key, [...(this.bySymbol.get(key) ?? []), instrument]);
+      }
+    }
+  }
+
+  get(instrumentId: string): CanonicalInstrument | undefined {
+    return this.byId.get(instrumentId);
+  }
+
+  matches(entry: SymbolEntry): CanonicalInstrument[] {
+    return (this.bySymbol.get(symbolKey(entry.symbol)) ?? [])
+      .filter((instrument) => !entry.exchange || instrument.venue.toUpperCase() === entry.exchange);
+  }
+}
+
+type Resolution = { instrument: CanonicalInstrument } | 'ambiguous' | null;
+
+function spotFirst(instruments: readonly CanonicalInstrument[]): CanonicalInstrument {
   // `BINANCE:BTCUSDT` names spot and perpetual alike; spot is the default.
-  return matches.find((instrument) => instrument.instrument_type !== 'perpetual') ?? matches[0];
+  return instruments.find((instrument) => instrument.instrument_type !== 'perpetual') ?? instruments[0];
+}
+
+/**
+ * A full instrument id, else a symbol on its venue. A bare symbol listed on
+ * several venues takes the one already in the user's watchlists, and is
+ * reported as ambiguous when none is.
+ */
+function resolveEntry(index: InstrumentIndex, entry: SymbolEntry, preferredIds: ReadonlySet<string>): Resolution {
+  const exact = index.get(entry.token);
+  if (exact) return { instrument: exact };
+  const matches = index.matches(entry);
+  if (matches.length === 0) return null;
+  if (!entry.exchange) {
+    const preferred = matches.filter((instrument) => preferredIds.has(binanceInstrumentIdFor(instrument.instrument_id)));
+    if (preferred.length) return { instrument: spotFirst(preferred) };
+    if (new Set(matches.map((instrument) => instrument.venue)).size > 1) return 'ambiguous';
+  }
+  return { instrument: spotFirst(matches) };
 }
 
 export type WatchlistImportResult = {
   payload: WatchlistPayload;
   /** Instruments found through search, for the caller's catalog. */
   instruments: CanonicalInstrument[];
-  unresolved: string[];
+  notFound: string[];
+  /** Bare symbols listed on several venues, none of them in the user's lists. */
+  ambiguous: string[];
 };
 
 const SEARCH_BATCH = 5;
 
 /**
- * Build a new watchlist from a text file. Symbols missing from `catalog` are
- * looked up with `search`, a few at a time and at most `maxSearches`
- * symbols; the rest are reported as unresolved.
+ * Build a new watchlist from a text file in one pass. Symbols missing from
+ * `catalog` are looked up with `search`, a few at a time and at most
+ * `maxSearches` symbols. Throws `WatchlistImportError` for a file over
+ * `MAX_WATCHLIST_IMPORT_SYMBOLS` symbols.
  */
 export async function importWatchlistText(
   name: string,
   text: string,
   catalog: readonly CanonicalInstrument[],
   search: (query: string) => Promise<CanonicalInstrument[]>,
-  maxSearches = 50,
+  options: { preferredInstrumentIds?: ReadonlySet<string>; maxSearches?: number } = {},
 ): Promise<WatchlistImportResult> {
+  const preferredIds = options.preferredInstrumentIds ?? new Set<string>();
   const entries = parseWatchlistText(text);
-  const known = [...catalog];
-  const found: CanonicalInstrument[] = [];
-  const missing = [...new Map(entries
-    .filter((entry): entry is Extract<WatchlistTextEntry, { type: 'symbol' }> => entry.type === 'symbol')
-    .filter((entry) => !findInstrument(known, entry))
-    .map((entry) => [entry.symbol, entry])).values()].slice(0, maxSearches);
-  for (let index = 0; index < missing.length; index += SEARCH_BATCH) {
-    const results = await Promise.all(missing.slice(index, index + SEARCH_BATCH).map((entry) => search(entry.symbol).catch(() => [])));
+  const symbols = entries.filter((entry): entry is SymbolEntry => entry.type === 'symbol');
+  if (symbols.length > MAX_WATCHLIST_IMPORT_SYMBOLS) {
+    throw new WatchlistImportError(
+      `The file lists ${symbols.length.toLocaleString('en-US')} symbols; an import takes at most ${MAX_WATCHLIST_IMPORT_SYMBOLS.toLocaleString('en-US')}.`,
+    );
+  }
+  const index = new InstrumentIndex(catalog);
+  const found = new Set<CanonicalInstrument>();
+  const missing = [...new Map(symbols
+    .filter((entry) => resolveEntry(index, entry, preferredIds) === null)
+    .map((entry) => [symbolKey(entry.symbol), entry])).values()].slice(0, options.maxSearches ?? 50);
+  for (let start = 0; start < missing.length; start += SEARCH_BATCH) {
+    const results = await Promise.all(missing.slice(start, start + SEARCH_BATCH)
+      // Omnix symbols spell share classes with a dash.
+      .map((entry) => search(entry.symbol.replace(/\./g, '-')).catch(() => [])));
     for (const result of results) {
-      known.push(...result);
-      found.push(...result);
+      index.add(result);
+      result.forEach((instrument) => found.add(instrument));
     }
   }
 
-  let payload = newWatchlistPayload(name);
-  const used: CanonicalInstrument[] = [];
-  const unresolved: string[] = [];
+  const items: WatchlistItem[] = [];
+  const used = new Set<CanonicalInstrument>();
+  const notFound: string[] = [];
+  const ambiguous: string[] = [];
   for (const entry of entries) {
     if (entry.type === 'section') {
-      payload = addWatchlistSection(payload, entry.name);
+      items.push({ type: 'section', id: newWatchlistSectionId(), name: entry.name, collapsed: false });
       continue;
     }
-    const instrument = findInstrument(known, entry);
-    if (!instrument) {
-      unresolved.push(entry.token);
-      continue;
+    const resolution = resolveEntry(index, entry, preferredIds);
+    if (resolution === 'ambiguous') ambiguous.push(entry.token);
+    else if (!resolution) notFound.push(entry.token);
+    else {
+      if (found.has(resolution.instrument)) used.add(resolution.instrument);
+      items.push({ type: 'symbol', instrumentId: binanceInstrumentIdFor(resolution.instrument.instrument_id) });
     }
-    if (found.includes(instrument) && !used.includes(instrument)) used.push(instrument);
-    payload = addWatchlistSymbols(payload, [binanceInstrumentIdFor(instrument.instrument_id)]);
   }
-  return { payload, instruments: used, unresolved };
+  return { payload: watchlistPayloadFromItems(name, items), instruments: [...used], notFound, ambiguous };
+}
+
+/** True when the import found at least one symbol worth a new watchlist. */
+export function importHasSymbols(result: WatchlistImportResult): boolean {
+  return watchlistSymbolIds(result.payload).length > 0;
 }

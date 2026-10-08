@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CanonicalInstrument } from './tradingTypes';
 import {
+  MAX_WATCHLIST_IMPORT_SYMBOLS,
+  WatchlistImportError,
   exchangeSymbolFor,
   formatWatchlistText,
+  importHasSymbols,
   importWatchlistText,
   parseWatchlistText,
 } from './tradingWatchlistTransfer';
@@ -47,7 +50,7 @@ describe('watchlist text files', () => {
       { type: 'symbol', instrumentId: btcSpot.instrument_id },
       { type: 'symbol', instrumentId: 'equity:NYSE:BRK-B' },
     ], (instrumentId) => exchangeSymbolFor(instrumentId, [apple, btcSpot].find((item) => item.instrument_id === instrumentId)));
-    expect(text).toBe('NASDAQ:AAPL,###Crypto  majors,BINANCE:BTCUSDT,NYSE:BRKB');
+    expect(text).toBe('NASDAQ:AAPL,###Crypto  majors,BINANCE:BTCUSDT,NYSE:BRK.B');
   });
 
   it('round-trips an exported list through import', async () => {
@@ -62,7 +65,8 @@ describe('watchlist text files', () => {
         { type: 'symbol', instrumentId: btcSpot.instrument_id },
       ],
     });
-    expect(result.unresolved).toEqual([]);
+    expect(result.notFound).toEqual([]);
+    expect(result.ambiguous).toEqual([]);
     expect(search).not.toHaveBeenCalled();
   });
 
@@ -76,6 +80,49 @@ describe('watchlist text files', () => {
       { type: 'symbol', instrumentId: apple.instrument_id },
     ]);
     expect(result.instruments).toEqual([msft]);
-    expect(result.unresolved).toEqual(['NYSE:MSFT', 'LSE:NOPE']);
+    expect(result.notFound).toEqual(['NYSE:MSFT', 'LSE:NOPE']);
+  });
+
+  it('matches share classes written with a dot, a dash or nothing', async () => {
+    const berkshire = instrument('equity:NYSE:BRK-B', 'NYSE', 'BRK-B');
+    expect(exchangeSymbolFor(berkshire.instrument_id, berkshire)).toBe('NYSE:BRK.B');
+    const result = await importWatchlistText('Classes', 'NYSE:BRK.B,NYSE:BRK-B,BRKB', [berkshire], vi.fn(async () => []));
+    expect(result.payload.items).toEqual([{ type: 'symbol', instrumentId: berkshire.instrument_id }]);
+    expect(result.notFound).toEqual([]);
+  });
+
+  it('searches for a missing share class with the Omnix dash spelling', async () => {
+    const search = vi.fn(async () => []);
+    await importWatchlistText('Classes', 'NYSE:BF.B', [], search);
+    expect(search).toHaveBeenCalledWith('BF-B');
+  });
+
+  it('resolves a bare symbol on several venues only through the user\'s lists', async () => {
+    const nasdaqShop = instrument('equity:NASDAQ:SHOP', 'NASDAQ', 'SHOP');
+    const torontoShop = instrument('equity:TSX:SHOP', 'TSX', 'SHOP');
+    const catalog = [nasdaqShop, torontoShop];
+    const ambiguous = await importWatchlistText('Shop', 'SHOP,TSX:SHOP', catalog, vi.fn(async () => []));
+    expect(ambiguous.ambiguous).toEqual(['SHOP']);
+    expect(ambiguous.payload.items).toEqual([{ type: 'symbol', instrumentId: torontoShop.instrument_id }]);
+    const preferred = await importWatchlistText('Shop', 'SHOP', catalog, vi.fn(async () => []), {
+      preferredInstrumentIds: new Set([nasdaqShop.instrument_id]),
+    });
+    expect(preferred.payload.items).toEqual([{ type: 'symbol', instrumentId: nasdaqShop.instrument_id }]);
+  });
+
+  it('refuses a file over the symbol limit and reports a file with nothing found', async () => {
+    const tooMany = Array.from({ length: MAX_WATCHLIST_IMPORT_SYMBOLS + 1 }, (_, index) => `NASDAQ:S${index}`).join(',');
+    await expect(importWatchlistText('Big', tooMany, [], vi.fn(async () => []))).rejects.toBeInstanceOf(WatchlistImportError);
+    const empty = await importWatchlistText('Nothing', '###Only a section,LSE:NOPE', [], vi.fn(async () => []));
+    expect(importHasSymbols(empty)).toBe(false);
+  });
+
+  it('builds a long list in one pass', async () => {
+    const catalog = Array.from({ length: MAX_WATCHLIST_IMPORT_SYMBOLS }, (_, index) => instrument(`equity:NASDAQ:S${index}`, 'NASDAQ', `S${index}`));
+    const text = catalog.map((item) => `NASDAQ:${item.display_symbol}`).join(',');
+    const started = performance.now();
+    const result = await importWatchlistText('Long', text, catalog, vi.fn(async () => []));
+    expect(result.payload.items).toHaveLength(MAX_WATCHLIST_IMPORT_SYMBOLS);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });

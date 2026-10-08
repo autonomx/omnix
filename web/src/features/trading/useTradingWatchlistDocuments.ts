@@ -3,7 +3,9 @@ import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
 import {
   flagListColor,
+  isNewerWatchlistPayload,
   newWatchlistPayload,
+  serializeWatchlist,
   upgradeWatchlistPayload,
   watchlistSymbolsNeedRewrite,
   type WatchlistPayload,
@@ -11,9 +13,10 @@ import {
 
 export type WatchlistSaveStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 'error';
 
-function documentPayload(payload: WatchlistPayload): Record<string, unknown> {
-  return payload as unknown as Record<string, unknown>;
-}
+/** A change to a list, applied to whichever revision is current when it is saved. */
+export type WatchlistOperation = (payload: WatchlistPayload) => WatchlistPayload;
+
+const MAX_CONFLICT_RETRIES = 3;
 
 function isConflictError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('(409)');
@@ -41,6 +44,8 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
   const flagColor = flagListColor(selectedListId);
   const selected = flagColor ? null : records.find((record) => record.record_id === selectedListId) ?? records[0] ?? null;
   const current = useMemo(() => upgradeWatchlistPayload(selected?.payload), [selected]);
+  // Written by a newer Omnix: shown from its `instrumentIds`, never saved over.
+  const readOnly = selected != null && isNewerWatchlistPayload(selected.payload);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +56,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
         const created = await tradingApi.createDocument(
           'watchlists',
           'default',
-          documentPayload(newWatchlistPayload('Default Watchlist', defaultWatchlistInstrumentIds(instruments))),
+          serializeWatchlist(newWatchlistPayload('Default Watchlist', defaultWatchlistInstrumentIds(instruments))),
         );
         next = [created];
       } else {
@@ -60,8 +65,8 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
         // Re-adding them here would resurrect symbols the user deliberately
         // removed after a reload or server restart. Only legacy crypto ids and
         // duplicates are rewritten.
-        if (defaultRecord && watchlistSymbolsNeedRewrite(defaultRecord.payload)) {
-          const upgraded = documentPayload(upgradeWatchlistPayload(defaultRecord.payload));
+        if (defaultRecord && !isNewerWatchlistPayload(defaultRecord.payload) && watchlistSymbolsNeedRewrite(defaultRecord.payload)) {
+          const upgraded = serializeWatchlist(upgradeWatchlistPayload(defaultRecord.payload));
           try {
             const updated = await tradingApi.updateDocument('watchlists', defaultRecord, upgraded);
             next = next.map((record) => record.record_id === updated.record_id ? updated : record);
@@ -88,51 +93,54 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
   };
 
-  const save = async (
-    nextPayload: WatchlistPayload,
-    rollbackRecord?: TradingDocument,
-    recordOverride?: TradingDocument,
-    conflictRetryCount = 0,
-  ): Promise<void> => {
-    const record = recordOverride ?? selected;
-    if (!record) return;
+  /**
+   * Save `operation` applied to `base`. On a revision conflict the latest
+   * revision is loaded and the operation applied to it again, so a change
+   * made elsewhere (another tab, another device) is kept rather than
+   * overwritten. A failed save shows the last known server revision.
+   */
+  const persist = async (base: TradingDocument, operation: WatchlistOperation) => {
     setStatus('saving');
-    try {
-      const next = await tradingApi.updateDocument('watchlists', record, documentPayload(nextPayload));
-      replace(next);
-      setStatus('saved');
-    } catch (error) {
-      const isConflict = isConflictError(error);
-      if (conflictRetryCount < 3 && isConflict) {
-        try {
-          const latest = (await tradingApi.documents('watchlists'))
-            .find((item) => item.record_id === record.record_id);
-          if (latest) {
-            replace(latest);
-            await save(nextPayload, rollbackRecord, latest, conflictRetryCount + 1);
-            return;
-          }
-        } catch {
-          // Fall through to the normal conflict state when the latest record cannot be loaded.
-        }
+    let record = base;
+    for (let attempt = 0; ; attempt += 1) {
+      if (isNewerWatchlistPayload(record.payload)) {
+        replace(record);
+        setStatus('conflict');
+        return;
       }
-      if (rollbackRecord) replace(rollbackRecord);
-      setStatus(isConflict ? 'conflict' : 'error');
+      try {
+        const saved = await tradingApi.updateDocument('watchlists', record, serializeWatchlist(operation(upgradeWatchlistPayload(record.payload))));
+        replace(saved);
+        setStatus('saved');
+        return;
+      } catch (error) {
+        const latest = isConflictError(error) && attempt < MAX_CONFLICT_RETRIES
+          ? (await tradingApi.documents('watchlists').catch(() => []))
+            .find((item) => item.record_id === record.record_id)
+          : undefined;
+        if (!latest) {
+          replace(record);
+          setStatus(isConflictError(error) ? 'conflict' : 'error');
+          return;
+        }
+        record = latest;
+        replace({ ...latest, payload: serializeWatchlist(operation(upgradeWatchlistPayload(latest.payload))) });
+      }
     }
   };
 
-  /** Show a change at once and persist it; a failed save restores the previous list. */
-  const commit = (nextPayload: WatchlistPayload) => {
-    if (!selected) return;
-    replace({ ...selected, payload: documentPayload(nextPayload) });
-    void save(nextPayload, selected, selected);
+  /** Show a change at once and persist it as an operation. Read-only lists ignore changes. */
+  const commit = (operation: WatchlistOperation) => {
+    if (!selected || readOnly) return;
+    replace({ ...selected, payload: serializeWatchlist(operation(current)) });
+    void persist(selected, operation);
   };
 
   /** Create and select a watchlist; false when it could not be saved. */
   const create = async (payload: WatchlistPayload = newWatchlistPayload(`Watchlist ${records.length + 1}`)): Promise<boolean> => {
     setStatus('saving');
     try {
-      const record = await tradingApi.createDocument('watchlists', `watchlist-${Date.now()}`, documentPayload(payload));
+      const record = await tradingApi.createDocument('watchlists', `watchlist-${Date.now()}`, serializeWatchlist(payload));
       setRecords((items) => [...items, record]);
       setSelectedListId(record.record_id);
       setStatus('saved');
@@ -164,8 +172,8 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     flagColor,
     selected,
     current,
+    readOnly,
     status,
-    save,
     commit,
     create,
     archive,

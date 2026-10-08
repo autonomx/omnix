@@ -70,7 +70,7 @@
 
   .trading-workspace .trading-watchlist .trading-watchlist-controls select,
   .trading-workspace .trading-watchlist-columns,
-  .trading-workspace .trading-watchlist li > button strong,
+  .trading-workspace .trading-watchlist-symbol-cell > button strong,
   .trading-workspace .trading-watchlist-price,
   .trading-workspace .trading-watchlist-change {
     font-size: 0.6875rem;

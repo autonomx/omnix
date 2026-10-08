@@ -5,9 +5,11 @@ import {
   flagListColor,
   flagListId,
   flaggedInstrumentIds,
-  moveWatchlistItem,
+  isNewerWatchlistPayload,
+  moveWatchlistEntry,
   readWatchlistFlags,
   removeWatchlistSection,
+  serializeWatchlist,
   setWatchlistFlags,
   upgradeWatchlistPayload,
   watchlistRows,
@@ -71,6 +73,38 @@ describe('watchlist payload upgrade', () => {
   });
 });
 
+describe('watchlist compatibility with other client versions', () => {
+  it('writes the instrumentIds mirror so a version 1 client still sees every symbol', () => {
+    expect(serializeWatchlist(sectioned)).toEqual({
+      schemaVersion: 2,
+      name: 'List',
+      items: sectioned.items,
+      instrumentIds: [AAPL, GME, TSLA],
+    });
+  });
+
+  it('keeps the symbols of a list last saved by a version 1 client', () => {
+    // A version 1 tab showed the mirror, added F, and saved its own shape.
+    const savedByOldClient = { name: 'List', instrumentIds: [...(serializeWatchlist(sectioned).instrumentIds as string[]), 'equity:NYSE:F'] };
+    expect(upgradeWatchlistPayload(savedByOldClient).items).toEqual([AAPL, GME, TSLA, 'equity:NYSE:F'].map((instrumentId) => ({ type: 'symbol', instrumentId })));
+  });
+
+  it('reads items only from a version 2 payload with an items array', () => {
+    expect(upgradeWatchlistPayload({ schemaVersion: 2, name: 'Odd', items: 'nope', instrumentIds: [AAPL] }).items)
+      .toEqual([{ type: 'symbol', instrumentId: AAPL }]);
+    expect(upgradeWatchlistPayload({ name: 'Old', items: [{ type: 'symbol', instrumentId: GME }], instrumentIds: [AAPL] }).items)
+      .toEqual([{ type: 'symbol', instrumentId: AAPL }]);
+  });
+
+  it('shows a newer version from its mirror and marks it read-only', () => {
+    const newer = { schemaVersion: 3, name: 'Future', items: [{ type: 'widget' }], instrumentIds: [GME] };
+    expect(isNewerWatchlistPayload(newer)).toBe(true);
+    expect(isNewerWatchlistPayload(serializeWatchlist(sectioned))).toBe(false);
+    expect(isNewerWatchlistPayload({ instrumentIds: [] })).toBe(false);
+    expect(upgradeWatchlistPayload(newer)).toEqual({ schemaVersion: 2, name: 'Future', items: [{ type: 'symbol', instrumentId: GME }] });
+  });
+});
+
 describe('watchlist items', () => {
   it('does not add a symbol twice', () => {
     expect(watchlistSymbolIds(addWatchlistSymbols(sectioned, [GME, 'equity:NYSE:F']))).toEqual([AAPL, GME, TSLA, 'equity:NYSE:F']);
@@ -82,11 +116,35 @@ describe('watchlist items', () => {
     expect(addWatchlistSection(sectioned, 'Last', null, 'new').items.at(-1)).toEqual({ type: 'section', id: 'new', name: 'Last', collapsed: false });
   });
 
+  const layout = (payload: WatchlistPayload) => payload.items.map((item) => item.type === 'section' ? `#${item.id}` : item.instrumentId);
+  const symbol = (instrumentId: string) => ({ type: 'symbol' as const, instrumentId });
+  const section = (id: string, collapsed = false) => ({ type: 'section' as const, id, name: id, collapsed });
+  const list = (...items: WatchlistPayload['items']): WatchlistPayload => ({ schemaVersion: 2, name: 'L', items });
+
   it('moves a symbol across a header into the neighbouring section', () => {
-    const moved = moveWatchlistItem(sectioned, 2, -1);
+    const moved = moveWatchlistEntry(sectioned, { type: 'symbol', instrumentId: GME }, -1);
     expect(watchlistRows(moved.items).map((row) => row.kind === 'symbol' ? `${row.instrumentId}@${row.sectionId}` : row.section.name))
       .toEqual([`${AAPL}@null`, `${GME}@null`, 'Movers', `${TSLA}@s1`]);
-    expect(moveWatchlistItem(sectioned, 0, -1)).toBe(sectioned);
+    expect(layout(moveWatchlistEntry(sectioned, { type: 'symbol', instrumentId: AAPL }, 1))).toEqual(['#s1', AAPL, GME, TSLA]);
+    expect(moveWatchlistEntry(sectioned, { type: 'symbol', instrumentId: AAPL }, -1)).toBe(sectioned);
+    expect(moveWatchlistEntry(sectioned, { type: 'symbol', instrumentId: 'equity:NYSE:F' }, 1)).toBe(sectioned);
+  });
+
+  it('moves a symbol past a collapsed section instead of into it', () => {
+    const payload = list(symbol(AAPL), section('a', true), symbol(GME), section('b'), symbol(TSLA));
+    expect(layout(moveWatchlistEntry(payload, { type: 'symbol', instrumentId: AAPL }, 1))).toEqual(['#a', GME, '#b', AAPL, TSLA]);
+    expect(layout(moveWatchlistEntry(payload, { type: 'symbol', instrumentId: TSLA }, -1))).toEqual([AAPL, TSLA, '#a', GME, '#b']);
+    const lastCollapsed = list(symbol(AAPL), section('a', true), symbol(GME));
+    expect(moveWatchlistEntry(lastCollapsed, { type: 'symbol', instrumentId: AAPL }, 1)).toBe(lastCollapsed);
+  });
+
+  it('moves a section together with its symbols', () => {
+    const payload = list(symbol(AAPL), section('a'), symbol(GME), section('b'), symbol(TSLA), symbol('equity:NYSE:F'));
+    expect(layout(moveWatchlistEntry(payload, { type: 'section', id: 'b' }, -1))).toEqual([AAPL, '#b', TSLA, 'equity:NYSE:F', '#a', GME]);
+    expect(layout(moveWatchlistEntry(payload, { type: 'section', id: 'a' }, 1))).toEqual([AAPL, '#b', TSLA, 'equity:NYSE:F', '#a', GME]);
+    // Above the first section would pull the unsectioned symbols into it; past the last there is nowhere to go.
+    expect(moveWatchlistEntry(payload, { type: 'section', id: 'a' }, -1)).toBe(payload);
+    expect(moveWatchlistEntry(payload, { type: 'section', id: 'b' }, 1)).toBe(payload);
   });
 
   it('keeps the symbols of a removed section', () => {
