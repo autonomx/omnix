@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
+import uuid
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
+from app.errors import LegacyPersistenceRetired
 from app.persistence.errors import RevisionConflict
 
 from .alerts import (
@@ -13,13 +17,26 @@ from .alerts import (
     TradingAlertEvaluation,
     TradingAlertRepository,
     TradingAlertTrigger,
+    TradingAlertUnreadable,
     TradingAlertUpdate,
     default_alert_repository,
 )
+from .alerts_channels import (
+    AVAILABLE_ALERT_CHANNELS,
+    AlertWebhookStore,
+    ProtectedAlertWebhookStore,
+    alert_webhook_prefix,
+    mask_webhook_url,
+    unavailable_channels,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class TradingAlertListResponse(BaseModel):
     alerts: list[TradingAlert]
+    # Stored alerts that no longer read; archive them with their revision.
+    unreadable: list[TradingAlertUnreadable] = []
 
 
 class TradingAlertTriggerListResponse(BaseModel):
@@ -29,25 +46,128 @@ class TradingAlertTriggerListResponse(BaseModel):
 AlertRepositoryFactory = Callable[[], TradingAlertRepository]
 
 
+@dataclass(frozen=True)
+class _WebhookPlan:
+    """Which protected-store reference an alert write will point at.
+
+    ``ref`` is what the row will reference. ``written`` is a reference this
+    request stored before the row write (inside the alert's advisory-locked
+    transaction): it is removed again if the transaction fails. ``previous``
+    is what the row pointed at, read under the row lock; it is removed after
+    a commit that replaced it. The row never references anything that was not
+    stored first, and nothing is removed that another row may point at.
+    """
+
+    ref: str | None
+    written: str | None
+    previous: str | None
+
+
+def _conflict(exc: RevisionConflict) -> HTTPException:
+    return HTTPException(status_code=409, detail={"code": "revision_conflict", "message": str(exc)})
+
+
 def create_trading_alert_router(
     repository_factory: AlertRepositoryFactory = default_alert_repository,
+    *,
+    webhook_store: AlertWebhookStore | None = None,
+    available_channels: Iterable[str] = AVAILABLE_ALERT_CHANNELS,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/alerts", tags=["trading-alerts"])
+    channels = frozenset(available_channels)
+    store: AlertWebhookStore = webhook_store or ProtectedAlertWebhookStore()
+
+    def store_failure(alert_id: str, exc: Exception) -> HTTPException:
+        logger.error("trading_alert_webhook_store_failed alert_id=%s error=%s", alert_id, type(exc).__name__)
+        return HTTPException(
+            status_code=503,
+            detail="the protected webhook store is unavailable; the alert was not changed",
+        )
+
+    def plan_webhook(
+        request: TradingAlertCreate | TradingAlertUpdate,
+        previous_ref: str | None,
+        workspace_id: str,
+        alert_id: str,
+    ) -> _WebhookPlan:
+        missing = unavailable_channels(request.parameters.notification_channels, channels)
+        if missing:
+            raise HTTPException(status_code=422, detail=f"alert channel {missing[0]} is not available yet")
+        webhook = request.parameters.delivery.webhook
+        secret = request.webhook_secret
+        if secret is not None and webhook is None:
+            raise HTTPException(status_code=422, detail="webhook_secret needs parameters.delivery.webhook")
+        if webhook is None:
+            return _WebhookPlan(ref=None, written=None, previous=previous_ref)
+        stored: dict[str, str] | None = None
+        if previous_ref:
+            try:
+                stored = store.load(previous_ref)
+            except Exception as exc:
+                # Never mistake an unreadable store for a missing webhook.
+                raise store_failure(alert_id, exc) from exc
+            if stored is None and (webhook.url is None or secret is None):
+                # The row points at a webhook the store does not have; refuse to guess.
+                raise HTTPException(
+                    status_code=409,
+                    detail="the stored webhook is missing; send its url and webhook_secret again",
+                )
+        url = webhook.url or (stored or {}).get("url")
+        if not url:
+            raise HTTPException(status_code=422, detail="parameters.delivery.webhook.url is required")
+        value = (stored or {}).get("secret", "") if secret is None else secret.get_secret_value().strip()
+        webhook.url = None  # write-only: the protected store keeps it
+        webhook.display_url = mask_webhook_url(url)
+        webhook.has_secret = bool(value)
+        if stored is not None and stored.get("url") == url and stored.get("secret", "") == value:
+            return _WebhookPlan(ref=previous_ref, written=None, previous=previous_ref)
+        if not store.available():
+            raise HTTPException(status_code=422, detail="alert webhooks require an operating-system credential store")
+        ref = f"{alert_webhook_prefix(workspace_id, alert_id)}{uuid.uuid4().hex}"
+        try:
+            store.save(ref, url, value)
+        except LegacyPersistenceRetired as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise store_failure(alert_id, exc) from exc
+        return _WebhookPlan(ref=ref, written=ref, previous=previous_ref)
+
+    def best_effort(action: str, alert_id: str, operation: Callable[[], None]) -> None:
+        """A reference no row points at is unused, so a failure here only leaves litter."""
+        try:
+            operation()
+        except Exception:
+            logger.warning("trading_alert_webhook_%s_failed alert_id=%s", action, alert_id, exc_info=True)
 
     @router.get("", response_model=TradingAlertListResponse)
     def list_alerts(
         limit: int = Query(default=200, ge=1, le=500),
     ) -> TradingAlertListResponse:
-        return TradingAlertListResponse(
-            alerts=repository_factory().list_alerts(limit=limit)
-        )
+        listing = repository_factory().list_alerts_report(limit=limit)
+        return TradingAlertListResponse(alerts=listing.alerts, unreadable=listing.unreadable)
 
     @router.post("", response_model=TradingAlert, status_code=201)
     def create_alert(request: TradingAlertCreate) -> TradingAlert:
+        repository = repository_factory()
+        workspace_id = repository.context.workspace_id
+        alert_id = request.alert_id
+        plan: _WebhookPlan | None = None
         try:
-            return repository_factory().create(request)
-        except RevisionConflict as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            with repository.alert_transaction(alert_id) as state:
+                if state.exists:
+                    raise HTTPException(status_code=409, detail=f"Trading alert already exists: {alert_id}")
+                plan = plan_webhook(request, None, workspace_id, alert_id)
+                if plan.written:
+                    # Nothing references webhooks left by an earlier alert with this id.
+                    best_effort("cleanup", alert_id, lambda: store.delete_alert(workspace_id, alert_id, keep=plan.written))
+                created = repository.create(request, webhook_ref=plan.ref)
+        except Exception as exc:
+            if plan is not None and plan.written:
+                best_effort("discard", alert_id, lambda: store.delete(plan.written or ""))
+            if isinstance(exc, RevisionConflict):
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise
+        return created
 
     @router.get("/triggers", response_model=TradingAlertTriggerListResponse)
     def list_triggers(
@@ -61,6 +181,19 @@ def create_trading_alert_router(
     def evaluate_alerts(
         request: TradingAlertEvaluation,
     ) -> TradingAlertTriggerListResponse:
+        """Evaluate a pushed price against the instrument's alerts.
+
+        Only alerts whose conditions all read one price field (close from
+        ``observed_price``, or volume from ``observed_volume``) against value
+        targets are evaluated: the alert's ``last_observed_value`` is the
+        previous value and the pushed value the current one. Every other alert
+        (indicators, percent change, trendlines, moving operators) is skipped;
+        the server monitor evaluates those on bars. Alerts with a per-bar
+        frequency (``once_per_bar``, ``once_per_bar_close``) are skipped too: a
+        pushed price carries no bar. Other frequencies, cooldown and
+        idempotency apply as for monitored alerts, with ``observed_at`` as the
+        observation's time.
+        """
         return TradingAlertTriggerListResponse(
             triggers=repository_factory().evaluate(request)
         )
@@ -71,38 +204,40 @@ def create_trading_alert_router(
         request: TradingAlertUpdate,
         if_match: int = Header(alias="If-Match", ge=1),
     ) -> TradingAlert:
+        repository = repository_factory()
+        workspace_id = repository.context.workspace_id
+        plan: _WebhookPlan | None = None
         try:
-            return repository_factory().update(
-                alert_id,
-                request,
-                expected_revision=if_match,
-            )
-        except RevisionConflict as exc:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "revision_conflict",
-                    "message": str(exc),
-                },
-            ) from exc
+            with repository.alert_transaction(alert_id) as state:
+                previous = repository.get(alert_id) if state.exists else None
+                if previous is None or previous.revision != if_match:
+                    raise RevisionConflict(f"Trading alert expected revision {if_match}: {alert_id}")
+                plan = plan_webhook(request, state.webhook_ref, workspace_id, alert_id)
+                updated = repository.update(alert_id, request, expected_revision=if_match, webhook_ref=plan.ref)
+        except Exception as exc:
+            if plan is not None and plan.written:
+                best_effort("discard", alert_id, lambda: store.delete(plan.written or ""))
+            if isinstance(exc, RevisionConflict):
+                raise _conflict(exc) from exc
+            raise
+        if plan.previous and plan.previous != plan.ref:
+            # Rotated or removed: the reference the row pointed at stops existing.
+            best_effort("prune", alert_id, lambda: store.delete(plan.previous or ""))
+        return updated
 
     @router.delete("/{alert_id}", response_model=TradingAlert)
     def archive_alert(
         alert_id: str,
         if_match: int = Header(alias="If-Match", ge=1),
     ) -> TradingAlert:
+        repository = repository_factory()
         try:
-            return repository_factory().archive(
-                alert_id,
-                expected_revision=if_match,
-            )
+            with repository.alert_transaction(alert_id) as state:
+                archived = repository.archive(alert_id, expected_revision=if_match)
         except RevisionConflict as exc:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "revision_conflict",
-                    "message": str(exc),
-                },
-            ) from exc
+            raise _conflict(exc) from exc
+        if state.webhook_ref:
+            best_effort("prune", alert_id, lambda: store.delete(state.webhook_ref or ""))
+        return archived
 
     return router

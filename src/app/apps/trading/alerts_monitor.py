@@ -6,7 +6,6 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Any
 
 from app.runtime.features import FeatureContext
@@ -14,22 +13,13 @@ from app.runtime.features import FeatureContext
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .alerts import (
+    AlertEvaluationContext,
+    AlertOutcomeRecord,
     TradingAlert,
-    TradingAlertEvaluation,
     TradingAlertRepository,
     default_alert_repository,
 )
-from .indicators.engine import (
-    anchored_volume_weighted_average_price,
-    average_true_range,
-    bollinger_bands,
-    exponential_moving_average,
-    moving_average_convergence_divergence,
-    relative_strength_index,
-    simple_moving_average,
-    stochastic_rsi,
-)
-from .models import MarketBar
+from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
 from .service import TradingMarketDataService, default_market_data_service
 
 
@@ -55,105 +45,21 @@ def _interval_seconds() -> float:
 
 
 def _history_limit(alerts: Sequence[TradingAlert]) -> int:
-    required = 2
+    """Bars to fetch for a group of alerts; see ``alerts_evaluation.history_limit``."""
+    return history_limit(max((required_bars(alert.conditions) for alert in alerts), default=1))
+
+
+def _final_only(alert: TradingAlert) -> bool:
+    return alert.frequency == "once_per_bar_close" or not alert.evaluation_policy.allow_partial_bars
+
+
+def _outcomes(alerts: Sequence[TradingAlert], bars: Sequence[Any]) -> list[AlertOutcomeRecord]:
+    records: list[AlertOutcomeRecord] = []
     for alert in alerts:
-        parameters = alert.parameters
-        required = max(required, parameters.lookback_bars + 2)
-        if alert.condition_type.startswith("indicator_"):
-            if parameters.indicator_id == "macd":
-                required = max(
-                    required,
-                    parameters.slow_period + parameters.signal_period + 2,
-                )
-            elif parameters.indicator_id == "vwap":
-                required = max(required, parameters.anchor_bars_ago + 2)
-            elif parameters.indicator_id == "stochastic-rsi":
-                required = max(
-                    required,
-                    parameters.period * 2
-                    + parameters.fast_period
-                    + parameters.signal_period
-                    + 2,
-                )
-            else:
-                required = max(required, parameters.period + 2)
-    return min(500, required)
-
-
-def _percent_change(alert: TradingAlert, bars: Sequence[MarketBar]) -> Decimal | None:
-    lookback = alert.parameters.lookback_bars
-    if len(bars) <= lookback:
-        return None
-    previous = Decimal(bars[-lookback - 1].close)
-    current = Decimal(bars[-1].close)
-    if previous == 0:
-        return None
-    return (current / previous - Decimal("1")) * Decimal("100")
-
-
-def _indicator_value(alert: TradingAlert, bars: Sequence[MarketBar]) -> Decimal | None:
-    parameters = alert.parameters
-    indicator_id = parameters.indicator_id
-    if indicator_id is None:
-        return None
-    closes = [Decimal(bar.close) for bar in bars]
-    highs = [Decimal(bar.high) for bar in bars]
-    lows = [Decimal(bar.low) for bar in bars]
-    volumes = [Decimal(bar.volume) for bar in bars]
-    if indicator_id == "sma":
-        values = simple_moving_average(closes, parameters.period)
-        return values[-1] if values else None
-    if indicator_id == "ema":
-        values = exponential_moving_average(closes, parameters.period)
-        return values[-1] if values else None
-    if indicator_id == "rsi":
-        values = relative_strength_index(closes, parameters.period)
-        return values[-1] if values else None
-    if indicator_id == "stochastic-rsi":
-        stochastic_values = stochastic_rsi(
-            closes,
-            parameters.period,
-            parameters.fast_period,
-            parameters.signal_period,
-        )
-        return stochastic_values[-1][0] if stochastic_values else None
-    if indicator_id == "atr":
-        values = average_true_range(highs, lows, closes, parameters.period)
-        return values[-1] if values else None
-    if indicator_id == "bollinger":
-        bands = bollinger_bands(closes, parameters.period)
-        if not bands:
-            return None
-        middle, upper, lower = bands[-1]
-        return {
-            "upper": upper,
-            "middle": middle,
-            "lower": lower,
-        }.get(parameters.component, middle)
-    if indicator_id == "macd":
-        macd_values = moving_average_convergence_divergence(
-            closes,
-            parameters.fast_period,
-            parameters.slow_period,
-            parameters.signal_period,
-        )
-        if not macd_values:
-            return None
-        line, signal, histogram = macd_values[-1]
-        return {
-            "line": line,
-            "signal": signal,
-            "histogram": histogram,
-        }.get(parameters.component, line)
-    anchor_index = max(0, len(bars) - 1 - parameters.anchor_bars_ago)
-    values = anchored_volume_weighted_average_price(
-        highs,
-        lows,
-        closes,
-        volumes,
-        anchor_index=anchor_index,
-    )
-    return values[-1] if values else None
+        outcome = evaluate_conditions(alert.conditions, bars, final_only=_final_only(alert))
+        if outcome is not None:
+            records.append(AlertOutcomeRecord(alert.alert_id, alert.revision, outcome))
+    return records
 
 
 class TradingAlertMonitor(ScheduledTradingMonitor):
@@ -171,10 +77,17 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.last_run_at: datetime | None = None
         self.evaluation_count = 0
         self.trigger_count = 0
+        self.unreadable_count = 0
+        self.unreadable_alert_ids: list[str] = []
 
     async def run_once(self) -> int:
         repository = self.repository_factory()
-        alerts = await asyncio.to_thread(repository.list_alerts, 500)
+        listing = await asyncio.to_thread(repository.list_alerts_report, 500)
+        alerts = listing.alerts
+        # Unreadable alerts are a state of the data, not an error of this pass.
+        self.unreadable_count = len(listing.unreadable)
+        self.unreadable_alert_ids = [item.alert_id for item in listing.unreadable[:20]]
+        error: str | None = None
         targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
         now = datetime.now(timezone.utc)
         for alert in alerts:
@@ -202,42 +115,29 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 if not response.bars:
                     continue
                 bars = list(response.bars)
-                latest = bars[-1]
-                percent_changes = {
-                    alert.alert_id: value
-                    for alert in target_alerts
-                    if alert.condition_type.startswith("percent_change_")
-                    and (value := _percent_change(alert, bars)) is not None
-                }
-                indicator_values = {
-                    alert.alert_id: value
-                    for alert in target_alerts
-                    if alert.condition_type.startswith("indicator_")
-                    and (value := _indicator_value(alert, bars)) is not None
-                }
-                evaluated_at = datetime.now(timezone.utc)
+                # Indicator maths is CPU work; keep it off the event loop.
+                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars)
+                if not outcomes:
+                    continue
                 triggers = await asyncio.to_thread(
-                    repository.evaluate,
-                    TradingAlertEvaluation(
+                    repository.record_outcomes,
+                    AlertEvaluationContext(
                         instrument_id=instrument_id,
+                        interval=interval,
+                        evaluated_at=datetime.now(timezone.utc),
                         binding_id=requested_binding_id,
                         resolved_binding_id=response.binding.binding_id,
                         provider=response.binding.provider,
-                        interval=interval,
-                        observed_price=Decimal(latest.close),
-                        observed_volume=Decimal(latest.volume),
-                        is_final=latest.is_final,
-                        observed_at=latest.end_time,
-                        evaluated_at=evaluated_at,
-                        percent_changes=percent_changes,
-                        indicator_values=indicator_values,
                     ),
+                    outcomes,
                 )
                 self.evaluation_count += 1
                 triggered += len(triggers)
             except Exception as exc:
-                self.last_error = f"{type(exc).__name__}: {exc}"
+                error = f"{type(exc).__name__}: {exc}"
         self.trigger_count += triggered
+        # A clean pass clears the previous pass's error.
+        self.last_error = error
         self.last_run_at = datetime.now(timezone.utc)
         return triggered
 
@@ -250,6 +150,8 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
             "last_error": self.last_error,
             "evaluation_count": self.evaluation_count,
             "trigger_count": self.trigger_count,
+            "unreadable_alert_count": self.unreadable_count,
+            "unreadable_alert_ids": list(self.unreadable_alert_ids),
         }
 
 

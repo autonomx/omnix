@@ -24,6 +24,8 @@ export type TradingAlertEditorState = {
   period: string;
   lookback: string;
   trendlinePoints?: Array<{ time: string; price: number }>;
+  // Alerts described by conditions (condition 'conditions') show them read-only until the condition editor ships.
+  conditionsSummary?: string;
 }
 
 const priceConditionOptions: Array<{ value: TradingAlertCondition; label: string }> = [
@@ -39,6 +41,14 @@ const trendlineModeOptions: Array<{ value: TradingAlertCondition; label: string 
   { value: 'trendline_crossing_down', label: 'Crossing Down' },
   { value: 'trendline_above', label: 'Greater Than' },
   { value: 'trendline_below', label: 'Less Than' },
+];
+
+const triggerOptions: Array<{ value: TradingAlertTriggerPolicy; label: string }> = [
+  { value: 'once', label: 'Once only' },
+  { value: 'once_per_bar', label: 'Once per bar' },
+  { value: 'once_per_bar_close', label: 'Once per bar close' },
+  { value: 'once_per_minute', label: 'Once per minute' },
+  { value: 'every_time', label: 'Every time' },
 ];
 
 const notificationOptions: Array<{ value: TradingAlertNotificationChannel; label: string }> = [
@@ -98,6 +108,7 @@ export function TradingAlertDialog({
   const [showConditionNote, setShowConditionNote] = useState(false);
   const family = conditionFamily(editor.condition);
   const direction = conditionDirection(editor.condition);
+  const isConditions = editor.condition === 'conditions';
   const isTrendline = editor.condition.startsWith('trendline_');
   const isIndicator = family === 'indicator_above';
   const isPercent = family === 'percent_change_above';
@@ -132,6 +143,9 @@ export function TradingAlertDialog({
       <div className="trading-alert-dialog-body">
         <section className="trading-alert-condition-section" aria-label="Alert condition">
           <div className="trading-alert-section-heading"><strong>Condition</strong><span>Price, indicator, or volume</span></div>
+          {isConditions ? (
+            <div className="trading-alert-value-row"><span>Conditions</span><strong>{editor.conditionsSummary || 'Conditions'}</strong></div>
+          ) : (<>
           <div className="trading-alert-condition-row">
             <select
               aria-label="Alert condition"
@@ -177,6 +191,7 @@ export function TradingAlertDialog({
               <input aria-label="Alert indicator period" inputMode="numeric" value={editor.period} onChange={(event) => onChange({ period: event.target.value })} />
             </div>
           ) : null}
+          </>)}
           <button type="button" className="trading-alert-add-condition" onClick={() => setShowConditionNote((value) => !value)} aria-expanded={showConditionNote}>＋ Add condition</button>
           {showConditionNote ? <small className="trading-alert-condition-note">Server alerts currently evaluate one condition per alert. Use separate alerts for additional conditions.</small> : null}
         </section>
@@ -184,7 +199,7 @@ export function TradingAlertDialog({
         <dl className="trading-alert-dialog-settings">
           <div>
             <dt>Trigger</dt>
-            <dd><select aria-label="Alert trigger" value={editor.triggerPolicy} onChange={(event) => onChange({ triggerPolicy: event.target.value as TradingAlertTriggerPolicy })}><option value="once">Once only</option><option value="once_per_bar">Once per bar</option><option value="every_time">Every time</option></select></dd>
+            <dd><select aria-label="Alert trigger" value={editor.triggerPolicy} onChange={(event) => onChange({ triggerPolicy: event.target.value as TradingAlertTriggerPolicy })}>{triggerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></dd>
           </div>
           <div>
             <dt>Expiration</dt>

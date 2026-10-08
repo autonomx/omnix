@@ -26,8 +26,13 @@ def install_settings_test_runtime(
         return deepcopy(secret_state)
 
     def save_secrets(payload: dict[str, Any]) -> None:
-        secret_state.clear()
-        secret_state.update(deepcopy(payload))
+        # Like the protected store: a patch of the named providers; "" deletes one.
+        api_keys = secret_state.setdefault("api_keys", {})
+        for provider, value in dict(payload.get("api_keys") or {}).items():
+            if value:
+                api_keys[provider] = value
+            else:
+                api_keys.pop(provider, None)
 
     monkeypatch.setattr(settings_access, "_SERVICE", service)
     monkeypatch.setattr(settings_access, "load_secrets", load_secrets)

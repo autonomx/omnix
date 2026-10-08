@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.apps.trading.alerts import TradingAlert
+from app.apps.trading.alerts import AlertListing, TradingAlert
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 
 
@@ -38,6 +38,9 @@ class ExpiredOnlyRepository:
 
     def list_alerts(self, limit: int = 200):
         return [alert(expires_at=NOW - timedelta(minutes=1))]
+
+    def list_alerts_report(self, limit: int = 200):
+        return AlertListing(self.list_alerts(limit), [])
 
     def evaluate(self, evaluation):
         self.evaluations += 1
