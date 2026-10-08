@@ -29,6 +29,7 @@ from ._helpers import (
     highest,
     hl2,
     js_max,
+    js_div,
     js_min,
     js_round,
     js_sign,
@@ -65,7 +66,7 @@ def _money_flow_index(high: Values, low: Values, close: Values, volume: Values, 
         elif ns == 0:
             result.append(100.0)
         else:
-            result.append(100 - 100 / (1 + ps / ns))
+            result.append(100 - js_div(100, 1 + ps / ns))
     return result
 
 

@@ -72,6 +72,20 @@ function gapsFlatsAndZeroVolume(): GoldenBar[] {
   return bars;
 }
 
+function negativePrices(length: number): GoldenBar[] {
+  const random = mulberry32(0x5eed5);
+  let previousClose = 2;
+  return Array.from({ length }, (_, index) => {
+    const open = previousClose + gaussian(random) * 0.3;
+    const close = index % 9 === 4 ? open : open + gaussian(random) * 1.5;
+    const high = Math.max(open, close) + (index % 7 === 3 ? 0 : random() * 0.8);
+    const low = Math.min(open, close) - (index % 7 === 3 ? 0 : random() * 0.8);
+    const volume = index % 11 === 5 ? -500 : index % 13 === 6 ? 0 : 1_000 + random() * 3_000;
+    previousClose = close;
+    return bar(index, open, high, low, close, volume);
+  });
+}
+
 function trendUp(length: number): GoldenBar[] {
   return Array.from({ length }, (_, index) => {
     const close = 50 + index * 0.5;
@@ -94,6 +108,7 @@ export function generateGoldenDatasets(): GoldenDataset[] {
     { name: 'constant-40', bars: constant(40) },
     { name: 'empty-0', bars: [] },
     { name: 'mixed-90', bars: randomWalk(0x5eed4, 90, 20) },
+    { name: 'negative-prices-60', bars: negativePrices(60) },
   ];
 }
 

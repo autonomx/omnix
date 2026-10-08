@@ -26,6 +26,7 @@ from ._helpers import (
     full,
     highest,
     hl2,
+    js_log,
     js_max,
     js_min,
     js_round,
@@ -82,6 +83,8 @@ def _accumulation_distribution(chart: Chart) -> list[float]:
 def _alma(values: Values, period: int, offset: float = 0.85, sigma: float = 6) -> list[MaybeNumber]:
     p = safe_period(period)
     result = full(len(values))
+    if p > len(values):
+        return result
     m = offset * (p - 1)
     s = p / sigma
     weights = [math.exp(-((i - m) * (i - m)) / (2 * s * s)) for i in range(p)]
@@ -435,7 +438,7 @@ def _fisher_transform(chart: Chart) -> Outputs:
 def _historical_volatility(chart: Chart) -> Outputs:
     close = chart.close
     log_returns = [
-        0.0 if i == 0 or close[i - 1] <= 0 or value <= 0 else math.log(value / close[i - 1])
+        0.0 if i == 0 or close[i - 1] <= 0 or value <= 0 else js_log(value / close[i - 1])
         for i, value in enumerate(close)
     ]
     deviation = stdev(log_returns, chart.period)

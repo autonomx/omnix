@@ -41,6 +41,22 @@ def js_sqrt(value: float) -> float:
     return math.sqrt(value) if value >= 0 else math.nan
 
 
+def js_div(numerator: float, denominator: float) -> float:
+    """JavaScript division: dividing by zero gives ±Infinity (NaN for 0 / 0) instead of raising."""
+    if denominator != 0:
+        return numerator / denominator
+    if numerator == 0 or math.isnan(numerator):
+        return math.nan
+    return math.copysign(math.inf, numerator) * math.copysign(1.0, denominator)
+
+
+def js_log(value: float) -> float:
+    """JavaScript ``Math.log``: -Infinity at 0 and NaN below it, instead of raising."""
+    if value > 0:
+        return math.log(value)
+    return -math.inf if value == 0 else math.nan
+
+
 def js_round(value: float) -> int:
     """JavaScript ``Math.round``: halves round up (towards +infinity). Python's ``round`` rounds halves to even."""
     # Not floor(value + 0.5): that addition rounds 0.49999999999999994 up to 1.
@@ -263,6 +279,8 @@ def dmi(high: Values, low: Values, close: Values, period: int) -> tuple[list[May
 def linear_regression(values: Values, period: int) -> list[MaybeNumber]:
     p = safe_period(period)
     result = full(len(values))
+    if p > len(values):
+        return result
     x_mean = (p - 1) / 2
     x_variance = 0.0
     for i in range(p):
@@ -282,6 +300,8 @@ def linear_regression(values: Values, period: int) -> list[MaybeNumber]:
 def correlation_with_index(values: Values, period: int) -> list[MaybeNumber]:
     p = safe_period(period)
     result = full(len(values))
+    if p > len(values):
+        return result
     x = [float(i) for i in range(p)]
     mx = mean(x)
     vx = js_sum([(value - mx) * (value - mx) for value in x])
@@ -337,7 +357,7 @@ def cci(high: Values, low: Values, close: Values, period: int) -> list[MaybeNumb
             result.append(None)
             continue
         deviation = mean([abs(value - b) for value in typical[i - p + 1 : i + 1]])
-        result.append(0.0 if deviation == 0 else (typical[i] - b) / (0.015 * deviation))
+        result.append(0.0 if deviation == 0 else js_div(typical[i] - b, 0.015 * deviation))
     return result
 
 
