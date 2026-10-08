@@ -36,6 +36,7 @@ def _entry(entry_id: str, **overrides: object) -> dict[str, object]:
 
 def _write_ledger(tmp_path: Path, entries: list[dict[str, object]]) -> Path:
     (tmp_path / "evidence.ts").write_text("export const ALERT_KINDS = ['price'];\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir(exist_ok=True)
     ledger = tmp_path / "ledger.json"
     ledger.write_text(json.dumps({"entries": entries}), encoding="utf-8")
     return ledger
@@ -80,11 +81,17 @@ def test_the_real_ledger_tracks_every_tradingview_built_in_indicator() -> None:
         (_entry("a", status="have", evidence=["no/such/file.ts"]), "does not exist"),
         (_entry("a", status="have", evidence=["evidence.ts#NOT_THERE"]), "not found in evidence.ts"),
         (_entry("a", status="have", evidence=["../outside.ts"]), "inside the repository"),
+        (_entry("a", status="have", evidence=["Evidence.ts"]), "does not exist: Evidence.ts"),
+        (_entry("a", status="have", evidence=["docs"]), "not a directory"),
+        (_entry("a", status="have", evidence=["docs#ALERT_KINDS"]), "not a directory"),
+        (_entry("a", status="have", evidence="evidence.ts"), "evidence must be a list"),
+        (_entry("a", status="have", evidence=[3]), "non-empty strings"),
         (_entry("a", status="done"), "unknown status"),
         (_entry("a", tier="hourly"), "unknown tier"),
         (_entry("a", level="identical"), "unknown level"),
         (_entry("a", wp=""), "missing or empty field(s): wp"),
         (_entry("a", status="excluded-pending-decision"), "needs the decision id"),
+        (_entry("a", status="excluded-pending-decision", decision="vendor"), "decision must be a decision id"),
     ],
 )
 def test_a_bad_entry_fails_the_report(tmp_path: Path, capsys: pytest.CaptureFixture[str], entry: dict[str, object], message: str) -> None:
@@ -107,6 +114,14 @@ def test_a_ledger_without_entries_fails_the_report(tmp_path: Path, capsys: pytes
 
     assert main(["--ledger", str(ledger), "--root", str(tmp_path)]) == 1
     assert "no 'entries' list" in capsys.readouterr().err
+
+
+def test_invalid_json_fails_the_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    ledger = tmp_path / "ledger.json"
+    ledger.write_text('{"entries": [', encoding="utf-8")
+
+    assert main(["--ledger", str(ledger), "--root", str(tmp_path)]) == 1
+    assert "not valid JSON" in capsys.readouterr().err
 
 
 def test_a_valid_ledger_reports_counts_per_area_and_tier(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

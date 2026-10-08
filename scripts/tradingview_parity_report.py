@@ -9,10 +9,11 @@ The script exits with status 1 when the ledger is invalid:
   - an entry lacks a required field, or has an unknown tier, status or level;
   - two entries share an id;
   - a ``have`` or ``partial`` entry has no evidence;
-  - an evidence path does not exist, or the symbol it names is not in the file;
-  - an ``excluded-pending-decision`` entry does not name its decision.
+  - an evidence path does not exist with exactly that spelling (case
+    included), is a directory, or the text it names is not in the file;
+  - an ``excluded-pending-decision`` entry does not name its decision (``D-<n>``).
 
-Evidence is a list of strings, each a repository-relative path, optionally
+Evidence is a list of strings, each a repository-relative file path, optionally
 followed by ``#`` and a piece of text that must appear in that file (a symbol,
 a label or a test name).
 """
@@ -20,6 +21,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -34,6 +37,7 @@ STATUSES = ("have", "partial", "missing", "excluded-pending-decision", "excluded
 LEVELS = ("equivalent", "functional")
 NEEDS_EVIDENCE = frozenset({"have", "partial"})
 REQUIRED_FIELDS = ("id", "area", "feature", "tier", "status", "level", "wp")
+DECISION_ID = re.compile(r"D-\d+")
 
 
 class LedgerError(Exception):
@@ -65,6 +69,29 @@ def load_ledger(path: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def _exists_with_exact_case(root: Path, relative: str) -> bool:
+    """True when every part of the path exists with exactly this spelling.
+
+    Windows and macOS file systems ignore case, so ``Path.exists`` alone would
+    accept evidence that breaks on a case-sensitive checkout.
+    """
+    current = root
+    for part in Path(relative).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            current = current.parent
+            continue
+        try:
+            names = os.listdir(current)
+        except (FileNotFoundError, NotADirectoryError):
+            return False
+        if part not in names:
+            return False
+        current = current / part
+    return True
+
+
 def _evidence_error(item: object, root: Path) -> str | None:
     if not isinstance(item, str) or not item.strip():
         return "evidence items must be non-empty strings"
@@ -72,11 +99,11 @@ def _evidence_error(item: object, root: Path) -> str | None:
     target = (root / relative).resolve()
     if Path(relative).is_absolute() or not target.is_relative_to(root.resolve()):
         return f"evidence path must be inside the repository: {relative}"
-    if not target.exists():
+    if not _exists_with_exact_case(root, relative):
         return f"evidence path does not exist: {relative}"
+    if not target.is_file():
+        return f"evidence must be a file, not a directory: {relative}"
     if symbol:
-        if not target.is_file():
-            return f"evidence symbol needs a file, not a directory: {relative}"
         if symbol not in target.read_text(encoding="utf-8", errors="replace"):
             return f"evidence symbol {symbol!r} not found in {relative}"
     return None
@@ -115,8 +142,11 @@ def validate(entries: Sequence[object], root: Path = ROOT) -> list[str]:
             problem = _evidence_error(item, root)
             if problem:
                 errors.append(f"{label}: {problem}")
-        if entry.get("status") == "excluded-pending-decision" and not entry.get("decision"):
+        decision = entry.get("decision")
+        if entry.get("status") == "excluded-pending-decision" and decision is None:
             errors.append(f"{label}: excluded-pending-decision needs the decision id (e.g. D-4)")
+        elif decision is not None and (not isinstance(decision, str) or not DECISION_ID.fullmatch(decision)):
+            errors.append(f"{label}: decision must be a decision id like D-4, not {decision!r}")
     return errors
 
 
@@ -171,7 +201,7 @@ def render(summary: Summary, ledger: str) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--ledger", type=Path, default=None, help="ledger file (default: %(default)s under --root)")
+    parser.add_argument("--ledger", type=Path, default=None, help=f"ledger file (default: {DEFAULT_LEDGER.as_posix()} under --root)")
     parser.add_argument("--root", type=Path, default=ROOT, help="repository root that evidence paths are relative to")
     args = parser.parse_args(argv)
     root = args.root.resolve()
