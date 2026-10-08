@@ -1,8 +1,8 @@
 """Server ports of the chart's built-in indicators, batch C: the TVP-6.1 quick wins.
 
-Each function mirrors one branch of ``calculateTradingViewBuiltInOutputs`` in ``tradingViewBuiltIns.ts``
-operation for operation; the TypeScript helpers state each indicator's definition. Sessions are UTC days of
-the bar start time and times are epoch milliseconds, as in the browser.
+Each function mirrors one branch of ``quickWinOutputs`` in ``tradingViewBuiltIns.ts`` operation for operation;
+the TypeScript helpers state each indicator's definition and ``BUILTIN_INPUTS`` there declares the params whose
+defaults are repeated here (the goldens check both). Times are epoch milliseconds; sessions come from ``_sessions``.
 """
 
 from __future__ import annotations
@@ -11,9 +11,7 @@ import math
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 
-from ..registry import BarSeries
 from ._helpers import (
     Chart,
     MaybeNumber,
@@ -25,29 +23,21 @@ from ._helpers import (
     ema,
     finite,
     full,
-    highest,
     js_div,
     js_max,
     js_min,
     js_sqrt,
-    lowest,
     rsi,
     stochastic,
 )
+from ._sessions import DAY_MS, SessionPeriod, epoch_ms, session_clock, session_periods
 
-DAY_MS = 86_400_000
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_MILLISECOND = timedelta(milliseconds=1)
-
-
-def _epoch_ms(start_time: datetime) -> int:
-    # Date.parse of the API's UTC ISO string; a naive time is taken as UTC.
-    moment = start_time if start_time.tzinfo is not None else start_time.replace(tzinfo=UTC)
-    return (moment - _EPOCH) // _MILLISECOND
+PERIODS = ("D", "W", "M")
+PRICE_SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
 
 
-def _start_times(bars: BarSeries) -> list[int]:
-    return [_epoch_ms(start_time) for start_time in bars.start_times]
+def _start_times(chart: Chart) -> list[int]:
+    return [epoch_ms(start_time) for start_time in chart.bars.start_times]
 
 
 @dataclass
@@ -61,70 +51,74 @@ class _PivotLevels:
     s3: list[MaybeNumber]
 
 
-def _session_pivots(times: Sequence[int], high: Values, low: Values, close: Values, developing: bool) -> _PivotLevels:
+_Hlc = tuple[float, float, float]
+
+
+def _set_pivots(levels: _PivotLevels, i: int, hlc: _Hlc) -> None:
+    h, lo, c = hlc
+    pp = (h + lo + c) / 3
+    levels.pp[i] = pp
+    levels.r1[i] = 2 * pp - lo
+    levels.s1[i] = 2 * pp - h
+    levels.r2[i] = pp + (h - lo)
+    levels.s2[i] = pp - (h - lo)
+    levels.r3[i] = h + 2 * (pp - lo)
+    levels.s3[i] = lo - 2 * (h - pp)
+
+
+def _extend(current: _Hlc | None, high: float, low: float, close: float) -> _Hlc:
+    return (js_max(current[0], high), js_min(current[1], low), close) if current else (high, low, close)
+
+
+def _period_pivots(
+    keys: Sequence[int], counts: Sequence[bool], high: Values, low: Values, close: Values, developing: bool
+) -> _PivotLevels:
     length = len(close)
-    levels = _PivotLevels(full(length), full(length), full(length), full(length), full(length), full(length), full(length))
-    day = 0
-    started = False
-    h = low_ = c = 0.0
-    previous: tuple[float, float, float] | None = None
+    levels = _PivotLevels(*(full(length) for _ in range(7)))
+    key = 0
+    current: _Hlc | None = None
+    previous: _Hlc | None = None
     for i in range(length):
-        bar_day = times[i] // DAY_MS
-        if not started or bar_day != day:
-            if started:
-                previous = (h, low_, c)
-            started = True
-            day = bar_day
-            h, low_, c = high[i], low[i], close[i]
-        else:
-            h = js_max(h, high[i])
-            low_ = js_min(low_, low[i])
-            c = close[i]
-        source = (h, low_, c) if developing else previous
-        if source is None:
-            continue
-        sh, sl, sc = source
-        pp = (sh + sl + sc) / 3
-        levels.pp[i] = pp
-        levels.r1[i] = 2 * pp - sl
-        levels.s1[i] = 2 * pp - sh
-        levels.r2[i] = pp + (sh - sl)
-        levels.s2[i] = pp - (sh - sl)
-        levels.r3[i] = sh + 2 * (pp - sl)
-        levels.s3[i] = sl - 2 * (sh - pp)
+        if i == 0 or keys[i] != key:
+            if current:
+                previous = current
+            key = keys[i]
+            current = None
+        if counts[i]:
+            current = _extend(current, high[i], low[i], close[i])
+        source = current if developing else previous
+        if source:
+            _set_pivots(levels, i, source)
     return levels
 
 
 def _missed_pivots(
-    times: Sequence[int], high: Values, low: Values, close: Values, sessions_back: int
+    keys: Sequence[int], counts: Sequence[bool], high: Values, low: Values, close: Values, periods_back: int
 ) -> tuple[list[MaybeNumber], list[MaybeNumber]]:
     above = full(len(close))
     below = full(len(close))
     pending: list[tuple[float, int]] = []
-    day = 0
-    session = -1
-    h = low_ = c = 0.0
+    key = 0
+    period = -1
+    current: _Hlc | None = None
     for i in range(len(close)):
-        bar_day = times[i] // DAY_MS
-        if session < 0 or bar_day != day:
-            if session >= 0:
-                pending.append(((h + low_ + c) / 3, session + 1))
-            session += 1
-            day = bar_day
-            h, low_, c = high[i], low[i], close[i]
-        else:
-            h = js_max(h, high[i])
-            low_ = js_min(low_, low[i])
-            c = close[i]
+        if period < 0 or keys[i] != key:
+            if current:
+                pending.append(((current[0] + current[1] + current[2]) / 3, period + 1))
+            period += 1
+            key = keys[i]
+            current = None
+        if counts[i]:
+            current = _extend(current, high[i], low[i], close[i])
         pending = [
-            (value, level_session)
-            for value, level_session in pending
-            if level_session >= session - sessions_back and not (low[i] <= value <= high[i])
+            (value, level_period)
+            for value, level_period in pending
+            if level_period >= period - periods_back and not (low[i] <= value <= high[i])
         ]
         up: MaybeNumber = None
         down: MaybeNumber = None
-        for value, level_session in pending:
-            if level_session >= session:
+        for value, level_period in pending:
+            if level_period >= period:
                 continue
             if value > close[i] and (up is None or value < up):
                 up = value
@@ -135,58 +129,67 @@ def _missed_pivots(
     return above, below
 
 
-def _relative_volume_at_time(times: Sequence[int], volume: Values, sessions: int) -> list[MaybeNumber]:
+def _relative_volume_at_time(
+    keys: Sequence[int], since: Sequence[int], volume: Values, length: int, cumulative: bool
+) -> list[MaybeNumber]:
     result = full(len(volume))
     history: dict[int, list[float]] = {}
-    day = 0
-    cumulative = 0.0
+    key = 0
+    running = 0.0
     for i in range(len(volume)):
-        bar_day = times[i] // DAY_MS
-        if i == 0 or bar_day != day:
-            day = bar_day
-            cumulative = 0.0
-        cumulative += volume[i]
-        past = history.setdefault(times[i] - bar_day * DAY_MS, [])
-        if len(past) >= sessions:
+        if i == 0 or keys[i] != key:
+            key = keys[i]
+            running = 0.0
+        running += volume[i]
+        value = running if cumulative else volume[i]
+        past = history.setdefault(since[i], [])
+        if len(past) >= length:
             total = 0.0
-            for k in range(len(past) - sessions, len(past)):
+            for k in range(len(past) - length, len(past)):
                 total += past[k]
-            average = total / sessions
+            average = total / length
             if average != 0:
-                result[i] = cumulative / average
-        past.append(cumulative)
+                result[i] = js_div(value, average)
+        past.append(value)
     return result
 
 
-def _rolling_day_volume(times: Sequence[int], volume: Values) -> list[MaybeNumber]:
+def _price_source(source: str, open_: Values, high: Values, low: Values, close: Values) -> list[float]:
+    if source == "open":
+        return list(open_)
+    if source == "high":
+        return list(high)
+    if source == "low":
+        return list(low)
+    if source == "hl2":
+        return [(h + lo) / 2 for h, lo in zip(high, low, strict=True)]
+    if source == "hlc3":
+        return [(h + lo + c) / 3 for h, lo, c in zip(high, low, close, strict=True)]
+    if source == "ohlc4":
+        return [(o + h + lo + c) / 4 for o, h, lo, c in zip(open_, high, low, close, strict=True)]
+    return list(close)
+
+
+def _rolling_day_volume(times: Sequence[int], volume: Values, price: Values) -> list[MaybeNumber]:
     result = full(len(volume))
     step: float = math.inf
     for i in range(1, len(times)):
         gap = times[i] - times[i - 1]
         if 0 < gap < step:
             step = gap
+    if DAY_MS < step < math.inf:
+        return result
     covered = min(step, DAY_MS)
+    traded = [value * price[i] for i, value in enumerate(volume)]
     left = 0
     running = 0.0
     for i in range(len(volume)):
-        running += volume[i]
+        running += traded[i]
         while left < i and times[left] <= times[i] - DAY_MS:
-            running -= volume[left]
+            running -= traded[left]
             left += 1
         if times[0] <= times[i] - DAY_MS + covered:
             result[i] = running
-    return result
-
-
-def _aligned_compare_closes(times: Sequence[int], compare: BarSeries) -> list[MaybeNumber]:
-    # A stable sort by start time, like the browser's Array.prototype.sort.
-    series = sorted(zip(_start_times(compare), compare.close, strict=True), key=lambda item: item[0])
-    j = -1
-    result: list[MaybeNumber] = []
-    for time in times:
-        while j + 1 < len(series) and series[j + 1][0] <= time:
-            j += 1
-        result.append(series[j][1] if j >= 0 else None)
     return result
 
 
@@ -215,13 +218,17 @@ def _pearson(x: Values, y: Sequence[MaybeNumber], period: int) -> list[MaybeNumb
     return result
 
 
-def _knoxville_divergence(high: Values, low: Values, close: Values, lookback: int) -> tuple[list[MaybeNumber], list[MaybeNumber]]:
+def _knoxville_divergence(
+    high: Values, low: Values, close: Values, lookback: int, momentum_length: int, rsi_length: int
+) -> tuple[list[MaybeNumber], list[MaybeNumber]]:
     bearish = full(len(close))
     bullish = full(len(close))
-    momentum: list[MaybeNumber] = [value - close[i - 20] if i >= 20 else None for i, value in enumerate(close)]
+    momentum: list[MaybeNumber] = [
+        value - close[i - momentum_length] if i >= momentum_length else None for i, value in enumerate(close)
+    ]
     overbought: list[int] = []
     oversold: list[int] = []
-    for i, value in enumerate(rsi(close, 21)):
+    for i, value in enumerate(rsi(close, rsi_length)):
         overbought.append((overbought[i - 1] if i > 0 else 0) + (1 if finite(value) and value > 70 else 0))
         oversold.append((oversold[i - 1] if i > 0 else 0) + (1 if finite(value) and value < 30 else 0))
 
@@ -255,92 +262,132 @@ def _knoxville_divergence(high: Values, low: Values, close: Values, lookback: in
     return bearish, bullish
 
 
+def _complete_sma(values: Sequence[MaybeNumber], length: int) -> list[MaybeNumber]:
+    result: list[MaybeNumber] = []
+    for i in range(len(values)):
+        if i < length - 1:
+            result.append(None)
+            continue
+        total = 0.0
+        complete = True
+        for j in range(i - length + 1, i + 1):
+            value = values[j]
+            if not finite(value):
+                complete = False
+                break
+            total += value
+        result.append(total / length if complete else None)
+    return result
+
+
 @builtin("tv-24-hour-volume", "24-hour Volume", "exact", 1)
 def _volume_24_hours(chart: Chart) -> Outputs:
-    return [chart.out("volume-24h", _rolling_day_volume(_start_times(chart.bars), chart.volume))]
+    source = chart.select_param("source", "close", PRICE_SOURCES)
+    price = _price_source(source, chart.open, chart.high, chart.low, chart.close)
+    return [chart.out("volume-24h", _rolling_day_volume(_start_times(chart), chart.volume, price))]
 
 
 @builtin_with_compare_series("tv-correlation-coefficient-cc", "Correlation Coefficient (CC)", "exact", 20)
 def _correlation_coefficient(chart: Chart) -> Outputs:
-    compare = (
-        _aligned_compare_closes(_start_times(chart.bars), chart.compare)
-        if chart.compare is not None and len(chart.compare) > 0
-        else full(len(chart.bars))
-    )
-    return [chart.out("cc", _pearson(chart.close, compare, chart.period))]
+    return [chart.out("cc", _pearson(chart.close, chart.compare_close, chart.period))]
 
 
-@builtin("tv-relative-volume-at-time", "Relative Volume at Time", "exact", 10)
+@builtin("tv-relative-volume-at-time", "Relative Volume at Time", "exact", 5)
 def _relative_volume_at_time_builtin(chart: Chart) -> Outputs:
-    return [chart.out("rvol-at-time", _relative_volume_at_time(_start_times(chart.bars), chart.volume, chart.period))]
+    anchor = chart.select_param("anchor", "D", PERIODS)
+    cumulative = chart.select_param("mode", "cumulative", ("cumulative", "regular")) == "cumulative"
+    keys, since = session_periods(session_clock(chart.bars, chart.inputs.session), anchor, chart.inputs.session)
+    return [chart.out("rvol-at-time", _relative_volume_at_time(keys, since, chart.volume, chart.period, cumulative))]
 
 
-@builtin("tv-rob-booker-adx-breakout", "Rob Booker - ADX Breakout", "recursive", 14)
+@builtin("tv-rob-booker-adx-breakout", "Rob Booker - ADX Breakout", "recursive", 20)
 def _adx_breakout(chart: Chart) -> Outputs:
-    _, _, adx = dmi(chart.high, chart.low, chart.close, chart.period)
-    hh = highest(chart.high, chart.period)
-    ll = lowest(chart.low, chart.period)
-    upper = full(len(chart.bars))
-    lower = full(len(chart.bars))
-    top: MaybeNumber = None
-    bottom: MaybeNumber = None
-    for i in range(len(chart.bars)):
+    high, low, close, lookback = chart.high, chart.low, chart.close, chart.period
+    _, _, adx = dmi(high, low, close, int(chart.number_param("adxLength", 14, 1, integer=True)))
+    level = chart.number_param("level", 18, 0)
+    upper = full(len(close))
+    lower = full(len(close))
+    up = full(len(close))
+    down = full(len(close))
+    for i in range(lookback, len(close)):
         strength = adx[i]
-        if finite(strength) and strength < 18 and finite(hh[i]) and finite(ll[i]):
-            top = hh[i]
-            bottom = ll[i]
+        if not finite(strength) or not strength < level:
+            continue
+        top = high[i - lookback]
+        bottom = low[i - lookback]
+        for j in range(i - lookback + 1, i):
+            top = js_max(top, high[j])
+            bottom = js_min(bottom, low[j])
         upper[i] = top
         lower[i] = bottom
-    return [chart.out("upper", upper), chart.out("lower", lower)]
+        if close[i] > top:
+            up[i] = close[i]
+        if close[i] < bottom:
+            down[i] = close[i]
+    return [
+        chart.out("upper", upper),
+        chart.out("lower", lower),
+        chart.out("breakout-up", up),
+        chart.out("breakout-down", down),
+    ]
 
 
 @builtin("tv-rob-booker-knoxville-divergence", "Rob Booker - Knoxville Divergence", "recursive", 150)
 def _knoxville(chart: Chart) -> Outputs:
-    bearish, bullish = _knoxville_divergence(chart.high, chart.low, chart.close, chart.period)
+    momentum_length = int(chart.number_param("momentumLength", 20, 1, integer=True))
+    rsi_length = int(chart.number_param("rsiLength", 21, 1, integer=True))
+    bearish, bullish = _knoxville_divergence(chart.high, chart.low, chart.close, chart.period, momentum_length, rsi_length)
     return [chart.out("bearish", bearish), chart.out("bullish", bullish)]
+
+
+def _pivot_outputs(chart: Chart, period: SessionPeriod, developing: bool, lines: Sequence[str]) -> Outputs:
+    clock = session_clock(chart.bars, chart.inputs.session)
+    keys, _ = session_periods(clock, period, chart.inputs.session)
+    levels = _period_pivots(keys, clock.counts, chart.high, chart.low, chart.close, developing)
+    return [chart.out(line, getattr(levels, line)) for line in lines]
 
 
 @builtin("tv-rob-booker-intraday-pivot-points", "Rob Booker Intraday Pivot Points", "exact", 1)
 def _intraday_pivots(chart: Chart) -> Outputs:
-    levels = _session_pivots(_start_times(chart.bars), chart.high, chart.low, chart.close, developing=False)
-    return [
-        chart.out("pp", levels.pp),
-        chart.out("r1", levels.r1),
-        chart.out("r2", levels.r2),
-        chart.out("r3", levels.r3),
-        chart.out("s1", levels.s1),
-        chart.out("s2", levels.s2),
-        chart.out("s3", levels.s3),
-    ]
+    # The period is the pivot period in hours (TradingView offers 1, 4 and 8).
+    return _pivot_outputs(chart, chart.period, False, ("pp", "r1", "r2", "r3", "s1", "s2", "s3"))
 
 
 @builtin("tv-rob-booker-missed-pivot-points", "Rob Booker Missed Pivot Points", "exact", 10)
 def _missed_pivot_points(chart: Chart) -> Outputs:
-    above, below = _missed_pivots(_start_times(chart.bars), chart.high, chart.low, chart.close, chart.period)
+    clock = session_clock(chart.bars, chart.inputs.session)
+    keys, _ = session_periods(clock, chart.select_param("pivotPeriod", "D", PERIODS), chart.inputs.session)
+    above, below = _missed_pivots(keys, clock.counts, chart.high, chart.low, chart.close, chart.period)
     return [chart.out("missed-above", above), chart.out("missed-below", below)]
 
 
 @builtin("tv-rob-booker-reversal", "Rob Booker Reversal", "recursive", 14)
 def _reversal(chart: Chart) -> Outputs:
     close, high, low = chart.close, chart.high, chart.low
-    fast = ema(close, 12)
-    slow = ema(close, 26)
-    k = stochastic(high, low, close, chart.period)
+    fast = ema(close, int(chart.number_param("fastLength", 12, 1, integer=True)))
+    slow = ema(close, int(chart.number_param("slowLength", 26, 1, integer=True)))
+    slowing = int(chart.number_param("slowing", 3, 1, integer=True))
+    k = _complete_sma(stochastic(high, low, close, chart.period), slowing)
+    upper = chart.number_param("upper", 70, 0)
+    lower = chart.number_param("lower", 30, 0)
     macd = [f - s if finite(f) and finite(s) else None for f, s in zip(fast, slow, strict=True)]
     bullish = full(len(close))
     bearish = full(len(close))
-    for i in range(2, len(close)):
-        now, before, earlier, stoch = macd[i], macd[i - 1], macd[i - 2], k[i]
-        if now is None or before is None or earlier is None or not finite(stoch):
+    for i in range(1, len(close)):
+        now, before, stoch = macd[i], macd[i - 1], k[i]
+        if now is None or before is None or not finite(stoch):
             continue
-        if now > before and before <= earlier and stoch < 30:
-            bullish[i] = low[i]
-        if now < before and before >= earlier and stoch > 70:
+        if before > 0 and now <= 0 and stoch > upper:
             bearish[i] = high[i]
+        if before < 0 and now >= 0 and stoch < lower:
+            bullish[i] = low[i]
     return [chart.out("bullish", bullish), chart.out("bearish", bearish)]
+
+
+_GHOST_PERIODS: dict[str, SessionPeriod] = {"240": 4, "480": 8, "W": "W", "M": "M"}
 
 
 @builtin("tv-rob-booker-ziv-ghost-pivots", "Rob Booker Ziv Ghost Pivots", "exact", 1)
 def _ziv_ghost_pivots(chart: Chart) -> Outputs:
-    levels = _session_pivots(_start_times(chart.bars), chart.high, chart.low, chart.close, developing=True)
-    return [chart.out("pp", levels.pp), chart.out("r1", levels.r1), chart.out("s1", levels.s1)]
+    period = _GHOST_PERIODS[chart.select_param("pivotPeriod", "W", tuple(_GHOST_PERIODS))]
+    return _pivot_outputs(chart, period, True, ("pp", "r1", "s1"))

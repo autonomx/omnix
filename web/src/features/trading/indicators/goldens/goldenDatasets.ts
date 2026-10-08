@@ -1,5 +1,6 @@
 import type { MarketBar } from '../../tradingTypes';
 import { fixture } from '../../../../test/fixture';
+import { wallClockMs, type TradingSessionSpec } from '../tradingSessions';
 
 export type GoldenBar = {
   start_time: string;
@@ -9,6 +10,8 @@ export type GoldenBar = {
   low: string;
   close: string;
   volume: string;
+  /** Session label, as the server sets it on equity bars; absent elsewhere. */
+  session?: string;
 };
 
 export type GoldenDataset = { name: string; bars: GoldenBar[] };
@@ -121,6 +124,47 @@ export function generateCompareDatasets(): GoldenDataset[] {
 }
 
 export const COMPARE_DATASET = 'compare-walk-291';
+
+const HALF_HOUR_MS = 1_800_000;
+
+/**
+ * A US equity on 30-minute bars from 04:00 to 20:00 New York time, Monday 2026-02-16 to Friday 2026-03-20: five weeks across the
+ * start of daylight saving time (2026-03-08) and a month end, with the server's pre-market, regular and after-hours labels.
+ */
+function equitySession(): GoldenBar[] {
+  const random = mulberry32(0x5eed7);
+  const bars: GoldenBar[] = [];
+  let previousClose = 50;
+  for (let start = Date.parse('2026-02-16T00:00:00Z'); start < Date.parse('2026-03-21T00:00:00Z'); start += HALF_HOUR_MS) {
+    const local = new Date(wallClockMs(start, 'America/New_York'));
+    const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
+    if (local.getUTCDay() === 0 || local.getUTCDay() === 6 || minute < 240 || minute >= 1200) continue;
+    const open = Math.max(5, previousClose + gaussian(random) * 0.1);
+    const close = Math.max(5, open + gaussian(random) * 0.4);
+    const high = Math.max(open, close) + random() * 0.3;
+    const low = Math.max(1, Math.min(open, close) - random() * 0.3);
+    const regular = minute >= 570 && minute < 960;
+    bars.push({
+      start_time: new Date(start).toISOString(),
+      end_time: new Date(start + HALF_HOUR_MS).toISOString(),
+      open: open.toFixed(2), high: high.toFixed(2), low: low.toFixed(2), close: close.toFixed(2),
+      volume: Math.round((regular ? 5_000 : 400) + random() * 2_000).toString(),
+      session: minute < 570 ? 'extended_pre' : regular ? 'regular' : 'extended_post',
+    });
+    previousClose = close;
+  }
+  return bars;
+}
+
+/** Datasets for session-aware indicators only (TVP-6.1), so other golden files keep their bytes. */
+export function generateSessionDatasets(): GoldenDataset[] {
+  return [{ name: 'equity-dst-30m', bars: equitySession() }];
+}
+
+export const SESSION_DATASET = 'equity-dst-30m';
+/** The session calendar the server derives for a US equity, and a futures-style 18:00 ET roll. */
+export const EQUITY_SESSION: TradingSessionSpec = { timezone: 'America/New_York', startMinute: 0, regularStartMinute: 570, regularOnly: true };
+export const FUTURES_SESSION: TradingSessionSpec = { timezone: 'America/New_York', startMinute: 1080 };
 export const COMPARE_SYMBOL = 'golden:compare';
 
 export const ALTERNATIVE_PERIOD_DATASET = 'random-walk-300';

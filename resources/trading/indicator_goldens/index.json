@@ -13,6 +13,9 @@
  "compare_datasets": [
   "compare-walk-291"
  ],
+ "session_datasets": [
+  "equity-dst-30m"
+ ],
  "indicators": [
   {
    "id": "tv-24-hour-volume",
@@ -382,12 +385,12 @@
   {
    "id": "tv-relative-volume-at-time",
    "name": "Relative Volume at Time",
-   "default_period": 10
+   "default_period": 5
   },
   {
    "id": "tv-rob-booker-adx-breakout",
    "name": "Rob Booker - ADX Breakout",
-   "default_period": 14
+   "default_period": 20
   },
   {
    "id": "tv-rob-booker-knoxville-divergence",

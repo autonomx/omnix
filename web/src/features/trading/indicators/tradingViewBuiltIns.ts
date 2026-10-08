@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import type { MarketBar } from '../tradingTypes';
 import { findPatternPivots } from './autoPatterns';
+import { UTC_SESSION, sessionClock, sessionPeriods, type SessionPeriod, type TradingSessionSpec } from './tradingSessions';
 
 export type TradingViewBuiltInId = `tv-${string}`;
 export type TradingViewBuiltInDefinition = {
@@ -23,7 +24,13 @@ export type TradingViewBuiltInOutput = {
   labelsOnPriceScale?: boolean;
   valuesInStatusLine?: boolean;
   inputsInStatusLine?: boolean;
+  /** How the chart draws the points: a joined line (default), horizontal levels with gaps where there is no value, or markers. */
+  render?: IndicatorRender;
+  marker?: IndicatorMarkerShape;
 };
+export type IndicatorRender = 'line' | 'levels' | 'markers';
+export type IndicatorMarkerShape = 'arrowUp' | 'arrowDown' | 'circle';
+type ParamValue = number | string;
 export type TradingViewBuiltInInstance = {
   id: string;
   period: number;
@@ -34,7 +41,16 @@ export type TradingViewBuiltInInstance = {
   anchorTime?: string | null;
   /** Instrument id of the second series (Correlation Coefficient). */
   compareSymbol?: string | null;
+  /** Indicator-specific inputs declared in `tradingViewBuiltInInputs`; missing or invalid values use the defaults. */
+  params?: Record<string, ParamValue>;
+  /** The chart instrument's session calendar (not stored with the indicator); UTC when absent. */
+  session?: TradingSessionSpec | null;
 };
+export type TradingViewBuiltInParamSpec =
+  | { key: string; label: string; kind: 'number'; default: number; min: number; integer?: boolean; step?: number }
+  | { key: string; label: string; kind: 'select'; default: string; options: ReadonlyArray<{ value: string; label: string }> };
+/** Inputs of a built-in beyond `period`: the period's label (null hides it) and its params. */
+export type TradingViewBuiltInInputs = { periodLabel: string | null; params: readonly TradingViewBuiltInParamSpec[] };
 /** Series an indicator reads besides the chart's own bars. */
 export type TradingViewBuiltInSeries = {
   /** Bars of `compareSymbol`, in any order; aligned to the chart by start time. Ignored when the instance has no `compareSymbol`. */
@@ -336,8 +352,8 @@ const SUPPORTED: Record<string, SupportedConfig> = {
   'RCI Ribbon': { defaultPeriod: 9, pane: 1 },
   'Relative Vigor Index': { defaultPeriod: 10, pane: 1 },
   'Relative Volatility Index': { defaultPeriod: 14, pane: 1 },
-  'Relative Volume at Time': { defaultPeriod: 10, pane: 1 },
-  'Rob Booker - ADX Breakout': { defaultPeriod: 14, pane: 0 },
+  'Relative Volume at Time': { defaultPeriod: 5, pane: 1 },
+  'Rob Booker - ADX Breakout': { defaultPeriod: 20, pane: 0 },
   'Rob Booker - Knoxville Divergence': { defaultPeriod: 150, pane: 0 },
   'Rob Booker Intraday Pivot Points': { defaultPeriod: 1, pane: 0 },
   'Rob Booker Missed Pivot Points': { defaultPeriod: 10, pane: 0 },
@@ -385,6 +401,31 @@ const SPECIALIZED_REQUIREMENTS: Record<string, string> = {
   'Visible Average Price': 'Depends on the current visible viewport rather than the loaded bar set.',
   'VWAP Auto Anchored': 'Requires TradingView-style automatic anchor selection and corporate-event/session context.',
 };
+
+const PERIOD_OPTIONS = { D: 'Day', W: 'Week', M: 'Month' } as const;
+const integer = (key: string, label: string, value: number): TradingViewBuiltInParamSpec => ({ key, label, kind: 'number', default: value, min: 1, integer: true });
+const level = (key: string, label: string, value: number): TradingViewBuiltInParamSpec => ({ key, label, kind: 'number', default: value, min: 0, step: 1 });
+const select = (key: string, label: string, value: string, options: Record<string, string>): TradingViewBuiltInParamSpec => ({
+  key, label, kind: 'select', default: value, options: Object.entries(options).map(([optionValue, optionLabel]) => ({ value: optionValue, label: optionLabel })),
+});
+
+/** Declared inputs of the built-ins that have more than a period (TVP-6.1). The server registry uses the same keys and defaults. */
+const BUILTIN_INPUTS: Record<string, TradingViewBuiltInInputs> = {
+  '24-hour Volume': { periodLabel: null, params: [select('source', 'Price source', 'close', { close: 'Close', open: 'Open', high: 'High', low: 'Low', hl2: '(H + L) / 2', hlc3: '(H + L + C) / 3', ohlc4: '(O + H + L + C) / 4' })] },
+  'Correlation Coefficient (CC)': { periodLabel: 'Length', params: [] },
+  'Relative Volume at Time': { periodLabel: 'Length', params: [select('anchor', 'Anchor period', 'D', PERIOD_OPTIONS), select('mode', 'Calculation mode', 'cumulative', { cumulative: 'Cumulative', regular: 'Regular' })] },
+  'Rob Booker - ADX Breakout': { periodLabel: 'Box lookback', params: [integer('adxLength', 'ADX length', 14), level('level', 'ADX level', 18)] },
+  'Rob Booker - Knoxville Divergence': { periodLabel: 'Bars back', params: [integer('momentumLength', 'Momentum length', 20), integer('rsiLength', 'RSI length', 21)] },
+  'Rob Booker Intraday Pivot Points': { periodLabel: 'Pivot period (hours)', params: [] },
+  'Rob Booker Missed Pivot Points': { periodLabel: 'Periods back', params: [select('pivotPeriod', 'Pivot period', 'D', PERIOD_OPTIONS)] },
+  'Rob Booker Reversal': {
+    periodLabel: 'K period',
+    params: [integer('fastLength', 'Fast MA period', 12), integer('slowLength', 'Slow MA period', 26), integer('slowing', 'Slowing', 3), level('upper', 'Stochastic upper', 70), level('lower', 'Stochastic lower', 30)],
+  },
+  'Rob Booker Ziv Ghost Pivots': { periodLabel: null, params: [select('pivotPeriod', 'Pivot period', 'W', { 240: '4 hours', 480: '8 hours (next day)', W: 'Next week', M: 'Next month' })] },
+};
+const QUICK_WINS = new Set(Object.keys(BUILTIN_INPUTS));
+const SESSION_INDICATORS = new Set(['Time Weighted Average Price', 'Relative Volume at Time', 'Rob Booker Intraday Pivot Points', 'Rob Booker Missed Pivot Points', 'Rob Booker Ziv Ghost Pivots']);
 
 function slugify(name: string): string {
   return name
@@ -446,6 +487,18 @@ export function tradingViewBuiltInPaneScale(id: string): { min: number; max: num
 }
 
 const COMPARE_SERIES_INDICATORS = new Set(['Correlation Coefficient (CC)']);
+
+/** Declared inputs of a built-in beyond its period, or null when it has only a period. */
+export function tradingViewBuiltInInputs(id: string): TradingViewBuiltInInputs | null {
+  const name = definitionById.get(id)?.name;
+  return name === undefined ? null : BUILTIN_INPUTS[name] ?? null;
+}
+
+/** Whether the indicator groups bars into trading sessions, so it reads the chart instrument's session calendar. */
+export function tradingViewBuiltInUsesSessions(id: string): boolean {
+  const name = definitionById.get(id)?.name;
+  return name !== undefined && SESSION_INDICATORS.has(name);
+}
 
 /** Whether the indicator reads a second symbol (`compareSymbol`), loaded like a compare symbol. */
 export function tradingViewBuiltInUsesCompareSeries(id: string): boolean {
@@ -897,14 +950,13 @@ function volumeWeightedMa(close: readonly number[], volume: readonly number[], p
   return close.map((_, i) => finite(pvs[i]) && finite(vs[i]) && vs[i] !== 0 ? pvs[i]! / vs[i]! : null);
 }
 
-function sessionTwap(bars: readonly MarketBar[], typical: readonly number[]): MaybeNumber[] {
+function sessionTwap(bars: readonly MarketBar[], typical: readonly number[], session: TradingSessionSpec): MaybeNumber[] {
   const result = full(bars.length);
-  let currentDay = '';
+  const { day } = sessionClock(bars, bars.map((bar) => Date.parse(bar.start_time)), session);
   let running = 0;
   let count = 0;
-  bars.forEach((bar, i) => {
-    const day = bar.start_time.slice(0, 10);
-    if (day !== currentDay) { currentDay = day; running = 0; count = 0; }
+  bars.forEach((_, i) => {
+    if (i === 0 || day[i] !== day[i - 1]) { running = 0; count = 0; }
     running += typical[i]; count += 1; result[i] = running / count;
   });
   return result;
@@ -930,65 +982,84 @@ function technicalRating(high: readonly number[], low: readonly number[], close:
   });
 }
 
-// TVP-6.1 helpers. Sessions are UTC days of the bar start time (like the TWAP above); times are epoch milliseconds.
+// TVP-6.1 helpers. Times are epoch milliseconds of bar starts; sessions come from `tradingSessions.ts`.
 const DAY_MS = 86_400_000;
 
 function startTimes(bars: readonly MarketBar[]): number[] { return bars.map((bar) => Date.parse(bar.start_time)); }
 
+/** A built-in's `params` value: a finite number at least `min` (whole when `integer`), else the default. */
+function numberParam(instance: TradingViewBuiltInInstance, key: string, fallback: number, min: number, integer: boolean): number {
+  const value = instance.params?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && (!integer || Number.isInteger(value)) ? value : fallback;
+}
+
+function selectParam<T extends string>(instance: TradingViewBuiltInInstance, key: string, fallback: T, options: readonly T[]): T {
+  const value = instance.params?.[key];
+  return typeof value === 'string' && (options as readonly string[]).includes(value) ? value as T : fallback;
+}
+
+/** Reads every param of a built-in from its declared inputs, falling back to the declared defaults. */
+function builtInParams(name: string, instance: TradingViewBuiltInInstance): Record<string, ParamValue> {
+  const values: Record<string, ParamValue> = {};
+  for (const spec of BUILTIN_INPUTS[name]?.params ?? []) {
+    values[spec.key] = spec.kind === 'number'
+      ? numberParam(instance, spec.key, spec.default, spec.min, spec.integer === true)
+      : selectParam(instance, spec.key, spec.default, spec.options.map((option) => option.value));
+  }
+  return values;
+}
+
 type PivotLevels = { pp: MaybeNumber[]; r1: MaybeNumber[]; r2: MaybeNumber[]; r3: MaybeNumber[]; s1: MaybeNumber[]; s2: MaybeNumber[]; s3: MaybeNumber[] };
+type Hlc = [number, number, number];
+
+/** Classic floor pivots of a period's high H, low L and close C. */
+function setPivots(levels: PivotLevels, i: number, [h, l, c]: Hlc): void {
+  const pp = (h + l + c) / 3;
+  levels.pp[i] = pp; levels.r1[i] = 2 * pp - l; levels.s1[i] = 2 * pp - h;
+  levels.r2[i] = pp + (h - l); levels.s2[i] = pp - (h - l);
+  levels.r3[i] = h + 2 * (pp - l); levels.s3[i] = l - 2 * (h - pp);
+}
 
 /**
- * Classic floor pivots of a session's high H, low L and close C: PP = (H + L + C) / 3, R1 = 2PP - L, S1 = 2PP - H,
- * R2 = PP + (H - L), S2 = PP - (H - L), R3 = H + 2(PP - L), S3 = L - 2(H - PP).
- * `developing` false: each bar gets the pivots of the previous session with bars (Intraday Pivot Points).
- * `developing` true: each bar gets the pivots of its own session so far (Ziv Ghost Pivots: the next session's levels, as they form).
+ * Period pivots: PP = (H + L + C) / 3, R1 = 2PP - L, S1 = 2PP - H, R2 = PP + (H - L), S2 = PP - (H - L), R3 = H + 2(PP - L), S3 = L - 2(H - PP)
+ * of each period's bars (regular-hours bars only where the session asks for that). `developing` false: a bar gets the pivots of the
+ * last completed period (Intraday Pivot Points). `developing` true: the pivots of its own period so far, the levels the next period
+ * will use (Ziv Ghost Pivots).
  */
-function sessionPivots(times: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[], developing: boolean): PivotLevels {
+function periodPivots(keys: readonly number[], counts: readonly boolean[], high: readonly number[], low: readonly number[], close: readonly number[], developing: boolean): PivotLevels {
   const levels: PivotLevels = { pp: full(close.length), r1: full(close.length), r2: full(close.length), r3: full(close.length), s1: full(close.length), s2: full(close.length), s3: full(close.length) };
-  let day = 0; let started = false;
-  let h = 0; let l = 0; let c = 0;
-  let previous: [number, number, number] | null = null;
+  let key = 0; let current: Hlc | null = null; let previous: Hlc | null = null;
   for (let i = 0; i < close.length; i += 1) {
-    const barDay = Math.floor(times[i] / DAY_MS);
-    if (!started || barDay !== day) {
-      if (started) previous = [h, l, c];
-      started = true; day = barDay; h = high[i]; l = low[i]; c = close[i];
-    } else {
-      h = Math.max(h, high[i]); l = Math.min(l, low[i]); c = close[i];
+    if (i === 0 || keys[i] !== key) {
+      if (current) previous = current;
+      key = keys[i]; current = null;
     }
-    const source: [number, number, number] | null = developing ? [h, l, c] : previous;
-    if (!source) continue;
-    const [sh, sl, sc] = source;
-    const pp = (sh + sl + sc) / 3;
-    levels.pp[i] = pp; levels.r1[i] = 2 * pp - sl; levels.s1[i] = 2 * pp - sh;
-    levels.r2[i] = pp + (sh - sl); levels.s2[i] = pp - (sh - sl);
-    levels.r3[i] = sh + 2 * (pp - sl); levels.s3[i] = sl - 2 * (sh - pp);
+    if (counts[i]) current = current ? [Math.max(current[0], high[i]), Math.min(current[1], low[i]), close[i]] : [high[i], low[i], close[i]];
+    const source = developing ? current : previous;
+    if (source) setPivots(levels, i, source);
   }
   return levels;
 }
 
 /**
- * Missed pivots: each session's pivot PP = (H + L + C) / 3 of the session before it. A pivot that no bar's high-low range has
- * touched since its session began, once that session is over, is "missed" and stays a target until price touches it.
- * Only pivots of the last `sessionsBack` sessions count. Returns the nearest missed pivot above and below each close.
+ * Missed pivots: each period's pivot PP = (H + L + C) / 3 of the period before it. A pivot that no bar's high-low range has touched
+ * since its period began, once that period is over, is "missed" and stays a target until price touches it. Only the pivots of the
+ * last `periodsBack` periods count. Returns the nearest missed pivot above and below each close.
  */
-function missedPivots(times: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[], sessionsBack: number): { above: MaybeNumber[]; below: MaybeNumber[] } {
+function missedPivots(keys: readonly number[], counts: readonly boolean[], high: readonly number[], low: readonly number[], close: readonly number[], periodsBack: number): { above: MaybeNumber[]; below: MaybeNumber[] } {
   const above = full(close.length); const below = full(close.length);
-  let open: Array<{ value: number; session: number }> = [];
-  let day = 0; let session = -1;
-  let h = 0; let l = 0; let c = 0;
+  let open: Array<{ value: number; period: number }> = [];
+  let key = 0; let period = -1; let current: Hlc | null = null;
   for (let i = 0; i < close.length; i += 1) {
-    const barDay = Math.floor(times[i] / DAY_MS);
-    if (session < 0 || barDay !== day) {
-      if (session >= 0) open.push({ value: (h + l + c) / 3, session: session + 1 });
-      session += 1; day = barDay; h = high[i]; l = low[i]; c = close[i];
-    } else {
-      h = Math.max(h, high[i]); l = Math.min(l, low[i]); c = close[i];
+    if (period < 0 || keys[i] !== key) {
+      if (current) open.push({ value: (current[0] + current[1] + current[2]) / 3, period: period + 1 });
+      period += 1; key = keys[i]; current = null;
     }
-    open = open.filter((level) => level.session >= session - sessionsBack && !(low[i] <= level.value && level.value <= high[i]));
+    if (counts[i]) current = current ? [Math.max(current[0], high[i]), Math.min(current[1], low[i]), close[i]] : [high[i], low[i], close[i]];
+    open = open.filter((level) => level.period >= period - periodsBack && !(low[i] <= level.value && level.value <= high[i]));
     let up: MaybeNumber = null; let down: MaybeNumber = null;
     for (const level of open) {
-      if (level.session >= session) continue;
+      if (level.period >= period) continue;
       if (level.value > close[i] && (up === null || level.value < up)) up = level.value;
       if (level.value < close[i] && (down === null || level.value > down)) down = level.value;
     }
@@ -998,49 +1069,65 @@ function missedPivots(times: readonly number[], high: readonly number[], low: re
 }
 
 /**
- * Relative Volume at Time (cumulative): volume of the bar's UTC session up to and including the bar, divided by the average of the
- * same cumulative volume at the same UTC time of day over the last `sessions` earlier sessions that have a bar starting at that time.
- * No value until that many sessions exist, or when their average is zero.
+ * Relative Volume at Time: the volume since the start of the anchor period (cumulative mode) or the bar's own volume (regular mode),
+ * divided by the average of the same value at the same time since the start of the period over the last `length` earlier periods
+ * that have a bar at that time. No value until that many periods exist, or when their average is zero.
  */
-function relativeVolumeAtTime(times: readonly number[], volume: readonly number[], sessions: number): MaybeNumber[] {
+function relativeVolumeAtTime(keys: readonly number[], since: readonly number[], volume: readonly number[], length: number, cumulative: boolean): MaybeNumber[] {
   const result = full(volume.length);
   const history = new Map<number, number[]>();
-  let day = 0; let cumulative = 0;
+  let key = 0; let running = 0;
   for (let i = 0; i < volume.length; i += 1) {
-    const barDay = Math.floor(times[i] / DAY_MS);
-    if (i === 0 || barDay !== day) { day = barDay; cumulative = 0; }
-    cumulative += volume[i];
-    const timeOfDay = times[i] - barDay * DAY_MS;
-    const past = history.get(timeOfDay) ?? [];
-    if (past.length >= sessions) {
+    if (i === 0 || keys[i] !== key) { key = keys[i]; running = 0; }
+    running += volume[i];
+    const value = cumulative ? running : volume[i];
+    const past = history.get(since[i]) ?? [];
+    if (past.length >= length) {
       let total = 0;
-      for (let k = past.length - sessions; k < past.length; k += 1) total += past[k];
-      const average = total / sessions;
-      if (average !== 0) result[i] = cumulative / average;
+      for (let k = past.length - length; k < past.length; k += 1) total += past[k];
+      const average = total / length;
+      if (average !== 0) result[i] = value / average;
     }
-    past.push(cumulative);
-    history.set(timeOfDay, past);
+    past.push(value);
+    history.set(since[i], past);
   }
   return result;
 }
 
+const PRICE_SOURCES = ['close', 'open', 'high', 'low', 'hl2', 'hlc3', 'ohlc4'] as const;
+type PriceSource = typeof PRICE_SOURCES[number];
+
+function priceSource(source: PriceSource, open: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[]): number[] {
+  return close.map((value, i) => {
+    if (source === 'open') return open[i];
+    if (source === 'high') return high[i];
+    if (source === 'low') return low[i];
+    if (source === 'hl2') return (high[i] + low[i]) / 2;
+    if (source === 'hlc3') return (high[i] + low[i] + value) / 3;
+    if (source === 'ohlc4') return (open[i] + high[i] + low[i] + value) / 4;
+    return value;
+  });
+}
+
 /**
- * 24-hour volume: the sum of the volume of bars that started in the 24 hours up to and including this bar's start
- * (start > this start - 24h). Shown once the loaded bars cover a whole 24 hours: the first bar started at least
- * 24h minus one bar interval (the smallest gap between bar starts, at most 24h) earlier. Bars of a day or longer report their own volume.
+ * 24-hour volume in quote currency: the sum of volume × price (the price source, close by default) over the bars that started in the
+ * 24 hours up to and including this bar's start (start > this start - 24h). Shown once the loaded bars cover a whole 24 hours: the first
+ * bar started at least 24h minus one bar interval (the smallest gap between bar starts) earlier. Bars longer than a day show nothing.
  */
-function rollingDayVolume(times: readonly number[], volume: readonly number[]): MaybeNumber[] {
+function rollingDayVolume(times: readonly number[], volume: readonly number[], price: readonly number[]): MaybeNumber[] {
   const result = full(volume.length);
   let step = Infinity;
   for (let i = 1; i < times.length; i += 1) {
     const gap = times[i] - times[i - 1];
     if (gap > 0 && gap < step) step = gap;
   }
+  if (step > DAY_MS && step !== Infinity) return result;
   const covered = Math.min(step, DAY_MS);
+  const traded = volume.map((value, i) => value * price[i]);
   let left = 0; let running = 0;
   for (let i = 0; i < volume.length; i += 1) {
-    running += volume[i];
-    while (left < i && times[left] <= times[i] - DAY_MS) { running -= volume[left]; left += 1; }
+    running += traded[i];
+    while (left < i && times[left] <= times[i] - DAY_MS) { running -= traded[left]; left += 1; }
     if (times[0] <= times[i] - DAY_MS + covered) result[i] = running;
   }
   return result;
@@ -1083,13 +1170,13 @@ function pearson(x: readonly number[], y: readonly MaybeNumber[], period: number
 
 /**
  * Knoxville Divergence: a bearish signal at a bar whose high exceeds the highest high of the previous `lookback` bars while
- * Momentum(20) = close - close[20] is lower than at that earlier high, with RSI(21) above 70 at some bar from the earlier high to now;
+ * Momentum(m) = close - close[m] is lower than at that earlier high, with RSI(r) above 70 at some bar from the earlier high to now;
  * bullish mirrors it with lows, higher momentum and RSI below 30. The signal plots at the bar's high (bearish) or low (bullish).
  */
-function knoxvilleDivergence(high: readonly number[], low: readonly number[], close: readonly number[], lookback: number): { bearish: MaybeNumber[]; bullish: MaybeNumber[] } {
+function knoxvilleDivergence(high: readonly number[], low: readonly number[], close: readonly number[], lookback: number, momentumLength: number, rsiLength: number): { bearish: MaybeNumber[]; bullish: MaybeNumber[] } {
   const bearish = full(close.length); const bullish = full(close.length);
-  const momentum = close.map((value, i) => i >= 20 ? value - close[i - 20] : null);
-  const strength = rsi(close, 21);
+  const momentum = close.map((value, i) => i >= momentumLength ? value - close[i - momentumLength] : null);
+  const strength = rsi(close, rsiLength);
   const overbought: number[] = []; const oversold: number[] = [];
   strength.forEach((value, i) => {
     overbought.push((i > 0 ? overbought[i - 1] : 0) + (finite(value) && value > 70 ? 1 : 0));
@@ -1115,6 +1202,71 @@ function knoxvilleDivergence(high: readonly number[], low: readonly number[], cl
   return { bearish, bullish };
 }
 
+/** Mean of the last `length` values, only where all of them are finite (the Stochastic's slowing). */
+function completeSma(values: readonly MaybeNumber[], length: number): MaybeNumber[] {
+  return values.map((_, i) => {
+    if (i < length - 1) return null;
+    let total = 0;
+    for (let j = i - length + 1; j <= i; j += 1) {
+      const value = values[j];
+      if (!finite(value)) return null;
+      total += value;
+    }
+    return total / length;
+  });
+}
+
+/**
+ * Reversal: MACD line = EMA(close, fast) - EMA(close, slow); slow %K = SMA(raw Stochastic %K(K period), slowing). Bearish when the MACD
+ * line crosses zero from above (previous > 0, now <= 0) while slow %K is above the upper level; bullish when it crosses from below
+ * (previous < 0, now >= 0) while slow %K is below the lower level.
+ */
+function bookerReversal(high: readonly number[], low: readonly number[], close: readonly number[], kPeriod: number, p: Record<string, ParamValue>): { bullish: MaybeNumber[]; bearish: MaybeNumber[] } {
+  const fast = ema(close, p.fastLength as number); const slow = ema(close, p.slowLength as number);
+  const k = completeSma(stochastic(high, low, close, kPeriod), p.slowing as number);
+  const macd = close.map((_, i) => finite(fast[i]) && finite(slow[i]) ? fast[i]! - slow[i]! : null);
+  const bullish = full(close.length); const bearish = full(close.length);
+  for (let i = 1; i < close.length; i += 1) {
+    const now = macd[i]; const before = macd[i - 1]; const stoch = k[i];
+    if (now === null || before === null || !finite(stoch)) continue;
+    if (before > 0 && now <= 0 && stoch > (p.upper as number)) bearish[i] = high[i];
+    if (before < 0 && now >= 0 && stoch < (p.lower as number)) bullish[i] = low[i];
+  }
+  return { bullish, bearish };
+}
+
+/**
+ * ADX Breakout: while ADX(adx length) is below the level the market is consolidating, and the box is the highest high and lowest low of
+ * the previous `lookback` bars (not counting this one). A close above (below) the box while it is drawn is a breakout up (down).
+ */
+function adxBreakout(high: readonly number[], low: readonly number[], close: readonly number[], lookback: number, adxLength: number, level: number): { upper: MaybeNumber[]; lower: MaybeNumber[]; up: MaybeNumber[]; down: MaybeNumber[] } {
+  const { adx } = dmi(high, low, close, adxLength);
+  const upper = full(close.length); const lower = full(close.length); const up = full(close.length); const down = full(close.length);
+  for (let i = lookback; i < close.length; i += 1) {
+    const strength = adx[i];
+    if (!finite(strength) || !(strength < level)) continue;
+    let top = high[i - lookback]; let bottom = low[i - lookback];
+    for (let j = i - lookback + 1; j < i; j += 1) { top = Math.max(top, high[j]); bottom = Math.min(bottom, low[j]); }
+    upper[i] = top; lower[i] = bottom;
+    if (close[i] > top) up[i] = close[i];
+    if (close[i] < bottom) down[i] = close[i];
+  }
+  return { upper, lower, up, down };
+}
+
+const PIVOT_LINES: ReadonlyArray<[keyof PivotLevels, string, string | undefined]> = [
+  ['pp', 'Pivot', undefined], ['r1', 'R1', '#f23645'], ['r2', 'R2', '#f23645'], ['r3', 'R3', '#f23645'], ['s1', 'S1', '#20c997'], ['s2', 'S2', '#20c997'], ['s3', 'S3', '#20c997'],
+];
+const GHOST_LINES: ReadonlyArray<[keyof PivotLevels, string, string | undefined]> = [['pp', 'Ghost Pivot', undefined], ['r1', 'Ghost R1', '#f23645'], ['s1', 'Ghost S1', '#20c997']];
+
+function levelLine(id: string, suffix: string, title: string, values: readonly MaybeNumber[], bars: readonly MarketBar[], color?: string): TradingViewBuiltInOutput {
+  return { ...fixedLine(id, suffix, title, values, bars, color), render: 'levels' };
+}
+
+function markerLine(id: string, suffix: string, title: string, values: readonly MaybeNumber[], bars: readonly MarketBar[], color: string, marker: 'arrowUp' | 'arrowDown' | 'circle'): TradingViewBuiltInOutput {
+  return { ...fixedLine(id, suffix, title, values, bars, color), render: 'markers', marker };
+}
+
 /** TVP-6.1 indicators, built from public descriptions of the TradingView indicators; the helpers above state each definition. */
 function quickWinOutputs(
   name: string,
@@ -1124,56 +1276,60 @@ function quickWinOutputs(
   series: TradingViewBuiltInSeries,
   bars: readonly MarketBar[],
 ): TradingViewBuiltInOutput[] | null {
-  const high = nums(bars, 'high'); const low = nums(bars, 'low'); const close = nums(bars, 'close'); const volume = nums(bars, 'volume');
-  if (name === '24-hour Volume') return [output(id, 'volume-24h', '24h Volume', 1, 'histogram', rollingDayVolume(startTimes(bars), volume), bars)];
+  if (!BUILTIN_INPUTS[name] || !QUICK_WINS.has(name)) return null;
+  const open = nums(bars, 'open'); const high = nums(bars, 'high'); const low = nums(bars, 'low'); const close = nums(bars, 'close'); const volume = nums(bars, 'volume');
+  const p = builtInParams(name, instance);
+  const session = instance.session ?? UTC_SESSION;
+  const clock = () => sessionClock(bars, startTimes(bars), session);
+  if (name === '24-hour Volume') {
+    const price = priceSource(p.source as PriceSource, open, high, low, close);
+    return [output(id, 'volume-24h', '24h Volume', 1, 'histogram', rollingDayVolume(startTimes(bars), volume, price), bars)];
+  }
   if (name === 'Correlation Coefficient (CC)') {
     // The second series counts only while the instance names its symbol, like the server registry.
     const compareBars = instance.compareSymbol ? series.compareBars : undefined;
     const compare = compareBars?.length ? alignedCompareCloses(startTimes(bars), compareBars) : full(close.length);
     return [output(id, 'cc', `CC ${period}`, 1, 'line', pearson(close, compare, period), bars)];
   }
-  if (name === 'Relative Volume at Time') return [output(id, 'rvol-at-time', `RVol at Time ${period}`, 1, 'histogram', relativeVolumeAtTime(startTimes(bars), volume, period), bars)];
+  if (name === 'Relative Volume at Time') {
+    const periods = sessionPeriods(clock(), p.anchor as 'D' | 'W' | 'M', session);
+    return [output(id, 'rvol-at-time', `RVol at Time ${period}`, 1, 'histogram', relativeVolumeAtTime(periods.key, periods.since, volume, period, p.mode === 'cumulative'), bars)];
+  }
   if (name === 'Rob Booker - ADX Breakout') {
-    // The N-bar high-low box of the latest bar whose ADX(N) is below 18 (a consolidation), held until the next such bar, so breakouts show against it.
-    const { adx } = dmi(high, low, close, period); const hh = highest(high, period); const ll = lowest(low, period);
-    const upper = full(close.length); const lower = full(close.length); let top: MaybeNumber = null; let bottom: MaybeNumber = null;
-    for (let i = 0; i < close.length; i += 1) {
-      const strength = adx[i];
-      if (finite(strength) && strength < 18 && finite(hh[i]) && finite(ll[i])) { top = hh[i]; bottom = ll[i]; }
-      upper[i] = top; lower[i] = bottom;
-    }
-    return [fixedLine(id, 'upper', 'Breakout Upper', upper, bars, '#20c997'), fixedLine(id, 'lower', 'Breakout Lower', lower, bars, '#f23645')];
+    const box = adxBreakout(high, low, close, period, p.adxLength as number, p.level as number);
+    return [
+      levelLine(id, 'upper', 'Box Upper', box.upper, bars, '#20c997'), levelLine(id, 'lower', 'Box Lower', box.lower, bars, '#f23645'),
+      markerLine(id, 'breakout-up', 'Breakout Up', box.up, bars, '#20c997', 'arrowUp'), markerLine(id, 'breakout-down', 'Breakout Down', box.down, bars, '#f23645', 'arrowDown'),
+    ];
   }
   if (name === 'Rob Booker - Knoxville Divergence') {
-    const values = knoxvilleDivergence(high, low, close, period);
-    return [fixedLine(id, 'bearish', 'Bearish Divergence', values.bearish, bars, '#f23645'), fixedLine(id, 'bullish', 'Bullish Divergence', values.bullish, bars, '#20c997')];
+    const values = knoxvilleDivergence(high, low, close, period, p.momentumLength as number, p.rsiLength as number);
+    return [markerLine(id, 'bearish', 'Bearish Divergence', values.bearish, bars, '#f23645', 'arrowDown'), markerLine(id, 'bullish', 'Bullish Divergence', values.bullish, bars, '#20c997', 'arrowUp')];
   }
   if (name === 'Rob Booker Intraday Pivot Points' || name === 'Rob Booker Ziv Ghost Pivots') {
     const ghost = name === 'Rob Booker Ziv Ghost Pivots';
-    const levels = sessionPivots(startTimes(bars), high, low, close, ghost);
-    const lines: Array<[keyof PivotLevels, string, string | undefined]> = ghost
-      ? [['pp', 'Ghost Pivot', undefined], ['r1', 'Ghost R1', '#f23645'], ['s1', 'Ghost S1', '#20c997']]
-      : [['pp', 'Pivot', undefined], ['r1', 'R1', '#f23645'], ['r2', 'R2', '#f23645'], ['r3', 'R3', '#f23645'], ['s1', 'S1', '#20c997'], ['s2', 'S2', '#20c997'], ['s3', 'S3', '#20c997']];
-    return lines.map(([key, title, color]) => fixedLine(id, key, title, levels[key], bars, color));
+    const pivotPeriod: SessionPeriod = ghost ? ghostPeriod(p.pivotPeriod as string) : period;
+    const sessionClockValues = clock();
+    const { key } = sessionPeriods(sessionClockValues, pivotPeriod, session);
+    const levels = periodPivots(key, sessionClockValues.counts, high, low, close, ghost);
+    return (ghost ? GHOST_LINES : PIVOT_LINES).map(([level, title, color]) => levelLine(id, level, title, levels[level], bars, color));
   }
   if (name === 'Rob Booker Missed Pivot Points') {
-    const levels = missedPivots(startTimes(bars), high, low, close, period);
-    return [fixedLine(id, 'missed-above', 'Missed Pivot Above', levels.above, bars, '#f23645'), fixedLine(id, 'missed-below', 'Missed Pivot Below', levels.below, bars, '#20c997')];
+    const sessionClockValues = clock();
+    const { key } = sessionPeriods(sessionClockValues, p.pivotPeriod as 'D' | 'W' | 'M', session);
+    const levels = missedPivots(key, sessionClockValues.counts, high, low, close, period);
+    return [levelLine(id, 'missed-above', 'Missed Pivot Above', levels.above, bars, '#f23645'), levelLine(id, 'missed-below', 'Missed Pivot Below', levels.below, bars, '#20c997')];
   }
   if (name === 'Rob Booker Reversal') {
-    // MACD(12, 26) line turning up (down) - rising after a bar that did not rise - while the raw Stochastic %K(N) is below 30 (above 70).
-    const fast = ema(close, 12); const slow = ema(close, 26); const k = stochastic(high, low, close, period);
-    const macd = close.map((_, i) => finite(fast[i]) && finite(slow[i]) ? fast[i]! - slow[i]! : null);
-    const bullish = full(close.length); const bearish = full(close.length);
-    for (let i = 2; i < close.length; i += 1) {
-      const now = macd[i]; const before = macd[i - 1]; const earlier = macd[i - 2]; const stoch = k[i];
-      if (now === null || before === null || earlier === null || !finite(stoch)) continue;
-      if (now > before && before <= earlier && stoch < 30) bullish[i] = low[i];
-      if (now < before && before >= earlier && stoch > 70) bearish[i] = high[i];
-    }
-    return [fixedLine(id, 'bullish', 'Bullish Reversal', bullish, bars, '#20c997'), fixedLine(id, 'bearish', 'Bearish Reversal', bearish, bars, '#f23645')];
+    const values = bookerReversal(high, low, close, period, p);
+    return [markerLine(id, 'bullish', 'Bullish Reversal', values.bullish, bars, '#20c997', 'arrowUp'), markerLine(id, 'bearish', 'Bearish Reversal', values.bearish, bars, '#f23645', 'arrowDown')];
   }
   return null;
+}
+
+/** Ziv Ghost Pivots periods: 4 and 8 hours, a week, a month. */
+function ghostPeriod(value: string): SessionPeriod {
+  return value === '240' ? 4 : value === '480' ? 8 : value === 'M' ? 'M' : 'W';
 }
 
 export function calculateTradingViewBuiltInOutputs(
@@ -1369,12 +1525,12 @@ export function calculateTradingViewBuiltInOutputs(
   if (name === 'Pivot Points High Low') {
     const pivots = findPatternPivots(bars, Math.max(2, Math.min(8, Math.round(period / 3)))); const highs = full(close.length); const lows = full(close.length); let h: number | null = null; let l: number | null = null; const byIndex = new Map(pivots.map((pivot) => [pivot.index, pivot]));
     close.forEach((_, i) => { const pivot = byIndex.get(i); if (pivot?.type === 'high') h = pivot.price; if (pivot?.type === 'low') l = pivot.price; highs[i] = h; lows[i] = l; });
-    return [fixedLine(id, 'pivot-high', 'Pivot High', highs, bars, '#f23645'), fixedLine(id, 'pivot-low', 'Pivot Low', lows, bars, '#20c997')];
+    return [levelLine(id, 'pivot-high', 'Pivot High', highs, bars, '#f23645'), levelLine(id, 'pivot-low', 'Pivot Low', lows, bars, '#20c997')];
   }
   if (name === 'Pivot Points Standard') {
     const pp = full(close.length); const r1 = full(close.length); const s1 = full(close.length);
     for (let i = 1; i < close.length; i += 1) { const pivot = (high[i - 1] + low[i - 1] + close[i - 1]) / 3; pp[i] = pivot; r1[i] = 2 * pivot - low[i - 1]; s1[i] = 2 * pivot - high[i - 1]; }
-    return [fixedLine(id, 'pp', 'Pivot', pp, bars), fixedLine(id, 'r1', 'R1', r1, bars, '#f23645'), fixedLine(id, 's1', 'S1', s1, bars, '#20c997')];
+    return [levelLine(id, 'pp', 'Pivot', pp, bars), levelLine(id, 'r1', 'R1', r1, bars, '#f23645'), levelLine(id, 's1', 'S1', s1, bars, '#20c997')];
   }
   if (name === 'Price Momentum Oscillator (PMO)') {
     const oneRoc = roc(close, 1).map((v) => finite(v) ? v * 10 : 0); const smooth1 = ema(oneRoc, 35).map((v) => finite(v) ? v : 0); const pmo = ema(smooth1, 20); const signal = ema(pmo.map((v) => finite(v) ? v : 0), 10);
@@ -1403,7 +1559,7 @@ export function calculateTradingViewBuiltInOutputs(
   if (name === 'Stochastic Momentum Index (SMI)') { const smi = stochasticMomentum(high, low, close, period); const signal = ema(smi.map((v) => finite(v) ? v : 0), 3); return [output(id, 'smi', 'SMI', 1, 'line', smi, bars), output(id, 'signal', 'Signal', 1, 'line', signal, bars)]; }
   if (name === 'Supertrend') { const values = supertrend(high, low, close, period); return [fixedLine(id, 'supertrend', 'Supertrend', values.line, bars)]; }
   if (name === 'Technical Ratings') return [output(id, 'rating', 'Technical Rating', 1, 'histogram', technicalRating(high, low, close, volume), bars)];
-  if (name === 'Time Weighted Average Price') return [fixedLine(id, 'twap', 'TWAP', sessionTwap(bars, typical), bars)];
+  if (name === 'Time Weighted Average Price') return [fixedLine(id, 'twap', 'TWAP', sessionTwap(bars, typical, instance.session ?? UTC_SESSION), bars)];
   if (name === 'Trend Strength Index') return [output(id, 'trend-strength', `Trend Strength ${period}`, 1, 'line', correlationWithIndex(close, period), bars)];
   if (name === 'Triple EMA') return [fixedLine(id, 'tema', `TEMA ${period}`, tripleEma(close, period), bars)];
   if (name === 'TRIX') { const e1 = ema(close, period).map((v, i) => finite(v) ? v : close[i]); const e2 = ema(e1, period).map((v, i) => finite(v) ? v : e1[i]); const e3 = ema(e2, period).map((v, i) => finite(v) ? v : e2[i]); return [output(id, 'trix', `TRIX ${period}`, 1, 'line', e3.map((value, i) => i === 0 || e3[i - 1] === 0 ? null : (value / e3[i - 1] - 1) * 100), bars)]; }
@@ -1423,7 +1579,7 @@ export function calculateTradingViewBuiltInOutputs(
   if (name === 'Williams Fractal') {
     const radius = Math.max(2, Math.min(8, period)); const up = full(close.length); const down = full(close.length);
     for (let i = radius; i < close.length - radius; i += 1) { const hs = high.slice(i - radius, i + radius + 1); const ls = low.slice(i - radius, i + radius + 1); if (high[i] === Math.max(...hs)) up[i] = high[i]; if (low[i] === Math.min(...ls)) down[i] = low[i]; }
-    return [fixedLine(id, 'up-fractal', 'Up Fractal', up, bars, '#f23645'), fixedLine(id, 'down-fractal', 'Down Fractal', down, bars, '#20c997')];
+    return [markerLine(id, 'up-fractal', 'Up Fractal', up, bars, '#f23645', 'arrowDown'), markerLine(id, 'down-fractal', 'Down Fractal', down, bars, '#20c997', 'arrowUp')];
   }
   if (name === 'Woodies CCI') { const fast = cci(high, low, close, period); const slow = cci(high, low, close, 6); return [output(id, 'trend-cci', 'Trend CCI', 1, 'line', fast, bars), output(id, 'entry-cci', 'Entry CCI', 1, 'line', slow, bars)]; }
   if (name === 'Zig Zag') {
@@ -1457,7 +1613,7 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Pivot Points High Low': [['pivot-high', 'Pivot High'], ['pivot-low', 'Pivot Low']],
     'Pivot Points Standard': [['pp', 'Pivot'], ['r1', 'R1'], ['s1', 'S1']],
     'Relative Vigor Index': [['rvi', 'RVI'], ['signal', 'Signal']],
-    'Rob Booker - ADX Breakout': [['upper', 'Breakout Upper'], ['lower', 'Breakout Lower']],
+    'Rob Booker - ADX Breakout': [['upper', 'Box Upper'], ['lower', 'Box Lower'], ['breakout-up', 'Breakout Up'], ['breakout-down', 'Breakout Down']],
     'Rob Booker - Knoxville Divergence': [['bearish', 'Bearish Divergence'], ['bullish', 'Bullish Divergence']],
     'Rob Booker Intraday Pivot Points': [['pp', 'Pivot'], ['r1', 'R1'], ['r2', 'R2'], ['r3', 'R3'], ['s1', 'S1'], ['s2', 'S2'], ['s3', 'S3']],
     'Rob Booker Missed Pivot Points': [['missed-above', 'Missed Pivot Above'], ['missed-below', 'Missed Pivot Below']],

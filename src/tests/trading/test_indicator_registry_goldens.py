@@ -19,7 +19,9 @@ from app.apps.trading.indicators.registry import (
     FORMULA_VERSION,
     BarSeries,
     IndicatorInputs,
+    TradingSession,
     compute_indicator,
+    load_compare_bars,
     server_indicator,
     server_indicator_ids,
 )
@@ -50,6 +52,19 @@ def _dataset(name: str) -> BarSeries:
         low=tuple(float(bar["low"]) for bar in bars),
         close=tuple(float(bar["close"]) for bar in bars),
         volume=tuple(float(bar["volume"]) for bar in bars),
+        # MarketBar's default label, so a dataset converts like MarketBar rows do.
+        sessions=tuple(bar.get("session", "regular") for bar in bars),
+    )
+
+
+def _session(raw: dict[str, Any] | None) -> TradingSession | None:
+    if raw is None:
+        return None
+    return TradingSession(
+        timezone=raw["timezone"],
+        start_minute=raw["startMinute"],
+        regular_start_minute=raw.get("regularStartMinute"),
+        regular_only=raw.get("regularOnly", False),
     )
 
 
@@ -66,6 +81,8 @@ def _inputs(raw: dict[str, Any]) -> IndicatorInputs:
         standard_deviations=raw.get("standardDeviations"),
         anchor_time=raw.get("anchorTime"),
         compare_symbol=raw.get("compareSymbol"),
+        params=raw.get("params", {}),
+        session=_session(raw.get("session")),
     )
 
 
@@ -136,6 +153,55 @@ def test_compare_series_indicators_align_the_second_series_by_time() -> None:
     assert compute_indicator(indicator.id, bars, IndicatorInputs(period=20), bars)[0].points == ()
     assert indicator.compute(bars, with_symbol)[0].points == ()
     assert compute_indicator("sma", bars, IndicatorInputs(period=20), bars) == compute_indicator("sma", bars, IndicatorInputs(period=20))
+
+
+def test_load_compare_bars_covers_the_chart_time_range() -> None:
+    bars = _dataset("random-walk-300")
+    compare = json.loads((GOLDEN_ROOT / "datasets" / "compare-walk-291.json").read_text(encoding="utf-8"))["bars"]
+    rows = [MarketBar(instrument_id="golden:compare", interval="1h", provider="golden", **bar) for bar in compare]
+    requests: list[tuple[str, int]] = []
+
+    def fetch(instrument_id: str, limit: int) -> list[MarketBar]:
+        requests.append((instrument_id, limit))
+        return rows[-limit:]
+
+    loaded = load_compare_bars(fetch, "golden:compare", bars)
+    # 299 hourly gaps across the chart, so 300 bars: the chart's time range, not its bar count or a fixed size.
+    assert requests == [("golden:compare", 300)]
+    assert loaded is not None and loaded.close == tuple(float(bar["close"]) for bar in compare[-300:])
+    assert load_compare_bars(fetch, "golden:compare", bars, max_bars=50) is not None and requests[-1] == ("golden:compare", 50)
+    assert load_compare_bars(fetch, None, bars) is None
+    assert load_compare_bars(fetch, "golden:compare", _dataset("empty-0")) is None
+    inputs = IndicatorInputs(period=20, compare_symbol="golden:compare")
+    assert compute_indicator("tv-correlation-coefficient-cc", bars, inputs, loaded)[0].points
+
+
+def test_sessions_follow_the_exchange_calendar_across_daylight_saving() -> None:
+    from app.apps.trading.indicators.registry import session_for_instrument
+    from app.apps.trading.indicators.server_indicators._sessions import session_clock, session_periods
+
+    equity = session_for_instrument("equity", "XNYS", "America/New_York", "equity")
+    assert equity == TradingSession("America/New_York", 0, 570, True)
+    assert session_for_instrument("crypto", "24x7") == TradingSession()
+    # 13:30 UTC is 08:30 EST before 2026-03-08 and 09:30 EDT after; the 22:00 UTC futures bar belongs to the next day.
+    starts = ["2026-03-06T14:30:00+00:00", "2026-03-09T13:30:00+00:00", "2026-03-09T22:00:00+00:00"]
+    times = tuple(datetime.fromisoformat(start) for start in starts)
+    bars = BarSeries(times, (1.0,) * 3, (1.0,) * 3, (1.0,) * 3, (1.0,) * 3, (1.0,) * 3, ("regular", "regular", "extended_post"))
+    clock = session_clock(bars, equity)
+    assert [offset // 60_000 for offset in clock.offset] == [570, 570, 1080]
+    assert clock.counts == [True, True, False]
+    assert session_periods(clock, 1, equity)[1] == [0, 0, 1_800_000]
+    futures = session_clock(bars, session_for_instrument("commodity"))
+    assert futures.day[2] == futures.day[1] + 1
+    weeks = session_periods(clock, "W", equity)[0]
+    assert weeks[0] != weeks[1]
+
+
+def test_params_accept_a_mapping_and_stay_hashable() -> None:
+    inputs = IndicatorInputs(period=14, params={"upper": 50, "lower": 50})
+    assert inputs.params == (("lower", 50), ("upper", 50))
+    assert inputs.param("upper") == 50 and inputs.param("missing") is None
+    assert hash(inputs) == hash(IndicatorInputs(period=14, params=(("upper", 50), ("lower", 50))))
 
 
 def test_market_bars_convert_like_the_golden_datasets() -> None:

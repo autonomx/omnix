@@ -8,16 +8,23 @@ import {
   TRADINGVIEW_BUILTIN_DEFINITIONS,
   calculateTradingViewBuiltInOutputs,
   isTradingViewBuiltInId,
+  tradingViewBuiltInInputs,
   tradingViewBuiltInUsesCompareSeries,
+  tradingViewBuiltInUsesSessions,
 } from '../tradingViewBuiltIns';
+import type { TradingSessionSpec } from '../tradingSessions';
 import {
   ALTERNATIVE_PERIOD_DATASET,
   COMPARE_DATASET,
   COMPARE_SYMBOL,
+  EQUITY_SESSION,
+  FUTURES_SESSION,
   INPUT_VARIANT_DATASET,
+  SESSION_DATASET,
   asMarketBars,
   generateCompareDatasets,
   generateGoldenDatasets,
+  generateSessionDatasets,
   type GoldenDataset,
 } from './goldenDatasets';
 
@@ -28,6 +35,8 @@ const UPDATE = process.env.UPDATE_INDICATOR_GOLDENS === '1';
 const DATASET_NAMES = generateGoldenDatasets().map((dataset) => dataset.name);
 // Second series for compare-symbol indicators only, so adding them leaves every other golden file unchanged.
 const COMPARE_DATASET_NAMES = generateCompareDatasets().map((dataset) => dataset.name);
+// Datasets for session-aware and parameterised built-ins only (TVP-6.1), for the same reason.
+const SESSION_DATASET_NAMES = generateSessionDatasets().map((dataset) => dataset.name);
 
 type GoldenInputs = {
   period: number;
@@ -37,6 +46,8 @@ type GoldenInputs = {
   standardDeviations?: number;
   anchorTime?: string;
   compareSymbol?: string;
+  params?: Record<string, number | string>;
+  session?: TradingSessionSpec;
 };
 type GoldenOutput = { key: string; points: Array<[number, number | null]> };
 type GoldenCase = { case_id: string; dataset: string; compare_dataset?: string; inputs: GoldenInputs; error?: true; outputs: GoldenOutput[] };
@@ -55,7 +66,53 @@ function loadDatasets(names: readonly string[], generate: () => GoldenDataset[])
 
 const DATASETS = loadDatasets(DATASET_NAMES, generateGoldenDatasets);
 const COMPARE_DATASETS = loadDatasets(COMPARE_DATASET_NAMES, generateCompareDatasets);
-const datasetByName = new Map([...DATASETS, ...COMPARE_DATASETS].map((dataset) => [dataset.name, dataset]));
+const SESSION_DATASETS = loadDatasets(SESSION_DATASET_NAMES, generateSessionDatasets);
+const datasetByName = new Map([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS].map((dataset) => [dataset.name, dataset]));
+
+// Extra inputs worth a case of their own: Intraday Pivot Points' period is its pivot period in hours; looser Reversal levels and
+// shorter weekly/monthly lengths give those branches points on the five-week session dataset.
+const EXTRA_CASES: Record<string, Array<[string, Partial<GoldenInputs>, string?]>> = {
+  'tv-rob-booker-intraday-pivot-points': [['period-4', { period: 4 }], ['period-8', { period: 8 }]],
+  'tv-rob-booker-reversal': [['levels-50', { params: { upper: 50, lower: 50 } }], ['levels-50', { params: { upper: 50, lower: 50 } }, SESSION_DATASET]],
+  'tv-relative-volume-at-time': [['anchor-W-length-2', { period: 2, params: { anchor: 'W' } }], ['anchor-M-length-1', { period: 1, params: { anchor: 'M', mode: 'regular' } }]],
+  'tv-rob-booker-missed-pivot-points': [['pivotPeriod-W-back-2', { period: 2, params: { pivotPeriod: 'W' } }]],
+};
+
+/** Cases for declared params and sessions (TVP-6.1): each non-default option, changed numbers, invalid values, and session calendars. */
+function extraCases(id: string, defaults: GoldenInputs, withCompare: (inputs: GoldenInputs) => GoldenInputs): GoldenCase[] {
+  const cases: GoldenCase[] = [];
+  const sessions = tradingViewBuiltInUsesSessions(id);
+  const dataset = datasetByName.get(sessions ? SESSION_DATASET : ALTERNATIVE_PERIOD_DATASET)!;
+  const session = sessions ? { session: EQUITY_SESSION } : {};
+  const params = tradingViewBuiltInInputs(id)?.params ?? [];
+  for (const spec of params) {
+    if (spec.kind !== 'select') continue;
+    for (const option of spec.options) {
+      if (option.value === spec.default) continue;
+      cases.push(goldenCase(id, `${dataset.name}/${spec.key}-${option.value}`, withCompare({ ...defaults, ...session, params: { [spec.key]: option.value } }), dataset));
+    }
+  }
+  const numbers = params.filter((spec) => spec.kind === 'number');
+  if (numbers.length) {
+    const changed = Object.fromEntries(numbers.map((spec) => [spec.key, Math.max(spec.min, Math.floor(spec.default / 2) + 1)]));
+    cases.push(goldenCase(id, `${dataset.name}/changed-numbers`, withCompare({ ...defaults, ...session, params: changed }), dataset));
+  }
+  if (params.length) {
+    const invalid = Object.fromEntries(params.map((spec) => [spec.key, spec.kind === 'number' ? 'bogus' : 42]));
+    cases.push(goldenCase(id, `${dataset.name}/invalid-params`, withCompare({ ...defaults, ...session, params: invalid }), dataset));
+  }
+  for (const [label, extra, datasetName] of EXTRA_CASES[id] ?? []) {
+    const target = datasetName ? datasetByName.get(datasetName)! : dataset;
+    cases.push(goldenCase(id, `${target.name}/${label}`, withCompare({ ...defaults, ...session, ...extra }), target));
+  }
+  if (sessions) {
+    cases.push(goldenCase(id, `${SESSION_DATASET}/equity-session`, withCompare({ ...defaults, session: EQUITY_SESSION }), dataset));
+    cases.push(goldenCase(id, `${SESSION_DATASET}/utc`, withCompare(defaults), dataset));
+    const alternative = datasetByName.get(ALTERNATIVE_PERIOD_DATASET)!;
+    cases.push(goldenCase(id, `${ALTERNATIVE_PERIOD_DATASET}/futures-session`, withCompare({ ...defaults, session: FUTURES_SESSION }), alternative));
+  }
+  return cases;
+}
 
 function alternativePeriods(id: string, defaultPeriod: number): GoldenInputs[] {
   if (id === 'macd') return [{ period: defaultPeriod, fastPeriod: 8, slowPeriod: 21, signalPeriod: 5 }];
@@ -130,6 +187,7 @@ function indicatorFile(id: string, name: string, defaultPeriod: number): string 
     cases.push(goldenCase(id, `${ALTERNATIVE_PERIOD_DATASET}/without-compare-series`, defaultInputs(id, defaultPeriod), alternativeDataset));
     cases.push(goldenCase(id, `${COMPARE_DATASET}/compared-with-itself`, defaults, datasetByName.get(COMPARE_DATASET)!));
   }
+  cases.push(...extraCases(id, defaultInputs(id, defaultPeriod), withCompare));
   const header = JSON.stringify({ formula_version: CORE_INDICATOR_FORMULA_VERSION, id, name, default_period: defaultPeriod });
   return `${header.slice(0, -1)},"cases":[\n${cases.map((item) => JSON.stringify(item)).join(',\n')}\n]}\n`;
 }
@@ -158,11 +216,12 @@ describe('indicator goldens shared with the server registry', () => {
       formula_version: CORE_INDICATOR_FORMULA_VERSION,
       datasets: DATASET_NAMES,
       compare_datasets: COMPARE_DATASET_NAMES,
+      session_datasets: SESSION_DATASET_NAMES,
       indicators: AVAILABLE.map(({ id, name, defaultPeriod }) => ({ id, name, default_period: defaultPeriod })),
     }, null, 1)}\n`);
   });
 
-  it.each([...DATASETS, ...COMPARE_DATASETS].map((dataset) => [dataset.name, dataset] as const))('dataset %s is stored', (name, dataset) => {
+  it.each([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS].map((dataset) => [dataset.name, dataset] as const))('dataset %s is stored', (name, dataset) => {
     expectFile(datasetPath(name), datasetFile(dataset));
   });
 

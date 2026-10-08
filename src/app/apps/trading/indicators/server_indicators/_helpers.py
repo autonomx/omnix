@@ -15,6 +15,7 @@ import math
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Literal, TypeGuard
 
 from ..registry import (
@@ -25,6 +26,7 @@ from ..registry import (
     register,
     register_with_compare_series,
 )
+from ._sessions import epoch_ms
 
 MaybeNumber = float | None
 Values = Sequence[float]
@@ -459,6 +461,43 @@ class Chart:
 
     def out(self, suffix: str, values: Sequence[MaybeNumber]) -> IndicatorOutputSeries:
         return output(self.id, suffix, values)
+
+    @cached_property
+    def compare_close(self) -> list[MaybeNumber]:
+        """The second series' close at each bar: the close of its latest bar starting at or before the bar's start, so gaps
+        carry the last close forward (the browser's ``alignedCompareCloses``). None everywhere without a second series."""
+        if self.compare is None or len(self.compare) == 0:
+            return full(len(self.bars))
+        # A stable sort by start time, like the browser's Array.prototype.sort.
+        series = sorted(
+            zip((epoch_ms(start) for start in self.compare.start_times), self.compare.close, strict=True),
+            key=lambda item: item[0],
+        )
+        j = -1
+        result: list[MaybeNumber] = []
+        for start in self.bars.start_times:
+            time = epoch_ms(start)
+            while j + 1 < len(series) and series[j + 1][0] <= time:
+                j += 1
+            result.append(series[j][1] if j >= 0 else None)
+        return result
+
+    def number_param(self, key: str, default: int | float, minimum: float, integer: bool = False) -> float:
+        """A ``params`` number like the browser's ``numberParam``: finite, at least ``minimum``, whole when ``integer``."""
+        value = self.inputs.param(key)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and value >= minimum
+            and (not integer or float(value).is_integer())
+        ):
+            return int(value) if integer else value
+        return default
+
+    def select_param(self, key: str, default: str, options: Sequence[str]) -> str:
+        value = self.inputs.param(key)
+        return value if isinstance(value, str) and value in options else default
 
 
 Builder = Callable[[Chart], Outputs]

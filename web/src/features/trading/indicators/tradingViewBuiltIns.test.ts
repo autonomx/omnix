@@ -117,20 +117,51 @@ describe('TradingView built-in indicator catalog', () => {
     expect(calculateTradingViewBuiltInOutputs(bars, { id, period: 20, compareSymbol: 'equity:NASDAQ:QQQ' })[0].points).toEqual([]);
   });
 
-  it('sums the last 24 hours of volume once a whole day is loaded', () => {
+  it('sums the last 24 hours of volume in quote currency once a whole day is loaded', () => {
     const bars = hourlyBars(30, () => 100, (index) => index + 1);
     const [volume] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-24-hour-volume', period: 1 });
-    expect(volume.points[0]).toEqual({ time: bars[23].start_time, value: 300 });
-    expect(volume.points.at(-1)).toEqual({ time: bars[29].start_time, value: (7 + 30) * 24 / 2 });
+    expect(volume.points[0]).toEqual({ time: bars[23].start_time, value: 300 * 100 });
+    expect(volume.points.at(-1)).toEqual({ time: bars[29].start_time, value: (7 + 30) * 24 / 2 * 100 });
+    // The price source converts base volume: high is close + 1.
+    const [high] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-24-hour-volume', period: 1, params: { source: 'high' } });
+    expect(high.points[0].value).toBe(300 * 101);
+    // Bars longer than a day have no 24-hour volume until intrabar data exists.
+    const weekly = bars.map((bar, index) => ({ ...bar, start_time: new Date(Date.UTC(2026, 0, 5 + 7 * index)).toISOString() }));
+    expect(calculateTradingViewBuiltInOutputs(weekly, { id: 'tv-24-hour-volume', period: 1 })[0].points).toEqual([]);
   });
 
-  it('plots the previous UTC session pivots and the developing ghost pivots', () => {
+  it('plots pivots of the previous pivot period in hours, and the developing ghost pivots', () => {
     const bars = hourlyBars(48, (index) => 100 + index);
-    const [pivot] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-intraday-pivot-points', period: 1 });
-    // Bars start at 00:00 UTC; the second session's pivots come from the first: high 124, low 99, close 123.
-    expect(pivot.points[0]).toEqual({ time: bars[24].start_time, value: (124 + 99 + 123) / 3 });
-    const [ghost] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-ziv-ghost-pivots', period: 1 });
+    const [hourly] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-intraday-pivot-points', period: 1 });
+    // Each hourly bar gets the pivots of the bar before it: high 101, low 99, close 100.
+    expect(hourly.points[0]).toEqual({ time: bars[1].start_time, value: (101 + 99 + 100) / 3 });
+    expect(hourly.render).toBe('levels');
+    const [eightHours] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-intraday-pivot-points', period: 8 });
+    // 8-hour periods from 00:00 UTC: the first period's high 108, low 99, close 107.
+    expect(eightHours.points[0]).toEqual({ time: bars[8].start_time, value: (108 + 99 + 107) / 3 });
+    const ghostInputs = { id: 'tv-rob-booker-ziv-ghost-pivots', period: 1, params: { pivotPeriod: '480' } };
+    const [ghost] = calculateTradingViewBuiltInOutputs(bars, ghostInputs);
     expect(ghost.points[1]).toEqual({ time: bars[1].start_time, value: (102 + 99 + 101) / 3 });
+    expect(ghost.points[8]).toEqual({ time: bars[8].start_time, value: (109 + 107 + 108) / 3 });
+  });
+
+  it('signals Reversal when the MACD line crosses zero with slow %K beyond its level', () => {
+    // Falling then rising: the MACD line crosses zero from below while %K is still low.
+    const bars = hourlyBars(120, (index) => (index < 60 ? 200 - index : 140 + (index - 60) * 0.5));
+    const outputs = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-reversal', period: 14, params: { lower: 101 } });
+    const bullish = outputs.find((output) => output.key.endsWith(':bullish'))!;
+    expect(bullish.points).toHaveLength(1);
+    expect(bullish.render).toBe('markers');
+    expect(calculateTradingViewBuiltInOutputs(bars, { id: 'tv-rob-booker-reversal', period: 14 })[0].points).toEqual([]);
+  });
+
+  it('draws the ADX Breakout box from the bars before the current one', () => {
+    const bars = hourlyBars(60, (index) => 100 + (index % 2));
+    const outputs = calculateTradingViewBuiltInOutputs([...bars, ...hourlyBars(61, () => 110).slice(60)], { id: 'tv-rob-booker-adx-breakout', period: 20 });
+    const [upper, , up] = outputs;
+    // A flat market keeps ADX low; the last bar's close (110) is above the box of the 20 bars before it, so it is a breakout.
+    expect(upper.points.at(-1)?.value).toBe(102);
+    expect(up.points.at(-1)).toEqual({ time: new Date(Date.UTC(2026, 0, 5, 60)).toISOString(), value: 110 });
   });
 
   it('compares cumulative volume with the same UTC time in earlier sessions', () => {
@@ -138,6 +169,8 @@ describe('TradingView built-in indicator catalog', () => {
     const [ratio] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-relative-volume-at-time', period: 3 });
     expect(ratio.points).toHaveLength(24);
     expect(ratio.points.every((point) => point.value === 2)).toBe(true);
+    const [regular] = calculateTradingViewBuiltInOutputs(bars, { id: 'tv-relative-volume-at-time', period: 3, params: { mode: 'regular' } });
+    expect(regular.points.every((point) => point.value === 2)).toBe(true);
   });
 
   it('keeps Trend Strength Index in its documented -1 to +1 range', () => {
