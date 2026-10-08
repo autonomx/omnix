@@ -14,6 +14,7 @@ from app.apps.trading.paper import (
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
+    PaperPosition,
     paper_fill_decision,
 )
 from app.apps.trading.replay_api import create_trading_replay_router
@@ -243,3 +244,51 @@ def test_replay_order_endpoint_honours_advance_bar() -> None:
 
     assert Decimal(filled(once)) == Decimal("10")
     assert Decimal(filled(again)) == Decimal("20")
+
+
+OTHER = "equity:NYSE:OTHER"
+
+
+def _with_other_position() -> PaperAccountSnapshot:
+    other = PaperPosition(
+        instrument_id=OTHER,
+        quantity=Decimal("5"),
+        average_cost=Decimal("40"),
+        realized_pnl=Decimal("0"),
+        last_price=Decimal("50"),
+        unrealized_pnl=Decimal("50"),
+    )
+    return _funded_replay_snapshot().model_copy(update={"positions": [other]})
+
+
+def _equity(snapshot: PaperAccountSnapshot) -> Decimal:
+    cash = sum((balance.available + balance.reserved for balance in snapshot.balances), Decimal("0"))
+    return cash + sum(
+        (position.quantity * (position.last_price or position.average_cost) for position in snapshot.positions),
+        Decimal("0"),
+    )
+
+
+def test_replay_bars_mark_only_positions_in_their_own_instrument() -> None:
+    seeded = _with_other_position()
+    placed = place_replay_order(seeded, _market_request("market-1", "20"), _bar("101"))
+    advanced = advance_replay_snapshot(placed.snapshot, _bar("120", start_hour=11))
+
+    other = next(position for position in advanced.positions if position.instrument_id == OTHER)
+    own = next(position for position in advanced.positions if position.instrument_id == "equity:NYSE:TEST")
+    assert other.last_price == Decimal("50")
+    assert other.unrealized_pnl == Decimal("50")
+    assert own.last_price == Decimal("120")
+    # The other instrument still contributes 5 x 50 at its own last mark.
+    cash = sum((balance.available + balance.reserved for balance in advanced.balances), Decimal("0"))
+    assert _equity(advanced) == cash + Decimal("250") + own.quantity * Decimal("120")
+
+
+def test_a_bar_that_cannot_touch_the_account_leaves_it_unchanged() -> None:
+    # The browser queue skips such bars without asking the server; that is only
+    # correct if advancing through them changes nothing, equity included.
+    seeded = _with_other_position()
+    for hour in (10, 11, 12):
+        advanced = advance_replay_snapshot(seeded, _bar("150", high="160", low="90", start_hour=hour))
+        assert advanced == seeded
+        assert _equity(advanced) == _equity(seeded)

@@ -137,6 +137,11 @@ def _replace_order(snapshot: PaperAccountSnapshot, order: PaperOrder) -> PaperAc
 
 
 def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccountSnapshot:
+    """Mark positions in the bar's instrument at its close.
+
+    Positions in other instruments keep their last mark: a bar never prices
+    another instrument.
+    """
     positions = [
         position.model_copy(
             update={
@@ -144,6 +149,8 @@ def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccou
                 "unrealized_pnl": paper_unrealized_pnl(position.quantity, position.average_cost, bar.close),
             }
         )
+        if position.instrument_id == bar.instrument_id
+        else position
         for position in snapshot.positions
     ]
     return snapshot.model_copy(update={"positions": positions})
