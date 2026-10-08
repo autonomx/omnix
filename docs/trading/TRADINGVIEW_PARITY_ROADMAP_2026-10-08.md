@@ -1135,11 +1135,11 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 
 | WP | Status | Branch / commit | Notes |
 |---|---|---|---|
-| TVP-0.2 | In progress | `tradingview-parity` `451eda57b`; `tvp/0.2-builtins-a`, `tvp/0.2-builtins-b` | Scaffold done (lead): goldens for all 100 available indicators, server registry, 9 core indicators bit-exact. In review. Two agents port the 91 built-ins (45 + 46). Switching alerts and scanner to the registry follows |
-| TVP-0.3 | In progress (lead) | `tradingview-parity` | Command and shortcut layer |
+| TVP-0.2 | Mostly done | `451eda57b`, `47b8b9aac`, batches merged in `2f608d201` and `295483749`, `5a785d1bc` | **All 100 available chart indicators have server implementations.** 97 are bit-exact against the browser goldens, and 3 transcendental ones (ALMA, Choppiness, Fisher) are within 1e-15. Scaffold reviewed; review fixes applied: exact comparison, no warm-up skip, validation-only error cases, empty/variant/anchored cases, whole-number float periods, `js_round`/`js_sqrt`. Remaining: helper consolidation (agent, `tvp/0.2-consolidate`), and switching alerts and scanner to the registry (folded into TVP-1.2/1.3) |
+| TVP-0.3 | Done (lead), migration pending | `41d5410a3` | Command catalogue, dispatcher (text fields ignored, most specific scope wins, Alt matched by physical key), key overrides, conflict detection. The drawing undo/redo/delete keys move onto it after TVP-8.1 merges (same file). Finding: `TradingCommandCenter` is a strategy operations panel, not a command palette, so TVP-2.1's Ctrl+K needs a new palette |
 | TVP-5.1–5.3 | In progress (agent) | `tvp/5-watchlists` | Indicator columns (part of 5.2) wait for TVP-0.2 |
 | TVP-7.1 | In progress (agent) | `tvp/7.1-order-types` | Migration 0140 |
-| TVP-8.1 (wave 1 part) | In progress (agent) | `tvp/8.1-replay-clock` | Speed control and shared clock; sub-bar playback waits for TVP-0.6 |
+| TVP-8.1 (wave 1 part) | Fixing review findings (agent) | `tvp/8.1-replay-clock` `6b7ac3f3f` | Speed control and shared clock built. Review: replay trading dropped bars at 10× and above (fix: a sequential advance queue per session), bars streamed during replay not backfilled, per-tick full redraws, session reset on chart switch. Sub-bar playback waits for TVP-0.6 |
 
 ---
 
