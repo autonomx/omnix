@@ -20,7 +20,7 @@ def test_character_personality_prompt_has_no_12000_character_limit(
     # Character ids are global in PostgreSQL; keep reruns independent.
     character_id = f"long-personality-{uuid.uuid4().hex[:8]}"
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
-    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     initial_prompt = "A" * 20_000
     created = client.post(
@@ -46,7 +46,7 @@ def test_character_personality_prompt_has_no_12000_character_limit(
     assert updated.json()["personality_prompt"] == updated_prompt
     assert updated.json()["active_version"] == 2
 
-    reloaded = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    reloaded = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     profile = reloaded.get(f"/api/characters/{character_id}")
     assert profile.status_code == 200
     assert profile.json()["personality_prompt"] == updated_prompt

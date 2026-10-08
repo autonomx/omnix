@@ -99,9 +99,9 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
     monkeypatch.setattr(tts_pcm_websocket, "begin_stream", lambda stream_id, **details: loop_threads.append(threading.get_ident()))
     monkeypatch.setattr(tts_pcm_websocket, "end_stream", lambda stream_id, **details: 0)
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
 
-    with client.websocket_connect("/api/tts/stream/websocket") as websocket:
+    with client.websocket_connect("ws://127.0.0.1/api/tts/stream/websocket") as websocket:
         websocket.send_json(
             {
                 "text": "Hello from the websocket",
