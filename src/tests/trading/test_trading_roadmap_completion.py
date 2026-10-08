@@ -67,6 +67,6 @@ def test_completion_migration_preserves_initial_risk_and_protection_snapshots() 
         "trg_zz_omnix_trading_strategy_trade_metrics",
     ):
         assert token in migration
-    monitor = "\n".join(path.read_text(encoding="utf-8") for path in sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")))
+    monitor = "\n".join(path.read_text(encoding="utf-8") for path in [*sorted(Path("src/app/apps/trading").glob("strategy_monitor*.py")), Path("src/app/apps/trading/strategy_entry_path.py")])
     assert 'trigger = "rsi"' in monitor
     assert "relative_strength_index" in monitor
