@@ -402,6 +402,80 @@
    ]
   },
   {
+   "timeline": "tick_bars_even_gap_count",
+   "description": "Tick bars with gaps 1s, 2s, 3s, 7s: an even number of gaps takes the lower median (2s), not the mean of the middle two.",
+   "bar_times": [
+    "2026-10-07T12:00:00.000Z",
+    "2026-10-07T12:00:01.000Z",
+    "2026-10-07T12:00:03.000Z",
+    "2026-10-07T12:00:06.000Z",
+    "2026-10-07T12:00:13.000Z"
+   ],
+   "step_ms": null,
+   "index_for_time": [
+    {
+     "time": "2026-10-07T12:00:15.000Z",
+     "index": 5.0
+    },
+    {
+     "time": "2026-10-07T12:00:17.000Z",
+     "index": 6.0
+    },
+    {
+     "time": "2026-10-07T11:59:58.000Z",
+     "index": -1.0
+    }
+   ],
+   "time_for_index": [
+    {
+     "index": 5,
+     "time": "2026-10-07T12:00:15.000Z"
+    },
+    {
+     "index": -1,
+     "time": "2026-10-07T11:59:58.000Z"
+    }
+   ]
+  },
+  {
+   "timeline": "rounding_half_up",
+   "description": "time(index) rounds to whole milliseconds as floor(x + 0.5): halves round up, also below zero (not to even).",
+   "bar_times": [
+    "2026-10-07T12:00:00.000Z",
+    "2026-10-07T12:00:00.001Z",
+    "2026-10-07T12:00:00.004Z"
+   ],
+   "step_ms": 3,
+   "index_for_time": [
+    {
+     "time": "2026-10-07T12:00:00.001Z",
+     "index": 1
+    }
+   ],
+   "time_for_index": [
+    {
+     "index": 0.5,
+     "time": "2026-10-07T12:00:00.001Z"
+    },
+    {
+     "index": 1.5,
+     "time": "2026-10-07T12:00:00.003Z"
+    },
+    {
+     "index": 2.5,
+     "time": "2026-10-07T12:00:00.006Z"
+    },
+    {
+     "index": -0.5,
+     "time": "2026-10-07T11:59:59.999Z"
+    },
+    {
+     "index": -1.5,
+     "time": "2026-10-07T11:59:59.996Z"
+    }
+   ]
+  },
+  {
    "timeline": "empty",
    "description": "No bars: no index, no time.",
    "bar_times": [],

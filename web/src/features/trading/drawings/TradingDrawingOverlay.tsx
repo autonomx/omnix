@@ -26,6 +26,7 @@ import { creationPointLocator, drawingPointLocator, locatePoint } from './drawin
 import { storedDrawingRendererMode, type DrawingRendererMode } from './drawingRenderer';
 import { ShapeElement } from './svgShapes';
 import { drawingPropertiesWithDefaults, drawingToolDefinition, isDrawingToolId } from './tools/registry';
+import { guardToolCall } from './tools/guard';
 import { anchorProjector } from './tools/scene';
 import { shapeSignature } from './tools/shapes';
 import {
@@ -67,7 +68,8 @@ export type ChartAlertPlacement = DrawingPoint & {
 };
 
 function newDrawing(toolType: TradingDrawing['toolType'], definition: DrawingToolDefinition, instrumentId: string, points: DrawingPoint[], services: DrawingToolServices): TradingDrawing {
-  const created = definition.onCreate ? definition.onCreate(points, services) : { points };
+  const { onCreate } = definition;
+  const created = onCreate ? guardToolCall(definition.id, 'onCreate', () => onCreate(points, services), { points }) : { points };
   return {
     drawingId: crypto.randomUUID(),
     instrumentId,
@@ -167,12 +169,22 @@ function chartPlacement(
   };
 }
 
-/** What a drawing's tool offers from the context menu: its alert levels and actions. */
-function drawingMenuEntries(drawing: TradingDrawing | undefined, services: DrawingToolServices): Partial<ChartAlertPlacement> {
+/**
+ * What a drawing's tool offers from the context menu: its alert levels and actions. When the chart's bar index
+ * isn't the loaded bars' (brick-type charts), only flat levels are offered: the server evaluates alerts on time
+ * bars, where a sloped line would cross different prices than the one drawn.
+ */
+export function drawingMenuEntries(
+  drawing: TradingDrawing | undefined,
+  services: DrawingToolServices,
+  barIndexMatchesBars = true,
+): Partial<ChartAlertPlacement> {
   if (!drawing) return {};
   const definition = drawingToolDefinition(drawing.toolType);
   const properties = drawingPropertiesWithDefaults(drawing.toolType, drawing.properties);
-  const levels = definition?.alertLevels?.(drawing.points, properties, services) ?? [];
+  const alertLevels = definition?.alertLevels;
+  const levels = (alertLevels ? guardToolCall(drawing.toolType, 'alertLevels', () => alertLevels(drawing.points, properties, services), []) : [])
+    .filter((level) => barIndexMatchesBars || level.anchors[0].price === level.anchors[1].price);
   const legacyLine = levels[0] && (levels[0].extend === 'none' || levels[0].extend === 'both') ? levels[0] : undefined;
   const snapshot = { drawingId: drawing.drawingId, instrumentId: drawing.instrumentId, points: drawing.points, properties, text: drawing.text ?? '' };
   return {
@@ -180,7 +192,10 @@ function drawingMenuEntries(drawing: TradingDrawing | undefined, services: Drawi
     drawingTool: drawing.toolType,
     trendlinePoints: legacyLine?.anchors.map((point) => ({ time: point.time, price: point.price })),
     drawingAlertLevels: levels.length > 0 ? levels : undefined,
-    drawingActions: definition?.contextActions?.map((action) => ({ id: action.id, label: action.label, request: action.request(snapshot, services) })),
+    drawingActions: definition?.contextActions?.flatMap((action) => {
+      const request = guardToolCall(drawing.toolType, `contextActions.${action.id}`, () => action.request(snapshot, services), null);
+      return request ? [{ id: action.id, label: action.label, request }] : [];
+    }),
   };
 }
 
@@ -344,7 +359,7 @@ export function TradingDrawingOverlay({
     const drawingId = target?.dataset.drawingId ?? (canvas ? canvasHost.drawingAt(event.clientX, event.clientY)?.drawingId : undefined);
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
     const { placement, indicatorId } = chartPlacement(adapter, point, event.clientY, 'context-menu');
-    onChartContextMenu?.({ ...placement, ...drawingMenuEntries(drawing, access) }, indicatorId);
+    onChartContextMenu?.({ ...placement, ...drawingMenuEntries(drawing, access, adapter?.drawingBarIndexMatchesBars() ?? true) }, indicatorId);
   };
 
   void viewport.revision;

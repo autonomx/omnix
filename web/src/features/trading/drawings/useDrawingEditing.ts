@@ -1,5 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DrawingPoint, DrawingProperties, DrawingTool, TradingDrawing } from './drawingCommands';
+import { guardToolCall } from './tools/guard';
 import { drawingPropertiesWithDefaults } from './tools/registry';
 import type { DrawingEditPatch, DrawingHandle, DrawingModifiers, DrawingToolServices, ScreenPoint } from './tools/types';
 
@@ -101,14 +102,15 @@ export function useDrawingEditing({
     const point = pointFor(drawing, pointer.clientX, pointer.clientY, modifiers, handle.anchorIndex);
     const screen = screenFor(pointer.clientX, pointer.clientY);
     if (!point || !screen) return null;
-    return handle.drag({
+    const input = {
       points: drawing.points,
       properties: drawingPropertiesWithDefaults(drawing.toolType, drawing.properties),
       point,
       screen,
       modifiers,
       services: services(),
-    });
+    };
+    return guardToolCall(drawing.toolType, 'handle drag', () => handle.drag(input), null);
   };
 
   const dragHandle = (drawing: TradingDrawing, handle: DrawingHandle) => (event: ReactPointerEvent<SVGElement>) => {
@@ -116,12 +118,19 @@ export function useDrawingEditing({
     event.preventDefault();
     event.stopPropagation();
     if (drawing.locked || !enabled) return;
+    // A click on a handle without moving it edits nothing, so it adds no undo step.
+    const start = { x: event.clientX, y: event.clientY };
+    let moved = false;
+    const movedFrom = (pointer: PointerEvent) => pointer.clientX !== start.x || pointer.clientY !== start.y;
     trackPointer((pointer) => {
+      moved ||= movedFrom(pointer);
+      if (!moved) return;
       const patch = handlePatch(drawing, handle, pointer);
       if (patch) setHandlePreview({ drawingId: drawing.drawingId, patch });
     }, (pointer) => {
-      const patch = handlePatch(drawing, handle, pointer);
       setHandlePreview(null);
+      if (!moved && !movedFrom(pointer)) return;
+      const patch = handlePatch(drawing, handle, pointer);
       if (patch) onEdit(drawing.drawingId, patch);
     });
   };

@@ -94,7 +94,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
 /** The chart's context menu. */
 export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    adapterRef, applyChartTemplate, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
+    adapterRef, applyChartTemplate, chartId, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
     cursorLocked, drawings, indicators, instrumentId, onClearIndicators, pasteContextPrice, resetIndicatorPaneView,
     selectedRangeRef, setContextMenu, setCursorLocked, setObjectTreeVisible, setPriceScaleSettings,
     setSelectedRangeLabel, setSettingsIndicator, setSettingsVisible, setTableVisible, tableVisible,
@@ -114,6 +114,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
           />
           <TradingChartContextMenu
             point={contextMenu}
+            chartId={chartId}
             symbol={contextIndicator
               ? indicatorContextLabel(contextIndicator)
               : contextMenu?.trendlinePoints?.length === 2

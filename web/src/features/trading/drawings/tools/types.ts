@@ -5,6 +5,8 @@
 // space. Hosts (the SVG overlay, the canvas series primitive) render shapes and
 // own input, selection, handles and undo; they never branch on a tool id.
 
+import { guardToolCall } from './guard';
+
 /**
  * A drawing anchor, stored in time/price space, never in pixels. Anchors of a
  * screen-anchored tool (`anchoring: 'screen'`) also carry `screen`, their
@@ -338,7 +340,8 @@ export function handleIndices(definition: Pick<DrawingToolDefinition, 'handles'>
 
 /** The handles of a drawing whose anchors projected (`context`). */
 export function drawingHandles(definition: DrawingToolDefinition, context: DrawingGeometryContext): readonly DrawingHandle[] {
-  if (typeof definition.handles === 'function') return definition.handles(context);
+  const { handles } = definition;
+  if (typeof handles === 'function') return guardToolCall(definition.id, 'handles', () => handles(context), []);
   return handleIndices(definition, context.points.length).map((index) => anchorHandle(index, context.points[index], definition.handleClassName));
 }
 

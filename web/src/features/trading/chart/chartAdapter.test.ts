@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, DrawingTimeIndex, TradingChartAdapter, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { alignSeriesToTimes, candlestickData, constrainZoomOutRange, DrawingTimeIndex, TradingChartAdapter, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import type { UTCTimestamp } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
 import { fixture } from '../../../test/fixture';
 
@@ -213,10 +214,11 @@ describe('Trading chart adapter normalization', () => {
         indicatorSeries: new Map(),
         comparisonSeries: new Map(series.slice(2).map((item, index) => [`comparison-${index}`, item])),
         bars,
+        priceTimes: seriesTimes[0] ?? [],
         priceScaleMultiplier: 1,
         destroyed: false,
         chartTimeIndex: null,
-        seriesTimeSignatures: new Map(),
+        seriesTimes: new Map(seriesTimes.map((times, index) => [`series-${index}`, times])),
         rawBarIndex: null,
         barSeries: null,
         barSeriesCache: [],
@@ -225,8 +227,9 @@ describe('Trading chart adapter normalization', () => {
     }
     const seconds = (time: string) => Date.parse(time) / 1_000;
 
-    it("counts a 24/7 comparison series' extra times, as the chart does", () => {
-      // 1h equity bars at :30 for two sessions; a crypto comparison every hour on the hour.
+    it('counts every time any series plots, as the chart does', () => {
+      // 1h equity bars at :30 for two sessions and a series plotting every hour on the hour. Comparisons no longer add
+      // times (alignSeriesToTimes), but the index must still follow whatever times the chart plots.
       const equity = ['2026-10-05', '2026-10-06'].flatMap((day) => Array.from({ length: 7 }, (_, hour) => ({
         ...bar, interval: '1h', start_time: new Date(Date.parse(`${day}T13:30:00.000Z`) + hour * 3_600_000).toISOString(),
       })));
@@ -256,6 +259,30 @@ describe('Trading chart adapter normalization', () => {
       expect(adapter.drawingBarIndexForTime('2026-10-05T13:37:00.000Z')).toBe(8);
     });
 
+    it('rebuilds the chart time index when a time in the middle of a series changes', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const times = raw.map((item) => seconds(item.start_time));
+      const { adapter } = chartWith([times], raw);
+      const note = (next: number[]) => (adapter as unknown as { noteSeriesTimes: (key: string, data: { time: number }[]) => void })
+        .noteSeriesTimes('series-0', next.map((time) => ({ time })));
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBe(1);
+      note(times);
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBe(1);
+      // Same length, first and last time; the middle point moves 30 s later.
+      note([times[0], times[1] + 30, times[2]]);
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBeCloseTo(2 / 3, 9);
+    });
+
+    it('has no visible bars when the view is past the loaded bars', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const { adapter } = chartWith([raw.map((item) => seconds(item.start_time))], raw);
+      const timeScale = (adapter as unknown as { chart: { timeScale: () => { getVisibleLogicalRange: () => unknown } } }).chart.timeScale();
+      timeScale.getVisibleLogicalRange = () => ({ from: 5.2, to: 12 });
+      expect(adapter.drawingVisibleBars()).toBeNull();
+      timeScale.getVisibleLogicalRange = () => ({ from: 1.4, to: 12 });
+      expect(adapter.drawingVisibleBars()).toEqual({ from: 1, to: 2 });
+    });
+
     it('rebuilds the drawing time index only when times change, not on in-place ticks', () => {
       const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
       const { adapter } = chartWith([raw.map((item) => seconds(item.start_time))], raw);
@@ -270,5 +297,31 @@ describe('Trading chart adapter normalization', () => {
       expect(adapter.drawingBars()).not.toBe(first);
       expect(adapter.drawingBars().length).toBe(4);
     });
+  });
+});
+
+describe('comparison series on the main series times (TVP-0.4 decision)', () => {
+  const t = (value: number) => value as UTCTimestamp;
+
+  it('drops times only the comparison has and carries its value over times it lacks', () => {
+    const crypto = [1, 2, 3, 4, 5, 6].map((time) => ({ time: t(time * 100), value: time }));
+    expect(alignSeriesToTimes(crypto, [t(200), t(500)])).toEqual([{ time: 200, value: 2 }, { time: 500, value: 5 }]);
+    const equity = [{ time: t(100), value: 1 }, { time: t(400), value: 4 }];
+    expect(alignSeriesToTimes(equity, [t(100), t(200), t(300), t(400)])).toEqual([
+      { time: 100, value: 1 }, { time: 200, value: 1 }, { time: 300, value: 1 }, { time: 400, value: 4 },
+    ]);
+  });
+
+  it('plots nothing before the comparison starts or after it ends', () => {
+    const points = [{ time: t(200), value: 2 }, { time: t(300), value: 3 }];
+    expect(alignSeriesToTimes(points, [t(100), t(200), t(250), t(300), t(400)])).toEqual([
+      { time: 200, value: 2 }, { time: 250, value: 2 }, { time: 300, value: 3 },
+    ]);
+    expect(alignSeriesToTimes([], [t(100)])).toEqual([]);
+  });
+
+  it('maps onto brick times on Renko-type charts', () => {
+    const points = [{ time: t(100), value: 10 }, { time: t(160), value: 16 }, { time: t(220), value: 22 }];
+    expect(alignSeriesToTimes(points, [t(100), t(190), t(220)])).toEqual([{ time: 100, value: 10 }, { time: 190, value: 16 }, { time: 220, value: 22 }]);
   });
 });

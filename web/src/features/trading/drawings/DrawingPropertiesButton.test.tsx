@@ -89,6 +89,7 @@ describe('drawing context-menu actions', () => {
     render(
       <TradingChartContextMenu
         point={{ x: 0, y: 0, time: '2026-10-07T00:00:00.000Z', price: 1, source: 'context-menu', drawingId: 'position', drawingActions }}
+        chartId="chart-2"
         symbol="TEST"
         indicatorContext={false}
         drawingCount={1}
@@ -116,7 +117,7 @@ describe('drawing context-menu actions', () => {
     const stop = onDrawingActionRequest('order-ticket', handler);
     renderMenu([{ id: 'ticket', label: 'Open order ticket', request: { type: 'order-ticket', payload: { entry: 100, stop: 95 } } }]);
     fireEvent.click(screen.getByRole('menuitem', { name: /Open order ticket/ }));
-    expect(handler).toHaveBeenCalledWith({ entry: 100, stop: 95 });
+    expect(handler).toHaveBeenCalledWith({ entry: 100, stop: 95 }, { chartId: 'chart-2', drawingId: 'position' });
     stop();
   });
 

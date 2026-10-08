@@ -1,3 +1,4 @@
+import { guardToolCall } from './guard';
 import { DRAWING_HIT_TOLERANCE, hitTestShapes } from './hitTest';
 import {
   anchorCount,
@@ -58,7 +59,7 @@ export function drawingGeometry(input: DrawingShapeInput): { shapes: DrawingShap
     points.push(projected);
   }
   const context: DrawingGeometryContext = { ...rest, points };
-  return { shapes: definition.geometry(context), context };
+  return { shapes: guardToolCall(definition.id, 'geometry', () => definition.geometry(context), []), context };
 }
 
 /** Hit-tests one drawing's shapes, through the tool's override when it has one. */
@@ -69,7 +70,8 @@ export function hitTestDrawing(
   point: ScreenPoint,
   tolerance = DRAWING_HIT_TOLERANCE,
 ): DrawingHit | null {
-  return definition.hitTest
-    ? definition.hitTest(shapes, point, tolerance, context)
+  const { hitTest } = definition;
+  return hitTest
+    ? guardToolCall(definition.id, 'hitTest', () => hitTest(shapes, point, tolerance, context), null)
     : hitTestShapes(shapes, point, tolerance);
 }

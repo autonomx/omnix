@@ -96,6 +96,7 @@ function fakeAdapter() {
     drawingBarIndexForTime: (time: string) => (Date.parse(time) - Date.parse(pointAt(0, 0).time)) / 60_000,
     drawingTimeForBarIndex: (index: number) => pointAt(index, 0).time,
     drawingVisibleBars: () => null,
+    drawingBarIndexMatchesBars: () => true,
     formatDrawingPrice: (price: number) => price.toFixed(2),
     onViewportChange: (listener: () => void) => {
       listeners.add(listener);
@@ -343,6 +344,10 @@ describe('TradingDrawingOverlay', () => {
     const view = renderOverlay({ drawings: [{ ...position, drawingId: 'p' }], selectedId: 'p', onEditDrawing });
     const handle = view.svg.querySelector('[data-handle-id="stop"]')!;
     expect(handle).toHaveAttribute('cy', '201');
+    // A click without moving edits nothing, so it adds no undo step.
+    fireEvent.pointerDown(handle, { clientX: 125, clientY: 201, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 125, clientY: 201 });
+    expect(onEditDrawing).not.toHaveBeenCalled();
     fireEvent.pointerDown(handle, { clientX: 125, clientY: 201, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 125, clientY: 210 });
     // The preview applies the handle's property edit before it is committed.

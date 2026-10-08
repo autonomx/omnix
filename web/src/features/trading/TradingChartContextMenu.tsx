@@ -11,6 +11,7 @@ function displayPrice(value: number): string {
 
 export function TradingChartContextMenu({
   point,
+  chartId = null,
   symbol,
   indicatorContext,
   drawingCount,
@@ -31,6 +32,8 @@ export function TradingChartContextMenu({
   onSettings,
 }: {
   point: ChartAlertPlacement;
+  /** The chart the menu belongs to; drawing action requests carry it to the action bus. */
+  chartId?: string | null;
   symbol: string;
   indicatorContext: boolean;
   drawingCount: number;
@@ -95,7 +98,7 @@ export function TradingChartContextMenu({
               type="button"
               role="menuitem"
               disabled={!hasDrawingActionHandler(drawingAction.request.type)}
-              onClick={action(() => dispatchDrawingActionRequest(drawingAction.request))}
+              onClick={action(() => dispatchDrawingActionRequest(drawingAction.request, { chartId, drawingId: point.drawingId ?? null }))}
             >
               ▸ <span>{drawingAction.label}</span>
             </button>

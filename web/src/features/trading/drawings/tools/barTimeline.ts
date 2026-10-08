@@ -9,12 +9,18 @@
 // milliseconds (1m = 60 000, 1h = 3 600 000, 1D = 86 400 000, 1W = 604 800 000,
 // 1M = 30 days = 2 592 000 000). A step is null only for intervals without a
 // duration (tick, range, Renko bars); then the median gap between consecutive
-// bars is used, and with fewer than two bars there is no step.
+// bars is used: the lower median, gaps[floor((m - 1) / 2)] of the m sorted
+// gaps (gaps 1, 2, 3, 7 give 2). With fewer than two bars there is no step.
 //
-// - On the chart the sequence is every time point the chart plots (all series,
-//   including a comparison series' extra times and synthetic Renko/range bars).
+// - On the chart the sequence is every time point the chart plots. Comparison
+//   series are plotted on the main series' times, so on time-based chart types
+//   this is the loaded bars' own times; brick-type charts (Renko, range, line
+//   break, Kagi, P&F) plot their own times and offer only flat alert levels.
 //   For an alert it is the alert's own interval's bars, including the forming
-//   (not yet closed) bar as the last index.
+//   (not yet closed) bar as the last index. Those bars must start at or before
+//   the earliest anchor time (load enough history): an anchor before the first
+//   bar falls under rule 4 and would step across gaps by the calendar, unlike
+//   the chart that drew it.
 //
 // index(time):
 //   1. n = 0: no index (null).
@@ -30,8 +36,9 @@
 //   1. integer i in [0, n-1]: t[i].
 //   2. 0 < i < n-1, fractional: t[k] + (i - k) * (t[k+1] - t[k]), k = floor(i).
 //   3. i < 0: t[0] + i * step;  i > n-1: t[n-1] + (i - (n-1)) * step.
-//   Times are rounded to whole milliseconds, so index(time(i)) equals i to
-//   within 1 / gap-in-milliseconds.
+//   Times are rounded to whole milliseconds as floor(x + 0.5) (halves round
+//   up, also below zero; not to even), so index(time(i)) equals i to within
+//   1 / gap-in-milliseconds.
 //
 // An alert line (DrawingAlertLevel) is straight in this index space: with
 // anchors (time a, price pa) and (time b, price pb), a < b, its price at index
@@ -42,7 +49,7 @@
 export type BarTimeline = {
   /** Ascending, distinct bar start times in UTC milliseconds. */
   readonly times: ArrayLike<number>;
-  /** The step past the data: the interval's duration, else the median gap (computed once); null without either. */
+  /** The step past the data: the interval's duration, else the lower median gap (computed once); null without either. */
   readonly step: number | null;
 };
 
@@ -112,6 +119,11 @@ export function barIndexForTime(timeline: BarTimeline, milliseconds: number): nu
   return lower < 0 ? (milliseconds - times[0]) / step : last + (milliseconds - times[last]) / step;
 }
 
+/** floor(x + 0.5), as the spec states it (equal to Math.round, written out for the server's port). */
+function roundHalfUp(value: number): number {
+  return Math.floor(value + 0.5);
+}
+
 /** time(index) of the spec, in UTC milliseconds; null without bars or past the data without a step. */
 export function timeForBarIndex(timeline: BarTimeline, index: number): number | null {
   const { times, step } = timeline;
@@ -120,8 +132,8 @@ export function timeForBarIndex(timeline: BarTimeline, index: number): number | 
   if (Number.isInteger(index) && index >= 0 && index <= last) return times[index];
   if (index > 0 && index < last) {
     const lower = Math.floor(index);
-    return Math.round(times[lower] + (times[lower + 1] - times[lower]) * (index - lower));
+    return roundHalfUp(times[lower] + (times[lower + 1] - times[lower]) * (index - lower));
   }
   if (step === null) return null;
-  return index < 0 ? Math.round(times[0] + index * step) : Math.round(times[last] + (index - last) * step);
+  return index < 0 ? roundHalfUp(times[0] + index * step) : roundHalfUp(times[last] + (index - last) * step);
 }
