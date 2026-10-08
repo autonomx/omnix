@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { normalizeChartBars } from './chart/chartAdapter';
 import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
 import type { MarketBar } from './tradingTypes';
+import { replayBarAtClock, replayTickPlan, replayVisibleBars } from './replayClock';
+import { useTradingReplayStore } from './tradingReplayStore';
 import { TradingChartPanelProps, applyVisibleRange } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
@@ -15,10 +17,9 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     active, adapter, adapterRef, allBarsRef, barsRef, bindingId, chartQuery, chartType, clearReplayState, drawings,
     fittedBarsKeyRef, forceLiveRender, fullscreenIndicator, fullscreenMainPane, historyLimit, hostRef, indicators,
     indicatorsRef, instrumentId, interval, minimizedIndicators, pendingIntervalScrollRef, pendingRangeIntervalRef,
-    refreshIndicatorPanes, replayCurrentBar, replayCursorIndex, replayMode, replayPlaying, replaySessionId,
-    replaySpeed, replayStartIndex, replayVisible, replayWasVisibleRef, restartReplaySession, rightOffset,
-    scheduleIndicators, selectedDrawing, selectedRangeRef, selectedTimezone, setReplayBar, setReplayCursorIndex,
-    setReplayPlaying, setReplayStartIndex, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef, timezoneId,
+    refreshIndicatorPanes, replayClock, replayMode, replayPlaying, replaySessionId, replaySpeed, replayVisible,
+    replayWasVisibleRef, restartReplaySession, rightOffset, scheduleIndicators, selectedDrawing, selectedRangeRef,
+    selectedTimezone, setReplayBar, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef, timezoneId,
   } = ws;
 
   useEffect(() => {
@@ -54,11 +55,14 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
       selectedRangeRef.current = undefined;
       setSelectedRangeLabel('All');
     }
-    const visibleBars = replayVisible
-      ? bars.slice(0, Math.min(bars.length, (replayCursorIndex ?? 0) + 1))
+    const visibleBars = replayVisible && replayClock !== null
+      ? replayVisibleBars(bars, replayClock)
       : bars;
     barsRef.current = visibleBars;
     adapterRef.current?.setBars(visibleBars, shouldFit);
+    // The active chart keeps the viewport where its start bar was clicked;
+    // the other charts in the layout jump to the replay clock.
+    if (replayViewChanged && replayVisible && !active && visibleBars.length > 0) adapterRef.current?.scrollToLatest();
     if (keepSelectedRange && selectedRangeRef.current !== undefined && visibleBars.length > 0 && adapterRef.current) {
       applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars, interval, rightOffset, selectedTimezone);
     }
@@ -71,49 +75,34 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     scheduleIndicators();
     // Keyed by timezoneId and the loaded data, not by values derived from them (selectedTimezone, historyLimit).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, chartQuery.data, interval, replayCursorIndex, replayMode, replayStartIndex, replayVisible, rightOffset, scheduleIndicators, timezoneId, adapterRef, allBarsRef, barsRef, fittedBarsKeyRef, forceLiveRender, pendingIntervalScrollRef, pendingRangeIntervalRef, replayWasVisibleRef, selectedRangeRef, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
+  }, [active, chartQuery.data, interval, replayClock, replayMode, replayVisible, rightOffset, scheduleIndicators, timezoneId, adapterRef, allBarsRef, barsRef, fittedBarsKeyRef, forceLiveRender, pendingIntervalScrollRef, pendingRangeIntervalRef, replayWasVisibleRef, selectedRangeRef, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
 
   useEffect(() => {
-    setReplayStartIndex(null);
-    setReplayCursorIndex(null);
-    setReplayPlaying(false);
-    if (replayMode && active) restartReplaySession();
-  }, [active, bindingId, instrumentId, interval, replayMode, restartReplaySession, setReplayCursorIndex, setReplayPlaying, setReplayStartIndex]);
+    // A new active chart, symbol or interval keeps the replay clock but pauses
+    // and restarts replay trading, which executes against the active chart's bars.
+    if (!replayMode || !active) return;
+    useTradingReplayStore.getState().setPlaying(false);
+    restartReplaySession();
+  }, [active, bindingId, instrumentId, interval, replayMode, restartReplaySession]);
 
   useEffect(() => {
     if (!replayMode || !active) {
       if (!replayMode && active) clearReplayState();
       return;
     }
-    setReplayBar(replayCurrentBar);
-    // Publishes the bar at the replay cursor; replayCursorIndex stands for replayCurrentBar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, clearReplayState, replayCursorIndex, replayMode, replaySessionId, setReplayBar]);
+    // allBarsRef is current here: the data effect above has already run.
+    const replayStore = useTradingReplayStore.getState();
+    replayStore.setActiveBars(allBarsRef.current);
+    setReplayBar(replayClock === null ? null : replayBarAtClock(allBarsRef.current, replayClock));
+  }, [active, allBarsRef, chartQuery.data, clearReplayState, replayClock, replayMode, replaySessionId, setReplayBar]);
 
   useEffect(() => {
-    if (!replayMode || !active) {
-      setReplayPlaying(false);
-      return;
-    }
-    if (replayCursorIndex === null || replayCursorIndex >= allBarsRef.current.length - 1) {
-      setReplayPlaying(false);
-    }
-  }, [active, replayCursorIndex, replayMode, allBarsRef, setReplayPlaying]);
-
-  useEffect(() => {
-    if (!replayPlaying || !replayVisible || replayCursorIndex === null) return;
-    const numericSpeed = Math.max(0.25, Math.min(8, Number(replaySpeed) || 1));
+    if (!active || !replayPlaying || !replayVisible) return;
+    const { intervalMs, barsPerTick } = replayTickPlan(replaySpeed);
     return startTicker(() => {
-      setReplayCursorIndex((current) => {
-        const lastIndex = allBarsRef.current.length - 1;
-        if (current === null || current >= lastIndex) {
-          setReplayPlaying(false);
-          return current;
-        }
-        return current + 1;
-      });
-    }, Math.max(100, 1_000 / numericSpeed));
-  }, [replayCursorIndex, replayPlaying, replaySpeed, replayVisible, allBarsRef, setReplayCursorIndex, setReplayPlaying]);
+      useTradingReplayStore.getState().stepForward(barsPerTick);
+    }, intervalMs);
+  }, [active, replayPlaying, replaySpeed, replayVisible]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);

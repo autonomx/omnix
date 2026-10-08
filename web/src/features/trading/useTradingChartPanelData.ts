@@ -4,6 +4,7 @@ import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingComparisonData } from './chart/chartAdapter';
 import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
 import type { MarketBar } from './tradingTypes';
+import { nextReplayClock, replayBarAtClock, replayVisibleCount } from './replayClock';
 import { TRADING_COMPARISON_COLORS } from './tradingComparisons';
 import { resolveTradingTimezone } from './tradingTime';
 import { TradingChartPanelProps, chartHistoryLimit, comparisonBars, comparisonLabel } from './tradingChartPanelModel';
@@ -93,7 +94,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
 export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling>) {
   const {
     active, adapter, allBarsRef, bindingId, comparisons, historyLimit, indicators, instrumentId, interval,
-    onActivateRef, priceScaleCurrency, replayCursorIndex, replayMode, replayStartIndex, rightOffset,
+    onActivateRef, priceScaleCurrency, replayClock, replayMode, replaySelecting, replayStartTime, rightOffset,
     selectedIndicator, setPriceScaleCurrency, setSelectedIndicator, timezoneId,
   } = ws;
 
@@ -198,17 +199,25 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
   }, [selectedIndicator, setSelectedIndicator]);
 
-  const replayVisible = replayMode && active && replayCursorIndex !== null;
+  // Every chart follows the shared replay clock; only the active chart drops
+  // back to the full history while it waits for a new start bar.
+  const replayChoosingStart = replayMode && active && replaySelecting;
 
-  const replayStartBar = replayStartIndex === null ? null : allBarsRef.current[replayStartIndex] ?? null;
+  const replayVisible = replayMode && replayClock !== null && !replayChoosingStart;
 
-  const replayCurrentBar = replayCursorIndex === null ? null : allBarsRef.current[replayCursorIndex] ?? null;
+  const replayStartBar = replayMode && replayStartTime !== null ? replayBarAtClock(allBarsRef.current, replayStartTime) : null;
 
-  const replayHasNextBar = replayCursorIndex !== null && replayCursorIndex < allBarsRef.current.length - 1;
+  const replayCurrentBar = replayMode && replayClock !== null ? replayBarAtClock(allBarsRef.current, replayClock) : null;
+
+  const replayVisibleBarCount = replayMode && replayClock !== null ? replayVisibleCount(allBarsRef.current, replayClock) : 0;
+
+  const replayHasNextBar = replayVisible && replayClock !== null && nextReplayClock(allBarsRef.current, replayClock) !== null;
+
+  const replayHasPreviousBar = replayVisible && replayClock !== null && replayStartTime !== null && replayClock > replayStartTime;
 
   return {
     chartQuery, comparisonQueries, comparisonRenderData, sourceCurrency, supportsCurrencyConversion,
-    currencyRateQuery, priceScaleMultiplier, selectedTimezone, replayVisible, replayStartBar, replayCurrentBar,
-    replayHasNextBar,
+    currencyRateQuery, priceScaleMultiplier, selectedTimezone, replayChoosingStart, replayVisible, replayStartBar,
+    replayCurrentBar, replayVisibleBarCount, replayHasNextBar, replayHasPreviousBar,
   };
 }

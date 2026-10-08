@@ -1,5 +1,6 @@
 import { formatTradingTime, formatTradingTimezoneOffset, resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, writeTradingTimezoneId } from './tradingTime';
 import { ranges } from './tradingChartPanelModel';
+import { TradingReplaySpeedSelect } from './TradingReplaySpeedSelect';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { emitOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 import { useNow } from '../../shared/timers';
@@ -8,11 +9,12 @@ import { useNow } from '../../shared/timers';
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, allBarsRef, applyCustomRange, chartId, chartQuery, customRangeEnd, customRangeError, customRangeOpen,
-    customRangeRef, customRangeStart, drawings, exitReplay, openCustomRange, previousReplayBar, provenance,
-    replayCurrentBar, replayCursorIndex, replayHasNextBar, replayMode, replayPlaying, replaySpeed, replayStartIndex,
-    resetReplay, selectedRangeLabel, selectedTimezone, selectedTimezoneOption, setCustomRangeEnd, setCustomRangeOpen,
-    setCustomRangeStart, setReplayCursorIndex, setReplayPlaying, setReplaySpeed, setTimezoneId, setTimezoneMenuOpen,
-    showRange, streamStatus, timezoneId, timezoneMenuOpen, timezoneMenuRef,
+    customRangeRef, customRangeStart, drawings, exitReplay, nextReplayBar, openCustomRange,
+    previousReplayBar, provenance, replayChoosingStart, replayCurrentBar, replayHasNextBar, replayHasPreviousBar,
+    replayMode, replayPlaying, replayStartTime, replayVisibleBarCount, resetReplay, selectReplayStart,
+    selectedRangeLabel, selectedTimezone, selectedTimezoneOption, setCustomRangeEnd, setCustomRangeOpen,
+    setCustomRangeStart, setTimezoneId, setTimezoneMenuOpen, showRange, streamStatus, timezoneId, timezoneMenuOpen,
+    timezoneMenuRef, toggleReplayPlaying,
   } = ws;
   return (
     <>
@@ -20,15 +22,14 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
         {replayMode && active ? (
           <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={exitReplay} aria-label="Exit replay mode" title="Exit replay mode">×</button>
-            <button type="button" onClick={() => setReplayCursorIndex(null)} disabled={replayStartIndex === null} aria-label="Choose replay start" title="Choose replay start">Select bar</button>
-            <button type="button" onClick={resetReplay} disabled={replayStartIndex === null} aria-label="Reset replay" title="Reset replay">↤</button>
-            <button type="button" onClick={previousReplayBar} disabled={replayCursorIndex === null || replayCursorIndex <= replayStartIndex!} aria-label="Replay previous bar" title="Previous bar">|‹</button>
-            <button type="button" className="trading-replay-play" onClick={() => setReplayPlaying((value) => !value)} disabled={replayStartIndex === null || !replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
-            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.min(allBarsRef.current.length - 1, Math.max(replayStartIndex, current + 1)))} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
-            <select aria-label="Replay speed" value={replaySpeed} onChange={(event) => setReplaySpeed(event.target.value)}>
-              {['0.5', '1', '2', '4', '8'].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
-            </select>
-            <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayCursorIndex === null ? 0 : replayCursorIndex + 1}/{allBarsRef.current.length}</span>
+            <button type="button" onClick={selectReplayStart} disabled={replayChoosingStart} aria-label="Choose replay start" title="Jump to a new start bar">Select bar</button>
+            <button type="button" onClick={resetReplay} disabled={replayStartTime === null} aria-label="Reset replay" title="Reset replay">↤</button>
+            <button type="button" onClick={previousReplayBar} disabled={!replayHasPreviousBar} aria-label="Replay previous bar" title="Previous bar">|‹</button>
+            <button type="button" className="trading-replay-play" onClick={toggleReplayPlaying} disabled={!replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" onClick={nextReplayBar} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
+            <TradingReplaySpeedSelect />
+            <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayVisibleBarCount}/{allBarsRef.current.length}</span>
+            <button type="button" onClick={exitReplay} aria-label="Jump to real time" title="Leave replay and show live data">Real time</button>
           </div>
         ) : null}
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
