@@ -1,4 +1,5 @@
 /** Module-level helpers of the chart panel: visible ranges, comparisons, stream bars and its props type (WP-9.5 split them out of TradingChartPanel). */
+import type { QueryClient } from '@tanstack/react-query';
 import { type IChartApi } from 'lightweight-charts';
 import { tradingApi } from './tradingApi';
 import { DEFAULT_TRADING_RIGHT_OFFSET, type TradingChartType } from './chart/chartAdapter';
@@ -272,9 +273,41 @@ export async function comparisonBars(
   return selected;
 }
 
-/** Bars of an indicator's compare symbol (Correlation Coefficient), loaded like a compare symbol. */
-export async function compareSymbolBars(instrumentId: string, interval: string, limit: number): Promise<MarketBar[]> {
-  return (await comparisonBars(instrumentId, interval, limit)).bars as MarketBar[];
+/** Query key of a comparison's bars; compare series and compare-symbol indicators share it (placement does not change the data). */
+export function comparisonBarsQueryKey(instrumentId: string, interval: string, limit: number): readonly unknown[] {
+  return ['trading', 'comparison-bars-v2', instrumentId, interval, limit];
+}
+
+const COMPARE_BAR_LIMITS = [1_000, 2_000, 5_000] as const;
+
+/**
+ * How many of the latest bars cover a time range from its start to now: the comparison series' own history size when that is
+ * enough, else the next of 1,000, 2,000 and 5,000 (the API maximum). The few sizes keep the shared query cache small.
+ */
+export function compareBarsLimit(instrumentId: string, interval: string, from: number, now = Date.now()): number {
+  const base = chartHistoryLimit(instrumentId, interval, []);
+  const minutes = tradingIntervalMinutes(interval);
+  if (!minutes || !Number.isFinite(from)) return base;
+  const needed = Math.ceil((now - from) / (minutes * 60_000)) + 1;
+  if (needed <= base) return base;
+  return COMPARE_BAR_LIMITS.find((limit) => limit >= needed) ?? COMPARE_BAR_LIMITS[COMPARE_BAR_LIMITS.length - 1];
+}
+
+/** Bars of an indicator's compare symbol (Correlation Coefficient) over the chart's time range, through the comparison query cache. */
+export async function loadCompareSymbolBars(
+  queryClient: QueryClient,
+  instrumentId: string,
+  interval: string,
+  range: { from: number; to: number },
+  now = Date.now(),
+): Promise<MarketBar[]> {
+  const limit = compareBarsLimit(instrumentId, interval, range.from, now);
+  const response = await queryClient.fetchQuery({
+    queryKey: comparisonBarsQueryKey(instrumentId, interval, limit),
+    queryFn: () => comparisonBars(instrumentId, interval, limit),
+    staleTime: 15_000,
+  });
+  return response.bars as MarketBar[];
 }
 
 export type TradingChartPanelProps = {

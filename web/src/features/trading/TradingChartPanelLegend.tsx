@@ -116,6 +116,7 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
     onUpdateIndicator, paneIndicators, resetIndicatorPaneView, selectedIndicator, selectedIndicatorConfig,
     setSelectedIndicator, setSettingsIndicator, settingsIndicator, toggleFullscreenIndicator,
     toggleMinimizedIndicator,
+    instrumentId,
   } = ws;
   return (
     <>
@@ -162,6 +163,7 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
       {settingsIndicator ? (
         <TradingIndicatorSettings
           indicator={settingsIndicator}
+          instrumentId={instrumentId}
           onApply={(patch) => onUpdateIndicator(settingsIndicator.id, patch)}
           onClose={() => setSettingsIndicator(null)}
         />

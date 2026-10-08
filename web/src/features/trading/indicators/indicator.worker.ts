@@ -37,7 +37,7 @@ workerScope.addEventListener('message', (event: MessageEvent<IndicatorWorkerRequ
       .filter((indicator) => indicator.enabled && indicator.visible !== false)
       .flatMap((indicator) => {
         const raw = isTradingViewBuiltInId(indicator.id)
-          ? calculateTradingViewBuiltInOutputs(request.bars, indicator, {
+          ? calculateTradingViewBuiltInOutputs(request.bars, { ...indicator, session: request.session }, {
             compareBars: indicator.compareSymbol ? request.compareBars?.[indicator.compareSymbol] : undefined,
           }) as IndicatorOutput[]
           : indicatorOutputs(request.bars, indicator);

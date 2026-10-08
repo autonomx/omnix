@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   indicatorPlotDefinitions,
   indicatorDefaultBackgroundColor,
@@ -12,10 +12,11 @@ import {
   isTradingViewBuiltInId,
   tradingViewBuiltInDefaultPeriod,
   tradingViewBuiltInDefinition,
+  tradingViewBuiltInInputs,
   tradingViewBuiltInPlotDefinitions,
-  tradingViewBuiltInUsesCompareSeries,
   tradingViewBuiltInUsesSeparatePane,
 } from './indicators/tradingViewBuiltIns';
+import { TradingBuiltInInputs } from './TradingBuiltInInputs';
 import './TradingIndicatorSettings.css';
 import { chartPalette } from './chartPalette';
 
@@ -121,6 +122,7 @@ function resetIndicator(indicator: CoreIndicatorInstance): CoreIndicatorInstance
       reset.slowPeriod = name === 'True Strength Index' ? 25 : 26;
       reset.signalPeriod = name === 'True Strength Index' ? 13 : 9;
     }
+    reset.params = undefined;
     return reset;
   }
   if (indicator.id === 'macd' || indicator.id === 'log-macd' || indicator.id === 'macd-dema') {
@@ -175,15 +177,20 @@ function Field({
 
 export function TradingIndicatorSettings({
   indicator,
+  instrumentId = '',
   onApply,
   onClose,
 }: {
   indicator: CoreIndicatorInstance;
+  /** The chart's instrument, left out of compare-symbol choices. */
+  instrumentId?: string;
   onApply: (patch: Partial<CoreIndicatorInstance>) => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>('inputs');
   const [draft, setDraft] = useState<CoreIndicatorInstance>(() => ({ ...indicator, style: copyStyle(indicator.style) }));
+  const [inputsValid, setInputsValid] = useState(true);
+  const onInputsValidity = useCallback((valid: boolean) => setInputsValid(valid), []);
   const plots = useMemo(() => {
     const id = String(draft.id);
     return isTradingViewBuiltInId(id)
@@ -229,7 +236,7 @@ export function TradingIndicatorSettings({
     return (
       <>
         <div className="trading-indicator-settings-section-label">Calculation</div>
-        {!['vwap', 'ideal-bb', 'ema-stack'].includes(draft.id) ? (
+        {!['vwap', 'ideal-bb', 'ema-stack'].includes(draft.id) && !tradingViewBuiltInInputs(draftId) ? (
           <Field label="Period" value={draft.period} onChange={(value) => setNumber('period', value)} />
         ) : null}
         {draft.id === 'bollinger' ? <Field label="Standard deviations" value={draft.standardDeviations ?? 2} min={0.1} step={0.1} onChange={(value) => setNumber('standardDeviations', value, 0.1)} /> : null}
@@ -253,20 +260,7 @@ export function TradingIndicatorSettings({
             <Field label="Slow period" value={draft.slowPeriod ?? 200} onChange={(value) => setNumber('slowPeriod', value)} />
           </>
         ) : null}
-        {tradingViewBuiltInUsesCompareSeries(draftId) ? (
-          <>
-            <label className="trading-indicator-settings-field">
-              <span>Symbol</span>
-              <input
-                type="text"
-                placeholder="equity:NASDAQ:QQQ"
-                value={draft.compareSymbol ?? ''}
-                onChange={(event) => setDraft((current) => ({ ...current, compareSymbol: event.target.value.trim() || null }))}
-              />
-            </label>
-            <p className="trading-indicator-settings-help">The instrument to correlate with, loaded on the chart's interval like a compare symbol.</p>
-          </>
-        ) : null}
+        <TradingBuiltInInputs draft={draft} currentInstrumentId={instrumentId} setDraft={setDraft} onValidityChange={onInputsValidity} />
         {draft.id === 'vwap' ? (
           <label className="trading-indicator-settings-field">
             <span>Anchor time</span>
@@ -354,7 +348,7 @@ export function TradingIndicatorSettings({
           <button type="button" className="trading-indicator-settings-defaults" onClick={() => setDraft(resetIndicator(draft))}>Defaults</button>
           <div>
             <button type="button" onClick={onClose}>Cancel</button>
-            <button type="button" className="primary" onClick={() => { onApply(draft); onClose(); }}>OK</button>
+            <button type="button" className="primary" disabled={!inputsValid} onClick={() => { onApply(draft); onClose(); }}>OK</button>
           </div>
         </footer>
       </section>

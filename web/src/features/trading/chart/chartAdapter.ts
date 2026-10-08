@@ -10,15 +10,19 @@ import {
   LineStyle,
   PriceScaleMode,
   createChart,
+  createSeriesMarkers,
   type CandlestickData,
   type HistogramData,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type LineData,
   type Logical,
   type MouseEventParams,
+  type SeriesMarker,
   type Time,
   type UTCTimestamp,
+  type WhitespaceData,
 } from 'lightweight-charts';
 import type { DrawingPoint } from '../drawings/drawingCommands';
 import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
@@ -427,6 +431,13 @@ function indicatorPaneId(output: IndicatorOutput): string | null {
   return output.key.split(':', 1)[0] ?? null;
 }
 
+/** Levels step between values; markers hide the line (the markers carry the points). */
+function indicatorLineShape(output: IndicatorOutput): { lineType?: LineType; lineVisible?: boolean; pointMarkersVisible?: boolean; crosshairMarkerVisible?: boolean } {
+  if (output.render === 'levels') return { lineType: LineType.WithSteps, lineVisible: true };
+  if (output.render === 'markers') return { lineVisible: false, pointMarkersVisible: false, crosshairMarkerVisible: false };
+  return {};
+}
+
 function indicatorLineStyle(value: IndicatorOutput['lineStyle']): LineStyle | undefined {
   if (value === 'dotted') return LineStyle.Dotted;
   if (value === 'dashed') return LineStyle.Dashed;
@@ -434,6 +445,38 @@ function indicatorLineStyle(value: IndicatorOutput['lineStyle']): LineStyle | un
   if (value === 'sparse-dotted') return LineStyle.SparseDotted;
   if (value === 'solid') return LineStyle.Solid;
   return undefined;
+}
+
+/**
+ * Chart data of a line output. Level outputs (pivots, boxes) get whitespace on the chart's bars that have no value between their
+ * first and last point, so separate levels are not joined by a diagonal; marker outputs are drawn by `indicatorMarkers` instead.
+ */
+export function indicatorLineData(
+  output: IndicatorOutput,
+  barTimes: readonly UTCTimestamp[],
+  multiplier = 1,
+): Array<LineData<UTCTimestamp> | WhitespaceData<UTCTimestamp>> {
+  const scale = output.pane === 0 ? multiplier : 1;
+  const points = output.points.map((point) => ({ time: timestamp(point.time), value: point.value * scale }));
+  if (output.render !== 'levels' || points.length < 2) return points;
+  const first = points[0].time;
+  const last = points[points.length - 1].time;
+  const valued = new Set<number>(points.map((point) => point.time));
+  const gaps = barTimes.filter((time) => time > first && time < last && !valued.has(time)).map((time) => ({ time }));
+  return [...points, ...gaps].sort((left, right) => left.time - right.time);
+}
+
+/** Point signals (divergences, reversals, fractals) as series markers at their price. */
+export function indicatorMarkers(output: IndicatorOutput, multiplier = 1): SeriesMarker<UTCTimestamp>[] {
+  const scale = output.pane === 0 ? multiplier : 1;
+  return output.points.map((point) => ({
+    time: timestamp(point.time),
+    position: 'atPriceMiddle',
+    price: point.value * scale,
+    shape: output.marker ?? 'circle',
+    color: output.color ?? indicatorColor(output),
+    size: 1,
+  }));
 }
 
 function indicatorPriceFormat(precision: number | null | undefined): { priceFormat?: { type: 'price'; precision: number; minMove: number } } {
@@ -447,6 +490,7 @@ export class TradingChartAdapter {
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
   private readonly indicatorSeries = new Map<string, IndicatorSeries>();
   private readonly indicatorSeriesPanes = new Map<string, number>();
+  private readonly indicatorMarkerPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
   private readonly comparisonSeries = new Map<string, ISeriesApi<'Line'>>();
   private readonly comparisonSeriesPanes = new Map<string, number>();
   private readonly comparisonSeriesOptions = new Map<string, string>();
@@ -761,11 +805,14 @@ export class TradingChartAdapter {
     const enabled = new Set(outputs.map((output) => output.key));
     for (const [key, series] of this.indicatorSeries) {
       if (!enabled.has(key)) {
+        this.indicatorMarkerPlugins.get(key)?.detach();
+        this.indicatorMarkerPlugins.delete(key);
         this.chart.removeSeries(series);
         this.indicatorSeries.delete(key);
         this.indicatorSeriesPanes.delete(key);
       }
     }
+    const barTimes = this.bars.map((bar) => timestamp(bar.start_time));
     for (const output of outputs) {
       if (output.visible === false) continue;
       const paneId = indicatorPaneId(output);
@@ -787,7 +834,7 @@ export class TradingChartAdapter {
         };
         series = output.kind === 'histogram'
           ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId }, paneIndex)
-          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 1, priceScaleId }, paneIndex);
+          : this.chart.addSeries(LineSeries, { ...commonOptions, ...indicatorLineShape(output), ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 1, priceScaleId }, paneIndex);
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
@@ -812,16 +859,21 @@ export class TradingChartAdapter {
           priceLineVisible: false,
           lineWidth: output.lineWidth ?? 1,
           priceScaleId,
+          ...indicatorLineShape(output),
           ...(lineStyle === undefined ? {} : { lineStyle }),
           ...indicatorPriceFormat(output.precision),
         });
       }
-      const data = output.points.map((point) => ({
-        time: timestamp(point.time),
-        value: output.pane === 0 ? point.value * this.priceScaleMultiplier : point.value,
-      }));
-      if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
-      else (series as ISeriesApi<'Line'>).setData(data);
+      if (output.kind === 'histogram') {
+        (series as ISeriesApi<'Histogram'>).setData(indicatorLineData(output, barTimes, this.priceScaleMultiplier));
+        continue;
+      }
+      (series as ISeriesApi<'Line'>).setData(indicatorLineData(output, barTimes, this.priceScaleMultiplier));
+      const markers = output.render === 'markers' ? indicatorMarkers(output, this.priceScaleMultiplier) : null;
+      const plugin = this.indicatorMarkerPlugins.get(output.key);
+      if (markers && plugin) plugin.setMarkers(markers);
+      else if (markers) this.indicatorMarkerPlugins.set(output.key, createSeriesMarkers(series as ISeriesApi<'Line'>, markers) as ISeriesMarkersPluginApi<Time>);
+      else if (plugin) { plugin.detach(); this.indicatorMarkerPlugins.delete(output.key); }
     }
     this.indicatorPaneIds = paneIds;
     for (const [index, paneId] of paneIds.entries()) {
@@ -1452,7 +1504,7 @@ export class TradingChartAdapter {
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.indicatorMarkerPlugins.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
   private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }

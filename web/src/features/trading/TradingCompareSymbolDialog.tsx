@@ -44,13 +44,18 @@ export function TradingCompareSymbolDialog({
   open,
   currentInstrumentId,
   existingInstrumentIds,
+  mode = 'compare',
   onAdd,
+  onChoose,
   onClose,
 }: {
   open: boolean;
   currentInstrumentId: string;
   existingInstrumentIds: readonly string[];
-  onAdd: (instrument: CanonicalInstrument, placement: TradingComparisonPlacement) => void;
+  /** `choose` picks one symbol (an indicator's compare symbol) without a placement. */
+  mode?: 'compare' | 'choose';
+  onAdd?: (instrument: CanonicalInstrument, placement: TradingComparisonPlacement) => void;
+  onChoose?: (instrument: CanonicalInstrument) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -98,14 +103,19 @@ export function TradingCompareSymbolDialog({
   }, [currentInstrumentId, instrumentsQuery.data, query, recent]);
 
   const choose = (instrument: CanonicalInstrument) => {
-    setSelected(instrument);
     rememberRecent(instrument.instrument_id);
+    if (mode === 'choose') {
+      onChoose?.(instrument);
+      onClose();
+      return;
+    }
+    setSelected(instrument);
     setRecent((items) => [instrument.instrument_id, ...items.filter((id) => id !== instrument.instrument_id)].slice(0, 12));
   };
 
   const add = (placement: TradingComparisonPlacement) => {
     if (!selected) return;
-    onAdd(selected, placement);
+    onAdd?.(selected, placement);
     onClose();
   };
 
@@ -114,7 +124,7 @@ export function TradingCompareSymbolDialog({
     <div className="trading-symbol-search-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="trading-symbol-search-dialog trading-compare-dialog" role="dialog" aria-modal="true" aria-labelledby="trading-compare-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="trading-symbol-search-header">
-          <h2 id="trading-compare-title">Compare symbols</h2>
+          <h2 id="trading-compare-title">{mode === 'choose' ? 'Choose symbol' : 'Compare symbols'}</h2>
           <button type="button" className="trading-symbol-search-close" aria-label="Close compare symbols" onClick={onClose}>×</button>
         </header>
         <div className="trading-symbol-search-form">
@@ -157,15 +167,15 @@ export function TradingCompareSymbolDialog({
             <div className="trading-symbol-search-empty"><span className="trading-symbol-search-empty-icon" aria-hidden="true">⌕</span><strong>No symbols found</strong><p>Try a ticker, company name, or exchange.</p></div>
           )}
         </div>
-        <div role="group" className="trading-compare-placement" aria-label="Comparison placement">
+        {mode === 'compare' ? <div role="group" className="trading-compare-placement" aria-label="Comparison placement">
           <span>Place selected symbol</span>
           <div>
             <button type="button" disabled={!selected} onClick={() => add('percent')}>Same % scale</button>
             <button type="button" disabled={!selected} onClick={() => add('price-scale')}>New price scale</button>
             <button type="button" disabled={!selected} onClick={() => add('pane')}>New pane</button>
           </div>
-        </div>
-        <footer className="trading-symbol-search-footer"><span>{instrumentsQuery.isFetching ? 'Searching instrument catalog…' : `${results.length} ${results.length === 1 ? 'symbol' : 'symbols'}`}</span><span>Select a symbol, then choose its scale</span></footer>
+        </div> : null}
+        <footer className="trading-symbol-search-footer"><span>{instrumentsQuery.isFetching ? 'Searching instrument catalog…' : `${results.length} ${results.length === 1 ? 'symbol' : 'symbols'}`}</span><span>{mode === 'choose' ? 'Select a symbol' : 'Select a symbol, then choose its scale'}</span></footer>
       </section>
     </div>
   );

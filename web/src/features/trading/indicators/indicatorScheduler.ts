@@ -12,6 +12,7 @@ import {
   tradingViewBuiltInUsesCompareSeries,
 } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
+import type { TradingSessionSpec } from './tradingSessions';
 
 type PendingRequest = {
   resolve: (outputs: IndicatorOutput[] | null) => void;
@@ -20,11 +21,14 @@ type PendingRequest = {
 
 type WorkerFactory = () => Worker;
 
-/** Loads a compare symbol's bars on the chart's interval (the chart passes its compare-symbol loader). */
-export type CompareBarsLoader = (instrumentId: string, interval: string, limit: number) => Promise<readonly MarketBar[]>;
+/**
+ * Loads a compare symbol's bars on the chart's interval covering the chart's time range (epoch milliseconds of the first and
+ * last bar starts). The chart passes a loader that shares its comparison-series query cache.
+ */
+export type CompareBarsLoader = (instrumentId: string, interval: string, range: { from: number; to: number }) => Promise<readonly MarketBar[]>;
 type CompareBars = Record<string, MarketBar[]>;
-
-const COMPARE_BARS_STALE_MS = 15_000;
+/** What the chart knows beyond its bars: the instrument's session calendar. */
+export type IndicatorCalculationContext = { session?: TradingSessionSpec };
 
 function defaultWorkerFactory(): Worker {
   return new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });
@@ -50,10 +54,15 @@ function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstan
     .filter((output) => output.visible !== false);
 }
 
-function calculateOutputs(bars: readonly MarketBar[], indicator: CoreIndicatorInstance, compareBars: CompareBars | undefined): IndicatorOutput[] {
+function calculateOutputs(
+  bars: readonly MarketBar[],
+  indicator: CoreIndicatorInstance,
+  compareBars: CompareBars | undefined,
+  context: IndicatorCalculationContext,
+): IndicatorOutput[] {
   const id = String(indicator.id);
   const outputs = isTradingViewBuiltInId(id)
-    ? calculateTradingViewBuiltInOutputs(bars, { ...indicator, id }, {
+    ? calculateTradingViewBuiltInOutputs(bars, { ...indicator, id, session: context.session }, {
       compareBars: indicator.compareSymbol ? compareBars?.[indicator.compareSymbol] : undefined,
     }) as IndicatorOutput[]
     : indicatorOutputs(bars, indicator);
@@ -71,7 +80,6 @@ export class TradingIndicatorScheduler {
   private readonly pending = new Map<number, PendingRequest>();
   private latestRequestId = 0;
   private destroyed = false;
-  private readonly compareBarsCache = new Map<string, { expiresAt: number; promise: Promise<MarketBar[]> }>();
 
   constructor(
     workerFactory: WorkerFactory | null = typeof Worker === 'undefined' ? null : defaultWorkerFactory,
@@ -90,6 +98,7 @@ export class TradingIndicatorScheduler {
   calculate(
     bars: readonly MarketBar[],
     indicators: readonly CoreIndicatorInstance[],
+    context: IndicatorCalculationContext = {},
   ): Promise<IndicatorOutput[] | null> {
     if (this.destroyed) return Promise.resolve(null);
     const requestId = ++this.latestRequestId;
@@ -107,7 +116,7 @@ export class TradingIndicatorScheduler {
 
     if (!this.worker) {
       const localPromise = this.loadCompareBars(symbols, clonedBars).then((compareBars) => (
-        localIndicators.flatMap((indicator) => calculateOutputs(clonedBars, indicator, compareBars))
+        localIndicators.flatMap((indicator) => calculateOutputs(clonedBars, indicator, compareBars, context))
       ));
       return Promise.all([localPromise, externalPromise]).then(([local, external]) => (
         requestId === this.latestRequestId && !this.destroyed ? [...local, ...external] : null
@@ -122,10 +131,10 @@ export class TradingIndicatorScheduler {
 
     // Indicators with a compare symbol wait for its bars; the rest go to the worker at once, as before.
     const localPromise = symbols.length === 0
-      ? this.postToWorker(requestId, clonedBars, localIndicators, undefined)
+      ? this.postToWorker(requestId, clonedBars, localIndicators, undefined, context)
       : this.loadCompareBars(symbols, clonedBars).then((compareBars) => (
         requestId === this.latestRequestId && !this.destroyed
-          ? this.postToWorker(requestId, clonedBars, localIndicators, compareBars)
+          ? this.postToWorker(requestId, clonedBars, localIndicators, compareBars, context)
           : null
       ));
 
@@ -140,8 +149,9 @@ export class TradingIndicatorScheduler {
     bars: MarketBar[],
     indicators: CoreIndicatorInstance[],
     compareBars: CompareBars | undefined,
+    context: IndicatorCalculationContext,
   ): Promise<IndicatorOutput[] | null> {
-    if (!this.worker) return Promise.resolve(indicators.flatMap((indicator) => calculateOutputs(bars, indicator, compareBars)));
+    if (!this.worker) return Promise.resolve(indicators.flatMap((indicator) => calculateOutputs(bars, indicator, compareBars, context)));
     return new Promise<IndicatorOutput[] | null>((resolve, reject) => {
       for (const [pendingId, pending] of this.pending) {
         if (pendingId < requestId) {
@@ -150,28 +160,24 @@ export class TradingIndicatorScheduler {
         }
       }
       this.pending.set(requestId, { resolve, reject });
-      const request: IndicatorWorkerRequest = { requestId, bars, indicators, ...(compareBars ? { compareBars } : {}) };
+      const request: IndicatorWorkerRequest = {
+        requestId, bars, indicators, ...(compareBars ? { compareBars } : {}), ...(context.session ? { session: context.session } : {}),
+      };
       this.worker?.postMessage(request);
     });
   }
 
-  /** The compare symbols' bars on the chart's interval, as many as the chart has; a failed load gives no bars. */
+  /** The compare symbols' bars on the chart's interval over the chart's time range; a failed load gives no bars. */
   private loadCompareBars(symbols: readonly string[], bars: readonly MarketBar[]): Promise<CompareBars | undefined> {
     const interval = bars[0]?.interval;
     const loader = this.compareBarsLoader;
-    if (symbols.length === 0 || !interval || !loader) return Promise.resolve(undefined);
-    const limit = Math.max(100, bars.length);
-    const now = Date.now();
-    return Promise.all(symbols.map((symbol) => {
-      const key = `${symbol}|${interval}|${limit}`;
-      const cached = this.compareBarsCache.get(key);
-      if (cached && cached.expiresAt > now) return cached.promise;
-      const promise = loader(symbol, interval, limit)
-        .then((loaded) => loaded.map((bar) => ({ ...bar })))
-        .catch(() => [] as MarketBar[]);
-      this.compareBarsCache.set(key, { expiresAt: now + COMPARE_BARS_STALE_MS, promise });
-      return promise;
-    })).then((loaded) => Object.fromEntries(symbols.map((symbol, index) => [symbol, loaded[index]])));
+    const from = Date.parse(bars[0]?.start_time ?? '');
+    const to = Date.parse(bars.at(-1)?.start_time ?? '');
+    if (symbols.length === 0 || !interval || !loader || !Number.isFinite(from) || !Number.isFinite(to)) return Promise.resolve(undefined);
+    return Promise.all(symbols.map((symbol) => loader(symbol, interval, { from, to })
+      .then((loaded) => loaded.map((bar) => ({ ...bar })))
+      .catch(() => [] as MarketBar[])))
+      .then((loaded) => Object.fromEntries(symbols.map((symbol, index) => [symbol, loaded[index]])));
   }
 
   destroy(): void {
@@ -183,7 +189,6 @@ export class TradingIndicatorScheduler {
     this.worker = null;
     for (const pending of this.pending.values()) pending.resolve(null);
     this.pending.clear();
-    this.compareBarsCache.clear();
   }
 
   private readonly onMessage = (event: MessageEvent<IndicatorWorkerResponse>): void => {

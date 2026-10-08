@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, indicatorLineData, indicatorMarkers, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import type { IndicatorOutput } from '../indicators/coreIndicators';
+import type { UTCTimestamp } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
 import { fixture } from '../../../test/fixture';
 
@@ -126,5 +128,29 @@ describe('Trading chart adapter normalization', () => {
     const bars = [bar, secondBar];
     expect(drawingTimeForLogicalIndex(2, bars)).toBe('2026-08-05T12:02:00.000Z');
     expect(drawingLogicalIndexForTime('2026-08-05T12:03:00.000Z', bars)).toBe(3);
+  });
+
+  describe('indicator rendering', () => {
+    const times = [0, 60, 120, 180, 240].map((seconds) => (Date.UTC(2026, 7, 5, 12) / 1_000 + seconds) as UTCTimestamp);
+    const iso = (time: number) => new Date(time * 1_000).toISOString();
+    const levels: IndicatorOutput = {
+      key: 'tv-rob-booker-missed-pivot-points:missed-above', title: 'Missed Pivot Above', pane: 0, kind: 'line', render: 'levels',
+      points: [{ time: iso(times[0]), value: 10 }, { time: iso(times[1]), value: 10 }, { time: iso(times[3]), value: 12 }],
+    };
+
+    it('leaves gaps between separate levels instead of joining them', () => {
+      expect(indicatorLineData(levels, times, 2)).toEqual([
+        { time: times[0], value: 20 }, { time: times[1], value: 20 }, { time: times[2] }, { time: times[3], value: 24 },
+      ]);
+      // Joined lines and pane outputs keep their points and price scale.
+      expect(indicatorLineData({ ...levels, render: 'line', pane: 1 }, times, 2)).toEqual([
+        { time: times[0], value: 10 }, { time: times[1], value: 10 }, { time: times[3], value: 12 },
+      ]);
+    });
+
+    it('draws point signals as markers at their price', () => {
+      const signals: IndicatorOutput = { ...levels, key: 'tv-rob-booker-reversal:bullish', render: 'markers', marker: 'arrowUp', color: '#20c997' };
+      expect(indicatorMarkers(signals, 2)[2]).toEqual({ time: times[3], position: 'atPriceMiddle', price: 24, shape: 'arrowUp', color: '#20c997', size: 1 });
+    });
   });
 });

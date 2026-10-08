@@ -108,6 +108,12 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   if (item.standardDeviations !== undefined && (!Number.isFinite(item.standardDeviations) || item.standardDeviations <= 0)) return false;
   if (item.anchorTime !== undefined && item.anchorTime !== null && typeof item.anchorTime !== 'string') return false;
   if (item.compareSymbol !== undefined && item.compareSymbol !== null && typeof item.compareSymbol !== 'string') return false;
+  if (item.params !== undefined) {
+    if (!item.params || typeof item.params !== 'object' || Array.isArray(item.params)) return false;
+    for (const [key, value] of Object.entries(item.params)) {
+      if (!key || !(typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)))) return false;
+    }
+  }
   if (item.style !== undefined) {
     if (!item.style || typeof item.style !== 'object') return false;
     const style = item.style as CoreIndicatorStyle;
