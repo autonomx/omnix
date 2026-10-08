@@ -6,7 +6,7 @@ Omnix process. Explicit process-environment values remain authoritative.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 from app.errors import LegacyPersistenceRetired
 
 import ctypes
@@ -357,6 +357,48 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
     else:
         api_keys.pop(provider, None)
     stored_payload["research_api_keys"] = api_keys
+    _write_payload(stored_payload)
+
+
+def _stored_alert_webhook_secrets() -> dict[str, str]:
+    secrets = _stored_payload().get("alert_webhook_secrets")
+    if not isinstance(secrets, dict):
+        return {}
+    return {str(key): str(value) for key, value in secrets.items() if value}
+
+
+def load_alert_webhook_secret(key: str) -> str:
+    """The signing secret of one alert's webhook (TVP-1.2); empty when none is stored."""
+    return _stored_alert_webhook_secrets().get(key, "")
+
+
+def has_alert_webhook_secret(key: str) -> bool:
+    return bool(load_alert_webhook_secret(key))
+
+
+def save_alert_webhook_secret(key: str, value: str | None) -> None:
+    """Store, replace or (with an empty value) remove one alert's webhook secret.
+
+    Alert webhook secrets never go to PostgreSQL. Without an operating-system
+    credential store, setting one fails closed.
+    """
+
+    requested = str(value or "").strip()
+    if sys.platform != "win32":
+        if requested:
+            raise LegacyPersistenceRetired(
+                "alert webhook secrets require an operating-system credential store"
+            )
+        return
+    stored_payload = _stored_payload()
+    secrets = _stored_alert_webhook_secrets()
+    if requested:
+        secrets[key] = requested
+    elif key in secrets:
+        secrets.pop(key)
+    else:
+        return
+    stored_payload["alert_webhook_secrets"] = secrets
     _write_payload(stored_payload)
 
 
