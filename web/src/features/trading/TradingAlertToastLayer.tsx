@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { playAlertSound } from './alertSounds';
 import { useTradingAlerts, useTradingAlertTriggers } from './useTradingAlerts';
 import './TradingAlertToastLayer.css';
 
@@ -25,7 +26,10 @@ export function TradingAlertToastLayer() {
     seen.current = current;
     if (!trigger) return;
     const alert = alertsQuery.data?.find((item) => item.alert_id === trigger.alert_id);
-    if (alert && !(alert.parameters.notification_channels ?? ['app', 'toast']).includes('toast')) return;
+    const channels = alert?.parameters.notification_channels ?? ['app', 'toast'];
+    // The Sound channel plays the alert's sound (chime unless it chose another).
+    if (channels.includes('sound')) playAlertSound(alert?.parameters.delivery?.sound?.name);
+    if (alert && !channels.includes('toast')) return;
     const message = alert?.parameters.message || `${symbol(trigger.instrument_id)} crossed ${trigger.threshold}`;
     setToast({ triggerId: trigger.trigger_id, title: 'Alert triggered', message });
     const timer = window.setTimeout(() => setToast((currentToast) => currentToast?.triggerId === trigger.trigger_id ? null : currentToast), 6_000);

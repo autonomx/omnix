@@ -3,6 +3,7 @@ import { convertedPrice, intervalLabel } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { chartPalette } from './chartPalette';
 import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
+import { DrawingStyleControls } from './drawings/DrawingStyleControls';
 import { drawingToolDefinition } from './drawings/tools/registry';
 import { ChartCopyImageButton, ChartMarketStatusBadges } from './TradingChartWorkflowControls';
 
@@ -87,6 +88,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             {selectedDrawing ? (
               <>
                 <input aria-label="Drawing color" type="color" value={selectedDrawing.style?.color ?? chartPalette.cyan} onChange={(event) => drawings.updateSelected({ style: { ...(selectedDrawing.style ?? { lineWidth: 2, lineStyle: 'solid' }), color: event.target.value } })} />
+                <DrawingStyleControls drawing={selectedDrawing} onChange={(style) => drawings.updateSelected({ style })} />
                 <button type="button" aria-pressed={Boolean(selectedDrawing.locked)} onClick={() => drawings.updateSelected({ locked: !selectedDrawing.locked })}>{selectedDrawing.locked ? 'Unlock' : 'Lock'}</button>
                 <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
                 {drawingToolDefinition(selectedDrawing.toolType)?.editableText ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}

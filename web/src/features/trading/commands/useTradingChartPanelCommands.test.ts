@@ -25,6 +25,7 @@ function fakeAdapter() {
     setPriceScaleInvert: vi.fn(),
     setPriceScaleMode: vi.fn(),
     snapshotDataUrl: vi.fn(() => 'data:image/png;base64,AA'),
+    projectDrawingPoint: vi.fn(() => ({ x: 640, y: 120 })),
   };
   return { adapter, timeScale, range: () => range };
 }
@@ -32,6 +33,7 @@ function fakeAdapter() {
 function mount(active: boolean, replayMode = false) {
   const fake = fakeAdapter();
   const openGoToDate = vi.fn();
+  const setAlertPlacement = vi.fn();
   const selectedRangeRef = { current: 30 as number | undefined | null };
   const setSelectedRangeLabel = vi.fn();
   const hook = renderHook(() => {
@@ -47,10 +49,12 @@ function mount(active: boolean, replayMode = false) {
       setSelectedRangeLabel,
       openGoToDate,
       replayMode,
+      setAlertPlacement,
+      latest: { start_time: '2026-10-08T14:00:00.000Z', close: '101.5' } as never,
     });
     return priceScaleSettings;
   });
-  return { ...fake, hook, openGoToDate, selectedRangeRef, setSelectedRangeLabel };
+  return { ...fake, hook, openGoToDate, setAlertPlacement, selectedRangeRef, setSelectedRangeLabel };
 }
 
 const press = (init: KeyboardEventInit) => act(() => { fireEvent.keyDown(document.body, init); });
@@ -115,6 +119,13 @@ describe('chart panel shortcuts (TVP-2.1)', () => {
     press({ key: 'g', code: 'KeyG', altKey: true });
     expect(replaying.openGoToDate).not.toHaveBeenCalled();
     replaying.hook.unmount();
+  });
+
+  it('opens the alert dialog at the last price with Alt+A', () => {
+    const chart = mount(true);
+    press({ key: 'a', code: 'KeyA', altKey: true });
+    expect(chart.setAlertPlacement).toHaveBeenCalledWith(expect.objectContaining({ time: '2026-10-08T14:00:00.000Z', price: 101.5, source: 'context-menu' }));
+    chart.hook.unmount();
   });
 
   it('leaves inactive charts alone', () => {

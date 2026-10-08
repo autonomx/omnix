@@ -115,6 +115,8 @@ export function chartAlertCreateInput(input: {
   triggerPolicy?: TradingAlertTriggerPolicy;
   message?: string;
   notificationChannels?: TradingAlertNotificationChannel[];
+  /** The sound the Sound channel plays (sent only with that channel). */
+  soundName?: string;
   now?: number;
 }): TradingAlertCreateInput {
   const triggerPolicy = input.triggerPolicy ?? 'every_time';
@@ -136,6 +138,7 @@ export function chartAlertCreateInput(input: {
       message: input.message ?? '',
       notification_channels: input.notificationChannels ?? ['app', 'toast'],
       trigger_policy: triggerPolicy,
+      ...(input.soundName && input.notificationChannels?.includes('sound') ? { delivery: { sound: { name: input.soundName } } } : {}),
     },
     evaluation_policy: {
       interval: input.interval,
@@ -158,6 +161,8 @@ export function chartAlertUpdateInput(
     trigger_policy?: TradingAlertTriggerPolicy;
     message?: string;
     notification_channels?: TradingAlertNotificationChannel[];
+    /** The sound the Sound channel plays; the other delivery settings are kept. */
+    sound_name?: string;
   },
 ): TradingAlertUpdateInput {
   const triggerPolicy = patch.trigger_policy ?? alertFrequency(alert);
@@ -182,6 +187,9 @@ export function chartAlertUpdateInput(
         : {}),
       ...(patch.trigger_policy !== undefined || alert.parameters.trigger_policy !== undefined
         ? { trigger_policy: triggerPolicy }
+        : {}),
+      ...(patch.sound_name !== undefined
+        ? { delivery: { ...alert.parameters.delivery, sound: { name: patch.sound_name } } }
         : {}),
     },
     evaluation_policy: { ...alert.evaluation_policy, allow_partial_bars: triggerPolicy !== 'once_per_bar_close' },

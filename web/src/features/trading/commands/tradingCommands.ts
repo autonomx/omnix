@@ -71,6 +71,7 @@ export const TRADING_COMMANDS = [
   { id: 'chart.logScale', label: 'Logarithmic price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+l'] },
   { id: 'chart.percentScale', label: 'Percent price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+p'] },
   { id: 'chart.snapshot', label: 'Chart snapshot (download PNG)', group: 'Chart', scope: 'chart', defaultKeys: ['alt+s'] },
+  { id: 'chart.addAlert', label: 'Add alert at the last price', group: 'Chart', scope: 'chart', defaultKeys: ['alt+a'] },
   { id: 'chart.goToDate', label: 'Go to date', group: 'Chart', scope: 'chart', defaultKeys: ['alt+g'] },
   // Drawings
   { id: 'drawing.undo', label: 'Undo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+z'] },
