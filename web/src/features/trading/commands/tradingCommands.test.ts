@@ -49,9 +49,31 @@ describe('trading command matching', () => {
     expect(matchesHotkey('mod+shift+z', key({ key: 'Z', ctrlKey: true, shiftKey: true }))).toBe(true);
   });
 
-  it('matches Alt shortcuts by physical key so macOS Option characters still work', () => {
+  it('matches Alt shortcuts by the typed letter, or the physical key when Option or the layout changes the character', () => {
     expect(matchesHotkey('alt+t', key({ key: '†', code: 'KeyT', altKey: true }))).toBe(true);
-    expect(matchesHotkey('alt+t', key({ key: 't', code: 'KeyY', altKey: true }))).toBe(false);
+    expect(matchesHotkey('alt+t', key({ key: 't', code: 'KeyY', altKey: true }))).toBe(true);
+    expect(matchesHotkey('alt+y', key({ key: 't', code: 'KeyY', altKey: true }))).toBe(false);
+  });
+
+  it('follows the layout for Alt letters on AZERTY and Dvorak', () => {
+    // AZERTY: the key labelled Z sits where QWERTY has W.
+    const azertyZ = key({ key: 'Z', code: 'KeyW', altKey: true, shiftKey: true });
+    expect(matchesHotkey('alt+shift+z', azertyZ)).toBe(true);
+    expect(matchesHotkey('alt+shift+w', azertyZ)).toBe(false);
+    expect(hotkeyFromEvent(key({ key: 'a', code: 'KeyQ', altKey: true }))).toBe('alt+a');
+    // Dvorak: P sits where QWERTY has R.
+    const dvorakP = key({ key: 'p', code: 'KeyR', altKey: true });
+    expect(matchesHotkey('alt+p', dvorakP)).toBe(true);
+    expect(matchesHotkey('alt+r', dvorakP)).toBe(false);
+    // AZERTY digit row types "&" for 1 without Shift.
+    expect(matchesHotkey('alt+1', key({ key: '&', code: 'Digit1', altKey: true }))).toBe(true);
+  });
+
+  it('matches Ctrl letters on non-Latin layouts by the physical key', () => {
+    const russianCtrlS = key({ key: 'ы', code: 'KeyS', ctrlKey: true });
+    expect(matchesHotkey('mod+s', russianCtrlS)).toBe(true);
+    expect(hotkeyFromEvent(russianCtrlS)).toBe('mod+s');
+    expect(matchesHotkey('mod+z', key({ key: 'я', code: 'KeyZ', ctrlKey: true }))).toBe(true);
   });
 
   it('normalizes modifier order for conflict detection', () => {
@@ -344,6 +366,59 @@ describe('one key rule for recording and matching', () => {
 
   it('accepts a digit typed with Shift (AZERTY) for the interval box', () => {
     expect(matchesKeyPattern('interval', key({ key: '5', code: 'Digit5', shiftKey: true }))).toBe(true);
+  });
+});
+
+describe('review fixes: overrides, repeat and composition', () => {
+  afterEach(() => {
+    setTradingCommandKeyOverrides({});
+    setTradingCommandAvailability('browser');
+  });
+
+  it('falls back to the default keys in the browser when an override only has browser-reserved keys', () => {
+    const newTab = tradingCommandDefinition('tab.new')!;
+    expect(commandKeys(newTab, { 'tab.new': ['mod+t'] }, 'browser')).toEqual(newTab.defaultKeys);
+    expect(commandKeys(newTab, { 'tab.new': ['mod+t'] }, 'installed')).toEqual(['mod+t', ...(newTab.installedKeys ?? [])]);
+    expect(commandKeys(newTab, { 'tab.new': ['mod+t', 'alt+n'] }, 'browser')).toEqual(['alt+n']);
+  });
+
+  it('refuses Ctrl+Alt bindings because they are AltGr characters on many layouts', () => {
+    const reset = tradingCommandDefinition('chart.reset')!;
+    expect(rebindProblem(reset, 'mod+alt+e')).toMatch(/AltGr/);
+    expect(rebindProblem(reset, 'alt+e')).toBeNull();
+  });
+
+  it('runs a command once per press but repeats moving and zooming while the key is held', () => {
+    const newTab = vi.fn();
+    const moveLeft = vi.fn();
+    const dispatcher = renderHook(() => useTradingCommandDispatcher());
+    const tabBinding = renderHook(() => useTradingCommand('tab.new', newTab));
+    const moveBinding = renderHook(() => useTradingCommand('chart.moveLeft', moveLeft));
+
+    window.dispatchEvent(key({ key: 'T', code: 'KeyT', altKey: true, shiftKey: true }));
+    const held = key({ key: 'T', code: 'KeyT', altKey: true, shiftKey: true, repeat: true });
+    window.dispatchEvent(held);
+    expect(newTab).toHaveBeenCalledTimes(1);
+    expect(held.defaultPrevented).toBe(true);
+
+    expect(tradingCommandDefinition('chart.moveLeft')!.repeatable).toBe(true);
+    expect(tradingCommandDefinition('tab.new')!.repeatable).toBeUndefined();
+
+    tabBinding.unmount();
+    moveBinding.unmount();
+    dispatcher.unmount();
+  });
+
+  it('ignores key presses while an input method is composing', () => {
+    const undo = vi.fn();
+    const dispatcher = renderHook(() => useTradingCommandDispatcher());
+    const binding = renderHook(() => useTradingCommand('drawing.undo', undo));
+    window.dispatchEvent(key({ key: 'z', code: 'KeyZ', ctrlKey: true, isComposing: true }));
+    expect(undo).not.toHaveBeenCalled();
+    window.dispatchEvent(key({ key: 'z', code: 'KeyZ', ctrlKey: true }));
+    expect(undo).toHaveBeenCalledTimes(1);
+    binding.unmount();
+    dispatcher.unmount();
   });
 });
 

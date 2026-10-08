@@ -21,7 +21,8 @@ export function sanitizeKeyOverrides(value: unknown): KeyOverrides {
     if (!definition || !isRebindable(definition) || !Array.isArray(keys)) continue;
     const hotkeys = keys.filter((key): key is string => typeof key === 'string' && key.trim() !== '').map(normalizeHotkey)
       .filter((key) => rebindProblem(definition, key, 'installed') === null);
-    overrides[id] = [...new Set(hotkeys)];
+    // An override left with no keys would leave the command dead; drop it so the defaults apply.
+    if (hotkeys.length > 0) overrides[id] = [...new Set(hotkeys)];
   }
   return overrides;
 }

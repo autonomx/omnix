@@ -54,9 +54,13 @@ export function useTradingCommandKeyOverrides(): KeyOverrides {
 
 function dispatch(event: KeyboardEvent): void {
   if (event.key === 'Escape') forgetChartClick();
-  if (event.defaultPrevented) return;
+  if (event.defaultPrevented || event.isComposing) return;
   const match = resolveCommand(registered, event, keyOverrides, availability);
   if (!match) return;
+  if (event.repeat && !match.definition.repeatable) {
+    event.preventDefault();
+    return;
+  }
   event.preventDefault();
   event.stopPropagation();
   match.handler.run(event);

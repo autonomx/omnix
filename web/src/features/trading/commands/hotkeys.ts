@@ -2,10 +2,14 @@
  * Hotkey strings: parsing, matching key events, and recording key presses.
  *
  * One rule decides which key a hotkey names, for both recording and matching:
- * - with Alt held, the physical key (`event.code`), because macOS Option and
- *   AltGr change the typed character (Option+T types "†");
- * - otherwise the typed character (`event.key`), so Ctrl+Z is the key that
- *   types "z" on QWERTY, QWERTZ and AZERTY alike.
+ * - the typed character (`event.key`), so Ctrl+Z is the key that types "z"
+ *   on QWERTY, QWERTZ, AZERTY and Dvorak alike;
+ * - with Alt held, the typed character when it is an ASCII letter or digit
+ *   (Windows and Linux keep the layout's letter), otherwise the physical key
+ *   (`event.code`): macOS Option types "†" for T, and the AZERTY digit row
+ *   types "&" for 1;
+ * - with Ctrl or ⌘ held on a non-Latin layout (Ctrl+S types "ы" on Russian),
+ *   the physical letter key.
  * For typed characters other than letters (digits and punctuation such as
  * `/`, `.` or `!`), Shift is part of producing the character, so it is
  * neither recorded nor checked: `/` is Shift+7 on QWERTZ, and the digit row
@@ -87,8 +91,16 @@ function physicalKeyName(code: string): string {
 
 type KeyLike = Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>;
 
-function eventKeyName(event: KeyLike, physical: boolean): string {
-  return physical && event.code ? physicalKeyName(event.code) : typedKeyName(event.key ?? '');
+const ASCII_LETTER_OR_DIGIT = /^[a-z0-9]$/;
+const LETTER_CODE = /^Key[A-Z]$/;
+
+function eventKeyName(event: KeyLike): string {
+  const typed = typedKeyName(event.key ?? '');
+  const code = event.code ?? '';
+  if (event.altKey) return ASCII_LETTER_OR_DIGIT.test(typed) || !code ? typed : physicalKeyName(code);
+  const nonLatinLetter = typed.length === 1 && typed.charCodeAt(0) > 0x7f && typed.toUpperCase() !== typed;
+  if ((event.ctrlKey || event.metaKey) && nonLatinLetter && LETTER_CODE.test(code)) return physicalKeyName(code);
+  return typed;
 }
 
 /** True when the event is exactly this hotkey (see the rule at the top of this file). */
@@ -100,7 +112,7 @@ export function matchesHotkey(hotkey: string, event: KeyLike): boolean {
   } else if (parsed.ctrl !== event.ctrlKey || parsed.meta !== event.metaKey) {
     return false;
   }
-  if (eventKeyName(event, parsed.alt) !== parsed.key) return false;
+  if (eventKeyName(event) !== parsed.key) return false;
   return (!parsed.alt && isCharacterKey(parsed.key)) || parsed.shift === event.shiftKey;
 }
 
@@ -109,7 +121,7 @@ const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'O
 /** The hotkey a key press records, by the same rule `matchesHotkey` uses. Null for a lone modifier or a dead key. */
 export function hotkeyFromEvent(event: KeyLike): string | null {
   if (MODIFIER_KEYS.has(event.key)) return null;
-  const key = eventKeyName(event, event.altKey);
+  const key = eventKeyName(event);
   if (!key || ['unidentified', 'dead', 'process'].includes(key)) return null;
   const modifiers = [
     event.ctrlKey || event.metaKey ? 'mod' : null,

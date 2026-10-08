@@ -36,6 +36,8 @@ export type TradingCommandDefinition = {
   keyContext?: ChartKeyContext;
   /** Keys a component's own keyboard pattern reads (the watchlist tree grid). Listed in the shortcut dialog; never dispatched or rebound. */
   handledLocally?: boolean;
+  /** Fires again while the key is held (moving and zooming the chart); other commands run once per press. */
+  repeatable?: boolean;
   /** Catalogued ahead of its action (it arrives with another work package): listed as not available yet, never dispatched or rebound. */
   planned?: boolean;
 };
@@ -53,12 +55,12 @@ export const TRADING_COMMANDS = [
   { id: 'chart.symbolSearch', label: 'Change symbol (type a letter)', group: 'Chart', scope: 'chart', defaultKeys: [], keyPattern: 'letter', keyContext: 'chart' },
   { id: 'chart.intervalInput', label: 'Change interval (type a number or comma)', group: 'Chart', scope: 'chart', defaultKeys: [], keyPattern: 'interval', keyContext: 'chart' },
   { id: 'chart.indicators', label: 'Open indicators', group: 'Chart', scope: 'chart', defaultKeys: ['/'], keyContext: 'chart' },
-  { id: 'chart.moveLeft', label: 'Move chart one bar left', group: 'Chart', scope: 'chart', defaultKeys: ['arrowleft'], keyContext: 'chart' },
-  { id: 'chart.moveRight', label: 'Move chart one bar right', group: 'Chart', scope: 'chart', defaultKeys: ['arrowright'], keyContext: 'chart' },
-  { id: 'chart.moveFurtherLeft', label: 'Move chart further left', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowleft'], keyContext: 'chart' },
-  { id: 'chart.moveFurtherRight', label: 'Move chart further right', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowright'], keyContext: 'chart' },
-  { id: 'chart.zoomIn', label: 'Zoom in', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowup'], keyContext: 'chart' },
-  { id: 'chart.zoomOut', label: 'Zoom out', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowdown'], keyContext: 'chart' },
+  { id: 'chart.moveLeft', label: 'Move chart one bar left', group: 'Chart', scope: 'chart', defaultKeys: ['arrowleft'], keyContext: 'chart', repeatable: true },
+  { id: 'chart.moveRight', label: 'Move chart one bar right', group: 'Chart', scope: 'chart', defaultKeys: ['arrowright'], keyContext: 'chart', repeatable: true },
+  { id: 'chart.moveFurtherLeft', label: 'Move chart further left', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowleft'], keyContext: 'chart', repeatable: true },
+  { id: 'chart.moveFurtherRight', label: 'Move chart further right', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowright'], keyContext: 'chart', repeatable: true },
+  { id: 'chart.zoomIn', label: 'Zoom in', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowup'], keyContext: 'chart', repeatable: true },
+  { id: 'chart.zoomOut', label: 'Zoom out', group: 'Chart', scope: 'chart', defaultKeys: ['mod+arrowdown'], keyContext: 'chart', repeatable: true },
   { id: 'chart.reset', label: 'Reset chart view', group: 'Chart', scope: 'chart', defaultKeys: ['alt+r'] },
   { id: 'chart.invertScale', label: 'Invert price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+i'] },
   { id: 'chart.logScale', label: 'Logarithmic price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+l'] },
@@ -125,7 +127,10 @@ export function commandKeys(
   overrides: KeyOverrides = {},
   availability: TradingCommandAvailability = 'browser',
 ): readonly string[] {
-  const keys = (isRebindable(definition) ? overrides[definition.id] : undefined) ?? definition.defaultKeys;
+  const override = isRebindable(definition) ? overrides[definition.id] : undefined;
+  // A key rebound in the installed app may be one the browser keeps; it can't fire here, so fall back to the defaults.
+  const usable = availability === 'browser' ? override?.filter((key) => !isBrowserReservedHotkey(key)) : override;
+  const keys = usable && usable.length > 0 ? usable : definition.defaultKeys;
   return availability === 'installed' && definition.installedKeys ? [...keys, ...definition.installedKeys] : keys;
 }
 
@@ -212,10 +217,12 @@ export function rebindProblem(
 ): string | null {
   if (!isRebindable(definition)) return `${definition.label} can't be rebound.`;
   const plain = isPlainHotkey(hotkey);
-  const { key } = parseHotkey(hotkey);
+  const parsed = parseHotkey(hotkey);
+  const { key } = parsed;
   if (!key) return 'Press a key.';
   if (plain && FOCUS_KEYS.has(key)) return 'Enter, Space, Tab and Escape need Ctrl, Alt or ⌘: on their own they work buttons, focus and dialogs.';
   if (plain && !definition.keyContext) return 'Keys without Ctrl, Alt or ⌘ are only for commands that act on the chart. Add a modifier.';
+  if ((parsed.mod || parsed.ctrl) && parsed.alt) return 'Ctrl+Alt is AltGr on many keyboards, which types characters such as @ or {. Use Ctrl or Alt, not both.';
   if (availability === 'browser' && isBrowserReservedHotkey(hotkey)) return 'The browser keeps this key for itself, so it only works in the installed app. The current keys stay.';
   return null;
 }

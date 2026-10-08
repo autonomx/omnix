@@ -155,6 +155,7 @@ describe('stored key overrides', () => {
       'watchlist.next': ['j'],
       'nope.command': ['mod+j'],
       'layout.save': 'mod+e',
+      'tab.close': ['k'],
     })).toEqual({ 'chart.reset': ['alt+x'] });
     window.localStorage.setItem(KEY_OVERRIDES_STORAGE_KEY, '{not json');
     expect(loadStoredKeyOverrides()).toEqual({});
