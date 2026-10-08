@@ -24,7 +24,7 @@ from app.apps.trading.alerts import (
     TradingAlertUpdate,
 )
 from app.apps.trading.alerts_api import create_trading_alert_router
-from app.apps.trading.alerts_channels import ProtectedAlertSecretStore
+from app.apps.trading.alerts_channels import ProtectedAlertWebhookStore
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -365,37 +365,56 @@ def test_migration_backfills_legacy_alerts(alerts) -> None:
         uow.rollback()
 
 
-class MemorySecrets:
+class MemoryWebhooks:
+    """An in-memory webhook store; ``fail_save`` simulates the protected store failing."""
+
     def __init__(self) -> None:
-        self.values: dict[tuple[str, str], str] = {}
-
-    def save(self, workspace_id, alert_id, secret) -> None:
-        if secret:
-            self.values[(workspace_id, alert_id)] = secret
-        else:
-            self.values.pop((workspace_id, alert_id), None)
-
-    def has(self, workspace_id, alert_id) -> bool:
-        return (workspace_id, alert_id) in self.values
+        self.entries: dict[str, dict[str, str]] = {}
+        self.fail_save = False
 
     def available(self) -> bool:
         return True
 
+    def load(self, ref):
+        return self.entries.get(ref)
 
-def _client(env, secrets):
+    def save(self, ref, url, secret) -> None:
+        if self.fail_save:
+            raise OSError("store unavailable")
+        self.entries[ref] = {"url": url, "secret": secret}
+
+    def delete(self, ref) -> None:
+        self.entries.pop(ref, None)
+
+    def delete_alert(self, workspace_id, alert_id, *, keep=None) -> None:
+        prefix = f"{workspace_id}/{alert_id}/"
+        self.entries = {ref: entry for ref, entry in self.entries.items() if ref == keep or not ref.startswith(prefix)}
+
+    def of(self, workspace_id, alert_id):
+        prefix = f"{workspace_id}/{alert_id}/"
+        return [entry for ref, entry in self.entries.items() if ref.startswith(prefix)]
+
+
+def _client(env, webhooks):
     from app.errors import install_error_envelope
 
     app = FastAPI()
     install_error_envelope(app)
-    app.include_router(create_trading_alert_router(repository_factory=lambda: env.repository, secret_store=secrets))
+    app.include_router(create_trading_alert_router(repository_factory=lambda: env.repository, webhook_store=webhooks))
     return TestClient(app)
 
 
-def test_api_rejects_unavailable_channels_and_never_returns_the_webhook_secret(alerts) -> None:
-    secrets = MemorySecrets()
-    client = _client(alerts, secrets)
+HOOK = "https://hooks.example.com/services/T000/B000/tokenvalue"
+
+
+def test_api_rejects_unavailable_channels_and_keeps_webhooks_out_of_responses(alerts) -> None:
+    webhooks = MemoryWebhooks()
+    client = _client(alerts, webhooks)
     alert_id = f"api-{alerts.suffix}"
-    key = (alerts.context.workspace_id, alert_id)
+
+    def stored():
+        return webhooks.of(alerts.context.workspace_id, alert_id)
+
     body = {
         "alert_id": alert_id,
         "instrument_id": alerts.instrument,
@@ -408,64 +427,80 @@ def test_api_rejects_unavailable_channels_and_never_returns_the_webhook_secret(a
     for channel in ("email", "push"):
         assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": [channel]}}).status_code == 422
 
-    body["parameters"] = {
-        "notification_channels": ["app", "sound"],
-        "delivery": {"webhook": {"url": "https://hooks.example.com/a", "has_secret": False}, "sound": {"name": "chime"}},
-    }
+    body["parameters"] = {"notification_channels": ["app", "sound"], "delivery": {"webhook": {"url": HOOK}, "sound": {"name": "chime"}}}
     created = client.post("/api/trading/alerts", json={**body, "webhook_secret": "very-secret-value"})
     assert created.status_code == 201, created.text
-    assert "very-secret-value" not in created.text and "webhook_secret" not in created.text
-    assert created.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
-    assert secrets.values[key] == "very-secret-value"
+    for text in (created.text, client.get("/api/trading/alerts").text):
+        assert "very-secret-value" not in text and "tokenvalue" not in text and "webhook_secret" not in text
+    webhook = created.json()["parameters"]["delivery"]["webhook"]
+    assert webhook == {"display_url": "https://hooks.example.com/…", "has_secret": True}
+    assert stored() == [{"url": HOOK, "secret": "very-secret-value"}]
     with alerts.uow() as uow:
-        stored = uow.connection.execute(
+        row = uow.connection.execute(
             "SELECT condition_parameters::text || notification_settings::text FROM omnix_trading_alerts"
             " WHERE workspace_id = %s AND alert_id = %s",
             (alerts.context.workspace_id, alert_id),
         ).fetchone()[0]
-    assert "very-secret-value" not in stored and "hooks.example.com" in stored
-    assert "very-secret-value" not in client.get("/api/trading/alerts").text
+    assert "very-secret-value" not in row and "tokenvalue" not in row and "hooks.example.com/…" in row
 
-    # Reusing the alert id fails without touching the stored secret.
+    # Reusing the alert id fails without touching the stored webhook.
     duplicate = client.post("/api/trading/alerts", json={**body, "webhook_secret": "other-secret"})
     assert duplicate.status_code == 409
-    assert secrets.values[key] == "very-secret-value"
+    assert stored() == [{"url": HOOK, "secret": "very-secret-value"}]
 
-    # An update without a secret keeps it.
-    update = {name: value for name, value in body.items() if name != "alert_id"}
-    kept = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=update)
-    assert kept.status_code == 200 and kept.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
-    # A stale update fails without touching the secret.
-    stale = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json={**update, "webhook_secret": "stale-secret"})
+    # An update that sends back what it read (masked URL, no secret) keeps both.
+    echoed = {**body, "parameters": {**body["parameters"], "delivery": {"webhook": created.json()["parameters"]["delivery"]["webhook"]}}}
+    echoed.pop("alert_id")
+    kept = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json=echoed)
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
+    assert stored() == [{"url": HOOK, "secret": "very-secret-value"}]
+    # A stale update fails before anything is stored.
+    stale = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "1"}, json={**echoed, "webhook_secret": "stale"})
     assert stale.status_code == 409
-    assert secrets.values[key] == "very-secret-value"
-    cleared = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json={**update, "webhook_secret": ""})
+    assert stored() == [{"url": HOOK, "secret": "very-secret-value"}]
+    # A store failure changes nothing: no new revision, the old secret still referenced.
+    webhooks.fail_save = True
+    failed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json={**echoed, "webhook_secret": "rotated"})
+    assert failed.status_code == 503
+    webhooks.fail_save = False
+    assert _alert(alerts, "api").revision == 2
+    assert stored() == [{"url": HOOK, "secret": "very-secret-value"}]
+    # Rotation replaces the old secret; nothing else for this alert stays stored.
+    rotated = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "2"}, json={**echoed, "webhook_secret": "rotated"})
+    assert rotated.status_code == 200
+    assert stored() == [{"url": HOOK, "secret": "rotated"}]
+    cleared = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "3"}, json={**echoed, "webhook_secret": ""})
     assert cleared.json()["parameters"]["delivery"]["webhook"]["has_secret"] is False
-    assert secrets.values == {}
-    # A client cannot claim a secret: the stored flag decides.
-    claim = {**update, "parameters": {**update["parameters"], "delivery": {"webhook": {"url": "https://hooks.example.com/a", "has_secret": True}}}}
-    claimed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "3"}, json=claim)
+    assert stored() == [{"url": HOOK, "secret": ""}]
+    # A client cannot claim a secret.
+    claim = {**echoed, "parameters": {**echoed["parameters"], "delivery": {"webhook": {"has_secret": True}}}}
+    claimed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "4"}, json=claim)
     assert claimed.json()["parameters"]["delivery"]["webhook"]["has_secret"] is False
-    replaced = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "4"}, json={**update, "webhook_secret": "new-secret"})
-    assert replaced.json()["parameters"]["delivery"]["webhook"]["has_secret"] is True
-    # Removing the webhook removes its secret.
-    removed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "5"}, json={**update, "parameters": {"notification_channels": ["app"]}})
-    assert removed.status_code == 200 and secrets.values == {}
-    again = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "6"}, json={**update, "webhook_secret": "last"})
-    assert again.status_code == 200 and secrets.values[key] == "last"
+    # Removing the webhook removes it from the store.
+    removed = client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "5"}, json={**echoed, "parameters": {"notification_channels": ["app"]}})
+    assert removed.status_code == 200 and stored() == []
+    assert client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "6"}, json=echoed).status_code == 422  # url required again
+    readd = {name: value for name, value in body.items() if name != "alert_id"}
+    assert client.put(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "6"}, json=readd).status_code == 200
+    assert stored() == [{"url": HOOK, "secret": ""}]
     assert client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": "7"}).status_code == 200
-    assert secrets.values == {}
+    assert stored() == []
 
-    no_webhook = client.post("/api/trading/alerts", json={**body, "parameters": {}, "webhook_secret": "x"})
-    assert no_webhook.status_code == 422
+    # A new alert with an old id does not inherit anything left in the store.
+    webhooks.save(f"{alerts.context.workspace_id}/{alert_id}/leftover", "https://old.example.com/x", "old")
+    assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": ["app"]}}).status_code == 201
+    assert stored() == []
+    assert client.post("/api/trading/alerts", json={**body, "alert_id": f"nohook-{alerts.suffix}", "parameters": {}, "webhook_secret": "x"}).status_code == 422
 
 
-def test_validation_errors_never_echo_the_webhook_secret(alerts) -> None:
-    client = _client(alerts, MemorySecrets())
+def test_trigger_payloads_and_422s_never_carry_webhook_credentials(alerts) -> None:
+    webhooks = MemoryWebhooks()
+    client = _client(alerts, webhooks)
     base = {
         "alert_id": f"leak-{alerts.suffix}",
         "instrument_id": alerts.instrument,
-        "parameters": {"delivery": {"webhook": {"url": "https://hooks.example.com/a"}}},
+        "parameters": {"delivery": {"webhook": {"url": HOOK}}},
         "webhook_secret": "leaky-secret-value",
     }
     for body in (
@@ -473,14 +508,37 @@ def test_validation_errors_never_echo_the_webhook_secret(alerts) -> None:
         {**base, "conditions": [{"source": CLOSE, "operator": "inside_channel", "target": {"kind": "value", "value": "1"}}]},
         {**base, "condition_type": "conditions", "threshold": "5"},
         {**base, "webhook_secret": "leaky-secret-value" * 40},  # field error on the secret itself
-        {**base, "parameters": {"delivery": {"webhook": {"url": "file:///etc/passwd"}}}},
+        {**base, "parameters": {"delivery": {"webhook": {"url": HOOK + "x" * 2000}}}},  # field error on the URL
+        {**base, "conditions": [{"source": {}, "operator": "greater_than", "target": {"kind": "value", "value": "1"}}]},
     ):
         response = client.post("/api/trading/alerts", json=body)
         assert response.status_code == 422, response.text
-        assert "leaky-secret-value" not in response.text
+        assert "leaky-secret-value" not in response.text and "tokenvalue" not in response.text
     update = {name: value for name, value in base.items() if name != "alert_id"}
     put = client.put(f"/api/trading/alerts/{base['alert_id']}", headers={"If-Match": "1"}, json=update)
-    assert put.status_code == 422 and "leaky-secret-value" not in put.text
+    assert put.status_code in {409, 422} and "leaky-secret-value" not in put.text
+
+    created = client.post(
+        "/api/trading/alerts",
+        json={**base, "conditions": [{"source": CLOSE, "operator": "crossing_up", "target": {"kind": "value", "value": "100"}}]},
+    )
+    assert created.status_code == 201
+    market = Market()
+    market.set([99, 101])
+    assert _run(alerts, market) == ["leak"]
+    triggers = client.get("/api/trading/alerts/triggers").text
+    assert "hooks.example.com/…" in triggers
+    assert "tokenvalue" not in triggers and "leaky-secret-value" not in triggers
+
+
+def test_a_missing_kind_is_a_422(alerts) -> None:
+    client = _client(alerts, MemoryWebhooks())
+    body = {"alert_id": f"kind-{alerts.suffix}", "instrument_id": alerts.instrument}
+    for condition in (
+        {"source": {}, "operator": "greater_than", "target": {"kind": "value", "value": "1"}},
+        {"source": CLOSE, "operator": "greater_than", "target": {"value": "1"}},
+    ):
+        assert client.post("/api/trading/alerts", json={**body, "conditions": [condition]}).status_code == 422
 
 
 def test_editing_notification_settings_keeps_trigger_state(alerts) -> None:
@@ -504,48 +562,92 @@ def test_editing_notification_settings_keeps_trigger_state(alerts) -> None:
     })
     edited = alerts.repository.update(created.alert_id, update, expected_revision=fired.revision)
     assert edited.parameters.message == "new text"
+    assert edited.definition_revision == fired.definition_revision
     assert _alert(alerts, "notify").last_triggered_at == fired.last_triggered_at
     market.set([99], forming=102)
     assert _run(alerts, market) == []  # still inside the minute
-    # A condition change starts a new history.
+    # A condition change starts a new definition and a new history.
     changed = TradingAlertUpdate(**{
         **edited.model_dump(include=fields),
         "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "101"}}],
     })
     alerts.repository.update(created.alert_id, changed, expected_revision=edited.revision)
-    assert _alert(alerts, "notify").last_triggered_at is None
+    after = _alert(alerts, "notify")
+    assert after.last_triggered_at is None and after.definition_revision == fired.definition_revision + 1
 
 
-def test_unreadable_rows_do_not_break_listing_or_the_monitor(alerts) -> None:
+def test_a_notification_edit_does_not_let_a_bar_fire_twice(alerts) -> None:
+    market = Market()
+    created = _create(alerts, "per-bar-edit", frequency="once_per_bar")
+    market.set([99], forming=101)
+    assert _run(alerts, market) == ["per-bar-edit"]
+    fired = _alert(alerts, "per-bar-edit")
+    fields = set(TradingAlertUpdate.model_fields) - {"webhook_secret"}
+    update = TradingAlertUpdate(**{**fired.model_dump(include=fields), "parameters": {**fired.parameters.model_dump(), "message": "edited"}})
+    alerts.repository.update(created.alert_id, update, expected_revision=fired.revision)
+    market.set([99], forming=102)
+    assert _run(alerts, market) == []  # same forming bar
+    # A definition edit is a new alert as far as bars go.
+    threshold = TradingAlertUpdate(**{
+        **_alert(alerts, "per-bar-edit").model_dump(include=fields),
+        "conditions": [{"source": CLOSE, "operator": "crossing_up", "target": {"kind": "value", "value": "101.5"}}],
+    })
+    alerts.repository.update(created.alert_id, threshold, expected_revision=fired.revision + 1)
+    assert _run(alerts, market) == ["per-bar-edit"]
+
+
+def _insert_raw(env, alert_id, condition_type="price_above", notification=None):
+    with env.uow() as uow:
+        uow.connection.execute(
+            "INSERT INTO omnix_trading_alerts (workspace_id, alert_id, instrument_id, condition_type, threshold,"
+            " notification_settings) VALUES (%s, %s, %s, %s, 100, %s::jsonb)",
+            (env.context.workspace_id, alert_id, env.instrument, condition_type, json.dumps(notification or {})),
+        )
+        uow.commit()
+
+
+def test_unreadable_rows_are_reported_skipped_and_archivable(alerts) -> None:
     market = Market()
     _create(alerts, "healthy")
-    workspace = alerts.context.workspace_id
+    suffix = alerts.suffix
+    # Breaks today's write rules but reads: a blocked webhook URL, a legacy indicator without an id.
+    _insert_raw(alerts, f"blocked-url-{suffix}", notification={"delivery": {"webhook": {"url": "http://169.254.169.254/"}}})
+    _insert_raw(alerts, f"no-indicator-{suffix}", "indicator_above")
+    # Cannot be read: a bad alert row, and a good alert row with a bad condition row.
+    _insert_raw(alerts, f"broken-{suffix}", notification={"notification_channels": ["fax"]})
+    bad_condition = _create(alerts, "bad-condition")
     with alerts.uow() as uow:
-        for alert_id, condition_type, notification in (
-            # Breaks today's write rules but reads: a blocked webhook URL, a legacy indicator without an id.
-            (f"blocked-url-{alerts.suffix}", "price_above", {"delivery": {"webhook": {"url": "http://169.254.169.254/"}}}),
-            (f"no-indicator-{alerts.suffix}", "indicator_above", {}),
-            # Cannot be read at all.
-            (f"broken-{alerts.suffix}", "price_above", {"notification_channels": ["fax"]}),
-        ):
-            uow.connection.execute(
-                "INSERT INTO omnix_trading_alerts (workspace_id, alert_id, instrument_id, condition_type, threshold,"
-                " notification_settings) VALUES (%s, %s, %s, %s, 100, %s::jsonb)",
-                (workspace, alert_id, alerts.instrument, condition_type, json.dumps(notification)),
-            )
+        uow.connection.execute(
+            "UPDATE omnix_trading_alert_conditions SET operator = 'inside_channel'"
+            " WHERE workspace_id = %s AND alert_id = %s",
+            (alerts.context.workspace_id, bad_condition.alert_id),
+        )
         uow.commit()
-    try:
-        listed = {alert.alert_id for alert in alerts.repository.list_alerts(500) if alert.instrument_id == alerts.instrument}
-        assert listed == {f"healthy-{alerts.suffix}", f"blocked-url-{alerts.suffix}", f"no-indicator-{alerts.suffix}"}
-        market.set([99, 101])
-        assert _run(alerts, market) == ["blocked-url", "healthy"]
-    finally:
-        with alerts.uow() as uow:
-            uow.connection.execute(
-                "DELETE FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
-                (workspace, f"broken-{alerts.suffix}"),
-            )
-            uow.commit()
+
+    listing = alerts.repository.list_alerts_report(500)
+    listed = {alert.alert_id for alert in listing.alerts if alert.instrument_id == alerts.instrument}
+    assert listed == {f"healthy-{suffix}", f"blocked-url-{suffix}", f"no-indicator-{suffix}"}
+    unreadable = {item.alert_id: item for item in listing.unreadable if item.instrument_id == alerts.instrument}
+    assert set(unreadable) == {f"broken-{suffix}", f"bad-condition-{suffix}"}
+    assert "fax" not in unreadable[f"broken-{suffix}"].reason
+
+    client = _client(alerts, MemoryWebhooks())
+    body = client.get("/api/trading/alerts").json()
+    assert {item["alert_id"] for item in body["unreadable"]} >= set(unreadable)
+
+    market.set([99, 101])
+    service = SimpleNamespace(bars=market.bars_for)
+    monitor = TradingAlertMonitor(repository_factory=lambda: alerts.repository, market_service_factory=lambda: service, interval_seconds=5)
+    asyncio.run(monitor.run_once())
+    assert monitor.diagnostics()["unreadable_alert_count"] >= 2
+    assert f"broken-{suffix}" in (monitor.last_error or "")
+    assert any(t.alert_id == f"healthy-{suffix}" for t in alerts.repository.list_triggers(500))
+
+    for alert_id, item in unreadable.items():
+        archived = client.delete(f"/api/trading/alerts/{alert_id}", headers={"If-Match": str(item.revision)})
+        assert archived.status_code == 200, archived.text
+        assert archived.json()["alert_id"] == alert_id and archived.json()["enabled"] is False
+    assert not [item for item in alerts.repository.list_alerts_report(500).unreadable if item.instrument_id == alerts.instrument]
 
 
 def test_migrated_legacy_alerts_ignore_bars_closed_before_the_migration(alerts) -> None:
@@ -575,12 +677,26 @@ def test_migrated_legacy_alerts_ignore_bars_closed_before_the_migration(alerts) 
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the protected store needs DPAPI")
-def test_protected_secret_store_round_trip(tmp_path, monkeypatch) -> None:
+def test_protected_webhook_store_round_trip_and_serialised_writes(tmp_path, monkeypatch) -> None:
+    import threading
+
     monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "secrets.dpapi"))
-    store = ProtectedAlertSecretStore()
-    assert not store.has("w", "a")
-    store.save("w", "a", "s3cret")
-    assert store.has("w", "a") and not store.has("w", "b")
-    assert b"s3cret" not in (tmp_path / "secrets.dpapi").read_bytes()
-    store.save("w", "a", None)
-    assert not store.has("w", "a")
+    store = ProtectedAlertWebhookStore()
+    assert store.load("w/a/1") is None
+    store.save("w/a/1", HOOK, "s3cret")
+    assert store.load("w/a/1") == {"url": HOOK, "secret": "s3cret"}
+    raw = (tmp_path / "secrets.dpapi").read_bytes()
+    assert b"s3cret" not in raw and b"tokenvalue" not in raw
+
+    # Concurrent writers must not lose each other's entries.
+    threads = [threading.Thread(target=store.save, args=(f"w/b/{index}", HOOK, str(index))) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert all(store.load(f"w/b/{index}") == {"url": HOOK, "secret": str(index)} for index in range(8))
+
+    store.delete_alert("w", "b", keep="w/b/3")
+    assert store.load("w/b/3") is not None and store.load("w/b/4") is None
+    store.delete("w/a/1")
+    assert store.load("w/a/1") is None and store.load("w/b/3") is not None

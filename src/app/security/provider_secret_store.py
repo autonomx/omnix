@@ -10,12 +10,16 @@ from app.config.env import environment
 from app.errors import LegacyPersistenceRetired
 
 import ctypes
+import functools
 import json
 import os
 import sys
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from ctypes import wintypes
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 
 _PROVIDERS = ("openrouter", "cerebras")
@@ -57,6 +61,70 @@ def provider_secret_path() -> Path:
     if not local_app_data:
         local_app_data = str(Path.home() / "AppData" / "Local")
     return Path(local_app_data) / "Omnix" / "secrets" / "provider-api-keys.dpapi"
+
+
+_PAYLOAD_LOCK = threading.RLock()
+_LOCK_STATE = threading.local()
+
+
+def _lock_file(handle: Any) -> None:
+    handle.seek(0)
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(handle: Any) -> None:
+    handle.seek(0)
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def payload_lock() -> Iterator[None]:
+    """Serialise read-modify-write of the protected file across threads and processes."""
+    with _PAYLOAD_LOCK:
+        depth = getattr(_LOCK_STATE, "depth", 0)
+        if depth:
+            _LOCK_STATE.depth = depth + 1
+            try:
+                yield
+            finally:
+                _LOCK_STATE.depth = depth
+            return
+        lock_path = provider_secret_path().with_suffix(".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "a+b") as handle:
+            _lock_file(handle)
+            _LOCK_STATE.depth = 1
+            try:
+                yield
+            finally:
+                _LOCK_STATE.depth = 0
+                _unlock_file(handle)
+
+
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _serialized(function: _F) -> _F:
+    @functools.wraps(function)
+    def locked(*args: Any, **kwargs: Any) -> Any:
+        with payload_lock():
+            return function(*args, **kwargs)
+
+    return cast(_F, locked)
 
 
 def _input_blob(value: bytes) -> tuple[_DataBlob, Any]:
@@ -306,6 +374,7 @@ def _save_environment_owned_marker(incoming: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+@_serialized
 def save_provider_secrets(payload: dict[str, Any]) -> None:
     incoming = payload.get("api_keys") if isinstance(payload, dict) else None
     incoming = incoming if isinstance(incoming, dict) else {}
@@ -327,6 +396,7 @@ def save_provider_secrets(payload: dict[str, Any]) -> None:
     _write_payload(stored_payload)
 
 
+@_serialized
 def save_research_provider_secret(provider: str, value: str | None) -> None:
     """Persist one Brave/Tavily key in the user-scoped protected store.
 
@@ -360,48 +430,53 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
     _write_payload(stored_payload)
 
 
-def _stored_alert_webhook_secrets() -> dict[str, str]:
-    secrets = _stored_payload().get("alert_webhook_secrets")
-    if not isinstance(secrets, dict):
+def _stored_alert_webhooks() -> dict[str, dict[str, str]]:
+    entries = _stored_payload().get("alert_webhooks")
+    if not isinstance(entries, dict):
         return {}
-    return {str(key): str(value) for key, value in secrets.items() if value}
+    return {
+        str(ref): {"url": str(entry.get("url") or ""), "secret": str(entry.get("secret") or "")}
+        for ref, entry in entries.items()
+        if isinstance(entry, dict)
+    }
 
 
-def load_alert_webhook_secret(key: str) -> str:
-    """The signing secret of one alert's webhook (TVP-1.2); empty when none is stored."""
-    return _stored_alert_webhook_secrets().get(key, "")
+def load_alert_webhook(ref: str) -> dict[str, str] | None:
+    """One alert webhook's destination and signing secret (TVP-1.2), by its reference."""
+    return _stored_alert_webhooks().get(ref)
 
 
-def has_alert_webhook_secret(key: str) -> bool:
-    return bool(load_alert_webhook_secret(key))
+@_serialized
+def save_alert_webhook(ref: str, url: str, secret: str) -> None:
+    """Store an alert webhook under a new reference.
 
-
-def save_alert_webhook_secret(key: str, value: str | None) -> None:
-    """Store, replace or (with an empty value) remove one alert's webhook secret.
-
-    Alert webhook secrets never go to PostgreSQL. Without an operating-system
-    credential store, setting one fails closed.
+    Webhook URLs and secrets are credentials and never go to PostgreSQL.
+    Without an operating-system credential store this fails closed.
     """
-
-    requested = str(value or "").strip()
     if sys.platform != "win32":
-        if requested:
-            raise LegacyPersistenceRetired(
-                "alert webhook secrets require an operating-system credential store"
-            )
-        return
+        raise LegacyPersistenceRetired("alert webhooks require an operating-system credential store")
     stored_payload = _stored_payload()
-    secrets = _stored_alert_webhook_secrets()
-    if requested:
-        secrets[key] = requested
-    elif key in secrets:
-        secrets.pop(key)
-    else:
-        return
-    stored_payload["alert_webhook_secrets"] = secrets
+    entries = _stored_alert_webhooks()
+    entries[ref] = {"url": url, "secret": secret}
+    stored_payload["alert_webhooks"] = entries
     _write_payload(stored_payload)
 
 
+@_serialized
+def delete_alert_webhooks(prefix: str, *, keep: str | None = None) -> None:
+    """Remove the webhooks stored under ``prefix`` (one alert's), except ``keep``."""
+    if sys.platform != "win32":
+        return
+    stored_payload = _stored_payload()
+    entries = _stored_alert_webhooks()
+    remaining = {ref: entry for ref, entry in entries.items() if ref == keep or not ref.startswith(prefix)}
+    if len(remaining) == len(entries):
+        return
+    stored_payload["alert_webhooks"] = remaining
+    _write_payload(stored_payload)
+
+
+@_serialized
 def save_trading_provider_secrets(
     provider: str,
     updates: dict[str, str | None],

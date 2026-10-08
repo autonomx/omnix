@@ -36,11 +36,12 @@ def import_legacy_secrets(source: Path | None = None) -> tuple[int, Path | None]
     if not incoming:
         raise ValueError("legacy secrets file contains no recognized credentials")
 
-    current = provider_secret_store._stored_payload_for_import()
-    merged = _merge_missing(current, incoming)
-    count = _credential_count(merged) - _credential_count(current)
-    if count:
-        provider_secret_store._write_payload(merged)
+    with provider_secret_store.payload_lock():
+        current = provider_secret_store._stored_payload_for_import()
+        merged = _merge_missing(current, incoming)
+        count = _credential_count(merged) - _credential_count(current)
+        if count:
+            provider_secret_store._write_payload(merged)
     os.replace(source_path, archive_path)
     return count, archive_path
 
