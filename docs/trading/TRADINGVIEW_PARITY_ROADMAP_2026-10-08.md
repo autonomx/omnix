@@ -1130,7 +1130,7 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 | TradingView parity, all features in scope | 72% |
 | TradingView parity, daily + weekly features | 81% |
 | Roadmap work packages merged in full | 31% (21 of 67) |
-| Daily + weekly gap closed since the first count | 57% (86 of 150) |
+| Daily + weekly gap closed since the first count | 58% (87 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1144,7 +1144,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Drawing tools | 45 | 0 | 0 / 9 / 47 | 0 | 0 | 45% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
-| Alerts | 17 | 2 | 3 / 2 / 0 | 0 | 0 | 75% |
+| Alerts | 18 | 2 | 2 / 2 / 0 | 0 | 0 | 79% |
 | Shortcuts | 43 | 7 | 0 / 0 / 0 | 0 | 0 | 93% |
 | Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 | 86% |
 | Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
@@ -1152,15 +1152,15 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Paper and chart trading | 13 | 1 | 4 / 4 / 0 | 0 | 0 | 61% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 305 | 17 | 14 / 50 / 52 | 55 | 0 | 72% |
+| **Total** | 306 | 17 | 13 / 50 / 52 | 55 | 0 | 72% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 139 | 10 | 14 | 0 | 0 | 163 | 88% |
+| Daily | 140 | 10 | 13 | 0 | 0 | 163 | 89% |
 | Weekly | 153 | 7 | 50 | 0 | 0 | 210 | 75% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **64**
+Missing daily + weekly features: **63**
 
 Done (have counts 1, partial 0.5, of the features in scope): **72%** overall, **81%** of daily + weekly.
 <!-- parity-report:end -->

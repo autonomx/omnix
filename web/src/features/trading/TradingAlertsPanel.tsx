@@ -76,6 +76,9 @@ function directionLabel(condition: TradingAlertCondition): string {
 }
 
 function alertTitle(alert: TradingAlert): string {
+  // The alert's name (TVP-1.5), then its message, then its condition.
+  const name = alert.parameters.name?.trim();
+  if (name) return name;
   const message = alert.parameters.message?.trim();
   if (message) return message;
 
