@@ -125,6 +125,17 @@ export function replayBarAtClock(bars: readonly MarketBar[], clock: number): Mar
 }
 
 /**
+ * The latest bar closed by `clock` whose close is known, which replay trading
+ * can execute against; null when there is none.
+ */
+export function replayTradableBarAtClock(bars: readonly MarketBar[], clock: number): MarketBar | null {
+  for (let index = replayVisibleCount(bars, clock) - 1; index >= 0; index -= 1) {
+    if (Number.isFinite(barCloseTime(bars[index]))) return bars[index];
+  }
+  return null;
+}
+
+/**
  * The clock after `steps` bars forward on `bars`, or null when no bar closes
  * after `clock`. Bars that never close are skipped.
  */

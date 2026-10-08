@@ -179,7 +179,9 @@ describe('replay account execution queue', () => {
     await wait(ROUND_TRIP_MS);
 
     expect(placedAfter).toBe(ROUND_TRIP_MS);
-    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(expect.anything(), expect.anything(), current, false);
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.objectContaining({ start_time: current.start_time }), false,
+    );
     // From now on the working order sees every bar.
     await wait(2_000);
     expect(replayApi.advanceExecution.mock.calls.length).toBeGreaterThan(0);
@@ -294,5 +296,54 @@ describe('replay account execution queue', () => {
     expect(replay().snapshot).toBeNull();
     expect(replay().pendingExecutions).toBe(0);
     expect(replay().clock).toBe(at(1));
+  });
+
+  it('places an order at the bar the clock just reached, even in the same handler as the step', async () => {
+    const bars = series(10);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    let placed: Promise<unknown> = Promise.resolve();
+    act(() => {
+      replay().stepForward();
+      placed = replay().placeOrder(order('market-1'));
+    });
+
+    await wait(1_000);
+    await placed;
+
+    // The published bar still pointed at bar 1 when the order was placed.
+    expect(log).toEqual(['bar 2', 'order market-1 at 2']);
+  });
+
+  it('sends a bar with an unreadable end at its derived close, and skips one whose close cannot be known', async () => {
+    const bars = series(6);
+    bars[2] = { ...bars[2], end_time: '' };
+    bars[4] = { ...bars[4], end_time: '', interval: 'tick' };
+    startReplay(bars, 0, account([workingLimit('1')]));
+
+    act(() => { replay().stepForward(5); });
+    await wait(2_000);
+
+    expect(log).toEqual(['bar 2', 'bar 3', 'bar 4', 'bar 6']);
+    expect(replay().advancedThrough).toBe(at(6));
+    expect(replay().executionError).toBeNull();
+  });
+
+  it('trades on the replay session feed: bars and orders carry its binding', async () => {
+    const bars = series(5);
+    startReplay(bars, 0, account([workingLimit('1')]));
+    act(() => { replay().setActiveBars(bars, 'bind-1'); });
+
+    act(() => { replay().stepForward(); });
+    const placed = replay().placeOrder(fixture<PaperOrderInput>({ order_id: 'market-1', instrument_id: INSTRUMENT, binding_id: null }));
+    await wait(1_000);
+    await placed;
+
+    expect(replayApi.advanceExecution).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ binding_id: 'bind-1' }));
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ binding_id: 'bind-1' }),
+      expect.objectContaining({ binding_id: 'bind-1' }),
+      false,
+    );
   });
 });

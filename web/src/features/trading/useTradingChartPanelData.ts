@@ -211,6 +211,7 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     replayMode,
     bars: loadedBars,
     chartKey: `${instrumentId}|${bindingId ?? ''}|${interval}`,
+    bindingId: chartQuery.data?.binding.binding_id ?? bindingId ?? null,
     reloadBars,
   });
 

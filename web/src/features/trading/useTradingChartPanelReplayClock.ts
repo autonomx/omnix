@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { replayTickPlan, replayVisibleCount } from './replayClock';
+import { useEffect, useMemo, useRef } from 'react';
+import { barCloseTime, replayTickPlan, replayVisibleCount } from './replayClock';
 import { useTradingReplayStore } from './tradingReplayStore';
 import type { MarketBar } from './tradingTypes';
 import { startTicker } from '../../shared/timers';
@@ -11,6 +11,8 @@ export type ChartReplayClockInput = {
   bars: readonly MarketBar[];
   /** The chart's instrument, binding and interval. */
   chartKey: string;
+  /** The feed binding the chart's bars come from; replay trading on this chart uses it. */
+  bindingId?: string | null;
   /** Reloads the chart's bars; called when replay ends, since no chart streams during replay. */
   reloadBars: () => void;
 };
@@ -23,7 +25,7 @@ export type ChartReplayClockInput = {
  * active chart also feeds the clock: it publishes its bars (which step and
  * play advance through) and runs the playback ticker.
  */
-export function useChartReplayClock({ active, replayMode, bars, chartKey, reloadBars }: ChartReplayClockInput) {
+export function useChartReplayClock({ active, replayMode, bars, chartKey, bindingId = null, reloadBars }: ChartReplayClockInput) {
   const selecting = useTradingReplayStore((state) => state.selecting);
   const clockSet = useTradingReplayStore((state) => state.clock !== null);
   const visibleBarCount = useTradingReplayStore((state) => (state.clock === null ? 0 : replayVisibleCount(bars, state.clock)));
@@ -38,6 +40,14 @@ export function useChartReplayClock({ active, replayMode, bars, chartKey, reload
   const currentBar = replayMode && visibleBarCount > 0 ? bars[visibleBarCount - 1] ?? null : null;
   const startBar = replayMode && startBarCount > 0 ? bars[startBarCount - 1] ?? null : null;
   const hasNextBar = visible && visibleBarCount < bars.length;
+  // Replay trading prices orders at the latest bar whose close is known.
+  const tradableBar = useMemo(() => {
+    if (!replayMode) return null;
+    for (let index = visibleBarCount - 1; index >= 0; index -= 1) {
+      if (Number.isFinite(barCloseTime(bars[index]))) return bars[index];
+    }
+    return null;
+  }, [bars, replayMode, visibleBarCount]);
 
   // The active chart's identity decides whether replay trading restarts:
   // switching between charts of the same symbol, feed and interval keeps it.
@@ -53,13 +63,13 @@ export function useChartReplayClock({ active, replayMode, bars, chartKey, reload
       store.clear();
       return;
     }
-    store.setActiveBars(bars);
-  }, [active, bars, replayMode]);
+    store.setActiveBars(bars, bindingId);
+  }, [active, bars, bindingId, replayMode]);
 
   useEffect(() => {
     if (!replayMode || !active) return;
-    useTradingReplayStore.getState().setBar(currentBar);
-  }, [active, currentBar, replayMode]);
+    useTradingReplayStore.getState().setBar(tradableBar);
+  }, [active, replayMode, tradableBar]);
 
   useEffect(() => {
     if (!active || !playing || !visible) return;

@@ -1,6 +1,5 @@
 import type { PaperAccountSnapshot, PaperOrder, PaperOrderInput } from './paperTypes';
-import { tradingReplayApi } from './tradingReplayApi';
-import type { MarketBar } from './tradingTypes';
+import { tradingReplayApi, type ReplayExecutionMarketBar } from './tradingReplayApi';
 
 type ReplayResult = {
   snapshot: PaperAccountSnapshot;
@@ -43,7 +42,7 @@ export function createReplaySnapshot(source: PaperAccountSnapshot): PaperAccount
 /** Advance replay through the shared server-authoritative paper execution policy. */
 export async function advanceReplaySnapshot(
   source: PaperAccountSnapshot,
-  bar: MarketBar,
+  bar: ReplayExecutionMarketBar,
 ): Promise<PaperAccountSnapshot> {
   return tradingReplayApi.advanceExecution(source, bar);
 }
@@ -56,7 +55,7 @@ export async function advanceReplaySnapshot(
 export async function placeReplayOrder(
   source: PaperAccountSnapshot,
   input: PaperOrderInput,
-  bar: MarketBar,
+  bar: ReplayExecutionMarketBar,
   { advanceBar = true }: { advanceBar?: boolean } = {},
 ): Promise<ReplayResult> {
   return tradingReplayApi.placeExecutionOrder(source, input, bar, advanceBar);

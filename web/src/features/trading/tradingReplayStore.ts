@@ -5,10 +5,12 @@ import {
   DEFAULT_REPLAY_SPEED,
   nextReplayClock,
   previousReplayClock,
+  replayTradableBarAtClock,
   replayVisibleCount,
   type ReplaySpeed,
 } from './replayClock';
 import { advanceReplaySnapshot, placeReplayOrder } from './replayTrading';
+import type { ReplayExecutionMarketBar } from './tradingReplayApi';
 import { useTradingStore } from './tradingStore';
 import type { MarketBar } from './tradingTypes';
 
@@ -44,6 +46,8 @@ type TradingReplayState = {
   speed: ReplaySpeed;
   /** The active chart's bars, which step, play and the replay account advance through. */
   activeBars: readonly MarketBar[];
+  /** The feed binding the active chart's bars come from; replay orders and bars use it. */
+  activeBindingId: string | null;
   /** The active chart's instrument, binding and interval; a change restarts replay trading. */
   activeChartKey: string | null;
   /** The close of the last bar the replay account has been advanced through. */
@@ -63,7 +67,7 @@ type TradingReplayState = {
   /** Place a replay order after every queued bar advance, at the current bar. */
   placeOrder: (input: PaperOrderInput) => Promise<ReplayOrderResult>;
   setSpeed: (speed: ReplaySpeed) => void;
-  setActiveBars: (bars: readonly MarketBar[]) => void;
+  setActiveBars: (bars: readonly MarketBar[], bindingId?: string | null) => void;
   /** Record the active chart's identity; a different instrument, binding or interval restarts replay trading. */
   setActiveChartKey: (key: string) => void;
   setPlaying: (playing: boolean) => void;
@@ -187,9 +191,10 @@ function advanceToClock(): void {
   void enqueue(async ({ snapshot: current, commit }) => {
     for (const bar of bars) {
       const close = barCloseTime(bar);
-      const through = Number.isFinite(close) ? close : undefined;
-      if (replayAccountHasExposure(current(), bar.instrument_id)) commit(await advanceReplaySnapshot(current(), bar), through);
-      else commit(current(), through);
+      // A bar with no knowable close is skipped here as it is by the clock.
+      if (!Number.isFinite(close)) continue;
+      if (replayAccountHasExposure(current(), bar.instrument_id)) commit(await advanceReplaySnapshot(current(), sessionBar(bar)), close);
+      else commit(current(), close);
     }
     commit(current(), clock);
     useTradingReplayStore.setState({ executionError: null });
@@ -213,9 +218,26 @@ function seedSnapshot(snapshot: PaperAccountSnapshot, key: string): void {
   useTradingReplayStore.setState({ snapshot, advancedThrough: clock, pendingExecutions: 0, executionError: null });
 }
 
+/** The bar as the replay kernel sees it: priced by the replay session's own feed binding. */
+function sessionBar(bar: MarketBar): ReplayExecutionMarketBar {
+  return { ...bar, binding_id: useTradingReplayStore.getState().activeBindingId };
+}
+
+/**
+ * The bar an order placed now executes at: derived from the clock itself, not
+ * from the published `bar`, which an effect updates only after the clock moves.
+ */
+function orderBar(): MarketBar | null {
+  const { activeBars, bar, clock } = useTradingReplayStore.getState();
+  if (clock !== null && activeBars.length > 0) return replayTradableBarAtClock(activeBars, clock);
+  return bar;
+}
+
 function placeOrder(input: PaperOrderInput): Promise<ReplayOrderResult> {
-  const bar = useTradingReplayStore.getState().bar;
+  const bar = orderBar();
   if (!bar) return Promise.reject(new Error('Select a replay bar before trading.'));
+  // Replay orders trade on the replay session's feed, the one its bars come from.
+  const order = { ...input, binding_id: useTradingReplayStore.getState().activeBindingId };
   // Bring the account up to the clock first, so the order follows every earlier bar.
   advanceToClock();
   return enqueue(async ({ snapshot, commit }) => {
@@ -223,7 +245,7 @@ function placeOrder(input: PaperOrderInput): Promise<ReplayOrderResult> {
     const advancedThrough = useTradingReplayStore.getState().advancedThrough;
     // The queue has normally applied this bar already; it must not reach working orders twice.
     const advanceBar = !(advancedThrough !== null && advancedThrough >= close);
-    const result = await placeReplayOrder(snapshot(), input, bar, { advanceBar });
+    const result = await placeReplayOrder(snapshot(), order, sessionBar(bar), { advanceBar });
     commit(result.snapshot, advanceBar && Number.isFinite(close) ? close : undefined);
     useTradingReplayStore.setState({ executionError: null });
     return result;
@@ -239,6 +261,7 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
   playing: false,
   speed: DEFAULT_REPLAY_SPEED,
   activeBars: NO_BARS,
+  activeBindingId: null,
   activeChartKey: null,
   advancedThrough: null,
   pendingExecutions: 0,
@@ -248,7 +271,7 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
   seedSnapshot,
   placeOrder,
   setSpeed: (speed) => set({ speed }),
-  setActiveBars: (activeBars) => set({ activeBars }),
+  setActiveBars: (activeBars, bindingId = null) => set({ activeBars, activeBindingId: bindingId }),
   setActiveChartKey: (key) => {
     const previous = get().activeChartKey;
     if (previous === key) return;
@@ -317,6 +340,7 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
       selecting: true,
       playing: false,
       activeBars: NO_BARS,
+      activeBindingId: null,
       activeChartKey: null,
     });
   },

@@ -292,3 +292,18 @@ def test_a_bar_that_cannot_touch_the_account_leaves_it_unchanged() -> None:
         advanced = advance_replay_snapshot(seeded, _bar("150", high="160", low="90", start_hour=hour))
         assert advanced == seeded
         assert _equity(advanced) == _equity(seeded)
+
+
+def test_replay_orders_on_a_feed_fill_only_from_that_feeds_bars() -> None:
+    # Replay follows live paper: an order bound to a feed fills only from that
+    # feed's observations, so replay bars must carry the session's binding.
+    request = _market_request("market-bound", "5").model_copy(update={"binding_id": "bind-1"})
+    placed = place_replay_order(_funded_replay_snapshot(), request, _bar("101"))
+    bound_bar = _bar("101", start_hour=11).model_copy(update={"binding_id": "bind-1"})
+    unbound_bar = _bar("101", start_hour=11)
+
+    filled = advance_replay_snapshot(placed.snapshot, bound_bar)
+    unfilled = advance_replay_snapshot(placed.snapshot, unbound_bar)
+
+    assert next(o for o in filled.order_history if o.order_id == "market-bound").filled_quantity == Decimal("5")
+    assert next(o for o in unfilled.order_history if o.order_id == "market-bound").filled_quantity == Decimal("0")
