@@ -22,6 +22,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/alerts/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deliveries
+         * @description Webhook (and later email and push) deliveries, newest first: status, attempts and the last error code.
+         */
+        get: operations["list_deliveries_api_trading_alerts_deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/alerts/evaluate": {
         parameters: {
             query?: never;
@@ -5984,6 +6004,47 @@ export interface components {
              */
             strategy_id?: "sma_cross";
         };
+        /**
+         * NotificationDelivery
+         * @description A delivery as the API shows it: status only, never a destination.
+         */
+        NotificationDelivery: {
+            /** Alert Id */
+            alert_id: string;
+            /** Attempts */
+            attempts: number;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "webhook" | "email" | "push";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Delivery Id */
+            delivery_id: string;
+            /** Last Attempt At */
+            last_attempt_at: string | null;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Status Code */
+            last_status_code: number | null;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "sending" | "delivered" | "failed";
+            /** Trigger Id */
+            trigger_id: string;
+        };
         /** NoveltyShadowAnnotation */
         NoveltyShadowAnnotation: {
             /** Annotation Id */
@@ -10498,6 +10559,11 @@ export interface components {
             /** Webhook Secret */
             webhook_secret?: string | null;
         };
+        /** TradingAlertDeliveryListResponse */
+        TradingAlertDeliveryListResponse: {
+            /** Deliveries */
+            deliveries: components["schemas"]["NotificationDelivery"][];
+        };
         /**
          * TradingAlertEvaluation
          * @description An observed price pushed to ``POST /api/trading/alerts/evaluate``.
@@ -12266,6 +12332,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingAlert"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deliveries_api_trading_alerts_deliveries_get: {
+        parameters: {
+            query?: {
+                alert_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingAlertDeliveryListResponse"];
                 };
             };
             /** @description Validation Error */

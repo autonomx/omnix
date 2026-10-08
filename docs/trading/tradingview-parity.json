@@ -1,7 +1,7 @@
 {
   "schema": "omnix-tradingview-parity-ledger-v1",
   "roadmap": "docs/trading/TRADINGVIEW_PARITY_ROADMAP_2026-10-08.md",
-  "verified": "2026-10-08 (updated after the TVP-2.5 and TVP-6.1 merges)",
+  "verified": "2026-10-08 (updated after TVP-0.5a)",
   "entries": [
   {"id": "charts.all-21-chart-types", "area": "Charts and layouts", "feature": "All 21 chart types", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/chart/chartAdapter.ts#TRADING_CHART_TYPE_OPTIONS"]},
   {"id": "charts.up-to-16-charts-per-tab", "area": "Charts and layouts", "feature": "Up to 16 charts per tab", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/tradingStore.ts#MAX_TRADING_CHARTS = 16"]},
@@ -367,7 +367,7 @@
   {"id": "alerts.toast-delivery", "area": "Alerts", "feature": "Toast delivery", "tier": "daily", "status": "have", "level": "equivalent", "wp": "TVP-1.2", "evidence": ["web/src/features/trading/TradingAlertToastLayer.tsx#toast"], "note": "Server alerts fire again since TVP-1.2."},
   {"id": "alerts.sound-delivery", "area": "Alerts", "feature": "Sound delivery", "tier": "daily", "status": "partial", "level": "equivalent", "wp": "TVP-1.5", "evidence": ["web/src/features/trading/TradingAlertDialog.tsx#value: 'sound'"], "note": "The sound channel can be chosen, but no code plays a sound."},
   {"id": "alerts.alert-manager-and-log", "area": "Alerts", "feature": "Alert manager and log", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/TradingAlertsPanel.tsx#'log'"]},
-  {"id": "alerts.webhook-delivery", "area": "Alerts", "feature": "Webhook delivery", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-1.2, TVP-0.5a"},
+  {"id": "alerts.webhook-delivery", "area": "Alerts", "feature": "Webhook delivery", "tier": "daily", "status": "have", "level": "equivalent", "wp": "TVP-1.2, TVP-0.5a", "evidence": ["src/app/apps/trading/alerts_delivery.py#class WebhookSender", "src/app/apps/trading/migrations/0142_trading_notification_deliveries.sql"], "note": "Outbox written with the trigger, retries with backoff, HMAC signature; the webhook editor in the alert dialog arrives with TVP-1.5."},
   {"id": "alerts.frequency-once-per-bar-close", "area": "Alerts", "feature": "Frequency: once per bar close", "tier": "daily", "status": "have", "level": "equivalent", "wp": "TVP-1.1", "evidence": ["src/app/apps/trading/alert_conditions.py#once_per_bar_close"]},
   {"id": "alerts.frequency-once-per-minute", "area": "Alerts", "feature": "Frequency: once per minute", "tier": "weekly", "status": "have", "level": "equivalent", "wp": "TVP-1.1", "evidence": ["src/app/apps/trading/alert_conditions.py#once_per_minute"]},
   {"id": "alerts.channel-operators", "area": "Alerts", "feature": "Entering / exiting / inside / outside channel", "tier": "weekly", "status": "have", "level": "equivalent", "wp": "TVP-1.2", "evidence": ["src/app/apps/trading/alert_conditions.py#entering_channel"]},

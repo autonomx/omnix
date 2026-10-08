@@ -21,6 +21,7 @@ from .alerts import (
     TradingAlertUpdate,
     default_alert_repository,
 )
+from .alerts_delivery import NotificationDelivery, NotificationDeliveryRepository, default_delivery_repository
 from .alerts_channels import (
     AVAILABLE_ALERT_CHANNELS,
     AlertWebhookStore,
@@ -41,6 +42,11 @@ class TradingAlertListResponse(BaseModel):
 
 class TradingAlertTriggerListResponse(BaseModel):
     triggers: list[TradingAlertTrigger]
+
+
+class TradingAlertDeliveryListResponse(BaseModel):
+    # Status of each notification delivery; destinations are never returned.
+    deliveries: list[NotificationDelivery]
 
 
 AlertRepositoryFactory = Callable[[], TradingAlertRepository]
@@ -72,6 +78,7 @@ def create_trading_alert_router(
     *,
     webhook_store: AlertWebhookStore | None = None,
     available_channels: Iterable[str] = AVAILABLE_ALERT_CHANNELS,
+    delivery_repository_factory: Callable[[], NotificationDeliveryRepository] = default_delivery_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/alerts", tags=["trading-alerts"])
     channels = frozenset(available_channels)
@@ -97,6 +104,8 @@ def create_trading_alert_router(
         secret = request.webhook_secret
         if secret is not None and webhook is None:
             raise HTTPException(status_code=422, detail="webhook_secret needs parameters.delivery.webhook")
+        if webhook is None and "webhook" in request.parameters.notification_channels:
+            raise HTTPException(status_code=422, detail="the webhook channel needs parameters.delivery.webhook")
         if webhook is None:
             return _WebhookPlan(ref=None, written=None, previous=previous_ref)
         stored: dict[str, str] | None = None
@@ -175,6 +184,16 @@ def create_trading_alert_router(
     ) -> TradingAlertTriggerListResponse:
         return TradingAlertTriggerListResponse(
             triggers=repository_factory().list_triggers(limit=limit)
+        )
+
+    @router.get("/deliveries", response_model=TradingAlertDeliveryListResponse)
+    def list_deliveries(
+        alert_id: str | None = Query(default=None, min_length=1, max_length=200),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> TradingAlertDeliveryListResponse:
+        """Webhook (and later email and push) deliveries, newest first: status, attempts and the last error code."""
+        return TradingAlertDeliveryListResponse(
+            deliveries=delivery_repository_factory().list_deliveries(alert_id=alert_id, limit=limit)
         )
 
     @router.post("/evaluate", response_model=TradingAlertTriggerListResponse)

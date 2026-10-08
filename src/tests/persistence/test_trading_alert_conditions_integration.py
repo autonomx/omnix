@@ -406,11 +406,19 @@ class MemoryWebhooks:
 
 
 def _client(env, webhooks):
+    from app.apps.trading.alerts_delivery import NotificationDeliveryRepository
     from app.errors import install_error_envelope
 
     app = FastAPI()
     install_error_envelope(app)
-    app.include_router(create_trading_alert_router(repository_factory=lambda: env.repository, webhook_store=webhooks))
+    deliveries = NotificationDeliveryRepository(context=env.context, uow_factory=env.uow)
+    app.include_router(
+        create_trading_alert_router(
+            repository_factory=lambda: env.repository,
+            webhook_store=webhooks,
+            delivery_repository_factory=lambda: deliveries,
+        )
+    )
     return TestClient(app)
 
 
@@ -433,7 +441,7 @@ def test_api_rejects_unavailable_channels_and_keeps_webhooks_out_of_responses(al
     }
     rejected = client.post("/api/trading/alerts", json=body)
     assert rejected.status_code == 422
-    assert rejected.json()["detail"] == "alert channel webhook is not available yet"
+    assert rejected.json()["detail"] == "the webhook channel needs parameters.delivery.webhook"
     for channel in ("email", "push"):
         assert client.post("/api/trading/alerts", json={**body, "parameters": {"notification_channels": [channel]}}).status_code == 422
 
@@ -833,3 +841,48 @@ def test_leftover_cleanup_is_best_effort(alerts) -> None:
     )
     assert created.status_code == 201
     assert webhooks.of(alerts.context.workspace_id, alert_id) == [{"url": HOOK, "secret": ""}]
+
+
+def test_webhook_channel_writes_need_an_https_public_destination(alerts) -> None:
+    client = _client(alerts, MemoryWebhooks())
+    body = {
+        "alert_id": f"hook-{alerts.suffix}",
+        "instrument_id": alerts.instrument,
+        "conditions": [{"source": CLOSE, "operator": "greater_than", "target": {"kind": "value", "value": "1"}}],
+    }
+
+    def channel(url: str):
+        return client.post(
+            "/api/trading/alerts",
+            json={**body, "parameters": {"notification_channels": ["webhook"], "delivery": {"webhook": {"url": url}}}},
+        )
+
+    for refused in ("http://hooks.example.com/x", "https://127.0.0.1/x", "https://10.0.0.5/x", "https://169.254.169.254/x"):
+        assert channel(refused).status_code == 422, refused
+    created = channel(HOOK)
+    assert created.status_code == 201, created.text
+    assert "tokenvalue" not in created.text
+    deliveries = client.get("/api/trading/alerts/deliveries", params={"alert_id": body["alert_id"]})
+    assert deliveries.status_code == 200
+    assert deliveries.json() == {"deliveries": []}
+
+    # A trigger queues a delivery; the listing shows its status, never the destination.
+    observed = datetime(2090, 1, 1, tzinfo=timezone.utc)
+    for minute, price in enumerate(("0.5", "2")):
+        client.post(
+            "/api/trading/alerts/evaluate",
+            json={"instrument_id": alerts.instrument, "observed_price": price, "observed_at": (observed + timedelta(minutes=minute)).isoformat()},
+        )
+    listed = client.get("/api/trading/alerts/deliveries", params={"alert_id": body["alert_id"]})
+    [queued] = listed.json()["deliveries"]
+    assert (queued["channel"], queued["status"], queued["attempts"]) == ("webhook", "pending", 0)
+    assert "tokenvalue" not in listed.text and "hooks.example.com" not in listed.text
+
+    # Updates follow the same rule: the webhook channel needs a webhook.
+    revision = created.json()["revision"]
+    no_hook = client.put(
+        f"/api/trading/alerts/{body['alert_id']}",
+        json={**body, "parameters": {"notification_channels": ["webhook"]}},
+        headers={"If-Match": str(revision)},
+    )
+    assert no_hook.status_code == 422

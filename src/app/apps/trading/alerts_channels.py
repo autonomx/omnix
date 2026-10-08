@@ -24,7 +24,7 @@ from app.security.provider_secret_store import (
     save_alert_webhook,
 )
 
-AVAILABLE_ALERT_CHANNELS: frozenset[str] = frozenset({"app", "toast", "sound"})
+AVAILABLE_ALERT_CHANNELS: frozenset[str] = frozenset({"app", "toast", "sound", "webhook"})
 
 
 def unavailable_channels(channels: Iterable[str], available: Iterable[str] = AVAILABLE_ALERT_CHANNELS) -> list[str]:
