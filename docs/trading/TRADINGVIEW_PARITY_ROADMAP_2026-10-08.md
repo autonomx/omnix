@@ -1167,6 +1167,19 @@ Missing daily + weekly features: **150**
 | TVP-7.1 | **Done** | merged `8ea2f9bcf9` | Stop-limit, trailing stop (amount or %), DAY/GTC/GTD, `expired` status, trailing bracket stop-loss; migration `0140_trading_paper_order_types.sql`; live gateway untouched (empty diff, tested). Three review rounds:<br>• trailing stops trust only bars that start after their last move (`trail_moved_at` = later of quote time and bar start, `clock_timestamp()`), for orders and bracket legs, plain legs included;<br>• chart edits keep the trail;<br>• expired DAY entries cancel their bracket without market data;<br>• tick rounding against the trader;<br>• stop-through-market warning.<br>Follow-ups: DAY for futures/forex at venue close; new order types in replay; keep the bar low at move time to catch a real dip later in the same bar |
 | TVP-8.1 (wave 1 part) | **Done** | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
 
+
+**Pre-existing issues found during this work** (outside any WP's scope unless noted):
+
+| Issue | Status |
+|---|---|
+| Server alerts could never fire: the 0027 lifecycle trigger reverted the evaluator's own state update | Fixed in TVP-1.2 (migration 0141), not yet merged |
+| A protected-store decrypt failure made the next credential save overwrite every stored provider and trading credential | Fixed on the TVP-1.2 branch (strict reads; unreadable store never overwritten), not yet merged |
+| Replay orders with a feed binding never filled; replay bars marked positions in other instruments | Fixed in TVP-8.1 (merged) |
+| Drawings: anchor projection scanned every bar per anchor (~52 ms/frame); anchors between bars drew at x=0 | Fixed in TVP-0.4 (merged) |
+| Drawing anchors resolve against the adapter's bar list, not the chart's time scale (comparison series with extra timestamps, Renko-type charts store wrong times) | Being fixed in the TVP-0.4 readiness round |
+| **Count-mode bar aggregation splits sessions on the UTC date**, so in winter a group with missing minutes can absorb the next morning's pre-market bars (`aggregation.py` ~71-77). The **strategy runner** uses this path | **Open — owner decision needed**: fixing it changes strategy inputs and evidence, so it's not changed as a side effect. Charts get a separate clock-aligned mode in TVP-2.5 |
+| Restored dynamic equities get the XNYS calendar for every venue (`catalog.py` ~484) | Market-status badge hides it for non-US venues (TVP-2.5); the catalog itself is unchanged |
+
 ---
 
 ## 10. Sources
