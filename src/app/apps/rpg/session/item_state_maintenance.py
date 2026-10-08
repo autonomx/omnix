@@ -11,7 +11,7 @@ from app.apps.rpg.session.item_state_compaction import (
     apply_item_state_compaction,
     build_item_state_compaction,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_state_maintenance_v1"
 TRACE_LIMIT = 20

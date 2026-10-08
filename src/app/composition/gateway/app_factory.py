@@ -21,7 +21,7 @@ from app.jobs import (
     default_model_residency_store,
 )
 from app.providers.facade import ProviderFacade, default_provider_facade
-from app.apps.rpg.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
+from app.apps.rpg.edge.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
 
 _LOCAL_BROWSER_ORIGINS = (
     "http://localhost:5173",
@@ -226,7 +226,7 @@ def create_gateway_app(
 
     if "rpg" in enabled_feature_ids(runtime_config):
         # Importing it loads the RPG route package; skip when RPG is off (WP-7.7).
-        from app.apps.rpg.api.feature_routes import add_rpg_debug_middleware
+        from app.apps.rpg.edge.api.feature_routes import add_rpg_debug_middleware
 
         add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False

@@ -8,7 +8,7 @@ from app.apps.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     repair_fast_combat_grounding_validation,
 )
-from app.apps.rpg.safe_values import dict_copy as _safe_dict
+from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict
 
 
 def _combat_grounding_validation() -> dict[str, Any]:

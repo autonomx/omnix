@@ -4,7 +4,7 @@ from copy import deepcopy
 import hashlib
 import json
 from typing import Any, Dict
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_replay_checkpoint_foundation"
 CHECKPOINT_SCHEMA_VERSION = 1

@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict
 from app.apps.rpg.narration.combat_contract import build_combat_narration_contract
 from app.apps.rpg.narration.combat_prompt import build_combat_narration_prompt
 from app.apps.rpg.narration.combat_validator import validate_combat_narration
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
 

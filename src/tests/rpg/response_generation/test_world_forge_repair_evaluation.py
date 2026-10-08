@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import app.apps.rpg.worlds.generation_repair_evaluation as repair_evaluation
-from app.apps.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
-from app.apps.rpg.worlds.generation_repair_evaluation import (
+import app.apps.rpg.genesis.worlds.generation_repair_evaluation as repair_evaluation
+from app.apps.rpg.genesis.worlds.generation_contract_bundle import CONTRACT_VERSION
+from app.apps.rpg.genesis.worlds.generation_repair_evaluation import (
     consecutive_no_op_count,
     evaluate_retry_repair,
     finding_fingerprint,
 )
-from app.apps.rpg.worlds.generation_review_state import review_state
+from app.apps.rpg.genesis.worlds.generation_review_state import review_state
 
 
 def _issue(

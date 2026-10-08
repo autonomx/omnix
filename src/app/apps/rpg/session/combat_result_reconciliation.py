@@ -10,7 +10,7 @@ from app.apps.rpg.session.session_runtime_store import (
     _extract_successful_consumable_result_from_string_payload as _extract_successful_consumable_result_from_string_payload,
     _find_active_combat_state_deep as _find_active_combat_state_deep, _safe_parse_mapping_payload as _safe_parse_mapping_payload,
 )
-from app.apps.rpg.combat.abilities import (
+from app.apps.rpg.rules.combat.abilities import (
     resolve_combat_ability as resolve_combat_ability,
 )
 from typing import (

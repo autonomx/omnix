@@ -1,7 +1,7 @@
 """A creator validation result survives its own serialization."""
 from __future__ import annotations
 
-from app.apps.rpg.creator.validation import ValidationIssue, ValidationResult
+from app.apps.rpg.genesis.creator.validation import ValidationIssue, ValidationResult
 
 
 def test_a_validation_result_round_trips_through_its_dict() -> None:

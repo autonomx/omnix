@@ -9,7 +9,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
-from app.apps.rpg.persistence.rpg_turn_service import persist_foreground_turn
+from app.apps.rpg.foundation.persistence.rpg_turn_service import persist_foreground_turn
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -373,7 +373,7 @@ def test_foreground_transaction_cannot_borrow_a_workers_current_lease(supplied_l
 
 
 def test_foreground_mirror_carries_original_claim_through_atomic_turn_and_replay(monkeypatch) -> None:
-    from app.apps.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
+    from app.apps.rpg.session.jobs.turn_job_mirror import _apply_turn_with_job_mirror
     from app.jobs.foreground_execution import current_foreground_execution
     from app.jobs import store as stores
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter

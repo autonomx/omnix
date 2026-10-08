@@ -13,7 +13,7 @@ from app.providers import service as shared
 from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.composition.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.apps.rpg.jobs.turn_executor import (
+from app.apps.rpg.session.jobs.turn_executor import (
     _queue_deferred_rpg_turn_narration,
     _rpg_turn_visible_text,
 )

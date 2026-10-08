@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation, generation_starter_bubble_release
-from app.apps.rpg.worlds.contracts import canonical_content_hash
-from app.apps.rpg.worlds.generation_publication_transaction import publication_transaction_report
-from app.apps.rpg.worlds.generation_starter_bubble_release import (
+from app.apps.rpg.genesis.worlds import generation_compilation, generation_starter_bubble_release
+from app.apps.rpg.genesis.worlds.contracts import canonical_content_hash
+from app.apps.rpg.genesis.worlds.generation_publication_transaction import publication_transaction_report
+from app.apps.rpg.genesis.worlds.generation_starter_bubble_release import (
     StarterBubbleReleaseCompilationError,
     require_valid_starter_bubble_release,
     starter_bubble_release_report,

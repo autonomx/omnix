@@ -10,19 +10,19 @@ from app.providers.facade import PROVIDER_CATALOGS
 from app.runtime.features import FeatureModule
 from app.runtime.ports import ContributionSpec
 
-from .persistence.feature_repositories import RPG_REPOSITORY_SPECS
-from .api.compat_router import create_rpg_compatibility_router
-from .api.feature_routes import create_rpg_routes_router
-from .api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
+from app.apps.rpg.foundation.persistence.feature_repositories import RPG_REPOSITORY_SPECS
+from app.apps.rpg.edge.api.compat_router import create_rpg_compatibility_router
+from app.apps.rpg.edge.api.feature_routes import create_rpg_routes_router
+from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
 
-from .jobs.turn_job_guard import rpg_turn_submission_policy
-from .jobs.handlers import (
+from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
+from app.apps.rpg.session.jobs.handlers import (
     RpgReportJobInput,
     RpgTurnJobInput,
     execute_rpg_report_job,
     execute_rpg_turn_job,
 )
-from .jobs.debug_observer import rpg_debug_job_observer
+from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
 
 
 def _turn(context: JobExecutionContext, job):
@@ -50,7 +50,7 @@ def _rpg_routes_router(context):
 
 def _campaign_genesis_worker(context):
     async def recover() -> None:
-        from app.apps.rpg.session.genesis.async_coordinator import configure_campaign_genesis_owner
+        from app.apps.rpg.genesis.forge.async_coordinator import configure_campaign_genesis_owner
 
         owner = getattr(context.runtime_state, "background_runtime", None)
         if owner is not None:
@@ -60,7 +60,7 @@ def _campaign_genesis_worker(context):
     async def stop() -> None:
         import asyncio
 
-        from app.apps.rpg.session.genesis.async_coordinator import stop_campaign_genesis_worker
+        from app.apps.rpg.genesis.forge.async_coordinator import stop_campaign_genesis_worker
 
         await asyncio.to_thread(stop_campaign_genesis_worker)
 
@@ -76,7 +76,7 @@ class _VisualProviderCatalog:
     family = "rpg_visual"
 
     def list_providers(self):
-        from .visual.providers.registry import list_visual_provider_options
+        from app.apps.rpg.narration.visual.providers.registry import list_visual_provider_options
 
         return list_visual_provider_options()
 
@@ -85,7 +85,7 @@ FEATURE = FeatureModule(
     id="rpg",
     title="RPG",
     tier="app",
-    # The Hermes routes in app/apps/rpg/hermes read assist mode through app.platform.chat.contracts.
+    # The Hermes routes in app/apps/rpg/edge/hermes read assist mode through app.platform.chat.contracts.
     depends_on=("chat",),
     # World images use image providers; RPG runs without the image feature.
     uses=("image",),

@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, cast
 
-from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.item_detail import _session_genre, _setting_context
 from app.prompts import prompt_template
 

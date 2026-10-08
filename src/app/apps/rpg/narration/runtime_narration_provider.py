@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, List
 
 from .runtime_narration_common import _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
 

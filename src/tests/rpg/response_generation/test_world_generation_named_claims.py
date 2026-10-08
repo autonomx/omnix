@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation
-from app.apps.rpg.worlds.generation_named_claims import (
+from app.apps.rpg.genesis.worlds import generation_compilation
+from app.apps.rpg.genesis.worlds.generation_named_claims import (
     ObjectiveNamedClaimCompilationError,
     objective_named_claim_issues,
     objective_named_claim_report,
 )
-from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.apps.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.genesis.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.genesis.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 

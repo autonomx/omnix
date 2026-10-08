@@ -59,7 +59,7 @@ from .conversation_thread_base import (
     ensure_conversation_thread_state,
     get_conversation_thread_state,
 )
-from app.apps.rpg.safe_values import (
+from app.apps.rpg.foundation.safe_values import (
     safe_dict as _safe_dict,
     safe_list as _safe_list,
     safe_str as _safe_str,

@@ -7,7 +7,7 @@ from typing import Any, Callable
 from app.apps.rpg.session.package_bridge import package_to_session, session_to_package
 from app.apps.rpg.session.replay_checkpoint import build_session_checkpoint, compare_session_checkpoints
 from app.apps.rpg.session.replay_turn_sequence import validate_replay_turn_sequence
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_save_load_replay_roundtrip_gate"
 SaveSession = Callable[[dict[str, Any]], dict[str, Any]]
@@ -136,7 +136,7 @@ def build_save_load_replay_roundtrip_contract(result: dict[str, Any]) -> dict[st
 def assert_phase7_save_load_replay_roundtrip_ready() -> dict[str, Any]:
     import tempfile
 
-    from app.apps.rpg.locations.discovery import discover_location, discover_route, unblock_route
+    from app.apps.rpg.world.locations.discovery import discover_location, discover_route, unblock_route
     from app.apps.rpg.session import durable_store
 
     session = {

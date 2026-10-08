@@ -192,7 +192,7 @@ def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
 
 def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
     from app.runtime import config as runtime_config
-    from app.apps.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.genesis.forge import async_coordinator as genesis
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
     monkeypatch.setattr(genesis.threading, 'Thread', lambda *args, **kwargs: pytest.fail('API started genesis thread'))
@@ -200,7 +200,7 @@ def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
 
 
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
-    from app.apps.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.genesis.forge import async_coordinator as genesis
     from app.persistence.background_authority import require_background_owner
     from app.runtime import config as runtime_config
     # Campaign genesis runs on job-worker processes (WP-6.1).

@@ -88,7 +88,7 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/hermes/execution_ledger.py",
+      "path": "src/app/apps/rpg/edge/hermes/execution_ledger.py",
       "symbol": "_LEDGER",
       "category": "cache",
       "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -1123,25 +1123,25 @@
       "reason": "This set deduplicates local research threads only; durable job status and ownership remain in the job store, entries are capped at 32, and each thread removes its ID in finally."
     },
     {
-      "path": "src/app/apps/rpg/debug_logging.py",
+      "path": "src/app/apps/rpg/foundation/debug_logging.py",
       "symbol": "_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/jobs/foreground_submission_store.py",
+      "path": "src/app/apps/rpg/session/jobs/foreground_submission_store.py",
       "symbol": "_STATES",
       "category": "coordination",
       "reason": "This is the provider-free foreground-submission store; production RPG composition selects PostgresRpgForegroundSubmissionStore."
     },
     {
-      "path": "src/app/apps/rpg/jobs/foreground_submission_store.py",
+      "path": "src/app/apps/rpg/session/jobs/foreground_submission_store.py",
       "symbol": "_STATES_LOCK",
       "category": "coordination",
       "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
     },
     {
-      "path": "src/app/apps/rpg/map_repository.py",
+      "path": "src/app/apps/rpg/world/map_repository.py",
       "symbol": "default_map_repository.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1150,7 +1150,7 @@
       "invalidation": "default_map_repository.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/narrative_delivery.py",
+      "path": "src/app/apps/rpg/narration/narrative_delivery.py",
       "symbol": "_cached_delivery_repository.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1159,7 +1159,7 @@
       "invalidation": "_cached_delivery_repository.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/narrative_engine/legacy_retirement.py",
+      "path": "src/app/apps/rpg/narration/narrative_engine/legacy_retirement.py",
       "symbol": "production_legacy_retirement_audit.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1168,7 +1168,7 @@
       "invalidation": "production_legacy_retirement_audit.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/narrative_repository.py",
+      "path": "src/app/apps/rpg/narration/narrative_repository.py",
       "symbol": "_cached_repository.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1177,7 +1177,7 @@
       "invalidation": "_cached_repository.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/narrative_retirement.py",
+      "path": "src/app/apps/rpg/narration/narrative_retirement.py",
       "symbol": "_cached_repository.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -1186,13 +1186,13 @@
       "invalidation": "_cached_repository.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/session/genesis/async_coordinator.py",
+      "path": "src/app/apps/rpg/genesis/forge/async_coordinator.py",
       "symbol": "_worker_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/session/genesis/async_coordinator.py",
+      "path": "src/app/apps/rpg/genesis/forge/async_coordinator.py",
       "symbol": "_worker_stop",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
@@ -1219,7 +1219,7 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/visual/providers/__init__.py",
+      "path": "src/app/apps/rpg/narration/visual/providers/__init__.py",
       "symbol": "_IMAGE_PROVIDER_CACHE",
       "category": "cache",
       "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -1237,25 +1237,25 @@
       "invalidation": "load_all_file_npc_profiles.cache_clear"
     },
     {
-      "path": "src/app/apps/rpg/worlds/generation_coordinator.py",
+      "path": "src/app/apps/rpg/genesis/worlds/generation_coordinator.py",
       "symbol": "_reconcile_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/worlds/generation_diagnostics.py",
+      "path": "src/app/apps/rpg/genesis/worlds/generation_diagnostics.py",
       "symbol": "_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/worlds/generation_worker.py",
+      "path": "src/app/apps/rpg/genesis/worlds/generation_worker.py",
       "symbol": "_worker_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
-      "path": "src/app/apps/rpg/worlds/progressive_materialization_worker.py",
+      "path": "src/app/apps/rpg/genesis/worlds/progressive_materialization_worker.py",
       "symbol": "_worker_lock",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

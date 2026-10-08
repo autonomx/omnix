@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.mode_routing import omnix_mode_route
+from app.apps.rpg.edge.hermes.mode_routing import omnix_mode_route
 
 
 def test_rpg_route_remains_simulation_owned() -> None:

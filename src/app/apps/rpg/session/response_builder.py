@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List
 
-from app.apps.rpg.memory.dialogue_context import (
+from app.apps.rpg.world.memory.dialogue_context import (
     build_dialogue_memory_context,
     build_llm_memory_prompt_block,
 )
-from app.apps.rpg.presentation import (
+from app.apps.rpg.narration.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
 )
 from app.apps.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
 from app.apps.rpg.session.state_normalization import _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from app.apps.rpg.session.survival_runtime import attach_survival_runtime_payloads
-from app.apps.rpg.survival_action_context import attach_survival_action_context
-from app.apps.rpg.survival_tick_runtime import apply_survival_runtime_tick
+from app.apps.rpg.rules.survival_action_context import attach_survival_action_context
+from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
 
 
 def _first_dict(*values):

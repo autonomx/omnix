@@ -6,7 +6,7 @@ from typing import Any, Dict
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_evolution_state import get_npc_evolution
 from app.apps.rpg.world.npc_reputation_state import get_npc_reputation
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

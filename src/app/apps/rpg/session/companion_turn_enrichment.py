@@ -4,30 +4,30 @@ from __future__ import annotations
 from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict, _safe_str as _safe_str,
 )
-from app.apps.rpg.party.companion_presence import (
+from app.apps.rpg.rules.party.companion_presence import (
     build_party_aware_turn_context as build_party_aware_turn_context, companion_presence_summary as companion_presence_summary,
     project_active_companions_into_presence as project_active_companions_into_presence,
 )
 from app.apps.rpg.session.turn_perf_trace import (
     record_elapsed_turn_stage as record_elapsed_turn_stage, record_turn_perf_trace as record_turn_perf_trace,
 )
-from app.apps.rpg.party.companion_memory import (
+from app.apps.rpg.rules.party.companion_memory import (
     companion_memory_summary as companion_memory_summary, maybe_apply_companion_relationship_drift_from_player_input as maybe_apply_companion_relationship_drift_from_player_input,
 )
-from app.apps.rpg.party.companion_quests import (
+from app.apps.rpg.rules.party.companion_quests import (
     companion_quest_summary as companion_quest_summary, maybe_progress_companion_quest_from_player_input as maybe_progress_companion_quest_from_player_input,
 )
-from app.apps.rpg.party.companion_turns import (
+from app.apps.rpg.rules.party.companion_turns import (
     maybe_build_direct_companion_turn_response as maybe_build_direct_companion_turn_response,
 )
-from app.apps.rpg.party.party_composition import (
+from app.apps.rpg.rules.party.party_composition import (
     project_party_composition_effects as project_party_composition_effects,
 )
 import copy
 from app.apps.rpg.session.companion_turn_runtime import (
     _active_companion_profiles_summary as _active_companion_profiles_summary, _sync_session_if_companion_runtime_mutated as _sync_session_if_companion_runtime_mutated,
 )
-from app.apps.rpg.profiles.character_cards import (
+from app.apps.rpg.genesis.profiles.character_cards import (
     list_character_cards_for_simulation_state as list_character_cards_for_simulation_state,
 )
 from app.apps.rpg.session.visible_response_core import (

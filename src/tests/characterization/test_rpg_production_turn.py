@@ -132,10 +132,10 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from app.jobs import store as job_store
     from app.persistence.startup import bootstrap_postgresql_runtime
     from app.providers import service as provider_service
-    from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
-    from app.apps.rpg.narrative_engine import service as narrative_service
-    from app.apps.rpg.narrative_engine.writer import StructuredNarrativeWriter
-    from app.apps.rpg.presentation.turn_response import RpgTurnResponse
+    from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from app.apps.rpg.narration.narrative_engine import service as narrative_service
+    from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
+    from app.apps.rpg.narration.presentation.turn_response import RpgTurnResponse
     from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
     from tests.support.routers import include_router_registrar
 

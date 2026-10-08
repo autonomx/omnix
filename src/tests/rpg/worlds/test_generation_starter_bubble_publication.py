@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.rpg.worlds.contracts import canonical_content_hash
-from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.apps.rpg.worlds.generation_starter_bubble_publication import (
+from app.apps.rpg.genesis.worlds.contracts import canonical_content_hash
+from app.apps.rpg.genesis.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.genesis.worlds.generation_starter_bubble_publication import (
     StarterBubblePublicationError,
     apply_certified_starter_bubble,
     persist_certified_starter_maps,
 )
-from app.apps.rpg.worlds.service import compile_world_release, compile_world_revision
-from app.apps.rpg.worlds.starter_bubble import (
+from app.apps.rpg.genesis.worlds.service import compile_world_release, compile_world_revision
+from app.apps.rpg.genesis.worlds.starter_bubble import (
     build_starter_bubble,
     build_starter_map_definitions,
     starter_bubble_certification,

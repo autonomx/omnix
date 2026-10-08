@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation, generation_starter_core_locations
-from app.apps.rpg.worlds.generation_starter_core_locations import (
+from app.apps.rpg.genesis.worlds import generation_compilation, generation_starter_core_locations
+from app.apps.rpg.genesis.worlds.generation_starter_core_locations import (
     StarterCoreLocationCompilationError,
     require_valid_starter_core_locations,
     starter_core_location_report,

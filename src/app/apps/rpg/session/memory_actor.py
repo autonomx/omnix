@@ -8,7 +8,7 @@ from .memory_writer import (
     MEMORY_SCHEMA_VERSION,
     memory_state_from_session,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 ACTOR_MEMORY_KIND = "actor"
 DEFAULT_ACTOR_MEMORY_LIMIT = 6

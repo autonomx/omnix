@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 
 def _text(value: Any, fallback: str = "") -> str:

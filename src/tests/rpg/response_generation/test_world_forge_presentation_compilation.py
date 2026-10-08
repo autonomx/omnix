@@ -1,6 +1,6 @@
-from app.apps.rpg.session.genesis.canon_audit import CanonAuditReport
-from app.apps.rpg.session.genesis.canon_compiler import compile_campaign_bible
-from app.apps.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.genesis.forge.canon_audit import CanonAuditReport
+from app.apps.rpg.genesis.forge.canon_compiler import compile_campaign_bible
+from app.apps.rpg.genesis.forge.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
     WorldForgeJobRecord,

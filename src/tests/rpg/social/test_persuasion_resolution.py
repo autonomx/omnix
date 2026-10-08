@@ -1,6 +1,6 @@
-from app.apps.rpg.social.leverage import add_social_leverage
-from app.apps.rpg.social.reputation import get_relationship, set_relationship_values
-from app.apps.rpg.social.resolution import resolve_persuasion
+from app.apps.rpg.world.social.leverage import add_social_leverage
+from app.apps.rpg.world.social.reputation import get_relationship, set_relationship_values
+from app.apps.rpg.world.social.resolution import resolve_persuasion
 
 
 def test_persuasion_success_high_trust():

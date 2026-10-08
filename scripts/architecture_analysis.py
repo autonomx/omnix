@@ -653,7 +653,9 @@ class SourceAnalysis:
                     if call_name.split(".")[-1] in {"local_tenant_context", "bootstrap_local_tenant"}:
                         if not path.startswith("src/app/security/") and relative not in owners.get("tenant_bootstrap", []) and "/cli/" not in path and not path.endswith("/__main__.py"):
                             add("AL012", node, call_name, scope)
-                    core = any(package_prefix(module_name(path), prefix) for prefix in self.config.get("rpg_core", {}).get("packages", []))
+                    rpg_core = self.config.get("rpg_core", {})
+                    core = (any(package_prefix(module_name(path), prefix) for prefix in rpg_core.get("packages", []))
+                            and not any(package_prefix(module_name(path), prefix) for prefix in rpg_core.get("exclude", [])))
                     unseeded = call_name == "random.Random" and not node.args and not any(item.arg in {"x", "seed"} for item in node.keywords)
                     if core and (unseeded or call_name.startswith("random.") and call_name != "random.Random"
                                  or call_name in {"time.time", "datetime.now", "datetime.utcnow", "datetime.datetime.now", "datetime.datetime.utcnow", "uuid.uuid4"}):

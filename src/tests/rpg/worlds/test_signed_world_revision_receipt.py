@@ -4,9 +4,9 @@ from copy import deepcopy
 
 import pytest
 
-from app.apps.rpg.worlds.contracts import WorldRevisionDocument
-from app.apps.rpg.worlds.revision_authorship import require_revision_authorship
-from app.apps.rpg.worlds.service import compile_world_revision
+from app.apps.rpg.genesis.worlds.contracts import WorldRevisionDocument
+from app.apps.rpg.genesis.worlds.revision_authorship import require_revision_authorship
+from app.apps.rpg.genesis.worlds.service import compile_world_revision
 
 
 @pytest.fixture(autouse=True)

@@ -69,7 +69,7 @@ def _phase4_session_travel_summary(command_result: dict[str, Any]) -> str:
 
 def _phase4_frontend_map_location_panel_payload(simulation_state: dict[str, Any]) -> dict[str, Any]:
     """Build the player-visible map/location UI payload without mutating state."""
-    from app.apps.rpg.locations import build_map_location_panel_payload
+    from app.apps.rpg.world.locations import build_map_location_panel_payload
 
     panel_payload = build_map_location_panel_payload(deepcopy(_safe_dict(simulation_state)))
     panel_payload["frontend_source"] = _PHASE4_FRONTEND_MAP_LOCATION_SOURCE
@@ -500,7 +500,7 @@ def _phase4_session_travel_payload(
     runtime_state: dict[str, Any],
     command_result: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.apps.rpg.locations import build_runtime_travel_command_narration_contract
+    from app.apps.rpg.world.locations import build_runtime_travel_command_narration_contract
 
     command_result = _safe_dict(command_result)
     turn_index = _phase4_session_travel_turn_index(runtime_state, simulation_state)
@@ -616,7 +616,7 @@ def _apply_phase4_session_travel_command(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.apps.rpg.locations import apply_runtime_travel_command, resolve_travel_command
+    from app.apps.rpg.world.locations import apply_runtime_travel_command, resolve_travel_command
 
     turn_index = _phase4_session_travel_turn_index(runtime_state, simulation_state)
     current_location_id = _phase4_session_travel_current_location(simulation_state)

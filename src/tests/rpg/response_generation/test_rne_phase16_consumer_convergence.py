@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -13,7 +13,7 @@ from app.apps.rpg.narrative_engine import (
     ValidationReport,
     canonical_consumer_bundle,
 )
-from app.apps.rpg.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
+from app.apps.rpg.narration.narrative_engine.consumer_publish import attach_canonical_consumer_bundle
 
 
 def _response() -> CanonicalNarrativeResponse:

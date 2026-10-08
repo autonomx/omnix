@@ -37,10 +37,10 @@ from app.apps.rpg.session.ambient_tick_runtime import (
 from app.apps.rpg.session.conversation_thread_runtime import (
     advance_conversation_threads_for_turn as advance_conversation_threads_for_turn,
 )
-from app.apps.rpg.memory.social_effects import (
+from app.apps.rpg.world.memory.social_effects import (
     apply_general_social_effects as apply_general_social_effects,
 )
-from app.apps.rpg.presentation.speaker_cards import (
+from app.apps.rpg.narration.presentation.speaker_cards import (
     build_nearby_npc_cards as build_nearby_npc_cards,
 )
 from app.apps.rpg.session.narration_runtime import (
@@ -49,19 +49,19 @@ from app.apps.rpg.session.narration_runtime import (
 from app.apps.rpg.world.location_registry import (
     ensure_location_state as ensure_location_state,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     expire_conversation_threads as expire_conversation_threads, normalize_conversation_threads as normalize_conversation_threads,
 )
-from app.apps.rpg.creator.world_scene_generator import (
+from app.apps.rpg.genesis.creator.world_scene_generator import (
     generate_scenes_from_simulation as generate_scenes_from_simulation,
 )
 from app.apps.rpg.session.ambient_intent import (
     is_ambient_wait_or_listen_intent as is_ambient_wait_or_listen_intent,
 )
-from app.apps.rpg.items.world_items import (
+from app.apps.rpg.rules.items.world_items import (
     list_scene_items as list_scene_items,
 )
-from app.apps.rpg.creator.world_simulation import (
+from app.apps.rpg.genesis.creator.world_simulation import (
     step_simulation_state as step_simulation_state,
 )
 

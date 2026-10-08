@@ -6,8 +6,8 @@ and that constraint enforcement is consistently applied.
 
 from __future__ import annotations
 
-from app.apps.rpg.coherence.core import CoherenceCore
-from app.apps.rpg.execution.resolver import SUPPORTED_EVENT_TYPES, ActionResolver
+from app.apps.rpg.narration.coherence.core import CoherenceCore
+from app.apps.rpg.session.execution.resolver import SUPPORTED_EVENT_TYPES, ActionResolver
 
 
 def _make_option(

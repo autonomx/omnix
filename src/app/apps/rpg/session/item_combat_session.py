@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.item_combat_integration import resolve_actor_item_damage
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 _TRACE_LIMIT = 50

@@ -8,10 +8,10 @@ Tests for:
 
 import unittest
 
-from app.apps.rpg.core.effects import EffectManager, EffectPolicy
-from app.apps.rpg.core.event_bus import Event, EventBus
-from app.apps.rpg.core.game_loop import GameLoop
-from app.apps.rpg.simulation.sandbox import SimulationSandbox
+from app.apps.rpg.foundation.core.effects import EffectManager, EffectPolicy
+from app.apps.rpg.foundation.core.event_bus import Event, EventBus
+from app.apps.rpg.foundation.core.game_loop import GameLoop
+from app.apps.rpg.world.simulation.sandbox import SimulationSandbox
 
 
 class _Parser:

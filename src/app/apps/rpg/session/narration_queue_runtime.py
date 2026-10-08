@@ -11,12 +11,12 @@ from app.apps.rpg.session.companion_turn_runtime import (
     _DEFAULT_INTERACTION_DURATION_TICKS as _DEFAULT_INTERACTION_DURATION_TICKS, _INTERACTION_STALE_GRACE_TICKS as _INTERACTION_STALE_GRACE_TICKS,
     _MAX_ACTIVE_INTERACTIONS as _MAX_ACTIVE_INTERACTIONS, _get_narration_job_for_turn as _get_narration_job_for_turn, _is_narration_job_active as _is_narration_job_active,
 )
-from app.apps.rpg.ai.npc_reaction_layer import (
+from app.apps.rpg.narration.ai.npc_reaction_layer import (
     apply_npc_reactions as apply_npc_reactions, build_interaction_reaction_context as build_interaction_reaction_context,
     build_npc_reaction_candidates as build_npc_reaction_candidates, select_npc_reactions as select_npc_reactions,
     update_interaction_reaction_state as update_interaction_reaction_state,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     seed_or_update_thread as seed_or_update_thread,
 )
 import hashlib as hashlib

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.worlds.generation_audit_stages import (
+from app.apps.rpg.genesis.worlds.generation_audit_stages import (
     pre_repair_audit_report,
     two_stage_audit_report,
 )

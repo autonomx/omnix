@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.apps.rpg.ai.compact_dialogue import build_compact_dialogue_advisory
+from app.apps.rpg.narration.ai.compact_dialogue import build_compact_dialogue_advisory
 
 
 def _state() -> tuple[dict, dict]:

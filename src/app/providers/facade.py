@@ -228,7 +228,7 @@ class ProviderFacade:
                 _provider_from_info(
                     info,
                     family="rpg_visual",
-                    source="app.apps.rpg.visual.providers.registry",
+                    source="app.apps.rpg.narration.visual.providers.registry",
                     capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
                 )
             )

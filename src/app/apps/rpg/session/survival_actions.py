@@ -9,7 +9,7 @@ actions backed by inventory/service availability.
 
 from typing import Any, Dict, List, Tuple
 
-from app.apps.rpg.economy.currency import (
+from app.apps.rpg.rules.economy.currency import (
     can_afford,
     format_currency,
     get_player_currency,
@@ -17,7 +17,7 @@ from app.apps.rpg.economy.currency import (
     set_player_currency,
     subtract_currency_cost,
 )
-from app.apps.rpg.economy.service_registry import (
+from app.apps.rpg.rules.economy.service_registry import (
     SERVICE_KIND_DRINK,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
@@ -29,7 +29,7 @@ from app.apps.rpg.world.location_registry import (
     location_allows_service,
     provider_present_at_location,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

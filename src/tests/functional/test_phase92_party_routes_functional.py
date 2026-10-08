@@ -29,7 +29,7 @@ def minimal_player_state():
 def test_build_party_summary_returns_valid_shape(minimal_player_state):
     """Ensure build_party_summary returns a dict with expected keys."""
     sys.path.insert(0, "src")
-    from app.apps.rpg.party.party_state import build_party_summary
+    from app.apps.rpg.rules.party.party_state import build_party_summary
 
     summary = build_party_summary(minimal_player_state)
     assert isinstance(summary, dict)
@@ -45,7 +45,7 @@ def test_build_party_summary_returns_valid_shape(minimal_player_state):
 def test_companion_loyalty_updates_persist():
     """Test loyalty delta updates correctly."""
     sys.path.insert(0, "src")
-    from app.apps.rpg.party.party_state import ensure_party_state, update_companion_loyalty
+    from app.apps.rpg.rules.party.party_state import ensure_party_state, update_companion_loyalty
 
     ps = ensure_party_state({})
     ps["party_state"]["companions"] = [
@@ -59,7 +59,7 @@ def test_companion_loyalty_updates_persist():
 def test_migration_v5_to_v6_adds_fields():
     """Test that migration v5→v6 adds new fields to companions."""
     sys.path.insert(0, "src")
-    from app.apps.rpg.persistence.migrations.v5_to_v6 import migrate_v5_to_v6
+    from app.apps.rpg.foundation.persistence.migrations.v5_to_v6 import migrate_v5_to_v6
 
     v5_package = {
         "schema_version": 5,
@@ -92,7 +92,7 @@ def test_migration_v5_to_v6_adds_fields():
 def test_migration_manager_handles_v5():
     """Test migration manager correctly processes v5 packages."""
     sys.path.insert(0, "src")
-    from app.apps.rpg.persistence.migration_manager import migrate_package_to_current
+    from app.apps.rpg.foundation.persistence.migration_manager import migrate_package_to_current
 
     v5_package = {
         "schema_version": 5,

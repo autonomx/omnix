@@ -8,7 +8,7 @@ context, reports, and grounding guards without changing the schema contract.
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MEMORY_SCHEMA_VERSION = "rpg_memory_v1"
 MAX_MEMORY_TEXT = 500

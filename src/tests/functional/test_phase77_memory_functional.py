@@ -6,16 +6,16 @@ with coherence, social state, and creator canon systems.
 
 from __future__ import annotations
 
-from app.apps.rpg.coherence.core import CoherenceCore
-from app.apps.rpg.coherence.models import (
+from app.apps.rpg.narration.coherence.core import CoherenceCore
+from app.apps.rpg.narration.coherence.models import (
     ConsequenceRecord,
     FactRecord,
     ThreadRecord,
 )
-from app.apps.rpg.creator.canon import CreatorCanonFact, CreatorCanonState
-from app.apps.rpg.memory.core import CampaignMemoryCore
-from app.apps.rpg.social_state.core import SocialStateCore
-from app.apps.rpg.social_state.models import (
+from app.apps.rpg.genesis.creator.canon import CreatorCanonFact, CreatorCanonState
+from app.apps.rpg.world.memory.core import CampaignMemoryCore
+from app.apps.rpg.world.social_state.core import SocialStateCore
+from app.apps.rpg.world.social_state.models import (
     RelationshipStateRecord,
     RumorRecord,
 )

@@ -11,13 +11,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.apps.rpg.encounter.controller import EncounterController
-from app.apps.rpg.encounter.models import (
+from app.apps.rpg.rules.encounter.controller import EncounterController
+from app.apps.rpg.rules.encounter.models import (
     EncounterState,
 )
-from app.apps.rpg.encounter.presenter import EncounterPresenter
-from app.apps.rpg.encounter.resolver import EncounterResolver
-from app.apps.rpg.memory.core import CampaignMemoryCore
+from app.apps.rpg.rules.encounter.presenter import EncounterPresenter
+from app.apps.rpg.rules.encounter.resolver import EncounterResolver
+from app.apps.rpg.world.memory.core import CampaignMemoryCore
 
 # ======================================================================
 # Test helpers / fixtures

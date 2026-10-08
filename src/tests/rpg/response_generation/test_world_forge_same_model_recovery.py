@@ -13,25 +13,25 @@ from app.providers.base import (
     ModelInfo,
     ProviderConfig,
 )
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_review import result_status
-from app.apps.rpg.worlds.generation_recovering_provider import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_review import result_status
+from app.apps.rpg.genesis.worlds.generation_recovering_provider import (
     RecoveringFirstPassWorldForgeTopicGenerator,
 )
-from app.apps.rpg.worlds.generation_contract_bundle import build_topic_contract_bundle
-from app.apps.rpg.worlds.generation_first_pass_provider import _authored_contract
-from app.apps.rpg.worlds.generation_recovery_evidence import (
+from app.apps.rpg.genesis.worlds.generation_contract_bundle import build_topic_contract_bundle
+from app.apps.rpg.genesis.worlds.generation_first_pass_provider import _authored_contract
+from app.apps.rpg.genesis.worlds.generation_recovery_evidence import (
     EvidenceBackedRecoveringWorldForgeTopicGenerator,
 )
-from app.apps.rpg.worlds.generation_structured_recovery import (
+from app.apps.rpg.genesis.worlds.generation_structured_recovery import (
     apply_missing_field_patches,
     deterministic_repair,
     minimum_viability_candidate,
     missing_field_paths,
     missing_field_patch_contract,
 )
-from app.apps.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
-from app.apps.rpg.worlds.providers.single_pass import SinglePassWorldForgeProviderError
+from app.apps.rpg.genesis.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.apps.rpg.genesis.worlds.providers.single_pass import SinglePassWorldForgeProviderError
 
 
 class _Provider(BaseProvider):

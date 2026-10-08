@@ -9,10 +9,10 @@ from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _normalize_active_interactions as _normalize_active_interactions, _normalize_runtime_settings as _normalize_runtime_settings,
     _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.apps.rpg.creator.schema import (
+from app.apps.rpg.genesis.creator.schema import (
     normalize_world_behavior_config as normalize_world_behavior_config,
 )
-from app.apps.rpg.ai.scene_continuity import (
+from app.apps.rpg.narration.ai.scene_continuity import (
     ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
@@ -24,13 +24,13 @@ from app.apps.rpg.session.player_activity_runtime import (
 from app.apps.rpg.session.world_consequence_runtime import (
     emit_scene_beat as emit_scene_beat,
 )
-from app.apps.rpg.items.inventory_state import (
+from app.apps.rpg.rules.items.inventory_state import (
     normalize_inventory_state as normalize_inventory_state,
 )
 from app.apps.rpg.session.semantic_state_changes import (
     _get_combat_state as _get_combat_state,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     normalize_combat_state as normalize_combat_state,
 )
 from typing import (
@@ -873,7 +873,7 @@ def get_effective_world_behavior(session: dict[str, Any]) -> dict[str, Any]:
     override = _safe_dict(runtime.get("world_behavior_override"))
 
     effective = dict(base)
-    from app.apps.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS
+    from app.apps.rpg.genesis.creator.schema import _WORLD_BEHAVIOR_ENUMS
     for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
         val = override.get(key)
         if isinstance(val, str) and val.strip().lower() in allowed:

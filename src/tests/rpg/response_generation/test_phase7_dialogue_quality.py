@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.presentation.dialogue_quality import (
+from app.apps.rpg.narration.presentation.dialogue_quality import (
     TARGET_MAX_WORDS,
     TARGET_MIN_WORDS,
     assess_dialogue_quality,

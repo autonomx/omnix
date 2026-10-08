@@ -1,10 +1,10 @@
 import unittest
 
-from app.apps.rpg.core.determinism import DeterminismConfig
-from app.apps.rpg.core.effects import EffectManager
-from app.apps.rpg.core.event_bus import EventBus
-from app.apps.rpg.core.game_loop import GameLoop
-from app.apps.rpg.core.tool_runtime_boundary import ToolRuntimeGateway, ToolRuntimeRecorder
+from app.apps.rpg.foundation.core.determinism import DeterminismConfig
+from app.apps.rpg.foundation.core.effects import EffectManager
+from app.apps.rpg.foundation.core.event_bus import EventBus
+from app.apps.rpg.foundation.core.game_loop import GameLoop
+from app.apps.rpg.foundation.core.tool_runtime_boundary import ToolRuntimeGateway, ToolRuntimeRecorder
 
 
 class _Parser:

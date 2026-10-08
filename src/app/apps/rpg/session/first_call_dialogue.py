@@ -326,7 +326,7 @@ def build_non_stateful_dialogue_result(
             persist=True,
         )
     except Exception as exc:
-        from app.apps.rpg.debug_logging import log_rpg_event
+        from app.apps.rpg.foundation.debug_logging import log_rpg_event
 
         result["conversation_thread_record"] = {
             "recorded": False,

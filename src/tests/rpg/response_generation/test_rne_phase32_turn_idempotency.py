@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from app.apps.rpg.persistence.rpg_narrative_response_repository import (
+from app.apps.rpg.foundation.persistence.rpg_narrative_response_repository import (
     NarrativeResponsePersistenceConflict,
 )
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     DeliveryMode,
     EvidenceBroker,
     InMemoryNarrativeResponseRepository,
@@ -18,7 +18,7 @@ from app.apps.rpg.narrative_engine import (
     TurnPresentationRequest,
     WriterResult,
 )
-from app.apps.rpg.narrative_repository import PostgresNarrativeResponseRepositoryAdapter
+from app.apps.rpg.narration.narrative_repository import PostgresNarrativeResponseRepositoryAdapter
 
 
 class _CountingWriter:

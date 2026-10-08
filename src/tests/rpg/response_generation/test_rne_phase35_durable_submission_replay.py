@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.foreground_turn_record import (
+from app.apps.rpg.foundation.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_MAX_BYTES,
     build_foreground_turn_record,
 )
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -20,11 +20,11 @@ from app.apps.rpg.narrative_engine import (
     NarrativeBlock,
     ValidationReport,
 )
-from app.apps.rpg.narrative_replay import (
+from app.apps.rpg.edge.narrative_replay import (
     CanonicalNarrativeReplayError,
     hydrate_canonical_narrative_replay,
 )
-from app.apps.rpg.presentation.turn_response_budget import encoded_size_bytes
+from app.apps.rpg.narration.presentation.turn_response_budget import encoded_size_bytes
 
 
 ROOT = Path(__file__).resolve().parents[4]

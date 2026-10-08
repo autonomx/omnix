@@ -2,58 +2,58 @@
   "schema_version": 1,
   "modules": [
     {
-      "path": "src/app/apps/rpg/api/compat/rpg_adventure_compat.py",
+      "path": "src/app/apps/rpg/edge/api/compat/rpg_adventure_compat.py",
       "category": "A",
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
-        "src/app/apps/rpg/api/compat_router.py"
+        "src/app/apps/rpg/edge/api/compat_router.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/api/compat/rpg_inspection_compat.py",
+      "path": "src/app/apps/rpg/edge/api/compat/rpg_inspection_compat.py",
       "category": "A",
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
-        "src/app/apps/rpg/api/compat_router.py"
+        "src/app/apps/rpg/edge/api/compat_router.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/api/compat/rpg_player_compat.py",
+      "path": "src/app/apps/rpg/edge/api/compat/rpg_player_compat.py",
       "category": "A",
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
-        "src/app/apps/rpg/api/compat_router.py"
+        "src/app/apps/rpg/edge/api/compat_router.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/api/compat/rpg_session_compat.py",
+      "path": "src/app/apps/rpg/edge/api/compat/rpg_session_compat.py",
       "category": "A",
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
-        "src/app/apps/rpg/api/compat_router.py",
-        "src/app/apps/rpg/api/compat/rpg_session_genesis_compat.py"
+        "src/app/apps/rpg/edge/api/compat_router.py",
+        "src/app/apps/rpg/edge/api/compat/rpg_session_genesis_compat.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/api/compat/rpg_session_genesis_compat.py",
+      "path": "src/app/apps/rpg/edge/api/compat/rpg_session_genesis_compat.py",
       "category": "A",
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
-        "src/app/apps/rpg/api/compat_router.py"
+        "src/app/apps/rpg/edge/api/compat_router.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
-      "path": "src/app/apps/rpg/persistence/rpg_compat.py",
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_compat.py",
       "category": "B",
       "purpose": "Legacy RPG session and interaction function contracts",
       "production_call_sites": [
@@ -68,11 +68,11 @@
       "replacement_or_deletion_prerequisite": "Move callers to an explicit session repository; preserve payload normalization and atomic writes."
     },
     {
-      "path": "src/app/apps/rpg/persistence/rpg_feature_compat.py",
+      "path": "src/app/apps/rpg/foundation/persistence/rpg_feature_compat.py",
       "category": "B",
       "purpose": "Legacy NPC projection and narrative event contracts",
       "production_call_sites": [
-        "src/app/apps/rpg/npc_evolution/profile_store.py"
+        "src/app/apps/rpg/world/npc_evolution/profile_store.py"
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Use typed NPC/narrative repositories and migrate default factories before deleting wrappers."

@@ -7,7 +7,7 @@ from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
 from app.runtime.clock import TurnContext as _TurnContext
 from app.runtime.clock import bind_turn_context as _bind_turn_context
-from app.apps.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
+from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
 from app.apps.rpg.session.response_builder import (
     build_apply_turn_response as _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
 )
@@ -17,8 +17,8 @@ from .fast_combat_narration_skip import fast_combat_narration_scope
 from .session_runtime_store import load_runtime_session, save_runtime_session
 from .player_turn_execution import apply_turn as _PHASE8_PART40_BASE_APPLY_TURN
 from .turn_authoritative_guards import _canonicalize_publication, _persist_soft_truth
-from app.apps.rpg.safe_values import safe_str as _safe_str
-from app.apps.rpg.safe_values import mapping_copy as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import mapping_copy as _safe_dict
 
 
 def build_apply_turn_response(

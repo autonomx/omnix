@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.worlds.generation_profile_release_contracts import (
+from app.apps.rpg.genesis.worlds.generation_profile_release_contracts import (
     require_profile_release_contracts,
 )
 

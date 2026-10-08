@@ -11,8 +11,8 @@ Regression tests for:
 
 import unittest
 
-from app.apps.rpg.core.determinism import DeterminismConfig
-from app.apps.rpg.core.llm_recording import DeterministicLLMClient, LLMRecorder
+from app.apps.rpg.foundation.core.determinism import DeterminismConfig
+from app.apps.rpg.foundation.core.llm_recording import DeterministicLLMClient, LLMRecorder
 
 
 class _DummyLLM:
@@ -157,7 +157,7 @@ class TestPhase53LLMRecordingRegression(unittest.TestCase):
     def test_recorder_load_records_isolation(self):
         """Test that load_records clears previous state."""
         rec = LLMRecorder()
-        from app.apps.rpg.core.llm_recording import LLMRecord
+        from app.apps.rpg.foundation.core.llm_recording import LLMRecord
 
         # Record some data
         rec.record("initial", "initial_response", {})

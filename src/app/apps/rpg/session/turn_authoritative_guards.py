@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 from copy import deepcopy
 from typing import Any, Iterable
 
-from app.apps.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
-from app.apps.rpg.economy.service_resolver import resolve_service_turn
-from app.apps.rpg.economy.currency import format_currency
+from app.apps.rpg.narration.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.rules.economy.currency import format_currency
 from app.apps.rpg.session.public_state_bridge import (
     hydrate_simulation_player,
     project_authoritative_player,

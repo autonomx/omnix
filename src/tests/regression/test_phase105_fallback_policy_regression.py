@@ -4,7 +4,7 @@ Verifies that finalize_runtime_turn and mark_runtime_turn_interrupted
 do NOT invent text by default, only when explicitly enabled.
 """
 
-from app.apps.rpg.runtime.dialogue_runtime import (
+from app.apps.rpg.session.runtime.dialogue_runtime import (
     begin_runtime_turn,
     finalize_runtime_turn,
     get_runtime_dialogue_state,

@@ -52,10 +52,10 @@ CASES = [
     ("AL010", {APP + "platform/chat/a.py": "from external import *"}),
     ("AL011", {APP + "platform/chat/a.py": "from app.persistence.blob_store import LocalBlobStore as Store\nStore()"}),
     ("AL012", {APP + "platform/chat/a.py": "local_tenant_context()"}),
-    ("AL013", {APP + "apps/rpg/core/a.py": "from random import Random as RNG\nRNG()"}),
+    ("AL013", {APP + "apps/rpg/foundation/core/a.py": "from random import Random as RNG\nRNG()"}),
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
     ("AL015", {APP + "platform/chat/a.py": "def work():\n    import app.apps.rpg.b", APP + "apps/rpg/b.py": "def work():\n    import app.platform.chat.a"}),
-    ("AL017", {APP + "apps/rpg/core/a.py": "def work():\n    import app.apps.rpg.session.b", APP + "apps/rpg/session/b.py": ""}),
+    ("AL017", {APP + "apps/rpg/foundation/core/a.py": "def work():\n    import app.apps.rpg.session.b", APP + "apps/rpg/session/b.py": ""}),
     ("AL016", {APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]
 
@@ -185,20 +185,20 @@ def test_a_feature_without_a_tier_and_a_nested_feature_with_another_tier_are_vio
 
     conflicting = {
         APP + "apps/rpg/feature.py": feature("rpg", "app"),
-        APP + "apps/rpg/hermes/feature.py": feature("hermes", "platform", ("rpg",)),
+        APP + "apps/rpg/edge/hermes/feature.py": feature("hermes", "platform", ("rpg",)),
     }
     assert {entry["fingerprint"] for entry in layer_violations(conflicting)} == {
-        "<module>:<tier-conflict>:app.apps.rpg.hermes"
+        "<module>:<tier-conflict>:app.apps.rpg.edge.hermes"
     }
 
 
 def test_nested_features_and_transitional_owners_belong_to_their_unit():
     sources = {
         APP + "apps/rpg/feature.py": feature("rpg", "app"),
-        APP + "apps/rpg/hermes/feature.py": feature("hermes", "app", ("rpg",)),
-        APP + "apps/rpg/hermes/flow.py": "from app.apps.rpg import engine\n",
+        APP + "apps/rpg/edge/hermes/feature.py": feature("hermes", "app", ("rpg",)),
+        APP + "apps/rpg/edge/hermes/flow.py": "from app.apps.rpg import engine\n",
         APP + "apps/rpg/engine.py": "VALUE = 1\n",
-        APP + "apps/rpg/replay/adapter.py": "from app.apps.rpg import engine\n",
+        APP + "apps/rpg/edge/replay/adapter.py": "from app.apps.rpg import engine\n",
     }
     assert not layer_violations(sources)
 
@@ -302,7 +302,7 @@ def test_compliant_owners_local_classes_and_tests_are_allowed():
         APP + "persistence/blob_store.py": "LocalBlobStore()",
         APP + "composition/production.py": "bootstrap_local_tenant()",
         APP + "platform/chat/a.py": "class Local:\n    pass\nLocal.method = replacement\n@router.post('/api/a')\nasync def route():\n    await work()",
-        APP + "apps/rpg/core/a.py": "import random\nrandom.Random(42)",
+        APP + "apps/rpg/foundation/core/a.py": "import random\nrandom.Random(42)",
         "src/tests/test_example.py": "import builtins\nbuiltins.open = fake\nprint('test')",
     }
     assert report(sources)["violations"] == []
@@ -550,9 +550,9 @@ def test_a_migration_moved_into_its_modules_folder_is_not_a_change():
 
 
 def test_a_sql_file_outside_the_three_migration_places_is_a_violation():
-    sources = {APP + "apps/rpg/persistence/migrations/v8.sql": "SELECT 1;\n"}
+    sources = {APP + "apps/rpg/foundation/persistence/migrations/v8.sql": "SELECT 1;\n"}
     assert {(entry["path"], entry["fingerprint"]) for entry in report(sources)["violations"] if entry["rule"] == "AL014"} == {
-        (APP + "apps/rpg/persistence/migrations/v8.sql", "stray_schema_migration"),
+        (APP + "apps/rpg/foundation/persistence/migrations/v8.sql", "stray_schema_migration"),
     }
 
 
@@ -563,15 +563,15 @@ def _al017(sources):
 def test_rpg_contexts_import_only_the_contexts_below_them():
     """Track R-2: foundation < rules < world < narration < genesis < session < edge."""
     # Upward, at any scope: a violation naming both contexts and the entry.
-    assert _al017({APP + "apps/rpg/combat/a.py": "def work():\n    from app.apps.rpg.narration import b",
+    assert _al017({APP + "apps/rpg/rules/combat/a.py": "def work():\n    from app.apps.rpg.narration import b",
                    APP + "apps/rpg/narration/b.py": ""}) == ["rules->narration:narration"]
     # Downward and within a context: free.
-    assert _al017({APP + "apps/rpg/session/a.py": "import app.apps.rpg.core.b\nimport app.apps.rpg.session.c",
-                   APP + "apps/rpg/core/b.py": "", APP + "apps/rpg/session/c.py": ""}) == []
+    assert _al017({APP + "apps/rpg/session/a.py": "import app.apps.rpg.foundation.core.b\nimport app.apps.rpg.session.c",
+                   APP + "apps/rpg/foundation/core/b.py": "", APP + "apps/rpg/session/c.py": ""}) == []
     # A subpackage entry decides its own context, and importing it does not
     # count as importing its parent package: worlds -> session.genesis is genesis -> genesis.
-    assert _al017({APP + "apps/rpg/worlds/a.py": "from app.apps.rpg.session.genesis import forge",
-                   APP + "apps/rpg/session/genesis/forge.py": "", APP + "apps/rpg/session/__init__.py": ""}) == []
+    assert _al017({APP + "apps/rpg/genesis/worlds/a.py": "from app.apps.rpg.genesis.forge import forge",
+                   APP + "apps/rpg/genesis/forge/forge.py": "", APP + "apps/rpg/session/__init__.py": ""}) == []
     # Every top-level entry belongs to a context.
     assert _al017({APP + "apps/rpg/brand_new/a.py": "x = 1"}) == ["rpg_entry_without_context:brand_new"]
 

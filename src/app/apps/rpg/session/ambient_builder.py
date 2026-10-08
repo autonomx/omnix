@@ -9,8 +9,8 @@ from app.runtime.clock import utc_now
 
 from typing import Any, Dict, List
 
-from app.apps.rpg.social.conversation_presentation import build_conversation_payload
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.world.social.conversation_presentation import build_conversation_payload
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 # ── Hard caps (Phase 0.3) ──────────────────────────────────────────────────
 _MAX_AMBIENT_QUEUE = 32

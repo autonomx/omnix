@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, cast
 
 from app.apps.rpg.session.survival_persistence import normalize_survival_for_persistence
-from app.apps.rpg.validation.integrity import validate_package_integrity
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.rules.validation.integrity import validate_package_integrity
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _PACKAGE_SCHEMA_VERSION = 1
 

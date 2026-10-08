@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
 
 
 AMBIENT_WAIT_MARKERS = (

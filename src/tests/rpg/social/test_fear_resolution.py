@@ -1,9 +1,9 @@
-from app.apps.rpg.social.reputation import (
+from app.apps.rpg.world.social.reputation import (
     get_global_reputation,
     get_relationship,
     set_relationship_values,
 )
-from app.apps.rpg.social.resolution import resolve_intimidation
+from app.apps.rpg.world.social.resolution import resolve_intimidation
 
 
 def test_intimidation_success_creates_fear_and_lowers_trust():

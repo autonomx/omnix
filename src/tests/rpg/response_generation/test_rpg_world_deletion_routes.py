@@ -4,7 +4,7 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes import rpg_world_deletion_routes
+from app.apps.rpg.edge.api.feature_routes import rpg_world_deletion_routes
 
 
 def test_world_deletion_routes_register_safe_endpoints() -> None:

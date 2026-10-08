@@ -57,7 +57,7 @@ def _megabytes(limit: str) -> int:
 
 def test_ingress_body_limits_admit_what_the_gateway_accepts():
     from app.apps.audiobook.extraction import MAX_SOURCE_BYTES
-    from app.apps.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
+    from app.apps.rpg.genesis.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
     from app.security.model_service import DEFAULT_MAX_UPLOAD_BYTES
 
     limits = POLICY['body_limits']

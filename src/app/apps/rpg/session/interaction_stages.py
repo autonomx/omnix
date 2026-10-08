@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.apps.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID
-from app.apps.rpg.performance_trace import rpg_pipeline_span
+from app.apps.rpg.session.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID
+from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span
 
 
 def commit_interaction(ctx: Any) -> Any:
@@ -75,7 +75,7 @@ def commit_interaction(ctx: Any) -> Any:
 
     if uses_postgresql_runtime():
         from app.jobs.foreground_execution import current_foreground_execution
-        from app.apps.rpg.persistence.rpg_turn_service import persist_foreground_turn
+        from app.apps.rpg.foundation.persistence.rpg_turn_service import persist_foreground_turn
 
         execution = current_foreground_execution()
         result["session"] = session

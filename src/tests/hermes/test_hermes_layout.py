@@ -20,5 +20,5 @@ def test_the_sidecar_client_is_transport_only() -> None:
 def test_rpg_hermes_modules_live_under_rpg() -> None:
     # assist_core is gone (WP-8.2): assist mode lives in app/platform/chat/assist.
     assert not (APP / "assist_core").exists()
-    assert FEATURE_CATALOG["hermes"] == "app.apps.rpg.hermes.feature:FEATURE"
+    assert FEATURE_CATALOG["hermes"] == "app.apps.rpg.edge.hermes.feature:FEATURE"
     assert load_feature("hermes").depends_on == ("rpg",)

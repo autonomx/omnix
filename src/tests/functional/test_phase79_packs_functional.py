@@ -6,15 +6,15 @@ integration layer: register, list, load, merge, export.
 
 from __future__ import annotations
 
-from app.apps.rpg.packs.exporter import PackExporter
-from app.apps.rpg.packs.loader import PackLoader
-from app.apps.rpg.packs.merger import PackMerger
-from app.apps.rpg.packs.models import (
+from app.apps.rpg.genesis.packs.exporter import PackExporter
+from app.apps.rpg.genesis.packs.loader import PackLoader
+from app.apps.rpg.genesis.packs.merger import PackMerger
+from app.apps.rpg.genesis.packs.models import (
     AdventurePack,
 )
-from app.apps.rpg.packs.presenters import PackPresenter
-from app.apps.rpg.packs.registry import PackRegistry
-from app.apps.rpg.packs.validator import PackValidator
+from app.apps.rpg.genesis.packs.presenters import PackPresenter
+from app.apps.rpg.genesis.packs.registry import PackRegistry
+from app.apps.rpg.genesis.packs.validator import PackValidator
 
 # ======================================================================
 # Helpers

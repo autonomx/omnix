@@ -39,7 +39,7 @@ from app.apps.rpg.session.narration_runtime import (
 from app.apps.rpg.session.session_runtime_store import (
     save_runtime_session as save_runtime_session,
 )
-from app.apps.rpg.creator.world_simulation_reports import (
+from app.apps.rpg.genesis.creator.world_simulation_reports import (
     summarize_simulation_step as summarize_simulation_step,
 )
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.apps.rpg.session.genesis.world_forge_dossier_quality import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.genesis.forge.world_forge_dossier_quality import (
     content_target,
     dossier_word_count,
     validate_dossier_quality,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 
 
 class _Generator:

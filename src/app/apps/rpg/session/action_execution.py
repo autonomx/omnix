@@ -5,74 +5,74 @@ from app.apps.rpg.session.state_normalization import (
     _apply_starting_resources_to_player_state as _apply_starting_resources_to_player_state, _ensure_simulation_state as _ensure_simulation_state,
     _normalize_runtime_settings as _normalize_runtime_settings, _safe_bool as _safe_bool, _safe_dict as _safe_dict, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.apps.rpg.creator.world_player_actions import (
+from app.apps.rpg.genesis.creator.world_player_actions import (
     ESCALATE_CONFLICT as ESCALATE_CONFLICT,
     INTERVENE_THREAD as INTERVENE_THREAD,
     SUPPORT_FACTION as SUPPORT_FACTION,
 )
-from app.apps.rpg.ai.world_scene_narrator import (
+from app.apps.rpg.narration.ai.world_scene_narrator import (
     narrate_scene as narrate_scene,
 )
-from app.apps.rpg.presentation.visual_state import (
+from app.apps.rpg.narration.presentation.visual_state import (
     ensure_visual_state as ensure_visual_state,
 )
 from app.apps.rpg.session.combat_intent import (
     _apply_grounded_scene_overlay as _apply_grounded_scene_overlay, _derive_grounded_scene_context as _derive_grounded_scene_context, _utc_now_iso as _utc_now_iso,
 )
-from app.apps.rpg.presentation.speaker_cards import (
+from app.apps.rpg.narration.presentation.speaker_cards import (
     build_nearby_npc_cards as build_nearby_npc_cards,
 )
 from app.apps.rpg.session.player_activity_runtime import (
     _build_transaction_menus_for_state as _build_transaction_menus_for_state, _derive_transaction_providers as _derive_transaction_providers,
 )
-from app.apps.rpg.presentation.memory_inspector import (
+from app.apps.rpg.narration.presentation.memory_inspector import (
     build_memory_ui_summary as build_memory_ui_summary,
 )
-from app.apps.rpg.presentation.runtime_bridge_n1222 import (
+from app.apps.rpg.narration.presentation.runtime_bridge_n1222 import (
     build_runtime_presentation_payload as build_runtime_presentation_payload,
 )
-from app.apps.rpg.creator.defaults import (
+from app.apps.rpg.genesis.creator.defaults import (
     apply_adventure_defaults as apply_adventure_defaults,
 )
-from app.apps.rpg.creator.world_simulation import (
+from app.apps.rpg.genesis.creator.world_simulation import (
     build_initial_simulation_state as build_initial_simulation_state,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _SCHEMA_VERSION as _SCHEMA_VERSION,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     build_empty_combat_state as build_empty_combat_state,
 )
-from app.apps.rpg.player.player_progression_state import (
+from app.apps.rpg.rules.player.player_progression_state import (
     award_player_xp as award_player_xp, award_skill_xp as award_skill_xp, ensure_player_progression_state as ensure_player_progression_state,
     resolve_level_ups as resolve_level_ups, resolve_skill_level_ups as resolve_skill_level_ups,
 )
-from app.apps.rpg.player.player_xp_rules import (
+from app.apps.rpg.rules.player.player_xp_rules import (
     compute_action_player_xp as compute_action_player_xp, compute_action_skill_xp as compute_action_skill_xp, compute_stat_influence_bonus as compute_stat_influence_bonus,
 )
 from app.apps.rpg.session.service_runtime import (
     service_authoritative_result as service_authoritative_result,
 )
-from app.apps.rpg.economy.transactions import (
+from app.apps.rpg.rules.economy.transactions import (
     build_transaction_metadata as build_transaction_metadata, enrich_action_with_registry_price as enrich_action_with_registry_price,
 )
 from app.apps.rpg.session.inventory_runtime import (
     drop_item_action as drop_item_action, equip_item_action as equip_item_action, pickup_item_action as pickup_item_action, unequip_item_action as unequip_item_action,
 )
-from app.apps.rpg.action_resolver import (
+from app.apps.rpg.rules.action_resolver import (
     resolve_player_action as resolve_player_action,
 )
-from app.apps.rpg.economy.transaction_effects import (
+from app.apps.rpg.rules.economy.transaction_effects import (
     apply_transaction_effects as apply_transaction_effects,
 )
-from app.apps.rpg.items.inventory_state import (
+from app.apps.rpg.rules.items.inventory_state import (
     normalize_inventory_state as normalize_inventory_state,
 )
-from app.apps.rpg.economy.currency import (
+from app.apps.rpg.rules.economy.currency import (
     can_afford as can_afford, currency_delta as currency_delta, currency_to_copper_value as currency_to_copper_value, normalize_currency as normalize_currency,
     subtract_currency_cost as subtract_currency_cost,
 )
-from app.apps.rpg.items.item_effects import (
+from app.apps.rpg.rules.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
 from typing import (
@@ -536,7 +536,7 @@ def _apply_authoritative_action(
             "result": blocked_result,
         }
 
-    from app.apps.rpg.core.determinism import rng_for
+    from app.apps.rpg.foundation.core.determinism import rng_for
 
     session_seed = gated_state.get("rng_seed")
     if not isinstance(session_seed, int) or isinstance(session_seed, bool):

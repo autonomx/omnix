@@ -54,7 +54,7 @@ from app.providers.cache_status import (
 )
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 from app.providers.facade import ProviderFacadePayload
-from app.apps.rpg.replay import (
+from app.apps.rpg.edge.replay import (
     CheckpointBundleRequest,
     CheckpointEnvelope,
     PersistenceInventory,

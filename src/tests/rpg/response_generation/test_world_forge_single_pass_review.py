@@ -14,21 +14,21 @@ from app.persistence.database import (
     _classified_postgres_error,
 )
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicGraph, CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_fact_pipeline import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_review import mark_needs_review, review_report
-from app.apps.rpg.worlds.generation_candidate_spool import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_review import mark_needs_review, review_report
+from app.apps.rpg.genesis.worlds.generation_candidate_spool import (
     delete_candidate_spool,
     read_candidate_spool,
     write_candidate_spool,
 )
-from app.apps.rpg.worlds.generation_jobs import generation_progress
-from app.apps.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
-from app.apps.rpg.worlds.providers.single_pass import (
+from app.apps.rpg.genesis.worlds.generation_jobs import generation_progress
+from app.apps.rpg.genesis.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.apps.rpg.genesis.worlds.providers.single_pass import (
     SinglePassProviderWorldForgeTopicGenerator,
     SinglePassWorldForgeProviderError,
 )

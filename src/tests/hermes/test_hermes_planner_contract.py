@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.planner_contract import (
+from app.apps.rpg.edge.hermes.planner_contract import (
     hermes_planner_contract_schema,
     normalize_hermes_planner_response,
 )

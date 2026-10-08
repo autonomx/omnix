@@ -4,7 +4,7 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_progressive_map_routes import (
+from app.apps.rpg.edge.api.feature_routes.rpg_progressive_map_routes import (
     register_rpg_progressive_map_routes,
 )
 
@@ -28,7 +28,7 @@ def test_deferred_materialization_route_is_hidden_and_revision_explicit(
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_progressive_map_routes.materialize_deferred_location",
+        "app.apps.rpg.edge.api.feature_routes.rpg_progressive_map_routes.materialize_deferred_location",
         fake_materialize,
     )
     app = FastAPI()
@@ -65,11 +65,11 @@ def test_campaign_signal_and_telemetry_routes_are_in_openapi(monkeypatch) -> Non
         return {"ok": True, "status": "idle", **kwargs}
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_progressive_map_routes.schedule_campaign_predictive_materialization",
+        "app.apps.rpg.edge.api.feature_routes.rpg_progressive_map_routes.schedule_campaign_predictive_materialization",
         fake_schedule,
     )
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_progressive_map_routes.materialization_job_telemetry",
+        "app.apps.rpg.edge.api.feature_routes.rpg_progressive_map_routes.materialization_job_telemetry",
         fake_telemetry,
     )
     app = FastAPI()

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.apps.rpg.session.legacy_interaction_migration import migrate_legacy_interactions
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 _CURRENT_SAVE_VERSION = "1.0"
 _CURRENT_SCHEMA_VERSION = 5

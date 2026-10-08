@@ -525,7 +525,7 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
     monkeypatch.setattr(identity_service, "ensure_local_identity", forbidden)
     monkeypatch.setattr("app.persistence.apply_migrations", forbidden)
 
-    from app.apps.rpg.api.feature_routes import rpg_world_library_routes
+    from app.apps.rpg.edge.api.feature_routes import rpg_world_library_routes
     from app.apps.rpg.session import service as rpg_session_service
 
     monkeypatch.setattr(
@@ -613,7 +613,7 @@ def test_disabled_features_are_not_imported():
         "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
         "declarations = {'app.apps.rpg', 'app.apps.rpg.declarations', 'app.apps.trading', 'app.apps.trading.declarations'}\n"
         # The kernel replay routes load RPG's replay adapter whatever is enabled (as app.replay did before PA-5.3).
-        "replay = ('app.apps.rpg.replay', 'app.apps.rpg.replay.models', 'app.apps.rpg.replay.rpg_adapter')\n"
+        "replay = ('app.apps.rpg.edge', 'app.apps.rpg.edge.replay', 'app.apps.rpg.edge.replay.models', 'app.apps.rpg.edge.replay.rpg_adapter')\n"
         "loaded = sorted(m for m in sys.modules if m.startswith(('app.apps.rpg', 'app.apps.trading'))\n"
         "                and m not in declarations and m not in replay)\n"
         "print(len(loaded), loaded[:5])\n"

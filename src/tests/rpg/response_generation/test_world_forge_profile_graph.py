@@ -1,10 +1,10 @@
-from app.apps.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
-from app.apps.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
-from app.apps.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.genesis.forge.world_forge_contract import build_campaign_topic_graph
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import STANDARD_DOMAIN_IDS
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.apps.rpg.session.genesis.world_forge_profiles import (
+from app.apps.rpg.genesis.forge.world_forge_profiles import (
     DomainDefinition,
     DomainTargetRange,
     FieldDefinition,

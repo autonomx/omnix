@@ -10,7 +10,7 @@ from app.apps.rpg.world.npc_presence_runtime import (
     update_present_npcs_for_location,
 )
 from app.apps.rpg.world.npc_schedule_state import active_schedule_for_npc
-from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
 
 
 def build_scene_population_state(

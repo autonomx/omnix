@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.response_generation.baseline import (
+from app.apps.rpg.narration.response_generation.baseline import (
     BaselineObservation,
     evaluate_baseline,
     load_baseline_scenarios,

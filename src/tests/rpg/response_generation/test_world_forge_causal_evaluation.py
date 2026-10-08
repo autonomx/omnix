@@ -1,9 +1,9 @@
-from app.apps.rpg.session.genesis.canon_audit import CanonAuditReport
-from app.apps.rpg.session.genesis.world_forge_causal_evaluation import (
+from app.apps.rpg.genesis.forge.canon_audit import CanonAuditReport
+from app.apps.rpg.genesis.forge.world_forge_causal_evaluation import (
     attach_causal_evaluation,
     evaluate_causal_generation,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 
 
 def _topics() -> tuple[GeneratedTopic, ...]:

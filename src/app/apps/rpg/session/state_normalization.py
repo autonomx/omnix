@@ -4,19 +4,19 @@ from copy import deepcopy
 import json
 from typing import Any, cast
 
-from app.apps.rpg.ai.grounding_settings import normalize_grounding_settings
-from app.apps.rpg.economy.currency import currency_to_copper_value, normalize_currency
-from app.apps.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
-from app.apps.rpg.items.world_items import ensure_world_item_state
-from app.apps.rpg.memory.actor_memory_state import ensure_actor_memory_state
-from app.apps.rpg.memory.memory_state import ensure_memory_state
-from app.apps.rpg.memory.world_memory_state import ensure_world_memory_state
-from app.apps.rpg.player import ensure_player_party, ensure_player_state
-from app.apps.rpg.player.player_progression_state import ensure_player_progression_state
-from app.apps.rpg.presentation.personality_state import ensure_personality_state
-from app.apps.rpg.presentation.visual_state import ensure_visual_state
+from app.apps.rpg.narration.ai.grounding_settings import normalize_grounding_settings
+from app.apps.rpg.rules.economy.currency import currency_to_copper_value, normalize_currency
+from app.apps.rpg.rules.items.inventory_state import add_inventory_items, normalize_inventory_state
+from app.apps.rpg.rules.items.world_items import ensure_world_item_state
+from app.apps.rpg.world.memory.actor_memory_state import ensure_actor_memory_state
+from app.apps.rpg.world.memory.memory_state import ensure_memory_state
+from app.apps.rpg.world.memory.world_memory_state import ensure_world_memory_state
+from app.apps.rpg.rules.player import ensure_player_party, ensure_player_state
+from app.apps.rpg.rules.player.player_progression_state import ensure_player_progression_state
+from app.apps.rpg.narration.presentation.personality_state import ensure_personality_state
+from app.apps.rpg.narration.presentation.visual_state import ensure_visual_state
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _DEFAULT_STORY_POLICY = {
     "save_load_stable": True,

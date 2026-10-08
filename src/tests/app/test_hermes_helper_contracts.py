@@ -75,7 +75,7 @@ def test_unknown_readout_is_rejected_without_payload() -> None:
 
 def test_plan_summary_readout_returns_dry_shape() -> None:
     from app.platform.chat.contracts import ASSIST_READOUTS
-    from app.apps.rpg.hermes.feature import _PlanSummaryReadout
+    from app.apps.rpg.edge.hermes.feature import _PlanSummaryReadout
     from app.runtime.ports import PortBinding, PortBindings, install_port_bindings, reset_port_bindings_for_tests
 
     # Composition binds the Hermes feature's readout (ADR-0016).

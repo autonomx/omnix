@@ -3,7 +3,7 @@ from __future__ import annotations
 # RPG session runtime responsibility module.
 import time as _time
 import logging
-from app.apps.rpg.ai.world_scene_narrator import (
+from app.apps.rpg.narration.ai.world_scene_narrator import (
     narrate_scene as narrate_scene,
 )
 from app.apps.rpg.session.session_runtime_store import (
@@ -24,13 +24,13 @@ from app.apps.rpg.session.combat_intent import (
     _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
 )
 import os as os
-from app.apps.rpg.ai.grounding_soft_audit import (
+from app.apps.rpg.narration.ai.grounding_soft_audit import (
     run_grounding_soft_audit as run_grounding_soft_audit,
 )
-from app.apps.rpg.llm_app_gateway import (
+from app.apps.rpg.foundation.llm_app_gateway import (
     build_app_llm_gateway as build_app_llm_gateway,
 )
-from app.apps.rpg.ai.grounding_settings import (
+from app.apps.rpg.narration.ai.grounding_settings import (
     normalize_grounding_settings as normalize_grounding_settings,
 )
 from app.apps.rpg.session.narration_queue_runtime import (
@@ -745,7 +745,7 @@ def process_next_narration_job(session_id: str) -> dict[str, Any]:
 
         return apply_narration_result_to_interaction(session_id, result)
     except Exception as exc:
-        from app.apps.rpg.debug_logging import log_rpg_event
+        from app.apps.rpg.foundation.debug_logging import log_rpg_event
 
         result["interaction_lifecycle_update"] = {
             "updated": False,

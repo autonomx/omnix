@@ -4,7 +4,7 @@ import logging
 
 from copy import deepcopy
 from typing import Any, Dict, List
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 try:
     from app.apps.rpg.world.npc_profile_loader import get_file_npc_profile

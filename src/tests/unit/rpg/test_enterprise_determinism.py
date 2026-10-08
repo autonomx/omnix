@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from app.apps.rpg.action_resolver import resolve_player_action
-from app.apps.rpg.core.determinism import (
+from app.apps.rpg.rules.action_resolver import resolve_player_action
+from app.apps.rpg.foundation.core.determinism import (
     deterministic_turn_uuid,
     rng_for,
     rng_for_current_turn,
@@ -12,8 +12,8 @@ from app.apps.rpg.core.determinism import (
     stable_json,
     turn_rng_identity,
 )
-from app.apps.rpg.core.clock import DeterministicClock
-from app.apps.rpg.core.event_bus import DeterminismConfig, Event, EventBus
+from app.apps.rpg.foundation.core.clock import DeterministicClock
+from app.apps.rpg.foundation.core.event_bus import DeterminismConfig, Event, EventBus
 from app.apps.rpg.session.idle_time import recorded_idle_tick_time
 from app.runtime.clock import Clock, TurnContext, bind_turn_context, utc_now
 from app.apps.rpg.session import service as session_service

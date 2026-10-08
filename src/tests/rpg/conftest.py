@@ -32,7 +32,7 @@ def in_memory_narrative_responses(request, monkeypatch):
     The production default follows the runtime (PostgreSQL), which needs a
     campaign row for every response; the engine tests do not create campaigns.
     """
-    from app.apps.rpg.narrative_repository import _cached_repository
+    from app.apps.rpg.narration.narrative_repository import _cached_repository
 
     if request.node.get_closest_marker("postgres") is None:
         monkeypatch.setenv("OMNIX_RPG_NARRATIVE_REPOSITORY", "in_memory")

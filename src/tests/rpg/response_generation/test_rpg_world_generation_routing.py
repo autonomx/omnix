@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.apps.rpg.worlds.providers.world_forge import ProviderWorldForgeTopicGenerator
-from app.apps.rpg.worlds import generation_routing
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.genesis.worlds.providers.world_forge import ProviderWorldForgeTopicGenerator
+from app.apps.rpg.genesis.worlds import generation_routing
 
 
 class _Provider(BaseProvider):

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation
-from app.apps.rpg.worlds.generation_manifest_references import (
+from app.apps.rpg.genesis.worlds import generation_compilation
+from app.apps.rpg.genesis.worlds.generation_manifest_references import (
     ManifestReferenceCompilationError,
     manifest_reference_issues,
     manifest_reference_report,
 )
-from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.genesis.worlds.generation_publication import WorldGenerationPublication
 
 
 class _Document:

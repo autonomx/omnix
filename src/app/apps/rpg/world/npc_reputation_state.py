@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, cast
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 REPUTATION_MIN = -5
 REPUTATION_MAX = 5

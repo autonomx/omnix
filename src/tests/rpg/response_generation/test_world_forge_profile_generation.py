@@ -1,4 +1,4 @@
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     STANDARD_DOMAIN_IDS,
     GenreProfileRegistry,
     HeuristicWorldLocalProfileGenerator,

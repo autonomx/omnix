@@ -4,12 +4,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.apps.rpg.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
-from app.apps.rpg.jobs.turn_job_mirror import (
+from app.apps.rpg.foundation.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
+from app.apps.rpg.session.jobs.turn_job_mirror import (
     _apply_turn_with_job_mirror,
 )
-from app.apps.rpg.jobs.last10_report_debug import build_turn_debug_payload
-from app.apps.rpg.presentation.turn_response import build_turn_response_v2
+from app.apps.rpg.session.jobs.last10_report_debug import build_turn_debug_payload
+from app.apps.rpg.narration.presentation.turn_response import build_turn_response_v2
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 _FORBIDDEN_GRAPH_KEYS = {

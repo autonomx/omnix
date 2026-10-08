@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.rpg.worlds import generation_exact_artifact
-from app.apps.rpg.worlds.generation_exact_artifact import (
+from app.apps.rpg.genesis.worlds import generation_exact_artifact
+from app.apps.rpg.genesis.worlds.generation_exact_artifact import (
     ExactArtifactBindingError,
     exact_artifact_binding_report,
     prepare_world_generation_audit_rows,

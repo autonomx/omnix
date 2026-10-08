@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Callable, Protocol
 
-from app.apps.rpg.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
-from app.apps.rpg.debug_logging import log_rpg_event, new_rpg_trace_id, summarize_turn_result
+from app.apps.rpg.foundation.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
+from app.apps.rpg.foundation.debug_logging import log_rpg_event, new_rpg_trace_id, summarize_turn_result
 
 
 @dataclass(slots=True)
@@ -212,10 +212,10 @@ def run_turn_pipeline(
             ctx = _run_stage_sequence(ctx, stages)
         else:
             from app.persistence.runtime import uses_postgresql_runtime
-            from app.apps.rpg.narrative_engine.persistence_policy import (
+            from app.apps.rpg.narration.narrative_engine.persistence_policy import (
                 narrative_repository_save_policy,
             )
-            from app.apps.rpg.persistence.rpg_session_save_policy import (
+            from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
                 rpg_session_save_policy,
             )
 

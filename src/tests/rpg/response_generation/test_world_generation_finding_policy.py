@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.worlds.generation_finding_policy import (
+from app.apps.rpg.genesis.worlds.generation_finding_policy import (
     finding_severity,
     finding_waiver_policy_report,
 )

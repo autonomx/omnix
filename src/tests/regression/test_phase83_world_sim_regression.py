@@ -21,12 +21,12 @@ from unittest.mock import MagicMock
 # Ensure the src directory is on sys.path for import resolution.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.apps.rpg.world_sim.controller import _MAX_RECENT_EFFECTS, WorldSimController
-from app.apps.rpg.world_sim.models import (
+from app.apps.rpg.world.world_sim.controller import _MAX_RECENT_EFFECTS, WorldSimController
+from app.apps.rpg.world.world_sim.models import (
     SUPPORTED_WORLD_EFFECT_TYPES,
 )
-from app.apps.rpg.world_sim.presenter import WorldSimPresenter
-from app.apps.rpg.world_sim.reducers import (
+from app.apps.rpg.world.world_sim.presenter import WorldSimPresenter
+from app.apps.rpg.world.world_sim.reducers import (
     reduce_faction_drift,
     reduce_location_conditions,
     reduce_npc_activities,
@@ -613,7 +613,7 @@ def test_recent_effects_trim_preserves_newest() -> None:
 
 def test_seed_context_is_bounded_and_sorted() -> None:
     """build_seed_context must return bounded, deterministically sorted data."""
-    from app.apps.rpg.world_sim.controller import WorldSimController
+    from app.apps.rpg.world.world_sim.controller import WorldSimController
 
     class _CQ:
         def get_known_locations(self):
@@ -658,8 +658,8 @@ def test_seed_context_is_bounded_and_sorted() -> None:
 
 def test_rumor_propagation_plateaus_and_cools() -> None:
     """Rumors should plateau at max reach or cool when no new surface pressure."""
-    from app.apps.rpg.world_sim.models import RumorPropagationState
-    from app.apps.rpg.world_sim.reducers import reduce_rumor_propagation
+    from app.apps.rpg.world.world_sim.models import RumorPropagationState
+    from app.apps.rpg.world.world_sim.reducers import reduce_rumor_propagation
 
     current = {
         "r1": RumorPropagationState(
@@ -685,8 +685,8 @@ def test_rumor_propagation_plateaus_and_cools() -> None:
 
 def test_world_pressure_cools_when_not_reinforced() -> None:
     """Pressure should decay for threads/locations/factions not present."""
-    from app.apps.rpg.world_sim.models import WorldPressureState
-    from app.apps.rpg.world_sim.reducers import reduce_world_pressure
+    from app.apps.rpg.world.world_sim.models import WorldPressureState
+    from app.apps.rpg.world.world_sim.reducers import reduce_world_pressure
 
     current = WorldPressureState(
         active_threads=[],
@@ -715,8 +715,8 @@ def test_world_pressure_cools_when_not_reinforced() -> None:
 
 def test_world_sim_from_dict_normalizes_nested_models() -> None:
     """from_dict must convert plain dicts back into proper state objects."""
-    from app.apps.rpg.world_sim.controller import WorldSimController
-    from app.apps.rpg.world_sim.models import FactionDriftState
+    from app.apps.rpg.world.world_sim.controller import WorldSimController
+    from app.apps.rpg.world.world_sim.models import FactionDriftState
 
     ctrl = WorldSimController.from_dict({
         "sim_tick": 2,

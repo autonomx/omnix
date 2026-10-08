@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from tests.support.routers import include_router_registrar
 
 
@@ -91,7 +91,7 @@ def test_gateway_composition_uses_the_explicit_turn_pipeline_without_installers(
     script = """
 from app.composition.gateway.main import create_gateway_app
 create_gateway_app()
-from app.apps.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
+from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
 from app.apps.rpg.session import interactive_first_call_runtime as runtime
 from app.apps.rpg.session.pipeline import TURN_PIPELINE
 assert callable(execute_turn_with_job_mirror)

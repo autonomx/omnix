@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.narrative_engine import BeatPurpose, detect_scene_changes
+from app.apps.rpg.narration.narrative_engine import BeatPurpose, detect_scene_changes
 
 
 def test_new_game_requires_scene_establishment() -> None:

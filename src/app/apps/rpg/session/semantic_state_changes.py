@@ -6,7 +6,7 @@ import logging
 from app.apps.rpg.session.state_normalization import (
     _normalize_active_interactions as _normalize_active_interactions, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     normalize_combat_state as normalize_combat_state,
 )
 from app.apps.rpg.session.world_consequence_runtime import (
@@ -27,7 +27,7 @@ import json as json
 from app.apps.rpg.session.narration_queue_runtime import (
     _build_active_interaction_prompt_context as _build_active_interaction_prompt_context,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
 from typing import (

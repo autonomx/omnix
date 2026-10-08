@@ -5,8 +5,8 @@ import logging
 
 from typing import Any, Dict, List, cast
 
-from app.apps.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
-from app.apps.rpg.npc_dialogue.intelligence import (
+from app.apps.rpg.narration.dialogue_state import get_dialogue_context, update_dialogue_state
+from app.apps.rpg.narration.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
@@ -14,7 +14,7 @@ from app.apps.rpg.npc_dialogue.intelligence import (
 from app.providers.service import get_provider
 
 from .runtime_narration_common import NARRATION_FORMAT_VERSION, _norm, _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 

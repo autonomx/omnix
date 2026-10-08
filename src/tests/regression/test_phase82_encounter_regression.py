@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import os
 
-from app.apps.rpg.encounter import (
+from app.apps.rpg.rules.encounter import (
     EncounterResolver,
     build_encounter_from_scene,
     build_player_actions,

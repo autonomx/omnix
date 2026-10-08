@@ -1,4 +1,4 @@
-from app.apps.rpg.session.genesis.world_forge_planning import (
+from app.apps.rpg.genesis.forge.world_forge_planning import (
     PlanningTopicDefinition,
     planning_contract_metadata,
     planning_revision_hash,
@@ -6,10 +6,10 @@ from app.apps.rpg.session.genesis.world_forge_planning import (
     planning_topic_definitions,
     validate_planning_contract,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
 
 
 def test_planning_contract_is_internal_revisioned_and_acyclic() -> None:

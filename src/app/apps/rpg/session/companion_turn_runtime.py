@@ -9,16 +9,16 @@ from app.apps.rpg.world.companion_acceptance import (
     resolve_pending_companion_offer_response as resolve_pending_companion_offer_response,
 )
 import copy
-from app.apps.rpg.profiles.character_cards import (
+from app.apps.rpg.genesis.profiles.character_cards import (
     list_character_cards_for_simulation_state as list_character_cards_for_simulation_state,
 )
-from app.apps.rpg.interactions.resolver import (
+from app.apps.rpg.rules.interactions.resolver import (
     detect_interaction_intent as detect_interaction_intent,
 )
-from app.apps.rpg.profiles.dynamic_npc_profiles import (
+from app.apps.rpg.genesis.profiles.dynamic_npc_profiles import (
     load_npc_profile as load_npc_profile,
 )
-from app.apps.rpg.profiles.profile_drafts import (
+from app.apps.rpg.genesis.profiles.profile_drafts import (
     profile_draft_summary as profile_draft_summary,
 )
 from app.apps.rpg.session.inventory_runtime import (

@@ -12,12 +12,12 @@ from app.providers.base import (
     ModelInfo,
     ProviderConfig,
 )
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.worlds.generation_recovering_provider import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.worlds.generation_recovering_provider import (
     RecoveringFirstPassWorldForgeTopicGenerator,
 )
-from app.apps.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
-from app.apps.rpg.worlds.providers.single_pass import SinglePassWorldForgeProviderError
+from app.apps.rpg.genesis.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.apps.rpg.genesis.worlds.providers.single_pass import SinglePassWorldForgeProviderError
 
 
 class _Provider(BaseProvider):

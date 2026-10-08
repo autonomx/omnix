@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # RPG session runtime responsibility module.
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     add_thread_line as add_thread_line, build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
     expire_conversation_threads as expire_conversation_threads, normalize_conversation_threads as normalize_conversation_threads, seed_or_update_thread as seed_or_update_thread,
 )
@@ -9,7 +9,7 @@ from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _normalize_runtime_settings as _normalize_runtime_settings, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list,
     _safe_str as _safe_str,
 )
-from app.apps.rpg.ai.ambient_dialogue import (
+from app.apps.rpg.narration.ai.ambient_dialogue import (
     apply_dialogue_cooldowns as apply_dialogue_cooldowns, build_ambient_dialogue_candidates as build_ambient_dialogue_candidates,
     build_ambient_dialogue_request as build_ambient_dialogue_request, select_ambient_dialogue_candidate as select_ambient_dialogue_candidate,
 )
@@ -33,18 +33,18 @@ from app.apps.rpg.session.ambient_builder import (
     get_pending_ambient_updates as get_pending_ambient_updates, is_player_visible_update as is_player_visible_update, normalize_ambient_state as normalize_ambient_state,
     score_ambient_salience as score_ambient_salience,
 )
-from app.apps.rpg.ai.npc_initiative import (
+from app.apps.rpg.narration.ai.npc_initiative import (
     apply_initiative_cooldowns as apply_initiative_cooldowns, apply_world_behavior_bias as apply_world_behavior_bias,
     build_npc_initiative_candidates as build_npc_initiative_candidates, select_npc_initiative_candidate as select_npc_initiative_candidate,
 )
 from app.apps.rpg.session.ambient_tick_runtime import (
     advance_autonomous_ambient_tick as advance_autonomous_ambient_tick,
 )
-from app.apps.rpg.ai.scene_continuity import (
+from app.apps.rpg.narration.ai.scene_continuity import (
     advance_scene as advance_scene, build_continuation_beats as build_continuation_beats, compact_finished_scenes as compact_finished_scenes,
     maybe_build_scene_consequence as maybe_build_scene_consequence, select_continuing_scene as select_continuing_scene, start_persistent_scene as start_persistent_scene,
 )
-from app.apps.rpg.ai.scene_weaver import (
+from app.apps.rpg.narration.ai.scene_weaver import (
     apply_scene_cooldowns as apply_scene_cooldowns, build_scene_beats as build_scene_beats, build_scene_candidates as build_scene_candidates,
     select_scene_candidate as select_scene_candidate,
 )
@@ -572,7 +572,7 @@ def _apply_idle_tick_to_session(
 
     # Update recent world event rows for frontend
     try:
-        from app.apps.rpg.analytics.world_events import build_incremental_world_event_rows
+        from app.apps.rpg.foundation.analytics.world_events import build_incremental_world_event_rows
         new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
 
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))

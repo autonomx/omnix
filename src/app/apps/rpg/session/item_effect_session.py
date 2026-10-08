@@ -8,7 +8,7 @@ from typing import Any
 
 from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item
 from app.apps.rpg.session.item_signals import apply_item_signal, normalize_item_signals
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ITEM_EFFECT_SESSION_SOURCE = "engine_item_effect_session_v1"
 

@@ -1,7 +1,8 @@
 # RPG bounded contexts (Track R)
 
-Status: **R-1 proposed, awaiting the owner's approval. R-2 done (lint rule AL017
-with a recorded baseline). R-3 not started.** Date: 2026-10-06.
+Status: **R-1 and R-2 done (lint rule AL017 with a recorded baseline). R-3 moves
+done (2026-10-08): each context is a package under `app/apps/rpg`; the upward
+imports are not yet inverted (AL017 baseline still 60).** Date: 2026-10-08.
 
 RPG is about 285,000 lines in 1,208 files under `src/app/apps/rpg`, with 129
 top-level entries. Measured at any import scope, 32 of those entries form a
@@ -69,6 +70,22 @@ still reach up into the contexts they serve. The baseline only shrinks: a new
 upward import fails the lint.
 
 ## R-3: moving RPG into its contexts
+
+**Done: the moves (2026-10-08).** RPG now has nine top-level entries: the seven
+context packages, plus `feature.py`, `declarations.py` and `migrations/`, which
+must stay together at the package root (migration and declaration discovery
+find them next to `feature.py`). `world`, `narration` and `session` are both
+an old entry and a context root; every other entry moved inside its context
+(`app.apps.rpg.<context>.<entry>`), and the World Forge moved from
+`session/genesis` to `genesis/forge`. The move was a pure `git mv` plus
+`scripts/rewrite_imports.py`; cross-entry relative imports were made absolute
+first. Five top-level modules that were shadowed by same-named packages (never
+importable) were deleted. AL013 keeps its scope through `[rpg_core].exclude`.
+
+**Still to do:** invert the 60 upward imports (the baseline below, now under the
+new paths) and add each context's `contracts` module.
+
+The original plan:
 
 R-3 waits for WP-8.6 to close, because moving files would collide with the RPG
 work still landing. One context per pull request series: a pure `git mv`, then

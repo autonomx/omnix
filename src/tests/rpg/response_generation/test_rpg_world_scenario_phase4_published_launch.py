@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.apps.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
-from app.apps.rpg.map_grid_contracts import (
+from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.apps.rpg.world.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.apps.rpg.worlds.contracts import MapDefinitionBinding
-from app.apps.rpg.worlds.published_launch import launch_published_scenario
-from app.apps.rpg.worlds.service import (
+from app.apps.rpg.genesis.worlds.contracts import MapDefinitionBinding
+from app.apps.rpg.genesis.worlds.published_launch import launch_published_scenario
+from app.apps.rpg.genesis.worlds.service import (
     compile_scenario_revision,
     compile_world_release,
     compile_world_revision,
@@ -172,19 +172,19 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.load_published_resources",
+        "app.apps.rpg.genesis.worlds.published_launch.load_published_resources",
         lambda **_kwargs: (world_revision, release, scenario),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.load_release_definitions",
+        "app.apps.rpg.genesis.worlds.published_launch.load_release_definitions",
         lambda *_args, **_kwargs: {definition.map_id: definition},
     )
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.require_scenario_writable",
+        "app.apps.rpg.genesis.worlds.published_launch.require_scenario_writable",
         lambda *_args, **_kwargs: {"status": "published"},
     )
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.create_new_game_session",
+        "app.apps.rpg.genesis.worlds.published_launch.create_new_game_session",
         lambda _request: {
             "ok": True,
             "session_id": "campaign:published",
@@ -201,7 +201,7 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         },
     )
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.save_session",
+        "app.apps.rpg.genesis.worlds.published_launch.save_session",
         lambda session, **_kwargs: session,
     )
 
@@ -219,11 +219,11 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.unit_of_work",
+        "app.apps.rpg.genesis.worlds.published_launch.unit_of_work",
         lambda _database: _fake_unit_of_work(captured),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.worlds.published_launch.schedule_campaign_predictive_materialization",
+        "app.apps.rpg.genesis.worlds.published_launch.schedule_campaign_predictive_materialization",
         fake_schedule,
     )
 

@@ -12,7 +12,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.item_pickups import apply_scene_item_pickup, list_scene_item_nodes
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 PICKUP_SESSION_SOURCE = "engine_item_pickup_session_v1"
 

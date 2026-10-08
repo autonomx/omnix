@@ -1,7 +1,7 @@
 """An NPC with remembered events still plans its goals."""
 from __future__ import annotations
 
-from app.apps.rpg.ai.llm_mind.npc_mind import NPCMind
+from app.apps.rpg.narration.ai.llm_mind.npc_mind import NPCMind
 
 
 def test_goals_refresh_after_the_npc_remembers_an_event() -> None:

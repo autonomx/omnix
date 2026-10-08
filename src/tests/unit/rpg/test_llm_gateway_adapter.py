@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ProviderConfig
-from app.apps.rpg.ai.llm_gateway_adapter import LLMGatewayAdapter, adapt_base_provider
+from app.apps.rpg.narration.ai.llm_gateway_adapter import LLMGatewayAdapter, adapt_base_provider
 
 
 class _Provider(BaseProvider):
@@ -58,7 +58,7 @@ def test_base_provider_adapter_exposes_generate_stream_and_call() -> None:
 
 def test_provider_access_wraps_base_provider(monkeypatch) -> None:
     from app.providers import service as provider_service
-    from app.apps.rpg.provider_access import get_provider
+    from app.apps.rpg.foundation.provider_access import get_provider
 
     provider = _Provider()
     monkeypatch.setattr(provider_service, "get_provider", lambda: provider)

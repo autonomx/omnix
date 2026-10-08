@@ -32,7 +32,7 @@ DOCUMENT_SCHEMA_OWNERS = (
     "app.platform.chat.legacy_session_api",
     "app.providers.persistence.model_refresh",
     "app.platform.research.persistence.source_store",
-    "app.apps.rpg.persistence.rpg_feature_compat",
+    "app.apps.rpg.foundation.persistence.rpg_feature_compat",
     "app.apps.trading.repositories",
 )
 

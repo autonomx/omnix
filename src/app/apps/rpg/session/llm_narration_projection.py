@@ -84,8 +84,8 @@ def _phase8_part31_sync_narration(payload: dict[str, Any]) -> dict[str, Any]:
         return {}
 
     try:
-        from app.apps.rpg.ai.world_scene_narrator import narrate_scene
-        from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+        from app.apps.rpg.narration.ai.world_scene_narrator import narrate_scene
+        from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 
         scene = _safe_dict(request.get("scene"))
         context = _safe_dict(request.get("narration_context"))

@@ -4,7 +4,7 @@ from copy import deepcopy
 import re
 from typing import Any, Dict, List, cast
 
-from app.apps.rpg.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
 from app.apps.rpg.session.survival_actions import (
     build_survival_suggested_actions,

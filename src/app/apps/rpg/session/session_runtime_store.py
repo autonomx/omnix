@@ -8,7 +8,7 @@ from app.apps.rpg.session.state_normalization import (
 )
 import json as json
 import ast as ast
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
@@ -17,22 +17,22 @@ from app.apps.rpg.session.companion_turn_runtime import (
 from app.apps.rpg.session.combat_intent import (
     _actor_is_player as _actor_is_player, _build_combat_gate_result as _build_combat_gate_result, _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text,
 )
-from app.apps.rpg.combat.resolver import (
+from app.apps.rpg.rules.combat.resolver import (
     resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.apps.rpg.combat.apply import (
+from app.apps.rpg.rules.combat.apply import (
     apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
-from app.apps.rpg.items.item_effects import (
+from app.apps.rpg.rules.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
-from app.apps.rpg.combat.initiative import (
+from app.apps.rpg.rules.combat.initiative import (
     advance_turn as advance_turn,
 )
-from app.apps.rpg.combat.npc_turns import (
+from app.apps.rpg.rules.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
-from app.apps.rpg.combat.lifecycle import (
+from app.apps.rpg.rules.combat.lifecycle import (
     evaluate_combat_exit as evaluate_combat_exit,
 )
 from app.apps.rpg.session.semantic_state_changes import (

@@ -6,8 +6,8 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.apps.rpg.api.feature_routes.rpg_session_routes as routes
-from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+import app.apps.rpg.edge.api.feature_routes.rpg_session_routes as routes
+from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from app.apps.rpg.session import durable_store
 from app.apps.rpg.session.service import load_session
 

@@ -6,7 +6,7 @@ import copy
 from typing import Any, Dict, Iterable, List, Tuple
 
 from app.apps.rpg.session.state_normalization import _safe_int, _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 

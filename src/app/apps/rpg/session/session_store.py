@@ -5,7 +5,7 @@ Provides bounded, normalized session registry management.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 _MAX_SESSIONS = 64
 

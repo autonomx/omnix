@@ -118,7 +118,7 @@ def test_dialogue_quality_stage_enforces_resolved_visible_result(monkeypatch) ->
 
 
 def test_semantic_action_prompt_owns_the_dialogue_quality_contract() -> None:
-    from app.apps.rpg.ai.semantic_action_intelligence import build_semantic_action_prompt
+    from app.apps.rpg.narration.ai.semantic_action_intelligence import build_semantic_action_prompt
 
     prompt = build_semantic_action_prompt("ask about the road", {}, {}, {})
 
@@ -145,7 +145,7 @@ def test_visible_response_stage_attaches_canonical_turn_record() -> None:
 
 
 def test_provider_visible_text_falls_back_to_assistant_message_content() -> None:
-    from app.apps.rpg.ai.semantic_action_intelligence import _complete_raw_text
+    from app.apps.rpg.narration.ai.semantic_action_intelligence import _complete_raw_text
 
     class Provider:
         def complete_semantic_packet(self, _prompt: str, *, response_schema: dict[str, Any]) -> dict[str, Any]:
@@ -284,7 +284,7 @@ def test_direct_dialogue_recording_failure_emits_degradation_metric(monkeypatch)
 
     monkeypatch.setattr(dialogue_focus, "record_direct_dialogue_exchange", fail_recording)
     logged: list[dict[str, Any]] = []
-    from app.apps.rpg import debug_logging
+    from app.apps.rpg.foundation import debug_logging
 
     monkeypatch.setattr(
         debug_logging,

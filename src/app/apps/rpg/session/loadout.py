@@ -32,7 +32,7 @@ from app.apps.rpg.session.item_loadout_hooks import run_loadout_item_hooks
 from app.apps.rpg.session.item_use import use_inventory_item
 from app.apps.rpg.session.service import load_session, save_session
 from app.apps.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 LoadoutActionKind = Literal[
     "inspect",

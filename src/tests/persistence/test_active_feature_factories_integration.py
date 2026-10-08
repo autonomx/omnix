@@ -253,7 +253,7 @@ snapshot = refresh_store.record_snapshot(
 )
 assert refresh_store.latest_snapshot().id == snapshot.id
 
-from app.apps.rpg.npc_evolution import profile_store
+from app.apps.rpg.world.npc_evolution import profile_store
 runtime_state = {
     "npc_evolution": {
         "arcs": {"npc:bran": {"arc_stage": "warming", "axes": {"trust": 1}}},
@@ -329,7 +329,7 @@ assert getattr(PostgresJobStoreAdapter, "_omnix_research_jobs_installed", False)
 from app.runtime.feature_catalog import load_feature
 from app.jobs.handlers import registry_from_features
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.apps.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
+from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
 rpg_registry = registry_from_features((load_feature("rpg"),))
 rpg_turn_policy = rpg_registry.require("rpg.turn").submission_policy
 assert callable(rpg_turn_policy)

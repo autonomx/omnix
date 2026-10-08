@@ -8,7 +8,7 @@ turn-by-turn state instead of report-only projection.
 """
 
 from typing import Any, Dict, List, cast
-from app.apps.rpg.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict, list_copy as _safe_list, safe_str as _safe_str
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

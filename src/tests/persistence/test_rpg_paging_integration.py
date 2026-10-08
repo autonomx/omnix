@@ -64,7 +64,7 @@ def test_every_campaign_is_listed_past_one_page(rpg) -> None:
 
 
 def test_world_scenarios_are_complete_and_library_counts_come_from_the_database(rpg) -> None:
-    from app.apps.rpg.worlds.library_service import read_world_library, read_world_detail
+    from app.apps.rpg.genesis.worlds.library_service import read_world_library, read_world_detail
 
     database, tenant, prefix = rpg
     big_world, small_world = f"{prefix}-big", f"{prefix}-small"

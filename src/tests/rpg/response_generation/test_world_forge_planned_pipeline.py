@@ -1,7 +1,7 @@
-from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
-from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.apps.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
-from app.apps.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
+from app.apps.rpg.genesis.forge.contract import CampaignGenesisContract
+from app.apps.rpg.genesis.forge.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.genesis.forge.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.apps.rpg.genesis.forge.world_forge_pipeline import run_campaign_world_forge
 
 
 def test_planned_pipeline_is_launch_ready_with_compact_diagnostics() -> None:

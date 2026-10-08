@@ -20,7 +20,7 @@ from app.apps.rpg.world.npc_goal_state import (
     record_goal_influence,
     seed_default_npc_goals,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_CONVERSATION_THREADS = 32
 MAX_BEATS_PER_THREAD = 8

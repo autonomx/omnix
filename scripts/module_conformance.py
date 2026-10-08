@@ -41,7 +41,7 @@ for path in (ROOT / "scripts", ROOT / "src"):
 
 
 def catalog() -> dict[str, str]:
-    """Catalog module id -> its Python package (``app.apps.rpg.hermes``)."""
+    """Catalog module id -> its Python package (``app.apps.rpg.edge.hermes``)."""
     from app.runtime.feature_catalog import FEATURE_CATALOG
 
     return {module_id: target.split(":", 1)[0].removesuffix(".feature") for module_id, target in FEATURE_CATALOG.items()}

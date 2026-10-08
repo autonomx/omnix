@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     AuthorityClass,
     CampaignBibleEvidenceSource,
     CampaignBibleSnapshot,
@@ -15,7 +15,7 @@ from app.apps.rpg.narrative_engine import (
     VisibilityClass,
     campaign_bible_evidence,
 )
-from app.apps.rpg.session.genesis import turn_grounding
+from app.apps.rpg.genesis.forge import turn_grounding
 
 
 def _snapshot() -> CampaignBibleSnapshot:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     CampaignBibleSnapshot,
     VisibilityClass,
     campaign_bible_evidence,
 )
-from app.apps.rpg.session.genesis import turn_grounding
-from app.apps.rpg.session.genesis import npc_lore_projection
-from app.apps.rpg.session.genesis.npc_lore_projection import ensure_encountered_npc_lore
+from app.apps.rpg.genesis.forge import turn_grounding
+from app.apps.rpg.genesis.forge import npc_lore_projection
+from app.apps.rpg.genesis.forge.npc_lore_projection import ensure_encountered_npc_lore
 from app.apps.rpg.world import npc_biography_registry
 
 

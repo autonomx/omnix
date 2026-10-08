@@ -7,17 +7,17 @@ from copy import deepcopy
 from time import perf_counter
 from typing import Any
 
-from app.apps.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
-from app.apps.rpg.ai.compact_dialogue import (
+from app.apps.rpg.narration.ai.action_intelligence import get_action_advisory  # noqa: F401
+from app.apps.rpg.narration.ai.compact_dialogue import (
     build_compact_dialogue_advisory,
 )
-from app.apps.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
-from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+from app.apps.rpg.narration.ai.semantic_action_intelligence import get_semantic_action_advisory
+from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
 from app.apps.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
 from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
 from app.apps.rpg.session.semantic_interaction import attach_semantic_interaction
-from app.apps.rpg.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
 from app.apps.rpg.session.service_runtime import service_action_from_result
 from app.apps.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session

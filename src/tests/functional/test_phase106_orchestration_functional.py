@@ -1,13 +1,13 @@
 """Phase 10.6 — Functional tests for orchestration layer."""
 
-from app.apps.rpg.orchestration.controller import execute_llm_request_for_turn
-from app.apps.rpg.orchestration.provider_interface import set_llm_provider_mode
-from app.apps.rpg.orchestration.state import (
+from app.apps.rpg.session.orchestration.controller import execute_llm_request_for_turn
+from app.apps.rpg.session.orchestration.provider_interface import set_llm_provider_mode
+from app.apps.rpg.session.orchestration.state import (
     begin_llm_request,
     get_llm_orchestration_state,
 )
-from app.apps.rpg.orchestration.stream_adapter import apply_provider_result_to_runtime_turn
-from app.apps.rpg.runtime.dialogue_runtime import (
+from app.apps.rpg.session.orchestration.stream_adapter import apply_provider_result_to_runtime_turn
+from app.apps.rpg.session.runtime.dialogue_runtime import (
     begin_runtime_turn,
     get_runtime_dialogue_state,
 )
@@ -41,7 +41,7 @@ def test_phase106_begin_llm_request_creates_pending_active_request():
 
 
 def test_phase106_execute_llm_request_for_turn_disabled_mode_finalizes_without_text_by_default():
-    from app.apps.rpg.runtime.dialogue_runtime import begin_runtime_turn
+    from app.apps.rpg.session.runtime.dialogue_runtime import begin_runtime_turn
 
     state = {}
     state = set_llm_provider_mode(state, "disabled")

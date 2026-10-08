@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation
-from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.apps.rpg.worlds.generation_strict_integrity import (
+from app.apps.rpg.genesis.worlds import generation_compilation
+from app.apps.rpg.genesis.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.genesis.worlds.generation_strict_integrity import (
     DuplicateCanonCompilationError,
     duplicate_canon_identifiers,
 )

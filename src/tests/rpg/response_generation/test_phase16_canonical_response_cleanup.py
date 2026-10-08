@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.apps.rpg.jobs import turn_executor
-from app.apps.rpg.presentation.visible_response import visible_response_text
+from app.apps.rpg.session.jobs import turn_executor
+from app.apps.rpg.narration.presentation.visible_response import visible_response_text
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 

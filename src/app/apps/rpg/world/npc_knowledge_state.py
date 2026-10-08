@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_KNOWN_FACTS_PER_NPC = 24
 DEFAULT_KNOWLEDGE_TTL_TICKS = 2000

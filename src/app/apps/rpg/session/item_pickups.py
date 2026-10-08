@@ -6,7 +6,7 @@ from typing import Any
 
 from app.apps.rpg.session.inventory_items import merge_inventory_stack
 from app.apps.rpg.session.item_rewards import generate_item_rewards
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_pickup_v1"
 NODE_KEYS = ("item_nodes", "pickup_nodes", "resource_nodes")

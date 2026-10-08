@@ -1,15 +1,15 @@
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_contradictions import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_contradictions import (
     audit_presentation_contradictions,
 )
-from app.apps.rpg.session.genesis.world_forge_fact_pipeline import (
+from app.apps.rpg.genesis.forge.world_forge_fact_pipeline import (
     compile_structured_entity_facts,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_integrity import WorldForgeIntegrityError
-from app.apps.rpg.session.genesis.world_forge_presentation import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_integrity import WorldForgeIntegrityError
+from app.apps.rpg.genesis.forge.world_forge_presentation import (
     render_fact_derived_presentations,
 )
 

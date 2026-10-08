@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from app.apps.rpg.core.determinism import rng_seed_from_session_id
-from app.apps.rpg.map_persistence import ensure_session_map_state
+from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id
+from app.apps.rpg.world.map_persistence import ensure_session_map_state
 from app.apps.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     normalize_ambient_state,
@@ -22,12 +22,12 @@ from app.apps.rpg.session.published_opening_progress import (
     ensure_published_opening_progress,
 )
 from app.apps.rpg.session.survival_persistence import normalize_session_survival_for_persistence
-from app.apps.rpg.validation.integrity import (
+from app.apps.rpg.rules.validation.integrity import (
     assert_session_integrity,
     validate_session_integrity,
 )
-from app.apps.rpg.performance_trace import rpg_pipeline_span_if_active
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 
 def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -146,7 +146,7 @@ def load_session(session_id: str) -> dict[str, Any]:
         try:
             recovered = recover_pending_interaction_narration(session_id, session)
         except Exception as exc:
-            from app.apps.rpg.debug_logging import log_rpg_event
+            from app.apps.rpg.foundation.debug_logging import log_rpg_event
 
             log_rpg_event(
                 "turn.stage.degraded",

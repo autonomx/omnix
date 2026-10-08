@@ -2,22 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_information_locality import (
+from app.apps.rpg.genesis.forge.world_forge_information_locality import (
     deterministic_information_locality_signature,
     information_locality_components,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_generation import default_profile_registry
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.apps.rpg.session.genesis.world_forge_route_effects import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import default_profile_registry
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.forge.world_forge_route_effects import (
     deterministic_route_effect_signature,
 )
-from app.apps.rpg.worlds import generation_compilation
-from app.apps.rpg.worlds.generation_information_locality import (
+from app.apps.rpg.genesis.worlds import generation_compilation
+from app.apps.rpg.genesis.worlds.generation_information_locality import (
     InformationLocalityCompilationError,
     information_locality_issues,
     information_locality_report,
 )
-from app.apps.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.genesis.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 

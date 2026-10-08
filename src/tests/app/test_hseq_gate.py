@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.sequence_gate import hermes_sequence_apply_gate, hermes_sequence_gate_decision
+from app.apps.rpg.edge.hermes.sequence_gate import hermes_sequence_apply_gate, hermes_sequence_gate_decision
 
 
 def test_gate_allows_plain_item() -> None:

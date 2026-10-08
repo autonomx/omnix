@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from app.composition.gateway.main import create_gateway_app
-from app.apps.rpg.worlds.generation_recovery_evidence import _DiagnosticsWithRawEvidence
+from app.apps.rpg.genesis.worlds.generation_recovery_evidence import _DiagnosticsWithRawEvidence
 
 
 _RETIRED_PATHS = {

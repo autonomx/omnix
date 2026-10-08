@@ -1,4 +1,4 @@
-from app.apps.rpg.spatial.visibility import (
+from app.apps.rpg.world.spatial.visibility import (
     can_see_area,
     can_see_entity,
     visible_entities_from,

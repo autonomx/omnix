@@ -5,7 +5,7 @@ import logging
 import contextvars
 from contextlib import contextmanager
 from typing import Any, Iterator
-from app.apps.rpg.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import dict_copy as _safe_dict, safe_str as _safe_str
 
 logger = logging.getLogger(__name__)
 

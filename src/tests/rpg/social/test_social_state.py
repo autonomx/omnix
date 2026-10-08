@@ -1,5 +1,5 @@
-from app.apps.rpg.social.reputation import get_relationship, set_relationship_values
-from app.apps.rpg.social.state import (
+from app.apps.rpg.world.social.reputation import get_relationship, set_relationship_values
+from app.apps.rpg.world.social.state import (
     ensure_social_state,
     normalize_social_profile,
     normalize_social_state,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 SOURCE = "deterministic_phase7_saved_autoplay_digest_source_gate"
 

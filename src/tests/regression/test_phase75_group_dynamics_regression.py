@@ -9,12 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.apps.rpg.coherence.reducers import REDUCERS
-from app.apps.rpg.group_dynamics.group_engine import (
+from app.apps.rpg.narration.coherence.reducers import REDUCERS
+from app.apps.rpg.world.group_dynamics.group_engine import (
     SUPPORTED_GROUP_EVENT_TYPES,
     GroupDynamicsEngine,
 )
-from app.apps.rpg.group_dynamics.participant_finder import ParticipantFinder
+from app.apps.rpg.world.group_dynamics.participant_finder import ParticipantFinder
 
 # ===========================================================================
 # Test Helpers / Fakes

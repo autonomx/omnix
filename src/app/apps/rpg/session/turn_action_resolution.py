@@ -40,7 +40,7 @@ import time as _time
 from app.apps.rpg.session.conversation_thread_runtime import (
     advance_conversation_threads_for_turn as advance_conversation_threads_for_turn,
 )
-from app.apps.rpg.creator.defaults import (
+from app.apps.rpg.genesis.creator.defaults import (
     apply_adventure_defaults as apply_adventure_defaults,
 )
 from app.apps.rpg.session.session_runtime_store import (
@@ -49,10 +49,10 @@ from app.apps.rpg.session.session_runtime_store import (
 from app.apps.rpg.session.ambient_tick_runtime import (
     is_ambient_tick_command as is_ambient_tick_command,
 )
-from app.apps.rpg.ai.action_intelligence import (
+from app.apps.rpg.narration.ai.action_intelligence import (
     merge_action_advisory as merge_action_advisory,
 )
-from app.apps.rpg.combat.companion_ai import (
+from app.apps.rpg.rules.combat.companion_ai import (
     parse_companion_command as parse_companion_command,
 )
 from app.apps.rpg.world.npc_dialogue_recall import (
@@ -61,7 +61,7 @@ from app.apps.rpg.world.npc_dialogue_recall import (
 from app.apps.rpg.session.turn_perf_trace import (
     record_turn_perf_trace as record_turn_perf_trace, record_turn_perf_trace_stack as record_turn_perf_trace_stack,
 )
-from app.apps.rpg.economy.service_resolver import (
+from app.apps.rpg.rules.economy.service_resolver import (
     resolve_service_turn as resolve_service_turn,
 )
 from app.apps.rpg.session.service_runtime import (

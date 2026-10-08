@@ -55,7 +55,7 @@ CASES = [
     ("absolute_storage_path_reads", {APP + "platform/chat/a.py": "a.storage_path\nb.storage_path"}, 1),
     ("unbounded_fetchall", {APP + "persistence/custom_repository.py": "connection.execute('SELECT id FROM things').fetchall()"}, 1),
     ("capped_500_queries", {APP + "persistence/custom_repository.py": "connection.execute('SELECT id FROM things LIMIT 500').fetchall()"}, 1),
-    ("rpg_nondeterminism", {APP + "apps/rpg/core/a.py": "import random\nrandom.Random()"}, 1),
+    ("rpg_nondeterminism", {APP + "apps/rpg/foundation/core/a.py": "import random\nrandom.Random()"}, 1),
     ("files_over_1200_lines", {APP + "platform/chat/a.py": "# source\n" * 1201}, 1),
     ("functions_over_150_lines", {APP + "platform/chat/a.py": "def large():\n" + "    pass\n" * 151}, 1),
     ("largest_class_lines", {APP + "platform/chat/a.py": "class Large:\n" + "    pass\n" * 160}, 161),
@@ -452,7 +452,7 @@ def test_negative_cases_do_not_count_compliant_code():
         APP + "persistence/blob_store.py": "LocalBlobStore(); asset.storage_path",
         APP + "composition/production.py": "bootstrap_local_tenant()",
         APP + "platform/chat/a.py": "class Local:\n    pass\nLocal.attribute = 1\ntry:\n    call()\nexcept Exception:\n    logger.exception('failed')",
-        APP + "apps/rpg/core/a.py": "import random\nrandom.Random(42)",
+        APP + "apps/rpg/foundation/core/a.py": "import random\nrandom.Random(42)",
         APP + "composition/gateway/a.py": "router = APIRouter(prefix='/internal')\n@router.get('/secret', include_in_schema=False)\nasync def route():\n    await work()\n@app.get('/health')\ndef health():\n    return {}\n",
         WEB + "api/a.ts": "fetch('/api/a'); // window.fetch = replacement;\nconst text = '/* not a comment */';",
     }
@@ -490,7 +490,7 @@ def test_model_servers_and_python_startup_hooks_are_production_source():
 
 
 def test_scoped_queries_and_seeded_random_are_not_unbounded_or_nondeterministic():
-    result = observed({APP + "persistence/custom_repository.py": "def list_items():\n    sql = 'SELECT id FROM things LIMIT %s'\n    return connection.execute(sql, (limit,)).fetchall()", APP + "apps/rpg/core/a.py": "import random as rng\nrng.Random(seed)"})
+    result = observed({APP + "persistence/custom_repository.py": "def list_items():\n    sql = 'SELECT id FROM things LIMIT %s'\n    return connection.execute(sql, (limit,)).fetchall()", APP + "apps/rpg/foundation/core/a.py": "import random as rng\nrng.Random(seed)"})
     assert result["metrics"]["unbounded_fetchall"]["value"] == 0
     assert result["metrics"]["rpg_nondeterminism"]["value"] == 0
 

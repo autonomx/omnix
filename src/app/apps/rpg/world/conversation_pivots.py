@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set
 
 from app.apps.rpg.world.conversation_topics import conversation_topics_for_state
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 
 def _safe_str(v: Any) -> str:

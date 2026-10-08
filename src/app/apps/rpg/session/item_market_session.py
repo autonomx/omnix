@@ -14,7 +14,7 @@ from typing import Any
 from app.apps.rpg.session.inventory_items import inventory_quantity
 from app.apps.rpg.session.item_market import build_merchant_catalog
 from app.apps.rpg.session.item_transactions import apply_item_transaction
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MARKET_ACTION_SOURCE = "engine_item_market_session_v1"
 

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.world.location_registry import current_location_id
 from app.apps.rpg.world.npc_schedule_state import scheduled_npcs_for_location
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _normalize_npc_id(value: Any) -> str:

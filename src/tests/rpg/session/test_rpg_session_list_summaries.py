@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.apps.rpg.api.feature_routes.rpg_session_routes import _attach_environment_snapshot_to_session
+from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import _attach_environment_snapshot_to_session
 from app.apps.rpg.session import list_summaries
 
 

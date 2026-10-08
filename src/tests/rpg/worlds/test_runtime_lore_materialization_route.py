@@ -4,7 +4,7 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes import rpg_campaign_lore_routes as routes
+from app.apps.rpg.edge.api.feature_routes import rpg_campaign_lore_routes as routes
 
 
 def test_runtime_materialization_route_returns_document_and_definition(

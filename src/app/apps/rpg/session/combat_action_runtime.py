@@ -3,16 +3,16 @@ from __future__ import annotations
 import logging
 
 # RPG session runtime responsibility module.
-from app.apps.rpg.combat.lifecycle import (
+from app.apps.rpg.rules.combat.lifecycle import (
     build_combat_participants as build_combat_participants, evaluate_combat_exit as evaluate_combat_exit,
 )
-from app.apps.rpg.combat.initiative import (
+from app.apps.rpg.rules.combat.initiative import (
     advance_turn as advance_turn, begin_combat as begin_combat,
 )
 from app.apps.rpg.session.semantic_state_changes import (
     _set_combat_state as _set_combat_state,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
 from app.apps.rpg.session.state_normalization import (
@@ -22,32 +22,32 @@ from app.apps.rpg.session.combat_intent import (
     _actor_is_player as _actor_is_player, _build_combat_gate_result as _build_combat_gate_result, _derive_grounded_scene_context as _derive_grounded_scene_context,
     _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
-from app.apps.rpg.combat.models import (
+from app.apps.rpg.rules.combat.models import (
     AttackIntent as AttackIntent,
 )
-from app.apps.rpg.combat.resolver import (
+from app.apps.rpg.rules.combat.resolver import (
     resolve_attack as resolve_attack, resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.apps.rpg.combat.apply import (
+from app.apps.rpg.rules.combat.apply import (
     apply_attack_resolution as apply_attack_resolution, apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
-from app.apps.rpg.combat.npc_turns import (
+from app.apps.rpg.rules.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _build_turn_id as _build_turn_id, _fallback_general_interaction_narration as _fallback_general_interaction_narration,
     _player_input_requests_general_interaction as _player_input_requests_general_interaction,
 )
-from app.apps.rpg.items.item_effects import (
+from app.apps.rpg.rules.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
 from app.apps.rpg.session.special_combat_turns import (
     _maybe_return_completed_combat_utility_turn as _maybe_return_completed_combat_utility_turn,
 )
-from app.apps.rpg.economy.service_resolver import (
+from app.apps.rpg.rules.economy.service_resolver import (
     resolve_service_turn as resolve_service_turn,
 )
 from app.apps.rpg.session.turn_contract import (
@@ -73,13 +73,13 @@ from app.apps.rpg.session.narration_queue_runtime import (
 from app.apps.rpg.session.turn_perf_trace import (
     record_elapsed_turn_stage as record_elapsed_turn_stage, record_turn_perf_trace as record_turn_perf_trace,
 )
-from app.apps.rpg.ai.action_intelligence import (
+from app.apps.rpg.narration.ai.action_intelligence import (
     get_action_advisory as get_action_advisory,
 )
-from app.apps.rpg.interactions.resolver import (
+from app.apps.rpg.rules.interactions.resolver import (
     resolve_general_interaction as resolve_general_interaction_v2,
 )
-from app.apps.rpg.ai.semantic_action_intelligence import (
+from app.apps.rpg.narration.ai.semantic_action_intelligence import (
     get_semantic_action_advisory as get_semantic_action_advisory,
 )
 from typing import (

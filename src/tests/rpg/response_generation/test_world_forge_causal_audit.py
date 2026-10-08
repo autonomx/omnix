@@ -1,6 +1,6 @@
-from app.apps.rpg.session.genesis.canon_audit import audit_generated_canon
-from app.apps.rpg.session.genesis.world_forge_causal_audit import audit_causal_canon
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.canon_audit import audit_generated_canon
+from app.apps.rpg.genesis.forge.world_forge_causal_audit import audit_causal_canon
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 
 
 def _history(*events: dict) -> GeneratedTopic:

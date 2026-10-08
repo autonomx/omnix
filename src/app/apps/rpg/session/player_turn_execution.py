@@ -21,27 +21,27 @@ from app.apps.rpg.session.companion_turn_runtime import (
     _sync_session_simulation_state_for_early_return as _sync_session_simulation_state_for_early_return,
     _try_resolve_pending_companion_offer_at_turn_start as _try_resolve_pending_companion_offer_at_turn_start,
 )
-from app.apps.rpg.party.companion_presence import (
+from app.apps.rpg.rules.party.companion_presence import (
     build_party_aware_turn_context as build_party_aware_turn_context, companion_presence_summary as companion_presence_summary,
     project_active_companions_into_presence as project_active_companions_into_presence,
 )
-from app.apps.rpg.party.companion_memory import (
+from app.apps.rpg.rules.party.companion_memory import (
     companion_loyalty_projection as companion_loyalty_projection, companion_memory_summary as companion_memory_summary,
     record_companion_join_memory as record_companion_join_memory,
 )
-from app.apps.rpg.party.companion_quests import (
+from app.apps.rpg.rules.party.companion_quests import (
     companion_quest_summary as companion_quest_summary, seed_companion_quest_from_arc as seed_companion_quest_from_arc,
 )
-from app.apps.rpg.party.party_composition import (
+from app.apps.rpg.rules.party.party_composition import (
     project_party_composition_effects as project_party_composition_effects,
 )
-from app.apps.rpg.party.companion_turns import (
+from app.apps.rpg.rules.party.companion_turns import (
     maybe_build_direct_companion_turn_response as maybe_build_direct_companion_turn_response,
 )
-from app.apps.rpg.party.companion_commands import (
+from app.apps.rpg.rules.party.companion_commands import (
     maybe_apply_companion_command as maybe_apply_companion_command,
 )
-from app.apps.rpg.interactions.interaction_runtime import (
+from app.apps.rpg.rules.interactions.interaction_runtime import (
     resolve_general_interaction as resolve_general_interaction,
 )
 from app.apps.rpg.narration.combat_contract import (
@@ -73,7 +73,7 @@ from app.apps.rpg.session.response_builder import (
 from app.apps.rpg.session.companion_turn_enrichment import (
     _apply_post_action_companion_enrichment as _apply_post_action_companion_enrichment,
 )
-from app.apps.rpg.campaign_journal_runtime import (
+from app.apps.rpg.narration.campaign_journal_runtime import (
     advance_campaign_journal_for_turn as advance_campaign_journal_for_turn,
 )
 from app.apps.rpg.session.combat_action_reconciliation import (
@@ -95,7 +95,7 @@ from app.apps.rpg.session.narration_trace import (
 from app.apps.rpg.narration.runtime_provider import (
     get_runtime_llm_provider as get_runtime_llm_provider,
 )
-from app.apps.rpg.response_generation.runtime_bridge import (
+from app.apps.rpg.narration.response_generation.runtime_bridge import (
     build_runtime_narration_payload as build_runtime_narration_payload,
 )
 from app.apps.rpg.session.narration_queue_runtime import (

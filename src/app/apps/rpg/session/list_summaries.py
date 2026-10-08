@@ -17,7 +17,7 @@ from app.apps.rpg.session.durable_store import (
     ensure_session_dir,
 )
 from app.apps.rpg.session.migrations import migrate_session_payload
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def _summary_from_path(path: Path) -> Dict[str, Any]:
 def list_session_summaries_from_disk(*, limit: int | None = None) -> List[Dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import list_session_summaries_from_postgres
+        from app.apps.rpg.foundation.persistence.rpg_compat import list_session_summaries_from_postgres
         return list_session_summaries_from_postgres(limit=limit)
     """Return bounded session summaries without normalizing full session payloads."""
 

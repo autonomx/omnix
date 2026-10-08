@@ -11,7 +11,7 @@ from typing import Any
 
 from app.apps.rpg.session.crafting import CRAFTING_RECIPES, get_recipe
 from app.apps.rpg.session.inventory_items import display_item_name, normalize_inventory_items
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 RECIPE_HINTS: dict[str, tuple[str, ...]] = {
     "torch": ("torch", "lamp", "light", "campfire"),

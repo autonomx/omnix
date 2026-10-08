@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.approved_config import FEATURE_FLAG
-from app.apps.rpg.hermes.sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
-from app.apps.rpg.hermes.sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
-from app.apps.rpg.hermes.sequence_loop_guard import hermes_sequence_loop_guard
-from app.apps.rpg.hermes.sequence_state import build_hermes_sequence_state
+from app.apps.rpg.edge.hermes.approved_config import FEATURE_FLAG
+from app.apps.rpg.edge.hermes.sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
+from app.apps.rpg.edge.hermes.sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
+from app.apps.rpg.edge.hermes.sequence_loop_guard import hermes_sequence_loop_guard
+from app.apps.rpg.edge.hermes.sequence_state import build_hermes_sequence_state
 
 
 def _safe_sequence_25() -> dict:

@@ -4,14 +4,14 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
+from app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
 
 
 def test_entity_routes_read_edit_and_regenerate_with_topic_tokens(monkeypatch) -> None:
     calls: list[tuple[str, dict[str, object]]] = []
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.read_world_entity",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes.read_world_entity",
         lambda world_id, topic_id, entity_id: {
             "ok": True,
             "world": {"id": world_id},
@@ -29,8 +29,8 @@ def test_entity_routes_read_edit_and_regenerate_with_topic_tokens(monkeypatch) -
         calls.append(("regenerate", {"world_id": world_id, "topic_id": topic_id, "entity_id": entity_id, **kwargs}))
         return {"ok": True, "topic": {"content_hash": "sha256:regen"}, "entity": {"id": entity_id}, "stale_topic_ids": [], "stale_entity_ids": []}
 
-    monkeypatch.setattr("app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_entity", fake_update)
-    monkeypatch.setattr("app.apps.rpg.api.feature_routes.rpg_world_authoring_routes.regenerate_world_entity", fake_regenerate)
+    monkeypatch.setattr("app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes.update_world_entity", fake_update)
+    monkeypatch.setattr("app.apps.rpg.edge.api.feature_routes.rpg_world_authoring_routes.regenerate_world_entity", fake_regenerate)
 
     app = FastAPI()
     include_router_registrar(app, register_rpg_world_authoring_routes)

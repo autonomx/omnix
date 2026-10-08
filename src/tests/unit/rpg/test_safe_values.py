@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from app.apps.rpg.safe_values import dict_copy, list_copy, mapping_copy, safe_dict, safe_list, safe_str
+from app.apps.rpg.foundation.safe_values import dict_copy, list_copy, mapping_copy, safe_dict, safe_list, safe_str
 
 
 def test_safe_readers_return_the_value_itself_and_copies_return_a_new_container() -> None:
