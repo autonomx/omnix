@@ -13,6 +13,7 @@ import {
   type CandlestickData,
   type HistogramData,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type LineData,
   type Logical,
@@ -75,6 +76,15 @@ export type TradingIndicatorSelection = {
   y: number;
 };
 export type TradingPriceScaleSide = 'left' | 'right';
+export type TradingPaneHit = { kind: 'main' } | { kind: 'indicator'; id: CoreIndicatorId };
+export type TradingSessionPriceLine = { price: number; title: string; color: string };
+export type TradingLastPriceLabelPosition = {
+  y: number;
+  color: string;
+  side: TradingPriceScaleSide;
+  scaleWidth: number;
+  paneHeight: number;
+};
 export type TradingComparisonData = {
   instrumentId: string;
   label: string;
@@ -474,6 +484,8 @@ export class TradingChartAdapter {
   private indicatorOutputs: IndicatorOutput[] = [];
   private comparisonData: TradingComparisonData[] = [];
   private priceScaleMultiplier = 1;
+  private sessionPriceLineConfig: TradingSessionPriceLine | null = null;
+  private sessionPriceLine: { series: PriceSeries; line: IPriceLine } | null = null;
   private destroyed = false;
 
   constructor(container: HTMLElement, chartType: TradingChartType = 'candlestick') {
@@ -577,8 +589,10 @@ export class TradingChartAdapter {
     if (type === this.chartType) return;
     this.chart.removeSeries(this.priceSeries);
     this.chartType = type;
+    this.sessionPriceLine = null;
     this.priceSeries = this.createPriceSeries(type);
     this.priceSeries.applyOptions({ lastValueVisible: this.latestValueLabelVisible });
+    this.renderSessionPriceLine();
     this.setBars(bars, false);
   }
 
@@ -1134,6 +1148,20 @@ export class TradingChartAdapter {
     return paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] ?? null : null;
   }
 
+  /** The pane under a viewport y: the main pane, an indicator pane, or null on the time axis (TVP-2.5). */
+  paneAtClientY(clientY: number): TradingPaneHit | null {
+    this.assertActive();
+    if (!Number.isFinite(clientY)) return null;
+    for (const [paneIndex, pane] of this.chart.panes().entries()) {
+      const rect = pane.getHTMLElement()?.getBoundingClientRect();
+      if (!rect || rect.height <= 0 || clientY < rect.top || clientY > rect.top + rect.height) continue;
+      if (paneIndex === 0) return { kind: 'main' };
+      const id = this.indicatorPaneIds[paneIndex - 1];
+      return id ? { kind: 'indicator', id: id as CoreIndicatorId } : null;
+    }
+    return null;
+  }
+
   indicatorPaneIdAtClientY(clientY: number): CoreIndicatorId | null {
     this.assertActive();
     const chartRect = this.chart.chartElement().getBoundingClientRect();
@@ -1265,6 +1293,7 @@ export class TradingChartAdapter {
     if (Math.abs(nextMultiplier - this.priceScaleMultiplier) < 1e-12) return;
     const visibleRange = this.chart.timeScale().getVisibleLogicalRange();
     this.priceScaleMultiplier = nextMultiplier;
+    this.renderSessionPriceLine();
     this.setPriceData(this.bars);
     this.setIndicatorOutputs(this.indicatorOutputs);
     this.chart.priceScale(this.priceScaleSide).setAutoScale(true);
@@ -1349,6 +1378,47 @@ export class TradingChartAdapter {
   snapshotDataUrl(): string {
     this.assertActive();
     return this.chart.takeScreenshot().toDataURL('image/png');
+  }
+
+  /** Where the main series' last-price label sits, so the bar-close countdown can sit under it (TVP-2.5). */
+  lastPriceLabelPosition(): TradingLastPriceLabelPosition | null {
+    this.assertActive();
+    if (!this.latestValueLabelVisible || !this.priceScaleLabelsVisible) return null;
+    const last = this.priceSeries.lastValueData(true);
+    if (last.noData) return null;
+    const y = this.priceSeries.priceToCoordinate(last.price);
+    const scaleWidth = this.chart.priceScale(this.priceScaleSide).width();
+    const paneHeight = this.chart.panes()[0]?.getHeight() ?? 0;
+    if (y === null || scaleWidth <= 0 || y < 0 || y > paneHeight) return null;
+    return { y, color: last.color, side: this.priceScaleSide, scaleWidth, paneHeight };
+  }
+
+  /** A labelled price line, such as the latest pre/post-market price; null removes it (TVP-2.5). */
+  setSessionPriceLine(line: TradingSessionPriceLine | null): void {
+    this.assertActive();
+    const current = this.sessionPriceLineConfig;
+    if (current === line || (current && line && current.price === line.price && current.title === line.title && current.color === line.color)) return;
+    this.sessionPriceLineConfig = line ? { ...line } : null;
+    this.renderSessionPriceLine();
+  }
+
+  private renderSessionPriceLine(): void {
+    if (this.sessionPriceLine) {
+      const { series, line } = this.sessionPriceLine;
+      this.sessionPriceLine = null;
+      if (series === this.priceSeries) series.removePriceLine(line);
+    }
+    const config = this.sessionPriceLineConfig;
+    if (!config) return;
+    const line = this.priceSeries.createPriceLine({
+      price: config.price * this.priceScaleMultiplier,
+      color: config.color,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: config.title,
+    });
+    this.sessionPriceLine = { series: this.priceSeries, line };
   }
 
   onIndicatorClick(listener: (selection: TradingIndicatorSelection) => void): () => void {

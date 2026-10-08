@@ -13,7 +13,7 @@ import { SelectedVisibleRange, TradingChartPanelProps, TradingContextMenuState, 
 
 /** The panel's refs, store selections and UI state. */
 export function useChartPanelState(ws: TradingChartPanelProps) {
-  const { indicators, instrumentId, interval, onActivate, sessionId } = ws;
+  const { chartId, indicators, instrumentId, interval, onActivate, sessionId } = ws;
 
   const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -157,6 +157,11 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   const indicatorResizeRef = useRef<{ id: CoreIndicatorId; edge: 'top' | 'bottom'; pointerId: number; lastY: number; target: HTMLDivElement } | null>(null);
 
+  // TVP-2.5: per-chart display settings and a go-to-date request for more history.
+  const chartSettings = useTradingStore((state) => state.charts.find((chart) => chart.chartId === chartId)?.settings);
+
+  const [historyLimitOverride, setHistoryLimitOverride] = useState<{ key: string; limit: number } | null>(null);
+
   return {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
@@ -178,6 +183,6 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     replaySelectionIndex, setReplaySelectionIndex, replaySelectionX,
     setReplaySelectionX, minimizedIndicators, setMinimizedIndicators, minimizedIndicatorsRef, fullscreenIndicator,
     setFullscreenIndicator, fullscreenIndicatorRef, fullscreenMainPane, setFullscreenMainPane, fullscreenMainPaneRef,
-    indicatorResizeRef,
+    indicatorResizeRef, chartSettings, historyLimitOverride, setHistoryLimitOverride,
   };
 }

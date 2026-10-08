@@ -5,6 +5,7 @@ import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chart
 import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
 import { convertedPrice, indicatorContextLabel, isAlertIndicatorId, price, rightOffsetOptions } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
+import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 
 /** Drawings, alerts, positions, the data table, object tree and settings. */
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
@@ -82,6 +83,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
           <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{TRADING_CHART_TYPE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label>Right margin<select aria-label="Chart right margin" value={rightOffset} onChange={(event) => changeRightOffset(event.target.value)}>{rightOffsetOptions.map((offset) => <option key={offset} value={offset}>{offset === 0 ? 'None' : `${offset} bars`}</option>)}</select></label>
           <label>Snap mode<select value={drawingSnapMode} disabled><option>{drawingSnapMode}</option></select></label>
+          <ChartWorkflowSettings ws={ws} />
         </aside>
       ) : null}
     </>

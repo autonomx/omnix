@@ -4,6 +4,7 @@ import { TradingReplaySpeedSelect } from './TradingReplaySpeedSelect';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { emitOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 import { useNow } from '../../shared/timers';
+import { ChartGoToDate } from './TradingChartWorkflowControls';
 
 /** The footer: replay controls, visible ranges, timezone, offset and clock. */
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
@@ -72,6 +73,7 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
               </form>
             ) : null}
           </div>
+          <ChartGoToDate ws={ws} />
         </nav>
         <div className="trading-chart-footer-meta">
           <div className="trading-timezone-control" ref={timezoneMenuRef}>
