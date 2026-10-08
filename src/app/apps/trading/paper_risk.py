@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .execution import ExecutionObservation
-from .paper import PaperAccountSnapshot, PaperOrderRequest
+from .paper import PaperAccountSnapshot, PaperOrderRequest, PaperTimeInForce
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .strategy_risk import paper_account_equity, paper_daily_realized_pnl
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
@@ -75,12 +75,19 @@ class PaperRiskOrderRequest(BaseModel):
     order_id: str = Field(min_length=1, max_length=200)
     instrument_id: str = Field(min_length=3, max_length=200)
     binding_id: str | None = Field(default=None, max_length=240)
-    order_type: Literal["market", "limit", "stop"] = "market"
+    order_type: Literal["market", "limit", "stop", "stop_limit"] = "market"
+    # The limit or stop price; for a stop-limit entry, its stop price.
     trigger_price: Decimal | None = Field(default=None, gt=0)
+    # Only for a stop-limit entry: the most it pays once the stop is reached.
+    limit_price: Decimal | None = Field(default=None, gt=0)
     stop_loss: Decimal = Field(gt=0)
     take_profit: Decimal | None = Field(default=None, gt=0)
+    # The stop-loss leg trails the best price by the entry-to-stop distance.
+    trailing_stop_loss: bool = False
     desired_risk_pct: Decimal = Field(default=Decimal("0.35"), gt=0, le=20)
     idempotency_key: str = Field(min_length=1, max_length=240)
+    time_in_force: PaperTimeInForce = "gtc"
+    expires_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_trigger(self):
@@ -88,7 +95,20 @@ class PaperRiskOrderRequest(BaseModel):
             raise ValueError("market risk orders cannot include trigger_price")
         if self.order_type != "market" and self.trigger_price is None:
             raise ValueError("limit/stop risk orders require trigger_price")
+        if (self.order_type == "stop_limit") != (self.limit_price is not None):
+            raise ValueError("limit_price is required for, and only valid on, stop_limit risk orders")
+        if self.time_in_force == "gtd" and (self.expires_at is None or self.expires_at.tzinfo is None):
+            raise ValueError("gtd orders require a timezone-aware expires_at")
+        if self.time_in_force != "gtd" and self.expires_at is not None:
+            raise ValueError("expires_at is only valid for gtd orders")
         return self
+
+    @property
+    def worst_entry_price(self) -> Decimal | None:
+        """The highest price this entry can fill at before slippage, for sizing."""
+        if self.order_type == "stop_limit":
+            return self.limit_price
+        return self.trigger_price
 
 
 def paper_risk_day_bounds(observed_at: datetime | None = None) -> tuple[datetime, datetime]:
@@ -284,18 +304,37 @@ def risk_order_request(
         side="buy",
         order_type=intent.order_type,
         quantity=quantity,
-        limit_price=intent.trigger_price if intent.order_type == "limit" else None,
-        stop_price=intent.trigger_price if intent.order_type == "stop" else None,
+        limit_price=(
+            intent.trigger_price
+            if intent.order_type == "limit"
+            else intent.limit_price
+            if intent.order_type == "stop_limit"
+            else None
+        ),
+        stop_price=intent.trigger_price if intent.order_type in {"stop", "stop_limit"} else None,
         reference_price=entry_price if intent.order_type == "market" else None,
         idempotency_key=intent.idempotency_key,
+        time_in_force=intent.time_in_force,
+        expires_at=intent.expires_at,
     )
 
 
-def risk_protection_request(intent: PaperRiskOrderRequest) -> PaperProtectionUpsert:
+def risk_protection_request(
+    intent: PaperRiskOrderRequest,
+    *,
+    entry_price: Decimal | None = None,
+) -> PaperProtectionUpsert:
+    """The bracket for a risk entry; a trailing stop-loss trails by the sized risk distance."""
+    trail_amount = None
+    if intent.trailing_stop_loss:
+        if entry_price is None or entry_price <= intent.stop_loss:
+            raise ValueError("paper_trailing_stop_requires_stop_below_entry")
+        trail_amount = entry_price - intent.stop_loss
     return PaperProtectionUpsert(
         instrument_id=intent.instrument_id,
         binding_id=intent.binding_id,
         entry_order_id=intent.order_id,
         take_profit=intent.take_profit,
         stop_loss=intent.stop_loss,
+        trail_amount=trail_amount,
     )

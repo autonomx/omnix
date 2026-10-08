@@ -12,7 +12,8 @@ from typing import Any, cast
 
 _COLUMNS = """
     account_id, instrument_id, binding_id, binding_purpose, entry_order_id, exit_order_id,
-    take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at
+    take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at,
+    trail_amount, trail_percent, trail_water_mark
 """
 
 
@@ -31,6 +32,9 @@ def _protection(row) -> PaperPositionProtection:
         revision=int(row[10]),
         created_at=row[11],
         updated_at=row[12],
+        trail_amount=Decimal(row[13]) if row[13] is not None else None,
+        trail_percent=Decimal(row[14]) if row[14] is not None else None,
+        trail_water_mark=Decimal(row[15]) if row[15] is not None else None,
     )
 
 
@@ -132,14 +136,18 @@ class TradingPaperProtectionRepository:
                 INSERT INTO omnix_trading_paper_protections (
                     workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
-                    exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed')
+                    exit_order_id, trigger_reason, trail_amount, trail_percent,
+                    trail_water_mark
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed', %s, %s, NULL)
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
                        binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
+                       trail_amount = EXCLUDED.trail_amount,
+                       trail_percent = EXCLUDED.trail_percent,
+                       trail_water_mark = NULL,
                        status = 'pending_entry',
                        exit_order_id = NULL,
                        trigger_reason = 'entry_armed',
@@ -156,6 +164,8 @@ class TradingPaperProtectionRepository:
                     request.entry_order_id,
                     request.take_profit,
                     request.stop_loss,
+                    request.trail_amount,
+                    request.trail_percent,
                 ),
             ).fetchone()
             uow.commit()
@@ -255,14 +265,18 @@ class TradingPaperProtectionRepository:
                 INSERT INTO omnix_trading_paper_protections (
                     workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
-                    exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL)
+                    exit_order_id, trigger_reason, trail_amount, trail_percent,
+                    trail_water_mark
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, NULL)
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
                        binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
+                       trail_amount = EXCLUDED.trail_amount,
+                       trail_percent = EXCLUDED.trail_percent,
+                       trail_water_mark = NULL,
                        status = EXCLUDED.status,
                        exit_order_id = NULL,
                        trigger_reason = NULL,
@@ -280,10 +294,50 @@ class TradingPaperProtectionRepository:
                     request.take_profit,
                     request.stop_loss,
                     status,
+                    request.trail_amount,
+                    request.trail_percent,
                 ),
             ).fetchone()
             uow.commit()
         return _protection(row)
+
+    def trail_stop(
+        self,
+        account_id: str,
+        instrument_id: str,
+        *,
+        water_mark: Decimal,
+        stop_loss: Decimal,
+        expected_revision: int,
+    ) -> PaperPositionProtection | None:
+        """Persist a trailing stop-loss leg's new water mark and stop.
+
+        Only an active trailing leg at ``expected_revision`` moves, so a user's
+        edit or a trigger in between wins. The water mark is monitor state: the
+        revision and ``updated_at`` (the leg's activation evidence) are left as
+        they are. Returns None when the leg changed underneath.
+        """
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                f"""
+                UPDATE omnix_trading_paper_protections
+                   SET trail_water_mark = %s, stop_loss = %s
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                   AND status = 'active' AND revision = %s
+                   AND (trail_amount IS NOT NULL OR trail_percent IS NOT NULL)
+                RETURNING {_COLUMNS}
+                """,
+                (
+                    water_mark,
+                    stop_loss,
+                    self.context.workspace_id,
+                    account_id,
+                    instrument_id,
+                    expected_revision,
+                ),
+            ).fetchone()
+            uow.commit()
+        return _protection(row) if row is not None else None
 
     def clear(self, account_id: str, instrument_id: str) -> PaperPositionProtection:
         return self.transition(

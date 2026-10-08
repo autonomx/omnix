@@ -407,6 +407,13 @@ def place_replay_order(
         created_at=created_at,
         updated_at=created_at,
     )
+    # Replay snapshots are detached and do not carry trigger/trailing state or
+    # a session clock, so the TVP-7.1 order types and time in force are live
+    # paper only for now.
+    if request.order_type in {"stop_limit", "trailing_stop"}:
+        return _reject(prepared, order, "replay_order_type_unsupported")
+    if request.time_in_force != "gtc":
+        return _reject(prepared, order, "replay_time_in_force_unsupported")
     reserved = _reserve(prepared, request, order)
     if reserved.order.status == "rejected":
         return reserved

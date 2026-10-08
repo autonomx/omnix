@@ -230,7 +230,7 @@ def create_trading_paper_router(
         entry_price = (
             (execution.ask or execution.last)
             if request.order_type == "market"
-            else request.trigger_price
+            else request.worst_entry_price
         )
         if entry_price is None:
             raise HTTPException(status_code=422, detail="paper_risk_entry_price_unavailable")
@@ -260,7 +260,10 @@ def create_trading_paper_router(
 
         repository = repository_factory()
         protection_repository = protection_repository_factory()
-        protection_request = risk_protection_request(request)
+        try:
+            protection_request = risk_protection_request(request, entry_price=entry_price)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         try:
             protection = await asyncio.to_thread(
                 protection_repository.arm_pending_entry,

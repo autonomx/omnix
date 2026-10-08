@@ -28068,6 +28068,18 @@
             ],
             "title": "Created At"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "filled_quantity": {
             "anyOf": [
               {
@@ -28112,7 +28124,9 @@
             "enum": [
               "market",
               "limit",
-              "stop"
+              "stop",
+              "stop_limit",
+              "trailing_stop"
             ],
             "title": "Order Type",
             "type": "string"
@@ -28182,7 +28196,8 @@
               "open",
               "filled",
               "cancelled",
-              "rejected"
+              "rejected",
+              "expired"
             ],
             "title": "Status",
             "type": "string"
@@ -28201,6 +28216,73 @@
               }
             ],
             "title": "Stop Price"
+          },
+          "stop_triggered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Triggered At"
+          },
+          "time_in_force": {
+            "default": "gtc",
+            "enum": [
+              "gtc",
+              "day",
+              "gtd"
+            ],
+            "title": "Time In Force",
+            "type": "string"
+          },
+          "trail_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Amount"
+          },
+          "trail_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Percent"
+          },
+          "trail_water_mark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Water Mark"
           },
           "updated_at": {
             "anyOf": [
@@ -28269,6 +28351,18 @@
             ],
             "title": "Created At"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "filled_quantity": {
             "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -28303,7 +28397,9 @@
             "enum": [
               "market",
               "limit",
-              "stop"
+              "stop",
+              "stop_limit",
+              "trailing_stop"
             ],
             "title": "Order Type",
             "type": "string"
@@ -28356,7 +28452,8 @@
               "open",
               "filled",
               "cancelled",
-              "rejected"
+              "rejected",
+              "expired"
             ],
             "title": "Status",
             "type": "string"
@@ -28372,6 +28469,64 @@
               }
             ],
             "title": "Stop Price"
+          },
+          "stop_triggered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Triggered At"
+          },
+          "time_in_force": {
+            "default": "gtc",
+            "enum": [
+              "gtc",
+              "day",
+              "gtd"
+            ],
+            "title": "Time In Force",
+            "type": "string"
+          },
+          "trail_amount": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Amount"
+          },
+          "trail_percent": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Percent"
+          },
+          "trail_water_mark": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Water Mark"
           },
           "updated_at": {
             "anyOf": [
@@ -28404,7 +28559,13 @@
           "rejection_reason",
           "reserved_cash",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "time_in_force",
+          "expires_at",
+          "trail_amount",
+          "trail_percent",
+          "trail_water_mark",
+          "stop_triggered_at"
         ],
         "title": "PaperOrder",
         "type": "object"
@@ -28454,6 +28615,18 @@
             ],
             "title": "Binding Id"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "idempotency_key": {
             "maxLength": 240,
             "minLength": 1,
@@ -28492,7 +28665,9 @@
             "enum": [
               "market",
               "limit",
-              "stop"
+              "stop",
+              "stop_limit",
+              "trailing_stop"
             ],
             "title": "Order Type",
             "type": "string"
@@ -28549,6 +28724,49 @@
               }
             ],
             "title": "Stop Price"
+          },
+          "time_in_force": {
+            "default": "gtc",
+            "enum": [
+              "gtc",
+              "day",
+              "gtd"
+            ],
+            "title": "Time In Force",
+            "type": "string"
+          },
+          "trail_amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Amount"
+          },
+          "trail_percent": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 100,
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Percent"
           }
         },
         "required": [
@@ -28935,6 +29153,42 @@
             ],
             "title": "Take Profit"
           },
+          "trail_amount": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Amount"
+          },
+          "trail_percent": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Percent"
+          },
+          "trail_water_mark": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Water Mark"
+          },
           "trigger_reason": {
             "anyOf": [
               {
@@ -28972,7 +29226,10 @@
           "trigger_reason",
           "revision",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "trail_amount",
+          "trail_percent",
+          "trail_water_mark"
         ],
         "title": "PaperPositionProtection",
         "type": "object"
@@ -29058,6 +29315,39 @@
               }
             ],
             "title": "Take Profit"
+          },
+          "trail_amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Amount"
+          },
+          "trail_percent": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 100,
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trail Percent"
           }
         },
         "required": [
@@ -29162,6 +29452,18 @@
             "default": "0.35",
             "title": "Desired Risk Pct"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "idempotency_key": {
             "maxLength": 240,
             "minLength": 1,
@@ -29174,6 +29476,22 @@
             "title": "Instrument Id",
             "type": "string"
           },
+          "limit_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
           "order_id": {
             "maxLength": 200,
             "minLength": 1,
@@ -29185,7 +29503,8 @@
             "enum": [
               "market",
               "limit",
-              "stop"
+              "stop",
+              "stop_limit"
             ],
             "title": "Order Type",
             "type": "string"
@@ -29218,6 +29537,21 @@
               }
             ],
             "title": "Take Profit"
+          },
+          "time_in_force": {
+            "default": "gtc",
+            "enum": [
+              "gtc",
+              "day",
+              "gtd"
+            ],
+            "title": "Time In Force",
+            "type": "string"
+          },
+          "trailing_stop_loss": {
+            "default": false,
+            "title": "Trailing Stop Loss",
+            "type": "boolean"
           },
           "trigger_price": {
             "anyOf": [

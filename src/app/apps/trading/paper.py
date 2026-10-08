@@ -2,17 +2,25 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.apps.trading.us_equity_calendar import EASTERN, regular_close_time, regular_holidays
+
 
 PaperSide = Literal["buy", "sell"]
-PaperOrderType = Literal["market", "limit", "stop"]
-PaperOrderStatus = Literal["open", "filled", "cancelled", "rejected"]
+PaperOrderType = Literal["market", "limit", "stop", "stop_limit", "trailing_stop"]
+PaperOrderStatus = Literal["open", "filled", "cancelled", "rejected", "expired"]
+# GTC is the default and was the only behaviour before TVP-7.1. DAY expires at
+# the session close: for US equities the regular close (early closes
+# included); every other market trades around the clock, so its day ends at
+# midnight UTC. GTD expires at the order's own ``expires_at``.
+PaperTimeInForce = Literal["gtc", "day", "gtd"]
 ProtectionTrigger = Literal["stop", "target"]
+TIME_IN_FORCE_EXPIRED = "time_in_force_expired"
 
 
 class PaperExecutionPolicy(BaseModel):
@@ -86,6 +94,12 @@ class PaperOrderRequest(BaseModel):
     stop_price: Decimal | None = Field(default=None, gt=0)
     reference_price: Decimal | None = Field(default=None, gt=0)
     idempotency_key: str = Field(min_length=1, max_length=240)
+    time_in_force: PaperTimeInForce = "gtc"
+    # Only for GTD. A DAY order's expiry is set by the server when it is placed.
+    expires_at: datetime | None = None
+    # A trailing stop trails the best price by exactly one of these.
+    trail_amount: Decimal | None = Field(default=None, gt=0)
+    trail_percent: Decimal | None = Field(default=None, gt=0, lt=100)
 
     @model_validator(mode="after")
     def validate_prices(self):
@@ -93,12 +107,30 @@ class PaperOrderRequest(BaseModel):
             raise ValueError("limit orders require limit_price")
         if self.order_type == "stop" and self.stop_price is None:
             raise ValueError("stop orders require stop_price")
+        if self.order_type == "stop_limit" and (self.stop_price is None or self.limit_price is None):
+            raise ValueError("stop_limit orders require stop_price and limit_price")
         if self.order_type == "market" and (
             self.limit_price is not None or self.stop_price is not None
         ):
             raise ValueError("market orders cannot include limit_price or stop_price")
-        if self.order_type != "market" and self.reference_price is not None:
-            raise ValueError("reference_price is only valid for market orders")
+        if self.order_type == "trailing_stop":
+            if (self.trail_amount is None) == (self.trail_percent is None):
+                raise ValueError("trailing_stop orders require exactly one of trail_amount or trail_percent")
+            if self.limit_price is not None or self.stop_price is not None:
+                raise ValueError("trailing_stop orders cannot include limit_price or stop_price")
+            if self.side == "buy" and self.reference_price is None:
+                raise ValueError("buy trailing_stop orders require reference_price for the cash reservation")
+        elif self.trail_amount is not None or self.trail_percent is not None:
+            raise ValueError("trail_amount and trail_percent are only valid for trailing_stop orders")
+        if self.order_type not in {"market", "trailing_stop"} and self.reference_price is not None:
+            raise ValueError("reference_price is only valid for market and trailing_stop orders")
+        if self.time_in_force == "gtd":
+            if self.expires_at is None:
+                raise ValueError("gtd orders require expires_at")
+            if self.expires_at.tzinfo is None:
+                raise ValueError("expires_at must be timezone-aware")
+        elif self.expires_at is not None:
+            raise ValueError("expires_at is only valid for gtd orders")
         return self
 
 
@@ -149,6 +181,26 @@ class PaperOrder(BaseModel):
     reserved_cash: Decimal = Decimal("0")
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    time_in_force: PaperTimeInForce = "gtc"
+    expires_at: datetime | None = None
+    trail_amount: Decimal | None = None
+    trail_percent: Decimal | None = None
+    # Server-tracked trailing state: the best price since the order was armed
+    # (the highest for a sell, the lowest for a buy); ``stop_price`` holds the
+    # stop it implies. Both are persisted, so a restart resumes the same trail.
+    trail_water_mark: Decimal | None = None
+    # When a stop-limit order's stop was reached; from then on it is a limit order.
+    stop_triggered_at: datetime | None = None
+
+
+class PaperOrderStateUpdate(BaseModel):
+    """The trigger and trailing state an observation moves an open order to."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stop_price: Decimal | None
+    trail_water_mark: Decimal | None
+    stop_triggered_at: datetime | None
 
 
 class PaperMarketObservation(BaseModel):
@@ -246,6 +298,8 @@ class PaperAccountSnapshot(BaseModel):
 
 
 def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -> bool:
+    # A trailing stop's stop_price is server state that moves with the market,
+    # and a DAY order's expiry is set by the server: neither is in the request.
     return (
         order.order_id == request.order_id
         and order.instrument_id == request.instrument_id
@@ -254,9 +308,68 @@ def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -
         and order.order_type == request.order_type
         and order.quantity == request.quantity
         and order.limit_price == request.limit_price
-        and order.stop_price == request.stop_price
+        and (order.order_type == "trailing_stop" or order.stop_price == request.stop_price)
         and order.reference_price == request.reference_price
+        and order.time_in_force == request.time_in_force
+        and (request.time_in_force != "gtd" or order.expires_at == request.expires_at)
+        and order.trail_amount == request.trail_amount
+        and order.trail_percent == request.trail_percent
     )
+
+
+def _us_equity_trading_day(day: date) -> bool:
+    return day.weekday() < 5 and day not in regular_holidays(day.year)
+
+
+def paper_day_expiry(instrument_id: str, placed_at: datetime) -> datetime:
+    """When a DAY order placed at ``placed_at`` expires.
+
+    US equities: the first regular-session close after placement, early closes
+    included, so an order placed after the close, on a weekend or on a holiday
+    lasts until the next session's close. Every other market trades around the
+    clock, so its day is the UTC calendar day.
+    """
+    if placed_at.tzinfo is None:
+        raise ValueError("paper order placement time must be timezone-aware")
+    if instrument_id.startswith("equity:"):
+        day = placed_at.astimezone(EASTERN).date()
+        while True:
+            if _us_equity_trading_day(day):
+                close = datetime.combine(day, regular_close_time(day), tzinfo=EASTERN)
+                if close > placed_at:
+                    return close.astimezone(timezone.utc)
+            day += timedelta(days=1)
+    utc_day = placed_at.astimezone(timezone.utc).date()
+    return datetime.combine(utc_day + timedelta(days=1), time(0), tzinfo=timezone.utc)
+
+
+def paper_order_expiry(request: PaperOrderRequest, placed_at: datetime) -> datetime | None:
+    """The expiry an order gets when it is placed; GTC orders never expire."""
+    if request.time_in_force == "gtd":
+        return request.expires_at
+    if request.time_in_force == "day":
+        return paper_day_expiry(request.instrument_id, placed_at)
+    return None
+
+
+def paper_order_is_expired(order: PaperOrder, moment: datetime) -> bool:
+    return order.expires_at is not None and moment >= order.expires_at
+
+
+def paper_trailing_stop_price(
+    *,
+    side: PaperSide,
+    water_mark: Decimal,
+    trail_amount: Decimal | None,
+    trail_percent: Decimal | None,
+) -> Decimal:
+    """The stop a trail implies: below the high for a sell, above the low for a buy."""
+    distance = (
+        trail_amount
+        if trail_amount is not None
+        else water_mark * (trail_percent or Decimal("0")) / Decimal("100")
+    )
+    return water_mark - distance if side == "sell" else water_mark + distance
 
 
 def _worse_price(price: Decimal, side: PaperSide, bps: Decimal) -> Decimal:
@@ -386,27 +499,225 @@ def paper_protection_trigger(
     return None
 
 
+def _observation_gate(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy,
+) -> str | None:
+    """Why this observation cannot act on the order at all, or None."""
+    if order.status != "open":
+        return "order_not_open"
+    if paper_order_is_expired(order, observation.source_time):
+        return "order_expired"
+    if order.instrument_id != observation.instrument_id:
+        return "instrument_mismatch"
+    if order.binding_id and order.binding_id != observation.binding_id:
+        return "binding_mismatch"
+    if policy.require_execution_eligible and not observation.execution_eligible:
+        return "execution_data_ineligible"
+    if observation.age_seconds > policy.max_observation_age_seconds:
+        return "stale_market_data"
+    if policy.reject_halted and observation.halted:
+        return "market_halted"
+    activation = _order_activation_time(order, policy)
+    if activation is not None and observation.source_time.astimezone(timezone.utc) < activation:
+        return "execution_latency_not_elapsed"
+    return None
+
+
+def _bar_evidence_is_after(observation: PaperMarketObservation, moment: datetime) -> bool:
+    if observation.bar_start_time is None:
+        return False
+    return observation.bar_start_time.astimezone(timezone.utc) >= moment.astimezone(timezone.utc)
+
+
+def _price_window(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy,
+    *,
+    since: datetime | None = None,
+) -> tuple[Decimal | None, Decimal, Decimal, Decimal, bool]:
+    """Return (market side, current, high, low, used bar range) for a resting order.
+
+    The bar's range is used only when the whole bar happened after the order
+    became executable and, with ``since``, after that moment too.
+    """
+    use_range = (
+        observation.high is not None
+        and observation.low is not None
+        and _bar_evidence_is_causal(order, observation, policy)
+        and (since is None or _bar_evidence_is_after(observation, since))
+    )
+    market_side = observation.ask if order.side == "buy" else observation.bid
+    current_price = market_side if market_side is not None else observation.price
+    high = observation.high if use_range and observation.high is not None else current_price
+    low = observation.low if use_range and observation.low is not None else current_price
+    return market_side, current_price, high, low, use_range
+
+
+def _stop_reached(side: PaperSide, stop_price: Decimal, high: Decimal, low: Decimal) -> bool:
+    return high >= stop_price if side == "buy" else low <= stop_price
+
+
+def _limit_fill_price(side: PaperSide, limit_price: Decimal, market_side: Decimal | None) -> Decimal:
+    if market_side is None:
+        return limit_price
+    return min(limit_price, market_side) if side == "buy" else max(limit_price, market_side)
+
+
+def _stop_limit_decision(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy,
+    fill_quantity: Decimal,
+) -> PaperFillDecision:
+    """A stop-limit order rests until its stop is reached, then is a limit order.
+
+    In the observation that reaches the stop, the order fills only at the
+    gap-through price, as a stop order would (the worse of the stop and the
+    current executable price), and only when that is within the limit: a bar's
+    range does not say whether its extreme came before or after the stop. A
+    gap through both the stop and the limit leaves a resting limit order.
+    After the trigger, a bar's range counts only when the whole bar started at
+    or after the trigger.
+    """
+    assert order.stop_price is not None and order.limit_price is not None
+    if order.stop_triggered_at is None:
+        _, current_price, high, low, _ = _price_window(order, observation, policy)
+        if not _stop_reached(order.side, order.stop_price, high, low):
+            return PaperFillDecision(should_fill=False, reason="stop_limit_not_triggered")
+        if order.side == "buy":
+            gap_through = max(order.stop_price, current_price)
+            within_limit = gap_through <= order.limit_price
+        else:
+            gap_through = min(order.stop_price, current_price)
+            within_limit = gap_through >= order.limit_price
+        if not within_limit:
+            return PaperFillDecision(should_fill=False, reason="stop_limit_price_not_reached")
+        return PaperFillDecision(
+            should_fill=True,
+            fill_price=gap_through,
+            fill_quantity=fill_quantity,
+            reason="stop_limit_triggered_within_limit",
+        )
+
+    market_side, _, high, low, use_range = _price_window(
+        order, observation, policy, since=order.stop_triggered_at
+    )
+    reached = low <= order.limit_price if order.side == "buy" else high >= order.limit_price
+    if not reached:
+        return PaperFillDecision(should_fill=False, reason="stop_limit_price_not_reached")
+    return PaperFillDecision(
+        should_fill=True,
+        fill_price=_limit_fill_price(order.side, order.limit_price, market_side),
+        fill_quantity=fill_quantity,
+        reason="stop_limit_range_reached" if use_range else "stop_limit_current_market_reached",
+    )
+
+
+def paper_order_state_update(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy | None = None,
+) -> PaperOrderStateUpdate | None:
+    """The persisted trigger/trailing state after this observation, or None if unchanged.
+
+    The fill decision for the same observation uses the state from before it,
+    which is the pessimistic order: a trailing stop is checked against its
+    previous stop before the observation's high (low for a buy) raises
+    (lowers) it, because a bar does not say which came first.
+
+    - A stop-limit order records when its stop was first reached.
+    - A trailing stop is armed by its first usable observation (water mark =
+      current executable price), then follows the best price: a causal bar's
+      high for a sell, its low for a buy, otherwise the current price. The stop
+      only ever moves toward the market.
+    """
+    active = policy or PaperExecutionPolicy()
+    if order.order_type not in {"stop_limit", "trailing_stop"}:
+        return None
+    if _observation_gate(order, observation, active) is not None:
+        return None
+    if order.order_type == "stop_limit":
+        if order.stop_triggered_at is not None or order.stop_price is None:
+            return None
+        _, _, high, low, _ = _price_window(order, observation, active)
+        if not _stop_reached(order.side, order.stop_price, high, low):
+            return None
+        return PaperOrderStateUpdate(
+            stop_price=order.stop_price,
+            trail_water_mark=None,
+            stop_triggered_at=observation.source_time,
+        )
+
+    _, current_price, high, low, _ = _price_window(order, observation, active)
+    if order.trail_water_mark is None:
+        water_mark = current_price
+    elif order.side == "sell":
+        water_mark = max(order.trail_water_mark, high)
+    else:
+        water_mark = min(order.trail_water_mark, low)
+    if water_mark == order.trail_water_mark and order.stop_price is not None:
+        return None
+    stop_price = paper_trailing_stop_price(
+        side=order.side,
+        water_mark=water_mark,
+        trail_amount=order.trail_amount,
+        trail_percent=order.trail_percent,
+    )
+    return PaperOrderStateUpdate(stop_price=stop_price, trail_water_mark=water_mark, stop_triggered_at=None)
+
+
+def paper_trailing_protection_update(
+    *,
+    is_long: bool,
+    stop_loss: Decimal,
+    trail_amount: Decimal | None,
+    trail_percent: Decimal | None,
+    water_mark: Decimal | None,
+    observation: PaperMarketObservation,
+    activated_at: datetime | None = None,
+) -> tuple[Decimal, Decimal] | None:
+    """Move a trailing stop-loss bracket leg; return (water mark, stop) or None if unchanged.
+
+    The water mark is the best price since the leg became active (a long's
+    high, a short's low), using a bar's range only when the bar started at or
+    after activation, as ``paper_protection_trigger`` does. The stop is the
+    trail behind the water mark but never looser than the stop it already has,
+    so the user's initial stop is the floor (the ceiling for a short).
+    """
+    use_range = observation.high is not None and observation.low is not None
+    if activated_at is not None:
+        use_range = use_range and _bar_evidence_is_after(observation, activated_at)
+    high = observation.high if use_range and observation.high is not None else observation.price
+    low = observation.low if use_range and observation.low is not None else observation.price
+    extreme = high if is_long else low
+    if water_mark is None:
+        next_mark = extreme
+    else:
+        next_mark = max(water_mark, extreme) if is_long else min(water_mark, extreme)
+    trailed = paper_trailing_stop_price(
+        side="sell" if is_long else "buy",
+        water_mark=next_mark,
+        trail_amount=trail_amount,
+        trail_percent=trail_percent,
+    )
+    next_stop = max(stop_loss, trailed) if is_long else min(stop_loss, trailed)
+    if next_mark == water_mark and next_stop == stop_loss:
+        return None
+    return next_mark, next_stop
+
+
 def paper_fill_decision(
     order: PaperOrder,
     observation: PaperMarketObservation,
     policy: PaperExecutionPolicy | None = None,
 ) -> PaperFillDecision:
     active = policy or PaperExecutionPolicy()
-    if order.status != "open":
-        return PaperFillDecision(should_fill=False, reason="order_not_open")
-    if order.instrument_id != observation.instrument_id:
-        return PaperFillDecision(should_fill=False, reason="instrument_mismatch")
-    if order.binding_id and order.binding_id != observation.binding_id:
-        return PaperFillDecision(should_fill=False, reason="binding_mismatch")
-    if active.require_execution_eligible and not observation.execution_eligible:
-        return PaperFillDecision(should_fill=False, reason="execution_data_ineligible")
-    if observation.age_seconds > active.max_observation_age_seconds:
-        return PaperFillDecision(should_fill=False, reason="stale_market_data")
-    if active.reject_halted and observation.halted:
-        return PaperFillDecision(should_fill=False, reason="market_halted")
-    activation = _order_activation_time(order, active)
-    if activation is not None and observation.source_time.astimezone(timezone.utc) < activation:
-        return PaperFillDecision(should_fill=False, reason="execution_latency_not_elapsed")
+    gate = _observation_gate(order, observation, active)
+    if gate is not None:
+        return PaperFillDecision(should_fill=False, reason=gate)
 
     remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
     if remaining <= 0:
@@ -435,44 +746,39 @@ def paper_fill_decision(
             reason="market_execution_observation",
         )
 
-    use_range = (
-        observation.high is not None
-        and observation.low is not None
-        and _bar_evidence_is_causal(order, observation, active)
-    )
-    market_side = observation.ask if order.side == "buy" else observation.bid
-    current_price = market_side if market_side is not None else observation.price
-    high = observation.high if use_range and observation.high is not None else current_price
-    low = observation.low if use_range and observation.low is not None else current_price
+    if order.order_type == "stop_limit":
+        return _stop_limit_decision(order, observation, active, fill_quantity)
+
+    market_side, current_price, high, low, use_range = _price_window(order, observation, active)
     if order.order_type == "limit":
         assert order.limit_price is not None
         triggered = low <= order.limit_price if order.side == "buy" else high >= order.limit_price
         if not triggered:
             return PaperFillDecision(should_fill=False, reason="limit_range_not_reached")
-        if market_side is None:
-            fill_price = order.limit_price
-        elif order.side == "buy":
-            fill_price = min(order.limit_price, market_side)
-        else:
-            fill_price = max(order.limit_price, market_side)
         return PaperFillDecision(
             should_fill=True,
-            fill_price=fill_price,
+            fill_price=_limit_fill_price(order.side, order.limit_price, market_side),
             fill_quantity=fill_quantity,
             reason="limit_range_reached" if use_range else "limit_current_market_reached",
         )
 
-    assert order.stop_price is not None
-    triggered = high >= order.stop_price if order.side == "buy" else low <= order.stop_price
-    if not triggered:
-        return PaperFillDecision(should_fill=False, reason="stop_range_not_triggered")
+    # A stop order, or a trailing stop at its current (pre-observation) stop.
+    prefix = "trailing_" if order.order_type == "trailing_stop" else ""
+    if order.stop_price is None:
+        return PaperFillDecision(should_fill=False, reason="trailing_stop_not_armed")
+    if not _stop_reached(order.side, order.stop_price, high, low):
+        return PaperFillDecision(should_fill=False, reason=f"{prefix}stop_range_not_triggered")
     observed = current_price
     gap_through = max(order.stop_price, observed) if order.side == "buy" else min(order.stop_price, observed)
     return PaperFillDecision(
         should_fill=True,
         fill_price=_worse_price(gap_through, order.side, active.stop_slippage_bps),
         fill_quantity=fill_quantity,
-        reason="stop_range_triggered_gap_aware" if use_range else "stop_current_market_triggered",
+        reason=(
+            f"{prefix}stop_range_triggered_gap_aware"
+            if use_range
+            else f"{prefix}stop_current_market_triggered"
+        ),
     )
 
 
@@ -497,7 +803,22 @@ def paper_buy_reservation(
             return available_cash
         notional = request.quantity * request.reference_price
         return notional + paper_commission(notional, commission_bps)
-    reference_price = request.limit_price if request.order_type == "limit" else request.stop_price
+    reference_price: Decimal | None
+    if request.order_type == "trailing_stop":
+        # Held at the stop the trail implies from the reference price; the
+        # stop of a buy trail only moves down from where it is armed.
+        assert request.reference_price is not None
+        reference_price = paper_trailing_stop_price(
+            side="buy",
+            water_mark=request.reference_price,
+            trail_amount=request.trail_amount,
+            trail_percent=request.trail_percent,
+        )
+    elif request.order_type in {"limit", "stop_limit"}:
+        # A stop-limit buy never pays more than its limit.
+        reference_price = request.limit_price
+    else:
+        reference_price = request.stop_price
     assert reference_price is not None
     notional = request.quantity * reference_price
     return notional + paper_commission(notional, commission_bps)
@@ -511,7 +832,8 @@ def paper_fill_is_fundable(
 ) -> bool:
     if order.side != "buy":
         return True
-    if order.order_type == "market":
+    if order.order_type in {"market", "trailing_stop"}:
+        # Both reserve from a reference price that is not a price bound.
         return order.reserved_cash + available_cash >= total_cost
     return order.reserved_cash >= total_cost
 
