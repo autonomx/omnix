@@ -16,10 +16,12 @@ import {
   undoDrawing,
   updateSelectedDrawing,
   type DrawingPoint,
+  type DrawingProperties,
   type DrawingState,
   type DrawingStyle,
   type TradingDrawing,
 } from './drawingCommands';
+import { drawingDocumentPayload, upgradeDrawingDocument } from './drawingDocument';
 
 export type DrawingPersistenceStatus = 'loading' | 'saved' | 'saving' | 'conflict' | 'error';
 
@@ -80,10 +82,7 @@ function emit(entry: DrawingEntry): void {
 }
 
 function drawingsFrom(record: TradingDocument | null, instrumentId: string): TradingDrawing[] {
-  const payload = record?.payload as { drawings?: TradingDrawing[] } | undefined;
-  return Array.isArray(payload?.drawings)
-    ? payload.drawings.filter((item) => item.instrumentId === instrumentId)
-    : [];
+  return upgradeDrawingDocument(record?.payload, instrumentId).drawings;
 }
 
 async function loadEntry(entry: DrawingEntry): Promise<void> {
@@ -111,10 +110,7 @@ async function loadEntry(entry: DrawingEntry): Promise<void> {
 }
 
 function payload(entry: DrawingEntry): Record<string, unknown> {
-  return {
-    instrumentId: entry.instrumentId,
-    drawings: entry.state.drawings.map((drawing) => ({ ...drawing, selected: false })),
-  };
+  return drawingDocumentPayload(entry.instrumentId, entry.state.drawings);
 }
 
 async function saveEntry(entry: DrawingEntry): Promise<void> {
@@ -194,7 +190,7 @@ export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
     },
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(entry, moveDrawingPoint(entry.state, id, index, point)),
     translate: (id: string, from: DrawingPoint, to: DrawingPoint) => persist(entry, translateDrawing(entry.state, id, from, to)),
-    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string }) => persist(entry, updateSelectedDrawing(entry.state, patch)),
+    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties }) => persist(entry, updateSelectedDrawing(entry.state, patch)),
     remove: (id: string) => persist(entry, deleteDrawing(entry.state, id)),
     removeSelected: () => persist(entry, deleteSelectedDrawing(entry.state)),
     removeAll: () => persist(entry, deleteAllDrawings(entry.state)),
